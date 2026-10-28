@@ -22,6 +22,8 @@ pub enum HookEvent {
     Stop,
     PreCompact,
     PostCompact,
+    TaskCreated,
+    TaskCompleted,
 }
 
 impl HookEvent {
@@ -36,6 +38,8 @@ impl HookEvent {
             Self::Stop => "Stop",
             Self::PreCompact => "PreCompact",
             Self::PostCompact => "PostCompact",
+            Self::TaskCreated => "TaskCreated",
+            Self::TaskCompleted => "TaskCompleted",
         }
     }
 }

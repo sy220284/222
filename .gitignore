@@ -2,6 +2,7 @@
 /.atlas/sessions/
 /.atlas/history/
 /.atlas/background/
+/.atlas/task-lists/
 /.atlas/memory/
 *.swp
 *.bak

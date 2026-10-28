@@ -95,6 +95,54 @@ impl Agent {
         Ok(())
     }
 
+    async fn run_task_graph(&self,call:&ToolCall)->Result<String>{
+        let args:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
+        match call.function.name.as_str(){
+            "TaskCreate"=>{
+                let created=self.graph.create(&args)?;
+                let id=created.split_whitespace().nth(1)
+                    .and_then(|value|value.strip_prefix('#'))
+                    .context("Created task has no valid identifier")?;
+                let outcome=self.hooks.run(HookEvent::TaskCreated,None,json!({
+                    "task_id":id,"task_subject":args["subject"],
+                    "task_description":args["description"]
+                })).await;
+                match outcome{
+                    Ok(result)=>{
+                        if let Some(reason)=result.blocking_reason{
+                            self.graph.delete_for_blocking_hook(id)?;
+                            bail!("TaskCreated hook feedback:\n{reason}")
+                        }
+                    },
+                    Err(error)=>{
+                        self.graph.delete_for_blocking_hook(id)?;
+                        return Err(error);
+                    }
+                }
+                Ok(created)
+            },
+            "TaskUpdate"=>{
+                if args.get("status").and_then(serde_json::Value::as_str)==Some("completed"){
+                    let id=args.get("taskId").and_then(serde_json::Value::as_str)
+                        .context("Missing taskId")?;
+                    if let Some(existing)=self.graph.peek(id)?{
+                        if existing.status!="completed"{
+                            let outcome=self.hooks.run(HookEvent::TaskCompleted,None,json!({
+                                "task_id":id,"task_subject":existing.subject,
+                                "task_description":existing.description,
+                            })).await?;
+                            if let Some(reason)=outcome.blocking_reason{
+                                bail!("TaskCompleted hook feedback:\n{reason}")
+                            }
+                        }
+                    }
+                }
+                Ok(self.graph.run(call))
+            },
+            _=>Ok(self.graph.run(call))
+        }
+    }
+
     async fn run_team(&self, call:&ToolCall, executor:&ToolExecutor)->Result<String>{
         if self.child_depth!=0 {bail!("Nested teams are not allowed")}
         let args:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
@@ -488,7 +536,10 @@ impl Agent {
                         lsp.execute(&input).await
                     }else{"ERROR: No LSP server configured".into()}
                 } else if task_graph::handles(&call.function.name) {
-                    self.graph.run(&call)
+                    match self.run_task_graph(&call).await{
+                        Ok(result)=>result,
+                        Err(error)=>format!("ERROR: {error:#}"),
+                    }
                 } else if task::handles(&call.function.name) {
                     task::execute(&mut self.session, &call)
                 } else if let Some(mcp) = &mut self.mcp {

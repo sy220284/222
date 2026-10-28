@@ -140,6 +140,10 @@ impl TaskGraph {
             Ok(format!("Task #{} created successfully: {}",task.id,task.subject))
         })
     }
+    pub fn peek(&self,id:&str)->Result<Option<Item>>{self.load(id)}
+    pub fn delete_for_blocking_hook(&self,id:&str)->Result<bool>{
+        self.locked(|this|this.delete(id))
+    }
     pub fn get(&self,args:&Value)->Result<String>{
         Self::strict(args,&["taskId"])?;
         let id=Self::required(args,"taskId")?;
@@ -225,13 +229,13 @@ impl TaskGraph {
             if !blocks.is_empty(){
                 let existing=task.blocks.clone();
                 let new=blocks.iter().filter(|x|!existing.contains(*x)).collect::<Vec<_>>();
-                for other in &new{let _=this.link(id,other);}
+                for other in &new{this.link(id,other)?;}
                 if !new.is_empty(){fields.push("blocks")}
             }
             if !blocked_by.is_empty(){
                 let existing=task.blocked_by.clone();
                 let new=blocked_by.iter().filter(|x|!existing.contains(*x)).collect::<Vec<_>>();
-                for other in &new{let _=this.link(other,id);}
+                for other in &new{this.link(other,id)?;}
                 if !new.is_empty(){fields.push("blockedBy")}
             }
             Ok(format!("Updated task #{id} {}",fields.join(", ")).trim_end().to_owned())
@@ -308,6 +312,26 @@ mod tests{
         assert!(fresh.create(&json!({"subject":"Followup","description":"Next"})).unwrap().contains("#3"));
     }
     #[test]
+    fn concurrent_creators_get_unique_monotonic_ids(){
+        let (root,_g)=store();
+        let root=std::sync::Arc::new(root);
+        let workers=(0..12).map(|i|{
+            let root=root.clone();
+            std::thread::spawn(move||{
+                let graph=TaskGraph::new(root.path(),"session-1").unwrap();
+                graph.create(&json!({"subject":format!("Worker {i}"),"description":"Parallel"})).unwrap()
+            })
+        }).collect::<Vec<_>>();
+        let mut ids=workers.into_iter().map(|t|t.join().unwrap().split_whitespace()
+            .nth(1).unwrap().trim_start_matches('#').parse::<u64>().unwrap())
+            .collect::<Vec<_>>();
+        ids.sort();
+        assert_eq!(ids,(1..=12).collect::<Vec<_>>());
+        let graph=TaskGraph::new(root.path(),"session-1").unwrap();
+        assert_eq!(graph.all().unwrap().len(),12);
+    }
+
+    #[test]
     fn validates_input_and_rejects_path_traversal(){
         let (root,g)=store();
         assert!(g.create(&json!({"subject":"x"})).is_err());
@@ -319,7 +343,7 @@ mod tests{
     }
     #[test]
     fn internal_tasks_hidden_and_busy_claim_fails(){
-        let (_,g)=store();
+        let (_root,g)=store();
         g.create(&json!({"subject":"A","description":"desc"})).unwrap();
         g.create(&json!({"subject":"B","description":"desc","metadata":{"_internal":true}})).unwrap();
         g.create(&json!({"subject":"C","description":"desc"})).unwrap();
