@@ -7,6 +7,7 @@ mod protocol;
 mod provider;
 mod session;
 mod task;
+mod task_graph;
 mod tools;
 mod notebook;
 mod search;

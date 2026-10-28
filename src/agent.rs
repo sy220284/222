@@ -6,6 +6,7 @@ use crate::{
     mcp::McpManager,
     lsp::LspManager,
     task,
+    task_graph,
     background::BackgroundTasks,
     memory,
     runtime_contracts,
@@ -50,6 +51,7 @@ pub struct Agent {
     enabled_plugins: Vec<String>,
     search_backend: Option<SearchBackend>,
     background: Arc<BackgroundTasks>,
+    graph: task_graph::TaskGraph,
     hook_rules: Vec<HookRule>,
 }
 
@@ -64,7 +66,8 @@ impl Agent {
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
         let background = Arc::new(BackgroundTasks::new(&root)?);
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, hook_rules: Vec::new() })
+        let graph = task_graph::TaskGraph::new(&root,&session.id.to_string())?;
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -365,6 +368,7 @@ impl Agent {
         for _ in 0..self.max_steps {
             let mut available_tools = tools::definitions();
             available_tools.extend(task::definitions());
+            available_tools.extend(task_graph::definitions());
             if self.search_backend.is_some(){available_tools.push(crate::websearch::definition());}
             if self.child_depth == 0 {
                 available_tools.push(json!({"type":"function","function":{
@@ -483,6 +487,8 @@ impl Agent {
                         let input:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
                         lsp.execute(&input).await
                     }else{"ERROR: No LSP server configured".into()}
+                } else if task_graph::handles(&call.function.name) {
+                    self.graph.run(&call)
                 } else if task::handles(&call.function.name) {
                     task::execute(&mut self.session, &call)
                 } else if let Some(mcp) = &mut self.mcp {
@@ -586,6 +592,7 @@ mod tests {
             enabled_plugins: Vec::new(),
             search_backend: None,
             background: Arc::new(BackgroundTasks::new(dir.path()).unwrap()),
+            graph: task_graph::TaskGraph::new(dir.path(),"test").unwrap(),
             hook_rules: Vec::new(),
         };
         agent.compact_history().await.unwrap();
