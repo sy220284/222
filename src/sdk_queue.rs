@@ -168,7 +168,7 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
 }
 /// Reject non-text content before dequeue; the current Agent interface
 /// cannot preserve documents, images or tool-result blocks end to end.
-fn text_only_value(value:&Value)->Result<String>{
+pub(crate) fn text_only_value(value:&Value)->Result<String>{
     match value {
         Value::String(text)=>Ok(text.clone()),
         Value::Array(blocks)=>{
