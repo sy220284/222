@@ -17,6 +17,25 @@ fn state()->&'static Mutex<Signal>{
     static SIGNAL:OnceLock<Mutex<Signal>>=OnceLock::new();
     SIGNAL.get_or_init(||Mutex::new(Signal::default()))
 }
+thread_local!{
+    static DEFERRED:std::cell::RefCell<(usize,usize)>=
+        const {std::cell::RefCell::new((0,0))};
+}
+pub struct BatchGuard;
+pub fn defer_notifications()->BatchGuard{
+    DEFERRED.with(|state|state.borrow_mut().0+=1);
+    BatchGuard
+}
+impl Drop for BatchGuard{
+    fn drop(&mut self){
+        let pending=DEFERRED.with(|state|{
+            let mut state=state.borrow_mut();
+            state.0-=1;
+            if state.0==0{std::mem::take(&mut state.1)}else{0}
+        });
+        for _ in 0..pending{dispatch()}
+    }
+}
 pub struct Subscription{ id:u64 }
 impl Drop for Subscription {
     fn drop(&mut self){state().lock().unwrap().listeners.remove(&self.id);}
@@ -29,9 +48,15 @@ pub fn on_tasks_updated(listener:Listener)->Subscription {
     Subscription{id}
 }
 pub fn notify_tasks_updated(){
+    let deferred=DEFERRED.with(|state|{
+        let mut state=state.borrow_mut();
+        if state.0>0{state.1+=1;true}else{false}
+    });
+    if !deferred{dispatch()}
+}
+fn dispatch(){
     let listeners=state().lock().unwrap().listeners.values().cloned().collect::<Vec<_>>();
     for listener in listeners {
-        // Catch subscriber panics. Task mutation is not an observer's concern.
         let _=catch_unwind(AssertUnwindSafe(||listener()));
     }
 }

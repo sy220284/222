@@ -27,6 +27,17 @@ pub struct Item {
     pub metadata:Option<Map<String,Value>>,
 }
 
+struct TaskMutationGuard{
+    file:fs::File,
+    deferred:Option<task_events::BatchGuard>,
+}
+impl Drop for TaskMutationGuard{
+    fn drop(&mut self){
+        let _=FileExt::unlock(&self.file);
+        // Dispatch observers only after the file lock is released.
+        self.deferred.take();
+    }
+}
 #[derive(Clone)]
 pub struct TaskGraph { directory:PathBuf }
 impl TaskGraph {
@@ -50,8 +61,11 @@ impl TaskGraph {
         if path.symlink_metadata().is_ok_and(|m|m.file_type().is_symlink()){bail!("Unsafe task lock link")}
         let lock=OpenOptions::new().write(true).create(true).open(path)?;
         lock.lock_exclusive().context("Task list lock failed")?;
+        let guard=TaskMutationGuard{
+            file:lock,deferred:Some(task_events::defer_notifications())
+        };
         let result=action(self);
-        let _=FileExt::unlock(&lock);
+        drop(guard);
         result
     }
     fn path(&self,id:&str)->Result<PathBuf>{
@@ -425,6 +439,23 @@ mod tests{
         assert_eq!(graph.all().unwrap().len(),1);
         assert_eq!(graph.get(&json!({"taskId":"2"})).unwrap(),"Task not found");
         assert!(graph.list(&json!({})).unwrap().contains("Valid"));
+    }
+    #[test]
+    fn subscriber_can_reenter_task_mutation_after_unlock(){
+        use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
+        let (_root,graph)=store();
+        let graph_for_callback=graph.clone();
+        let once=Arc::new(AtomicBool::new(false));
+        let gate=once.clone();
+        let _listener=task_events::on_tasks_updated(Arc::new(move||{
+            if !gate.swap(true,Ordering::SeqCst){
+                graph_for_callback.update(&json!({
+                    "taskId":"1","subject":"Updated by subscriber"
+                })).unwrap();
+            }
+        }));
+        graph.create(&json!({"subject":"Original","description":"Body"})).unwrap();
+        assert_eq!(graph.peek("1").unwrap().unwrap().subject,"Updated by subscriber");
     }
     #[test]
     fn task_mutations_emit_observable_events(){
