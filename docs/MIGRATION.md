@@ -31,7 +31,8 @@
 | Git 只读操作 | `tools.rs` | status / diff / log 已实现 |
 | Jupyter Notebook 编辑 | `notebook.rs` / `tools.rs` | 单元格 ID / 索引、插入/替换/删除、读后修改检测（输出与编码仍待对照） |
 | Glob / Grep 高级检索 | `search.rs` | 文件模式、分页、内容/计数/路径输出；ripgrep 各项语义仍需逐项核实 |
-| LSP、Git 修改与工作树管理 | — | 未实现 |
+| LSP 标准查询与文档同步 | `lsp.rs` | 9 类请求和消息帧已实现，服务器兼容未完全验证 |
+| Git 修改与工作树管理 | `worktree.rs` | 工作树生命周期部分实现 |
 | 一级子 Agent 委派与工作树隔离 | `agent.rs` / `worktree.rs` | 已实现独立会话、隔离、清理 |
 | 完整多 Agent 团队、任务消息与并行管理 | — | 未实现 |
 | 背景任务、任务恢复、远程会话 | — | 未实现 |

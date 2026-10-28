@@ -4,11 +4,12 @@ use crate::{
     provider::{self, ModelProvider},
     session::Session,
     mcp::McpManager,
+    lsp::LspManager,
     task,
     hooks::{HookRule, HookRunner, HookEvent},
     worktree::Worktree,
     protocol::ToolCall,
-    config::McpServerConfig,
+    config::{McpServerConfig, LspServerConfig},
     tools::{self, Approval, ToolExecutor},
 };
 use anyhow::{bail, Context, Result};
@@ -36,10 +37,12 @@ pub struct Agent {
     max_steps: usize,
     session: Session,
     mcp: Option<McpManager>,
+    lsp: Option<LspManager>,
     hooks: HookRunner,
     session_context: String,
     child_depth: u8,
     mcp_configs: Vec<McpServerConfig>,
+    lsp_configs: Vec<LspServerConfig>,
     hook_rules: Vec<HookRule>,
 }
 
@@ -53,7 +56,7 @@ impl Agent {
         session: Session,
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, hooks: HookRunner::default(), session_context: String::new(), child_depth: 0, mcp_configs: Vec::new(), hook_rules: Vec::new() })
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -109,6 +112,7 @@ impl Agent {
         let child_id = child.session_id();
         let result = async {
             child.attach_mcp(&self.mcp_configs).await?;
+            child.attach_lsp(&self.lsp_configs).await?;
             child.attach_hooks(&self.hook_rules).await?;
             // Box the nested agent future to keep the recursive async type finite.
             let response = Box::pin(child.ask(prompt)).await;
@@ -123,6 +127,14 @@ impl Agent {
         let answer = result?;
         Ok(format!("Subagent session: {child_id}\nResult:\n{answer}\n{}",
             isolation_result.unwrap_or_default()))
+    }
+
+    pub async fn attach_lsp(&mut self, servers: &[LspServerConfig]) -> Result<()> {
+        self.lsp_configs = servers.to_vec();
+        if !servers.is_empty() {
+            self.lsp = Some(LspManager::connect(&self.root,servers).await?);
+        }
+        Ok(())
     }
 
     pub fn profile(&self) -> &ProviderProfile { &self.profile }
@@ -224,6 +236,7 @@ impl Agent {
             if let Some(mcp) = &self.mcp {
                 available_tools.extend(mcp.definitions());
             }
+            if self.lsp.is_some(){ available_tools.push(LspManager::definition()); }
             let response = self.provider.complete(&ModelRequest {
                 model: self.profile.model.clone(),
                 system: system.clone(),
@@ -270,6 +283,11 @@ impl Agent {
                         Ok(output) => output,
                         Err(error) => format!("ERROR: {error:#}"),
                     }
+                } else if call.function.name == "lsp_query" {
+                    if let Some(lsp)=&mut self.lsp {
+                        let input:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
+                        lsp.execute(&input).await
+                    }else{"ERROR: No LSP server configured".into()}
                 } else if task::handles(&call.function.name) {
                     task::execute(&mut self.session, &call)
                 } else if let Some(mcp) = &mut self.mcp {
@@ -358,10 +376,12 @@ mod tests {
             max_steps: 5,
             session,
             mcp: None,
+            lsp: None,
             hooks: HookRunner::default(),
             session_context: String::new(),
             child_depth: 0,
             mcp_configs: Vec::new(),
+            lsp_configs: Vec::new(),
             hook_rules: Vec::new(),
         };
         agent.compact_history().await.unwrap();

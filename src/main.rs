@@ -10,6 +10,7 @@ mod task;
 mod tools;
 mod notebook;
 mod search;
+mod lsp;
 
 use agent::Agent;
 use anyhow::{bail, Result};
@@ -109,6 +110,7 @@ async fn main() -> Result<()> {
         profile, root, cli.approval.into(), interactive, cli.max_steps, session
     )?;
     agent.attach_mcp(&config.mcp_servers).await?;
+    agent.attach_lsp(&config.lsp_servers).await?;
     agent.attach_hooks(&config.hooks).await?;
     eprintln!("Session: {}", agent.session_id());
     eprintln!("Provider: {} / {}", agent.profile().id, agent.profile().model);

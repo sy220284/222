@@ -23,6 +23,17 @@ pub struct McpServerConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LspServerConfig {
+    pub id: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    pub extensions: Vec<String>,
+    #[serde(default)]
+    pub language_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub default_provider: String,
     pub providers: Vec<ProviderProfile>,
@@ -30,6 +41,8 @@ pub struct Config {
     pub mcp_servers: Vec<McpServerConfig>,
     #[serde(default)]
     pub hooks: Vec<HookRule>,
+    #[serde(default)]
+    pub lsp_servers: Vec<LspServerConfig>,
 }
 
 impl Default for Config {
@@ -61,6 +74,7 @@ impl Default for Config {
             ],
             mcp_servers: vec![],
             hooks: vec![],
+            lsp_servers: vec![],
         }
     }
 }
@@ -123,6 +137,11 @@ impl Config {
             if s.command.trim().is_empty() { bail!("MCP server command cannot be empty"); }
         }
         HookRunner::new(&self.hooks)?;
+        for server in &self.lsp_servers {
+            if server.id.trim().is_empty() || server.command.trim().is_empty() || server.extensions.is_empty() {
+                bail!("LSP server must define id, command, and extensions")
+            }
+        }
         if !seen.contains(&self.default_provider) { bail!("Default provider is missing"); }
         Ok(())
     }
