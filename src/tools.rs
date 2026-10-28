@@ -1,4 +1,4 @@
-use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins, websearch, config::SearchBackend, background::BackgroundTasks, permission_rules};
+use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins, websearch, config::SearchBackend, background::BackgroundTasks, permission_rules, permission_mode};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -33,11 +33,17 @@ pub struct ToolExecutor {
     search_backend: Option<SearchBackend>,
     background: Option<Arc<BackgroundTasks>>,
     permission_rules: Vec<permission_rules::Rule>,
+    mode: Option<permission_mode::Mode>,
 }
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new() }
+        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new(), mode: None }
+    }
+
+    pub fn with_permission_mode(mut self, mode:permission_mode::Mode)->Self{
+        self.mode=Some(mode);
+        self
     }
 
     pub fn with_permission_rules(mut self, rules: Vec<permission_rules::Rule>) -> Self {
@@ -208,7 +214,18 @@ impl ToolExecutor {
         if self.approval == Approval::ReadOnly {
             bail!("Tool {tool} denied in read-only mode");
         }
+        // Plan and don't-ask never auto-authorize mutations. A read-only
+        // permission mode must not be bypassed by an inherited allow rule.
+        if matches!(self.mode, Some(permission_mode::Mode::Plan | permission_mode::Mode::DontAsk)) {
+            bail!("Tool {tool} denied by permission mode");
+        }
         if matched == Some(permission_rules::Behavior::Allow) {
+            return Ok(());
+        }
+        if self.mode==Some(permission_mode::Mode::AcceptEdits)
+            && matched!=Some(permission_rules::Behavior::Ask)
+            && matches!(permission_rules::canonical_tool(tool),"Write"|"Edit")
+        {
             return Ok(());
         }
         if self.approval == Approval::Full &&
