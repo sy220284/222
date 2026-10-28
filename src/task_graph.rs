@@ -448,7 +448,9 @@ mod tests{
         let once=Arc::new(AtomicBool::new(false));
         let gate=once.clone();
         let _listener=task_events::on_tasks_updated(Arc::new(move||{
-            if !gate.swap(true,Ordering::SeqCst){
+            let relevant=graph_for_callback.peek("1").ok().flatten()
+                .is_some_and(|task|task.subject=="Original");
+            if relevant && !gate.swap(true,Ordering::SeqCst){
                 graph_for_callback.update(&json!({
                     "taskId":"1","subject":"Updated by subscriber"
                 })).unwrap();
