@@ -36,6 +36,27 @@ Project skills can be discovered with list_skills and loaded with read_skill whe
 Never reveal secrets from configuration, environment variables, or private files.
 When finished, report the verified result and any remaining limitations accurately."#;
 
+/// Finish a teammate only after its task ownership has been released and
+/// the leader has received the durable completion notification. A failure
+/// leaves the member active so team cleanup cannot silently erase its state.
+fn finish_team_member(root:&Path,team:&str,name:&str,success:bool,
+    graph:&task_graph::TaskGraph)->Result<()>{
+    let reason=if success{"shutdown"}else{"terminated"};
+    graph.unassign_teammate(&format!("{name}@{team}"),name,reason)?;
+    let mailbox=crate::team_mailbox::Mailbox::new(root,team)?;
+    mailbox.write("team-lead",crate::team_mailbox::Message{
+        from:name.to_owned(),
+        text:json!({"type":"idle_notification","from":name,
+            "idleReason":if success{"available"}else{"failed"},
+            "timestamp":chrono::Utc::now().to_rfc3339()}).to_string(),
+        timestamp:chrono::Utc::now().to_rfc3339_opts(
+            chrono::SecondsFormat::Millis,true),
+        read:false,color:None,summary:None
+    })?;
+    Teams::new(root)?.active(team,name,false)?;
+    Ok(())
+}
+
 pub struct Agent {
     profile: ProviderProfile,
     provider: Box<dyn ModelProvider>,
@@ -395,29 +416,8 @@ impl Agent {
                 }else{None};
                 let cleanup=if let Some(team)=current_team.as_deref(){
                     let team_root=current_team_root.as_deref().unwrap_or(&root);
-                    let reason=if result.is_ok(){"shutdown"}else{"terminated"};
-                    (||->Result<()>{
-                        let registry=Teams::new(team_root)?;
-                        let release=cleanup_graph.unassign_teammate(
-                            &format!("{name}@{team}"),&name,reason);
-                        let notification=(||->Result<()>{
-                            let mailbox=crate::team_mailbox::Mailbox::new(team_root,team)?;
-                            mailbox.write("team-lead",crate::team_mailbox::Message{
-                                from:name.clone(),
-                                text:json!({"type":"idle_notification","from":name,
-                                    "idleReason":if result.is_ok(){"available"}else{"failed"},
-                                    "timestamp":chrono::Utc::now().to_rfc3339()}).to_string(),
-                                timestamp:chrono::Utc::now().to_rfc3339_opts(
-                                    chrono::SecondsFormat::Millis,true),
-                                read:false,color:None,summary:None
-                            })
-                        })();
-                        let state=registry.active(team,&name,false);
-                        release?;
-                        notification?;
-                        state?;
-                        Ok(())
-                    })().err().map(|e|format!("{e:#}"))
+                    finish_team_member(team_root,team,&name,result.is_ok(),&cleanup_graph)
+                        .err().map(|e|format!("{e:#}"))
                 }else{None};
                 let value=match result{
                     Ok((session_id,answer))=>{
@@ -1166,6 +1166,77 @@ mod tests {
         assert!(after.agent_name.is_none());
         assert!(!root.path().join(".atlas/teams/persistent").exists());
         assert!(!root.path().join(".atlas/task-lists/persistent").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_task_release_keeps_member_active_until_retry_completes() {
+        use std::os::unix::fs::symlink;
+        let root=tempfile::tempdir().unwrap();
+        let teams=Teams::new(root.path()).unwrap();
+        teams.create("team",None,"lead").unwrap();
+        teams.member("team",crate::team_registry::Member{
+            name:"worker".into(),id:"worker@team".into(),active:true
+        }).unwrap();
+        let graph=task_graph::TaskGraph::new(root.path(),"team").unwrap();
+        graph.create(&json!({"subject":"Work","description":"Finish"})).unwrap();
+        graph.update(&json!({"taskId":"1","owner":"worker",
+            "status":"in_progress"})).unwrap();
+        let lock=root.path().join(".atlas/task-lists/team/.lock");
+        fs::remove_file(&lock).unwrap();
+        symlink(root.path().join("untrusted-lock"),&lock).unwrap();
+        assert!(finish_team_member(root.path(),"team","worker",false,&graph).is_err());
+        let before=teams.read("team").unwrap().unwrap();
+        assert!(before.members.iter().find(|m|m.name=="worker").unwrap().active);
+        assert_eq!(graph.peek("1").unwrap().unwrap().owner.as_deref(),Some("worker"));
+        fs::remove_file(&lock).unwrap();
+        finish_team_member(root.path(),"team","worker",false,&graph).unwrap();
+        let after=teams.read("team").unwrap().unwrap();
+        assert!(!after.members.iter().find(|m|m.name=="worker").unwrap().active);
+        assert!(graph.peek("1").unwrap().unwrap().owner.is_none());
+        let inbox=crate::team_mailbox::Mailbox::new(root.path(),"team").unwrap();
+        assert_eq!(inbox.unread("team-lead").unwrap().len(),1);
+    }
+
+    #[tokio::test]
+    async fn agent_shutdown_tool_requires_persisted_request_before_exit() {
+        let root=tempfile::tempdir().unwrap();
+        let teams=Teams::new(root.path()).unwrap();
+        teams.create("team",None,"lead").unwrap();
+        teams.member("team",crate::team_registry::Member{
+            name:"worker".into(),id:"worker@team".into(),active:true
+        }).unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),
+            model:"mock".into(),api_key_env:None,stream:false
+        };
+        let mut worker=Agent::new(profile,root.path().to_path_buf(),
+            Approval::ReadOnly,false,5,Session::fresh()).unwrap();
+        worker.team_name=Some("team".into());
+        worker.team_root=Some(root.path().to_path_buf());
+        worker.agent_name=Some("worker".into());
+        let executor=ToolExecutor::new(root.path().to_path_buf(),Approval::ReadOnly,false);
+        let call=|request_id:&str|ToolCall{
+            id:"shutdown-response".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"SendMessage".into(),
+                arguments:json!({"to":"team-lead","message":{
+                    "type":"shutdown_response","request_id":request_id,"approve":true
+                }}).to_string()
+            }
+        };
+        assert!(worker.run_team_tools(&call("forged"),&executor).await.is_err());
+        assert!(!worker.shutdown_requested);
+        let request=teams.send_structured("team","worker","team-lead",
+            &json!({"type":"shutdown_request","reason":"done"})).unwrap();
+        let id=request["request_id"].as_str().unwrap();
+        assert_eq!(worker.run_team_tools(&call(id),&executor).await.unwrap()
+            .contains("shutdown_requested"),true);
+        assert!(worker.shutdown_requested);
+        assert!(worker.run_team_tools(&call(id),&executor).await.is_err());
+        let inbox=crate::team_mailbox::Mailbox::new(root.path(),"team").unwrap();
+        assert_eq!(inbox.unread("team-lead").unwrap().len(),1);
     }
 
     #[test]
