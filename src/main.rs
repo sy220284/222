@@ -1,4 +1,5 @@
 mod agent;
+mod mcp;
 mod config;
 mod protocol;
 mod provider;
@@ -102,6 +103,7 @@ async fn main() -> Result<()> {
     let mut agent = Agent::new(
         profile, root, cli.approval.into(), interactive, cli.max_steps, session
     )?;
+    agent.attach_mcp(&config.mcp_servers).await?;
     eprintln!("Session: {}", agent.session_id());
     eprintln!("Provider: {} / {}", agent.profile().id, agent.profile().model);
     match &cli.command {

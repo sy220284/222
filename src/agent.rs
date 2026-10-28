@@ -3,6 +3,8 @@ use crate::{
     protocol::{Message, ModelRequest},
     provider::{self, ModelProvider},
     session::Session,
+    mcp::McpManager,
+    config::McpServerConfig,
     tools::{self, Approval, ToolExecutor},
 };
 use anyhow::{bail, Context, Result};
@@ -26,6 +28,7 @@ pub struct Agent {
     interactive: bool,
     max_steps: usize,
     session: Session,
+    mcp: Option<McpManager>,
 }
 
 impl Agent {
@@ -38,7 +41,14 @@ impl Agent {
         session: Session,
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session })
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None })
+    }
+
+    pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
+        if !servers.is_empty() {
+            self.mcp = Some(McpManager::connect(servers).await?);
+        }
+        Ok(())
     }
 
     pub fn profile(&self) -> &ProviderProfile { &self.profile }
@@ -63,11 +73,15 @@ impl Agent {
         let system = system_prompt(&self.root)?;
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive);
         for _ in 0..self.max_steps {
+            let mut available_tools = tools::definitions();
+            if let Some(mcp) = &self.mcp {
+                available_tools.extend(mcp.definitions());
+            }
             let response = self.provider.complete(&ModelRequest {
                 model: self.profile.model.clone(),
                 system: system.clone(),
                 messages: self.session.messages.clone(),
-                tools: tools::definitions(),
+                tools: available_tools,
             }).await?;
             let calls = response.message.tool_calls.clone().unwrap_or_default();
             let text = response.message.content.clone().unwrap_or_default();
@@ -85,7 +99,18 @@ impl Agent {
             }
             for call in calls {
                 eprintln!("Executing tool: {}", call.function.name);
-                let result = executor.execute(&call).await;
+                let result = if let Some(mcp) = &mut self.mcp {
+                    if mcp.handles(&call.function.name) {
+                        match executor.approve_external(&call) {
+                            Ok(()) => mcp.execute(&call).await,
+                            Err(error) => format!("ERROR: {error:#}"),
+                        }
+                    } else {
+                        executor.execute(&call).await
+                    }
+                } else {
+                    executor.execute(&call).await
+                };
                 self.session.messages.push(Message::tool_result(&call, result));
                 self.session.save(&self.root)?;
             }

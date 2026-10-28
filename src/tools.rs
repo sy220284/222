@@ -63,6 +63,11 @@ impl ToolExecutor {
         }
     }
 
+    pub fn approve_external(&self, call: &ToolCall) -> Result<()> {
+        let args: Value = serde_json::from_str(&call.function.arguments)?;
+        self.require_approval(&call.function.name, &args)
+    }
+
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
         match self.approval {
             Approval::Full => Ok(()),

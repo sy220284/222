@@ -14,9 +14,19 @@ pub struct ProviderProfile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    pub id: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub default_provider: String,
     pub providers: Vec<ProviderProfile>,
+    #[serde(default)]
+    pub mcp_servers: Vec<McpServerConfig>,
 }
 
 impl Default for Config {
@@ -46,6 +56,7 @@ impl Default for Config {
                     api_key_env: Some("GEMINI_API_KEY".into()),
                 },
             ],
+            mcp_servers: vec![],
         }
     }
 }
@@ -97,6 +108,15 @@ impl Config {
             }
             let url = reqwest::Url::parse(&p.base_url)?;
             if !matches!(url.scheme(), "http" | "https") { bail!("Only http(s) endpoints are supported") }
+        }
+        let mut server_ids = std::collections::HashSet::new();
+        for s in &self.mcp_servers {
+            if s.id.is_empty() || s.id.len() > 24 ||
+                !s.id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
+                bail!("Invalid MCP server id: {}", s.id);
+            }
+            if !server_ids.insert(&s.id) { bail!("Duplicate MCP server id: {}", s.id); }
+            if s.command.trim().is_empty() { bail!("MCP server command cannot be empty"); }
         }
         if !seen.contains(&self.default_provider) { bail!("Default provider is missing"); }
         Ok(())

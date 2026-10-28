@@ -12,6 +12,7 @@
 - 默认审批写操作与 Shell；非交互模式默认拒绝，需明确设置 `--approval full`。
 - 文件工具工作区限制与符号链接越界检查；命令执行按明确授权处理。
 - `AGENTS.md` / `.atlas/instructions.md` 项目指导文件、UUID 会话保存与继续。
+- MCP stdio 外部工具服务器：工具发现、JSON-RPC 调用与结果回填，执行前沿用审批。
 - 独立编写的单元测试和 GitHub Actions 编译测试。
 
 ## 快速开始
@@ -44,6 +45,18 @@ cargo run -- --provider gemini chat
 
 无需固定账号也可使用自建兼容服务：运行 `cargo run -- init`，编辑配置文件中 `base_url`、`model`、`api_key_env`，或添加新的 `openai-compatible` 配置。配置默认在系统配置目录下的 `atlas-agent/config.json`；可以用环境变量 `ATLAS_CONFIG` 指定位置。
 
+## MCP 本地工具
+
+在原有 JSON 配置的根对象增加 `mcp_servers`：
+
+```json
+"mcp_servers": [
+  {"id":"filesystem","command":"my-mcp-server","args":["--stdio"]}
+]
+```
+
+当前支持本地 stdio 传输；外部工具执行必须通过审批。
+
 ## 执行权限
 
 - `--approval read-only`：只能读、搜索文件。
@@ -70,7 +83,8 @@ cargo run -- chat --resume <上次输出的UUID>
 | 会话恢复与项目规则 | 已实现 |
 | 文件路径隔离与审批 | 已实现（Shell 权限依赖用户授权） |
 | 流式文本、Token 成本统计和自动压缩 | 未实现 |
-| MCP、Skills、Plugins、Hooks、LSP | 未实现 |
+| MCP stdio 客户端 | 已实现基础工具发现和调用 |
+| Skills、Plugins、Hooks、LSP | 未实现 |
 | 多 Agent 协作、后台任务、Git Worktree | 未实现 |
 | 完整终端 UI、SDK、远程桥接、语音和 IDE | 未实现 |
 
