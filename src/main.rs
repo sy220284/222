@@ -9,6 +9,7 @@ mod session;
 mod task;
 mod task_graph;
 mod task_events;
+mod team_mailbox;
 mod tools;
 mod notebook;
 mod search;
