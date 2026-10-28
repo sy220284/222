@@ -6,6 +6,7 @@ use std::{
     fs,
     io::{self, Write},
     path::{Component, Path, PathBuf},
+    process::Stdio,
     time::Duration,
 };
 use tokio::{process::Command, time::timeout};
@@ -288,16 +289,43 @@ impl ToolExecutor {
             p.arg("-c").arg(command);
             p
         };
-        proc.current_dir(&self.root).kill_on_drop(true);
-        let output = timeout(Duration::from_secs(secs), proc.output())
-            .await.context("Command timed out")??;
+        proc.current_dir(&self.root).kill_on_drop(true)
+            .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = proc.spawn()?;
+        let stdout = child.stdout.take().context("No command stdout")?;
+        let stderr = child.stderr.take().context("No command stderr")?;
+        let (status, out, err) = timeout(Duration::from_secs(secs), async {
+            let (out, err) = tokio::try_join!(
+                capped_read(stdout, 128_000),
+                capped_read(stderr, 32_000)
+            )?;
+            let status = child.wait().await?;
+            Ok::<_, anyhow::Error>((status, out, err))
+        }).await.context("Command timed out")??;
         Ok(format!(
             "Exit: {}\nSTDOUT:\n{}\nSTDERR:\n{}",
-            output.status,
-            truncate(&String::from_utf8_lossy(&output.stdout), 12_000),
-            truncate(&String::from_utf8_lossy(&output.stderr), 4_000)
+            status,
+            truncate(&String::from_utf8_lossy(&out), 12_000),
+            truncate(&String::from_utf8_lossy(&err), 4_000)
         ))
     }
+}
+
+async fn capped_read<R: tokio::io::AsyncRead + Unpin>(
+    mut input: R, max_bytes: usize
+) -> Result<Vec<u8>> {
+    use tokio::io::AsyncReadExt;
+    let mut bytes = Vec::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let n = input.read(&mut buffer).await?;
+        if n == 0 { break; }
+        if bytes.len() + n > max_bytes {
+            bail!("Command output exceeded {max_bytes} bytes");
+        }
+        bytes.extend_from_slice(&buffer[..n]);
+    }
+    Ok(bytes)
 }
 
 fn required<'a>(args: &'a Value, key: &str) -> Result<&'a str> {
@@ -387,6 +415,29 @@ mod tests {
         ToolExecutor::new(root.canonicalize().unwrap(), approval, false)
     }
 
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn shell_command_respects_output_limit() {
+        let root = tempfile::tempdir().unwrap();
+        let executor = executor(root.path(), Approval::Full);
+        let small = ToolCall {
+            id: "ok".into(), kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":"printf hello"}).to_string(),
+            },
+        };
+        assert!(executor.execute(&small).await.contains("hello"));
+        let large = ToolCall {
+            id: "large".into(), kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":"head -c 200000 /dev/zero"}).to_string(),
+            },
+        };
+        assert!(executor.execute(&large).await.contains("Command output exceeded"));
+    }
 
     #[tokio::test]
     async fn git_status_and_diff_read_real_repository() {
