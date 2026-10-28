@@ -323,7 +323,7 @@ impl Agent {
         } else {
             format!("{prompt}\n\n[Local hook context]\n{}", pre_prompt.additional_context.join("\n"))
         };
-        self.session.messages.push(Message::text("user", prompt));
+        self.session.messages.push(Message::text("user", &prompt));
         self.session.save(&self.root)?;
         let mut system = system_prompt(&self.root)?;
         if let Some(summary) = &self.session.summary {

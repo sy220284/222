@@ -154,8 +154,9 @@ pub async fn context(root: &Path, query: &str, provider: &dyn ModelProvider,
     let mut seen = std::collections::HashSet::new();
     for name in parsed.get("selected_memories").and_then(Value::as_array)
         .into_iter().flatten().filter_map(Value::as_str).take(50) {
-        if !seen.insert(name) || seen.len() > 5 { continue }
         let Some(file) = files.iter().find(|f| f.filename == name) else { continue };
+        if !seen.insert(name) { continue }
+        if seen.len() > 5 { break }
         let contents = fs::read_to_string(&file.path)?;
         text.push_str(&format!("\nRelevant local memory ({name}):\n{}\n",
             trim_utf8(&contents, MAX_PER_TOPIC_BYTES)));
