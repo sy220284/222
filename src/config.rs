@@ -1,0 +1,136 @@
+use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
+use std::{fs, path::{Path, PathBuf}};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderProfile {
+    pub id: String,
+    /// openai-compatible or gemini
+    pub kind: String,
+    pub base_url: String,
+    pub model: String,
+    #[serde(default)]
+    pub api_key_env: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
+    pub default_provider: String,
+    pub providers: Vec<ProviderProfile>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            default_provider: "local".into(),
+            providers: vec![
+                ProviderProfile {
+                    id: "local".into(),
+                    kind: "openai-compatible".into(),
+                    base_url: "http://127.0.0.1:11434/v1".into(),
+                    model: "qwen2.5-coder:7b".into(),
+                    api_key_env: None,
+                },
+                ProviderProfile {
+                    id: "openai".into(),
+                    kind: "openai-compatible".into(),
+                    base_url: "https://api.openai.com/v1".into(),
+                    model: "gpt-4.1-mini".into(),
+                    api_key_env: Some("OPENAI_API_KEY".into()),
+                },
+                ProviderProfile {
+                    id: "gemini".into(),
+                    kind: "gemini".into(),
+                    base_url: "https://generativelanguage.googleapis.com/v1beta".into(),
+                    model: "gemini-2.5-flash".into(),
+                    api_key_env: Some("GEMINI_API_KEY".into()),
+                },
+            ],
+        }
+    }
+}
+
+impl Config {
+    pub fn path() -> Result<PathBuf> {
+        if let Ok(p) = std::env::var("ATLAS_CONFIG") {
+            return Ok(PathBuf::from(p));
+        }
+        let home = dirs::config_dir().context("Cannot locate user config directory; set ATLAS_CONFIG")?;
+        Ok(home.join("atlas-agent").join("config.json"))
+    }
+
+    pub fn load() -> Result<Self> {
+        let path = Self::path()?;
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let raw = fs::read_to_string(&path).with_context(|| format!("Read {}", path.display()))?;
+        let config: Self = serde_json::from_str(&raw)
+            .with_context(|| format!("Parse {}", path.display()))?;
+        config.validate()?;
+        Ok(config)
+    }
+
+    pub fn init() -> Result<PathBuf> {
+        let path = Self::path()?;
+        if path.exists() {
+            bail!("Config already exists at {}", path.display());
+        }
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let data = serde_json::to_string_pretty(&Self::default())?;
+        fs::write(&path, format!("{data}\n"))?;
+        Ok(path)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.providers.is_empty() { bail!("At least one provider is required") }
+        let mut seen = std::collections::HashSet::new();
+        for p in &self.providers {
+            if p.id.trim().is_empty() || p.model.trim().is_empty() {
+                bail!("Provider id and model must be nonempty");
+            }
+            if !seen.insert(&p.id) { bail!("Duplicate provider id: {}", p.id); }
+            if !matches!(p.kind.as_str(), "openai-compatible" | "gemini") {
+                bail!("Unsupported provider kind for {}: {}", p.id, p.kind);
+            }
+            let url = reqwest::Url::parse(&p.base_url)?;
+            if !matches!(url.scheme(), "http" | "https") { bail!("Only http(s) endpoints are supported") }
+        }
+        if !seen.contains(&self.default_provider) { bail!("Default provider is missing"); }
+        Ok(())
+    }
+
+    pub fn select(&self, selected: Option<&str>, model: Option<&str>) -> Result<ProviderProfile> {
+        let id = selected.unwrap_or(&self.default_provider);
+        let mut p = self.providers.iter().find(|p| p.id == id)
+            .with_context(|| format!("No provider named {id}; run 'atlas-agent models'"))?.clone();
+        if let Some(m) = model {
+            if m.trim().is_empty() { bail!("Model cannot be empty"); }
+            p.model = m.to_owned();
+        }
+        Ok(p)
+    }
+}
+
+pub fn canonical_workspace(path: &Path) -> Result<PathBuf> {
+    let root = path.canonicalize().with_context(|| format!("Workspace {} unavailable", path.display()))?;
+    if !root.is_dir() { bail!("Workspace must be a directory") }
+    Ok(root)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn profiles_have_unique_names() {
+        Config::default().validate().unwrap();
+    }
+    #[test]
+    fn selecting_custom_model_does_not_mutate_config() {
+        let c = Config::default();
+        assert_eq!(c.select(Some("local"), Some("example")).unwrap().model, "example");
+        assert_eq!(c.select(Some("local"), None).unwrap().model, "qwen2.5-coder:7b");
+    }
+}

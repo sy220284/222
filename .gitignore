@@ -1,0 +1,7 @@
+/target/
+/.atlas/sessions/
+*.swp
+*.bak
+.env
+.env.*
+!.env.example
