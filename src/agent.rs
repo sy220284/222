@@ -327,6 +327,7 @@ impl Agent {
 
     async fn run_team(&self, call:&ToolCall, executor:&ToolExecutor)->Result<String>{
         if self.child_depth!=0 {bail!("Nested teams are not allowed")}
+        executor.approve_delegation(call)?;
         let args:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
         let plans=args.get("tasks").and_then(|v|v.as_array())
             .context("spawn_team requires tasks array")?;
@@ -453,6 +454,7 @@ impl Agent {
 
     async fn run_subagent(&self, call: &ToolCall, executor: &ToolExecutor) -> Result<String> {
         if self.child_depth >= 1 { bail!("Subagent depth limit reached") }
+        executor.approve_delegation(call)?;
         let args: serde_json::Value = serde_json::from_str(&call.function.arguments)?;
         let prompt = args.get("prompt").and_then(|v| v.as_str())
             .context("spawn_agent requires prompt")?;
@@ -1244,6 +1246,39 @@ mod tests {
         assert!(worker.run_team_tools(&call(id),&executor).await.is_err());
         let inbox=crate::team_mailbox::Mailbox::new(root.path(),"team").unwrap();
         assert_eq!(inbox.unread("team-lead").unwrap().len(),1);
+    }
+
+    #[tokio::test]
+    async fn explicit_agent_permission_deny_blocks_both_delegation_routes() {
+        let root=tempfile::tempdir().unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),
+            model:"mock".into(),api_key_env:None,stream:false
+        };
+        let mut agent=Agent::new(profile,root.path().to_path_buf(),
+            Approval::ReadOnly,false,5,Session::fresh()).unwrap();
+        let rules=[permission_rules::RuleSetting{
+            behavior:"deny".into(),rule:"Agent".into()
+        }];
+        agent.set_permission_rules(&rules).unwrap();
+        let executor=ToolExecutor::new(root.path().to_path_buf(),
+            Approval::ReadOnly,false).with_permission_rules(agent.permission_rules.clone());
+        let team=ToolCall{id:"team-deny".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"spawn_team".into(),
+                arguments:json!({"tasks":[{"name":"worker","prompt":"Review"}]}).to_string()
+            }};
+        let sub=ToolCall{id:"sub-deny".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"spawn_agent".into(),
+                arguments:json!({"prompt":"Review"}).to_string()
+            }};
+        assert!(agent.run_team(&team,&executor).await.unwrap_err()
+            .to_string().contains("denied"));
+        assert!(agent.run_subagent(&sub,&executor).await.unwrap_err()
+            .to_string().contains("denied"));
+        assert!(!root.path().join(".atlas/worktrees").exists());
     }
 
     #[test]
