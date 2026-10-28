@@ -22,6 +22,7 @@ mod history;
 mod plugins;
 mod websearch;
 mod sse;
+mod gemini_sse;
 mod background;
 mod memory;
 mod memory_age;
