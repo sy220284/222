@@ -99,3 +99,7 @@
 ### 模型缓存计费来源差异
 
 原版计费将 input、cache_read、cache_creation 作为三类费用来源分别计算；部分通用 OpenAI 兼容服务却把缓存 Token 计入 prompt_tokens。费用配置按模型新增 `cache_read_included_in_input` 与 `cache_write_included_in_input` 标志：计入输入的缓存部分先减掉，再按缓存价格计费；独立上报时不减。普通 HTTP、SSE、Gemini 扩展用量解析统一记录 cache_creation 和 web_search_requests。既有费率 JSON 不提供这些字段时保持默认向后兼容。
+
+### 原始集合和对象分组纯函数
+
+`src/collections.rs` 通过 `indexmap` 的 `IndexSet`/`IndexMap` 实现并验证差集/交集/子集/并集及对象分组行为，保持集合和分组插入顺序、零起始回调索引及 `__proto__` 不作为原型赋值。未依赖 JavaScript 的 Symbol、SameValueZero、Number 及引用对象身份的全部复杂边界还需实现跨语言相等语义，严格维持部分实现标记。

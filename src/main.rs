@@ -1,6 +1,7 @@
 mod agent;
 mod cost;
 mod tool_metrics;
+mod collections;
 mod semantic_inputs;
 mod xml_escape;
 mod json_read;

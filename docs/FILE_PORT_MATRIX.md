@@ -1626,7 +1626,7 @@
 | `src/utils/nativeInstaller/packageManagers.ts` | 337 | 8963 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/nativeInstaller/pidLock.ts` | 434 | 11934 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/notebook.ts` | 225 | 6368 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/objectGroupBy.ts` | 19 | 511 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/objectGroupBy.ts` | 19 | 511 | 重写：迭代分组、索引与防原型污染 | `src/collections.rs` | 部分实现：逐项回调、零起始索引、键分组和 __proto__ 安全；JS Symbol/整数属性枚举次序及对象标识待核对 |
 | `src/utils/pasteStore.ts` | 105 | 2950 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/path.ts` | 156 | 5700 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/pdf.ts` | 301 | 8148 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1754,7 +1754,7 @@
 | `src/utils/sessionStoragePortable.ts` | 794 | 25448 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionTitle.ts` | 130 | 4757 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionUrl.ts` | 65 | 1672 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/set.ts` | 54 | 1036 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/set.ts` | 54 | 1036 | 重写：Set 差集、交集判定、包含关系与有序并集 | `src/collections.rs` | 部分实现：4 个函数保持 Set 插入顺序和空集语义；JS 对象引用与 SameValueZero 非整数数字语义待跨语言核对 |
 | `src/utils/settings/allErrors.ts` | 33 | 1257 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/applySettingsChange.ts` | 93 | 3656 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/changeDetector.ts` | 489 | 16384 | 重写：保持通用行为 | 待定 | 未迁移 |
