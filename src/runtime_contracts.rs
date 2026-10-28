@@ -22,8 +22,16 @@ fn warning_store()->&'static watch::Sender<bool>{
 }
 pub fn compact_warning_suppressed()->bool{*warning_store().borrow()}
 pub fn subscribe_compact_warning()->watch::Receiver<bool>{warning_store().subscribe()}
-pub fn suppress_compact_warning(){warning_store().send_replace(true);}
-pub fn clear_compact_warning_suppression(){warning_store().send_replace(false);}
+pub fn suppress_compact_warning(){
+    warning_store().send_if_modified(|current|{
+        if *current {false}else{*current=true;true}
+    });
+}
+pub fn clear_compact_warning_suppression(){
+    warning_store().send_if_modified(|current|{
+        if !*current {false}else{*current=false;true}
+    });
+}
 
 /// Generic ASCII-safe name sanitization; the proprietary server prefix
 /// special-case is intentionally omitted.
@@ -64,6 +72,14 @@ mod tests{
         assert!(!compact_warning_suppressed());
         assert!(receiver.has_changed().unwrap());
         assert!(!*receiver.borrow_and_update());
+        // The original createStore uses Object.is and emits no event when
+        // the boolean value remains unchanged.
+        clear_compact_warning_suppression();
+        assert!(!receiver.has_changed().unwrap());
+        suppress_compact_warning();
+        assert!(*receiver.borrow_and_update());
+        suppress_compact_warning();
+        assert!(!receiver.has_changed().unwrap());
     }
     #[test]
     fn generic_mcp_ascii_names_match_reference_nonvendor_behavior(){
