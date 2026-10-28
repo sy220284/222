@@ -605,6 +605,6 @@ fn model_driven_team_create_message_receive_and_cleanup() {
     assert!(results[1].contains("success"));
     assert!(saw_auto_delivery,"Teammate messages must reach the next model round");
     assert_eq!(results[2],"[]");
-    assert!(results[3].contains("Cleaned up directories"));
+    assert!(results[3].contains("Cleaned up team configuration"));
     assert!(!dir.path().join(".atlas/teams/review").exists());
 }

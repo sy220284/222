@@ -266,6 +266,7 @@ impl TaskGraph {
     /// Remove an inactive team's task storage after team cleanup succeeds.
     /// Unlike reset, this also removes the high-water mark and lock file.
     pub fn remove_storage(&self)->Result<()>{
+        if !self.directory.exists(){return Ok(())}
         self.locked(|store|{
             for entry in fs::read_dir(&store.directory)?{
                 let entry=entry?;

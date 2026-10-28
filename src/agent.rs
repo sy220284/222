@@ -193,8 +193,17 @@ impl Agent {
                     .context("team_name is required for TeamCreate")?;
                 let description=args.get("description").and_then(serde_json::Value::as_str);
                 let team=registry.create(name,description,&self.session.id.to_string())?;
-                let graph=task_graph::TaskGraph::new(&self.root,&team.name)?;
-                graph.reset()?;
+                let graph=match (||->Result<task_graph::TaskGraph>{
+                    let graph=task_graph::TaskGraph::new(&self.root,&team.name)?;
+                    graph.reset()?;
+                    Ok(graph)
+                })(){
+                    Ok(graph)=>graph,
+                    Err(error)=>{
+                        let _=registry.delete(Some(&team.name));
+                        return Err(error)
+                    }
+                };
                 self.graph=graph;
                 self.team_name=Some(team.name.clone());
                 self.agent_name=Some("team-lead".into());
@@ -1012,6 +1021,38 @@ mod tests {
         assert_eq!(data["assignedBy"],"team-lead");
         leader.run_task_graph(&update).await.unwrap();
         assert_eq!(mailbox.unread("worker").unwrap().len(),1);
+    }
+
+    #[tokio::test]
+    async fn team_cleanup_can_retry_after_task_directory_failure(){
+        let root=tempfile::tempdir().unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),
+            model:"mock".into(),api_key_env:None,stream:false
+        };
+        let mut leader=Agent::new(profile,root.path().to_path_buf(),
+            Approval::Full,false,5,Session::fresh()).unwrap();
+        let executor=ToolExecutor::new(root.path().to_path_buf(),Approval::Full,false);
+        let create=ToolCall{id:"create".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"TeamCreate".into(),
+                arguments:json!({"team_name":"retry"}).to_string()
+            }};
+        leader.run_team_tools(&create,&executor).await.unwrap();
+        let nested=root.path().join(".atlas/task-lists/retry/nested");
+        fs::create_dir_all(&nested).unwrap();
+        let delete=ToolCall{id:"delete".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"TeamDelete".into(),arguments:"{}".into()
+            }};
+        assert!(leader.run_team_tools(&delete,&executor).await.is_err());
+        assert_eq!(leader.team_name.as_deref(),Some("retry"));
+        fs::remove_dir_all(&nested).unwrap();
+        let result=leader.run_team_tools(&delete,&executor).await.unwrap();
+        assert!(result.contains("already removed"));
+        assert!(leader.team_name.is_none());
+        assert!(!root.path().join(".atlas/task-lists/retry").exists());
     }
 
     #[tokio::test]

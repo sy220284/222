@@ -122,7 +122,17 @@ impl Teams {
         let Some(name)=team else {
             return Ok(json!({"success":true,"message":"No team name found, nothing to clean up"}))
         };
-        let cfg=this.read(name)?.context("Team missing")?;
+        let cfg=match this.read(name)?{
+            Some(cfg)=>cfg,
+            None=>{
+                let path=this.path(name)?;
+                if let Some(directory)=path.parent(){
+                    if directory.exists(){fs::remove_dir_all(directory)?;}
+                }
+                return Ok(json!({"success":true,"team_name":name,
+                    "message":"Team configuration already removed"}));
+            }
+        };
         let active=cfg.members.iter().filter(|m|m.name!="team-lead"&&m.active)
             .map(|m|m.name.as_str()).collect::<Vec<_>>();
         if !active.is_empty(){
@@ -132,7 +142,7 @@ impl Teams {
         let cfg_path=this.path(name)?;
         fs::remove_dir_all(cfg_path.parent().context("Team directory missing")?)?;
         Ok(json!({"success":true,"team_name":name,
-            "message":format!("Cleaned up directories and worktrees for team \"{name}\"")}))
+            "message":format!("Cleaned up team configuration and inbox directory for team \"{name}\"")}))
         })
     }
     /// Structured peer protocol. The on-disk payload field names match
