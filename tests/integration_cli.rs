@@ -1690,7 +1690,8 @@ fn sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http(
         for event in [
             json!({"type":"user","content":[{"type":"text","text":"hello"},
                 {"type":"document","source":{"type":"text","data":"PRIVATE"}}]}),
-            json!({"type":"user","message":{"content":[
+            json!({"type":"user","uuid":"direct-replay-1",
+                "replayUserMessages":true,"message":{"content":[
                 {"type":"text","text":"first"},{"type":"text","text":"second"}]}})
         ]{writeln!(input,"{event}").unwrap();}
     }
@@ -1703,8 +1704,15 @@ fn sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http(
         .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
     assert!(events.iter().any(|v|v["type"]=="error" &&
         v["message"].as_str().unwrap_or("").contains("Unsupported user content")));
-    assert!(events.iter().any(|v|v["type"]=="result" &&
-        v["content"]=="Direct text accepted"));
+    let replay=events.iter().find(|v|v["type"]=="user" &&
+        v["isReplay"]==true).unwrap();
+    assert_eq!(replay["uuid"],"direct-replay-1");
+    assert_eq!(replay["message"]["content"],json!([
+        {"type":"text","text":"first"},{"type":"text","text":"second"}]));
+    let replay_index=events.iter().position(|v|v["uuid"]=="direct-replay-1").unwrap();
+    let result_index=events.iter().position(|v|v["type"]=="result" &&
+        v["content"]=="Direct text accepted").unwrap();
+    assert!(replay_index<result_index);
 }
 
 
