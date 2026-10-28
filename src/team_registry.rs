@@ -155,13 +155,20 @@ impl Teams {
             if !cfg.members.iter().any(|m|m.name==sender&&m.active){
                 bail!("Sender is not an active team member")
             }
-            let target=cfg.members.iter().find(|m|m.name==recipient||m.id==recipient)
-                .context("Unknown recipient")?.name.clone();
+            let target_member=cfg.members.iter().find(|m|m.name==recipient||m.id==recipient)
+                .context("Unknown recipient")?;
+            if !target_member.active { bail!("Recipient is inactive") }
+            let target=target_member.name.clone();
             let timestamp=chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis,true);
             let (payload,request_id,shutdown)=match kind{
                 "shutdown_request"=>{
+                    if sender!="team-lead" || target=="team-lead" {
+                        bail!("Only the team lead can request a teammate shutdown")
+                    }
                     let reason=input.get("reason").and_then(Value::as_str);
-                    let request_id=format!("shutdown-{}@{}",chrono::Utc::now().timestamp_millis(),target);
+                    let request_id=format!("shutdown-{}-{}@{}",
+                        chrono::Utc::now().timestamp_millis(),
+                        uuid::Uuid::new_v4().simple(),target);
                     (json!({"type":"shutdown_request","requestId":request_id,
                         "from":sender,"reason":reason,"timestamp":timestamp}),request_id,false)
                 },
@@ -171,6 +178,26 @@ impl Teams {
                     }
                     let request_id=input.get("request_id").and_then(Value::as_str)
                         .filter(|s|!s.trim().is_empty()).context("request_id is required")?.to_owned();
+                    // A teammate may only answer a real, persisted request
+                    // addressed to that teammate. The team registry lock
+                    // serializes duplicate responses across agent processes.
+                    let inbox=Mailbox::new(&this.root,team)?;
+                    let issued=inbox.read(sender)?.iter().any(|item|{
+                        if item.from!="team-lead" { return false }
+                        serde_json::from_str::<Value>(&item.text).ok().is_some_and(|message|
+                            message.get("type").and_then(Value::as_str)==Some("shutdown_request")
+                            && message.get("requestId").and_then(Value::as_str)==Some(&request_id)
+                            && message.get("from").and_then(Value::as_str)==Some("team-lead"))
+                    });
+                    if !issued { bail!("No matching shutdown request for teammate") }
+                    let answered=inbox.read("team-lead")?.iter().any(|item|{
+                        if item.from!=sender { return false }
+                        serde_json::from_str::<Value>(&item.text).ok().is_some_and(|message|
+                            matches!(message.get("type").and_then(Value::as_str),
+                                Some("shutdown_approved"|"shutdown_rejected"))
+                            && message.get("requestId").and_then(Value::as_str)==Some(&request_id))
+                    });
+                    if answered { bail!("Shutdown request already answered") }
                     let approve=semantic_bool(input.get("approve").context("approve is required")?)?;
                     let payload=if approve {
                         json!({"type":"shutdown_approved","requestId":request_id,
@@ -210,11 +237,13 @@ impl Teams {
         let cfg=this.read(team)?.context("Team missing")?;
         if !cfg.members.iter().any(|m|m.name==sender&&m.active){bail!("Sender is not an active team member")}
         let names=if recipient=="*"{
-            cfg.members.iter().filter(|m|m.name!=sender)
+            cfg.members.iter().filter(|m|m.name!=sender&&m.active)
                 .map(|m|m.name.clone()).collect::<Vec<_>>()
         }else{
-            vec![cfg.members.iter().find(|m|m.name==recipient||m.id==recipient)
-                .context("Unknown recipient")?.name.clone()]
+            let member=cfg.members.iter().find(|m|m.name==recipient||m.id==recipient)
+                .context("Unknown recipient")?;
+            if !member.active { bail!("Recipient is inactive") }
+            vec![member.name.clone()]
         };
         let inbox=Mailbox::new(&this.root,team)?;
         for name in &names {
@@ -438,5 +467,75 @@ mod protocol_tests{
                 "approve":false,"feedback":"fix tests"})).unwrap();
         assert_eq!(plan["request_id"],"p");
         assert_eq!(inbox.unread("worker").unwrap().len(),2);
+    }
+}
+
+#[cfg(test)]
+mod shutdown_handshake_tests {
+    use super::*;
+
+    #[test]
+    fn shutdown_requires_real_request_and_is_single_use_across_registry_instances() {
+        let root=tempfile::tempdir().unwrap();
+        let teams=Teams::new(root.path()).unwrap();
+        teams.create("team",None,"lead").unwrap();
+        teams.member("team",Member{
+            name:"alice".into(),id:"alice@team".into(),active:true
+        }).unwrap();
+        teams.member("team",Member{
+            name:"bob".into(),id:"bob@team".into(),active:true
+        }).unwrap();
+        let forged=json!({"type":"shutdown_response",
+            "request_id":"shutdown-forged@alice","approve":true});
+        assert!(teams.send_structured("team","team-lead","alice",&forged).is_err());
+        assert!(teams.send_structured("team","bob","alice",
+            &json!({"type":"shutdown_request"})).is_err());
+
+        let first=teams.send_structured("team","alice","team-lead",
+            &json!({"type":"shutdown_request","reason":"finished"})).unwrap();
+        let second=teams.send_structured("team","alice","team-lead",
+            &json!({"type":"shutdown_request","reason":"finished"})).unwrap();
+        assert_ne!(first["request_id"],second["request_id"]);
+        let id=first["request_id"].as_str().unwrap();
+        let response=json!({"type":"shutdown_response","request_id":id,"approve":true});
+        assert!(teams.send_structured("team","team-lead","bob",&response).is_err());
+        let other=Teams::new(root.path()).unwrap();
+        assert_eq!(other.send_structured("team","team-lead","alice",&response)
+            .unwrap()["shutdown_requested"],true);
+        assert!(teams.send_structured("team","team-lead","alice",&response).is_err());
+        let mailbox=Mailbox::new(root.path(),"team").unwrap();
+        let replies=mailbox.read("team-lead").unwrap();
+        assert_eq!(replies.len(),1);
+        assert!(replies[0].text.contains("shutdown_approved"));
+
+        teams.active("team","bob",false).unwrap();
+        assert!(teams.send("team","bob","team-lead","hello","note").is_err());
+        assert!(teams.send_structured("team","bob","team-lead",
+            &json!({"type":"shutdown_request"})).is_err());
+        assert_eq!(teams.send("team","*","team-lead","hello","note")
+            .unwrap()["recipients"],json!(["alice"]));
+    }
+
+    #[test]
+    fn shutdown_rejection_is_persisted_and_cannot_be_replayed() {
+        let root=tempfile::tempdir().unwrap();
+        let teams=Teams::new(root.path()).unwrap();
+        teams.create("team",None,"lead").unwrap();
+        teams.member("team",Member{
+            name:"worker".into(),id:"worker@team".into(),active:true
+        }).unwrap();
+        let request=teams.send_structured("team","worker","team-lead",
+            &json!({"type":"shutdown_request"})).unwrap();
+        let response=json!({"type":"shutdown_response",
+            "request_id":request["request_id"],"approve":false,"reason":"busy"});
+        assert_eq!(teams.send_structured("team","team-lead","worker",&response)
+            .unwrap()["shutdown_requested"],false);
+        assert!(teams.send_structured("team","team-lead","worker",&response).is_err());
+        let inbox=Mailbox::new(root.path(),"team").unwrap();
+        let replies=inbox.read("team-lead").unwrap();
+        assert_eq!(replies.len(),1);
+        let payload:Value=serde_json::from_str(&replies[0].text).unwrap();
+        assert_eq!(payload["type"],"shutdown_rejected");
+        assert_eq!(payload["reason"],"busy");
     }
 }
