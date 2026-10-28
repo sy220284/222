@@ -1787,7 +1787,7 @@
 | `src/utils/shellConfig.ts` | 168 | 4737 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sideQuery.ts` | 223 | 8184 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sideQuestion.ts` | 156 | 6133 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/signal.ts` | 44 | 1447 | 重写：保持通用行为 | `src/event_signal.rs` | 部分实现：订阅、监听身份去重、事件通知与注销；JS Set 动态迭代及异常传播仍未完全一致 |
+| `src/utils/signal.ts` | 44 | 1447 | 重写：保持通用行为 | `src/event_signal.rs` | 部分实现：事件订阅/注销/去重、清空与 JS Set 实时增删监听迭代已有测试；完整调用方和异常传播仍待核对 |
 | `src/utils/sinks.ts` | 17 | 608 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/skills/skillChangeDetector.ts` | 312 | 10033 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/slashCommandParsing.ts` | 61 | 1437 | 重写：保持通用行为 | 待定 | 未迁移 |
