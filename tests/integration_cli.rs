@@ -2002,3 +2002,72 @@ fn agent_invalid_tool_json_preserves_sibling_calls_and_model_followup(){
         assert!(history.contains(id),"missing persisted tool id {id}");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn agent_pre_and_post_hook_execution_failures_preserve_sibling_results(){
+    let root=tempfile::tempdir().unwrap();
+    fs::write(root.path().join("secret.txt"),"SECRET_DO_NOT_LEAK_PREHOOK\n").unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for index in 0..2 {
+            let (mut conn,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut conn));
+            let response=if index==0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[
+                        {"id":"pre-failure","type":"function","function":{
+                            "name":"read_file",
+                            "arguments":json!({"path":"secret.txt"}).to_string()}},
+                        {"id":"post-failure","type":"function","function":{
+                            "name":"write_file",
+                            "arguments":json!({"path":"hooked.txt",
+                                "content":"write took effect"}).to_string()}},
+                        {"id":"sibling-continues","type":"function","function":{
+                            "name":"list_files",
+                            "arguments":json!({"path":"."}).to_string()}}
+                    ]},"finish_reason":"tool_calls"}]})
+            }else{
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Hooks and sibling recovery confirmed"},"finish_reason":"stop"}]})
+            };
+            let body=response.to_string();
+            write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            conn.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }],"hooks":[
+        {"event":"PreToolUse","matcher":"^read_file$",
+            "command":"echo 'pre-hook boom' >&2; exit 7","timeout_seconds":5},
+        {"event":"PostToolUse","matcher":"^write_file$",
+            "command":"echo 'post-hook boom' >&2; exit 9","timeout_seconds":5}
+    ]}).to_string()).unwrap();
+    let output=binary().args([
+        "--workspace",root.path().to_str().unwrap(),
+        "--approval","full","run","Check tool hooks"
+    ]).env("ATLAS_CONFIG",&config).output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout)
+        .contains("Hooks and sibling recovery confirmed"));
+    assert_eq!(requests.len(),2);
+    let followup=&requests[1];
+    assert!(followup.contains("pre-failure"),"{followup}");
+    assert!(followup.contains("post-failure"),"{followup}");
+    assert!(followup.contains("sibling-continues"),"{followup}");
+    assert!(followup.contains("PreToolUse hook failed"),"{followup}");
+    assert!(followup.contains("PostToolUse hook failed after tool execution"),
+        "{followup}");
+    assert!(followup.contains("write took effect"),"{followup}");
+    assert!(!followup.contains("SECRET_DO_NOT_LEAK_PREHOOK"),"{followup}");
+    assert_eq!(fs::read_to_string(root.path().join("hooked.txt")).unwrap(),
+        "write took effect");
+}

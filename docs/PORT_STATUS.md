@@ -183,3 +183,10 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 对照 2.1.88 原始 `src/services/tools/toolExecution.ts::runToolUse` 的异常转为 `tool_result(is_error)`、`StreamingToolExecutor.ts` 非 Bash 工具错误不取消无关同轮工具，以及 `src/query.ts` 在下一轮前收齐工具回填：修复 `src/agent.rs::ask` 在模型输出非法工具参数 JSON 时调用 PreToolUse 钩子直接终止整个 Agent 的缺陷。现在在实际执行前验证 JSON 类型，非法语法和非对象参数变成对应 tool ID 的错误结果，不触发工具、文件或权限副作用；同轮其余合法工具继续执行并持久化，模型获得完整工具结果再继续下一轮。
 
 新 CLI 模拟模型 HTTP + 文件系统集成测试 `agent_invalid_tool_json_preserves_sibling_calls_and_model_followup` 核查一轮三个工具（非法 JSON、数组参数、合法写文件）以及第二轮模型真实接收对应全部三个工具 ID 和结果、合法文件落盘及会话保存。此变更只补充原有 `src/query.ts` 部分实现，不提升文件级验收。尚未实现安全并行工具批次、流式工具执行、用户中断与兄弟 Bash 子进程取消；原始 `StreamingToolExecutor` 仍未迁移，保留原有分类。**台账不变：22 排除、362 部分、1,493 未迁移、29 已验收，尚缺 1,855 条完整等价。**
+
+
+### 2026-10-29：Agent Hook 命令失败不再破坏多工具调用完整性
+
+继续对照原始 2.1.88 `src/services/tools/toolExecution.ts::runToolUse` 的异常转 `tool_result(is_error)` 和 `src/query.ts` 的工具结果汇总：此前 Rust 在 `PreToolUse` 本地命令异常退出或 `PostToolUse` 退出失败时用 `?` 终止整个 Agent 请求，漏回填其他工具。现在 PreToolUse 命令异常作为当前工具失败反馈，不执行被阻止的工具；PostToolUse 命令异常也作为工具失败反馈，同时保留实际已发生的工具输出和文件副作用，避免模型错误重试；其余同批工具及下一轮模型请求继续。成功/明确阻止 Hook 的既有处理不变。
+
+新增真正模型 HTTP、实际 Hook 子进程、工作区文件系统集成测试 `agent_pre_and_post_hook_execution_failures_preserve_sibling_results`：PreToolUse exit 7 不泄露未执行读取内容，PostToolUse exit 9 对已执行写入给出明确回填，第三个合法工具继续，下一轮模型收到全部三个 ID 和错误内容。此测试与修复仍归于 `src/query.ts` 原有部分实现，保持全部路径分类不变。其他 Hook 事件、并发时序、中断、权限询问等仍未等价；CI 状态以本提交实测为准。

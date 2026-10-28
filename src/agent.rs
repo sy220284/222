@@ -864,8 +864,18 @@ impl Agent {
                     Ok(serde_json::Value::Object(_))=>None,
                     Ok(_)=>Some("Tool arguments must be a JSON object".to_owned()),
                 };
+                let mut pre_hook_failure=None;
                 let pre=if invalid_input.is_none(){
-                    Some(self.hooks.before_tool(&call).await?)
+                    match self.hooks.before_tool(&call).await {
+                        Ok(outcome)=>Some(outcome),
+                        Err(error)=>{
+                            // An unhealthy user hook must not consume a sibling
+                            // tool call or turn a local execution error into an
+                            // orphaned model tool id.
+                            pre_hook_failure=Some(format!("{error:#}"));
+                            None
+                        }
+                    }
                 }else{None};
                 if let Some(updated) = pre.as_ref().and_then(|hook|hook.updated_input.as_ref()) {
                     call.function.arguments = serde_json::to_string(updated)?;
@@ -873,6 +883,8 @@ impl Agent {
                 let tool_started=Instant::now();
                 let result = if let Some(reason)=invalid_input {
                     format!("ERROR: {reason}")
+                } else if let Some(reason)=pre_hook_failure {
+                    format!("ERROR: PreToolUse hook failed: {reason}")
                 } else if let Some(reason) = pre.and_then(|hook|hook.blocking_reason) {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
                 } else if matches!(call.function.name.as_str(),
@@ -918,8 +930,17 @@ impl Agent {
                 self.session.cost.add_tool_duration(tool_started.elapsed());
                 let (added,removed)=self.file_metrics.counts();
                 self.session.cost.set_changed_lines(added,removed);
-                let post = self.hooks.after_tool(&call, &result).await?;
-                let mut result = result;
+                let (post,mut result):(crate::hooks::HookOutcome,String)=
+                    match self.hooks.after_tool(&call,&result).await {
+                        Ok(outcome)=>(outcome,result),
+                        Err(error)=>(
+                            Default::default(),
+                            // The tool already executed: tell the next model
+                            // turn about the side effect instead of inviting
+                            // an unsafe blind retry.
+                            format!("ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: {result}")
+                        )
+                    };
                 if let Some(reason) = post.blocking_reason {
                     result.push_str(&format!("\nPostToolUse hook blocked continuation: {reason}"));
                 }
