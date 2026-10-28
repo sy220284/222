@@ -313,7 +313,12 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                         "skipSlashCommands":event.get("skipSlashCommands").cloned()
                             .unwrap_or(json!(false)),
                         "isMeta":event.get("isMeta").cloned().unwrap_or(json!(false)),
-                        "workload":event.get("workload").cloned().unwrap_or(Value::Null)
+                        "workload":event.get("workload").cloned().unwrap_or(Value::Null),
+                        "uuid":event.get("uuid").cloned().unwrap_or(Value::Null),
+                        "origin":event.get("origin").cloned().unwrap_or(Value::Null),
+                        "pastedContents":event.get("pastedContents").cloned().unwrap_or(Value::Null),
+                        "preExpansionValue":event.get("preExpansionValue").cloned().unwrap_or(Value::Null),
+                        "bridgeOrigin":event.get("bridgeOrigin").cloned().unwrap_or(json!(false))
                     })) {
                         Ok(command)=>command,
                         Err(error)=>{
