@@ -266,3 +266,58 @@ fn sdk_mode_emits_json_lines_and_preserves_context() {
     assert!(records.iter().any(|v|v["type"]=="system"));
     assert!(records.iter().any(|v|v["type"]=="assistant"));
 }
+
+#[test]
+fn team_runs_two_members_with_separate_contexts_and_stable_result_order() {
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for step in 0..4{
+            let (mut conn,_)=listener.accept().unwrap();
+            let raw=read_request(&mut conn);
+            let request:Value=serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            let messages=request["messages"].as_array().unwrap();
+            let serialized=serde_json::to_string(messages).unwrap();
+            let payload=if step==0{
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"team-1","type":"function","function":{
+                        "name":"spawn_team","arguments":json!({"tasks":[
+                            {"name":"one","prompt":"Analyze A"},
+                            {"name":"two","prompt":"Analyze B"}
+                        ]}).to_string()}}
+                    ]},"finish_reason":"tool_calls"}]})
+            }else if serialized.contains("Analyze A"){
+                json!({"choices":[{"message":{"role":"assistant","content":"Result A"},
+                    "finish_reason":"stop"}]})
+            }else if serialized.contains("Analyze B"){
+                json!({"choices":[{"message":{"role":"assistant","content":"Result B"},
+                    "finish_reason":"stop"}]})
+            }else{
+                json!({"choices":[{"message":{"role":"assistant","content":"Team complete"},
+                    "finish_reason":"stop"}]})
+            };
+            let body=payload.to_string();
+            write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
+            conn.flush().unwrap();
+            requests.push(serialized);
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let output=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","read-only","run","Team tasks"]).env("ATLAS_CONFIG",&config)
+        .output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Team complete"));
+    assert!(requests.iter().any(|q|q.contains("Analyze A")));
+    assert!(requests.iter().any(|q|q.contains("Analyze B")));
+    assert!(requests.iter().any(|q|q.contains("Result A")&&q.contains("Result B")));
+    assert_eq!(fs::read_dir(root.path().join(".atlas/sessions")).unwrap().count(),3);
+}
