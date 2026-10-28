@@ -10,6 +10,8 @@ mod task;
 mod task_graph;
 mod task_events;
 mod team_mailbox;
+mod event_signal;
+mod in_memory_mailbox;
 mod team_registry;
 mod tools;
 mod notebook;
