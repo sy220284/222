@@ -9,6 +9,8 @@
 - 多模型提供商：OpenAI 兼容 Chat Completions（OpenAI、OpenRouter、DeepSeek、Qwen、vLLM、LM Studio 等需各自兼容函数调用）；Ollama 本地兼容接口；Gemini 原生 generateContent。
 - 通用模型消息格式，支持模型请求多次工具调用、工具结果回填与继续决策。
 - 文件读取、递归文件列表、正则全文检索、文件写入、唯一文本替换、带超时的 Shell 命令。
+- 项目技能（`.atlas/skills/<名称>/SKILL.md`）列表与加载，模型可选择使用相关指导。
+- 手动 `/compact` 及历史记录超过字符阈值时的自动摘要压缩；摘要随会话保存。
 - 默认审批写操作与 Shell；非交互模式默认拒绝，需明确设置 `--approval full`。
 - 文件工具工作区限制与符号链接越界检查；命令执行按明确授权处理。
 - `AGENTS.md` / `.atlas/instructions.md` 项目指导文件、UUID 会话保存与继续。
@@ -71,7 +73,7 @@ cargo run -- --approval full run "修改 README 并运行测试"
 cargo run -- chat --resume <上次输出的UUID>
 ```
 
-聊天支持 `/model <提供商> [模型]`、`/session`、`/clear` 和 `/exit`。
+聊天支持 `/model <提供商> [模型]`、`/session`、`/compact`、`/clear` 和 `/exit`。
 
 ## 功能边界与后续对照
 
@@ -82,9 +84,11 @@ cargo run -- chat --resume <上次输出的UUID>
 | 6 类基础代码工具 | 已实现 |
 | 会话恢复与项目规则 | 已实现 |
 | 文件路径隔离与审批 | 已实现（Shell 权限依赖用户授权） |
-| 流式文本、Token 成本统计和自动压缩 | 未实现 |
+| 历史摘要压缩 | 已实现（基于字符阈值，不是精确 Token 管理） |
+| 流式文本和 Token 成本统计 | 未实现 |
 | MCP stdio 客户端 | 已实现基础工具发现和调用 |
-| Skills、Plugins、Hooks、LSP | 未实现 |
+| 项目技能读取 | 已实现基础 SKILL.md 发现和加载 |
+| 插件管理、Hooks、LSP | 未实现 |
 | 多 Agent 协作、后台任务、Git Worktree | 未实现 |
 | 完整终端 UI、SDK、远程桥接、语音和 IDE | 未实现 |
 

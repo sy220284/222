@@ -136,6 +136,7 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
                 println!("/clear                   erase current conversation history");
+                println!("/compact                 summarize and compact conversation history");
                 println!("/exit                    quit");
                 continue;
             }
@@ -146,6 +147,11 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
             "/clear" => {
                 agent.clear_history()?;
                 println!("Conversation cleared.");
+                continue;
+            }
+            "/compact" => {
+                agent.compact_history().await?;
+                println!("Session context compacted.");
                 continue;
             }
             _ => {}

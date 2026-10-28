@@ -35,12 +35,11 @@ impl ModelProvider for OpenAiCompatible {
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         let mut messages = vec![Message::text("system", &request.system)];
         messages.extend_from_slice(&request.messages);
-        let body = json!({
-            "model": request.model,
-            "messages": messages,
-            "tools": request.tools,
-            "tool_choice": "auto"
-        });
+        let mut body = json!({"model":request.model,"messages":messages});
+        if !request.tools.is_empty() {
+            body["tools"] = json!(request.tools);
+            body["tool_choice"] = json!("auto");
+        }
         let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
         let mut post = self.client.post(url).json(&body);
         if let Some(key) = &self.key {

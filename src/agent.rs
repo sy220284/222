@@ -17,6 +17,7 @@ Before editing, inspect relevant files. Keep edits minimal and verify them when 
 The filesystem tools are scoped to the active workspace. Shell commands require user authorization
 and may affect the wider machine. Do not assume authorization.
 If a tool fails, analyze its error and make a concrete correction or explain the blocker.
+Project skills can be discovered with list_skills and loaded with read_skill when relevant.
 Never reveal secrets from configuration, environment variables, or private files.
 When finished, report the verified result and any remaining limitations accurately."#;
 
@@ -61,6 +62,33 @@ impl Agent {
         Ok(())
     }
 
+    /// Replace previous turns with a model-generated, persistent compact summary.
+    /// This is provider-neutral and never invokes executable tools.
+    pub async fn compact_history(&mut self) -> Result<()> {
+        if self.session.messages.is_empty() { bail!("No history to compact") }
+        let previous = self.session.summary.as_deref().unwrap_or("");
+        let prompt = format!(
+            "Summarize this coding conversation for accurate future continuation. \
+             Preserve user requirements, verified actions, modified paths, pending tasks, \
+             critical command results, errors and next steps. Be concise and factual. \
+             Do not invent completed work. Earlier summary:\n{previous}"
+        );
+        let response = self.provider.complete(&ModelRequest {
+            model: self.profile.model.clone(),
+            system: prompt,
+            messages: self.session.messages.clone(),
+            tools: Vec::new(),
+        }).await?;
+        if !response.message.tool_calls.unwrap_or_default().is_empty() {
+            bail!("Compaction model unexpectedly requested tools");
+        }
+        let summary = response.message.content.context("Compaction returned no text")?;
+        if summary.trim().is_empty() { bail!("Compaction returned empty text") }
+        self.session.summary = Some(summary);
+        self.session.messages.clear();
+        self.session.save(&self.root)
+    }
+
     pub fn clear_history(&mut self) -> Result<()> {
         self.session.clear();
         self.session.save(&self.root)
@@ -68,9 +96,21 @@ impl Agent {
 
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
         if prompt.trim().is_empty() { bail!("Prompt cannot be empty") }
+        let history_chars: usize = self.session.messages.iter()
+            .map(|m| m.content.as_deref().unwrap_or("").len()
+                + m.tool_calls.as_ref().map(|c| c.iter()
+                    .map(|t| t.function.arguments.len()).sum::<usize>()).unwrap_or(0))
+            .sum();
+        if history_chars > 100_000 {
+            self.compact_history().await?;
+        }
         self.session.messages.push(Message::text("user", prompt));
         self.session.save(&self.root)?;
-        let system = system_prompt(&self.root)?;
+        let mut system = system_prompt(&self.root)?;
+        if let Some(summary) = &self.session.summary {
+            system.push_str("\nVerified session continuity summary:\n");
+            system.push_str(summary);
+        }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive);
         for _ in 0..self.max_steps {
             let mut available_tools = tools::definitions();

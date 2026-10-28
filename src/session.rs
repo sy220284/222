@@ -8,11 +8,13 @@ use uuid::Uuid;
 pub struct Session {
     pub id: Uuid,
     pub messages: Vec<Message>,
+    #[serde(default)]
+    pub summary: Option<String>,
 }
 
 impl Session {
     pub fn fresh() -> Self {
-        Self { id: Uuid::new_v4(), messages: Vec::new() }
+        Self { id: Uuid::new_v4(), messages: Vec::new(), summary: None }
     }
 
     fn path(root: &Path, id: Uuid) -> PathBuf {
@@ -40,6 +42,7 @@ impl Session {
     }
 
     pub fn clear(&mut self) {
+        self.summary = None;
         self.messages.clear();
     }
 }

@@ -47,6 +47,8 @@ impl ToolExecutor {
             "read_file" => self.read_file(&args),
             "list_files" => self.list_files(&args),
             "search_text" => self.search_text(&args),
+            "list_skills" => self.list_skills(),
+            "read_skill" => self.read_skill(&args),
             "write_file" => {
                 self.require_approval("write_file", &args)?;
                 self.write_file(&args).await
@@ -176,6 +178,29 @@ impl ToolExecutor {
         Ok(matches.join("\n"))
     }
 
+    fn list_skills(&self) -> Result<String> {
+        let root = self.root.join(".atlas").join("skills");
+        if !root.is_dir() { return Ok(String::new()); }
+        let mut skills = Vec::new();
+        for entry in fs::read_dir(root)? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !valid_skill_name(&name) { continue; }
+            let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
+            if path.is_file() { skills.push(name); }
+        }
+        skills.sort();
+        Ok(skills.join("\n"))
+    }
+
+    fn read_skill(&self, args: &Value) -> Result<String> {
+        let name = required(args, "name")?;
+        if !valid_skill_name(name) { bail!("Invalid skill name") }
+        let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
+        if fs::metadata(&path)?.len() > 64_000 { bail!("Skill file too large") }
+        Ok(fs::read_to_string(path)?)
+    }
+
     async fn write_file(&self, args: &Value) -> Result<String> {
         let path = self.checked_path(required(args, "path")?)?;
         let content = required(args, "content")?;
@@ -241,6 +266,11 @@ fn required<'a>(args: &'a Value, key: &str) -> Result<&'a str> {
         .with_context(|| format!("Missing string argument: {key}"))
 }
 
+fn valid_skill_name(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 64 &&
+        name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 fn in_scope(entry: &walkdir::DirEntry) -> bool {
     if entry.depth() == 0 { return true }
     !matches!(entry.file_name().to_str(), Some(".git" | ".atlas" | "target" | "node_modules"))
@@ -271,6 +301,12 @@ pub fn definitions() -> Vec<Value> {
             "parameters":{"type":"object","properties":{
                 "pattern":{"type":"string"},"path":{"type":"string"},"limit":{"type":"integer"}
             },"required":["pattern"]}}}),
+        json!({"type":"function","function":{"name":"list_skills",
+            "description":"List available project skills in .atlas/skills.",
+            "parameters":{"type":"object","properties":{}}}}),
+        json!({"type":"function","function":{"name":"read_skill",
+            "description":"Load the instructions of a named project skill.",
+            "parameters":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}}),
         json!({"type":"function","function":{"name":"write_file",
             "description":"Create or overwrite a workspace text file. Requires approval.",
             "parameters":{"type":"object","properties":{

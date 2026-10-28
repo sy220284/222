@@ -20,9 +20,11 @@
 | CLI 和交互 REPL | `main.rs` | run/chat/models/init |
 | Web 搜索、Web 抓取 | — | 未实现 |
 | 流式执行和并发编排 | — | 未实现 |
-| 自动压缩与长期记忆检索 | — | 未实现 |
+| 会话摘要压缩 | `agent.rs` / `session.rs` | 已实现手动及字符阈值触发 |
+| 长期记忆检索 | — | 未实现 |
 | MCP stdio 工具连接 | `mcp.rs` | 已实现工具发现、调用、权限接入 |
-| Plugin / Skills / Hooks | — | 未实现 |
+| 项目 Skills | `tools.rs` | 已实现 SKILL.md 发现和读取 |
+| Plugin / Hooks | — | 未实现 |
 | 内建 LSP / Git 交互 | — | 未实现 |
 | 工作树与多 Agent 团队 | — | 未实现 |
 | 背景任务、任务恢复、远程会话 | — | 未实现 |
