@@ -28,6 +28,7 @@
 - 本地插件加载器：仅在 `enabled_plugins` 明确启用后加载本地 `plugin.json`，合并本地 MCP、Hooks 和 `plugin:skill` 技能，不连接专有插件市场。
 - 多搜索服务 WebSearch：支持用户指定 SearXNG 自建实例或 Brave 搜索接口，不依赖任何固定 AI 服务登录。
 - 后台 Shell 执行：支持 `run_command.run_in_background`、`task_output` 状态和阻塞读取、`task_stop` 停止；日志保存在 `.atlas/background`，进程仅在当前 Agent 存活期间运行。
+- 项目长期记忆：自动载入工作区 `.atlas/memory/MEMORY.md`（200 行/25 KB 上限），扫描最多 200 个 Markdown 主题文件，由当前所选模型筛选最多 5 个相关记忆，严格限制文件路径；不使用原厂记忆服务器或遥测。
 - OpenAI 兼容 SSE 流式生成：文本增量、分片函数调用重组、结束标识及 Token 用量；可在提供商配置添加 `stream:true` 开启，SDK 输出 `assistant_delta` 事件（Gemini 暂时回退非流式）。
 - `spawn_agent` 子智能体工具：独立会话、模型可覆盖、最多一级子任务；可选择临时 Git 工作树隔离，未修改自动清理，有修改保留路径与分支供复查。
 - `spawn_team` 多智能体并行任务：1—4 个成员独立上下文与模型选择、并发执行、结果按成员输入顺序汇总；可逐成员建立 Git 工作树。

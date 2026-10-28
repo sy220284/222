@@ -7,6 +7,7 @@ use crate::{
     lsp::LspManager,
     task,
     background::BackgroundTasks,
+    memory,
     hooks::{HookRule, HookRunner, HookEvent},
     worktree::Worktree,
     protocol::ToolCall,
@@ -332,6 +333,17 @@ impl Agent {
         if !self.session_context.is_empty() {
             system.push_str("\nSession start hook context:\n");
             system.push_str(&self.session_context);
+        }
+        // The memory index is always visible; topic selection uses the active
+        // model rather than a hardwired provider. No telemetry side channel.
+        let relevant = memory::context(&self.root, &prompt,
+            self.provider.as_ref(), &self.profile).await?;
+        if let Some(usage) = relevant.usage {
+            self.session.usage.accumulate(usage);
+        }
+        if !relevant.text.is_empty() {
+            system.push_str("\nRelevant project memory:\n");
+            system.push_str(&relevant.text);
         }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_plugins(self.enabled_plugins.clone())

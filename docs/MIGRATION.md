@@ -26,7 +26,7 @@
 | 模型流式输出 | `sse.rs` / `agent.rs` | SSE 文本增量、函数调用分片、SDK 事件已实现 |
 | 工具级流式并发编排 | — | 未实现；模型流式输出不等于流式工具执行 |
 | 会话摘要压缩 | `agent.rs` / `session.rs` | 已实现手动及字符阈值触发 |
-| 长期记忆检索 | — | 未实现 |
+| 本地长期记忆读取与相关性检索 | `memory.rs` | 200 个文件扫描、200 行/25 KB 索引、当前模型选取最多 5 项；自动提取/梦境同步仍未实现 |
 | MCP stdio 工具连接 | `mcp.rs` | 已实现工具发现、调用、权限接入 |
 | 项目 Skills | `tools.rs` | 已实现 SKILL.md 发现和读取 |
 | 本地同步 Hooks | `hooks.rs` / `agent.rs` | Pre/PostToolUse、Stop、用户输入、会话与压缩事件 |
