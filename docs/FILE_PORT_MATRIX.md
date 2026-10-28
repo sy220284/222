@@ -75,7 +75,7 @@
 | `src/cli/ndjsonSafeStringify.ts` | 33 | 1408 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/print.ts` | 5595 | 212735 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/remoteIO.ts` | 256 | 9946 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cli/structuredIO.ts` | 860 | 28720 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/cli/structuredIO.ts` | 860 | 28720 | 重写：保持通用行为 | `src/main.rs / src/agent.rs` | 部分实现：NDJSON 多轮 SDK、模型/工具事件/控制响应 |
 | `src/cli/transports/HybridTransport.ts` | 283 | 10883 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/transports/SSETransport.ts` | 712 | 23758 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/transports/SerialBatchEventUploader.ts` | 276 | 9089 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1034,12 +1034,12 @@
 | `src/services/extractMemories/extractMemories.ts` | 616 | 21684 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/extractMemories/prompts.ts` | 155 | 7673 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/internalLogging.ts` | 91 | 2799 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/lsp/LSPClient.ts` | 448 | 14361 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/lsp/LSPClient.ts` | 448 | 14361 | 重写：保持通用行为 | `src/lsp.rs` | 部分实现：JSON-RPC Content-Length、文档同步及查询测试通过 |
 | `src/services/lsp/LSPDiagnosticRegistry.ts` | 387 | 11957 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/lsp/LSPServerInstance.ts` | 512 | 16864 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/lsp/LSPServerManager.ts` | 421 | 13394 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/lsp/LSPServerManager.ts` | 421 | 13394 | 重写：保持通用行为 | `src/lsp.rs` | 部分实现：按扩展名选择服务；进程恢复及状态管理待补 |
 | `src/services/lsp/config.ts` | 80 | 2857 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/lsp/manager.ts` | 290 | 10067 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/lsp/manager.ts` | 290 | 10067 | 重写：保持通用行为 | `src/lsp.rs` | 部分实现：本地客户端管理；原版完整生命周期未等价 |
 | `src/services/lsp/passiveFeedback.ts` | 329 | 11190 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/mcp/InProcessTransport.ts` | 64 | 1772 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/MCPConnectionManager.tsx` | 73 | 8186 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
@@ -1162,7 +1162,7 @@
 | `src/tools/AgentTool/loadAgentsDir.ts` | 756 | 26220 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/prompt.ts` | 288 | 16671 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/resumeAgent.ts` | 266 | 9339 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/runAgent.ts` | 974 | 35768 | 重写：工具行为、参数和权限 | `src/agent.rs` / `src/worktree.rs` | 部分实现：独立子任务和隔离，团队及远程不等价 |
+| `src/tools/AgentTool/runAgent.ts` | 974 | 35768 | 重写：工具行为、参数和权限 | `src/agent.rs / src/worktree.rs` | 部分实现：独立子 Agent 调用；后台管理未等价 |
 | `src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx` | 266 | 39887 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AskUserQuestionTool/prompt.ts` | 45 | 2903 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/BashTool.tsx` | 1144 | 160530 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1223,13 +1223,13 @@
 | `src/tools/FileWriteTool/FileWriteTool.ts` | 435 | 14927 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileWriteTool/UI.tsx` | 405 | 43788 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileWriteTool/prompt.ts` | 19 | 969 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/GlobTool/GlobTool.ts` | 199 | 6064 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/GlobTool/GlobTool.ts` | 199 | 6064 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：通配符、结果排序与 100 项上限；原版全部边界待核对 |
 | `src/tools/GlobTool/UI.tsx` | 63 | 8040 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/GlobTool/prompt.ts` | 8 | 439 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/GrepTool/GrepTool.ts` | 578 | 20087 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/GrepTool/GrepTool.ts` | 578 | 20087 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：内容/路径/计数/分页/上下文；原版 ripgrep 语义待对照 |
 | `src/tools/GrepTool/UI.tsx` | 201 | 21784 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/GrepTool/prompt.ts` | 19 | 1150 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/LSPTool/LSPTool.ts` | 861 | 25710 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/LSPTool/LSPTool.ts` | 861 | 25710 | 重写：工具行为、参数和权限 | `src/lsp.rs` | 部分实现：9 类请求与真实模拟服务器回环；LSP 管理行为未全等 |
 | `src/tools/LSPTool/UI.tsx` | 228 | 25038 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/LSPTool/formatters.ts` | 593 | 17399 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/LSPTool/prompt.ts` | 22 | 1114 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1243,7 +1243,7 @@
 | `src/tools/MCPTool/classifyForCollapse.ts` | 605 | 15178 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/MCPTool/prompt.ts` | 4 | 119 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/McpAuthTool/McpAuthTool.ts` | 216 | 7873 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/NotebookEditTool/NotebookEditTool.ts` | 491 | 15271 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/NotebookEditTool/NotebookEditTool.ts` | 491 | 15271 | 重写：工具行为、参数和权限 | `src/notebook.rs / src/tools.rs` | 部分实现：插入、替换、删除、ID 定位及读后编辑测试通过；编码和 UI 待等价 |
 | `src/tools/NotebookEditTool/UI.tsx` | 93 | 13540 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/NotebookEditTool/constants.ts` | 3 | 104 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/NotebookEditTool/prompt.ts` | 4 | 632 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1316,12 +1316,12 @@
 | `src/tools/ToolSearchTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ToolSearchTool/prompt.ts` | 122 | 5227 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/WebFetchTool/UI.tsx` | 72 | 8083 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/WebFetchTool/WebFetchTool.ts` | 319 | 9324 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/WebFetchTool/WebFetchTool.ts` | 319 | 9324 | 重写：工具行为、参数和权限 | `src/webfetch.rs` | 部分实现：公网文本抓取/权限/跳转；原版网页摘要算法未等价 |
 | `src/tools/WebFetchTool/preapproved.ts` | 167 | 5248 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/WebFetchTool/prompt.ts` | 47 | 2200 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/WebFetchTool/utils.ts` | 531 | 16761 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/WebSearchTool/UI.tsx` | 101 | 12160 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/WebSearchTool/WebSearchTool.ts` | 436 | 13548 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/WebSearchTool/WebSearchTool.ts` | 436 | 13548 | 重写：工具行为、参数和权限 | `src/websearch.rs` | 部分实现：SearXNG/Brave 可配置搜索；原版搜索返回行为未等价 |
 | `src/tools/WebSearchTool/prompt.ts` | 35 | 1545 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/shared/gitOperationTracking.ts` | 278 | 9485 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/shared/spawnMultiAgent.ts` | 1094 | 35553 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1499,7 +1499,7 @@
 | `src/utils/extraUsage.ts` | 24 | 635 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/utils/fastMode.ts` | 533 | 17723 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/file.ts` | 585 | 18256 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/fileHistory.ts` | 1116 | 34660 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/fileHistory.ts` | 1116 | 34660 | 重写：保持通用行为 | `src/history.rs` | 部分实现：本地检查点与校验回退；消息粒度与 Bash 修改跟踪未等价 |
 | `src/utils/fileOperationAnalytics.ts` | 72 | 2287 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/filePersistence/filePersistence.ts` | 288 | 7763 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/filePersistence/outputsScanner.ts` | 127 | 3682 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1670,14 +1670,14 @@
 | `src/utils/plugins/installedPluginsManager.ts` | 1269 | 41410 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/loadPluginAgents.ts` | 349 | 12485 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/loadPluginCommands.ts` | 947 | 30541 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/loadPluginHooks.ts` | 288 | 10066 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/loadPluginHooks.ts` | 288 | 10066 | 重写：保持通用行为 | `src/plugins.rs / src/hooks.rs` | 部分实现：显式启用插件 Hook；全部原版事件待核对 |
 | `src/utils/plugins/loadPluginOutputStyles.ts` | 179 | 5672 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/lspPluginIntegration.ts` | 388 | 12414 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/lspRecommendation.ts` | 375 | 10695 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/managedPlugins.ts` | 28 | 877 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/marketplaceHelpers.ts` | 593 | 18217 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/marketplaceManager.ts` | 2644 | 93274 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/mcpPluginIntegration.ts` | 635 | 20113 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/mcpPluginIntegration.ts` | 635 | 20113 | 重写：保持通用行为 | `src/plugins.rs / src/mcp.rs` | 部分实现：插件 MCP 加载；工具兼容及认证功能未等价 |
 | `src/utils/plugins/mcpbHandler.ts` | 969 | 31289 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/officialMarketplace.ts` | 26 | 836 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/officialMarketplaceGcs.ts` | 217 | 9338 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1691,7 +1691,7 @@
 | `src/utils/plugins/pluginFlagging.ts` | 209 | 5621 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginIdentifier.ts` | 124 | 3928 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginInstallationHelpers.ts` | 596 | 20629 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/pluginLoader.ts` | 3303 | 110261 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/pluginLoader.ts` | 3303 | 110261 | 重写：保持通用行为 | `src/plugins.rs` | 部分实现：本地启用插件、MCP、Hooks、技能加载；市场与扩展生态未等价 |
 | `src/utils/plugins/pluginOptionsStorage.ts` | 401 | 15302 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginPolicy.ts` | 21 | 827 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginStartupCheck.ts` | 342 | 11096 | 重写：保持通用行为 | 待定 | 未迁移 |
