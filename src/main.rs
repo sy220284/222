@@ -142,6 +142,7 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
             "/help" => {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
+                println!("/usage                   show provider-reported token totals");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
                 println!("/exit                    quit");
@@ -149,6 +150,12 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             "/session" => {
                 println!("{}", agent.session_id());
+                continue;
+            }
+            "/usage" => {
+                let usage = agent.usage();
+                println!("Input: {}  Output: {}  Total: {} tokens",
+                    usage.input_tokens, usage.output_tokens, usage.total_tokens);
                 continue;
             }
             "/clear" => {

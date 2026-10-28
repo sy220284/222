@@ -48,8 +48,24 @@ pub struct ModelRequest {
     pub tools: Vec<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+}
+
+impl TokenUsage {
+    pub fn accumulate(&mut self, other: Self) {
+        self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
+        self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
+        self.total_tokens = self.total_tokens.saturating_add(other.total_tokens);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ModelResponse {
     pub message: Message,
     pub finish_reason: Option<String>,
+    pub usage: Option<TokenUsage>,
 }

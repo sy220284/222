@@ -18,6 +18,7 @@
 | 会话任务管理 | `task.rs` | 创建、状态更新、查询及持久化 |
 | 项目提示词 | `agent.rs::system_prompt` | AGENTS.md / 本地 instructions |
 | 模型选择与配置 | `config.rs` | 可自定义提供商配置 |
+| Token 用量归一化及持久化 | `protocol.rs` / `provider.rs` / `session.rs` | OpenAI 兼容与 Gemini 原生用量字段 |
 | CLI 和交互 REPL | `main.rs` | run/chat/models/init |
 | Web 搜索、Web 抓取 | — | 未实现 |
 | 流式执行和并发编排 | — | 未实现 |

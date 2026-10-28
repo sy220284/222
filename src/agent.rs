@@ -75,6 +75,7 @@ impl Agent {
 
     pub fn profile(&self) -> &ProviderProfile { &self.profile }
     pub fn session_id(&self) -> String { self.session.id.to_string() }
+    pub fn usage(&self) -> crate::protocol::TokenUsage { self.session.usage }
 
     pub fn switch_model(&mut self, profile: ProviderProfile) -> Result<()> {
         let new_provider = provider::create(&profile)?;
@@ -103,6 +104,7 @@ impl Agent {
             messages: self.session.messages.clone(),
             tools: Vec::new(),
         }).await?;
+        if let Some(usage) = response.usage { self.session.usage.accumulate(usage); }
         if !response.message.tool_calls.unwrap_or_default().is_empty() {
             bail!("Compaction model unexpectedly requested tools");
         }
@@ -165,6 +167,7 @@ impl Agent {
                 messages: self.session.messages.clone(),
                 tools: available_tools,
             }).await?;
+            if let Some(usage) = response.usage { self.session.usage.accumulate(usage); }
             let calls = response.message.tool_calls.clone().unwrap_or_default();
             let text = response.message.content.clone().unwrap_or_default();
             let finish = response.finish_reason.clone();
@@ -262,6 +265,7 @@ mod tests {
             Ok(crate::protocol::ModelResponse {
                 message: Message::text("assistant", "Retain verified changes and next steps."),
                 finish_reason: Some("stop".into()),
+                usage: None,
             })
         }
     }

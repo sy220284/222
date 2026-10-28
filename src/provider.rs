@@ -1,4 +1,4 @@
-use crate::{config::ProviderProfile, protocol::{Message, ModelRequest, ModelResponse, ToolCall, FunctionCall}};
+use crate::{config::ProviderProfile, protocol::{Message, ModelRequest, ModelResponse, ToolCall, FunctionCall, TokenUsage}};
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -61,6 +61,7 @@ impl ModelProvider for OpenAiCompatible {
         Ok(ModelResponse {
             message,
             finish_reason: choice.get("finish_reason").and_then(Value::as_str).map(str::to_owned),
+            usage: parse_openai_usage(&value),
         })
     }
 }
@@ -156,8 +157,33 @@ impl ModelProvider for Gemini {
                 tool_call_id: None,
             },
             finish_reason: candidate.get("finishReason").and_then(Value::as_str).map(str::to_owned),
+            usage: parse_gemini_usage(&value),
         })
     }
+}
+
+fn parse_openai_usage(value: &Value) -> Option<TokenUsage> {
+    let usage = value.get("usage")?;
+    let input = usage.get("prompt_tokens").and_then(Value::as_u64).unwrap_or(0);
+    let output = usage.get("completion_tokens").and_then(Value::as_u64).unwrap_or(0);
+    Some(TokenUsage {
+        input_tokens: input,
+        output_tokens: output,
+        total_tokens: usage.get("total_tokens").and_then(Value::as_u64)
+            .unwrap_or(input.saturating_add(output)),
+    })
+}
+
+fn parse_gemini_usage(value: &Value) -> Option<TokenUsage> {
+    let usage = value.get("usageMetadata")?;
+    let input = usage.get("promptTokenCount").and_then(Value::as_u64).unwrap_or(0);
+    let output = usage.get("candidatesTokenCount").and_then(Value::as_u64).unwrap_or(0);
+    Some(TokenUsage {
+        input_tokens: input,
+        output_tokens: output,
+        total_tokens: usage.get("totalTokenCount").and_then(Value::as_u64)
+            .unwrap_or(input.saturating_add(output)),
+    })
 }
 
 async fn read_response(response: reqwest::Response) -> Result<Value> {
@@ -174,6 +200,17 @@ fn error_summary(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn token_usage_normalization_is_provider_neutral() {
+        assert_eq!(parse_openai_usage(&json!({"usage":{"prompt_tokens":20,
+            "completion_tokens":3,"total_tokens":23}})),
+            Some(TokenUsage {input_tokens:20,output_tokens:3,total_tokens:23}));
+        assert_eq!(parse_gemini_usage(&json!({"usageMetadata":{"promptTokenCount":7,
+            "candidatesTokenCount":9,"totalTokenCount":16}})),
+            Some(TokenUsage {input_tokens:7,output_tokens:9,total_tokens:16}));
+        assert!(parse_gemini_usage(&json!({})).is_none());
+    }
+
     #[test]
     fn parse_provider_response_with_tool_call() {
         let msg: Message = serde_json::from_value(json!({
