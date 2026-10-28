@@ -195,7 +195,8 @@ mod tests{
             (r"echo \*","echo *",false),
             (r"echo \*","echo hey",false),
             ("npm * install","npm local install",true),
-            ("npm * install","npm local\ninstall",true),
+            ("npm * install","npm local\ninstall",false),
+            ("npm * install","npm local\n install",true),
             ("foo","foobar",false),("foo","foo",true),
         ]{
             assert_eq!(matches_content(pattern,command).unwrap(),matched,"{pattern} vs {command}");
