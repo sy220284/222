@@ -189,9 +189,12 @@ impl Agent {
             let hooks=self.hook_rules.clone();
             let plugins=self.enabled_plugins.clone();
             let search=self.search_backend.clone();
+            let shared_tasks=self.graph.clone();
             running.push(async move {
                 let result=async{
                     let mut child=Self::new(profile,root,approval,interactive,steps,Session::fresh())?;
+                    // Teammates share one persistent task list even with isolated code worktrees.
+                    child.graph=shared_tasks;
                     child.child_depth=1;
                     child.enabled_plugins=plugins;
                     child.search_backend=search;
@@ -257,6 +260,7 @@ impl Agent {
             child_profile, child_root, self.approval, self.interactive,
             self.max_steps, Session::fresh()
         )?;
+        child.graph = self.graph.clone();
         child.child_depth = self.child_depth + 1;
         child.enabled_plugins = self.enabled_plugins.clone();
         child.search_backend = self.search_backend.clone();

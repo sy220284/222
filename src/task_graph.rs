@@ -27,6 +27,7 @@ pub struct Item {
     pub metadata:Option<Map<String,Value>>,
 }
 
+#[derive(Clone)]
 pub struct TaskGraph { directory:PathBuf }
 impl TaskGraph {
     pub fn new(root:&Path,list_id:&str)->Result<Self>{
