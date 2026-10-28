@@ -364,12 +364,30 @@ impl Agent {
                 available_tools.extend(mcp.definitions());
             }
             if self.lsp.is_some(){ available_tools.push(LspManager::definition()); }
-            let response = self.provider.complete(&ModelRequest {
+            let request = ModelRequest {
                 model: self.profile.model.clone(),
                 system: system.clone(),
                 messages: self.session.messages.clone(),
                 tools: available_tools,
-            }).await?;
+            };
+            let response = if self.profile.stream {
+                let (tx,mut deltas)=tokio::sync::mpsc::unbounded_channel();
+                let future=self.provider.complete_stream(&request,tx);
+                tokio::pin!(future);
+                loop {
+                    tokio::select! {
+                        result=&mut future=>break result?,
+                        part=deltas.recv()=>{
+                            if let Some(delta)=part{
+                                self.emit(json!({"type":"assistant_delta",
+                                    "delta":delta,"session_id":self.session.id}));
+                            }
+                        }
+                    }
+                }
+            } else {
+                self.provider.complete(&request).await?
+            };
             if let Some(usage) = response.usage { self.session.usage.accumulate(usage); }
             let calls = response.message.tool_calls.clone().unwrap_or_default();
             let text = response.message.content.clone().unwrap_or_default();
@@ -508,7 +526,7 @@ mod tests {
             profile: ProviderProfile {
                 id: "fake".into(), kind: "openai-compatible".into(),
                 base_url: "http://127.0.0.1:1/v1".into(),
-                model: "mock".into(), api_key_env: None,
+                model: "mock".into(), api_key_env: None, stream: false,
             },
             provider: Box::new(SummaryModel),
             root: dir.path().canonicalize().unwrap(),

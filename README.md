@@ -27,6 +27,7 @@
 - SDK JSON Lines 标准输入输出（`sdk` 命令）：结构化用户消息、模型消息、工具结果、请求结果及控制响应；不使用第三方私有传输。
 - 本地插件加载器：仅在 `enabled_plugins` 明确启用后加载本地 `plugin.json`，合并本地 MCP、Hooks 和 `plugin:skill` 技能，不连接专有插件市场。
 - 多搜索服务 WebSearch：支持用户指定 SearXNG 自建实例或 Brave 搜索接口，不依赖任何固定 AI 服务登录。
+- OpenAI 兼容 SSE 流式生成：文本增量、分片函数调用重组、结束标识及 Token 用量；可在提供商配置添加 `stream:true` 开启，SDK 输出 `assistant_delta` 事件（Gemini 暂时回退非流式）。
 - `spawn_agent` 子智能体工具：独立会话、模型可覆盖、最多一级子任务；可选择临时 Git 工作树隔离，未修改自动清理，有修改保留路径与分支供复查。
 - `spawn_team` 多智能体并行任务：1—4 个成员独立上下文与模型选择、并发执行、结果按成员输入顺序汇总；可逐成员建立 Git 工作树。
 - 独立编写的单元测试和 GitHub Actions 编译测试。
@@ -89,6 +90,10 @@ Hook 经 stdin 接收 JSON，返回 JSON（`decision:block`、`hookSpecificOutpu
 ```
 
 服务器从用户指定的本地可执行程序启动，不会自行下载；按文件后缀选择语言服务。仅当前 Rust LSP 客户端协议与消息帧实现通过自动测试，不等同所有语言服务器都已端到端验收。
+
+## 模型流式输出
+
+在支持 SSE 的 OpenAI 兼容提供商配置中设置 `"stream":true`。JSON Lines SDK 可实时收到 `{"type":"assistant_delta","delta":"..."}` 事件，并在模型结束后收到完整 `assistant` 与 `result`。未开启该选项的提供商继续使用既有非流式协议，Gemini 暂使用非流式模式。
 
 ## WebSearch 接入
 

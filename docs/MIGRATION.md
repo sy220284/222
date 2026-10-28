@@ -9,6 +9,7 @@
 | 原有功能类别 | Rust 实现 | 当前状态 |
 | --- | --- | --- |
 | 模型 API 请求 | `provider.rs` | OpenAI-compatible 与 Gemini |
+| OpenAI 兼容 SSE 流式文本/函数调用 | `sse.rs` / `agent.rs` | 事件分片重组、增量通知、Token 用量；Gemini 和 UI 实时绘制尚未完成 |
 | 模型消息 / 工具调用 | `protocol.rs` | 统一文本、函数调用、工具结果 |
 | Agent 查询循环 | `agent.rs` | 多轮模型决策和工具反馈 |
 | 工具注册及参数 schema | `tools.rs::definitions` | 六类内置工具 |

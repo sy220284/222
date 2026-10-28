@@ -12,6 +12,8 @@ pub struct ProviderProfile {
     pub model: String,
     #[serde(default)]
     pub api_key_env: Option<String>,
+    #[serde(default)]
+    pub stream: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +70,7 @@ impl Default for Config {
                     base_url: "http://127.0.0.1:11434/v1".into(),
                     model: "qwen2.5-coder:7b".into(),
                     api_key_env: None,
+                    stream: false,
                 },
                 ProviderProfile {
                     id: "openai".into(),
@@ -75,6 +78,7 @@ impl Default for Config {
                     base_url: "https://api.openai.com/v1".into(),
                     model: "gpt-4.1-mini".into(),
                     api_key_env: Some("OPENAI_API_KEY".into()),
+                    stream: false,
                 },
                 ProviderProfile {
                     id: "gemini".into(),
@@ -82,6 +86,7 @@ impl Default for Config {
                     base_url: "https://generativelanguage.googleapis.com/v1beta".into(),
                     model: "gemini-2.5-flash".into(),
                     api_key_env: Some("GEMINI_API_KEY".into()),
+                    stream: false,
                 },
             ],
             mcp_servers: vec![],

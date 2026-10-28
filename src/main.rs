@@ -15,6 +15,7 @@ mod webfetch;
 mod history;
 mod plugins;
 mod websearch;
+mod sse;
 
 use agent::Agent;
 use anyhow::{bail, Result};

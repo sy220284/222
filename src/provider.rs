@@ -4,10 +4,14 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::{collections::HashMap, time::Duration};
+use tokio::sync::mpsc::UnboundedSender;
 
 #[async_trait]
 pub trait ModelProvider: Send + Sync {
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse>;
+    async fn complete_stream(&self, request:&ModelRequest, _deltas:UnboundedSender<String>) -> Result<ModelResponse>{
+        self.complete(request).await
+    }
 }
 
 pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
@@ -63,6 +67,10 @@ impl ModelProvider for OpenAiCompatible {
             finish_reason: choice.get("finish_reason").and_then(Value::as_str).map(str::to_owned),
             usage: parse_openai_usage(&value),
         })
+    }
+
+    async fn complete_stream(&self, request:&ModelRequest, deltas:UnboundedSender<String>) -> Result<ModelResponse>{
+        crate::sse::complete(&self.client,&self.base_url,self.key.as_deref(),request,deltas).await
     }
 }
 
