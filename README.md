@@ -28,6 +28,8 @@
 - 本地插件加载器：仅在 `enabled_plugins` 明确启用后加载本地 `plugin.json`，合并本地 MCP、Hooks 和 `plugin:skill` 技能，不连接专有插件市场。
 - MCP 进程配置环境变量展开：支持 VAR 和默认值占位语法，保留缺失变量报告；支持自定义 MCP 环境字典。
 - Bash 工具第一行注释标签和默认启用的工作树模式。
+- 18 项原有工具名常量已转为公开 Rust 常量；对已实现工具增加外部名称兼容入口。
+- 标准零用量对象与可订阅的压缩警告状态，MCP 服务名使用通用 ASCII 归一化（原厂专属规则不保留）。
 - 多搜索服务 WebSearch：支持用户指定 SearXNG 自建实例或 Brave 搜索接口，不依赖任何固定 AI 服务登录。
 - 后台 Shell 执行：支持 `run_command.run_in_background`、`task_output` 状态和阻塞读取、`task_stop` 停止（兼容历史别名 `KillShell` 和 `shell_id`），以及 `background_list`/`/tasks` 列表；日志保存在 `.atlas/background`，进程仅在当前 Agent 存活期间运行。
 - 后台任务输出格式：支持 TASK_MAX_OUTPUT_LENGTH 默认 32,000、上限 160,000 UTF-16 单位，尾部截断时附带本地日志位置；极端 Unicode 代理项及输出盘容量仍待原版对照。
