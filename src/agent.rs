@@ -10,6 +10,8 @@ use crate::{
     background::BackgroundTasks,
     memory,
     runtime_contracts,
+    team_registry::Teams,
+    task_events,
     hooks::{HookRule, HookRunner, HookEvent},
     worktree::Worktree,
     protocol::ToolCall,
@@ -52,6 +54,7 @@ pub struct Agent {
     search_backend: Option<SearchBackend>,
     background: Arc<BackgroundTasks>,
     graph: task_graph::TaskGraph,
+    team_name: Option<String>,
     hook_rules: Vec<HookRule>,
 }
 
@@ -67,7 +70,7 @@ impl Agent {
         let provider = provider::create(&profile)?;
         let background = Arc::new(BackgroundTasks::new(&root)?);
         let graph = task_graph::TaskGraph::new(&root,&session.id.to_string())?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, hook_rules: Vec::new() })
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: None, hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -143,6 +146,68 @@ impl Agent {
         }
     }
 
+    async fn run_team_tools(&mut self,call:&ToolCall,executor:&ToolExecutor)->Result<String>{
+        let args:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
+        let registry=Teams::new(&self.root)?;
+        match call.function.name.as_str(){
+            "TeamCreate"=>{
+                executor.approve_external(call)?;
+                if let Some(name)=self.team_name.as_deref(){
+                    bail!("Already leading team \"{name}\". Use TeamDelete first.")
+                }
+                let name=args.get("team_name").and_then(serde_json::Value::as_str)
+                    .context("team_name is required for TeamCreate")?;
+                let description=args.get("description").and_then(serde_json::Value::as_str);
+                let team=registry.create(name,description,&self.session.id.to_string())?;
+                let graph=task_graph::TaskGraph::new(&self.root,&team.name)?;
+                graph.reset()?;
+                self.graph=graph;
+                self.team_name=Some(team.name.clone());
+                task_events::notify_tasks_updated();
+                Ok(json!({
+                    "team_name":team.name,
+                    "team_file_path":registry.config_path(&team.name)?,
+                    "lead_agent_id":team.lead_id
+                }).to_string())
+            },
+            "TeamDelete"=>{
+                executor.approve_external(call)?;
+                let response=registry.delete(self.team_name.as_deref())?;
+                if response["success"]==true {
+                    self.team_name=None;
+                    self.graph=task_graph::TaskGraph::new(
+                        &self.root,&self.session.id.to_string())?;
+                    task_events::notify_tasks_updated();
+                }
+                Ok(response.to_string())
+            },
+            "SendMessage"=>{
+                executor.approve_external(call)?;
+                let team=self.team_name.as_deref().context("No active team")?;
+                let to=args.get("to").and_then(serde_json::Value::as_str)
+                    .context("Missing message recipient")?;
+                let summary=args.get("summary").and_then(serde_json::Value::as_str)
+                    .context("Plain text message summary required")?;
+                let message=args.get("message").and_then(serde_json::Value::as_str)
+                    .context("Structured shutdown/plan requests not yet supported")?;
+                registry.send(team,to,"team-lead",message,summary).map(|x|x.to_string())
+            },
+            "TeamInbox"=>{
+                let team=self.team_name.as_deref().context("No active team")?;
+                let recipient=args.get("recipient").and_then(serde_json::Value::as_str)
+                    .unwrap_or("team-lead");
+                let mailbox=crate::team_mailbox::Mailbox::new(&self.root,team)?;
+                let unread=mailbox.unread(recipient)?;
+                if args.get("mark_read").and_then(serde_json::Value::as_bool)==Some(true){
+                    executor.approve_external(call)?;
+                    mailbox.mark_all(recipient)?;
+                }
+                Ok(serde_json::to_string(&unread)?)
+            }
+            other=>bail!("Unsupported team tool {other}")
+        }
+    }
+
     async fn run_team(&self, call:&ToolCall, executor:&ToolExecutor)->Result<String>{
         if self.child_depth!=0 {bail!("Nested teams are not allowed")}
         let args:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
@@ -190,11 +255,13 @@ impl Agent {
             let plugins=self.enabled_plugins.clone();
             let search=self.search_backend.clone();
             let shared_tasks=self.graph.clone();
+            let current_team=self.team_name.clone();
             running.push(async move {
                 let result=async{
                     let mut child=Self::new(profile,root,approval,interactive,steps,Session::fresh())?;
                     // Teammates share one persistent task list even with isolated code worktrees.
                     child.graph=shared_tasks;
+                    child.team_name=current_team;
                     child.child_depth=1;
                     child.enabled_plugins=plugins;
                     child.search_backend=search;
@@ -261,6 +328,7 @@ impl Agent {
             self.max_steps, Session::fresh()
         )?;
         child.graph = self.graph.clone();
+        child.team_name = self.team_name.clone();
         child.child_depth = self.child_depth + 1;
         child.enabled_plugins = self.enabled_plugins.clone();
         child.search_backend = self.search_backend.clone();
@@ -421,6 +489,7 @@ impl Agent {
             let mut available_tools = tools::definitions();
             available_tools.extend(task::definitions());
             available_tools.extend(task_graph::definitions());
+            if self.child_depth==0 { available_tools.extend(crate::team_registry_tools()); }
             if self.search_backend.is_some(){available_tools.push(crate::websearch::definition());}
             if self.child_depth == 0 {
                 available_tools.push(json!({"type":"function","function":{
@@ -524,6 +593,12 @@ impl Agent {
                 }
                 let result = if let Some(reason) = pre.blocking_reason {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
+                } else if matches!(call.function.name.as_str(),
+                    "TeamCreate"|"TeamDelete"|"SendMessage"|"TeamInbox") {
+                    match self.run_team_tools(&call,&executor).await{
+                        Ok(result)=>result,
+                        Err(error)=>format!("ERROR: {error:#}"),
+                    }
                 } else if call.function.name == "spawn_team" {
                     match self.run_team(&call,&executor).await {
                         Ok(output)=>output,
@@ -648,6 +723,7 @@ mod tests {
             search_backend: None,
             background: Arc::new(BackgroundTasks::new(dir.path()).unwrap()),
             graph: task_graph::TaskGraph::new(dir.path(),"test").unwrap(),
+            team_name: None,
             hook_rules: Vec::new(),
         };
         agent.compact_history().await.unwrap();
