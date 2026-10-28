@@ -478,6 +478,8 @@ mod tests{
         let gate=once.clone();
         let seen=Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         let observed=seen.clone();
+        let finished=Arc::new((std::sync::Mutex::new(false),std::sync::Condvar::new()));
+        let completion=finished.clone();
         let _listener=task_events::on_tasks_updated(Arc::new(move||{
             let subject=graph_for_callback.peek("1").ok().flatten()
                 .map(|task|task.subject).unwrap_or_else(||"<missing>".into());
@@ -486,9 +488,19 @@ mod tests{
                 graph_for_callback.update(&json!({
                     "taskId":"1","subject":"Updated by subscriber"
                 })).unwrap();
+                let (lock,ready)=&*completion;
+                *lock.lock().unwrap()=true;
+                ready.notify_all();
             }
         }));
         graph.update(&json!({"taskId":"1","subject":"Original"})).unwrap();
+        // A process-wide signal may also be emitted by another test thread.
+        // Wait for the reentrant mutation to finish, not merely to begin.
+        let (lock,ready)=&*finished;
+        let (done,_)=ready.wait_timeout_while(
+            lock.lock().unwrap(),std::time::Duration::from_secs(2),
+            |done|!*done).unwrap();
+        assert!(*done,"subscriber did not complete: observed={:?}",seen.lock().unwrap());
         assert_eq!(graph.peek("1").unwrap().unwrap().subject,
             "Updated by subscriber","observed={:?} gate={}",
             seen.lock().unwrap(),once.load(Ordering::SeqCst));
