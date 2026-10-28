@@ -242,6 +242,53 @@ impl TaskGraph {
             Ok(format!("Updated task #{id} {}",fields.join(", ")).trim_end().to_owned())
         })
     }
+
+    pub fn reset(&self)->Result<()>{
+        self.locked(|store|{
+            let high=store.highest()?;
+            for item in store.all()? { fs::remove_file(store.path(&item.id)?)?; }
+            store.mark(high)
+        })
+    }
+
+    pub fn member_statuses(&self,members:&[(String,String,Option<String>)])->Result<Vec<Value>>{
+        let tasks=self.all()?;
+        Ok(members.iter().map(|(id,name,kind)|{
+            let owned=tasks.iter().filter(|t|
+                t.status!="completed" &&
+                (t.owner.as_deref()==Some(name)||t.owner.as_deref()==Some(id))
+            ).map(|t|t.id.clone()).collect::<Vec<_>>();
+            json!({"agentId":id,"name":name,"agentType":kind,
+                "status":if owned.is_empty(){"idle"}else{"busy"},"currentTasks":owned})
+        }).collect())
+    }
+
+    pub fn unassign_teammate(&self,agent_id:&str,name:&str,reason:&str)->Result<Value>{
+        if !matches!(reason,"terminated"|"shutdown"){bail!("Invalid exit reason")}
+        self.locked(|store|{
+            let mut removed=Vec::<Value>::new();
+            for mut item in store.all()?{
+                if item.status=="completed" ||
+                    (item.owner.as_deref()!=Some(agent_id)&&item.owner.as_deref()!=Some(name)){
+                    continue;
+                }
+                removed.push(json!({"id":item.id,"subject":item.subject}));
+                item.owner=None;
+                item.status="pending".into();
+                store.save(&item)?;
+            }
+            let verb=if reason=="terminated"{"was terminated"}else{"has shut down"};
+            let mut message=format!("{name} {verb}.");
+            if !removed.is_empty(){
+                let listing=removed.iter().map(|v|
+                    format!("#{} \"{}\"",v["id"].as_str().unwrap_or(""),v["subject"].as_str().unwrap_or(""))
+                ).collect::<Vec<_>>().join(", ");
+                message.push_str(&format!(" {} task(s) were unassigned: {listing}. Use TaskList to check availability and TaskUpdate with owner to reassign them to idle teammates.",removed.len()));
+            }
+            Ok(json!({"unassignedTasks":removed,"notificationMessage":message}))
+        })
+    }
+
     pub fn claim(&self,id:&str,owner:&str,check_busy:bool)->Result<Value>{
         self.locked(|this|{
             let Some(mut task)=this.load(id)?else{return Ok(json!({"success":false,"reason":"task_not_found"}))};
