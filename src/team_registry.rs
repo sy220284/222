@@ -1,7 +1,8 @@
 use anyhow::{bail,Context,Result};
 use serde::{Serialize,Deserialize};
 use serde_json::{json,Value};
-use std::{fs,path::{Path,PathBuf}};
+use std::{fs,fs::OpenOptions,io::Write,path::{Path,PathBuf}};
+use fs2::FileExt;
 use crate::team_mailbox::{Mailbox,Message};
 
 #[derive(Clone,Serialize,Deserialize)]
@@ -19,6 +20,17 @@ impl Teams {
         fs::create_dir_all(&teams)?;
         if !teams.canonicalize()?.starts_with(&root){bail!("Teams escape workspace")}
         Ok(Self{root})
+    }
+    fn locked<T,F:FnOnce(&Self)->Result<T>>(&self,action:F)->Result<T>{
+        let path=self.root.join(".atlas/teams/.registry.lock");
+        if path.symlink_metadata().is_ok_and(|m|m.file_type().is_symlink()){
+            bail!("Unsafe registry lock")
+        }
+        let lock=OpenOptions::new().create(true).write(true).open(path)?;
+        lock.lock_exclusive()?;
+        let result=action(self);
+        let _=FileExt::unlock(&lock);
+        result
     }
     fn path(&self,name:&str)->Result<PathBuf>{
         if name.trim().is_empty()||name.len()>120{bail!("Invalid team name")}
@@ -47,12 +59,22 @@ impl Teams {
     }
     fn save(&self,team:&Team)->Result<()>{
         let path=self.path(&team.name)?;
-        fs::write(path,serde_json::to_vec_pretty(team)?)?;
-        Ok(())
+        let data=serde_json::to_vec_pretty(team)?;
+        let temp=path.with_extension(format!("{}.tmp",uuid::Uuid::new_v4()));
+        let mut file=OpenOptions::new().write(true).create_new(true).open(&temp)?;
+        let result=(||->Result<()>{
+            file.write_all(&data)?;
+            file.sync_all()?;
+            fs::rename(&temp,&path)?;
+            Ok(())
+        })();
+        if result.is_err(){let _=fs::remove_file(&temp);}
+        result
     }
     pub fn create(&self,name:&str,description:Option<&str>,session:&str)->Result<Team>{
+        self.locked(|this|{
         let mut name=name.trim().to_owned();
-        if self.read(&name)?.is_some(){
+        if this.read(&name)?.is_some(){
             name=format!("{}-{}",&name,uuid::Uuid::new_v4().simple());
         }
         let lead=format!("team-lead@{name}");
@@ -61,43 +83,57 @@ impl Teams {
             lead_session:session.into(),lead_id:lead.clone(),
             members:vec![Member{name:"team-lead".into(),id:lead,active:true}],
         };
-        if self.read(&team.name)?.is_some(){bail!("Duplicate team")}
-        self.save(&team)?;
+        if this.read(&team.name)?.is_some(){bail!("Duplicate team")}
+        this.save(&team)?;
         Ok(team)
+        })
     }
     pub fn member(&self,team:&str,member:Member)->Result<()>{
-        let mut cfg=self.read(team)?.context("Team missing")?;
+        self.locked(|this|{
+        if member.name.is_empty() || member.name.len()>80 ||
+            !member.name.chars().all(|c|c.is_ascii_alphanumeric()||c=='_'||c=='-'){
+            bail!("Invalid member name")
+        }
+        let mut cfg=this.read(team)?.context("Team missing")?;
         if cfg.members.iter().any(|m|m.name==member.name||m.id==member.id){
             bail!("Duplicate member")
         }
         cfg.members.push(member);
-        self.save(&cfg)
+        this.save(&cfg)
+        })
     }
     pub fn active(&self,team:&str,name:&str,active:bool)->Result<()>{
-        let mut cfg=self.read(team)?.context("Team missing")?;
+        self.locked(|this|{
+        let mut cfg=this.read(team)?.context("Team missing")?;
         let member=cfg.members.iter_mut().find(|m|m.name==name)
             .context("Member missing")?;
         member.active=active;
-        self.save(&cfg)
+        this.save(&cfg)
+        })
     }
     pub fn delete(&self,team:Option<&str>)->Result<Value>{
+        self.locked(|this|{
         let Some(name)=team else {
             return Ok(json!({"success":true,"message":"No team name found, nothing to clean up"}))
         };
-        let cfg=self.read(name)?.context("Team missing")?;
+        let cfg=this.read(name)?.context("Team missing")?;
         let active=cfg.members.iter().filter(|m|m.name!="team-lead"&&m.active)
             .map(|m|m.name.as_str()).collect::<Vec<_>>();
         if !active.is_empty(){
             return Ok(json!({"success":false,"team_name":name,
                 "message":format!("Cannot cleanup team with {} active member(s): {}. Use requestShutdown to gracefully terminate teammates first.",active.len(),active.join(", "))}))
         }
-        let cfg_path=self.path(name)?;
+        let cfg_path=this.path(name)?;
         fs::remove_dir_all(cfg_path.parent().context("Team directory missing")?)?;
         Ok(json!({"success":true,"team_name":name,
             "message":format!("Cleaned up directories and worktrees for team \"{name}\"")}))
+        })
     }
     pub fn send(&self,team:&str,recipient:&str,sender:&str,text:&str,summary:&str)->Result<Value>{
-        let cfg=self.read(team)?.context("Team missing")?;
+        if summary.trim().is_empty(){bail!("summary is required when message is a string")}
+        self.locked(|this|{
+        let cfg=this.read(team)?.context("Team missing")?;
+        if !cfg.members.iter().any(|m|m.name==sender){bail!("Sender is not a team member")}
         let names=if recipient=="*"{
             cfg.members.iter().filter(|m|m.name!=sender)
                 .map(|m|m.name.clone()).collect::<Vec<_>>()
@@ -105,7 +141,7 @@ impl Teams {
             vec![cfg.members.iter().find(|m|m.name==recipient||m.id==recipient)
                 .context("Unknown recipient")?.name.clone()]
         };
-        let inbox=Mailbox::new(&self.root,team)?;
+        let inbox=Mailbox::new(&this.root,team)?;
         for name in &names {
             inbox.write(name,Message{
                 from:sender.into(),text:text.into(),read:false,
@@ -114,6 +150,7 @@ impl Teams {
             })?;
         }
         Ok(json!({"success":true,"recipients":names}))
+        })
     }
 }
 #[cfg(test)]
@@ -173,4 +210,47 @@ pub fn definitions(leader:bool,team_active:bool)->Vec<Value>{
         }}));
     }
     result
+}
+
+pub fn is_reserved_protocol(text:&str)->bool{
+    let Ok(value)=serde_json::from_str::<Value>(text) else{return false};
+    matches!(value.get("type").and_then(Value::as_str),
+        Some("permission_request"|"permission_response"|
+             "sandbox_permission_request"|"sandbox_permission_response"|
+             "shutdown_request"|"shutdown_approved"|"shutdown_rejected"|
+             "plan_approval_request"|"plan_approval_response"|
+             "team_permission_update"|"mode_set_request"|
+             "idle_notification"|"task_assignment"))
+}
+fn escape_attr(text:&str)->String{
+    text.replace('&',"&amp;").replace('"',"&quot;")
+        .replace('<',"&lt;").replace('>',"&gt;")
+}
+pub fn format_incoming(messages:&[Message])->String{
+    messages.iter().map(|m|{
+        let color=m.color.as_deref().map(|x|format!(" color=\"{}\"",escape_attr(x))).unwrap_or_default();
+        let summary=m.summary.as_deref().map(|x|format!(" summary=\"{}\"",escape_attr(x))).unwrap_or_default();
+        format!("<teammate-message teammate_id=\"{}\"{color}{summary}>\n{}\n</teammate-message>",
+            escape_attr(&m.from),m.text)
+    }).collect::<Vec<_>>().join("\n\n")
+}
+#[cfg(test)]
+mod message_tests{
+    use super::*;
+    #[test]
+    fn control_protocol_messages_are_not_plain_chat(){
+        assert!(is_reserved_protocol(r#"{"type":"permission_request"}"#));
+        assert!(is_reserved_protocol(r#"{"type":"shutdown_request"}"#));
+        assert!(!is_reserved_protocol(r#"{"type":"other"}"#));
+        assert!(!is_reserved_protocol("ordinary teammate message"));
+    }
+    #[test]
+    fn incoming_messages_escape_untrusted_attributes(){
+        let input=Message{from:"a\"<".into(),text:"review".into(),
+            timestamp:"now".into(),read:false,color:None,
+            summary:Some("x&y".into())};
+        let formatted=format_incoming(&[input]);
+        assert!(formatted.contains("teammate_id=\"a&quot;&lt;\""));
+        assert!(formatted.contains("summary=\"x&amp;y\""));
+    }
 }
