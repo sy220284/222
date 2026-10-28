@@ -110,7 +110,8 @@ impl Agent {
         let result = async {
             child.attach_mcp(&self.mcp_configs).await?;
             child.attach_hooks(&self.hook_rules).await?;
-            let response = child.ask(prompt).await;
+            // Box the nested agent future to keep the recursive async type finite.
+            let response = Box::pin(child.ask(prompt)).await;
             let finalization = child.finish().await;
             let answer = response?;
             finalization?;
