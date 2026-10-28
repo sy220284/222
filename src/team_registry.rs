@@ -157,6 +157,25 @@ impl Teams {
 mod tests {
     use super::*;
     #[test]
+    fn concurrent_member_updates_are_serialized_and_durable(){
+        let root=std::sync::Arc::new(tempfile::tempdir().unwrap());
+        Teams::new(root.path()).unwrap().create("parallel",None,"lead").unwrap();
+        let workers=(0..16).map(|i|{
+            let root=root.clone();
+            std::thread::spawn(move||{
+                let registry=Teams::new(root.path()).unwrap();
+                registry.member("parallel",Member{
+                    name:format!("worker-{i}"),
+                    id:format!("worker-{i}@parallel"),active:true
+                }).unwrap();
+            })
+        }).collect::<Vec<_>>();
+        for worker in workers{worker.join().unwrap();}
+        let team=Teams::new(root.path()).unwrap().read("parallel").unwrap().unwrap();
+        assert_eq!(team.members.len(),17);
+        assert!(team.members.iter().all(|m|m.active));
+    }
+    #[test]
     fn team_members_broadcast_and_cleanup_guards(){
         let root=tempfile::tempdir().unwrap();
         let teams=Teams::new(root.path()).unwrap();

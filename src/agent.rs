@@ -794,6 +794,123 @@ mod tests {
         assert_eq!(restored.summary.as_deref(), Some("Retain verified changes and next steps."));
     }
 
+
+    struct ToolScript {
+        next:std::sync::atomic::AtomicUsize,
+        seen:std::sync::Arc<std::sync::Mutex<Vec<Vec<Message>>>>,
+        send:bool,
+    }
+    #[async_trait::async_trait]
+    impl ModelProvider for ToolScript {
+        async fn complete(&self,request:&ModelRequest)->Result<crate::protocol::ModelResponse>{
+            self.seen.lock().unwrap().push(request.messages.clone());
+            let step=self.next.fetch_add(1,std::sync::atomic::Ordering::SeqCst);
+            if step==0 && self.send {
+                assert!(request.tools.iter().any(|tool|tool["function"]["name"]=="SendMessage"));
+                let call=crate::protocol::ToolCall{
+                    id:"send-1".into(),kind:"function".into(),
+                    function:crate::protocol::FunctionCall{
+                        name:"SendMessage".into(),
+                        arguments:json!({"to":"worker","summary":"Review this change",
+                            "message":"Please review src/lib.rs"}).to_string()
+                    }
+                };
+                return Ok(crate::protocol::ModelResponse{
+                    message:Message{
+                        role:"assistant".into(),content:None,
+                        tool_calls:Some(vec![call]),tool_call_id:None
+                    },
+                    finish_reason:Some("tool_calls".into()),usage:None
+                });
+            }
+            Ok(crate::protocol::ModelResponse{
+                message:Message::text("assistant","done"),
+                finish_reason:Some("stop".into()),usage:None
+            })
+        }
+    }
+    #[tokio::test]
+    async fn team_message_tool_dispatch_and_peer_inbox_delivery(){
+        let root=tempfile::tempdir().unwrap();
+        let registry=Teams::new(root.path()).unwrap();
+        let team=registry.create("team",None,"leader-session").unwrap();
+        registry.member(&team.name,crate::team_registry::Member{
+            name:"worker".into(),id:"worker@team".into(),active:true
+        }).unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),
+            model:"mock".into(),api_key_env:None,stream:false
+        };
+        let mut leader=Agent::new(profile.clone(),root.path().to_path_buf(),
+            Approval::ReadOnly,false,5,Session::fresh()).unwrap();
+        leader.team_name=Some(team.name.clone());
+        leader.team_root=Some(root.path().to_path_buf());
+        leader.agent_name=Some("team-lead".into());
+        let seen=std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        leader.provider=Box::new(ToolScript{
+            next:std::sync::atomic::AtomicUsize::new(0),
+            seen:seen.clone(),send:true
+        });
+        assert_eq!(leader.ask("Send a review request").await.unwrap(),"done");
+        let inbox=crate::team_mailbox::Mailbox::new(root.path(),&team.name).unwrap();
+        assert_eq!(inbox.unread("worker").unwrap().len(),1);
+        assert_eq!(inbox.unread("worker").unwrap()[0].from,"team-lead");
+        assert!(leader.session.messages.iter().any(|m|
+            m.role=="tool" && m.content.as_deref().unwrap_or("").contains("worker")));
+        let mut worker=Agent::new(profile,root.path().to_path_buf(),
+            Approval::ReadOnly,false,5,Session::fresh()).unwrap();
+        worker.team_name=Some(team.name.clone());
+        worker.team_root=Some(root.path().to_path_buf());
+        worker.agent_name=Some("worker".into());
+        let worker_seen=std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        worker.provider=Box::new(ToolScript{
+            next:std::sync::atomic::AtomicUsize::new(0),
+            seen:worker_seen.clone(),send:false
+        });
+        assert_eq!(worker.ask("Review your messages").await.unwrap(),"done");
+        let requests=worker_seen.lock().unwrap();
+        assert!(requests[0].iter().any(|m|
+            m.content.as_deref().unwrap_or("").contains(
+                "<teammate-message teammate_id=\"team-lead\"")));
+        assert!(inbox.unread("worker").unwrap().is_empty());
+    }
+    #[tokio::test]
+    async fn team_inbox_enforces_member_isolation_and_protocol_retention(){
+        let root=tempfile::tempdir().unwrap();
+        let registry=Teams::new(root.path()).unwrap();
+        let team=registry.create("team",None,"lead").unwrap();
+        registry.member(&team.name,crate::team_registry::Member{
+            name:"worker".into(),id:"worker@team".into(),active:true
+        }).unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),
+            model:"mock".into(),api_key_env:None,stream:false
+        };
+        let mut worker=Agent::new(profile,root.path().to_path_buf(),
+            Approval::ReadOnly,false,5,Session::fresh()).unwrap();
+        worker.team_name=Some(team.name.clone());
+        worker.team_root=Some(root.path().to_path_buf());
+        worker.agent_name=Some("worker".into());
+        let executor=ToolExecutor::new(root.path().to_path_buf(),Approval::ReadOnly,false);
+        let call=ToolCall{
+            id:"inbox-1".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"TeamInbox".into(),
+                arguments:json!({"recipient":"team-lead"}).to_string()
+            }
+        };
+        assert!(worker.run_team_tools(&call,&executor).await.is_err());
+        let mailbox=crate::team_mailbox::Mailbox::new(root.path(),&team.name).unwrap();
+        mailbox.write("worker",crate::team_mailbox::Message{
+            from:"team-lead".into(),
+            text:r#"{"type":"permission_request","request_id":"123"}"#.into(),
+            timestamp:"now".into(),read:false,color:None,summary:None
+        }).unwrap();
+        assert!(!worker.absorb_team_messages().unwrap());
+        assert_eq!(mailbox.unread("worker").unwrap().len(),1);
+    }
     #[test]
     fn loads_project_instruction_file() {
         let d = tempfile::tempdir().unwrap();
