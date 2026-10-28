@@ -193,3 +193,7 @@ cargo run -- chat --resume <上次输出的UUID>
 ## 独立性
 
 仓库不包含任何第三方反编译或提取源码，不包含其商标、账号登录、遥测或专有接口代码。参考的是通用编程智能体功能类别，并独立实现 Rust 版本。模型提供商名称仅用于描述可选兼容协议，不代表关联或背书。
+
+## 完整任务管理调用链进展
+
+新增 TaskCreate、TaskGet、TaskList、TaskUpdate 多工具联动，磁盘任务高水位编号、跨进程文件锁、双向依赖、元数据合并与删除级联、已完成依赖释放、团队任务列表共享、TaskCreated/TaskCompleted 本地 Hooks。尚缺原版任务后台所有方法及全功能对照，参见 docs/TASK_GRAPH_PARITY_AUDIT.md。
