@@ -78,6 +78,7 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                 .map(|v|v as usize).unwrap_or(usize::MAX);
             let mut results=Vec::new();
             let mut blocked=None;
+            let mut halted=None;
             let mut processed=0usize;
             while processed<max{
                 let ready=queue.peek(|c|c.agent_id.is_none() &&
@@ -91,6 +92,7 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                     Mode::OrphanedPermission=>Some("permission"),
                     _ if next.command.is_slash()=>Some("slash-command"),
                     _ if next.command.contains_image()=>Some("multimodal"),
+                    _ if text_only_value(&next.command.value).is_err()=>Some("unsupported-content"),
                     _=>None,
                 };
                 if let Some(reason)=reason {
@@ -117,7 +119,8 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                     let Some(candidate)=candidate else{break};
                     if !queued_prompt_batch::can_batch_with(
                         &batch[0].command,Some(&candidate.command))
-                        || candidate.command.is_slash() || candidate.command.contains_image(){
+                        || candidate.command.is_slash() || candidate.command.contains_image()
+                    || text_only_value(&candidate.command.value).is_err(){
                         break;
                     }
                     let follower=queue.dequeue(|c|c.agent_id.is_none() &&
@@ -127,15 +130,9 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                 }
                 let joined=queued_prompt_batch::join_prompt_values(
                     &batch.iter().map(|i|i.command.value.clone()).collect::<Vec<_>>());
-                let prompt=if let Some(text)=joined.as_str(){
-                    text.to_owned()
-                }else{
-                    // The text-only Agent accepts flattened text blocks. Images
-                    // were rejected before dequeuing; no multimodal bytes lost.
-                    batch.iter().filter_map(|i|i.command.text())
-                        .collect::<Vec<_>>().join("
-")
-                };
+                // Validate every content block before removal; never flatten
+                // unknown structured blocks into an incomplete model prompt.
+                let prompt=text_only_value(&joined)?;
                 if next.command.mode==Mode::TaskNotification{
                     if let Some(notification)=parse_task_notification(&prompt,&agent.session_id()){
                         println!("{}",crate::ndjson::stringify_value(&notification));
@@ -146,6 +143,8 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                 let ended=guard.end(generation);
                 if !ended{bail!("Query generation changed during execution")}
                 processed+=batch.len();
+                let failed=answer.is_err();
+                let failed_identities=batch.iter().map(|item|item.identity).collect::<Vec<_>>();
                 for item in batch{
                     match &answer{
                         Ok(answer)=>results.push(json!({"identity":item.identity,"ok":true,
@@ -154,13 +153,40 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                             "error":format!("{error:#}"),"session_id":agent.session_id()})),
                     }
                 }
+                // Headless processing stops on a failed model turn. Keep the
+                // error and leave all later commands available for retry.
+                if failed {
+                    halted=Some(json!({"reason":"model-error","identities":failed_identities}));
+                    break;
+                }
             }
-            Ok(json!({"results":results,"blocked":blocked,"revision":queue.revision(),
+            Ok(json!({"results":results,"blocked":blocked,"halted":halted,"revision":queue.revision(),
                 "length":queue.len(),"usage":agent.usage(),"cost":agent.cost_ledger()}))
         }
         _=>bail!("Unsupported queue control: {action}"),
     }
 }
+/// Reject non-text content before dequeue; the current Agent interface
+/// cannot preserve documents, images or tool-result blocks end to end.
+fn text_only_value(value:&Value)->Result<String>{
+    match value {
+        Value::String(text)=>Ok(text.clone()),
+        Value::Array(blocks)=>{
+            let mut parts=Vec::with_capacity(blocks.len());
+            for (index,block) in blocks.iter().enumerate(){
+                if block.get("type").and_then(Value::as_str)!=Some("text") {
+                    bail!("content block {index} requires a non-text handler");
+                }
+                let text=block.get("text").and_then(Value::as_str)
+                    .with_context(||format!("content block {index} requires text"))?;
+                parts.push(text);
+            }
+            Ok(parts.join("\n"))
+        },
+        _=>bail!("queued value must be text or text blocks"),
+    }
+}
+
 fn parse_priority(value:Option<&Value>)->Result<Priority>{
     if let Some(v)=value{Ok(serde_json::from_value(v.clone())
         .context("Invalid queue priority (expected now, next or later)")?)}
