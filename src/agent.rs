@@ -72,8 +72,12 @@ impl Agent {
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
         let background = Arc::new(BackgroundTasks::new(&root)?);
-        let graph = task_graph::TaskGraph::new(&root,&session.id.to_string())?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: None, agent_name: None, team_root: None, shutdown_requested: false, hook_rules: Vec::new() })
+        let list_id=session.team_name.clone().unwrap_or_else(||session.id.to_string());
+        let graph = task_graph::TaskGraph::new(&root,&list_id)?;
+        let restored_team=session.team_name.clone();
+        let restored_member=session.agent_name.clone();
+        let restored_root=restored_team.as_ref().map(|_|root.clone());
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -168,6 +172,9 @@ impl Agent {
                 self.team_name=Some(team.name.clone());
                 self.agent_name=Some("team-lead".into());
                 self.team_root=Some(self.root.clone());
+                self.session.team_name=self.team_name.clone();
+                self.session.agent_name=self.agent_name.clone();
+                self.session.save(&self.root)?;
                 task_events::notify_tasks_updated();
                 Ok(json!({
                     "team_name":team.name,
@@ -182,6 +189,9 @@ impl Agent {
                     self.team_name=None;
                     self.agent_name=None;
                     self.team_root=None;
+                    self.session.team_name=None;
+                    self.session.agent_name=None;
+                    self.session.save(&self.root)?;
                     self.graph=task_graph::TaskGraph::new(
                         &self.root,&self.session.id.to_string())?;
                     task_events::notify_tasks_updated();
@@ -306,6 +316,9 @@ impl Agent {
                     child.team_name=current_team.clone();
                     child.team_root=current_team_root.clone();
                     child.agent_name=Some(name.clone());
+                    child.session.team_name=child.team_name.clone();
+                    child.session.agent_name=child.agent_name.clone();
+                    child.session.save(&child.root)?;
                     child.child_depth=1;
                     child.enabled_plugins=plugins;
                     child.search_backend=search;
@@ -924,6 +937,47 @@ mod tests {
         assert!(!worker.absorb_team_messages().unwrap());
         assert_eq!(mailbox.unread("worker").unwrap().len(),1);
     }
+    #[tokio::test]
+    async fn resumed_leader_restores_team_and_shared_task_graph(){
+        let root=tempfile::tempdir().unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),
+            model:"mock".into(),api_key_env:None,stream:false
+        };
+        let mut leader=Agent::new(profile.clone(),root.path().to_path_buf(),
+            Approval::Full,false,5,Session::fresh()).unwrap();
+        let id=leader.session_id();
+        let executor=ToolExecutor::new(root.path().to_path_buf(),Approval::Full,false);
+        let create=ToolCall{
+            id:"team-create".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"TeamCreate".into(),
+                arguments:json!({"team_name":"persistent","description":"Review"}).to_string()
+            }
+        };
+        leader.run_team_tools(&create,&executor).await.unwrap();
+        leader.graph.create(&json!({"subject":"Retained","description":"task"})).unwrap();
+        let restored=Session::load(root.path(),&id).unwrap();
+        assert_eq!(restored.team_name.as_deref(),Some("persistent"));
+        assert_eq!(restored.agent_name.as_deref(),Some("team-lead"));
+        let mut resumed=Agent::new(profile,root.path().to_path_buf(),
+            Approval::Full,false,5,restored).unwrap();
+        assert_eq!(resumed.team_name.as_deref(),Some("persistent"));
+        assert_eq!(resumed.graph.peek("1").unwrap().unwrap().subject,"Retained");
+        let delete=ToolCall{
+            id:"team-delete".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"TeamDelete".into(),arguments:"{}".into()
+            }
+        };
+        resumed.run_team_tools(&delete,&executor).await.unwrap();
+        let after=Session::load(root.path(),&id).unwrap();
+        assert!(after.team_name.is_none());
+        assert!(after.agent_name.is_none());
+        assert!(!root.path().join(".atlas/teams/persistent").exists());
+    }
+
     #[test]
     fn loads_project_instruction_file() {
         let d = tempfile::tempdir().unwrap();

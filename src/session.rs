@@ -14,11 +14,15 @@ pub struct Session {
     pub tasks: Vec<Task>,
     #[serde(default)]
     pub usage: TokenUsage,
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    pub team_name: Option<String>,
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    pub agent_name: Option<String>,
 }
 
 impl Session {
     pub fn fresh() -> Self {
-        Self { id: Uuid::new_v4(), messages: Vec::new(), summary: None, tasks: Vec::new(), usage: TokenUsage::default() }
+        Self { id: Uuid::new_v4(), messages: Vec::new(), summary: None, tasks: Vec::new(), usage: TokenUsage::default(), team_name: None, agent_name: None }
     }
 
     fn path(root: &Path, id: Uuid) -> PathBuf {
@@ -39,10 +43,17 @@ impl Session {
         let path = Self::path(root, self.id);
         fs::create_dir_all(path.parent().context("Invalid session path")?)?;
         let data = serde_json::to_vec_pretty(self)?;
-        let temp = path.with_extension("tmp");
-        fs::write(&temp, data)?;
-        fs::rename(temp, path)?;
-        Ok(())
+        let temp=path.with_extension(format!("{}.tmp",Uuid::new_v4()));
+        use std::io::Write;
+        let mut file=fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+        let result=(||->Result<()>{
+            file.write_all(&data)?;
+            file.sync_all()?;
+            fs::rename(&temp,&path)?;
+            Ok(())
+        })();
+        if result.is_err(){let _=fs::remove_file(&temp);}
+        result
     }
 
     pub fn clear(&mut self) {
@@ -55,6 +66,21 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_session_without_team_fields_remains_loadable(){
+        let dir=tempfile::tempdir().unwrap();
+        let s=Session::fresh();
+        let path=Session::path(dir.path(),s.id);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path,serde_json::json!({
+            "id":s.id,"messages":[],"tasks":[],"usage":{
+                "input_tokens":0,"output_tokens":0,"total_tokens":0
+            }
+        }).to_string()).unwrap();
+        let restored=Session::load(dir.path(),&s.id.to_string()).unwrap();
+        assert!(restored.team_name.is_none());
+        assert!(restored.agent_name.is_none());
+    }
     #[test]
     fn roundtrip_resume() {
         let dir = tempfile::tempdir().unwrap();
