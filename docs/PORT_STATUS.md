@@ -3,10 +3,10 @@
 **目标：1906 个原始文件的功能逐项重写、等价验证。**
 
 - 明确归入环境/行为遥测删除项：22 个原始文件路径（仅是第一轮整文件分类；其他混合文件也需排除隐式上报）。
-- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：361 个原始文件路径。
+- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：362 个原始文件路径。
 - 当前台账仍标注“未迁移”的文件路径：1493 个（与部分实现项互斥，按当前状态字段分类）。
-- **达到原始文件纯函数行为/边界等价且有验证证据的路径：30 个（包括独立纯函数、状态模块与固定常量文件；完整调用链仍需逐项验证）；其上下游业务逻辑仍需完整验证。** 其他当前已实现的功能仅在特定测试场景验证，不能把“部分实现”升级为“完成”。
-- 非排除项的原始文件级等价验收仍未闭环：1854 个。
+- **达到原始文件纯函数行为/边界等价且有验证证据的路径：29 个（包括独立纯函数、状态模块与固定常量文件；完整调用链仍需逐项验证）；其上下游业务逻辑仍需完整验证。** 其他当前已实现的功能仅在特定测试场景验证，不能把“部分实现”升级为“完成”。
+- 非排除项的原始文件级等价验收仍未闭环：1855 个。
 
 ## 本轮已进入 Rust 实现的领域
 
@@ -153,4 +153,8 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 
 继续对照原始 `src/cli/print.ts` 的 `drainCommandQueue` 异常传播、`joinPromptValues` 与 `src/utils/messageQueueManager.ts` 消费时序。`src/sdk_queue.rs` 在模型调用失败时保留该批每条消息的错误结果、返回 `halted.reason=model-error` 和受影响身份，立即停止后续排队请求；后续消息保持在队列中，避免失败后继续向模型发送下一批。SDK 文本适配器对每个结构化块逐一检查，非文本块在出队前拒绝并保留原消息，不再静默丢弃 document/tool-result 等数据；合法文本块按顺序合并进入模型。
 
-新增真实 SDK 子进程与本地模拟 HTTP 服务测试：`sdk_failed_model_turn_stops_drain_without_consuming_following_work`、`sdk_unsupported_content_blocks_are_preserved_until_explicitly_removed`、`sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http`。SDK `user.content` 和 `user.message.content` 现接受文本块数组，直接提问或排队均经过相同的完整性检查；非文本块在模型请求前明确拒绝，排队场景保留原消息。本轮未修改逐文件状态：排除 22、部分实现 361、未迁移 1493、独立已验收 30，仍有 1854 个非排除路径未完成完整等价验收。多模态原生请求、跨进程队列取消、异步回放及 UI 调用链仍待补全；CI 结果以对应 HEAD 的实际工作流为准。
+新增真实 SDK 子进程与本地模拟 HTTP 服务测试：`sdk_failed_model_turn_stops_drain_without_consuming_following_work`、`sdk_unsupported_content_blocks_are_preserved_until_explicitly_removed`、`sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http`。SDK `user.content` 和 `user.message.content` 现接受文本块数组，直接提问或排队均经过相同的完整性检查；非文本块在模型请求前明确拒绝，排队场景保留原消息。SDK 队列改动自身不新增文件级验收；其后的压缩状态复审单独降级 1 项，最新分类为排除 22、部分实现 362、未迁移 1493、独立已验收 29，仍有 1855 个非排除路径未完成完整等价验收。多模态原生请求、跨进程队列取消、异步回放及 UI 调用链仍待补全；CI 结果以对应 HEAD 的实际工作流为准。
+
+### 2026-10-29：已验收路径的订阅行为复审
+
+复核原始 `src/services/compact/compactWarningState.ts` 与其依赖 `src/state/store.ts`，发现 `createStore` 通过 `Object.is` 忽略相同布尔值的重复赋值，且通过同步 JavaScript Set 向监听器通知；Rust `watch::send_replace` 之前会对相同值重复发送变更。现使用 `send_if_modified` 修复重复通知并加入测试。但 Rust watch 接收端的合并通知、同步回调和动态订阅仍未与原版逐项验证，因此将该源路径从“已验收”降为“部分实现”。更新 1,906 路径台账与汇总，验收数由 30 调整为 29，不以局部测试冒充全链等价。
