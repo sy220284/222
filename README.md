@@ -245,3 +245,7 @@ cargo run -- chat --resume <上次输出的UUID>
 缓存计费的输入口径可按模型配置：`cache_read_included_in_input` 默认为 `true`，`cache_write_included_in_input` 默认为 `false`。如果模型服务把缓存读取独立于 `input_tokens` 上报，将前者设置为 `false`，避免错误扣减；如缓存创建已包含在输入 Token 总量，将后者设置为 `true`。两项均属于每个 `model_prices` 条目的可选布尔字段。
 
 增加了按插入顺序保留项目的集合操作与分组功能（`src/collections.rs`），面向 Rust `Eq+Hash` 泛型键；跨语言 JavaScript 特殊键/对象相等语义仍在迁移核对中。
+
+### SDK 用户消息优先级队列
+
+以 `sdk` 子命令发送 `{"type":"user","content":"任务","queued":true,"priority":"now"}` 可排队；优先级支持 `now`、`next`、`later`。发送 `{"type":"control","action":"queue_drain","max_priority":"next"}` 将主 Agent 的 `now/next` 消息按优先级和同级 FIFO 执行，其他优先级或指定给其他 agentId 的消息仍保留。`queue_snapshot`、`queue_peek`、`queue_dequeue`、`queue_pop_editable`、`queue_remove_identity`、`queue_remove_agent`、`queue_clear` 可查看和操纵本地队列。Bash、孤立权限审批、内嵌图片的队列项在该 SDK 的纯文本执行通道暂不自动执行，以免误当模型文本或丢失多模态内容。

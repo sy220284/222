@@ -1191,3 +1191,109 @@ fn failed_team_member_usage_is_still_charged_to_parent_session(){
     let usd=parent["cost"]["models"][0]["known_cost_usd"].as_f64().unwrap();
     assert!((usd-0.000088).abs()<1e-12,"{usd}");
 }
+
+
+#[test]
+fn sdk_queue_drain_honors_priority_fifo_and_worker_isolation() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for index in 0..2{
+            let (mut conn,_)=listener.accept().unwrap();
+            let raw=read_request(&mut conn);
+            requests.push(raw.clone());
+            let content=format!("Reply {index}");
+            let response=json!({"choices":[{"message":{
+                "role":"assistant","content":content},"finish_reason":"stop"}],
+                "usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}})
+                .to_string();
+            write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(),response).unwrap();
+            conn.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=sdk.stdin.take().unwrap();
+        for value in [
+            json!({"type":"user","content":"NEXT_REQUEST","queued":true}),
+            json!({"type":"user","content":"LATER_REQUEST","queued":true,"priority":"later"}),
+            json!({"type":"user","content":"NOW_REQUEST","queued":true,"priority":"now"}),
+            json!({"type":"user","content":"WORKER_REQUEST","queued":true,
+                "priority":"now","agentId":"worker"}),
+            json!({"type":"control","action":"queue_drain","request_id":"drain",
+                "max_priority":"next"}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"snapshot"})
+        ]{writeln!(input,"{value}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(requests[0].contains("NOW_REQUEST"));
+    assert!(!requests[0].contains("NEXT_REQUEST"));
+    assert!(requests[1].contains("NEXT_REQUEST"));
+    assert!(!requests[1].contains("WORKER_REQUEST"));
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+    let drain=events.iter().find(|e|e["request_id"]=="drain").unwrap();
+    assert_eq!(drain["ok"],true);
+    assert_eq!(drain["result"]["results"].as_array().unwrap().len(),2);
+    assert_eq!(drain["result"]["usage"]["input_tokens"],20);
+    let snapshot=events.iter().find(|e|e["request_id"]=="snapshot").unwrap();
+    assert_eq!(snapshot["result"]["length"],2);
+    assert_eq!(snapshot["result"]["commands"][0]["value"],"LATER_REQUEST");
+    assert_eq!(snapshot["result"]["commands"][1]["agentId"],"worker");
+}
+
+#[test]
+fn sdk_queue_pop_editable_does_not_leak_system_notifications_into_input(){
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"local","providers":[{
+        "id":"local","kind":"openai-compatible","model":"offline",
+        "base_url":"http://127.0.0.1:9/v1"
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=sdk.stdin.take().unwrap();
+        for value in [
+            json!({"type":"control","action":"queue_enqueue","command":{
+                "mode":"prompt","value":"🌐 queued",
+                "pastedContents":{"7":{"id":7,"type":"image","content":"YWJj"}}
+            }}),
+            json!({"type":"control","action":"queue_enqueue","notification":true,
+                "command":{"mode":"task-notification","value":"<task-hidden/>"}}),
+            json!({"type":"control","action":"queue_enqueue","command":{
+                "mode":"prompt","value":"<meta-hidden/>","isMeta":true}}),
+            json!({"type":"control","action":"queue_pop_editable",
+                "request_id":"pop","current_input":"draft","cursor_offset":2}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"after"})
+        ]{writeln!(input,"{value}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+    let pop=events.iter().find(|v|v["request_id"]=="pop").unwrap();
+    assert_eq!(pop["ok"],true);
+    assert_eq!(pop["result"]["editable"]["text"],"🌐 queued\ndraft");
+    assert_eq!(pop["result"]["editable"]["images"][0]["id"],7);
+    assert_eq!(pop["result"]["editable"]["cursor_offset"],12);
+    let rest=events.iter().find(|v|v["request_id"]=="after").unwrap();
+    assert_eq!(rest["result"]["length"],2);
+    assert_eq!(rest["result"]["commands"][0]["mode"],"task-notification");
+}

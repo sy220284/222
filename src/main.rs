@@ -2,6 +2,9 @@ mod agent;
 mod cost;
 mod tool_metrics;
 mod collections;
+mod message_queue;
+mod query_guard;
+mod sdk_queue;
 mod semantic_inputs;
 mod xml_escape;
 mod json_read;
@@ -273,6 +276,8 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
 }
 
 async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
+    let mut queue=message_queue::Queue::default();
+    let mut query_guard=query_guard::QueryGuard::default();
     print_json!(json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
@@ -298,6 +303,20 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
                 };
+                if event.get("queued").and_then(Value::as_bool)==Some(true){
+                    let mut command:message_queue::Command=serde_json::from_value(json!({
+                        "value":prompt,"mode":"prompt","priority":event.get("priority")
+                            .cloned().unwrap_or(json!("next")),
+                        "skipSlashCommands":event.get("skipSlashCommands").cloned()
+                            .unwrap_or(json!(false)),
+                        "isMeta":event.get("isMeta").cloned().unwrap_or(json!(false))
+                    }))?;
+                    command.agent_id=event.get("agentId").and_then(Value::as_str).map(str::to_owned);
+                    let identity=queue.enqueue(command,false);
+                    print_json!(json!({"type":"queued","identity":identity,
+                        "revision":queue.revision(),"length":queue.len()}));
+                    continue;
+                }
                 match agent.ask(prompt).await{
                     Ok(answer)=>print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
@@ -323,6 +342,17 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     }};
                 }
                 let action=event.get("action").and_then(Value::as_str).unwrap_or("");
+                if action.starts_with("queue_"){
+                    let outcome=sdk_queue::control(action,&event,&mut queue,
+                        &mut query_guard,agent).await;
+                    match outcome {
+                        Ok(result)=>send_control!(json!({"type":"control_response",
+                            "action":action,"ok":true,"result":result})),
+                        Err(error)=>send_control!(json!({"type":"control_response",
+                            "action":action,"ok":false,"error":format!("{error:#}")})),
+                    }
+                    continue;
+                }
                 if action=="mailbox_send" {
                     let parsed=event.get("message").cloned()
                         .ok_or_else(||anyhow::anyhow!("mailbox_send requires message"))

@@ -1342,7 +1342,7 @@
 | `src/upstreamproxy/upstreamproxy.ts` | 286 | 9812 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/CircularBuffer.ts` | 85 | 1888 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/Cursor.ts` | 1531 | 46663 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/QueryGuard.ts` | 122 | 3597 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/QueryGuard.ts` | 122 | 3597 | 重写：查询排队、预约、运行、取消与代次状态机 | `src/query_guard.rs` / `src/sdk_queue.rs` | 已验收：完整状态转换、旧代次不可结束新请求、重复操作无通知、同步订阅/取消及 SDK 真正排队处理；证据 query_guard::tests / integration_cli::sdk_queue_drain_honors_priority_fifo_and_worker_isolation |
 | `src/utils/Shell.ts` | 475 | 16929 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ShellCommand.ts` | 466 | 14138 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/abortController.ts` | 100 | 3364 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1597,7 +1597,7 @@
 | `src/utils/memory/versions.ts` | 9 | 307 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/memoryFileDetection.ts` | 290 | 10212 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/messagePredicates.ts` | 9 | 427 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/messageQueueManager.ts` | 548 | 16563 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/messageQueueManager.ts` | 548 | 16563 | 重写：队列优先级、消息身份、可编辑恢复与 SDK 处理 | `src/message_queue.rs` / `src/sdk_queue.rs` / `src/main.rs` | 部分实现：优先级 FIFO、过滤移除、代理隔离、图片引用、UTF-16 光标和真实 SDK 消费；原始 UI 订阅、通知持久化、桥接可见规则和多模态直接模型发送仍待对照 |
 | `src/utils/messages/mappers.ts` | 291 | 9031 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/messages/systemInit.ts` | 97 | 3747 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/messages.ts` | 5513 | 193203 | 重写：保持通用行为 | 待定 | 未迁移 |

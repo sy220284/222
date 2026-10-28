@@ -107,3 +107,7 @@
 ### 错误路径的团队费用与格式
 
 原版 `src/cost-tracker.ts` 的 `formatCost` 对小额费用和超过 0.5 美元的总价有不同精度规则；Rust `format_cost` 已引入对应阈值、舍入与可选小额小数位。并行团队成员即使因 API 输出长度达到上限等原因失败，已产生的实际 Token/费用也保留在子会话并合并父会话账本；退出清理的成功标志依据真实结果而非仅依据构造结果对象是否成功。新增模拟失败团队成员 HTTP 用量的端到端检验。
+
+### 命令队列与查询保护（2026-10-29）
+
+`src/message_queue.rs` 覆盖优先级插队、同级 FIFO、原顺序全部出队/匹配移除、按标识删除、任务通知默认低优先级、消息原样复制、meta/notification 不可编辑、粘贴图片数据和 UTF-16 光标恢复；保留代理隔离。在 SDK `queue_enqueue`、`queue_snapshot`、`queue_peek`、`queue_dequeue`、`queue_remove_identity`、`queue_remove_agent`、`queue_pop_editable`、`queue_drain` 控制指令中接通真实 Agent 会话。`query_guard.rs` 实现完整原状态机并为异步 SDK drain 预约/开跑/按代次结束提供并发保护。未迁移的 UI 键盘交互、连接桥接可见策略及命令日志，队列仍按部分实现登记，不用局部跑通声称整文件等价。
