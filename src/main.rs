@@ -201,6 +201,7 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
                 println!("/session                 show resumable session id");
                 println!("/usage                   show provider-reported token totals");
                 println!("/tasks                   list background shell tasks");
+                println!("/mode                    cycle permission mode (default/accept edits/plan)");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
                 println!("/exit                    quit");
@@ -208,6 +209,10 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             "/session" => {
                 println!("{}", agent.session_id());
+                continue;
+            }
+            "/mode" => {
+                println!("Permission mode: {}",agent.cycle_permission_mode());
                 continue;
             }
             "/tasks" => {
@@ -310,6 +315,11 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     let message=agent.poll_transient();
                     print_json!(json!({"type":"control_response","action":action,
                         "ok":true,"message":message,"revision":agent.transient_revision()}));
+                    continue;
+                }
+                if action=="permission_mode" {
+                    print_json!(json!({"type":"control_response","action":action,
+                        "ok":true,"mode":agent.current_permission_mode()}));
                     continue;
                 }
                 if action=="tasks" {
