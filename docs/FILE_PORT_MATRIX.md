@@ -703,7 +703,7 @@
 | `src/constants/xml.ts` | 87 | 3325 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context/QueuedMessageContext.tsx` | 63 | 5598 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context/fpsMetrics.tsx` | 30 | 3158 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/context/mailbox.tsx` | 38 | 3436 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/context/mailbox.tsx` | 38 | 3436 | 重写：保持通用行为 | `src/agent.rs / src/in_memory_mailbox.rs` | 部分实现：Agent 为会话持有独立内存邮箱，并通过 SDK 控制事件收发；React Provider/Context 生命周期与未挂载异常仍未等价 |
 | `src/context/modalContext.tsx` | 58 | 6266 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context/notifications.tsx` | 240 | 33050 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context/overlayContext.tsx` | 151 | 14123 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -780,7 +780,7 @@
 | `src/hooks/useIssueFlagBanner.ts` | 134 | 3828 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useLogMessages.ts` | 120 | 5710 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useLspPluginRecommendation.tsx` | 194 | 21588 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useMailboxBridge.ts` | 22 | 716 | 重写：终端 UI／交互 | `src/in_memory_mailbox.rs` | 部分实现：空闲时提取一条消息并提交；React useSyncExternalStore/useEffect 的真实渲染时序与组件集成未迁移 |
+| `src/hooks/useMailboxBridge.ts` | 22 | 716 | 重写：终端 UI／交互 | `src/in_memory_mailbox.rs / src/main.rs` | 部分实现：空闲仅消费一条并提交、加载时不消费；React 外部 Store 与 effect 调度未等价 |
 | `src/hooks/useMainLoopModel.ts` | 35 | 1509 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useManagePlugins.ts` | 305 | 11888 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useMemoryUsage.ts` | 40 | 1293 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -1581,7 +1581,7 @@
 | `src/utils/lockfile.ts` | 44 | 1330 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/log.ts` | 363 | 11693 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/logoV2Utils.ts` | 351 | 9835 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/mailbox.ts` | 74 | 1596 | 重写：保持通用行为 | `src/in_memory_mailbox.rs / src/event_signal.rs` | 部分实现：内存队列、按谓词收取、等待者分配、取消不丢消息、revision 与订阅；消息桥接与原版全部同步时序未等价 |
+| `src/utils/mailbox.ts` | 74 | 1596 | 重写：保持通用行为 | `src/in_memory_mailbox.rs / src/event_signal.rs` | 部分实现：原始消息队列、谓词匹配、等待者优先、即时登记、FIFO、revision 与取消恢复；原 JS 同步异常边界仍待对照 |
 | `src/utils/managedEnv.ts` | 200 | 7908 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/managedEnvConstants.ts` | 192 | 6813 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/markdown.ts` | 382 | 11853 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1787,7 +1787,7 @@
 | `src/utils/shellConfig.ts` | 168 | 4737 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sideQuery.ts` | 223 | 8184 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sideQuestion.ts` | 156 | 6133 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/signal.ts` | 44 | 1447 | 重写：保持通用行为 | `src/event_signal.rs` | 部分实现：监听注册/注销、去重、事件发射和清空；JS Set 发射期间增删监听的即时迭代语义未等价 |
+| `src/utils/signal.ts` | 44 | 1447 | 重写：保持通用行为 | `src/event_signal.rs` | 部分实现：订阅、监听身份去重、事件通知与注销；JS Set 动态迭代及异常传播仍未完全一致 |
 | `src/utils/sinks.ts` | 17 | 608 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/skills/skillChangeDetector.ts` | 312 | 10033 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/slashCommandParsing.ts` | 61 | 1437 | 重写：保持通用行为 | 待定 | 未迁移 |

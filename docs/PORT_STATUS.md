@@ -3,8 +3,8 @@
 **目标：1906 个原始文件的功能逐项重写、等价验证。**
 
 - 明确归入环境/行为遥测删除项：22 个原始文件路径（仅是第一轮整文件分类；其他混合文件也需排除隐式上报）。
-- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：348 个原始文件路径。
-- 当前台账仍标注“未迁移”的文件路径：1509 个（与部分实现项互斥，按当前状态字段分类）。
+- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：349 个原始文件路径。
+- 当前台账仍标注“未迁移”的文件路径：1508 个（与部分实现项互斥，按当前状态字段分类）。
 - **达到原始文件纯函数行为/边界等价且有验证证据的路径：27 个（包括独立纯函数、状态模块与固定常量文件；完整调用链仍需逐项验证）；其上下游业务逻辑仍需完整验证。** 其他当前已实现的功能仅在特定测试场景验证，不能把“部分实现”升级为“完成”。
 - 非排除项的原始文件级等价验收仍未闭环：1857 个。
 
@@ -46,3 +46,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 邻接消息基础设施的保守登记
 
 `src/in_memory_mailbox.rs` 与 `src/event_signal.rs` 新增内存消息队列、等待者匹配、取消保护、修订号和事件订阅；`useMailboxBridge` 的空闲消费行为有单元测试。对照原始 `src/utils/mailbox.ts`、`src/utils/signal.ts`、`src/hooks/useMailboxBridge.ts`，三条路径仅由未迁移改为部分实现：React 渲染生命周期、监听集合在派发中增删的语义和完整调用方尚未等价，**没有新增已验收项**。
+
+## 内存邮箱与终端消息路径（2026-10-29）
+
+依据 2.1.88 原始 `src/utils/mailbox.ts`、`src/utils/signal.ts`、`src/context/mailbox.tsx`、`src/hooks/useMailboxBridge.ts` 的具体实现，现加入独立 `event_signal.rs` 与 `in_memory_mailbox.rs`；实现消息过滤、等待者先于队列分配、立即登记等待、通知与 revision、空闲单消息消费和取消恢复。Agent 对每个会话持有实例；SDK 提供 `mailbox_send` / `mailbox_poll`，对应真实多消息端到端测试。尚未实现 React Provider / useSyncExternalStore / useEffect 帧时序及 JS Set 迭代时动态订阅语义，因此这四项继续计作**部分实现**，不算已验收。

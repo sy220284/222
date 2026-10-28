@@ -197,3 +197,7 @@ cargo run -- chat --resume <上次输出的UUID>
 ## 完整任务管理调用链进展
 
 新增 TaskCreate、TaskGet、TaskList、TaskUpdate 多工具联动，磁盘任务高水位编号、跨进程文件锁、双向依赖、元数据合并与删除级联、已完成依赖释放、团队任务列表共享、TaskCreated/TaskCompleted 本地 Hooks。尚缺原版任务后台所有方法及全功能对照，参见 docs/TASK_GRAPH_PARITY_AUDIT.md。
+
+## 内存邮箱（尚未全等）
+
+工作进程内有独立 Mailbox，提供有序队列、谓词收取、等待者、修订号和消息通知；与磁盘团队收件箱职责不同。已绑定 Agent/SDK 标准输入输出消息控制。React 交互、JS Set 迭代/异常语义尚需逐项移植。
