@@ -59,6 +59,8 @@ pub struct Config {
     pub enabled_plugins: Vec<String>,
     #[serde(default)]
     pub search_backend: Option<SearchBackend>,
+    #[serde(default)]
+    pub permission_rules: Vec<crate::permission_rules::RuleSetting>,
 }
 
 impl Default for Config {
@@ -96,6 +98,7 @@ impl Default for Config {
             lsp_servers: vec![],
             enabled_plugins: vec![],
             search_backend: None,
+            permission_rules: vec![],
         }
     }
 }

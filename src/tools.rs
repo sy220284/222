@@ -1,4 +1,4 @@
-use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins, websearch, config::SearchBackend, background::BackgroundTasks};
+use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins, websearch, config::SearchBackend, background::BackgroundTasks, permission_rules};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -32,13 +32,18 @@ pub struct ToolExecutor {
     enabled_plugins: Vec<String>,
     search_backend: Option<SearchBackend>,
     background: Option<Arc<BackgroundTasks>>,
+    permission_rules: Vec<permission_rules::Rule>,
 }
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None }
+        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new() }
     }
 
+    pub fn with_permission_rules(mut self, rules: Vec<permission_rules::Rule>) -> Self {
+        self.permission_rules = rules;
+        self
+    }
     pub fn with_background(mut self, background: Arc<BackgroundTasks>) -> Self {
         self.background = Some(background);
         self
@@ -170,25 +175,33 @@ impl ToolExecutor {
     }
 
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
-        match self.approval {
-            Approval::Full => Ok(()),
-            Approval::ReadOnly => bail!("Tool {tool} denied in read-only mode"),
-            Approval::Ask if !self.interactive => bail!(
-                "Tool {tool} needs approval; noninteractive mode requires --approval full"
-            ),
-            Approval::Ask => {
-                eprintln!("\nProposed {tool}: {}", truncate(&args.to_string(), 600));
-                eprint!("Allow once? [y/N] ");
-                io::stderr().flush()?;
-                let mut answer = String::new();
-                io::stdin().read_line(&mut answer)?;
-                if answer.trim().eq_ignore_ascii_case("y") ||
-                   answer.trim().eq_ignore_ascii_case("yes") {
-                    Ok(())
-                } else {
-                    bail!("User rejected {tool}")
-                }
-            }
+        let matched = permission_rules::policy_for(&self.permission_rules,tool,args)?;
+        if matched == Some(permission_rules::Behavior::Deny) {
+            bail!("Tool {tool} denied by explicit permission rule");
+        }
+        if self.approval == Approval::ReadOnly {
+            bail!("Tool {tool} denied in read-only mode");
+        }
+        if matched == Some(permission_rules::Behavior::Allow) {
+            return Ok(());
+        }
+        if self.approval == Approval::Full &&
+            matched != Some(permission_rules::Behavior::Ask) {
+            return Ok(());
+        }
+        if !self.interactive {
+            bail!("Tool {tool} needs approval; noninteractive mode requires an explicit allow rule or --approval full")
+        }
+        eprintln!("\nProposed {tool}: {}", truncate(&args.to_string(), 600));
+        eprint!("Allow once? [y/N] ");
+        io::stderr().flush()?;
+        let mut answer = String::new();
+        io::stdin().read_line(&mut answer)?;
+        if answer.trim().eq_ignore_ascii_case("y") ||
+           answer.trim().eq_ignore_ascii_case("yes") {
+            Ok(())
+        } else {
+            bail!("User rejected {tool}")
         }
     }
 
