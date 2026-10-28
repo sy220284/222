@@ -1,4 +1,5 @@
 mod agent;
+mod hooks;
 mod mcp;
 mod config;
 mod protocol;
@@ -105,9 +106,10 @@ async fn main() -> Result<()> {
         profile, root, cli.approval.into(), interactive, cli.max_steps, session
     )?;
     agent.attach_mcp(&config.mcp_servers).await?;
+    agent.attach_hooks(&config.hooks).await?;
     eprintln!("Session: {}", agent.session_id());
     eprintln!("Provider: {} / {}", agent.profile().id, agent.profile().model);
-    match &cli.command {
+    let result = match &cli.command {
         Commands::Run { prompt } => {
             let actual_prompt = if prompt == "-" {
                 let mut input = String::new();
@@ -115,11 +117,15 @@ async fn main() -> Result<()> {
                 input
             } else { prompt.clone() };
             println!("{}", agent.ask(&actual_prompt).await?);
+            Ok(())
         }
-        Commands::Chat { .. } => chat(&mut agent, &config).await?,
+        Commands::Chat { .. } => chat(&mut agent, &config).await,
         _ => unreachable!(),
-    }
-    Ok(())
+    };
+    let end_result = agent.finish().await;
+    result?;
+    end_result
+
 }
 
 async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {

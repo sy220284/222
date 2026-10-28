@@ -16,6 +16,7 @@
 - `AGENTS.md` / `.atlas/instructions.md` 项目指导文件、UUID 会话保存与继续。
 - MCP stdio 外部工具服务器：工具发现、JSON-RPC 调用与结果回填，执行前沿用审批。
 - 持久化任务列表：创建、更新状态和查询；任务跟随当前会话恢复。
+- 本地 Hooks 生命周期：会话开始/结束、用户输入、工具执行前后、停止检查、上下文压缩前后；支持匹配、阻断、输入更新与附加上下文。
 - Git 仓库只读操作：状态、差异和提交摘要，使用 Git 子进程执行而不是拼接 Shell。
 - 独立编写的单元测试和 GitHub Actions 编译测试。
 
@@ -48,6 +49,23 @@ cargo run -- --provider gemini chat
 ```
 
 无需固定账号也可使用自建兼容服务：运行 `cargo run -- init`，编辑配置文件中 `base_url`、`model`、`api_key_env`，或添加新的 `openai-compatible` 配置。配置默认在系统配置目录下的 `atlas-agent/config.json`；可以用环境变量 `ATLAS_CONFIG` 指定位置。
+
+## 本地 Hooks（不上传事件）
+
+可在配置 JSON 的根对象加入 `hooks` 数组，规则包含 `event`、`matcher`（可选正则）、`command`、`timeout_seconds`（秒）。默认不运行任何 Hook。
+
+```json
+"hooks": [
+  {
+    "event": "PreToolUse",
+    "matcher": "^run_command$",
+    "command": "my-local-policy-check",
+    "timeout_seconds": 10
+  }
+]
+```
+
+Hook 经 stdin 接收 JSON，返回 JSON（`decision:block`、`hookSpecificOutput.additionalContext` 等）；退出码 2 可阻断执行。用户配置的命令在本地运行，必须自行确认其可信度和对外联网行为。
 
 ## MCP 本地工具
 
@@ -90,7 +108,8 @@ cargo run -- chat --resume <上次输出的UUID>
 | 流式文本和 Token 成本统计 | 未实现 |
 | MCP stdio 客户端 | 已实现基础工具发现和调用 |
 | 项目技能读取 | 已实现基础 SKILL.md 发现和加载 |
-| 插件管理、Hooks、LSP | 未实现 |
+| 本地 Hooks 基础生命周期 | 已实现（同步命令 Hook） |
+| 插件管理、完整异步 Hooks、LSP | 未实现 |
 | 多 Agent 协作、后台任务、Git Worktree | 未实现 |
 | 完整终端 UI、SDK、远程桥接、语音和 IDE | 未实现 |
 

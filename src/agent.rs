@@ -5,11 +5,13 @@ use crate::{
     session::Session,
     mcp::McpManager,
     task,
+    hooks::{HookRule, HookRunner, HookEvent},
     config::McpServerConfig,
     tools::{self, Approval, ToolExecutor},
 };
 use anyhow::{bail, Context, Result};
 use std::{fs, path::{Path, PathBuf}};
+use serde_json::json;
 
 const DEFAULT_SYSTEM: &str = r#"You are Atlas, a terminal-based software engineering assistant.
 You can inspect, search and modify files and execute commands using the provided tools.
@@ -32,6 +34,8 @@ pub struct Agent {
     max_steps: usize,
     session: Session,
     mcp: Option<McpManager>,
+    hooks: HookRunner,
+    session_context: String,
 }
 
 impl Agent {
@@ -44,13 +48,28 @@ impl Agent {
         session: Session,
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None })
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, hooks: HookRunner::default(), session_context: String::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
         if !servers.is_empty() {
             self.mcp = Some(McpManager::connect(servers).await?);
         }
+        Ok(())
+    }
+
+    pub async fn attach_hooks(&mut self, rules: &[HookRule]) -> Result<()> {
+        self.hooks = HookRunner::new(rules)?;
+        let result = self.hooks.run(HookEvent::SessionStart, None,
+            json!({"session_id":self.session.id,"workspace":self.root})).await?;
+        if let Some(reason) = result.blocking_reason { bail!("SessionStart blocked: {reason}") }
+        self.session_context = result.additional_context.join("\n");
+        Ok(())
+    }
+
+    pub async fn finish(&self) -> Result<()> {
+        self.hooks.run(HookEvent::SessionEnd, None,
+            json!({"session_id":self.session.id,"workspace":self.root})).await?;
         Ok(())
     }
 
@@ -68,6 +87,9 @@ impl Agent {
     /// This is provider-neutral and never invokes executable tools.
     pub async fn compact_history(&mut self) -> Result<()> {
         if self.session.messages.is_empty() { bail!("No history to compact") }
+        let before = self.hooks.run(HookEvent::PreCompact, None,
+            json!({"session_id":self.session.id, "message_count":self.session.messages.len()})).await?;
+        if let Some(reason) = before.blocking_reason { bail!("PreCompact blocked: {reason}") }
         let previous = self.session.summary.as_deref().unwrap_or("");
         let prompt = format!(
             "Summarize this coding conversation for accurate future continuation. \
@@ -88,7 +110,11 @@ impl Agent {
         if summary.trim().is_empty() { bail!("Compaction returned empty text") }
         self.session.summary = Some(summary);
         self.session.messages.clear();
-        self.session.save(&self.root)
+        self.session.save(&self.root)?;
+        let after = self.hooks.run(HookEvent::PostCompact, None,
+            json!({"session_id":self.session.id,"summary":self.session.summary})).await?;
+        if let Some(reason) = after.blocking_reason { bail!("PostCompact blocked: {reason}") }
+        Ok(())
     }
 
     pub fn clear_history(&mut self) -> Result<()> {
@@ -106,6 +132,14 @@ impl Agent {
         if history_chars > 100_000 {
             self.compact_history().await?;
         }
+        let pre_prompt = self.hooks.run(HookEvent::UserPromptSubmit, None,
+            json!({"prompt":prompt,"session_id":self.session.id})).await?;
+        if let Some(reason) = pre_prompt.blocking_reason { bail!("UserPromptSubmit blocked: {reason}") }
+        let prompt = if pre_prompt.additional_context.is_empty() {
+            prompt.to_owned()
+        } else {
+            format!("{prompt}\n\n[Local hook context]\n{}", pre_prompt.additional_context.join("\n"))
+        };
         self.session.messages.push(Message::text("user", prompt));
         self.session.save(&self.root)?;
         let mut system = system_prompt(&self.root)?;
@@ -113,7 +147,12 @@ impl Agent {
             system.push_str("\nVerified session continuity summary:\n");
             system.push_str(summary);
         }
+        if !self.session_context.is_empty() {
+            system.push_str("\nSession start hook context:\n");
+            system.push_str(&self.session_context);
+        }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive);
+        let mut stop_hook_active = false;
         for _ in 0..self.max_steps {
             let mut available_tools = tools::definitions();
             available_tools.extend(task::definitions());
@@ -135,14 +174,32 @@ impl Agent {
                 if matches!(finish.as_deref(), Some("length" | "MAX_TOKENS")) {
                     bail!("Model reached its output limit before completion; session saved")
                 }
+                if !stop_hook_active {
+                    let hook = self.hooks.run(HookEvent::Stop, None,
+                        json!({"session_id":self.session.id,"last_assistant_message":text,
+                            "stop_hook_active":false})).await?;
+                    if let Some(reason) = hook.blocking_reason {
+                        stop_hook_active = true;
+                        self.session.messages.push(Message::text("user",
+                            format!("Stop hook blocked finishing: {reason}. Continue work and verify results.")));
+                        self.session.save(&self.root)?;
+                        continue;
+                    }
+                }
                 return Ok(text);
             }
             if !text.trim().is_empty() {
                 eprintln!("{text}");
             }
-            for call in calls {
+            for mut call in calls {
                 eprintln!("Executing tool: {}", call.function.name);
-                let result = if task::handles(&call.function.name) {
+                let pre = self.hooks.before_tool(&call).await?;
+                if let Some(updated) = pre.updated_input {
+                    call.function.arguments = serde_json::to_string(&updated)?;
+                }
+                let result = if let Some(reason) = pre.blocking_reason {
+                    format!("ERROR: PreToolUse hook blocked: {reason}")
+                } else if task::handles(&call.function.name) {
                     task::execute(&mut self.session, &call)
                 } else if let Some(mcp) = &mut self.mcp {
                     if mcp.handles(&call.function.name) {
@@ -156,6 +213,14 @@ impl Agent {
                 } else {
                     executor.execute(&call).await
                 };
+                let post = self.hooks.after_tool(&call, &result).await?;
+                let mut result = result;
+                if let Some(reason) = post.blocking_reason {
+                    result.push_str(&format!("\nPostToolUse hook blocked continuation: {reason}"));
+                }
+                for context in post.additional_context {
+                    result.push_str(&format!("\n[Local hook context] {context}"));
+                }
                 self.session.messages.push(Message::tool_result(&call, result));
                 self.session.save(&self.root)?;
             }
@@ -221,6 +286,8 @@ mod tests {
             max_steps: 5,
             session,
             mcp: None,
+            hooks: HookRunner::default(),
+            session_context: String::new(),
         };
         agent.compact_history().await.unwrap();
         let restored = Session::load(dir.path(), &id).unwrap();

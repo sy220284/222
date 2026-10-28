@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use crate::hooks::{HookRule, HookRunner};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::{Path, PathBuf}};
 
@@ -27,6 +28,8 @@ pub struct Config {
     pub providers: Vec<ProviderProfile>,
     #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
+    #[serde(default)]
+    pub hooks: Vec<HookRule>,
 }
 
 impl Default for Config {
@@ -57,6 +60,7 @@ impl Default for Config {
                 },
             ],
             mcp_servers: vec![],
+            hooks: vec![],
         }
     }
 }
@@ -118,6 +122,7 @@ impl Config {
             if !server_ids.insert(&s.id) { bail!("Duplicate MCP server id: {}", s.id); }
             if s.command.trim().is_empty() { bail!("MCP server command cannot be empty"); }
         }
+        HookRunner::new(&self.hooks)?;
         if !seen.contains(&self.default_provider) { bail!("Default provider is missing"); }
         Ok(())
     }

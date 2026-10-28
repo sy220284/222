@@ -25,7 +25,8 @@
 | 长期记忆检索 | — | 未实现 |
 | MCP stdio 工具连接 | `mcp.rs` | 已实现工具发现、调用、权限接入 |
 | 项目 Skills | `tools.rs` | 已实现 SKILL.md 发现和读取 |
-| Plugin / Hooks | — | 未实现 |
+| 本地同步 Hooks | `hooks.rs` / `agent.rs` | Pre/PostToolUse、Stop、用户输入、会话与压缩事件 |
+| 插件管理、异步 HTTP/Prompt/Agent Hooks | — | 未实现 |
 | Git 只读操作 | `tools.rs` | status / diff / log 已实现 |
 | LSP、Git 修改与工作树管理 | — | 未实现 |
 | 工作树与多 Agent 团队 | — | 未实现 |
