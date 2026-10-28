@@ -336,14 +336,22 @@ impl Agent {
         }
         // The memory index is always visible; topic selection uses the active
         // model rather than a hardwired provider. No telemetry side channel.
-        let relevant = memory::context(&self.root, &prompt,
-            self.provider.as_ref(), &self.profile).await?;
-        if let Some(usage) = relevant.usage {
-            self.session.usage.accumulate(usage);
-        }
-        if !relevant.text.is_empty() {
-            system.push_str("\nRelevant project memory:\n");
-            system.push_str(&relevant.text);
+        match memory::context(&self.root, &prompt,
+            self.provider.as_ref(), &self.profile).await {
+            Ok(relevant) => {
+                if let Some(usage) = relevant.usage {
+                    self.session.usage.accumulate(usage);
+                }
+                if !relevant.text.is_empty() {
+                    system.push_str("\nRelevant project memory:\n");
+                    system.push_str(&relevant.text);
+                }
+            }
+            Err(error) => {
+                // Optional recall should not prevent the main coding request.
+                // The primary model/tool request remains provider-neutral.
+                eprintln!("Local memory recall unavailable: {error:#}");
+            }
         }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_plugins(self.enabled_plugins.clone())

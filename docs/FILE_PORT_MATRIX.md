@@ -933,12 +933,12 @@
 | `src/keybindings/useKeybinding.ts` | 197 | 6862 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/useShortcutDisplay.ts` | 60 | 2510 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/validate.ts` | 499 | 13667 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/memdir/findRelevantMemories.ts` | 142 | 5305 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/memdir/memdir.ts` | 508 | 21174 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
+| `src/memdir/findRelevantMemories.ts` | 142 | 5305 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：选用当前配置模型检索最多 5 条相关 Markdown 记忆；原版工具上下文和异常处理仍待核对 |
+| `src/memdir/memdir.ts` | 508 | 21174 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：MEMORY.md 200 行/25 KB 索引及截断提示；路径和团队记忆未等价 |
 | `src/memdir/memoryAge.ts` | 54 | 1931 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/memdir/memoryScan.ts` | 95 | 3105 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/memdir/memoryTypes.ts` | 272 | 22866 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/memdir/paths.ts` | 279 | 10668 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
+| `src/memdir/memoryScan.ts` | 95 | 3105 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：Markdown frontmatter、mtime 排序、最多 200 项；原版所有文件边界未全等 |
+| `src/memdir/memoryTypes.ts` | 272 | 22866 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：基础记忆分类读取；保存约束及类型提示词未全等 |
+| `src/memdir/paths.ts` | 279 | 10668 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：工作区记忆目录隔离；跨项目路径算法未等价 |
 | `src/memdir/teamMemPaths.ts` | 293 | 11691 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/memdir/teamMemPrompts.ts` | 101 | 5998 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/migrations/migrateAutoUpdatesToSettings.ts` | 62 | 1953 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1136,9 +1136,9 @@
 | `src/tasks/InProcessTeammateTask/types.ts` | 122 | 4322 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/LocalAgentTask/LocalAgentTask.tsx` | 683 | 82910 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/LocalMainSessionTask.ts` | 480 | 15136 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
-| `src/tasks/LocalShellTask/LocalShellTask.tsx` | 523 | 66306 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
-| `src/tasks/LocalShellTask/guards.ts` | 42 | 1552 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
-| `src/tasks/LocalShellTask/killShellTasks.ts` | 77 | 2565 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
+| `src/tasks/LocalShellTask/LocalShellTask.tsx` | 523 | 66306 | 重写：任务调度 | `src/background.rs / src/tools.rs` | 部分实现：进程启动、磁盘输出、停止和状态回填；UI 和完整通知时序未等价 |
+| `src/tasks/LocalShellTask/guards.ts` | 42 | 1552 | 重写：任务调度 | `src/background.rs` | 部分实现：local_bash 状态对象；原类型守卫未逐条验证 |
+| `src/tasks/LocalShellTask/killShellTasks.ts` | 77 | 2565 | 重写：任务调度 | `src/background.rs` | 部分实现：Shell 进程组停止；取消状态和外部子进程边界未全等 |
 | `src/tasks/RemoteAgentTask/RemoteAgentTask.tsx` | 856 | 126389 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/pillLabel.ts` | 83 | 2898 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/stopTask.ts` | 101 | 2894 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
@@ -1293,9 +1293,9 @@
 | `src/tools/TaskListTool/TaskListTool.ts` | 117 | 2803 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskListTool/constants.ts` | 2 | 46 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskListTool/prompt.ts` | 50 | 2066 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/TaskOutputTool/TaskOutputTool.tsx` | 584 | 66568 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/TaskOutputTool/TaskOutputTool.tsx` | 584 | 66568 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs` | 部分实现：阻塞/非阻塞输出、超时和状态；Agent/远程输出尚未覆盖 |
 | `src/tools/TaskOutputTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/TaskStopTool/TaskStopTool.ts` | 132 | 3935 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/TaskStopTool/TaskStopTool.ts` | 132 | 3935 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs` | 部分实现：停止 Shell 任务；Agent/远程任务停止未覆盖 |
 | `src/tools/TaskStopTool/UI.tsx` | 41 | 5672 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskStopTool/prompt.ts` | 9 | 280 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskUpdateTool/TaskUpdateTool.ts` | 407 | 12161 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1840,8 +1840,8 @@
 | `src/utils/systemTheme.ts` | 120 | 4231 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/taggedId.ts` | 55 | 1573 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/task/TaskOutput.ts` | 391 | 12474 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/task/diskOutput.ts` | 452 | 13568 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/task/framework.ts` | 309 | 9869 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/task/diskOutput.ts` | 452 | 13568 | 重写：保持通用行为 | `src/background.rs` | 部分实现：磁盘日志上限、任务 ID 关联和输出读取；原版输出驱逐策略未等价 |
+| `src/utils/task/framework.ts` | 309 | 9869 | 重写：保持通用行为 | `src/background.rs / src/task.rs` | 部分实现：任务状态与后台状态持久化；通知队列及通用生命周期未等价 |
 | `src/utils/task/outputFormatting.ts` | 39 | 1188 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/task/sdkProgress.ts` | 37 | 1153 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/tasks.ts` | 863 | 26354 | 重写：保持通用行为 | 待定 | 未迁移 |
