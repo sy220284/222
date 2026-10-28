@@ -1129,7 +1129,7 @@
 | `src/state/AppStateStore.ts` | 570 | 21847 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/state/onChangeAppState.ts` | 172 | 6197 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/state/selectors.ts` | 77 | 2240 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/state/store.ts` | 35 | 836 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/state/store.ts` | 35 | 836 | 重写：保持通用行为 | `src/reactive_store.rs` | 部分实现：状态/清理注册、顺序和订阅基础测试；JS Object.is 与 Promise 异常传播仍需等价验证 |
 | `src/state/teammateViewHelpers.ts` | 142 | 4399 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/tasks/DreamTask/DreamTask.ts` | 158 | 4988 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/InProcessTeammateTask/InProcessTeammateTask.tsx` | 126 | 16381 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
@@ -1419,7 +1419,7 @@
 | `src/utils/claudeInChrome/toolRendering.tsx` | 262 | 33862 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/claudemd.ts` | 1480 | 46391 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cleanup.ts` | 603 | 17770 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/cleanupRegistry.ts` | 26 | 900 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/cleanupRegistry.ts` | 26 | 900 | 重写：保持通用行为 | `src/cleanup_registry.rs` | 部分实现：状态/清理注册、顺序和订阅基础测试；JS Object.is 与 Promise 异常传播仍需等价验证 |
 | `src/utils/cliArgs.ts` | 61 | 2067 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cliHighlight.ts` | 55 | 2140 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/codeIndexing.ts` | 207 | 6110 | 重写：保持通用行为 | 待定 | 未迁移 |
