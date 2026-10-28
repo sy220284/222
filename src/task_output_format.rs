@@ -52,7 +52,8 @@ mod tests {
         assert_eq!(old.content, "abc");
         assert!(!old.was_truncated);
         let header = "[Truncated. Full output: a]\n\n";
-        let result = format_task_output("abcdefghij", "a", header.len()+4);
+        let long_output = format!("{}ghij", "a".repeat(header.len()+4));
+        let result = format_task_output(&long_output, "a", header.len()+4);
         assert!(result.was_truncated);
         assert_eq!(result.content, format!("{header}ghij"));
         let emoji = format_task_output("A😀B", "a", 4);
