@@ -1738,8 +1738,8 @@
 | `src/utils/secureStorage/macOsKeychainHelpers.ts` | 112 | 4797 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/macOsKeychainStorage.ts` | 232 | 8271 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/plainTextStorage.ts` | 85 | 2430 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/semanticBoolean.ts` | 30 | 1167 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/semanticNumber.ts` | 37 | 1486 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/semanticBoolean.ts` | 30 | 1167 | 重写：严格布尔字符串转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：仅精确 true/false 字符串归一化并接入工具参数；Zod 可选/默认 schema 泛型组合待核对 |
+| `src/utils/semanticNumber.ts` | 37 | 1486 | 重写：严格十进制数字转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：十进制词法、非有限拒绝及工具整数参数转换；Zod 泛型输出与全部调用方待核对 |
 | `src/utils/semver.ts` | 60 | 1713 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sequential.ts` | 57 | 1641 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionActivity.ts` | 134 | 4081 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1901,7 +1901,7 @@
 | `src/utils/worktree.ts` | 1520 | 49995 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
 | `src/utils/worktreeModeEnabled.ts` | 12 | 415 | 重写：Git 工作树隔离 | `src/compat_helpers.rs` | 已验收：原始无条件 true 开关纯函数语义对照；证据 compat_helpers::tests::worktree_feature_is_enabled |
 | `src/utils/xdg.ts` | 66 | 1876 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/xml.ts` | 17 | 622 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/xml.ts` | 17 | 622 | 重写：XML/属性转义函数完整移植 | `src/xml_escape.rs` | 已验收：两种函数字符替换次序、双引号/单引号、Unicode、空输入与多次转义对照；证据 xml_escape::tests |
 | `src/utils/yaml.ts` | 16 | 525 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/zodToJsonSchema.ts` | 24 | 761 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/vim/motions.ts` | 83 | 1902 | 重写：保持通用行为 | 待定 | 未迁移 |

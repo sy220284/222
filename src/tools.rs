@@ -83,10 +83,12 @@ impl ToolExecutor {
     }
 
     async fn dispatch(&self, call: &ToolCall) -> Result<String> {
-        let args: Value = serde_json::from_str(&call.function.arguments)
+        let mut args: Value = serde_json::from_str(&call.function.arguments)
             .with_context(|| format!("Invalid JSON arguments for {}", call.function.name))?;
         if !args.is_object() { bail!("Tool arguments must be a JSON object") }
-        match crate::tool_names::canonical_name(&call.function.name) {
+        let name=crate::tool_names::canonical_name(&call.function.name);
+        crate::semantic_inputs::normalize_tool_fields(name, &mut args)?;
+        match name {
             "read_file" => self.read_file(&args),
             "notebook_edit" => {
                 self.require_approval("notebook_edit", &args)?;
@@ -427,14 +429,18 @@ impl ToolExecutor {
         let old = required(args, "old")?;
         let new = required(args, "new")?;
         if old.is_empty() { bail!("Replacement target cannot be empty") }
+        if old == new { bail!("No changes to make: old and new strings are exactly the same") }
         if fs::metadata(&path)?.len() > MAX_FILE_BYTES { bail!("File too large") }
         let content = tokio::fs::read_to_string(&path).await?;
         let hits = content.matches(old).count();
-        if hits != 1 { bail!("Expected exactly one match; found {hits}") }
-        let updated = content.replacen(old, new, 1);
+        let replace_all = args.get("replace_all").and_then(Value::as_bool).unwrap_or(false);
+        if hits == 0 || (hits != 1 && !replace_all) {
+            bail!("Expected exactly one match; found {hits}")
+        }
+        let updated = if replace_all {content.replace(old,new)} else {content.replacen(old,new,1)};
         if updated.len() as u64 > MAX_FILE_BYTES { bail!("Updated file too large") }
         tokio::fs::write(&path, updated).await?;
-        Ok(format!("Replaced one occurrence in {}", path.display()))
+        Ok(format!("Replaced {hits} occurrence(s) in {}", path.display()))
     }
 
     async fn run_command(&self, args: &Value) -> Result<String> {
@@ -560,7 +566,8 @@ pub fn definitions() -> Vec<Value> {
         json!({"type":"function","function":{"name":"edit_file",
             "description":"Replace exactly one matching text span in a workspace file. Requires approval.",
             "parameters":{"type":"object","properties":{
-                "path":{"type":"string"},"old":{"type":"string"},"new":{"type":"string"}
+                "path":{"type":"string"},"old":{"type":"string"},"new":{"type":"string"},
+                "replace_all":{"type":"boolean"}
             },"required":["path","old","new"]}}}),
         json!({"type":"function","function":{"name":"run_command",
             "description":"Execute a shell command from the workspace. Requires explicit approval. Commands can access the entire host.",
@@ -692,6 +699,29 @@ mod tests {
         };
         assert!(tools.execute(&call).await.contains("Expected exactly one match"));
         assert_eq!(fs::read_to_string(root.path().join("a.txt")).unwrap(), "x x");
+    }
+
+    #[tokio::test]
+    async fn model_quoted_boolean_respects_edit_replace_all_and_file_integrity(){
+        let root=tempfile::tempdir().unwrap();
+        let path=root.path().join("edit.txt");
+        fs::write(&path,"abc abc abc").unwrap();
+        let tools=executor(root.path(),Approval::Full);
+        let make=|replace_all:&str|ToolCall{
+            id:"quoted".into(),kind:"function".into(),
+            function:FunctionCall{name:"edit_file".into(),
+                arguments:json!({"path":"edit.txt","old":"abc","new":"xyz",
+                    "replace_all":replace_all}).to_string()}
+        };
+        let single=tools.execute(&make("false")).await;
+        assert!(single.contains("Expected exactly one match"),"{single}");
+        assert_eq!(fs::read_to_string(&path).unwrap(),"abc abc abc");
+        let invalid=tools.execute(&make("FALSE")).await;
+        assert!(invalid.contains("must be a boolean"),"{invalid}");
+        assert_eq!(fs::read_to_string(&path).unwrap(),"abc abc abc");
+        let all=tools.execute(&make("true")).await;
+        assert!(!all.starts_with("ERROR:"),"{all}");
+        assert_eq!(fs::read_to_string(&path).unwrap(),"xyz xyz xyz");
     }
 
     #[tokio::test]

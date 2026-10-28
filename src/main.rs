@@ -1,5 +1,7 @@
 mod agent;
 mod cost;
+mod semantic_inputs;
+mod xml_escape;
 mod hooks;
 mod worktree;
 mod mcp;
