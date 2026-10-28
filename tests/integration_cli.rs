@@ -151,7 +151,7 @@ fn subagent_runs_a_separate_model_conversation_and_returns_to_parent() {
                     "role":"assistant","content":null,
                     "tool_calls":[{"id":"parent_spawn","type":"function",
                         "function":{"name":"spawn_agent",
-                            "arguments":"{\\"prompt\\":\\"Analyze workspace\\",\\"isolation\\":\\"none\\"}"
+                            "arguments":json!({"prompt":"Analyze workspace","isolation":"none"}).to_string()
                         }}]
                 },"finish_reason":"tool_calls"}]}),
                 1 => json!({"choices":[{"message":{
@@ -163,7 +163,7 @@ fn subagent_runs_a_separate_model_conversation_and_returns_to_parent() {
             };
             let body = reply.to_string();
             write!(stream,
-                "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}",
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 body.len(), body).unwrap();
             stream.flush().unwrap();
         }
