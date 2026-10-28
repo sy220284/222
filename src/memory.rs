@@ -11,6 +11,7 @@ use std::{
     time::SystemTime,
 };
 use walkdir::WalkDir;
+use crate::memory_age;
 
 const MAX_INDEX_LINES: usize = 200;
 const MAX_INDEX_BYTES: usize = 25_000;
@@ -158,8 +159,13 @@ pub async fn context(root: &Path, query: &str, provider: &dyn ModelProvider,
         if !seen.insert(name) { continue }
         if seen.len() > 5 { break }
         let contents = fs::read_to_string(&file.path)?;
-        text.push_str(&format!("\nRelevant local memory ({name}):\n{}\n",
-            trim_utf8(&contents, MAX_PER_TOPIC_BYTES)));
+        let age_ms = match file.modified.duration_since(SystemTime::UNIX_EPOCH) {
+            Ok(t) => t.as_secs_f64() * 1000.0,
+            Err(t) => -(t.duration().as_secs_f64() * 1000.0),
+        };
+        let freshness = memory_age::freshness_note(age_ms);
+        text.push_str(&format!("\nRelevant local memory ({name}):\n{}{}\n",
+            freshness, trim_utf8(&contents, MAX_PER_TOPIC_BYTES)));
     }
     Ok(MemoryContext { text, usage: response.usage })
 }

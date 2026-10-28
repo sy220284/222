@@ -935,7 +935,7 @@
 | `src/keybindings/validate.ts` | 499 | 13667 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/memdir/findRelevantMemories.ts` | 142 | 5305 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：选用当前配置模型检索最多 5 条相关 Markdown 记忆；原版工具上下文和异常处理仍待核对 |
 | `src/memdir/memdir.ts` | 508 | 21174 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：MEMORY.md 200 行/25 KB 索引及截断提示；路径和团队记忆未等价 |
-| `src/memdir/memoryAge.ts` | 54 | 1931 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
+| `src/memdir/memoryAge.ts` | 54 | 1931 | 重写：压缩与记忆 | `src/memory_age.rs` | 已验收：全部 4 个导出函数的日期边界、未来时间、特殊数值与原始提示文本对照；证据 memory_age::tests |
 | `src/memdir/memoryScan.ts` | 95 | 3105 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：Markdown frontmatter、mtime 排序、最多 200 项；原版所有文件边界未全等 |
 | `src/memdir/memoryTypes.ts` | 272 | 22866 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：基础记忆分类读取；保存约束及类型提示词未全等 |
 | `src/memdir/paths.ts` | 279 | 10668 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：工作区记忆目录隔离；跨项目路径算法未等价 |
@@ -1137,7 +1137,7 @@
 | `src/tasks/LocalAgentTask/LocalAgentTask.tsx` | 683 | 82910 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/LocalMainSessionTask.ts` | 480 | 15136 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/LocalShellTask/LocalShellTask.tsx` | 523 | 66306 | 重写：任务调度 | `src/background.rs / src/tools.rs` | 部分实现：进程启动、磁盘输出、停止和状态回填；UI 和完整通知时序未等价 |
-| `src/tasks/LocalShellTask/guards.ts` | 42 | 1552 | 重写：任务调度 | `src/background.rs` | 部分实现：local_bash 状态对象；原类型守卫未逐条验证 |
+| `src/tasks/LocalShellTask/guards.ts` | 42 | 1552 | 重写：任务调度 | `src/task_guards.rs` | 已验收：isLocalShellTask 对 object/null/array/类型字段和附加字段的行为对照；证据 task_guards::tests |
 | `src/tasks/LocalShellTask/killShellTasks.ts` | 77 | 2565 | 重写：任务调度 | `src/background.rs` | 部分实现：Shell 进程组停止；取消状态和外部子进程边界未全等 |
 | `src/tasks/RemoteAgentTask/RemoteAgentTask.tsx` | 856 | 126389 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/pillLabel.ts` | 83 | 2898 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
@@ -1488,7 +1488,7 @@
 | `src/utils/env.ts` | 348 | 10943 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/envDynamic.ts` | 152 | 5278 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/envUtils.ts` | 184 | 6246 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/envValidation.ts` | 39 | 1045 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/envValidation.ts` | 39 | 1045 | 重写：保持通用行为 | `src/env_validation.rs` | 部分实现：decimal-prefix parseInt 和上下限校验；超大整数及 JS 数值精度仍需核对 |
 | `src/utils/errorLogSink.ts` | 236 | 6557 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/errors.ts` | 239 | 7655 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/exampleCommands.ts` | 185 | 6200 | 重写：保持通用行为 | 待定 | 未迁移 |

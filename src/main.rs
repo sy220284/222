@@ -18,6 +18,9 @@ mod websearch;
 mod sse;
 mod background;
 mod memory;
+mod memory_age;
+mod task_guards;
+mod env_validation;
 
 use agent::Agent;
 use anyhow::{bail, Result};

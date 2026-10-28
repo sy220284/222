@@ -16,6 +16,7 @@ use tokio::{
     time::timeout,
 };
 use uuid::Uuid;
+use crate::task_guards;
 
 const LOG_CAP: usize = 2_000_000;
 const DISPLAY_CAP: usize = 80_000;
@@ -200,6 +201,7 @@ impl BackgroundTasks {
         let retrieval = if record.status == "running" {
             if block { "timeout" } else { "not_ready" }
         } else { "success" };
+        debug_assert!(task_guards::is_local_shell_task(&json!({"type":"local_bash"})));
         Ok(json!({"retrieval_status":retrieval,"task":{
             "task_id":record.id,"task_type":"local_bash",
             "status":record.status,"description":record.description,
