@@ -95,10 +95,16 @@ impl Teams {
             bail!("Invalid member name")
         }
         let mut cfg=this.read(team)?.context("Team missing")?;
-        if cfg.members.iter().any(|m|m.name==member.name||m.id==member.id){
-            bail!("Duplicate member")
+        if cfg.members.iter().any(|m|m.id==member.id&&m.name!=member.name){
+            bail!("Duplicate member identity")
         }
-        cfg.members.push(member);
+        if let Some(existing)=cfg.members.iter_mut().find(|m|m.name==member.name){
+            if existing.active{bail!("Duplicate active member")}
+            existing.id=member.id;
+            existing.active=true;
+        }else{
+            cfg.members.push(member);
+        }
         this.save(&cfg)
         })
     }
@@ -215,6 +221,20 @@ impl Teams {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stopped_member_can_rejoin_without_duplicate_roster_entry(){
+        let root=tempfile::tempdir().unwrap();
+        let registry=Teams::new(root.path()).unwrap();
+        registry.create("team",None,"lead").unwrap();
+        let member=Member{name:"worker".into(),id:"worker@team".into(),active:true};
+        registry.member("team",member.clone()).unwrap();
+        assert!(registry.member("team",member.clone()).is_err());
+        registry.active("team","worker",false).unwrap();
+        registry.member("team",member).unwrap();
+        let cfg=registry.read("team").unwrap().unwrap();
+        assert_eq!(cfg.members.len(),2);
+        assert!(cfg.members[1].active);
+    }
     #[test]
     fn concurrent_member_updates_are_serialized_and_durable(){
         let root=std::sync::Arc::new(tempfile::tempdir().unwrap());

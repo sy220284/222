@@ -359,29 +359,36 @@ impl Agent {
                     finalized?;
                     Ok::<_,anyhow::Error>((session_id,answer))
                 }.await;
-                // Exit is a state transition: mark the member idle, release
-                // unfinished task ownership and notify the leader on disk.
+                // The member remains active until worktree finalization,
+                // task release and leader notification have been attempted.
+                let worktree_status=if let Some(tree)=worktree{
+                    Some(tree.finish().await)
+                }else{None};
                 let cleanup=if let Some(team)=current_team.as_deref(){
                     let team_root=current_team_root.as_deref().unwrap_or(&root);
                     let reason=if result.is_ok(){"shutdown"}else{"terminated"};
                     (||->Result<()>{
                         let registry=Teams::new(team_root)?;
-                        registry.active(team,&name,false)?;
-                        cleanup_graph.unassign_teammate(&name,&name,reason)?;
-                        let mailbox=crate::team_mailbox::Mailbox::new(team_root,team)?;
-                        mailbox.write("team-lead",crate::team_mailbox::Message{
-                            from:name.clone(),
-                            text:json!({"type":"idle_notification","from":name,
-                                "idleReason":if result.is_ok(){"available"}else{"failed"},
-                                "timestamp":chrono::Utc::now().to_rfc3339()}).to_string(),
-                            timestamp:chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis,true),
-                            read:false,color:None,summary:None
-                        })?;
+                        let release=cleanup_graph.unassign_teammate(
+                            &format!("{name}@{team}"),&name,reason);
+                        let notification=(||->Result<()>{
+                            let mailbox=crate::team_mailbox::Mailbox::new(team_root,team)?;
+                            mailbox.write("team-lead",crate::team_mailbox::Message{
+                                from:name.clone(),
+                                text:json!({"type":"idle_notification","from":name,
+                                    "idleReason":if result.is_ok(){"available"}else{"failed"},
+                                    "timestamp":chrono::Utc::now().to_rfc3339()}).to_string(),
+                                timestamp:chrono::Utc::now().to_rfc3339_opts(
+                                    chrono::SecondsFormat::Millis,true),
+                                read:false,color:None,summary:None
+                            })
+                        })();
+                        let state=registry.active(team,&name,false);
+                        release?;
+                        notification?;
+                        state?;
                         Ok(())
                     })().err().map(|e|format!("{e:#}"))
-                }else{None};
-                let worktree_status=if let Some(tree)=worktree{
-                    Some(tree.finish().await)
                 }else{None};
                 let value=match result{
                     Ok((session_id,answer))=>{
