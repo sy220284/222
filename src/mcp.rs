@@ -139,3 +139,41 @@ impl McpManager {
         Ok(result.chars().take(16_000).collect())
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use crate::protocol::FunctionCall;
+
+    #[tokio::test]
+    async fn discovers_and_calls_stdio_tool() {
+        let script = r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}},"serverInfo":{"name":"mock","version":"1"}}}'
+    ;;
+  *'"method":"tools/list"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","description":"Echo string","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}]}}'
+    ;;
+  *'"method":"tools/call"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"echo ok"}]}}'
+    ;;
+esac
+done"#;
+        let servers = vec![McpServerConfig {
+            id: "mock".to_owned(), command: "sh".to_owned(),
+            args: vec!["-c".to_owned(), script.to_owned()],
+        }];
+        let mut manager = McpManager::connect(&servers).await.unwrap();
+        assert_eq!(manager.definitions().len(), 1);
+        assert!(manager.handles("mcp_mock_0"));
+        let call = ToolCall {
+            id: "call1".to_owned(), kind: "function".to_owned(),
+            function: FunctionCall {
+                name: "mcp_mock_0".to_owned(),
+                arguments: json!({"text":"hello"}).to_string(),
+            },
+        };
+        assert_eq!(manager.execute(&call).await, "echo ok");
+    }
+}

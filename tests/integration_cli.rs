@@ -91,3 +91,46 @@ fn real_http_tool_roundtrip_and_session_persistence() {
     assert!(saved.contains("call_1"));
     assert!(saved.contains("Read verified."));
 }
+
+#[test]
+fn gemini_native_adapter_completes_tool_roundtrip() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("example.txt"), "gemini test file\n").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut received = Vec::new();
+        for i in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            received.push(read_request(&mut stream));
+            let payload = if i == 0 {
+                json!({"candidates":[{"content":{"parts":[
+                    {"functionCall":{"name":"read_file","args":{"path":"example.txt"}}}
+                ]},"finishReason":"STOP"}]})
+            } else {
+                json!({"candidates":[{"content":{"parts":[{"text":"Gemini read verified."}]},"finishReason":"STOP"}]})
+            };
+            let body = payload.to_string();
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+            stream.flush().unwrap();
+        }
+        received
+    });
+    let config = dir.path().join("gemini-config.json");
+    fs::write(&config, json!({
+        "default_provider":"gm",
+        "providers":[{"id":"gm","kind":"gemini",
+            "base_url":format!("http://{address}/v1beta"),
+            "model":"example","api_key_env":"ATLAS_TEST_GEMINI_KEY"}]
+    }).to_string()).unwrap();
+    let output = binary().args([
+        "--workspace",dir.path().to_str().unwrap(),"run","Read example.txt"
+    ]).env("ATLAS_CONFIG", &config).env("ATLAS_TEST_GEMINI_KEY","fake-local-key")
+        .output().unwrap();
+    let requests = server.join().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Gemini read verified."));
+    assert!(requests[0].contains("functionDeclarations"));
+    assert!(requests[1].contains("functionResponse"));
+    assert!(requests[1].contains("gemini test file"));
+}
