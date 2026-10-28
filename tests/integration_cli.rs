@@ -788,3 +788,70 @@ fn gemini_sse_sdk_model_tool_roundtrip_preserves_streaming_and_context() {
     assert_eq!(events.iter().find(|e|e["type"]=="result").unwrap()["content"],
         "Verified stream complete");
 }
+
+#[test]
+fn chat_permission_mode_cycle_controls_real_model_tool_mutations() {
+    use std::process::Stdio;
+    for (cycles,expected_allowed) in [(1usize,true),(2usize,false)] {
+        let root=tempfile::tempdir().unwrap();
+        let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr=listener.local_addr().unwrap();
+        let server=thread::spawn(move||{
+            let mut tool_response=String::new();
+            for turn in 0..2 {
+                let(mut conn,_)=listener.accept().unwrap();
+                let raw=read_request(&mut conn);
+                let request:Value=serde_json::from_str(
+                    raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+                let payload=if turn==0{
+                    json!({"choices":[{"message":{"role":"assistant",
+                        "content":null,"tool_calls":[{
+                            "id":"mode-write","type":"function",
+                            "function":{"name":"write_file",
+                                "arguments":json!({
+                                    "path":"mode-write.txt","content":"written with mode"
+                                }).to_string()}
+                        }]},"finish_reason":"tool_calls"}]})
+                }else{
+                    tool_response=request["messages"].as_array().unwrap()
+                        .last().unwrap()["content"].as_str().unwrap().to_owned();
+                    json!({"choices":[{"message":{"role":"assistant",
+                        "content":"Completed."},"finish_reason":"stop"}]})
+                };
+                let body=payload.to_string();
+                write!(conn,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),body).unwrap();
+                conn.flush().unwrap();
+            }
+            tool_response
+        });
+        let config=root.path().join("config.json");
+        fs::write(&config,json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"test",
+            "base_url":format!("http://{addr}/v1")
+        }]}).to_string()).unwrap();
+        let mut child=binary().args([
+            "--workspace",root.path().to_str().unwrap(),"--approval","ask","chat"
+        ]).env("ATLAS_CONFIG",&config)
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+            .spawn().unwrap();
+        {
+            let mut input=child.stdin.take().unwrap();
+            for _ in 0..cycles{writeln!(input,"/mode").unwrap();}
+            writeln!(input,"Create mode-write.txt").unwrap();
+            writeln!(input,"/exit").unwrap();
+        }
+        let output=child.wait_with_output().unwrap();
+        let tool_result=server.join().unwrap();
+        assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+        assert_eq!(root.path().join("mode-write.txt").exists(),expected_allowed);
+        if expected_allowed {
+            assert!(tool_result.contains("Wrote"),"{tool_result}");
+        } else {
+            assert!(tool_result.contains("denied by permission mode"),"{tool_result}");
+        }
+        let stdout=String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.contains("Completed."),"{stdout}");
+    }
+}
