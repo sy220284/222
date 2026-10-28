@@ -16,10 +16,10 @@ use tokio::{
     time::timeout,
 };
 use uuid::Uuid;
-use crate::task_guards;
+use crate::{task_guards, task_output_format};
 
 const LOG_CAP: usize = 2_000_000;
-const DISPLAY_CAP: usize = 80_000;
+const DISPLAY_CAP: usize = 640_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRecord {
@@ -198,6 +198,9 @@ impl BackgroundTasks {
         let stderr = tail(safe_stderr.to_str().context("Invalid stderr path")?)?;
         let text = [stdout, stderr].into_iter()
             .filter(|x| !x.is_empty()).collect::<Vec<_>>().join("\n");
+        let displayed = task_output_format::format_task_output(
+            &text, safe_stdout.to_str().context("Invalid task output path")?,
+            task_output_format::max_output_length());
         let retrieval = if record.status == "running" {
             if block { "timeout" } else { "not_ready" }
         } else { "success" };
@@ -205,8 +208,9 @@ impl BackgroundTasks {
         Ok(json!({"retrieval_status":retrieval,"task":{
             "task_id":record.id,"task_type":"local_bash",
             "status":record.status,"description":record.description,
-            "output":text,"exitCode":record.exit_code,
-            "output_file":safe_stdout.to_string_lossy(),"truncated":record.truncated
+            "output":displayed.content,"exitCode":record.exit_code,
+            "output_file":safe_stdout.to_string_lossy(),
+            "truncated":record.truncated || displayed.was_truncated
         }}).to_string())
     }
 
