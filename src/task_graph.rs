@@ -6,7 +6,7 @@ use serde::{Deserialize,Serialize};
 use serde_json::{json,Map,Value};
 use std::{collections::HashSet,fs,fs::OpenOptions,path::{Path,PathBuf}};
 use uuid::Uuid;
-use crate::protocol::ToolCall;
+use crate::{protocol::ToolCall, task_events};
 
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq)]
 #[serde(rename_all="camelCase")]
@@ -64,8 +64,12 @@ impl TaskGraph {
         let path=self.path(id)?;
         let bytes=match fs::read(path) {Ok(v)=>v,Err(e)if e.kind()==std::io::ErrorKind::NotFound=>return Ok(None),Err(e)=>return Err(e.into())};
         if bytes.len()>1_000_000 {bail!("Task record too large")}
-        let item:Item=serde_json::from_slice(&bytes)?;
-        if item.id!=id || !matches!(item.status.as_str(),"pending"|"in_progress"|"completed"){bail!("Invalid task record")}
+        // Like the reference getTask, corrupt/invalid task records are absent,
+        // rather than rendering the entire shared task list unusable.
+        let Ok(item)=serde_json::from_slice::<Item>(&bytes) else {return Ok(None)};
+        if item.id!=id || !matches!(item.status.as_str(),"pending"|"in_progress"|"completed"){
+            return Ok(None)
+        }
         Ok(Some(item))
     }
     fn save(&self,item:&Item)->Result<()>{
@@ -77,6 +81,7 @@ impl TaskGraph {
         use std::io::Write;
         let result=(||{file.write_all(&data)?;file.sync_all()?;fs::rename(&temp,&path)?;Ok::<_,anyhow::Error>(())})();
         if result.is_err(){let _=fs::remove_file(&temp);}
+        if result.is_ok(){task_events::notify_tasks_updated();}
         result
     }
     fn all(&self)->Result<Vec<Item>>{
@@ -189,6 +194,7 @@ impl TaskGraph {
         let num=id.parse::<u64>()?;
         self.mark(self.highest()?.max(num))?;
         fs::remove_file(path)?;
+        task_events::notify_tasks_updated();
         for mut task in self.all()?{
             let a=task.blocks.len();let b=task.blocked_by.len();
             task.blocks.retain(|x|x!=id);task.blocked_by.retain(|x|x!=id);
@@ -247,7 +253,9 @@ impl TaskGraph {
         self.locked(|store|{
             let high=store.highest()?;
             for item in store.all()? { fs::remove_file(store.path(&item.id)?)?; }
-            store.mark(high)
+            store.mark(high)?;
+            task_events::notify_tasks_updated();
+            Ok(())
         })
     }
 
@@ -406,6 +414,39 @@ mod tests{
         let restarted=TaskGraph::new(root.path(),"session-1").unwrap();
         assert!(restarted.create(&json!({"subject":"Third","description":"After reset"}))
             .unwrap().contains("#3"));
+    }
+
+    #[test]
+    fn corrupt_task_files_are_skipped_without_hiding_valid_tasks(){
+        let (_root,graph)=store();
+        graph.create(&json!({"subject":"Valid","description":"Kept"})).unwrap();
+        fs::write(graph.path("2").unwrap(),"{definitely not json").unwrap();
+        fs::write(graph.path("3").unwrap(),r#"{"id":"3","subject":"Bad","description":"Bad","status":"obsolete","blocks":[],"blockedBy":[]}"#).unwrap();
+        assert_eq!(graph.all().unwrap().len(),1);
+        assert_eq!(graph.get(&json!({"taskId":"2"})).unwrap(),"Task not found");
+        assert!(graph.list(&json!({})).unwrap().contains("Valid"));
+    }
+    #[test]
+    fn task_mutations_emit_observable_events(){
+        use std::sync::{Arc,atomic::{AtomicUsize,Ordering}};
+        let (_root,graph)=store();
+        let hits=Arc::new(AtomicUsize::new(0));
+        let counter=hits.clone();
+        let handle=task_events::on_tasks_updated(Arc::new(move||{
+            counter.fetch_add(1,Ordering::SeqCst);
+        }));
+        graph.create(&json!({"subject":"A","description":"One"})).unwrap();
+        let after_create=hits.load(Ordering::SeqCst);
+        assert!(after_create>0);
+        graph.update(&json!({"taskId":"1","status":"completed"})).unwrap();
+        let after_update=hits.load(Ordering::SeqCst);
+        assert!(after_update>after_create);
+        graph.update(&json!({"taskId":"1","status":"deleted"})).unwrap();
+        assert!(hits.load(Ordering::SeqCst)>after_update);
+        let before_reset=hits.load(Ordering::SeqCst);
+        graph.reset().unwrap();
+        assert!(hits.load(Ordering::SeqCst)>before_reset);
+        drop(handle);
     }
 
     #[test]

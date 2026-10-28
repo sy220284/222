@@ -8,6 +8,7 @@ mod provider;
 mod session;
 mod task;
 mod task_graph;
+mod task_events;
 mod tools;
 mod notebook;
 mod search;
