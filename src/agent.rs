@@ -147,7 +147,34 @@ impl Agent {
                         }
                     }
                 }
-                Ok(self.graph.run(call))
+                let id=args.get("taskId").and_then(serde_json::Value::as_str)
+                    .context("Missing taskId")?;
+                let before=self.graph.peek(id)?;
+                let result=self.graph.update(&args)?;
+                if let (Some(previous),Some(owner),Some(team))=(
+                    before,
+                    args.get("owner").and_then(serde_json::Value::as_str),
+                    self.team_name.as_deref()
+                ){
+                    if previous.owner.as_deref()!=Some(owner) &&
+                        args.get("status").and_then(serde_json::Value::as_str)!=Some("deleted"){
+                        let sender=self.agent_name.as_deref().unwrap_or("team-lead");
+                        let timestamp=chrono::Utc::now().to_rfc3339_opts(
+                            chrono::SecondsFormat::Millis,true);
+                        let notification=json!({"type":"task_assignment","taskId":id,
+                            "subject":previous.subject,"description":previous.description,
+                            "assignedBy":sender,"timestamp":timestamp});
+                        let mailbox=crate::team_mailbox::Mailbox::new(
+                            self.team_root.as_deref().unwrap_or(&self.root),team)?;
+                        if let Err(error)=mailbox.write(owner,crate::team_mailbox::Message{
+                            from:sender.into(),text:notification.to_string(),timestamp,
+                            read:false,color:None,summary:None
+                        }){
+                            eprintln!("Local task assignment notification failed: {error:#}");
+                        }
+                    }
+                }
+                Ok(result)
             },
             _=>Ok(self.graph.run(call))
         }
@@ -240,7 +267,7 @@ impl Agent {
         let mailbox=crate::team_mailbox::Mailbox::new(
             self.team_root.as_deref().unwrap_or(&self.root),team)?;
         let incoming=mailbox.take_matching(member,|message|
-            !crate::team_registry::is_reserved_protocol(&message.text))?;
+            crate::team_registry::is_model_deliverable(&message.text))?;
         if incoming.is_empty(){return Ok(false)}
         let formatted=crate::team_registry::format_incoming(&incoming);
         self.session.messages.push(Message::text("user",format!(
@@ -937,6 +964,47 @@ mod tests {
         assert!(!worker.absorb_team_messages().unwrap());
         assert_eq!(mailbox.unread("worker").unwrap().len(),1);
     }
+    #[tokio::test]
+    async fn task_owner_change_sends_durable_assignment_to_member(){
+        let root=tempfile::tempdir().unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),
+            model:"mock".into(),api_key_env:None,stream:false
+        };
+        let mut leader=Agent::new(profile,root.path().to_path_buf(),
+            Approval::Full,false,5,Session::fresh()).unwrap();
+        let registry=Teams::new(root.path()).unwrap();
+        let team=registry.create("team",None,"lead").unwrap();
+        registry.member(&team.name,crate::team_registry::Member{
+            name:"worker".into(),id:"worker@team".into(),active:true
+        }).unwrap();
+        leader.team_name=Some(team.name.clone());
+        leader.agent_name=Some("team-lead".into());
+        leader.team_root=Some(root.path().to_path_buf());
+        leader.graph=task_graph::TaskGraph::new(root.path(),&team.name).unwrap();
+        leader.graph.create(&json!({"subject":"Inspect","description":"Review diff"})).unwrap();
+        let update=ToolCall{
+            id:"assign-1".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"TaskUpdate".into(),
+                arguments:json!({"taskId":"1","owner":"worker"}).to_string()
+            }
+        };
+        let result=leader.run_task_graph(&update).await.unwrap();
+        assert!(result.contains("owner"));
+        let mailbox=crate::team_mailbox::Mailbox::new(root.path(),&team.name).unwrap();
+        let messages=mailbox.unread("worker").unwrap();
+        assert_eq!(messages.len(),1);
+        let data:serde_json::Value=serde_json::from_str(&messages[0].text).unwrap();
+        assert_eq!(data["type"],"task_assignment");
+        assert_eq!(data["taskId"],"1");
+        assert_eq!(data["subject"],"Inspect");
+        assert_eq!(data["assignedBy"],"team-lead");
+        leader.run_task_graph(&update).await.unwrap();
+        assert_eq!(mailbox.unread("worker").unwrap().len(),1);
+    }
+
     #[tokio::test]
     async fn resumed_leader_restores_team_and_shared_task_graph(){
         let root=tempfile::tempdir().unwrap();

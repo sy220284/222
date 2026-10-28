@@ -310,10 +310,20 @@ pub fn is_reserved_protocol(text:&str)->bool{
     matches!(value.get("type").and_then(Value::as_str),
         Some("permission_request"|"permission_response"|
              "sandbox_permission_request"|"sandbox_permission_response"|
-             "shutdown_request"|"shutdown_approved"|"shutdown_rejected"|
+             "shutdown_request"|"shutdown_approved"|
              "plan_approval_request"|"plan_approval_response"|
+             "team_permission_update"|"mode_set_request"))
+}
+/// Protocol requests requiring a human/model decision can be surfaced as
+/// peer context; permission and mode updates stay unread until their
+/// dedicated authorization handlers exist.
+pub fn is_model_deliverable(text:&str)->bool{
+    let Ok(value)=serde_json::from_str::<Value>(text) else{return true};
+    !matches!(value.get("type").and_then(Value::as_str),
+        Some("permission_request"|"permission_response"|
+             "sandbox_permission_request"|"sandbox_permission_response"|
              "team_permission_update"|"mode_set_request"|
-             "idle_notification"|"task_assignment"))
+             "plan_approval_response"))
 }
 fn escape_attr(text:&str)->String{
     text.replace('&',"&amp;").replace('"',"&quot;")
@@ -336,6 +346,10 @@ mod message_tests{
         assert!(is_reserved_protocol(r#"{"type":"shutdown_request"}"#));
         assert!(!is_reserved_protocol(r#"{"type":"other"}"#));
         assert!(!is_reserved_protocol("ordinary teammate message"));
+        assert!(!is_reserved_protocol(r#"{"type":"task_assignment"}"#));
+        assert!(is_model_deliverable(r#"{"type":"shutdown_request"}"#));
+        assert!(is_model_deliverable(r#"{"type":"task_assignment"}"#));
+        assert!(!is_model_deliverable(r#"{"type":"permission_response"}"#));
     }
     #[test]
     fn incoming_messages_escape_untrusted_attributes(){
