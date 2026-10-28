@@ -393,7 +393,7 @@ fn background_shell_model_tool_roundtrip_runs_and_reads_real_process() {
                 let last: Value = serde_json::from_str(
                     messages.last().unwrap()["content"].as_str().unwrap()
                 ).unwrap();
-                let task_id = last["task_id"].as_str().unwrap();
+                let task_id = last["task_id"].as_str().unwrap().to_owned();
                 log.push(last);
                 json!({"choices":[{"message":{"role":"assistant","content":null,
                     "tool_calls":[{"id":"read1","type":"function","function":{
