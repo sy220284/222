@@ -129,11 +129,70 @@ impl Teams {
             "message":format!("Cleaned up directories and worktrees for team \"{name}\"")}))
         })
     }
+    /// Structured peer protocol. The on-disk payload field names match
+    /// the source protocol; it never routes to a vendor service.
+    pub fn send_structured(&self,team:&str,recipient:&str,sender:&str,input:&Value)->Result<Value>{
+        let kind=input.get("type").and_then(Value::as_str).context("Structured message type required")?;
+        if recipient=="*"{bail!("structured messages cannot be broadcast")}
+        self.locked(|this|{
+            let cfg=this.read(team)?.context("Team missing")?;
+            if !cfg.members.iter().any(|m|m.name==sender&&m.active){
+                bail!("Sender is not an active team member")
+            }
+            let target=cfg.members.iter().find(|m|m.name==recipient||m.id==recipient)
+                .context("Unknown recipient")?.name.clone();
+            let timestamp=chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis,true);
+            let (payload,request_id,shutdown)=match kind{
+                "shutdown_request"=>{
+                    let reason=input.get("reason").and_then(Value::as_str);
+                    let request_id=format!("shutdown-{}@{}",chrono::Utc::now().timestamp_millis(),target);
+                    (json!({"type":"shutdown_request","requestId":request_id,
+                        "from":sender,"reason":reason,"timestamp":timestamp}),request_id,false)
+                },
+                "shutdown_response"=>{
+                    if target!="team-lead"||sender=="team-lead"{
+                        bail!("shutdown_response must be sent by a teammate to team-lead")
+                    }
+                    let request_id=input.get("request_id").and_then(Value::as_str)
+                        .filter(|s|!s.trim().is_empty()).context("request_id is required")?.to_owned();
+                    let approve=semantic_bool(input.get("approve").context("approve is required")?)?;
+                    let payload=if approve {
+                        json!({"type":"shutdown_approved","requestId":request_id,
+                            "from":sender,"timestamp":timestamp})
+                    }else{
+                        let reason=input.get("reason").and_then(Value::as_str)
+                            .filter(|s|!s.trim().is_empty())
+                            .context("reason is required when rejecting shutdown")?;
+                        json!({"type":"shutdown_rejected","requestId":request_id,
+                            "from":sender,"reason":reason,"timestamp":timestamp})
+                    };
+                    (payload,request_id,approve)
+                },
+                "plan_approval_response"=>{
+                    if sender!="team-lead"{bail!("Only the team lead can approve plans")}
+                    let request_id=input.get("request_id").and_then(Value::as_str)
+                        .filter(|s|!s.trim().is_empty()).context("request_id is required")?.to_owned();
+                    let approve=semantic_bool(input.get("approve").context("approve is required")?)?;
+                    let feedback=input.get("feedback").and_then(Value::as_str);
+                    (json!({"type":"plan_approval_response","requestId":request_id,
+                        "approved":approve,"feedback":feedback,"timestamp":timestamp}),request_id,false)
+                },
+                other=>bail!("Unsupported structured message type: {other}")
+            };
+            let inbox=Mailbox::new(&this.root,team)?;
+            inbox.write(&target,Message{
+                from:sender.into(),text:payload.to_string(),
+                timestamp,read:false,color:None,summary:None
+            })?;
+            Ok(json!({"success":true,"request_id":request_id,
+                "target":target,"shutdown_requested":shutdown}))
+        })
+    }
     pub fn send(&self,team:&str,recipient:&str,sender:&str,text:&str,summary:&str)->Result<Value>{
         if summary.trim().is_empty(){bail!("summary is required when message is a string")}
         self.locked(|this|{
         let cfg=this.read(team)?.context("Team missing")?;
-        if !cfg.members.iter().any(|m|m.name==sender){bail!("Sender is not a team member")}
+        if !cfg.members.iter().any(|m|m.name==sender&&m.active){bail!("Sender is not an active team member")}
         let names=if recipient=="*"{
             cfg.members.iter().filter(|m|m.name!=sender)
                 .map(|m|m.name.clone()).collect::<Vec<_>>()
@@ -212,12 +271,27 @@ pub fn definitions(leader:bool,team_active:bool)->Vec<Value>{
     if team_active {
         result.push(json!({"type":"function","function":{
             "name":"SendMessage",
-            "description":"Send a plain-text message to a teammate or broadcast to all other members. A short summary is required.",
+            "description":"Send a teammate a plain message or shutdown/plan approval protocol response. Plain messages require a short summary; broadcast supports only plain messages.",
             "parameters":{"type":"object","properties":{
                 "to":{"type":"string"},
                 "summary":{"type":"string"},
-                "message":{"type":"string"}
-            },"required":["to","summary","message"]}
+                "message":{"oneOf":[
+                    {"type":"string"},
+                    {"type":"object","properties":{
+                        "type":{"const":"shutdown_request"},"reason":{"type":"string"}
+                    },"required":["type"]},
+                    {"type":"object","properties":{
+                        "type":{"const":"shutdown_response"},
+                        "request_id":{"type":"string"},"approve":{"type":"boolean"},
+                        "reason":{"type":"string"}
+                    },"required":["type","request_id","approve"]},
+                    {"type":"object","properties":{
+                        "type":{"const":"plan_approval_response"},
+                        "request_id":{"type":"string"},"approve":{"type":"boolean"},
+                        "feedback":{"type":"string"}
+                    },"required":["type","request_id","approve"]}
+                ]}
+            },"required":["to","message"]}
         }}));
         result.push(json!({"type":"function","function":{
             "name":"TeamInbox",
@@ -271,5 +345,54 @@ mod message_tests{
         let formatted=format_incoming(&[input]);
         assert!(formatted.contains("teammate_id=\"a&quot;&lt;\""));
         assert!(formatted.contains("summary=\"x&amp;y\""));
+    }
+}
+
+fn semantic_bool(value:&Value)->Result<bool>{
+    match value{
+        Value::Bool(value)=>Ok(*value),
+        Value::String(value) if value=="true"=>Ok(true),
+        Value::String(value) if value=="false"=>Ok(false),
+        _=>bail!("approve must be a boolean or literal true/false")
+    }
+}
+#[cfg(test)]
+mod protocol_tests{
+    use super::*;
+    #[test]
+    fn structured_shutdown_and_plan_protocol_roundtrip(){
+        let root=tempfile::tempdir().unwrap();
+        let registry=Teams::new(root.path()).unwrap();
+        registry.create("team",None,"lead").unwrap();
+        registry.member("team",Member{
+            name:"worker".into(),id:"worker@team".into(),active:true
+        }).unwrap();
+        let request=registry.send_structured("team","worker","team-lead",
+            &json!({"type":"shutdown_request","reason":"done"})).unwrap();
+        let inbox=Mailbox::new(root.path(),"team").unwrap();
+        let message=inbox.unread("worker").unwrap();
+        assert_eq!(message.len(),1);
+        let payload:Value=serde_json::from_str(&message[0].text).unwrap();
+        assert_eq!(payload["type"],"shutdown_request");
+        assert_eq!(payload["requestId"],request["request_id"]);
+        let approval=registry.send_structured("team","team-lead","worker",
+            &json!({"type":"shutdown_response","request_id":request["request_id"],
+                "approve":"true"})).unwrap();
+        assert_eq!(approval["shutdown_requested"],true);
+        let response:Value=serde_json::from_str(&inbox.unread("team-lead").unwrap()[0].text).unwrap();
+        assert_eq!(response["type"],"shutdown_approved");
+        assert!(registry.send_structured("team","*","worker",
+            &json!({"type":"shutdown_request"})).is_err());
+        assert!(registry.send_structured("team","team-lead","worker",
+            &json!({"type":"shutdown_response","request_id":"x",
+                "approve":false})).is_err());
+        assert!(registry.send_structured("team","worker","worker",
+            &json!({"type":"plan_approval_response","request_id":"x",
+                "approve":true})).is_err());
+        let plan=registry.send_structured("team","worker","team-lead",
+            &json!({"type":"plan_approval_response","request_id":"p",
+                "approve":false,"feedback":"fix tests"})).unwrap();
+        assert_eq!(plan["request_id"],"p");
+        assert_eq!(inbox.unread("worker").unwrap().len(),2);
     }
 }

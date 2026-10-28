@@ -57,6 +57,7 @@ pub struct Agent {
     team_name: Option<String>,
     agent_name: Option<String>,
     team_root: Option<PathBuf>,
+    shutdown_requested: bool,
     hook_rules: Vec<HookRule>,
 }
 
@@ -72,7 +73,7 @@ impl Agent {
         let provider = provider::create(&profile)?;
         let background = Arc::new(BackgroundTasks::new(&root)?);
         let graph = task_graph::TaskGraph::new(&root,&session.id.to_string())?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: None, agent_name: None, team_root: None, hook_rules: Vec::new() })
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: None, agent_name: None, team_root: None, shutdown_requested: false, hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -191,12 +192,20 @@ impl Agent {
                 let team=self.team_name.as_deref().context("No active team")?;
                 let to=args.get("to").and_then(serde_json::Value::as_str)
                     .context("Missing message recipient")?;
-                let summary=args.get("summary").and_then(serde_json::Value::as_str)
-                    .context("Plain text message summary required")?;
-                let message=args.get("message").and_then(serde_json::Value::as_str)
-                    .context("Structured shutdown/plan requests not yet supported")?;
+                let message=args.get("message").context("Missing message")?;
                 let sender=self.agent_name.as_deref().unwrap_or("team-lead");
-                registry.send(team,to,sender,message,summary).map(|x|x.to_string())
+                let result=if let Some(text)=message.as_str(){
+                    let summary=args.get("summary").and_then(serde_json::Value::as_str)
+                        .filter(|s|!s.trim().is_empty())
+                        .context("Plain text message summary required")?;
+                    registry.send(team,to,sender,text,summary)?
+                }else{
+                    registry.send_structured(team,to,sender,message)?
+                };
+                if result["shutdown_requested"]==true{
+                    self.shutdown_requested=true;
+                }
+                Ok(result.to_string())
             },
             "TeamInbox"=>{
                 let team=self.team_name.as_deref().context("No active team")?;
@@ -708,6 +717,9 @@ impl Agent {
                 }));
                 self.session.messages.push(Message::tool_result(&call, result));
                 self.session.save(&self.root)?;
+                if self.shutdown_requested {
+                    return Ok("Shutdown approved; confirmation delivered to team lead".into());
+                }
             }
         }
         bail!("Agent exceeded {} model steps; session saved for resume", self.max_steps)
@@ -786,6 +798,7 @@ mod tests {
             team_name: None,
             agent_name: None,
             team_root: None,
+            shutdown_requested: false,
             hook_rules: Vec::new(),
         };
         agent.compact_history().await.unwrap();
