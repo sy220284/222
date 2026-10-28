@@ -1980,7 +1980,7 @@ fn agent_invalid_tool_json_preserves_sibling_calls_and_model_followup(){
     ]).env("ATLAS_CONFIG",&config).output().unwrap();
     let requests=server.join().unwrap();
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
-    assert!(String::from_utf8_lossy(&output.stdout).unwrap()
+    assert!(String::from_utf8_lossy(&output.stdout)
         .contains("All tool calls acknowledged"));
     assert_eq!(requests.len(),2);
     let response_payload=&requests[1];
