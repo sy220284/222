@@ -1934,3 +1934,70 @@ done"#;
         assert!(server["config"].get("env").is_none());
     }
 }
+
+
+#[test]
+fn agent_invalid_tool_json_preserves_sibling_calls_and_model_followup(){
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for index in 0..2 {
+            let (mut conn,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut conn));
+            let body=if index==0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[
+                        {"id":"bad-json","type":"function","function":{
+                            "name":"read_file","arguments":"{bad-json"}},
+                        {"id":"bad-shape","type":"function","function":{
+                            "name":"write_file","arguments":"[1,2,3]"}},
+                        {"id":"good-write","type":"function","function":{
+                            "name":"write_file",
+                            "arguments":json!({"path":"survived.txt",
+                                "content":"persisted despite sibling failures\\n"}).to_string()}}
+                    ]},"finish_reason":"tool_calls"}]})
+            }else{
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"All tool calls acknowledged"},"finish_reason":"stop"}]})
+            }.to_string();
+            write!(conn,"HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}",
+                body.len(),body).unwrap();
+            conn.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let output=binary().args([
+        "--workspace",root.path().to_str().unwrap(),
+        "--approval","full","run","Make changes"
+    ]).env("ATLAS_CONFIG",&config).output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).unwrap()
+        .contains("All tool calls acknowledged"));
+    assert_eq!(requests.len(),2);
+    let response_payload=&requests[1];
+    assert!(response_payload.contains("bad-json"),"{response_payload}");
+    assert!(response_payload.contains("bad-shape"),"{response_payload}");
+    assert!(response_payload.contains("good-write"),"{response_payload}");
+    assert!(response_payload.contains("Invalid tool arguments JSON"),"{response_payload}");
+    assert!(response_payload.contains("Tool arguments must be a JSON object"),
+        "{response_payload}");
+    assert!(root.path().join("survived.txt").is_file());
+    let result=fs::read_to_string(root.path().join("survived.txt")).unwrap();
+    assert!(result.contains("persisted despite sibling failures"));
+    assert!(!root.path().join("bad-json").exists());
+    let sessions=fs::read_dir(root.path().join(".atlas/sessions")).unwrap()
+        .map(|e|e.unwrap().path()).collect::<Vec<_>>();
+    assert_eq!(sessions.len(),1);
+    let history=fs::read_to_string(&sessions[0]).unwrap();
+    for id in ["bad-json","bad-shape","good-write"] {
+        assert!(history.contains(id),"missing persisted tool id {id}");
+    }
+}

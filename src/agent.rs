@@ -854,12 +854,26 @@ impl Agent {
                 }else{None};
                 eprintln!("Executing tool: {}",
                     label.as_deref().unwrap_or(&call.function.name));
-                let pre = self.hooks.before_tool(&call).await?;
-                if let Some(updated) = pre.updated_input {
-                    call.function.arguments = serde_json::to_string(&updated)?;
+                // Original runToolUse returns a per-tool validation error,
+                // rather than aborting a response containing multiple calls.
+                // A sibling call must still execute and every tool id must
+                // receive a matching result before the next model request.
+                let invalid_input=match serde_json::from_str::<serde_json::Value>(
+                    &call.function.arguments) {
+                    Err(error)=>Some(format!("Invalid tool arguments JSON: {error}")),
+                    Ok(serde_json::Value::Object(_))=>None,
+                    Ok(_)=>Some("Tool arguments must be a JSON object".to_owned()),
+                };
+                let pre=if invalid_input.is_none(){
+                    Some(self.hooks.before_tool(&call).await?)
+                }else{None};
+                if let Some(updated) = pre.as_ref().and_then(|hook|hook.updated_input.as_ref()) {
+                    call.function.arguments = serde_json::to_string(updated)?;
                 }
                 let tool_started=Instant::now();
-                let result = if let Some(reason) = pre.blocking_reason {
+                let result = if let Some(reason)=invalid_input {
+                    format!("ERROR: {reason}")
+                } else if let Some(reason) = pre.and_then(|hook|hook.blocking_reason) {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
                 } else if matches!(call.function.name.as_str(),
                     "TeamCreate"|"TeamDelete"|"SendMessage"|"TeamInbox") {

@@ -21,7 +21,7 @@
 | `src/interactiveHelpers.tsx` | 366 | 57424 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/main.tsx` | 4684 | 803924 | 重写：CLI／SDK 入口 | `src/main.rs` | 部分实现，多模式与 SDK 未等价 |
 | `src/projectOnboardingState.ts` | 84 | 2337 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/query.ts` | 1730 | 68683 | 重写：模型／Agent 循环 | `src/agent.rs / src/sse.rs` | 部分实现：多轮循环、SSE 增量和工具回填；原版上下文状态机未全等 |
+| `src/query.ts` | 1730 | 68683 | 重写：模型／Agent 循环 | `src/agent.rs / src/sse.rs` | 部分实现：多轮循环、SSE 增量和工具回填；原版上下文状态机未全等；模型返回非法 JSON/非对象工具参数时逐工具错误回填，不中断同轮合法兄弟工具及后续模型请求 |
 | `src/replLauncher.tsx` | 23 | 3517 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/setup.ts` | 478 | 20646 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/tasks.ts` | 40 | 1355 | 重写：保持通用行为 | 待定 | 未迁移 |

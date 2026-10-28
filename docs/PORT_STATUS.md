@@ -176,3 +176,10 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 - Rust 单元测试覆盖 MCP 实际服务启动、工具发现、进程退出后状态变化。CLI 子进程集成测试验证重复 UUID 取消、请求编号、队列持久身份、仅存活提示实际模型 HTTP 请求与回放顺序、MCP 两次状态查询和机密环境隔离。
 
 这些是原有部分实现的主链补强，**不增加任何已验收文件数**。仍缺原版同时运行时 interrupt 取消、Hook callback/权限询问桥、SDK MCP 动态变更、远端传输和完整初始化控制。台账维持 **22 排除、362 部分、1,493 未迁移、29 已验收，未闭环 1,855**。测试通过状态须以本次提交 GitHub Actions CI 为准。
+
+
+### 2026-10-29：Agent 多工具错误隔离与后续模型请求恢复
+
+对照 2.1.88 原始 `src/services/tools/toolExecution.ts::runToolUse` 的异常转为 `tool_result(is_error)`、`StreamingToolExecutor.ts` 非 Bash 工具错误不取消无关同轮工具，以及 `src/query.ts` 在下一轮前收齐工具回填：修复 `src/agent.rs::ask` 在模型输出非法工具参数 JSON 时调用 PreToolUse 钩子直接终止整个 Agent 的缺陷。现在在实际执行前验证 JSON 类型，非法语法和非对象参数变成对应 tool ID 的错误结果，不触发工具、文件或权限副作用；同轮其余合法工具继续执行并持久化，模型获得完整工具结果再继续下一轮。
+
+新 CLI 模拟模型 HTTP + 文件系统集成测试 `agent_invalid_tool_json_preserves_sibling_calls_and_model_followup` 核查一轮三个工具（非法 JSON、数组参数、合法写文件）以及第二轮模型真实接收对应全部三个工具 ID 和结果、合法文件落盘及会话保存。此变更只补充原有 `src/query.ts` 部分实现，不提升文件级验收。尚未实现安全并行工具批次、流式工具执行、用户中断与兄弟 Bash 子进程取消；原始 `StreamingToolExecutor` 仍未迁移，保留原有分类。**台账不变：22 排除、362 部分、1,493 未迁移、29 已验收，尚缺 1,855 条完整等价。**
