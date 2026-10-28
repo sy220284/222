@@ -102,6 +102,10 @@ impl BackgroundTasks {
         };
         let workspace = self.directory.parent().and_then(Path::parent)
             .context("Background task workspace missing")?;
+        // Place the shell and its descendants into a new process group.
+        // Stopping only the shell can otherwise leave children holding pipes.
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(proc.as_std_mut(), 0);
         proc.current_dir(workspace).stdin(Stdio::null())
             .stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
         let mut child = proc.spawn().context("Cannot start background command")?;
@@ -136,6 +140,12 @@ impl BackgroundTasks {
                     Err(_) => ("failed", None),
                 },
                 _ = stopped => {
+                    #[cfg(unix)]
+                    if let Some(pid) = child.id() {
+                        // A negative PID targets the entire process group,
+                        // including Shell children which inherited output pipes.
+                        let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+                    }
                     let _ = child.kill().await;
                     ("killed", None)
                 }
