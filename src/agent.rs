@@ -185,7 +185,9 @@ impl Agent {
                                 "task_description":existing.description,
                             })).await?;
                             if let Some(reason)=outcome.blocking_reason{
-                                bail!("TaskCompleted hook feedback:\n{reason}")
+                                // A denied completion is ordinary tool feedback in 2.1.88.
+                                // It must not become an executor error that cancels sibling tools.
+                                return Ok(format!("TaskCompleted hook feedback:\n{reason}"));
                             }
                         }
                     }
@@ -209,12 +211,12 @@ impl Agent {
                             "assignedBy":sender,"timestamp":timestamp});
                         let mailbox=crate::team_mailbox::Mailbox::new(
                             self.team_root.as_deref().unwrap_or(&self.root),team)?;
-                        if let Err(error)=mailbox.write(owner,crate::team_mailbox::Message{
+                        // 2.1.88 awaits mailbox delivery. Failing it is a failed tool call,
+                        // even though the task change was already persisted.
+                        mailbox.write(owner,crate::team_mailbox::Message{
                             from:sender.into(),text:notification.to_string(),timestamp,
                             read:false,color:None,summary:None
-                        }){
-                            eprintln!("Local task assignment notification failed: {error:#}");
-                        }
+                        })?;
                     }
                 }
                 Ok(result)
@@ -874,6 +876,76 @@ fn system_prompt(root: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn blocked_completion_is_non_error_feedback_and_does_not_mutate_fields() {
+        let dir=tempfile::tempdir().unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),model:"mock".into(),
+            api_key_env:None,stream:false,
+        };
+        let mut agent=Agent::new(profile,dir.path().canonicalize().unwrap(),
+            Approval::ReadOnly,false,5,Session::fresh()).unwrap();
+        agent.graph.create(&json!({"subject":"Verify","description":"Check tests"})).unwrap();
+        agent.hooks=HookRunner::new(&[HookRule{
+            event:HookEvent::TaskCompleted,matcher:None,
+            command:"printf '{\"decision\":\"block\",\"reason\":\"Tests missing\"}'".into(),
+            timeout_seconds:5,
+        }]).unwrap();
+        let call=ToolCall{
+            id:"complete-1".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"TaskUpdate".into(),
+                arguments:json!({"taskId":"1","status":"completed",
+                    "subject":"Do not apply this","metadata":{"verified":true}}).to_string(),
+            }
+        };
+        let feedback=agent.run_task_graph(&call).await.unwrap();
+        assert_eq!(feedback,"TaskCompleted hook feedback:\nTests missing");
+        assert!(!feedback.starts_with("ERROR:"));
+        let after=agent.graph.peek("1").unwrap().unwrap();
+        assert_eq!(after.subject,"Verify");
+        assert_eq!(after.status,"pending");
+        assert!(after.metadata.is_none());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn failed_task_assignment_delivery_surfaces_error_after_task_persistence() {
+        use std::os::unix::fs::symlink;
+        let dir=tempfile::tempdir().unwrap();
+        let root=dir.path().canonicalize().unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),model:"mock".into(),
+            api_key_env:None,stream:false,
+        };
+        let mut agent=Agent::new(profile,root.clone(),
+            Approval::ReadOnly,false,5,Session::fresh()).unwrap();
+        agent.graph.create(&json!({"subject":"Implementation","description":"Build"})).unwrap();
+        agent.team_name=Some("team".into());
+        agent.team_root=Some(root.clone());
+        agent.agent_name=Some("team-lead".into());
+        crate::team_mailbox::Mailbox::new(&root,"team").unwrap();
+        let inbox=root.join(".atlas/teams/team/inboxes/worker.json");
+        symlink(root.join("not-a-mailbox.json"),&inbox).unwrap();
+        let call=ToolCall{
+            id:"assign-1".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"TaskUpdate".into(),
+                arguments:json!({"taskId":"1","owner":"worker"}).to_string(),
+            },
+        };
+        let error=agent.run_task_graph(&call).await.unwrap_err();
+        assert!(format!("{error:#}").contains("Unsafe mailbox link"),
+            "delivery failure must not be silently swallowed: {error:#}");
+        let saved=agent.graph.peek("1").unwrap().unwrap();
+        assert_eq!(saved.owner.as_deref(),Some("worker"),
+            "task update precedes mailbox write in original 2.1.88");
+    }
+
 
     struct SummaryModel;
 
