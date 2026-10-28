@@ -1,4 +1,4 @@
-use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins};
+use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins, websearch, config::SearchBackend};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -30,11 +30,17 @@ pub struct ToolExecutor {
     interactive: bool,
     reads: Mutex<HashMap<PathBuf, u64>>,
     enabled_plugins: Vec<String>,
+    search_backend: Option<SearchBackend>,
 }
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new() }
+        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None }
+    }
+
+    pub fn with_search(mut self,backend:Option<SearchBackend>)->Self{
+        self.search_backend=backend;
+        self
     }
 
     pub fn with_plugins(mut self,enabled:Vec<String>)->Self{
@@ -75,6 +81,11 @@ impl ToolExecutor {
             "search_text" => self.search_text(&args),
             "list_skills" => self.list_skills(),
             "read_skill" => self.read_skill(&args),
+            "web_search" => {
+                self.require_approval("web_search",&args)?;
+                let backend=self.search_backend.as_ref().context("No search backend configured")?;
+                websearch::execute(backend,&args).await
+            },
             "web_fetch" => {
                 self.require_approval("web_fetch", &args)?;
                 webfetch::execute(&args).await

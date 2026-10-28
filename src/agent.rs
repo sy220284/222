@@ -9,7 +9,7 @@ use crate::{
     hooks::{HookRule, HookRunner, HookEvent},
     worktree::Worktree,
     protocol::ToolCall,
-    config::{McpServerConfig, LspServerConfig},
+    config::{McpServerConfig, LspServerConfig, SearchBackend},
     tools::{self, Approval, ToolExecutor},
 };
 use anyhow::{bail, Context, Result};
@@ -45,6 +45,7 @@ pub struct Agent {
     mcp_configs: Vec<McpServerConfig>,
     lsp_configs: Vec<LspServerConfig>,
     enabled_plugins: Vec<String>,
+    search_backend: Option<SearchBackend>,
     hook_rules: Vec<HookRule>,
 }
 
@@ -58,7 +59,7 @@ impl Agent {
         session: Session,
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), hook_rules: Vec::new() })
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -112,6 +113,7 @@ impl Agent {
         )?;
         child.child_depth = self.child_depth + 1;
         child.enabled_plugins = self.enabled_plugins.clone();
+        child.search_backend = self.search_backend.clone();
         let child_id = child.session_id();
         let result = async {
             child.attach_mcp(&self.mcp_configs).await?;
@@ -141,6 +143,10 @@ impl Agent {
     }
 
     pub fn profile(&self) -> &ProviderProfile { &self.profile }
+    pub fn set_search_backend(&mut self,backend:Option<SearchBackend>){
+        self.search_backend=backend;
+    }
+
     pub fn set_enabled_plugins(&mut self, names:Vec<String>){
         self.enabled_plugins=names;
     }
@@ -235,11 +241,13 @@ impl Agent {
             system.push_str(&self.session_context);
         }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
-            .with_plugins(self.enabled_plugins.clone());
+            .with_plugins(self.enabled_plugins.clone())
+            .with_search(self.search_backend.clone());
         let mut stop_hook_active = false;
         for _ in 0..self.max_steps {
             let mut available_tools = tools::definitions();
             available_tools.extend(task::definitions());
+            if self.search_backend.is_some(){available_tools.push(crate::websearch::definition());}
             if self.child_depth == 0 {
                 available_tools.push(json!({"type":"function","function":{
                     "name":"spawn_agent",
@@ -411,6 +419,7 @@ mod tests {
             mcp_configs: Vec::new(),
             lsp_configs: Vec::new(),
             enabled_plugins: Vec::new(),
+            search_backend: None,
             hook_rules: Vec::new(),
         };
         agent.compact_history().await.unwrap();

@@ -14,6 +14,7 @@ mod lsp;
 mod webfetch;
 mod history;
 mod plugins;
+mod websearch;
 
 use agent::Agent;
 use anyhow::{bail, Result};
@@ -122,6 +123,7 @@ async fn main() -> Result<()> {
         profile, root, cli.approval.into(), interactive, cli.max_steps, session
     )?;
     agent.set_enabled_plugins(config.enabled_plugins.clone());
+    agent.set_search_backend(config.search_backend.clone());
     let mut mcp_profiles = config.mcp_servers.clone();
     mcp_profiles.extend(plugins.mcp_servers);
     agent.attach_mcp(&mcp_profiles).await?;

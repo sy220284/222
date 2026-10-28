@@ -34,6 +34,14 @@ pub struct LspServerConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchBackend {
+    pub kind:String,
+    pub base_url:String,
+    #[serde(default)]
+    pub api_key_env:Option<String>,
+}
+
+#[derive(Debug,Clone,Serialize,Deserialize)]
 pub struct Config {
     pub default_provider: String,
     pub providers: Vec<ProviderProfile>,
@@ -45,6 +53,8 @@ pub struct Config {
     pub lsp_servers: Vec<LspServerConfig>,
     #[serde(default)]
     pub enabled_plugins: Vec<String>,
+    #[serde(default)]
+    pub search_backend: Option<SearchBackend>,
 }
 
 impl Default for Config {
@@ -78,6 +88,7 @@ impl Default for Config {
             hooks: vec![],
             lsp_servers: vec![],
             enabled_plugins: vec![],
+            search_backend: None,
         }
     }
 }
@@ -138,6 +149,15 @@ impl Config {
             }
             if !server_ids.insert(&s.id) { bail!("Duplicate MCP server id: {}", s.id); }
             if s.command.trim().is_empty() { bail!("MCP server command cannot be empty"); }
+        }
+        if let Some(search) = &self.search_backend {
+            if !matches!(search.kind.as_str(),"searxng"|"brave"){
+                bail!("Unsupported search backend kind {}",search.kind);
+            }
+            let url=reqwest::Url::parse(&search.base_url)?;
+            if !matches!(url.scheme(),"http"|"https"){
+                bail!("Search endpoint requires http(s)");
+            }
         }
         HookRunner::new(&self.hooks)?;
         for server in &self.lsp_servers {

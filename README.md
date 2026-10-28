@@ -26,6 +26,7 @@
 - 本地文件修改检查点：写入/替换/笔记本编辑前保存旧内容、查看修改历史、校验文件未被后续修改后回退。历史默认保存在工作区 `.atlas/history/`，不会自动同步。
 - SDK JSON Lines 标准输入输出（`sdk` 命令）：结构化用户消息、模型消息、工具结果、请求结果及控制响应；不使用第三方私有传输。
 - 本地插件加载器：仅在 `enabled_plugins` 明确启用后加载本地 `plugin.json`，合并本地 MCP、Hooks 和 `plugin:skill` 技能，不连接专有插件市场。
+- 多搜索服务 WebSearch：支持用户指定 SearXNG 自建实例或 Brave 搜索接口，不依赖任何固定 AI 服务登录。
 - `spawn_agent` 子智能体工具：独立会话、模型可覆盖、最多一级子任务；可选择临时 Git 工作树隔离，未修改自动清理，有修改保留路径与分支供复查。
 - 独立编写的单元测试和 GitHub Actions 编译测试。
 
@@ -87,6 +88,16 @@ Hook 经 stdin 接收 JSON，返回 JSON（`decision:block`、`hookSpecificOutpu
 ```
 
 服务器从用户指定的本地可执行程序启动，不会自行下载；按文件后缀选择语言服务。仅当前 Rust LSP 客户端协议与消息帧实现通过自动测试，不等同所有语言服务器都已端到端验收。
+
+## WebSearch 接入
+
+本项目不绑定搜索平台；可配置自建 SearXNG（无固定账户）或自行持有密钥的 Brave 搜索服务。配置根对象示例：
+
+```json
+"search_backend": {"kind":"searxng","base_url":"http://127.0.0.1:8080/"}
+```
+
+也可设置 `"kind":"brave"`、`"base_url":"https://api.search.brave.com/"` 和 `"api_key_env":"BRAVE_SEARCH_API_KEY"`。搜索工具执行同样使用联网审批。
 
 ## 插件配置
 
