@@ -134,3 +134,56 @@ fn gemini_native_adapter_completes_tool_roundtrip() {
     assert!(requests[1].contains("functionResponse"));
     assert!(requests[1].contains("gemini test file"));
 }
+
+#[test]
+fn subagent_runs_a_separate_model_conversation_and_returns_to_parent() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..3 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let data = read_request(&mut stream);
+            requests.push(data);
+            let reply = match step {
+                0 => json!({"choices":[{"message":{
+                    "role":"assistant","content":null,
+                    "tool_calls":[{"id":"parent_spawn","type":"function",
+                        "function":{"name":"spawn_agent",
+                            "arguments":"{\\"prompt\\":\\"Analyze workspace\\",\\"isolation\\":\\"none\\"}"
+                        }}]
+                },"finish_reason":"tool_calls"}]}),
+                1 => json!({"choices":[{"message":{
+                    "role":"assistant","content":"Subagent completed analysis."
+                },"finish_reason":"stop"}]}),
+                _ => json!({"choices":[{"message":{
+                    "role":"assistant","content":"Delegation verified."
+                },"finish_reason":"stop"}]}),
+            };
+            let body = reply.to_string();
+            write!(stream,
+                "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}",
+                body.len(), body).unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let config = root.path().join("provider.json");
+    fs::write(&config, json!({"default_provider":"test","providers":[{
+        "id":"test","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let output = binary().args([
+        "--workspace",root.path().to_str().unwrap(),
+        "--approval","read-only","run","Delegate analysis"
+    ]).env("ATLAS_CONFIG", &config).output().unwrap();
+    let requests = server.join().unwrap();
+    assert!(output.status.success(),
+        "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Delegation verified."));
+    assert!(requests[1].contains("Analyze workspace"));
+    assert!(!requests[1].contains("spawn_agent"));
+    assert!(requests[2].contains("Subagent completed analysis."));
+    assert_eq!(fs::read_dir(root.path().join(".atlas/sessions")).unwrap().count(), 2);
+}
