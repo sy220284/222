@@ -190,6 +190,8 @@ fn parse_openai_usage(value: &Value) -> Option<TokenUsage> {
         output_tokens: output,
         total_tokens: usage.get("total_tokens").and_then(Value::as_u64)
             .unwrap_or(input.saturating_add(output)),
+        cache_read_input_tokens: usage.pointer("/prompt_tokens_details/cached_tokens").and_then(Value::as_u64).unwrap_or(0),
+        ..Default::default()
     })
 }
 
@@ -202,6 +204,8 @@ pub(crate) fn parse_gemini_usage(value: &Value) -> Option<TokenUsage> {
         output_tokens: output,
         total_tokens: usage.get("totalTokenCount").and_then(Value::as_u64)
             .unwrap_or(input.saturating_add(output)),
+        cache_read_input_tokens: usage.get("cachedContentTokenCount").and_then(Value::as_u64).unwrap_or(0),
+        ..Default::default()
     })
 }
 
@@ -242,10 +246,10 @@ mod tests {
     fn token_usage_normalization_is_provider_neutral() {
         assert_eq!(parse_openai_usage(&json!({"usage":{"prompt_tokens":20,
             "completion_tokens":3,"total_tokens":23}})),
-            Some(TokenUsage {input_tokens:20,output_tokens:3,total_tokens:23}));
+            Some(TokenUsage {input_tokens:20,output_tokens:3,total_tokens:23, ..Default::default()}));
         assert_eq!(parse_gemini_usage(&json!({"usageMetadata":{"promptTokenCount":7,
             "candidatesTokenCount":9,"totalTokenCount":16}})),
-            Some(TokenUsage {input_tokens:7,output_tokens:9,total_tokens:16}));
+            Some(TokenUsage {input_tokens:7,output_tokens:9,total_tokens:16, ..Default::default()}));
         assert!(parse_gemini_usage(&json!({})).is_none());
     }
 

@@ -1,6 +1,7 @@
 use crate::{
     config::ProviderProfile,
-    protocol::{Message, ModelRequest},
+    protocol::{Message, ModelRequest, TokenUsage},
+    cost::{CostLedger, ModelPrice},
     provider::{self, ModelProvider},
     session::Session,
     mcp::McpManager,
@@ -86,6 +87,7 @@ pub struct Agent {
     permission_mode: permission_mode::Mode,
     transient_mailbox: in_memory_mailbox::Mailbox,
     hook_rules: Vec<HookRule>,
+    model_prices: Vec<ModelPrice>,
 }
 
 impl Agent {
@@ -108,7 +110,7 @@ impl Agent {
         Approval::Ask=>permission_mode::Mode::Default,
         Approval::ReadOnly=>permission_mode::Mode::DontAsk,
         Approval::Full=>permission_mode::Mode::BypassPermissions,
-    }, hook_rules: Vec::new() })
+    }, hook_rules: Vec::new(), model_prices: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -390,6 +392,7 @@ impl Agent {
             let search=self.search_backend.clone();
             let mode=self.permission_mode;
             let permissions=self.permission_rules.clone();
+            let model_prices=self.model_prices.clone();
             let shared_tasks=self.graph.clone();
             let current_team=self.team_name.clone();
             let current_team_root=self.team_root.clone();
@@ -409,6 +412,7 @@ impl Agent {
                     child.enabled_plugins=plugins;
                     child.search_backend=search;
                     child.permission_rules=permissions;
+                    child.model_prices=model_prices;
                     child.permission_mode=mode;
                     let session_id=child.session_id();
                     child.attach_mcp(&mcps).await?;
@@ -494,6 +498,7 @@ impl Agent {
         child.enabled_plugins = self.enabled_plugins.clone();
         child.search_backend = self.search_backend.clone();
         child.permission_rules = self.permission_rules.clone();
+        child.model_prices = self.model_prices.clone();
         child.permission_mode = self.permission_mode;
         let child_id = child.session_id();
         let result = async {
@@ -544,6 +549,15 @@ impl Agent {
 
     pub fn session_id(&self) -> String { self.session.id.to_string() }
     pub fn usage(&self) -> crate::protocol::TokenUsage { self.session.usage }
+    pub fn cost_ledger(&self) -> &CostLedger { &self.session.cost }
+    pub fn cost_summary(&self) -> String { self.session.cost.format_summary() }
+    pub fn set_model_prices(&mut self, prices: &[ModelPrice]) {
+        self.model_prices = prices.to_vec();
+    }
+    fn record_usage(&mut self, usage: TokenUsage) {
+        self.session.usage.accumulate(usage);
+        self.session.cost.record(&self.profile.id, &self.profile.model, usage, &self.model_prices);
+    }
     pub fn background_tasks(&self) -> Result<String> { self.background.list() }
     pub async fn stop_background_task(&self,id:&str)->Result<String>{
         self.background.stop(id).await
@@ -623,7 +637,7 @@ impl Agent {
             messages: self.session.messages.clone(),
             tools: Vec::new(),
         }).await?;
-        if let Some(usage) = response.usage { self.session.usage.accumulate(usage); }
+        if let Some(usage) = response.usage { self.record_usage(usage); }
         if !response.message.tool_calls.unwrap_or_default().is_empty() {
             bail!("Compaction model unexpectedly requested tools");
         }
@@ -679,7 +693,7 @@ impl Agent {
             self.provider.as_ref(), &self.profile).await {
             Ok(relevant) => {
                 if let Some(usage) = relevant.usage {
-                    self.session.usage.accumulate(usage);
+                    self.record_usage(usage);
                 }
                 if !relevant.text.is_empty() {
                     system.push_str("\nRelevant project memory:\n");
@@ -762,7 +776,7 @@ impl Agent {
             } else {
                 self.provider.complete(&request).await?
             };
-            if let Some(usage) = response.usage { self.session.usage.accumulate(usage); }
+            if let Some(usage) = response.usage { self.record_usage(usage); }
             let calls = response.message.tool_calls.clone().unwrap_or_default();
             let text = response.message.content.clone().unwrap_or_default();
             let finish = response.finish_reason.clone();

@@ -215,3 +215,25 @@ cargo run -- chat --resume <上次输出的UUID>
 ```
 
 明确拒绝规则优先于允许规则；只读模式不可通过静态允许规则绕过；强制再次询问规则即使在全量授权模式下也需交互确认。子 Agent 和团队成员沿用相同策略。**尚未达到原版复杂命令分类器、全部权限来源与权限模式状态机的完整等价。**
+
+### 多模型费用统计
+
+配置文件中可增加 model_prices 数组。每条规则使用 provider 和 model 精确匹配；input_per_million、output_per_million 以及可选 cache_read_per_million、cache_write_per_million、web_search_per_request 均以美元为单位，费率由用户根据所接入平台自主填写。
+
+示例：
+
+```json
+"model_prices": [
+  {
+    "provider": "openai",
+    "model": "my-model",
+    "input_per_million": 1.0,
+    "output_per_million": 3.0,
+    "cache_read_per_million": 0.2,
+    "cache_write_per_million": 0.0,
+    "web_search_per_request": 0.0
+  }
+]
+```
+
+运行时输入 /cost，或在 SDK 中发送 {"type":"control","action":"cost"} 查看逐模型成本与用量。费用随会话保存和恢复；未配置费率时显示价格未知，不推测第三方报价。

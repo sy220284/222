@@ -13,7 +13,7 @@
 | `src/Tool.ts` | 793 | 29516 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands.ts` | 755 | 25185 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context.ts` | 190 | 6446 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` | 部分实现：已支持 Token 用量，价格成本未迁移 |
+| `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` / `src/cost.rs` / `src/agent.rs` | 部分实现：按模型计费及会话恢复；原版 API/工具时长、编辑行数和退出回调尚未迁移 |
 | `src/costHook.ts` | 23 | 617 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/dialogLaunchers.tsx` | 133 | 22948 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/history.ts` | 465 | 14081 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1617,7 +1617,7 @@
 | `src/utils/model/modelSupportOverrides.ts` | 51 | 1537 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/providers.ts` | 41 | 1340 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/validateModel.ts` | 160 | 4633 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/modelCost.ts` | 232 | 7520 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/modelCost.ts` | 232 | 7520 | 重写：多模型价格计算 | `src/cost.rs` / `src/config.rs` | 部分实现：用户可配五类费率、缓存独立计费、未知价格提示；原厂固定费率不保留 |
 | `src/utils/modifiers.ts` | 37 | 1112 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mtls.ts` | 180 | 4655 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/nativeInstaller/download.ts` | 524 | 15191 | 重写：保持通用行为 | 待定 | 未迁移 |

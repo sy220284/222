@@ -23,7 +23,9 @@ impl Assembler{
                 self.usage=Some(TokenUsage{
                     input_tokens:input,output_tokens:output,
                     total_tokens:usage.get("total_tokens").and_then(Value::as_u64)
-                        .unwrap_or(input.saturating_add(output))
+                        .unwrap_or(input.saturating_add(output)),
+                    cache_read_input_tokens: usage.pointer("/prompt_tokens_details/cached_tokens").and_then(Value::as_u64).unwrap_or(0),
+                    ..Default::default()
                 });
             }
         }

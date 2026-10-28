@@ -53,13 +53,23 @@ pub struct TokenUsage {
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub total_tokens: u64,
+    #[serde(default,skip_serializing_if="is_zero")]
+    pub cache_read_input_tokens: u64,
+    #[serde(default,skip_serializing_if="is_zero")]
+    pub cache_creation_input_tokens: u64,
+    #[serde(default,skip_serializing_if="is_zero")]
+    pub web_search_requests: u64,
 }
+fn is_zero(v:&u64)->bool{*v==0}
 
 impl TokenUsage {
     pub fn accumulate(&mut self, other: Self) {
         self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
         self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
         self.total_tokens = self.total_tokens.saturating_add(other.total_tokens);
+        self.cache_read_input_tokens=self.cache_read_input_tokens.saturating_add(other.cache_read_input_tokens);
+        self.cache_creation_input_tokens=self.cache_creation_input_tokens.saturating_add(other.cache_creation_input_tokens);
+        self.web_search_requests=self.web_search_requests.saturating_add(other.web_search_requests);
     }
 }
 

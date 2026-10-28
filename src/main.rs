@@ -1,4 +1,5 @@
 mod agent;
+mod cost;
 mod hooks;
 mod worktree;
 mod mcp;
@@ -153,6 +154,7 @@ async fn main() -> Result<()> {
         profile, root, cli.approval.into(), interactive, cli.max_steps, session
     )?;
     agent.set_enabled_plugins(config.enabled_plugins.clone());
+    agent.set_model_prices(&config.model_prices);
     agent.set_permission_rules(&config.permission_rules)?;
     agent.set_search_backend(config.search_backend.clone());
     let mut mcp_profiles = config.mcp_servers.clone();
@@ -201,6 +203,7 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
                 println!("/usage                   show provider-reported token totals");
+                println!("/cost                    show model costs and unknown pricing");
                 println!("/tasks                   list background shell tasks");
                 println!("/mode                    cycle permission mode (default/accept edits/plan)");
                 println!("/clear                   erase current conversation history");
@@ -218,6 +221,10 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             "/tasks" => {
                 println!("{}",agent.background_tasks()?);
+                continue;
+            }
+            "/cost" => {
+                println!("{}", agent.cost_summary());
                 continue;
             }
             "/usage" => {
@@ -287,7 +294,7 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                 match agent.ask(prompt).await{
                     Ok(answer)=>print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
-                        "content":answer,"usage":agent.usage()
+                        "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
                     })),
                     Err(error)=>print_json!(json!({
                         "type":"error","session_id":agent.session_id(),
@@ -329,6 +336,11 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     let message=agent.poll_transient();
                     send_control!(json!({"type":"control_response","action":action,
                         "ok":true,"message":message,"revision":agent.transient_revision()}));
+                    continue;
+                }
+                if action=="cost" {
+                    send_control!(json!({"type":"control_response","action":action,
+                        "ok":true,"cost":agent.cost_ledger()}));
                     continue;
                 }
                 if action=="permission_mode" {

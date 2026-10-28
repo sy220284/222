@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use crate::hooks::{HookRule, HookRunner};
+use crate::{hooks::{HookRule, HookRunner}, cost::ModelPrice};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::{Path, PathBuf}};
 
@@ -61,6 +61,8 @@ pub struct Config {
     pub search_backend: Option<SearchBackend>,
     #[serde(default)]
     pub permission_rules: Vec<crate::permission_rules::RuleSetting>,
+    #[serde(default)]
+    pub model_prices: Vec<ModelPrice>,
 }
 
 impl Default for Config {
@@ -99,6 +101,7 @@ impl Default for Config {
             enabled_plugins: vec![],
             search_backend: None,
             permission_rules: vec![],
+            model_prices: vec![],
         }
     }
 }
@@ -167,6 +170,14 @@ impl Config {
             let url=reqwest::Url::parse(&search.base_url)?;
             if !matches!(url.scheme(),"http"|"https"){
                 bail!("Search endpoint requires http(s)");
+            }
+        }
+        let mut rate_keys = std::collections::HashSet::new();
+        for price in &self.model_prices {
+            price.validate()?;
+            if !seen.contains(&price.provider) { bail!("Price refers to unknown provider {}",price.provider); }
+            if !rate_keys.insert((price.provider.as_str(),price.model.as_str())) {
+                bail!("Duplicate model price for {}/{}",price.provider,price.model);
             }
         }
         HookRunner::new(&self.hooks)?;
