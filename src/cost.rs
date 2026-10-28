@@ -183,7 +183,7 @@ impl CostLedger {
         }
         for model in &self.models {
             let _ = write!(summary,
-                "\n{}/{}: {} input, {} output, {} cache read, {} cache write, {} web search ({})",
+                "\n{}/{}: {} input, {} output, {} cache read, {} cache write, {} web search ({}{})",
                 model.provider, model.model, model.usage.input_tokens, model.usage.output_tokens,
                 model.usage.cache_read_input_tokens, model.usage.cache_creation_input_tokens,
                 model.usage.web_search_requests, format_cost(model.known_cost_usd,4),
