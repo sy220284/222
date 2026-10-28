@@ -201,3 +201,17 @@ cargo run -- chat --resume <上次输出的UUID>
 ## 内存邮箱（尚未全等）
 
 工作进程内有独立 Mailbox，提供有序队列、谓词收取、等待者、修订号和消息通知；与磁盘团队收件箱职责不同。已绑定 Agent/SDK 标准输入输出消息控制。React 交互、JS Set 迭代/异常语义尚需逐项移植。
+
+## 用户权限规则（部分等价）
+
+除全局工具审批模式外，配置支持以下可选权限规则数组（需放入完整配置对象）：
+
+```json
+"permission_rules": [
+  {"behavior":"allow","rule":"Bash(git status)"},
+  {"behavior":"ask","rule":"Bash(git reset *)"},
+  {"behavior":"deny","rule":"Bash(git push *)"}
+]
+```
+
+明确拒绝规则优先于允许规则；只读模式不可通过静态允许规则绕过；强制再次询问规则即使在全量授权模式下也需交互确认。子 Agent 和团队成员沿用相同策略。**尚未达到原版复杂命令分类器、全部权限来源与权限模式状态机的完整等价。**
