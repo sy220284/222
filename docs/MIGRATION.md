@@ -111,3 +111,7 @@
 ### 命令队列与查询保护（2026-10-29）
 
 `src/message_queue.rs` 覆盖优先级插队、同级 FIFO、原顺序全部出队/匹配移除、按标识删除、任务通知默认低优先级、消息原样复制、meta/notification 不可编辑、粘贴图片数据和 UTF-16 光标恢复；保留代理隔离。在 SDK `queue_enqueue`、`queue_snapshot`、`queue_peek`、`queue_dequeue`、`queue_remove_identity`、`queue_remove_agent`、`queue_pop_editable`、`queue_drain` 控制指令中接通真实 Agent 会话。`query_guard.rs` 实现完整原状态机并为异步 SDK drain 预约/开跑/按代次结束提供并发保护。未迁移的 UI 键盘交互、连接桥接可见策略及命令日志，队列仍按部分实现登记，不用局部跑通声称整文件等价。
+
+### 技能实际执行参数链与 Shell 引号安全
+
+已将原始参数解析函数直接接入 `ToolExecutor::read_skill`（同时支持本地技能与已启用插件），通过 SKILL.md frontmatter `arguments:` 获取命名参数，并开放调用参数 `arguments`、`argument_names`、`append_if_no_placeholder`。支持 `$ARGUMENTS`、位置缩写和命名参数替换；原始解析允许 Shell 引号组合，变量作为字面量不会展开。`shell_quote.rs` 增加带结构的 Shell 词法、严格/宽松安全引用和歧义防护；完整第三方 shell-quote 特殊模式仍需等价核查，两个原路径均保持部分实现。

@@ -1297,3 +1297,59 @@ fn sdk_queue_pop_editable_does_not_leak_system_notifications_into_input(){
     assert_eq!(rest["result"]["length"],2);
     assert_eq!(rest["result"]["commands"][0]["mode"],"task-notification");
 }
+
+
+#[test]
+fn model_invokes_skill_with_quote_aware_named_arguments_in_real_tool_loop(){
+    let root=tempfile::tempdir().unwrap();
+    let skill=root.path().join(".atlas/skills/audit");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(skill.join("SKILL.md"),
+        "---\narguments: file purpose\n---\nAudit $file for $purpose\nRaw: $ARGUMENTS\nIndexed: $1")
+        .unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut seen_result=String::new();
+        for turn in 0..2{
+            let (mut stream,_)=listener.accept().unwrap();
+            let raw=read_request(&mut stream);
+            let req:Value=serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            if turn==1 {
+                seen_result=req["messages"].as_array().unwrap().iter()
+                    .rev().find(|m|m["role"]=="tool").unwrap()["content"]
+                    .as_str().unwrap().to_owned();
+            }
+            let reply=if turn==0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"skill-args","type":"function",
+                        "function":{"name":"read_skill","arguments":json!({
+                            "name":"audit","arguments":"src/lib.rs 'safety and reliability'"
+                        }).to_string()}
+                    }]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Skill context received."},"finish_reason":"stop"}]})
+            };
+            let response=reply.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(),response).unwrap();
+            stream.flush().unwrap();
+        }
+        seen_result
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let output=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","read-only","run","Load audit skill and proceed"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    let result=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Skill context received."));
+    assert!(result.contains("Audit src/lib.rs for safety and reliability"),"{result}");
+    assert!(result.contains("Indexed: safety and reliability"),"{result}");
+    assert!(result.contains("Raw: src/lib.rs 'safety and reliability'"),"{result}");
+}

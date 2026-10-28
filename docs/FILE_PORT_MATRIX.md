@@ -1358,7 +1358,7 @@
 | `src/utils/api.ts` | 719 | 26078 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/apiPreconnect.ts` | 72 | 2843 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/appleTerminalBackup.ts` | 125 | 2798 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/argumentSubstitution.ts` | 146 | 5079 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/argumentSubstitution.ts` | 146 | 5079 | 重写：技能参数解析、位置/命名替换及渐进提示 | `src/skill_arguments.rs` / `src/tools.rs` | 部分实现：原始占位符顺序、Shell 引号分组、frontmatter 参数名和实际 read_skill 工具接入；复杂 shell-quote 歧义、全部命令前端及未列出来源待继续核对 |
 | `src/utils/array.ts` | 14 | 364 | 重写：保持通用行为 | `src/array_utils.rs` | 部分实现：intersperse 序号、count 布尔谓词、uniq 基础值去重；JS 对象引用身份与非布尔 Truthy 待核对 |
 | `src/utils/asciicast.ts` | 240 | 7755 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/attachments.ts` | 3998 | 127423 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1386,7 +1386,7 @@
 | `src/utils/bash/registry.ts` | 54 | 1433 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/shellCompletion.ts` | 260 | 7874 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/shellPrefix.ts` | 29 | 1028 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/bash/shellQuote.ts` | 305 | 10824 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/bash/shellQuote.ts` | 305 | 10824 | 重写：Shell 解析、安全引用与歧义检测 | `src/shell_quote.rs` / `src/skill_arguments.rs` | 部分实现：单双引号、转义、命令分隔符、注释、保留变量字面值、安全引用及 H1 单引号漏洞检查；原版 shell-quote 边缘 token、glob 及完整调用方待核对 |
 | `src/utils/bash/shellQuoting.ts` | 129 | 4718 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/specs/alias.ts` | 15 | 313 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/specs/index.ts` | 19 | 380 | 重写：保持通用行为 | 待定 | 未迁移 |

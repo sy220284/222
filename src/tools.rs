@@ -370,11 +370,25 @@ impl ToolExecutor {
 
     fn read_skill(&self, args: &Value) -> Result<String> {
         let name = required(args, "name")?;
-        if name.contains(':') { return plugins::read_skill(&self.root,&self.enabled_plugins,name); }
-        if !valid_skill_name(name) { bail!("Invalid skill name") }
-        let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
-        if fs::metadata(&path)?.len() > 64_000 { bail!("Skill file too large") }
-        Ok(fs::read_to_string(path)?)
+        let content=if name.contains(':'){
+            plugins::read_skill(&self.root,&self.enabled_plugins,name)?
+        }else{
+            if !valid_skill_name(name) { bail!("Invalid skill name") }
+            let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
+            if fs::metadata(&path)?.len() > 64_000 { bail!("Skill file too large") }
+            fs::read_to_string(path)?
+        };
+        let raw=args.get("arguments");
+        let arguments=raw.map(|v|v.as_str().context("arguments must be a string"))
+            .transpose()?;
+        let names=if let Some(names)=args.get("argument_names"){
+            crate::skill_arguments::parse_argument_names(Some(names))
+        }else{
+            crate::skill_arguments::frontmatter_argument_names(&content)
+        };
+        Ok(crate::skill_arguments::substitute_arguments(
+            &content,arguments,args.get("append_if_no_placeholder")
+                .and_then(Value::as_bool).unwrap_or(true),&names))
     }
 
     async fn git_read(&self, arguments: Vec<String>) -> Result<String> {
@@ -567,8 +581,13 @@ pub fn definitions() -> Vec<Value> {
             "description":"List available project skills in .atlas/skills.",
             "parameters":{"type":"object","properties":{}}}}),
         json!({"type":"function","function":{"name":"read_skill",
-            "description":"Load the instructions of a named project skill.",
-            "parameters":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}}),
+            "description":"Load a project or plugin skill and optionally fill its command arguments.",
+            "parameters":{"type":"object","properties":{
+                "name":{"type":"string"},
+                "arguments":{"type":"string"},
+                "argument_names":{"oneOf":[{"type":"string"},{"type":"array","items":{"type":"string"}}]},
+                "append_if_no_placeholder":{"type":"boolean"}
+            },"required":["name"]}}}),
         json!({"type":"function","function":{"name":"write_file",
             "description":"Create or overwrite a workspace text file. Requires approval.",
             "parameters":{"type":"object","properties":{
@@ -678,6 +697,22 @@ mod tests {
         assert!(executor.read_skill(&json!({"name":"../nope"})).is_err());
     }
 
+    #[test]
+    fn real_skill_tool_renders_frontmatter_named_and_indexed_args(){
+        let root=tempfile::tempdir().unwrap();
+        let folder=root.path().join(".atlas/skills/review");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(folder.join("SKILL.md"),
+            "---\narguments: file goal\n---\nReview $file for $goal: $0, $1, $ARGUMENTS").unwrap();
+        let executor=executor(root.path(),Approval::ReadOnly);
+        let rendered=executor.read_skill(&json!({
+            "name":"review","arguments":"src/main.rs 'all errors'"
+        })).unwrap();
+        assert!(rendered.contains("Review src/main.rs for all errors: src/main.rs, all errors, src/main.rs 'all errors'"),"{rendered}");
+        let unchanged=executor.read_skill(&json!({"name":"review"})).unwrap();
+        assert!(unchanged.contains("$ARGUMENTS"));
+        assert!(executor.read_skill(&json!({"name":"review","arguments":12})).is_err());
+    }
     #[test]
     fn blocks_parent_traversal() {
         let root = tempfile::tempdir().unwrap();

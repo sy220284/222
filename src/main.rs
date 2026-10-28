@@ -5,6 +5,8 @@ mod collections;
 mod message_queue;
 mod query_guard;
 mod sdk_queue;
+mod shell_quote;
+mod skill_arguments;
 mod semantic_inputs;
 mod xml_escape;
 mod json_read;
