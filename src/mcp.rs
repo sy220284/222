@@ -1,4 +1,4 @@
-use crate::{config::McpServerConfig, protocol::ToolCall, compat_helpers};
+use crate::{config::McpServerConfig, protocol::ToolCall, compat_helpers, runtime_contracts};
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::{collections::HashMap, process::Stdio, time::Duration};
@@ -108,7 +108,9 @@ impl McpManager {
                 for tool in tools {
                     let name = tool.get("name").and_then(Value::as_str)
                         .context("MCP tool missing name")?;
-                    let alias = format!("mcp_{}_{}", server.id.replace('-', "_"), out.routes.len());
+                    let normalized=runtime_contracts::normalize_mcp_name(&server.id);
+                    let alias=format!("mcp_{}_{}",
+                        normalized.chars().take(45).collect::<String>(),out.routes.len());
                     let description = format!("MCP {}: {}. Requires approval.",
                         server.id, tool.get("description").and_then(Value::as_str).unwrap_or(name));
                     let parameters = tool.get("inputSchema").cloned()

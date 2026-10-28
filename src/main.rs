@@ -23,6 +23,7 @@ mod task_guards;
 mod env_validation;
 mod task_output_format;
 mod compat_helpers;
+mod runtime_contracts;
 
 use agent::Agent;
 use anyhow::{bail, Result};
@@ -233,7 +234,8 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
 async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
     println!("{}",json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,
-        "model":agent.profile().model}));
+        "model":agent.profile().model,
+        "usage_schema":runtime_contracts::empty_usage()}));
     let stdin=io::stdin();
     for input in stdin.lock().lines(){
         let line=input?;

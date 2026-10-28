@@ -8,6 +8,7 @@ use crate::{
     task,
     background::BackgroundTasks,
     memory,
+    runtime_contracts,
     hooks::{HookRule, HookRunner, HookEvent},
     worktree::Worktree,
     protocol::ToolCall,
@@ -270,6 +271,7 @@ impl Agent {
     /// This is provider-neutral and never invokes executable tools.
     pub async fn compact_history(&mut self) -> Result<()> {
         if self.session.messages.is_empty() { bail!("No history to compact") }
+        runtime_contracts::clear_compact_warning_suppression();
         let before = self.hooks.run(HookEvent::PreCompact, None,
             json!({"session_id":self.session.id, "message_count":self.session.messages.len()})).await?;
         if let Some(reason) = before.blocking_reason { bail!("PreCompact blocked: {reason}") }
@@ -293,6 +295,7 @@ impl Agent {
         let summary = response.message.content.context("Compaction returned no text")?;
         if summary.trim().is_empty() { bail!("Compaction returned empty text") }
         self.session.summary = Some(summary);
+        runtime_contracts::suppress_compact_warning();
         self.session.messages.clear();
         self.session.save(&self.root)?;
         let after = self.hooks.run(HookEvent::PostCompact, None,
