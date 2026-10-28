@@ -651,3 +651,60 @@ fn sdk_transient_mailbox_preserves_fifo_revision_and_validation() {
     assert_eq!(events[4]["message"],Value::Null);
     assert_eq!(events[5]["ok"],false);
 }
+
+#[cfg(unix)]
+#[test]
+fn actual_model_tool_approval_obeys_explicit_allow_and_deny() {
+    for (behavior,mode,expected_run) in [
+        ("allow","ask",true),("deny","full",false)
+    ] {
+        let dir=tempfile::tempdir().unwrap();
+        let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr=listener.local_addr().unwrap();
+        let server=thread::spawn(move||{
+            let mut tool_feedback=String::new();
+            for turn in 0..2{
+                let (mut stream,_)=listener.accept().unwrap();
+                let raw=read_request(&mut stream);
+                let input:Value=serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+                let response=if turn==0{
+                    json!({"choices":[{"message":{"role":"assistant","content":null,
+                        "tool_calls":[{"id":"permission-test","type":"function","function":{
+                            "name":"run_command",
+                            "arguments":json!({"command":"echo EXECUTED > allowed-marker.txt"}).to_string()
+                        }}]},"finish_reason":"tool_calls"}]})
+                }else{
+                    tool_feedback=input["messages"].as_array().unwrap().last().unwrap()
+                        ["content"].as_str().unwrap().to_string();
+                    json!({"choices":[{"message":{"role":"assistant",
+                        "content":"Permission contract checked."},"finish_reason":"stop"}]})
+                };
+                let body=response.to_string();
+                write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),body).unwrap();
+                stream.flush().unwrap();
+            }
+            tool_feedback
+        });
+        let config=dir.path().join("config.json");
+        fs::write(&config,json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible",
+            "base_url":format!("http://{addr}/v1"),"model":"test"
+        }],"permission_rules":[{"behavior":behavior,
+            "rule":"Bash(echo EXECUTED > allowed-marker.txt)"}]}).to_string()).unwrap();
+        let output=binary().args([
+            "--workspace",dir.path().to_str().unwrap(),
+            "--approval",mode,"run","Try tool rule"
+        ]).env("ATLAS_CONFIG",&config).output().unwrap();
+        let tool_feedback=server.join().unwrap();
+        assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+        assert!(String::from_utf8_lossy(&output.stdout).contains("Permission contract checked."));
+        let marker=dir.path().join("allowed-marker.txt");
+        assert_eq!(marker.exists(),expected_run,"policy behavior {behavior}");
+        if expected_run {
+            assert!(!tool_feedback.starts_with("ERROR:"),"{tool_feedback}");
+        }else{
+            assert!(tool_feedback.contains("denied by explicit permission rule"),"{tool_feedback}");
+        }
+    }
+}
