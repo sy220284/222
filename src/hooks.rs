@@ -153,8 +153,14 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
     if input.len() > 256_000 { bail!("Hook input exceeds 256 KB") }
     let operation = async {
         let input_future = async {
-            stdin.write_all(&input).await?;
-            stdin.shutdown().await?;
+            // A hook may finish without reading stdin. Closed pipe is not
+            // a hook failure; the exit code and response decide the result.
+            if let Err(error) = stdin.write_all(&input).await {
+                if error.kind() != std::io::ErrorKind::BrokenPipe {
+                    return Err(error.into());
+                }
+            }
+            let _ = stdin.shutdown().await;
             Ok::<_, anyhow::Error>(())
         };
         let output_future = read_limited(&mut stdout, 64_000);
