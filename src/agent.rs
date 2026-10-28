@@ -6,6 +6,8 @@ use crate::{
     mcp::McpManager,
     task,
     hooks::{HookRule, HookRunner, HookEvent},
+    worktree::Worktree,
+    protocol::ToolCall,
     config::McpServerConfig,
     tools::{self, Approval, ToolExecutor},
 };
@@ -36,6 +38,9 @@ pub struct Agent {
     mcp: Option<McpManager>,
     hooks: HookRunner,
     session_context: String,
+    child_depth: u8,
+    mcp_configs: Vec<McpServerConfig>,
+    hook_rules: Vec<HookRule>,
 }
 
 impl Agent {
@@ -48,10 +53,11 @@ impl Agent {
         session: Session,
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, hooks: HookRunner::default(), session_context: String::new() })
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, hooks: HookRunner::default(), session_context: String::new(), child_depth: 0, mcp_configs: Vec::new(), hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
+        self.mcp_configs = servers.to_vec();
         if !servers.is_empty() {
             self.mcp = Some(McpManager::connect(servers).await?);
         }
@@ -60,6 +66,7 @@ impl Agent {
 
     pub async fn attach_hooks(&mut self, rules: &[HookRule]) -> Result<()> {
         self.hooks = HookRunner::new(rules)?;
+        self.hook_rules = rules.to_vec();
         let result = self.hooks.run(HookEvent::SessionStart, None,
             json!({"session_id":self.session.id,"workspace":self.root})).await?;
         if let Some(reason) = result.blocking_reason { bail!("SessionStart blocked: {reason}") }
@@ -71,6 +78,50 @@ impl Agent {
         self.hooks.run(HookEvent::SessionEnd, None,
             json!({"session_id":self.session.id,"workspace":self.root})).await?;
         Ok(())
+    }
+
+    async fn run_subagent(&self, call: &ToolCall, executor: &ToolExecutor) -> Result<String> {
+        if self.child_depth >= 1 { bail!("Subagent depth limit reached") }
+        let args: serde_json::Value = serde_json::from_str(&call.function.arguments)?;
+        let prompt = args.get("prompt").and_then(|v| v.as_str())
+            .context("spawn_agent requires prompt")?;
+        if prompt.trim().is_empty() { bail!("Subagent prompt cannot be empty") }
+        let isolation = args.get("isolation").and_then(|v| v.as_str()).unwrap_or("none");
+        if !matches!(isolation, "none" | "worktree") {
+            bail!("Unknown isolation mode {isolation}");
+        }
+        if isolation == "worktree" { executor.approve_external(call)?; }
+        let worktree = if isolation == "worktree" {
+            Some(Worktree::create(&self.root).await?)
+        } else { None };
+        let child_root = worktree.as_ref().map(|w| w.path.clone())
+            .unwrap_or_else(|| self.root.clone());
+        let mut child_profile = self.profile.clone();
+        if let Some(model) = args.get("model").and_then(|v| v.as_str()) {
+            if model.trim().is_empty() { bail!("Subagent model cannot be empty"); }
+            child_profile.model = model.to_string();
+        }
+        let mut child = Self::new(
+            child_profile, child_root, self.approval, self.interactive,
+            self.max_steps, Session::fresh()
+        )?;
+        child.child_depth = self.child_depth + 1;
+        let child_id = child.session_id();
+        let result = async {
+            child.attach_mcp(&self.mcp_configs).await?;
+            child.attach_hooks(&self.hook_rules).await?;
+            let response = child.ask(prompt).await;
+            let finalization = child.finish().await;
+            let answer = response?;
+            finalization?;
+            Ok::<_, anyhow::Error>(answer)
+        }.await;
+        let isolation_result = if let Some(w) = worktree {
+            Some(w.finish().await?)
+        } else { None };
+        let answer = result?;
+        Ok(format!("Subagent session: {child_id}\nResult:\n{answer}\n{}",
+            isolation_result.unwrap_or_default()))
     }
 
     pub fn profile(&self) -> &ProviderProfile { &self.profile }
@@ -158,6 +209,17 @@ impl Agent {
         for _ in 0..self.max_steps {
             let mut available_tools = tools::definitions();
             available_tools.extend(task::definitions());
+            if self.child_depth == 0 {
+                available_tools.push(json!({"type":"function","function":{
+                    "name":"spawn_agent",
+                    "description":"Delegate a coding subtask to an independent agent session, optionally in an isolated Git worktree. This is a real separate agent run; no implicit merge.",
+                    "parameters":{"type":"object","properties":{
+                        "prompt":{"type":"string"},
+                        "model":{"type":"string"},
+                        "isolation":{"type":"string","enum":["none","worktree"]}
+                    },"required":["prompt"]}
+                }}));
+            }
             if let Some(mcp) = &self.mcp {
                 available_tools.extend(mcp.definitions());
             }
@@ -202,6 +264,11 @@ impl Agent {
                 }
                 let result = if let Some(reason) = pre.blocking_reason {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
+                } else if call.function.name == "spawn_agent" {
+                    match self.run_subagent(&call, &executor).await {
+                        Ok(output) => output,
+                        Err(error) => format!("ERROR: {error:#}"),
+                    }
                 } else if task::handles(&call.function.name) {
                     task::execute(&mut self.session, &call)
                 } else if let Some(mcp) = &mut self.mcp {
@@ -292,6 +359,9 @@ mod tests {
             mcp: None,
             hooks: HookRunner::default(),
             session_context: String::new(),
+            child_depth: 0,
+            mcp_configs: Vec::new(),
+            hook_rules: Vec::new(),
         };
         agent.compact_history().await.unwrap();
         let restored = Session::load(dir.path(), &id).unwrap();

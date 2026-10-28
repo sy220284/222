@@ -30,7 +30,8 @@
 | 插件管理、异步 HTTP/Prompt/Agent Hooks | — | 未实现 |
 | Git 只读操作 | `tools.rs` | status / diff / log 已实现 |
 | LSP、Git 修改与工作树管理 | — | 未实现 |
-| 工作树与多 Agent 团队 | — | 未实现 |
+| 一级子 Agent 委派与工作树隔离 | `agent.rs` / `worktree.rs` | 已实现独立会话、隔离、清理 |
+| 完整多 Agent 团队、任务消息与并行管理 | — | 未实现 |
 | 背景任务、任务恢复、远程会话 | — | 未实现 |
 | 终端渲染/主题/快捷键/SDK/IDE | — | 未实现 |
 

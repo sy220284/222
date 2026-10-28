@@ -1,5 +1,6 @@
 mod agent;
 mod hooks;
+mod worktree;
 mod mcp;
 mod config;
 mod protocol;
