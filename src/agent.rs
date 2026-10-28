@@ -432,7 +432,13 @@ impl Agent {
                     }
                 };
                 let mut value=value;
-                if let Some(error)=cleanup {value["cleanup_error"]=json!(error);}
+                if let Some(error)=cleanup {
+                    // The model response alone does not mean the teammate
+                    // finished successfully: task release and durable leader
+                    // notification are part of the same lifecycle.
+                    value["success"]=json!(false);
+                    value["cleanup_error"]=json!(error);
+                }
                 Ok::<_,anyhow::Error>((index,value))
             });
         }
@@ -1231,8 +1237,9 @@ mod tests {
         let request=teams.send_structured("team","worker","team-lead",
             &json!({"type":"shutdown_request","reason":"done"})).unwrap();
         let id=request["request_id"].as_str().unwrap();
-        assert_eq!(worker.run_team_tools(&call(id),&executor).await.unwrap()
-            .contains("shutdown_requested"),true);
+        let outcome:serde_json::Value=serde_json::from_str(
+            &worker.run_team_tools(&call(id),&executor).await.unwrap()).unwrap();
+        assert_eq!(outcome["shutdown_requested"],true);
         assert!(worker.shutdown_requested);
         assert!(worker.run_team_tools(&call(id),&executor).await.is_err());
         let inbox=crate::team_mailbox::Mailbox::new(root.path(),"team").unwrap();
