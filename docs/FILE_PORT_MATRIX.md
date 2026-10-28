@@ -13,7 +13,7 @@
 | `src/Tool.ts` | 793 | 29516 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands.ts` | 755 | 25185 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context.ts` | 190 | 6446 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` / `src/cost.rs` / `src/agent.rs` / `src/tool_metrics.rs` | 部分实现：按模型计费、会话恢复、API/工具/墙钟耗时与文件改动行数；原版全部错误路径、重试时长与退出回调待核对 |
+| `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` / `src/cost.rs` / `src/agent.rs` / `src/tool_metrics.rs` | 部分实现：多模型/子代理/团队费用汇总、会话恢复、API/工具/墙钟耗时及改动行数；异常调用计时、重试时长与退出回调待核对 |
 | `src/costHook.ts` | 23 | 617 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/dialogLaunchers.tsx` | 133 | 22948 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/history.ts` | 465 | 14081 | 重写：保持通用行为 | 待定 | 未迁移 |

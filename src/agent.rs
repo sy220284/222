@@ -339,7 +339,7 @@ impl Agent {
         Ok(true)
     }
 
-    async fn run_team(&self, call:&ToolCall, executor:&ToolExecutor)->Result<String>{
+    async fn run_team(&mut self, call:&ToolCall, executor:&ToolExecutor)->Result<String>{
         if self.child_depth!=0 {bail!("Nested teams are not allowed")}
         executor.approve_delegation(call)?;
         let args:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
@@ -426,7 +426,7 @@ impl Agent {
                     let finalized=child.finish().await;
                     let answer=output?;
                     finalized?;
-                    Ok::<_,anyhow::Error>((session_id,answer))
+                    Ok::<_,anyhow::Error>((session_id,answer,child.session.usage,child.session.cost.clone()))
                 }.await;
                 // The member remains active until worktree finalization,
                 // task release and leader notification have been attempted.
@@ -438,19 +438,18 @@ impl Agent {
                     finish_team_member(team_root,team,&name,result.is_ok(),&cleanup_graph)
                         .err().map(|e|format!("{e:#}"))
                 }else{None};
-                let value=match result{
-                    Ok((session_id,answer))=>{
+                let (mut value,usage,cost)=match result{
+                    Ok((session_id,answer,usage,cost))=>{
                         let state=worktree_status.transpose()?;
-                        json!({"name":name,"success":true,"session_id":session_id,
-                            "answer":answer,"worktree":state})
+                        (json!({"name":name,"success":true,"session_id":session_id,
+                            "answer":answer,"worktree":state}),usage,cost)
                     }
                     Err(error)=>{
                         let state=worktree_status.transpose()?;
-                        json!({"name":name,"success":false,"error":format!("{error:#}"),
-                            "worktree":state})
+                        (json!({"name":name,"success":false,"error":format!("{error:#}"),
+                            "worktree":state}),TokenUsage::default(),CostLedger::default())
                     }
                 };
-                let mut value=value;
                 if let Some(error)=cleanup {
                     // The model response alone does not mean the teammate
                     // finished successfully: task release and durable leader
@@ -458,19 +457,22 @@ impl Agent {
                     value["success"]=json!(false);
                     value["cleanup_error"]=json!(error);
                 }
-                Ok::<_,anyhow::Error>((index,value))
+                Ok::<_,anyhow::Error>((index,value,usage,cost))
             });
         }
         let mut results=Vec::new();
         for completed in futures::future::join_all(running).await {
-            let (index,member)=completed?;
+            let (index,member,usage,cost)=completed?;
+            self.session.usage.accumulate(usage);
+            self.file_metrics.add_counts(cost.total_lines_added,cost.total_lines_removed);
+            self.session.cost.merge(cost);
             results.push((index,member));
         }
         results.sort_by_key(|(index,_)|*index);
         Ok(json!({"team_results":results.into_iter().map(|(_,v)|v).collect::<Vec<_>>()}).to_string())
     }
 
-    async fn run_subagent(&self, call: &ToolCall, executor: &ToolExecutor) -> Result<String> {
+    async fn run_subagent(&mut self, call: &ToolCall, executor: &ToolExecutor) -> Result<String> {
         if self.child_depth >= 1 { bail!("Subagent depth limit reached") }
         executor.approve_delegation(call)?;
         let args: serde_json::Value = serde_json::from_str(&call.function.arguments)?;
@@ -519,6 +521,12 @@ impl Agent {
         let isolation_result = if let Some(w) = worktree {
             Some(w.finish().await?)
         } else { None };
+        // Child sessions are durable independently, but their usage and edits
+        // must also contribute to the parent session ledger.
+        self.session.usage.accumulate(child.session.usage);
+        self.file_metrics.add_counts(child.session.cost.total_lines_added,
+            child.session.cost.total_lines_removed);
+        self.session.cost.merge(child.session.cost.clone());
         let answer = result?;
         Ok(format!("Subagent session: {child_id}\nResult:\n{answer}\n{}",
             isolation_result.unwrap_or_default()))

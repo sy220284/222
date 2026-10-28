@@ -86,6 +86,24 @@ pub struct CostLedger {
     pub total_lines_removed: u64,
 }
 impl CostLedger {
+    pub fn merge(&mut self,other:Self){
+        for incoming in other.models {
+            if let Some(existing)=self.models.iter_mut().find(|m|
+                m.provider==incoming.provider && m.model==incoming.model
+            ){
+                existing.usage.accumulate(incoming.usage);
+                existing.known_cost_usd+=incoming.known_cost_usd;
+                existing.has_unpriced_usage|=incoming.has_unpriced_usage;
+            } else {
+                self.models.push(incoming);
+            }
+        }
+        self.total_api_duration_ms=self.total_api_duration_ms.saturating_add(other.total_api_duration_ms);
+        self.total_tool_duration_ms=self.total_tool_duration_ms.saturating_add(other.total_tool_duration_ms);
+        self.total_wall_duration_ms=self.total_wall_duration_ms.saturating_add(other.total_wall_duration_ms);
+        self.total_lines_added=self.total_lines_added.saturating_add(other.total_lines_added);
+        self.total_lines_removed=self.total_lines_removed.saturating_add(other.total_lines_removed);
+    }
     pub fn add_api_duration(&mut self,elapsed:Duration){
         self.total_api_duration_ms=self.total_api_duration_ms.saturating_add(elapsed.as_millis() as u64);
     }
@@ -186,6 +204,29 @@ mod tests {
         assert_eq!(ledger.models[0].usage.input_tokens, 20);
         assert!(ledger.has_unknown_prices());
         assert!(ledger.format_summary().contains("price missing"));
+    }
+    #[test]
+    fn merging_child_model_costs_preserves_models_unknown_prices_and_durations(){
+        let sample=TokenUsage{input_tokens:11,output_tokens:5,total_tokens:16,
+            ..Default::default()};
+        let mut main=CostLedger::default();
+        main.record("a","m",sample,&[price()]);
+        main.add_api_duration(Duration::from_millis(8));
+        let mut child=CostLedger::default();
+        child.record("a","m",sample,&[price()]);
+        child.record("b","n",sample,&[]);
+        child.add_api_duration(Duration::from_millis(5));
+        child.add_tool_duration(Duration::from_millis(2));
+        child.set_changed_lines(3,1);
+        main.merge(child);
+        assert_eq!(main.models.len(),2);
+        assert_eq!(main.models[0].usage.input_tokens,22);
+        assert!(main.models[1].has_unpriced_usage);
+        assert!(main.has_unknown_prices());
+        assert_eq!(main.total_api_duration_ms,13);
+        assert_eq!(main.total_tool_duration_ms,2);
+        assert_eq!(main.total_lines_added,3);
+        assert!((main.models[0].known_cost_usd-price().cost(sample)*2.0).abs()<1e-12);
     }
     #[test]
     fn pricing_strings_and_side_query_costs_match_public_generic_contract(){

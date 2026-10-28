@@ -17,6 +17,10 @@ impl ToolMetrics {
         self.lines_added.fetch_add(added,Ordering::Relaxed);
         self.lines_removed.fetch_add(removed,Ordering::Relaxed);
     }
+    pub fn add_counts(&self,added:u64,removed:u64){
+        self.lines_added.fetch_add(added,Ordering::Relaxed);
+        self.lines_removed.fetch_add(removed,Ordering::Relaxed);
+    }
     pub fn counts(&self)->(u64,u64){
         (self.lines_added.load(Ordering::Relaxed),
             self.lines_removed.load(Ordering::Relaxed))

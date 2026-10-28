@@ -161,6 +161,9 @@ fn subagent_runs_a_separate_model_conversation_and_returns_to_parent() {
                     "role":"assistant","content":"Delegation verified."
                 },"finish_reason":"stop"}]}),
             };
+            let mut reply = reply;
+            reply["usage"]=json!({"prompt_tokens":20,"completion_tokens":10,
+                "total_tokens":30});
             let body = reply.to_string();
             write!(stream,
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -186,6 +189,22 @@ fn subagent_runs_a_separate_model_conversation_and_returns_to_parent() {
     assert!(!requests[1].contains("spawn_agent"));
     assert!(requests[2].contains("Subagent completed analysis."));
     assert_eq!(fs::read_dir(root.path().join(".atlas/sessions")).unwrap().count(), 2);
+    let files=fs::read_dir(root.path().join(".atlas/sessions")).unwrap()
+        .map(|v|v.unwrap().path()).collect::<Vec<_>>();
+    let sessions=files.iter().map(|file|
+        serde_json::from_slice::<Value>(&fs::read(file).unwrap()).unwrap()
+    ).collect::<Vec<_>>();
+    let parent=sessions.iter().find(|session|
+        session["messages"][0]["content"].as_str().unwrap_or("").contains("Delegate analysis")
+    ).expect("parent session");
+    let child=sessions.iter().find(|session|
+        session["messages"][0]["content"].as_str().unwrap_or("").contains("Analyze workspace")
+    ).expect("child session");
+    assert_eq!(child["usage"]["input_tokens"],20);
+    assert_eq!(parent["usage"]["input_tokens"],60);
+    assert_eq!(parent["usage"]["output_tokens"],30);
+    assert_eq!(parent["cost"]["models"][0]["usage"]["input_tokens"],60);
+    assert_eq!(parent["cost"]["models"][0]["has_unpriced_usage"],true);
 }
 
 #[test]
