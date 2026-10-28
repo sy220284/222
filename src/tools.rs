@@ -142,10 +142,13 @@ impl ToolExecutor {
                     args.get("block").and_then(Value::as_bool).unwrap_or(true),
                     args.get("timeout").and_then(Value::as_u64).unwrap_or(30_000)).await
             }
-            "task_stop" => {
+            "task_stop" | "KillShell" => {
                 self.require_approval("task_stop",&args)?;
                 let manager = self.background.as_ref().context("Background tasks unavailable")?;
-                manager.stop(required(&args,"task_id")?).await
+                let id = args.get("task_id").and_then(Value::as_str)
+                    .or_else(||args.get("shell_id").and_then(Value::as_str))
+                    .context("Missing required parameter: task_id")?;
+                manager.stop(id).await
             }
             other => bail!("Unknown tool: {other}"),
         }

@@ -27,7 +27,7 @@
 - SDK JSON Lines 标准输入输出（`sdk` 命令）：结构化用户消息、模型消息、工具结果、请求结果及控制响应；不使用第三方私有传输。
 - 本地插件加载器：仅在 `enabled_plugins` 明确启用后加载本地 `plugin.json`，合并本地 MCP、Hooks 和 `plugin:skill` 技能，不连接专有插件市场。
 - 多搜索服务 WebSearch：支持用户指定 SearXNG 自建实例或 Brave 搜索接口，不依赖任何固定 AI 服务登录。
-- 后台 Shell 执行：支持 `run_command.run_in_background`、`task_output` 状态和阻塞读取、`task_stop` 停止，以及 `background_list`/`/tasks` 列表；日志保存在 `.atlas/background`，进程仅在当前 Agent 存活期间运行。
+- 后台 Shell 执行：支持 `run_command.run_in_background`、`task_output` 状态和阻塞读取、`task_stop` 停止（兼容历史别名 `KillShell` 和 `shell_id`），以及 `background_list`/`/tasks` 列表；日志保存在 `.atlas/background`，进程仅在当前 Agent 存活期间运行。
 - 后台任务输出格式：支持 TASK_MAX_OUTPUT_LENGTH 默认 32,000、上限 160,000 UTF-16 单位，尾部截断时附带本地日志位置；极端 Unicode 代理项及输出盘容量仍待原版对照。
 - 项目长期记忆：自动载入工作区 `.atlas/memory/MEMORY.md`（200 行/25 KB 上限），扫描最多 200 个 Markdown 主题文件，由当前所选模型筛选最多 5 个相关记忆，严格限制文件路径；不使用原厂记忆服务器或遥测。
 - OpenAI 兼容 SSE 流式生成：文本增量、分片函数调用重组、结束标识及 Token 用量；可在提供商配置添加 `stream:true` 开启，SDK 输出 `assistant_delta` 事件（Gemini 暂时回退非流式）。

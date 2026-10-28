@@ -245,16 +245,33 @@ impl BackgroundTasks {
     }
 
     pub async fn stop(&self, id: &str) -> Result<String> {
-        let task = self.entries.lock().unwrap().get(id).cloned()
-            .with_context(|| format!("No running task with ID {id}"))?;
-        if task.record.lock().unwrap().status != "running" {
-            bail!("Task {id} is not running");
+        let task = match self.entries.lock().unwrap().get(id).cloned() {
+            Some(task) => task,
+            None => {
+                match self.load(id) {
+                    Ok(record) => bail!("Task {id} is not running (status: {})", record.status),
+                    Err(_) => bail!("No task found with ID: {id}"),
+                }
+            }
+        };
+        let record = task.record.lock().unwrap().clone();
+        if record.status != "running" {
+            bail!("Task {id} is not running (status: {})", record.status);
         }
         let sender = task.stop.lock().unwrap().take()
             .context("Task stop already requested")?;
         sender.send(()).map_err(|_| anyhow::anyhow!("Task already completed"))?;
+        timeout(Duration::from_secs(5), async {
+            loop {
+                let notified = task.completed.notified();
+                if task.record.lock().unwrap().status != "running" { break }
+                notified.await;
+            }
+        }).await.context("Timed out waiting for background shell to stop")?;
         Ok(json!({"task_id":id,"task_type":"local_bash",
-            "message":"Stop requested"}).to_string())
+            "command":record.command,
+            "message":format!("Successfully stopped task: {id} ({})", record.command)
+        }).to_string())
     }
 
     pub async fn stop_all(&self) {
@@ -321,8 +338,9 @@ pub fn definitions() -> Vec<Value> {
         json!({"type":"function","function":{"name":"task_stop",
             "description":"Stop a running background shell task by ID. Requires approval.",
             "parameters":{"type":"object","properties":{
-                "task_id":{"type":"string"}
-            },"required":["task_id"]}}}),
+                "task_id":{"type":"string"},
+                "shell_id":{"type":"string","description":"Legacy alias for task_id"}
+            }}}}),
     ]
 }
 
@@ -360,7 +378,7 @@ mod tests {
         let pending: Value = serde_json::from_str(
             &tasks.output(id, false, 0).await.unwrap()).unwrap();
         assert_eq!(pending["retrieval_status"], "not_ready");
-        assert!(tasks.stop(id).await.unwrap().contains("Stop requested"));
+        assert!(tasks.stop(id).await.unwrap().contains("Successfully stopped task"));
         let result: Value = serde_json::from_str(
             &tasks.output(id, true, 5000).await.unwrap()).unwrap();
         assert_eq!(result["task"]["status"], "killed");
