@@ -150,14 +150,7 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                 if replay_user_messages {
                     for item in &batch {
                         if let Some(uuid)=item.command.uuid.as_deref() {
-                            println!("{}",crate::ndjson::stringify_value(&json!({
-                                "type":"user",
-                                "message":{"role":"user","content":item.command.value},
-                                "session_id":agent.session_id(),
-                                "parent_tool_use_id":null,
-                                "uuid":uuid,
-                                "isReplay":true
-                            })));
+                            emit_user_replay(&item.command.value,uuid,&agent.session_id());
                         }
                     }
                 }
@@ -188,6 +181,20 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
         _=>bail!("Unsupported queue control: {action}"),
     }
 }
+/// Replays carry the unmodified SDK content, not the flattened text
+/// passed to the current model adapter. This preserves each caller UUID
+/// across batching and allows the SDK consumer to acknowledge delivery.
+pub(crate) fn emit_user_replay(content:&Value,uuid:&str,session_id:&str){
+    println!("{}",crate::ndjson::stringify_value(&json!({
+        "type":"user",
+        "message":{"role":"user","content":content},
+        "session_id":session_id,
+        "parent_tool_use_id":null,
+        "uuid":uuid,
+        "isReplay":true
+    })));
+}
+
 /// Reject non-text content before dequeue; the current Agent interface
 /// cannot preserve documents, images or tool-result blocks end to end.
 pub(crate) fn text_only_value(value:&Value)->Result<String>{
