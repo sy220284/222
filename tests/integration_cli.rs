@@ -708,3 +708,83 @@ fn actual_model_tool_approval_obeys_explicit_allow_and_deny() {
         }
     }
 }
+
+#[test]
+fn gemini_sse_sdk_model_tool_roundtrip_preserves_streaming_and_context() {
+    use std::process::Stdio;
+    let workspace=tempfile::tempdir().unwrap();
+    fs::write(workspace.path().join("verify.txt"),"verified gemini streaming tool\n").unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move || {
+        let mut seen=Vec::new();
+        for index in 0..2 {
+            let (mut conn,_)=listener.accept().unwrap();
+            let raw=read_request(&mut conn);
+            assert!(raw.lines().next().unwrap_or("").contains(":streamGenerateContent?alt=sse"),
+                "Expected streaming Gemini endpoint");
+            assert!(raw.to_ascii_lowercase().contains("x-goog-api-key: test-gemini-key"));
+            let body:Value=serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            seen.push(body);
+            let events=if index==0{
+                vec![json!({"candidates":[{"content":{"parts":[
+                    {"text":"Checking "},
+                    {"functionCall":{"name":"read_file","args":{"path":"verify.txt"}}}
+                ]},"finishReason":"STOP"}],"usageMetadata":{
+                    "promptTokenCount":6,"candidatesTokenCount":3,"totalTokenCount":9
+                }})]
+            }else{
+                vec![
+                    json!({"candidates":[{"content":{"parts":[{"text":"Verified "}]}}]}),
+                    json!({"candidates":[{"content":{"parts":[{"text":"stream complete"}]},"finishReason":"STOP"}],
+                        "usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":4,"totalTokenCount":14}})
+                ]
+            };
+            let sse=events.iter().map(|x|format!("data: {}\r\n\r\n",x))
+                .collect::<String>();
+            write!(conn,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                sse.len(),sse).unwrap();
+            conn.flush().unwrap();
+        }
+        seen
+    });
+    let config=workspace.path().join("config.json");
+    fs::write(&config,json!({
+        "default_provider":"mock-gemini",
+        "providers":[{"id":"mock-gemini","kind":"gemini",
+            "base_url":format!("http://{addr}/v1beta"),"model":"gemini-test",
+            "api_key_env":"ATLAS_TEST_GEMINI_KEY","stream":true}]
+    }).to_string()).unwrap();
+    let mut process=binary().args([
+        "--workspace",workspace.path().to_str().unwrap(),
+        "--approval","read-only","sdk"
+    ]).env("ATLAS_CONFIG",&config)
+      .env("ATLAS_TEST_GEMINI_KEY","test-gemini-key")
+      .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+      .spawn().unwrap();
+    {
+        let mut stdin=process.stdin.take().unwrap();
+        writeln!(stdin,"{}",json!({"type":"user","content":"Read verify.txt and summarize"})).unwrap();
+    }
+    let output=process.wait_with_output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert_eq!(requests.len(),2);
+    assert!(requests[0]["tools"][0]["functionDeclarations"].as_array().unwrap()
+        .iter().any(|x|x["name"]=="read_file"));
+    let second=requests[1]["contents"].as_array().unwrap();
+    assert!(second.iter().any(|entry|entry["parts"].as_array().is_some_and(|parts|
+        parts.iter().any(|p|p.get("functionResponse").is_some()))),
+        "Tool result was not restored to the next Gemini request: {second:?}");
+    let lines=String::from_utf8(output.stdout).unwrap();
+    let events=lines.lines().map(|s|serde_json::from_str::<Value>(s).unwrap())
+        .collect::<Vec<_>>();
+    let deltas=events.iter().filter(|v|v["type"]=="assistant_delta")
+        .filter_map(|v|v["delta"].as_str()).collect::<Vec<_>>();
+    assert!(deltas.contains(&"Checking "));
+    assert!(deltas.contains(&"Verified "));
+    assert!(deltas.contains(&"stream complete"));
+    assert_eq!(events.iter().find(|e|e["type"]=="result").unwrap()["content"],
+        "Verified stream complete");
+}
