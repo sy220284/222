@@ -273,6 +273,15 @@ impl Agent {
                 })?;
             }
         }
+        // Persist active members before running their independent agents.
+        if let Some(team)=self.team_name.as_deref(){
+            let registry=Teams::new(&self.root)?;
+            for (_,name,_,_,_) in &prepared {
+                registry.member(team,crate::team_registry::Member{
+                    name:name.clone(),id:format!("{name}@{team}"),active:true
+                })?;
+            }
+        }
         let mut running=Vec::new();
         for (index,name,prompt,profile,worktree) in prepared{
             let root=worktree.as_ref().map(|w|w.path.clone())
@@ -357,6 +366,17 @@ impl Agent {
             results.push((index,member));
         }
         results.sort_by_key(|(index,_)|*index);
+        if let Some(team)=self.team_name.as_deref(){
+            let registry=Teams::new(&self.root)?;
+            for (_,value) in &results {
+                let Some(name)=value.get("name").and_then(serde_json::Value::as_str) else {continue};
+                registry.active(team,name,false)?;
+                // Release unfinished assignments when the teammate completes
+                // or fails. Do not release already completed tasks.
+                self.graph.unassign_teammate(
+                    &format!("{name}@{team}"),name,"shutdown")?;
+            }
+        }
         Ok(json!({"team_results":results.into_iter().map(|(_,v)|v).collect::<Vec<_>>()}).to_string())
     }
 
