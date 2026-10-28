@@ -286,6 +286,28 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
             },
             "control"=>{
                 let action=event.get("action").and_then(Value::as_str).unwrap_or("");
+                if action=="mailbox_send" {
+                    let parsed=event.get("message").cloned()
+                        .ok_or_else(||anyhow::anyhow!("mailbox_send requires message"))
+                        .and_then(|v|serde_json::from_value::<in_memory_mailbox::Message>(v)
+                            .map_err(anyhow::Error::from));
+                    match parsed {
+                        Ok(message)=>{
+                            let revision=agent.send_transient(message);
+                            print_json!(json!({"type":"control_response","action":action,
+                                "ok":true,"revision":revision}));
+                        }
+                        Err(error)=>print_json!(json!({"type":"control_response",
+                            "action":action,"ok":false,"error":format!("{error:#}")})),
+                    }
+                    continue;
+                }
+                if action=="mailbox_poll" {
+                    let message=agent.poll_transient();
+                    print_json!(json!({"type":"control_response","action":action,
+                        "ok":true,"message":message,"revision":agent.transient_revision()}));
+                    continue;
+                }
                 if action=="tasks" {
                     match agent.background_tasks() {
                         Ok(tasks)=>print_json!(json!({
