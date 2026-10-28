@@ -120,7 +120,7 @@ impl Agent {
             }else{None};
             prepared.push((index,name.to_owned(),prompt.to_owned(),profile,worktree));
         }
-        let mut running=tokio::task::JoinSet::new();
+        let mut running=Vec::new();
         for (index,name,prompt,profile,worktree) in prepared{
             let root=worktree.as_ref().map(|w|w.path.clone())
                 .unwrap_or_else(||self.root.clone());
@@ -132,7 +132,7 @@ impl Agent {
             let hooks=self.hook_rules.clone();
             let plugins=self.enabled_plugins.clone();
             let search=self.search_backend.clone();
-            running.spawn(async move {
+            running.push(async move {
                 let result=async{
                     let mut child=Self::new(profile,root,approval,interactive,steps,Session::fresh())?;
                     child.child_depth=1;
@@ -167,8 +167,8 @@ impl Agent {
             });
         }
         let mut results=Vec::new();
-        while let Some(joined)=running.join_next().await{
-            let (index,member)=joined??;
+        for completed in futures::future::join_all(running).await {
+            let (index,member)=completed?;
             results.push((index,member));
         }
         results.sort_by_key(|(index,_)|*index);
