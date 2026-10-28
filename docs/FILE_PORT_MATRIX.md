@@ -13,7 +13,7 @@
 | `src/Tool.ts` | 793 | 29516 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands.ts` | 755 | 25185 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context.ts` | 190 | 6446 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cost-tracker.ts` | 324 | 10706 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` | 部分实现：已支持 Token 用量，价格成本未迁移 |
 | `src/costHook.ts` | 23 | 617 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/dialogLaunchers.tsx` | 133 | 22948 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/history.ts` | 465 | 14081 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1143,7 +1143,7 @@
 | `src/tasks/pillLabel.ts` | 83 | 2898 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/stopTask.ts` | 101 | 2894 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/types.ts` | 47 | 1691 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
-| `src/tools/AgentTool/AgentTool.tsx` | 1398 | 233734 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/AgentTool/AgentTool.tsx` | 1398 | 233734 | 重写：工具行为、参数和权限 | `src/agent.rs` / `src/worktree.rs` | 部分实现：独立子任务和隔离，团队及远程不等价 |
 | `src/tools/AgentTool/UI.tsx` | 872 | 125359 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/agentColorManager.ts` | 67 | 1499 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/agentDisplay.ts` | 105 | 3269 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1158,11 +1158,11 @@
 | `src/tools/AgentTool/built-in/verificationAgent.ts` | 153 | 11410 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/builtInAgents.ts` | 73 | 2756 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/constants.ts` | 13 | 547 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/forkSubagent.ts` | 211 | 8678 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/AgentTool/forkSubagent.ts` | 211 | 8678 | 重写：工具行为、参数和权限 | `src/agent.rs` / `src/worktree.rs` | 部分实现：独立子任务和隔离，团队及远程不等价 |
 | `src/tools/AgentTool/loadAgentsDir.ts` | 756 | 26220 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/prompt.ts` | 288 | 16671 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/resumeAgent.ts` | 266 | 9339 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/runAgent.ts` | 974 | 35768 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/AgentTool/runAgent.ts` | 974 | 35768 | 重写：工具行为、参数和权限 | `src/agent.rs` / `src/worktree.rs` | 部分实现：独立子任务和隔离，团队及远程不等价 |
 | `src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx` | 266 | 39887 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AskUserQuestionTool/prompt.ts` | 45 | 2903 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/BashTool.tsx` | 1144 | 160530 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1518,8 +1518,8 @@
 | `src/utils/generatedFiles.ts` | 137 | 3481 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/generators.ts` | 89 | 2156 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/genericProcessUtils.ts` | 185 | 6403 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/getWorktreePaths.ts` | 71 | 2048 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/getWorktreePathsPortable.ts` | 28 | 847 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/getWorktreePaths.ts` | 71 | 2048 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
+| `src/utils/getWorktreePathsPortable.ts` | 28 | 847 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
 | `src/utils/ghPrStatus.ts` | 107 | 2823 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/git/gitConfigParser.ts` | 278 | 6645 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/git/gitFilesystem.ts` | 700 | 22340 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1898,8 +1898,8 @@
 | `src/utils/withResolvers.ts` | 14 | 444 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/words.ts` | 801 | 10960 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/workloadContext.ts` | 58 | 2337 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/worktree.ts` | 1520 | 49995 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/worktreeModeEnabled.ts` | 12 | 415 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/worktree.ts` | 1520 | 49995 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
+| `src/utils/worktreeModeEnabled.ts` | 12 | 415 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
 | `src/utils/xdg.ts` | 66 | 1876 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/xml.ts` | 17 | 622 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/yaml.ts` | 16 | 525 | 重写：保持通用行为 | 待定 | 未迁移 |
