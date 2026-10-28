@@ -120,7 +120,7 @@ impl BackgroundTasks {
         Self::save(&self.directory, &record)?;
         let (stop, stopped) = oneshot::channel();
         let running = Arc::new(Running {
-            record: Mutex::new(record),
+            record: Mutex::new(record.clone()),
             stop: Mutex::new(Some(stop)),
             completed: Notify::new(),
         });
