@@ -1,0 +1,19 @@
+name: Rust 检查与测试
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feat/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 配置 Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: 编译
+        run: cargo check --all-targets
+      - name: 单元测试
+        run: cargo test --all-targets
