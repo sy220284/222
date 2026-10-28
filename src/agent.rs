@@ -86,6 +86,95 @@ impl Agent {
         Ok(())
     }
 
+    async fn run_team(&self, call:&ToolCall, executor:&ToolExecutor)->Result<String>{
+        if self.child_depth!=0 {bail!("Nested teams are not allowed")}
+        let args:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
+        let plans=args.get("tasks").and_then(|v|v.as_array())
+            .context("spawn_team requires tasks array")?;
+        if plans.is_empty() || plans.len()>4{
+            bail!("Team supports 1 to 4 member tasks")
+        }
+        let isolation=args.get("isolation").and_then(|v|v.as_str()).unwrap_or("none");
+        if !matches!(isolation,"none"|"worktree"){bail!("Invalid team isolation")}
+        if isolation=="worktree"{executor.approve_external(call)?}
+        let mut names=std::collections::HashSet::new();
+        let mut prepared=Vec::new();
+        for (index,task) in plans.iter().enumerate(){
+            let name=task.get("name").and_then(|v|v.as_str())
+                .context("Team member name missing")?;
+            let prompt=task.get("prompt").and_then(|v|v.as_str())
+                .context("Team member prompt missing")?;
+            if name.trim().is_empty() || name.len()>80 || !names.insert(name.to_string()){
+                bail!("Team member names must be nonempty and unique")
+            }
+            if prompt.trim().is_empty() || prompt.len()>100_000{
+                bail!("Team prompt must be nonempty and under 100 KB")
+            }
+            let mut profile=self.profile.clone();
+            if let Some(model)=task.get("model").and_then(|v|v.as_str()){
+                if model.trim().is_empty(){bail!("Team member model cannot be empty")}
+                profile.model=model.into();
+            }
+            let worktree=if isolation=="worktree"{
+                Some(Worktree::create(&self.root).await?)
+            }else{None};
+            prepared.push((index,name.to_owned(),prompt.to_owned(),profile,worktree));
+        }
+        let mut running=tokio::task::JoinSet::new();
+        for (index,name,prompt,profile,worktree) in prepared{
+            let root=worktree.as_ref().map(|w|w.path.clone())
+                .unwrap_or_else(||self.root.clone());
+            let approval=self.approval;
+            let interactive=self.interactive;
+            let steps=self.max_steps;
+            let mcps=self.mcp_configs.clone();
+            let lsps=self.lsp_configs.clone();
+            let hooks=self.hook_rules.clone();
+            let plugins=self.enabled_plugins.clone();
+            let search=self.search_backend.clone();
+            running.spawn(async move {
+                let result=async{
+                    let mut child=Self::new(profile,root,approval,interactive,steps,Session::fresh())?;
+                    child.child_depth=1;
+                    child.enabled_plugins=plugins;
+                    child.search_backend=search;
+                    let session_id=child.session_id();
+                    child.attach_mcp(&mcps).await?;
+                    child.attach_lsp(&lsps).await?;
+                    child.attach_hooks(&hooks).await?;
+                    let output=Box::pin(child.ask(&prompt)).await;
+                    let finalized=child.finish().await;
+                    let answer=output?;
+                    finalized?;
+                    Ok::<_,anyhow::Error>((session_id,answer))
+                }.await;
+                let worktree_status=if let Some(tree)=worktree{
+                    Some(tree.finish().await)
+                }else{None};
+                let value=match result{
+                    Ok((session_id,answer))=>{
+                        let state=worktree_status.transpose()?;
+                        json!({"name":name,"success":true,"session_id":session_id,
+                            "answer":answer,"worktree":state})
+                    }
+                    Err(error)=>{
+                        let state=worktree_status.transpose()?;
+                        json!({"name":name,"success":false,"error":format!("{error:#}"),
+                            "worktree":state})
+                    }
+                };
+                Ok::<_,anyhow::Error>((index,value))
+            });
+        }
+        let mut results=Vec::new();
+        while let Some(joined)=running.join_next().await{
+            let (index,member)=joined??;
+            results.push((index,member));
+        }
+        results.sort_by_key(|(index,_)|*index);
+        Ok(json!({"team_results":results.into_iter().map(|(_,v)|v).collect::<Vec<_>>()}).to_string())
+    }
+
     async fn run_subagent(&self, call: &ToolCall, executor: &ToolExecutor) -> Result<String> {
         if self.child_depth >= 1 { bail!("Subagent depth limit reached") }
         let args: serde_json::Value = serde_json::from_str(&call.function.arguments)?;
@@ -250,6 +339,18 @@ impl Agent {
             if self.search_backend.is_some(){available_tools.push(crate::websearch::definition());}
             if self.child_depth == 0 {
                 available_tools.push(json!({"type":"function","function":{
+                    "name":"spawn_team",
+                    "description":"Run 1-4 independent agent tasks concurrently. Each member has its own context and may optionally use an isolated Git worktree. No automatic merge.",
+                    "parameters":{"type":"object","properties":{
+                        "tasks":{"type":"array","minItems":1,"maxItems":4,
+                            "items":{"type":"object","properties":{
+                                "name":{"type":"string"},"prompt":{"type":"string"},
+                                "model":{"type":"string"}
+                            },"required":["name","prompt"]}},
+                        "isolation":{"type":"string","enum":["none","worktree"]}
+                    },"required":["tasks"]}
+                }}));
+                available_tools.push(json!({"type":"function","function":{
                     "name":"spawn_agent",
                     "description":"Delegate a coding subtask to an independent agent session, optionally in an isolated Git worktree. This is a real separate agent run; no implicit merge.",
                     "parameters":{"type":"object","properties":{
@@ -308,6 +409,11 @@ impl Agent {
                 }
                 let result = if let Some(reason) = pre.blocking_reason {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
+                } else if call.function.name == "spawn_team" {
+                    match self.run_team(&call,&executor).await {
+                        Ok(output)=>output,
+                        Err(error)=>format!("ERROR: {error:#}"),
+                    }
                 } else if call.function.name == "spawn_agent" {
                     match self.run_subagent(&call, &executor).await {
                         Ok(output) => output,
