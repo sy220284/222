@@ -213,10 +213,11 @@ impl BackgroundTasks {
         let mut records = Vec::new();
         for entry in fs::read_dir(&self.directory)? {
             let entry = entry?;
-            if entry.path().extension().and_then(|e| e.to_str()) != Some("json") {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
                 continue;
             }
-            let Some(id) = entry.path().file_stem().and_then(|s| s.to_str()) else {
+            let Some(id) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
             if Uuid::parse_str(id).is_err() { continue }
