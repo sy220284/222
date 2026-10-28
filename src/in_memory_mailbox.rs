@@ -64,7 +64,14 @@ impl Mailbox{
         }
         let(tx,rx)=oneshot::channel();
         state.waiters.push_back(Waiter{accept,resolve:tx});
-        Box::pin(async move{rx.await.expect("Mailbox disposed with pending waiter")})
+        Box::pin(async move{
+            match rx.await{
+                Ok(message)=>message,
+                // JS promises stay pending when their mailbox is discarded;
+                // dropping the owner must not turn a pending receive into panic.
+                Err(_)=>std::future::pending::<Message>().await,
+            }
+        })
     }
     pub fn receive_any(&self)->Pin<Box<dyn Future<Output=Message>+Send>>{
         self.receive(Arc::new(|_|true))
@@ -118,6 +125,16 @@ mod tests{
         assert_eq!(inbox.receive_any().await.id,"x");
         assert_eq!(*events.lock().unwrap(),1);
         assert_eq!(inbox.revision(),revision);
+    }
+    #[tokio::test]
+    async fn mailbox_disposal_keeps_unresolved_receiver_pending(){
+        let pending={
+            let mailbox=Mailbox::new();
+            mailbox.receive_any()
+        };
+        let outcome=tokio::time::timeout(
+            std::time::Duration::from_millis(20),pending).await;
+        assert!(outcome.is_err());
     }
     #[tokio::test]
     async fn canceled_waiter_does_not_lose_future_message(){
