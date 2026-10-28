@@ -25,6 +25,7 @@ impl Worktree {
     /// Create an independent checkout from HEAD. It never modifies the source
     /// working tree or implicitly merges changes back into it.
     pub async fn create(workspace: &Path) -> Result<Self> {
+        debug_assert!(crate::compat_helpers::is_worktree_mode_enabled());
         let original = git(workspace, &["rev-parse", "--show-toplevel"]).await?;
         let repo = PathBuf::from(original).canonicalize()?;
         let id = Uuid::new_v4().simple().to_string();

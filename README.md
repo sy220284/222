@@ -26,6 +26,8 @@
 - 本地文件修改检查点：写入/替换/笔记本编辑前保存旧内容、查看修改历史、校验文件未被后续修改后回退。历史默认保存在工作区 `.atlas/history/`，不会自动同步。
 - SDK JSON Lines 标准输入输出（`sdk` 命令）：结构化用户消息、模型消息、工具结果、请求结果及控制响应；不使用第三方私有传输。
 - 本地插件加载器：仅在 `enabled_plugins` 明确启用后加载本地 `plugin.json`，合并本地 MCP、Hooks 和 `plugin:skill` 技能，不连接专有插件市场。
+- MCP 进程配置环境变量展开：支持 VAR 和默认值占位语法，保留缺失变量报告；支持自定义 MCP 环境字典。
+- Bash 工具第一行注释标签和默认启用的工作树模式。
 - 多搜索服务 WebSearch：支持用户指定 SearXNG 自建实例或 Brave 搜索接口，不依赖任何固定 AI 服务登录。
 - 后台 Shell 执行：支持 `run_command.run_in_background`、`task_output` 状态和阻塞读取、`task_stop` 停止（兼容历史别名 `KillShell` 和 `shell_id`），以及 `background_list`/`/tasks` 列表；日志保存在 `.atlas/background`，进程仅在当前 Agent 存活期间运行。
 - 后台任务输出格式：支持 TASK_MAX_OUTPUT_LENGTH 默认 32,000、上限 160,000 UTF-16 单位，尾部截断时附带本地日志位置；极端 Unicode 代理项及输出盘容量仍待原版对照。

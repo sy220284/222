@@ -22,6 +22,7 @@ mod memory_age;
 mod task_guards;
 mod env_validation;
 mod task_output_format;
+mod compat_helpers;
 
 use agent::Agent;
 use anyhow::{bail, Result};

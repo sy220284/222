@@ -1,4 +1,4 @@
-use crate::{config::McpServerConfig, protocol::ToolCall};
+use crate::{config::McpServerConfig, protocol::ToolCall, compat_helpers};
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::{collections::HashMap, process::Stdio, time::Duration};
@@ -20,8 +20,20 @@ struct Client {
 
 impl Client {
     async fn connect(server: &McpServerConfig) -> Result<Self> {
-        let mut process = Command::new(&server.command);
-        process.args(&server.args).stdin(Stdio::piped())
+        let expand = |raw: &str| -> Result<String> {
+            let data=compat_helpers::expand_env_vars_in_string(raw);
+            if !data.missing_vars.is_empty() {
+                bail!("MCP {} missing environment variables: {}",
+                    server.id,data.missing_vars.join(", "));
+            }
+            Ok(data.expanded)
+        };
+        let executable=expand(&server.command)?;
+        let args=server.args.iter().map(|v|expand(v)).collect::<Result<Vec<_>>>()?;
+        let mut env=std::collections::HashMap::new();
+        for (k,v) in &server.env {env.insert(k.clone(),expand(v)?);}
+        let mut process = Command::new(&executable);
+        process.args(&args).envs(env).stdin(Stdio::piped())
             .stdout(Stdio::piped()).stderr(Stdio::inherit()).kill_on_drop(true);
         let mut child = process.spawn()
             .with_context(|| format!("Starting MCP server {}", server.id))?;
@@ -163,6 +175,7 @@ done"#;
         let servers = vec![McpServerConfig {
             id: "mock".to_owned(), command: "sh".to_owned(),
             args: vec!["-c".to_owned(), script.to_owned()],
+            env: std::collections::HashMap::new(),
         }];
         let mut manager = McpManager::connect(&servers).await.unwrap();
         assert_eq!(manager.definitions().len(), 1);

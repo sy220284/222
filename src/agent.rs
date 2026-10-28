@@ -451,7 +451,14 @@ impl Agent {
                 eprintln!("{text}");
             }
             for mut call in calls {
-                eprintln!("Executing tool: {}", call.function.name);
+                let label=if matches!(call.function.name.as_str(),"run_command"|"Bash"){
+                    serde_json::from_str::<serde_json::Value>(&call.function.arguments)
+                        .ok().and_then(|args|args.get("command")
+                            .and_then(serde_json::Value::as_str)
+                            .and_then(crate::compat_helpers::extract_bash_comment_label))
+                }else{None};
+                eprintln!("Executing tool: {}",
+                    label.as_deref().unwrap_or(&call.function.name));
                 let pre = self.hooks.before_tool(&call).await?;
                 if let Some(updated) = pre.updated_input {
                     call.function.arguments = serde_json::to_string(&updated)?;
