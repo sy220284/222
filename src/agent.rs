@@ -424,9 +424,16 @@ impl Agent {
                     child.attach_hooks(&hooks).await?;
                     let output=Box::pin(child.ask(&prompt)).await;
                     let finalized=child.finish().await;
-                    let answer=output?;
-                    finalized?;
-                    Ok::<_,anyhow::Error>((session_id,answer,child.session.usage,child.session.cost.clone()))
+                    // An unsuccessful model run can still have billed API usage
+                    // and tool edits: collect accounting before propagating its error.
+                    let usage=child.session.usage;
+                    let cost=child.session.cost.clone();
+                    let outcome=match (output,finalized) {
+                        (Err(error),_)=>Err(error),
+                        (Ok(_),Err(error))=>Err(error),
+                        (Ok(answer),Ok(()))=>Ok((session_id,answer)),
+                    };
+                    Ok::<_,anyhow::Error>((outcome,usage,cost))
                 }.await;
                 // The member remains active until worktree finalization,
                 // task release and leader notification have been attempted.
@@ -435,14 +442,21 @@ impl Agent {
                 }else{None};
                 let cleanup=if let Some(team)=current_team.as_deref(){
                     let team_root=current_team_root.as_deref().unwrap_or(&root);
-                    finish_team_member(team_root,team,&name,result.is_ok(),&cleanup_graph)
+                    let succeeded=result.as_ref()
+                        .is_ok_and(|(outcome,_,_)|outcome.is_ok());
+                    finish_team_member(team_root,team,&name,succeeded,&cleanup_graph)
                         .err().map(|e|format!("{e:#}"))
                 }else{None};
                 let (mut value,usage,cost)=match result{
-                    Ok((session_id,answer,usage,cost))=>{
+                    Ok((Ok((session_id,answer)),usage,cost))=>{
                         let state=worktree_status.transpose()?;
                         (json!({"name":name,"success":true,"session_id":session_id,
                             "answer":answer,"worktree":state}),usage,cost)
+                    }
+                    Ok((Err(error),usage,cost))=>{
+                        let state=worktree_status.transpose()?;
+                        (json!({"name":name,"success":false,"error":format!("{error:#}"),
+                            "worktree":state}),usage,cost)
                     }
                     Err(error)=>{
                         let state=worktree_status.transpose()?;

@@ -1116,3 +1116,78 @@ fn real_model_tool_edits_update_persisted_line_and_cost_metrics(){
     let usd=session["cost"]["models"][0]["known_cost_usd"].as_f64().unwrap();
     assert!((usd-0.00012).abs()<1e-12,"{usd}");
 }
+
+
+#[test]
+fn failed_team_member_usage_is_still_charged_to_parent_session(){
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for step in 0..3 {
+            let (mut conn,_)=listener.accept().unwrap();
+            let raw=read_request(&mut conn);
+            let request:Value=serde_json::from_str(
+                raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            requests.push(request);
+            let payload=match step {
+                0=>json!({"choices":[{"message":{"role":"assistant",
+                    "content":null,"tool_calls":[{
+                        "id":"spawn-failed","type":"function",
+                        "function":{"name":"spawn_team",
+                            "arguments":json!({"tasks":[{
+                                "name":"failed","prompt":"Failed worker prompt"
+                            }]}).to_string()}
+                    }]},"finish_reason":"tool_calls"}],
+                    "usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}),
+                1=>json!({"choices":[{"message":{"role":"assistant",
+                        "content":"Partial work","tool_calls":null},
+                    "finish_reason":"length"}],
+                    "usage":{"prompt_tokens":50,"completion_tokens":5,"total_tokens":55}}),
+                _=>json!({"choices":[{"message":{"role":"assistant",
+                        "content":"Team failure acknowledged"},
+                    "finish_reason":"stop"}],
+                    "usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}),
+            };
+            let body=payload.to_string();
+            write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            conn.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }],"model_prices":[{"provider":"mock","model":"model",
+        "input_per_million":1.0,"output_per_million":2.0}]}).to_string()).unwrap();
+    let output=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","read-only","run","Start failing team"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let tool_result=requests[2]["messages"].as_array().unwrap().iter()
+        .rev().find(|m|m["role"]=="tool").unwrap()["content"]
+        .as_str().unwrap().to_owned();
+    assert!(tool_result.contains("\"success\":false"),"{tool_result}");
+    assert!(tool_result.contains("output limit"),"{tool_result}");
+    let sessions=fs::read_dir(root.path().join(".atlas/sessions")).unwrap()
+        .map(|entry|serde_json::from_slice::<Value>(
+            &fs::read(entry.unwrap().path()).unwrap()).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(sessions.len(),2);
+    let parent=sessions.iter().find(|session|
+        session["messages"][0]["content"].as_str()
+            .unwrap_or("").contains("Start failing team")).unwrap();
+    let child=sessions.iter().find(|session|
+        session["messages"][0]["content"].as_str()
+            .unwrap_or("").contains("Failed worker prompt")).unwrap();
+    assert_eq!(child["usage"]["input_tokens"],50);
+    assert_eq!(parent["usage"]["input_tokens"],70);
+    assert_eq!(parent["usage"]["output_tokens"],9);
+    assert_eq!(parent["cost"]["models"][0]["usage"]["input_tokens"],70);
+    let usd=parent["cost"]["models"][0]["known_cost_usd"].as_f64().unwrap();
+    assert!((usd-0.000088).abs()<1e-12,"{usd}");
+}

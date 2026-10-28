@@ -73,6 +73,16 @@ impl ModelPrice {
     }
 }
 
+/// Source-compatible monetary display: small amounts use four decimals,
+/// larger amounts round to cents. Rates are finite and nonnegative.
+pub fn format_cost(cost:f64,max_decimal_places:usize)->String{
+    if cost>0.5{
+        format!("{}{:.2}","$",(cost*100.0).round()/100.0)
+    }else{
+        format!("{}{:.*}","$",max_decimal_places,cost)
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ModelCost {
     pub provider: String,
@@ -159,7 +169,8 @@ impl CostLedger {
         self.models.iter().any(|m| m.has_unpriced_usage)
     }
     pub fn format_summary(&self) -> String {
-        let mut summary = format!("Total cost (priced usage): {}{:.4}", "$", self.total_known_cost_usd());
+        let mut summary=format!("Total cost (priced usage): {}",
+            format_cost(self.total_known_cost_usd(),4));
         if self.has_unknown_prices() {
             summary.push_str(" (incomplete: unknown model prices)");
         }
@@ -172,10 +183,10 @@ impl CostLedger {
         }
         for model in &self.models {
             let _ = write!(summary,
-                "\n{}/{}: {} input, {} output, {} cache read, {} cache write, {} web search ({}{:.4}{})",
+                "\n{}/{}: {} input, {} output, {} cache read, {} cache write, {} web search ({})",
                 model.provider, model.model, model.usage.input_tokens, model.usage.output_tokens,
                 model.usage.cache_read_input_tokens, model.usage.cache_creation_input_tokens,
-                model.usage.web_search_requests, "$", model.known_cost_usd,
+                model.usage.web_search_requests, format_cost(model.known_cost_usd,4),
                 if model.has_unpriced_usage {", price missing"} else {""});
         }
         summary
@@ -191,6 +202,21 @@ mod tests {
             cache_write_per_million: 3.75, web_search_per_request: 0.01,
             cache_read_included_in_input:true,cache_write_included_in_input:false
         }
+    }
+    #[test]
+    fn total_cost_uses_original_small_and_large_amount_rounding(){
+        assert_eq!(format_cost(0.0,4),"$0.0000");
+        assert_eq!(format_cost(0.000019,4),"$0.0000");
+        assert_eq!(format_cost(0.49996,4),"$0.5000");
+        assert_eq!(format_cost(0.5,4),"$0.5000");
+        assert_eq!(format_cost(0.501,4),"$0.50");
+        assert_eq!(format_cost(1.235,4),"$1.24");
+        assert_eq!(format_cost(0.012345,3),"$0.012");
+        let mut ledger=CostLedger::default();
+        ledger.record("a","m",TokenUsage{
+            input_tokens:1_000_000,output_tokens:0,total_tokens:1_000_000,
+            ..Default::default()},&[price()]);
+        assert!(ledger.format_summary().contains("$3.00"),"{}",ledger.format_summary());
     }
     #[test]
     fn cached_tokens_are_not_double_charged() {
