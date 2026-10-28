@@ -120,6 +120,23 @@ impl Mailbox {
             Ok(changed)
         })
     }
+    /// Acknowledge matching unread messages atomically without swallowing
+    /// protocol messages intended for a separate dispatcher.
+    pub fn take_matching<F>(&self,recipient:&str,predicate:F)->Result<Vec<Message>>
+    where F:Fn(&Message)->bool {
+        self.locked(recipient,|path|{
+            let mut items=Self::read_path(path)?;
+            let mut taken=Vec::new();
+            for item in &mut items {
+                if !item.read && predicate(item) {
+                    taken.push(item.clone());
+                    item.read=true;
+                }
+            }
+            if !taken.is_empty() { Self::save(path,&items)?; }
+            Ok(taken)
+        })
+    }
     pub fn clear(&self,recipient:&str)->Result<()> {
         self.locked(recipient,|path|Self::save(path,&[]))
     }
@@ -162,6 +179,19 @@ mod tests {
         let messages=Mailbox::new(root.path(),"team").unwrap().read("alice").unwrap();
         assert_eq!(messages.len(),20);
         assert_eq!(messages.iter().map(|m|m.text.as_str()).collect::<std::collections::HashSet<_>>().len(),20);
+    }
+    #[test]
+    fn predicate_read_keeps_control_messages_unread() {
+        let tmp=tempfile::tempdir().unwrap();
+        let mailbox=Mailbox::new(tmp.path(),"team").unwrap();
+        mailbox.write("alice",message("ordinary".into())).unwrap();
+        mailbox.write("alice",message(r#"{"type":"permission_request"}"#.into())).unwrap();
+        let taken=mailbox.take_matching("alice",|m|!m.text.contains("permission_request")).unwrap();
+        assert_eq!(taken.len(),1);
+        assert_eq!(taken[0].text,"ordinary");
+        assert_eq!(mailbox.unread("alice").unwrap().len(),1);
+        assert!(mailbox.take_matching("alice",|_|false).unwrap().is_empty());
+        assert_eq!(mailbox.mark_all("alice").unwrap(),1);
     }
     #[test]
     fn rejects_external_symlink_directory() {
