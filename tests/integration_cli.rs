@@ -1706,3 +1706,87 @@ fn sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http(
     assert!(events.iter().any(|v|v["type"]=="result" &&
         v["content"]=="Direct text accepted"));
 }
+
+
+#[test]
+fn sdk_queued_uuid_replays_survive_prompt_batching_and_preserve_source_content() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for index in 0..2 {
+            let (mut stream,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut stream));
+            let response=json!({"choices":[{"message":{"role":"assistant",
+                "content":if index==0 {"First batch"} else {"Second batch"}},
+                "finish_reason":"stop"}]}).to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(),response).unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=sdk.stdin.take().unwrap();
+        for event in [
+            json!({"type":"user","queued":true,"content":"INVALID_UUID","uuid":42}),
+            json!({"type":"user","queued":true,"content":"FIRST","uuid":"u-first",
+                "workload":"review","origin":{"kind":"sdk"}}),
+            json!({"type":"user","queued":true,"content":[
+                {"type":"text","text":"SECOND"}],"uuid":"u-second","workload":"review"}),
+            json!({"type":"user","queued":true,"content":"THIRD","uuid":"u-third",
+                "workload":"other"}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"before"}),
+            json!({"type":"control","action":"queue_drain","request_id":"drain",
+                "replay_user_messages":true}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"after"}),
+        ]{writeln!(input,"{event}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(requests[0].contains("FIRST") && requests[0].contains("SECOND"));
+    assert!(requests[1].contains("THIRD") && !requests[1].contains("SECOND"));
+    assert!(!requests[0].contains("INVALID_UUID"));
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+    assert!(events.iter().any(|v|v["type"]=="error" &&
+        v["message"].as_str().unwrap_or("").contains("Invalid queued user command")));
+    let before=events.iter().find(|v|v["request_id"]=="before").unwrap();
+    assert_eq!(before["result"]["length"],3);
+    assert_eq!(before["result"]["commands"][0]["uuid"],"u-first");
+    assert_eq!(before["result"]["commands"][0]["origin"]["kind"],"sdk");
+    assert_eq!(before["result"]["commands"][1]["uuid"],"u-second");
+    let replays=events.iter().filter(|v|v["type"]=="user" && v["isReplay"]==true)
+        .collect::<Vec<_>>();
+    assert_eq!(replays.len(),3,"{events:?}");
+    assert_eq!(replays.iter().map(|v|v["uuid"].as_str().unwrap())
+        .collect::<Vec<_>>(),vec!["u-first","u-second","u-third"]);
+    assert_eq!(replays[0]["message"]["content"],"FIRST");
+    assert_eq!(replays[1]["message"]["content"],
+        json!([{"type":"text","text":"SECOND"}]));
+    assert_eq!(replays[2]["message"]["content"],"THIRD");
+    assert_eq!(replays[0]["parent_tool_use_id"],Value::Null);
+    assert_eq!(replays[0]["session_id"],replays[1]["session_id"]);
+    let drain_index=events.iter().position(|v|v["request_id"]=="drain").unwrap();
+    assert!(events.iter().enumerate().filter(|(_,v)|v["isReplay"]==true)
+        .all(|(index,_)|index<drain_index));
+    let drain=&events[drain_index];
+    assert_eq!(drain["ok"],true,"{drain}");
+    assert_eq!(drain["result"]["results"].as_array().unwrap().len(),3);
+    assert_eq!(drain["result"]["results"][0]["content"],"First batch");
+    assert_eq!(drain["result"]["results"][1]["content"],"First batch");
+    assert_eq!(drain["result"]["results"][2]["content"],"Second batch");
+    let after=events.iter().find(|v|v["request_id"]=="after").unwrap();
+    assert_eq!(after["result"]["length"],0);
+}
