@@ -335,6 +335,20 @@ mod tests {
         ToolExecutor::new(root.canonicalize().unwrap(), approval, false)
     }
 
+
+    #[test]
+    fn skills_are_discovered_and_loaded_from_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let skill = root.path().join(".atlas/skills/test_skill");
+        fs::create_dir_all(&skill).unwrap();
+        fs::write(skill.join("SKILL.md"), "# Useful guide\nDo the task.").unwrap();
+        let executor = executor(root.path(), Approval::ReadOnly);
+        assert_eq!(executor.list_skills().unwrap(), "test_skill");
+        let content = executor.read_skill(&json!({"name":"test_skill"})).unwrap();
+        assert!(content.contains("Useful guide"));
+        assert!(executor.read_skill(&json!({"name":"../nope"})).is_err());
+    }
+
     #[test]
     fn blocks_parent_traversal() {
         let root = tempfile::tempdir().unwrap();

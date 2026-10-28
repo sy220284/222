@@ -182,6 +182,47 @@ fn system_prompt(root: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct SummaryModel;
+
+    #[async_trait::async_trait]
+    impl ModelProvider for SummaryModel {
+        async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
+            assert!(request.tools.is_empty());
+            Ok(crate::protocol::ModelResponse {
+                message: Message::text("assistant", "Retain verified changes and next steps."),
+                finish_reason: Some("stop".into()),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn compacted_summary_survives_session_restore() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut session = Session::fresh();
+        session.messages.push(Message::text("user", "Check this project"));
+        session.messages.push(Message::text("assistant", "Checked files"));
+        let id = session.id.to_string();
+        let mut agent = Agent {
+            profile: ProviderProfile {
+                id: "fake".into(), kind: "openai-compatible".into(),
+                base_url: "http://127.0.0.1:1/v1".into(),
+                model: "mock".into(), api_key_env: None,
+            },
+            provider: Box::new(SummaryModel),
+            root: dir.path().canonicalize().unwrap(),
+            approval: Approval::ReadOnly,
+            interactive: false,
+            max_steps: 5,
+            session,
+            mcp: None,
+        };
+        agent.compact_history().await.unwrap();
+        let restored = Session::load(dir.path(), &id).unwrap();
+        assert!(restored.messages.is_empty());
+        assert_eq!(restored.summary.as_deref(), Some("Retain verified changes and next steps."));
+    }
+
     #[test]
     fn loads_project_instruction_file() {
         let d = tempfile::tempdir().unwrap();
