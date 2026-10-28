@@ -211,8 +211,10 @@ impl Agent {
             },
             "TeamDelete"=>{
                 executor.approve_external(call)?;
-                let response=registry.delete(self.team_name.as_deref())?;
+                let old_team=self.team_name.clone();
+                let response=registry.delete(old_team.as_deref())?;
                 if response["success"]==true {
+                    if old_team.is_some(){self.graph.remove_storage()?;}
                     self.team_name=None;
                     self.agent_name=None;
                     self.team_root=None;
@@ -1051,6 +1053,7 @@ mod tests {
         assert!(after.team_name.is_none());
         assert!(after.agent_name.is_none());
         assert!(!root.path().join(".atlas/teams/persistent").exists());
+        assert!(!root.path().join(".atlas/task-lists/persistent").exists());
     }
 
     #[test]

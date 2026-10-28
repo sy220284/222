@@ -263,6 +263,23 @@ impl TaskGraph {
         })
     }
 
+    /// Remove an inactive team's task storage after team cleanup succeeds.
+    /// Unlike reset, this also removes the high-water mark and lock file.
+    pub fn remove_storage(&self)->Result<()>{
+        self.locked(|store|{
+            for entry in fs::read_dir(&store.directory)?{
+                let entry=entry?;
+                let kind=entry.file_type()?;
+                if kind.is_symlink(){bail!("Unsafe task storage link")}
+                if kind.is_dir(){bail!("Unexpected nested task directory")}
+            }
+            Ok(())
+        })?;
+        fs::remove_dir_all(&self.directory)?;
+        task_events::notify_tasks_updated();
+        Ok(())
+    }
+
     pub fn reset(&self)->Result<()>{
         self.locked(|store|{
             let high=store.highest()?;
@@ -439,6 +456,16 @@ mod tests{
         assert_eq!(graph.all().unwrap().len(),1);
         assert_eq!(graph.get(&json!({"taskId":"2"})).unwrap(),"Task not found");
         assert!(graph.list(&json!({})).unwrap().contains("Valid"));
+    }
+    #[test]
+    fn deleting_team_storage_removes_tasks_and_counter(){
+        let (_root,graph)=store();
+        graph.create(&json!({"subject":"A","description":"B"})).unwrap();
+        let directory=graph.directory.clone();
+        assert!(directory.join("1.json").exists());
+        assert!(directory.join(".highwatermark").exists());
+        graph.remove_storage().unwrap();
+        assert!(!directory.exists());
     }
     #[test]
     fn subscriber_can_reenter_task_mutation_after_unlock(){
