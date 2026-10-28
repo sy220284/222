@@ -1342,7 +1342,7 @@
 | `src/upstreamproxy/upstreamproxy.ts` | 286 | 9812 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/CircularBuffer.ts` | 85 | 1888 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/Cursor.ts` | 1531 | 46663 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/QueryGuard.ts` | 122 | 3597 | 重写：查询排队、预约、运行、取消与代次状态机 | `src/query_guard.rs` / `src/sdk_queue.rs` | 已验收：完整状态转换、旧代次不可结束新请求、重复操作无通知、同步订阅/取消及 SDK 真正排队处理；证据 query_guard::tests / integration_cli::sdk_queue_drain_honors_priority_fifo_and_worker_isolation |
+| `src/utils/QueryGuard.ts` | 122 | 3597 | 重写：查询排队、预约、运行、取消与代次状态机 | `src/query_guard.rs` / `src/sdk_queue.rs` | 部分实现：同步预约、运行、取消和代次保护有测试；原始信号订阅动态增删、React UI 生命周期及跨模块取消时序未验收；证据 query_guard::tests / integration_cli::sdk_queue_drain_honors_priority_fifo_and_worker_isolation |
 | `src/utils/Shell.ts` | 475 | 16929 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ShellCommand.ts` | 466 | 14138 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/abortController.ts` | 100 | 3364 | 重写：保持通用行为 | 待定 | 未迁移 |
