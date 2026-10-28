@@ -187,3 +187,39 @@ fn subagent_runs_a_separate_model_conversation_and_returns_to_parent() {
     assert!(requests[2].contains("Subagent completed analysis."));
     assert_eq!(fs::read_dir(root.path().join(".atlas/sessions")).unwrap().count(), 2);
 }
+
+#[test]
+fn stop_hook_block_causes_one_additional_model_round() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut messages = Vec::new();
+        for i in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            messages.push(read_request(&mut stream));
+            let text = if i == 0 { "Premature answer" } else { "Verified final answer" };
+            let body = json!({"choices":[{
+                "message":{"role":"assistant","content":text},"finish_reason":"stop"
+            }]}).to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
+            stream.flush().unwrap();
+        }
+        messages
+    });
+    let config = root.path().join("config.json");
+    fs::write(&config, json!({
+        "default_provider":"mock",
+        "providers":[{"id":"mock","kind":"openai-compatible",
+            "base_url":format!("http://{address}/v1"),"model":"mock"}],
+        "hooks":[{"event":"Stop","command":"echo 'Confirm tests' >&2; exit 2",
+            "timeout_seconds":5}]
+    }).to_string()).unwrap();
+    let output = binary()
+        .args(["--workspace",root.path().to_str().unwrap(),"run","Do work"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    let requests = server.join().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Verified final answer"));
+    assert!(requests[1].contains("Confirm tests"));
+}

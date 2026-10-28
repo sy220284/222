@@ -117,8 +117,7 @@ async fn main() -> Result<()> {
                 io::stdin().read_to_string(&mut input)?;
                 input
             } else { prompt.clone() };
-            println!("{}", agent.ask(&actual_prompt).await?);
-            Ok(())
+            agent.ask(&actual_prompt).await.map(|answer| println!("{answer}"))
         }
         Commands::Chat { .. } => chat(&mut agent, &config).await,
         _ => unreachable!(),
