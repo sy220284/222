@@ -1630,9 +1630,9 @@ fn sdk_unsupported_content_blocks_are_preserved_until_explicitly_removed() {
     {
         let mut input=sdk.stdin.take().unwrap();
         for event in [
-            json!({"type":"control","action":"queue_enqueue","command":{
-                "mode":"prompt","value":[{"type":"text","text":"SAFE"},
-                    {"type":"document","source":{"type":"text","data":"MUST_NOT_DROP"}}]}}),
+            json!({"type":"user","queued":true,"content":[
+                {"type":"text","text":"SAFE"},
+                {"type":"document","source":{"type":"text","data":"MUST_NOT_DROP"}}]}),
             json!({"type":"control","action":"queue_drain","request_id":"blocked"}),
             json!({"type":"control","action":"queue_snapshot","request_id":"preserved"}),
             json!({"type":"control","action":"queue_remove_identity","identities":[1]}),
@@ -1658,4 +1658,51 @@ fn sdk_unsupported_content_blocks_are_preserved_until_explicitly_removed() {
     let accepted=events.iter().find(|v|v["request_id"]=="accepted").unwrap();
     assert_eq!(accepted["ok"],true,"{accepted}");
     assert_eq!(accepted["result"]["results"][0]["content"],"Text blocks accepted");
+}
+
+
+#[test]
+fn sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let (mut conn,_)=listener.accept().unwrap();
+        let request=read_request(&mut conn);
+        let body=json!({"choices":[{"message":{"role":"assistant",
+            "content":"Direct text accepted"},"finish_reason":"stop"}]}).to_string();
+        write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),body).unwrap();
+        conn.flush().unwrap();
+        request
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=sdk.stdin.take().unwrap();
+        for event in [
+            json!({"type":"user","content":[{"type":"text","text":"hello"},
+                {"type":"document","source":{"type":"text","data":"PRIVATE"}}]}),
+            json!({"type":"user","message":{"content":[
+                {"type":"text","text":"first"},{"type":"text","text":"second"}]}})
+        ]{writeln!(input,"{event}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    let request=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(request.contains("first\\nsecond"),"{request}");
+    assert!(!request.contains("PRIVATE"));
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+    assert!(events.iter().any(|v|v["type"]=="error" &&
+        v["message"].as_str().unwrap_or("").contains("Unsupported user content")));
+    assert!(events.iter().any(|v|v["type"]=="result" &&
+        v["content"]=="Direct text accepted"));
 }
