@@ -380,6 +380,35 @@ mod tests{
     }
 
     #[test]
+    fn member_statuses_unassign_and_reset_highwatermark(){
+        let (root,store)=store();
+        store.create(&json!({"subject":"First","description":"Do first"})).unwrap();
+        store.create(&json!({"subject":"Second","description":"Do second"})).unwrap();
+        store.update(&json!({"taskId":"1","owner":"alice","status":"in_progress"})).unwrap();
+        store.update(&json!({"taskId":"2","owner":"agent-b","status":"completed"})).unwrap();
+        let members=vec![
+            ("agent-a".into(),"alice".into(),Some("coder".into())),
+            ("agent-b".into(),"bob".into(),None),
+        ];
+        let status=store.member_statuses(&members).unwrap();
+        assert_eq!(status[0]["status"],"busy");
+        assert_eq!(status[0]["currentTasks"],json!(["1"]));
+        assert_eq!(status[1]["status"],"idle");
+        let result=store.unassign_teammate("agent-a","alice","terminated").unwrap();
+        assert_eq!(result["unassignedTasks"][0]["id"],"1");
+        assert!(result["notificationMessage"].as_str().unwrap().contains("1 task(s) were unassigned"));
+        let task=store.peek("1").unwrap().unwrap();
+        assert_eq!(task.owner,None);
+        assert_eq!(task.status,"pending");
+        assert!(store.unassign_teammate("agent-a","alice","invalid").is_err());
+        store.reset().unwrap();
+        assert!(store.all().unwrap().is_empty());
+        let restarted=TaskGraph::new(root.path(),"session-1").unwrap();
+        assert!(restarted.create(&json!({"subject":"Third","description":"After reset"}))
+            .unwrap().contains("#3"));
+    }
+
+    #[test]
     fn validates_input_and_rejects_path_traversal(){
         let (root,g)=store();
         assert!(g.create(&json!({"subject":"x"})).is_err());
