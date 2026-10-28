@@ -1,4 +1,4 @@
-use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins, websearch, config::SearchBackend, background::BackgroundTasks, permission_rules, permission_mode};
+use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins, websearch, config::SearchBackend, background::BackgroundTasks, permission_rules, permission_mode, tool_metrics::ToolMetrics};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -34,11 +34,17 @@ pub struct ToolExecutor {
     background: Option<Arc<BackgroundTasks>>,
     permission_rules: Vec<permission_rules::Rule>,
     mode: Option<permission_mode::Mode>,
+    metrics: Arc<ToolMetrics>,
 }
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new(), mode: None }
+        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new(), mode: None, metrics: Arc::new(ToolMetrics::default()) }
+    }
+
+    pub fn with_metrics(mut self,metrics:Arc<ToolMetrics>)->Self{
+        self.metrics=metrics;
+        self
     }
 
     pub fn with_permission_mode(mut self, mode:permission_mode::Mode)->Self{
@@ -410,6 +416,8 @@ impl ToolExecutor {
     async fn write_file(&self, args: &Value) -> Result<String> {
         let path = self.checked_path(required(args, "path")?)?;
         let content = required(args, "content")?;
+        let existed = path.exists();
+        let before = if existed {tokio::fs::read_to_string(&path).await.ok()} else {None};
         if content.len() as u64 > MAX_FILE_BYTES { bail!("Content too large") }
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await?;
@@ -420,6 +428,9 @@ impl ToolExecutor {
             file.write_all(content.as_bytes()).await?;
         } else {
             tokio::fs::write(&path, content).await?;
+        }
+        if !existed || before.is_some(){
+            self.metrics.record_change(before.as_deref(),content);
         }
         Ok(format!("Wrote {} bytes to {}", content.len(), path.display()))
     }
@@ -439,7 +450,8 @@ impl ToolExecutor {
         }
         let updated = if replace_all {content.replace(old,new)} else {content.replacen(old,new,1)};
         if updated.len() as u64 > MAX_FILE_BYTES { bail!("Updated file too large") }
-        tokio::fs::write(&path, updated).await?;
+        tokio::fs::write(&path, &updated).await?;
+        self.metrics.record_change(Some(&content),&updated);
         Ok(format!("Replaced {hits} occurrence(s) in {}", path.display()))
     }
 
@@ -724,6 +736,23 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(),"xyz xyz xyz");
     }
 
+    #[tokio::test]
+    async fn edit_and_write_record_actual_line_changes(){
+        let root=tempfile::tempdir().unwrap();
+        let metrics=Arc::new(ToolMetrics::default());
+        let tool=executor(root.path(),Approval::Full).with_metrics(metrics.clone());
+        let write=ToolCall{id:"write".into(),kind:"function".into(),
+            function:FunctionCall{name:"write_file".into(),
+                arguments:json!({"path":"count.txt","content":"a\nb\n"}).to_string()}};
+        assert!(!tool.execute(&write).await.starts_with("ERROR:"));
+        assert_eq!(metrics.counts(),(3,0));
+        let edit=ToolCall{id:"edit".into(),kind:"function".into(),
+            function:FunctionCall{name:"edit_file".into(),
+                arguments:json!({"path":"count.txt","old":"b","new":"c"}).to_string()}};
+        assert!(!tool.execute(&edit).await.starts_with("ERROR:"));
+        assert_eq!(metrics.counts(),(4,1));
+        assert_eq!(fs::read_to_string(root.path().join("count.txt")).unwrap(),"a\nc\n");
+    }
     #[tokio::test]
     async fn noninteractive_requires_permission_for_writes() {
         let root = tempfile::tempdir().unwrap();

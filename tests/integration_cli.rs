@@ -1039,3 +1039,61 @@ fn sdk_cost_ledger_survives_model_switch_and_session_resume() {
         v["action"]=="cost" && v["cost"]["models"].as_array().is_some_and(|a|a.len()==2)
     }));
 }
+
+
+#[test]
+fn real_model_tool_edits_update_persisted_line_and_cost_metrics(){
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        for step in 0..3{
+            let (mut conn,_)=listener.accept().unwrap();
+            let _=read_request(&mut conn);
+            let message=match step{
+                0=>json!({"role":"assistant","content":null,"tool_calls":[{
+                    "id":"write-1","type":"function",
+                    "function":{"name":"write_file",
+                        "arguments":json!({"path":"tracked.txt","content":"alpha\nbeta\n"}).to_string()}
+                }]}),
+                1=>json!({"role":"assistant","content":null,"tool_calls":[{
+                    "id":"edit-1","type":"function",
+                    "function":{"name":"edit_file",
+                        "arguments":json!({"path":"tracked.txt","old":"beta","new":"gamma"}).to_string()}
+                }]}),
+                _=>json!({"role":"assistant","content":"Changes verified"})
+            };
+            let reply=json!({"choices":[{"message":message,
+                "finish_reason":if step<2{"tool_calls"}else{"stop"}}],
+                "usage":{"prompt_tokens":20,"completion_tokens":10,"total_tokens":30}})
+                .to_string();
+            write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                reply.len(),reply).unwrap();
+            conn.flush().unwrap();
+        }
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"test",
+        "base_url":format!("http://{address}/v1")
+    }],"model_prices":[{"provider":"mock","model":"test",
+        "input_per_million":1.0,"output_per_million":2.0}]}).to_string()).unwrap();
+    let output=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","full","run","Create and edit a file"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert_eq!(fs::read_to_string(root.path().join("tracked.txt")).unwrap(),
+        "alpha\ngamma\n");
+    let dir=root.path().join(".atlas/sessions");
+    let files=fs::read_dir(dir).unwrap().map(|e|e.unwrap().path()).collect::<Vec<_>>();
+    assert_eq!(files.len(),1);
+    let session:Value=serde_json::from_slice(&fs::read(&files[0]).unwrap()).unwrap();
+    assert_eq!(session["usage"]["input_tokens"],60);
+    assert_eq!(session["usage"]["output_tokens"],30);
+    assert_eq!(session["cost"]["total_lines_added"],4);
+    assert_eq!(session["cost"]["total_lines_removed"],1);
+    assert_eq!(session["cost"]["models"][0]["has_unpriced_usage"],false);
+    let usd=session["cost"]["models"][0]["known_cost_usd"].as_f64().unwrap();
+    assert!((usd-0.00012).abs()<1e-12,"{usd}");
+}

@@ -87,3 +87,7 @@
 ### JSON 兼容与斜杠指令解析
 
 对照原始 `src/utils/jsonRead.ts`、`src/utils/slashCommandParsing.ts`；`src/json_read.rs` 保留单次 BOM 剥离规则，并接入真实 Config 和 Session 读路径。`src/slash_command.rs` 保留按字面量空格分词、MCP 第二词标识和输入 trim 的语义，CLI 模型切换复用该解析；MCP 斜杠指令分发仍未等价。这两项仅宣称源函数自身等价。
+
+### 模型成本与真实工具改动持续对照
+
+`src/tool_metrics.rs` 按原始 `countLinesChanged` 的插入/删除行计数实现新建、覆盖和编辑文件统计，使用文本差异算法从实际修改前后内容计算，而不是按工具调用次数估算；`src/agent.rs` 在模型/工具/交互执行路径记录可恢复的耗时指标。`CostLedger` 现在支持模型价格字符串、直接 Token 计价以及附加持续统计。`src/utils/diff.ts` 只迁移统计子集，差异补丁的其余输出仍未迁移，保持原台账的严格标注。

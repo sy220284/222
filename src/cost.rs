@@ -1,7 +1,7 @@
 use crate::protocol::TokenUsage;
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
-use std::fmt::Write;
+use std::{fmt::Write,time::Duration};
 
 /// Prices must be user-supplied. Unknown model prices are never guessed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +31,23 @@ impl ModelPrice {
         }
         Ok(())
     }
+    pub fn format_model_pricing(&self) -> String {
+        fn fmt_price(value:f64)->String{
+            if value.fract()==0.0 {format!("{}{:.0}", "$", value)}
+            else {format!("{}{:.2}", "$", value)}
+        }
+        format!("{}/{} per Mtok",
+            fmt_price(self.input_per_million),fmt_price(self.output_per_million))
+    }
+    pub fn cost_from_tokens(&self,input:u64,output:u64,cache_read:u64,cache_write:u64)->f64{
+        self.cost(TokenUsage{
+            input_tokens:input,output_tokens:output,
+            total_tokens:input.saturating_add(output),
+            cache_read_input_tokens:cache_read,
+            cache_creation_input_tokens:cache_write,
+            ..Default::default()
+        })
+    }
     pub fn cost(&self, usage: TokenUsage) -> f64 {
         let uncached = usage.input_tokens.saturating_sub(usage.cache_read_input_tokens);
         (uncached as f64 * self.input_per_million
@@ -57,8 +74,34 @@ pub struct ModelCost {
 pub struct CostLedger {
     #[serde(default)]
     pub models: Vec<ModelCost>,
+    #[serde(default)]
+    pub total_api_duration_ms: u64,
+    #[serde(default)]
+    pub total_tool_duration_ms: u64,
+    #[serde(default)]
+    pub total_wall_duration_ms: u64,
+    #[serde(default)]
+    pub total_lines_added: u64,
+    #[serde(default)]
+    pub total_lines_removed: u64,
 }
 impl CostLedger {
+    pub fn add_api_duration(&mut self,elapsed:Duration){
+        self.total_api_duration_ms=self.total_api_duration_ms.saturating_add(elapsed.as_millis() as u64);
+    }
+    pub fn add_tool_duration(&mut self,elapsed:Duration){
+        self.total_tool_duration_ms=self.total_tool_duration_ms.saturating_add(elapsed.as_millis() as u64);
+    }
+    pub fn add_wall_duration(&mut self,elapsed:Duration){
+        self.total_wall_duration_ms=self.total_wall_duration_ms.saturating_add(elapsed.as_millis() as u64);
+    }
+    pub fn set_changed_lines(&mut self,added:u64,removed:u64){
+        self.total_lines_added=added;
+        self.total_lines_removed=removed;
+    }
+    pub fn model_pricing<'a>(prices:&'a[ModelPrice],provider:&str,model:&str)->Option<&'a ModelPrice>{
+        prices.iter().find(|p|p.provider==provider && p.model==model)
+    }
     pub fn record(&mut self, provider: &str, model: &str, usage: TokenUsage, prices: &[ModelPrice]) {
         let index = self.models.iter().position(|m| m.provider == provider && m.model == model)
             .unwrap_or_else(|| {
@@ -88,6 +131,10 @@ impl CostLedger {
         if self.has_unknown_prices() {
             summary.push_str(" (incomplete: unknown model prices)");
         }
+        let _=write!(summary,
+            "\nTotal duration (API): {} ms\nTotal duration (tools): {} ms\nTotal duration (wall): {} ms\nTotal code changes: {} lines added, {} lines removed",
+            self.total_api_duration_ms,self.total_tool_duration_ms,
+            self.total_wall_duration_ms,self.total_lines_added,self.total_lines_removed);
         if self.models.is_empty() {
             summary.push_str("\nUsage: 0 input, 0 output, 0 cache read, 0 cache write");
         }
@@ -139,6 +186,25 @@ mod tests {
         assert_eq!(ledger.models[0].usage.input_tokens, 20);
         assert!(ledger.has_unknown_prices());
         assert!(ledger.format_summary().contains("price missing"));
+    }
+    #[test]
+    fn pricing_strings_and_side_query_costs_match_public_generic_contract(){
+        let mut p=price();
+        assert_eq!(p.format_model_pricing(),"$3/$15 per Mtok");
+        p.input_per_million=0.8;
+        assert_eq!(p.format_model_pricing(),"$0.80/$15 per Mtok");
+        assert!((p.cost_from_tokens(1_000_000,10_000,0,0)-0.95).abs()<1e-9);
+        let prices=vec![p];
+        assert!(CostLedger::model_pricing(&prices,"other","m").is_none());
+        assert!(CostLedger::model_pricing(&prices,"a","m").is_some());
+        let mut ledger=CostLedger::default();
+        ledger.add_api_duration(Duration::from_millis(20));
+        ledger.add_tool_duration(Duration::from_millis(5));
+        ledger.add_wall_duration(Duration::from_millis(30));
+        ledger.set_changed_lines(3,1);
+        let restored:CostLedger=serde_json::from_str(&serde_json::to_string(&ledger).unwrap()).unwrap();
+        assert_eq!(restored,ledger);
+        assert!(ledger.format_summary().contains("3 lines added, 1 lines removed"));
     }
     #[test]
     fn invalid_rates_and_old_data() {

@@ -13,7 +13,7 @@
 | `src/Tool.ts` | 793 | 29516 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands.ts` | 755 | 25185 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context.ts` | 190 | 6446 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` / `src/cost.rs` / `src/agent.rs` | 部分实现：按模型计费及会话恢复；原版 API/工具时长、编辑行数和退出回调尚未迁移 |
+| `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` / `src/cost.rs` / `src/agent.rs` / `src/tool_metrics.rs` | 部分实现：按模型计费、会话恢复、API/工具/墙钟耗时与文件改动行数；原版全部错误路径、重试时长与退出回调待核对 |
 | `src/costHook.ts` | 23 | 617 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/dialogLaunchers.tsx` | 133 | 22948 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/history.ts` | 465 | 14081 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1474,7 +1474,7 @@
 | `src/utils/desktopDeepLink.ts` | 237 | 7130 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/detectRepository.ts` | 179 | 6063 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/diagLogs.ts` | 95 | 2784 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/diff.ts` | 178 | 4855 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/diff.ts` | 178 | 4855 | 重写：行增删统计和差异工具 | `src/tool_metrics.rs` / `src/tools.rs` | 部分实现：使用文本行级差异统计写入与编辑增删行；原始补丁生成、应用、超时及引号转义待对照 |
 | `src/utils/directMemberMessage.ts` | 70 | 1715 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/displayTags.ts` | 52 | 2256 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/doctorContextWarnings.ts` | 266 | 8071 | 重写：保持通用行为 | 待定 | 未迁移 |

@@ -2,6 +2,7 @@ use crate::{
     config::ProviderProfile,
     protocol::{Message, ModelRequest, TokenUsage},
     cost::{CostLedger, ModelPrice},
+    tool_metrics::ToolMetrics,
     provider::{self, ModelProvider},
     session::Session,
     mcp::McpManager,
@@ -23,7 +24,7 @@ use crate::{
     tools::{self, Approval, ToolExecutor},
 };
 use anyhow::{bail, Context, Result};
-use std::{fs, path::{Path, PathBuf}, sync::Arc};
+use std::{fs, path::{Path, PathBuf}, sync::Arc, time::Instant};
 use serde_json::json;
 
 const DEFAULT_SYSTEM: &str = r#"You are Atlas, a terminal-based software engineering assistant.
@@ -88,6 +89,7 @@ pub struct Agent {
     transient_mailbox: in_memory_mailbox::Mailbox,
     hook_rules: Vec<HookRule>,
     model_prices: Vec<ModelPrice>,
+    file_metrics: Arc<ToolMetrics>,
 }
 
 impl Agent {
@@ -106,11 +108,13 @@ impl Agent {
         let restored_team=session.team_name.clone();
         let restored_member=session.agent_name.clone();
         let restored_root=restored_team.as_ref().map(|_|root.clone());
+        let file_metrics=Arc::new(ToolMetrics::with_totals(
+            session.cost.total_lines_added,session.cost.total_lines_removed));
         Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), permission_mode:match approval {
         Approval::Ask=>permission_mode::Mode::Default,
         Approval::ReadOnly=>permission_mode::Mode::DontAsk,
         Approval::Full=>permission_mode::Mode::BypassPermissions,
-    }, hook_rules: Vec::new(), model_prices: Vec::new() })
+    }, hook_rules: Vec::new(), model_prices: Vec::new(), file_metrics })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -631,12 +635,14 @@ impl Agent {
              critical command results, errors and next steps. Be concise and factual. \
              Do not invent completed work. Earlier summary:\n{previous}"
         );
+        let api_started=Instant::now();
         let response = self.provider.complete(&ModelRequest {
             model: self.profile.model.clone(),
             system: prompt,
             messages: self.session.messages.clone(),
             tools: Vec::new(),
         }).await?;
+        self.session.cost.add_api_duration(api_started.elapsed());
         if let Some(usage) = response.usage { self.record_usage(usage); }
         if !response.message.tool_calls.unwrap_or_default().is_empty() {
             bail!("Compaction model unexpectedly requested tools");
@@ -659,6 +665,7 @@ impl Agent {
     }
 
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
+        let ask_started=Instant::now();
         if prompt.trim().is_empty() { bail!("Prompt cannot be empty") }
         let history_chars: usize = self.session.messages.iter()
             .map(|m| m.content.as_deref().unwrap_or("").len()
@@ -707,6 +714,7 @@ impl Agent {
             }
         }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+            .with_metrics(self.file_metrics.clone())
             .with_plugins(self.enabled_plugins.clone())
             .with_search(self.search_backend.clone())
             .with_background(self.background.clone())
@@ -753,6 +761,7 @@ impl Agent {
                 messages: self.session.messages.clone(),
                 tools: available_tools,
             };
+            let api_started=Instant::now();
             let response = if self.profile.stream {
                 let (tx,mut deltas)=tokio::sync::mpsc::unbounded_channel();
                 let future=self.provider.complete_stream(&request,tx);
@@ -776,6 +785,7 @@ impl Agent {
             } else {
                 self.provider.complete(&request).await?
             };
+            self.session.cost.add_api_duration(api_started.elapsed());
             if let Some(usage) = response.usage { self.record_usage(usage); }
             let calls = response.message.tool_calls.clone().unwrap_or_default();
             let text = response.message.content.clone().unwrap_or_default();
@@ -803,6 +813,8 @@ impl Agent {
                         continue;
                     }
                 }
+                self.session.cost.add_wall_duration(ask_started.elapsed());
+                self.session.save(&self.root)?;
                 return Ok(text);
             }
             if !text.trim().is_empty() {
@@ -821,6 +833,7 @@ impl Agent {
                 if let Some(updated) = pre.updated_input {
                     call.function.arguments = serde_json::to_string(&updated)?;
                 }
+                let tool_started=Instant::now();
                 let result = if let Some(reason) = pre.blocking_reason {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
                 } else if matches!(call.function.name.as_str(),
@@ -863,6 +876,9 @@ impl Agent {
                 } else {
                     executor.execute(&call).await
                 };
+                self.session.cost.add_tool_duration(tool_started.elapsed());
+                let (added,removed)=self.file_metrics.counts();
+                self.session.cost.set_changed_lines(added,removed);
                 let post = self.hooks.after_tool(&call, &result).await?;
                 let mut result = result;
                 if let Some(reason) = post.blocking_reason {
@@ -879,10 +895,14 @@ impl Agent {
                 self.session.messages.push(Message::tool_result(&call, result));
                 self.session.save(&self.root)?;
                 if self.shutdown_requested {
+                    self.session.cost.add_wall_duration(ask_started.elapsed());
+                    self.session.save(&self.root)?;
                     return Ok("Shutdown approved; confirmation delivered to team lead".into());
                 }
             }
         }
+        self.session.cost.add_wall_duration(ask_started.elapsed());
+        self.session.save(&self.root)?;
         bail!("Agent exceeded {} model steps; session saved for resume", self.max_steps)
     }
 }
@@ -1035,6 +1055,7 @@ mod tests {
             permission_mode: permission_mode::Mode::DontAsk,
             hook_rules: Vec::new(),
             model_prices: Vec::new(),
+            file_metrics: Arc::new(ToolMetrics::default()),
         };
         agent.compact_history().await.unwrap();
         let restored = Session::load(dir.path(), &id).unwrap();
