@@ -1034,6 +1034,7 @@ mod tests {
             permission_rules: Vec::new(),
             permission_mode: permission_mode::Mode::DontAsk,
             hook_rules: Vec::new(),
+            model_prices: Vec::new(),
         };
         agent.compact_history().await.unwrap();
         let restored = Session::load(dir.path(), &id).unwrap();

@@ -941,3 +941,101 @@ fn sdk_native_control_envelopes_switch_model_enforce_approval_and_preserve_ids()
     assert_eq!(messages[3]["response"]["subtype"],"error");
     assert_eq!(messages[4]["response"]["subtype"],"error");
 }
+
+
+#[test]
+fn sdk_cost_ledger_survives_model_switch_and_session_resume() {
+    use std::process::Stdio;
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..2 {
+            let (mut connection, _) = listener.accept().unwrap();
+            requests.push(read_request(&mut connection));
+            let usage = if step == 0 {
+                json!({"prompt_tokens":1_000_000,"completion_tokens":100_000,
+                    "total_tokens":1_100_000})
+            } else {
+                json!({"prompt_tokens":500_000,"completion_tokens":100_000,
+                    "total_tokens":600_000,
+                    "prompt_tokens_details":{"cached_tokens":200_000}})
+            };
+            let reply = json!({"choices":[{"message":{"role":"assistant",
+                "content":format!("Response {step}")},
+                "finish_reason":"stop"}],"usage":usage}).to_string();
+            write!(connection,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                reply.len(), reply).unwrap();
+            connection.flush().unwrap();
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(&config, json!({
+        "default_provider":"mock",
+        "providers":[{"id":"mock","kind":"openai-compatible",
+            "base_url":format!("http://{address}/v1"),"model":"first"}],
+        "model_prices":[
+            {"provider":"mock","model":"first",
+                "input_per_million":1.0,"output_per_million":2.0},
+            {"provider":"mock","model":"second",
+                "input_per_million":3.0,"output_per_million":4.0,
+                "cache_read_per_million":0.5}
+        ]
+    }).to_string()).unwrap();
+    let mut sdk = binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input = sdk.stdin.take().unwrap();
+        for value in [
+            json!({"type":"user","content":"first prompt"}),
+            json!({"type":"control","action":"model","provider":"mock","model":"second"}),
+            json!({"type":"user","content":"second prompt"}),
+            json!({"type":"control","action":"cost","requestId":"c1"})
+        ] {
+            writeln!(input,"{value}").unwrap();
+        }
+    }
+    let output = sdk.wait_with_output().unwrap();
+    let requests = server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(requests[0].contains("\"model\":\"first\""));
+    assert!(requests[1].contains("\"model\":\"second\""));
+    let events:Vec<Value> = String::from_utf8(output.stdout).unwrap()
+        .lines().map(|s|serde_json::from_str(s).unwrap()).collect();
+    let cost = events.iter().find(|v|v["action"]=="cost").unwrap();
+    assert_eq!(cost["request_id"],"c1");
+    assert_eq!(cost["cost"]["models"].as_array().unwrap().len(),2);
+    let mut usd = 0.0;
+    for model in cost["cost"]["models"].as_array().unwrap(){
+        usd += model["known_cost_usd"].as_f64().unwrap();
+        assert_eq!(model["has_unpriced_usage"],false);
+    }
+    // first: $1.2; second: uncached .3M*$3 + cached .2M*$0.5
+    // plus output .1M*$4 = $1.4; total $2.6.
+    assert!((usd - 2.6).abs()<1e-9,"{cost}");
+    let session_files=fs::read_dir(root.path().join(".atlas/sessions")).unwrap()
+        .map(|entry|entry.unwrap().path()).collect::<Vec<_>>();
+    assert_eq!(session_files.len(),1);
+    let stored:Value=serde_json::from_slice(&fs::read(&session_files[0]).unwrap()).unwrap();
+    assert_eq!(stored["cost"]["models"].as_array().unwrap().len(),2);
+    assert_eq!(stored["usage"]["cache_read_input_tokens"],200_000);
+    let session_id=stored["id"].as_str().unwrap();
+    let resumed = binary().args([
+        "--workspace",root.path().to_str().unwrap(),"sdk","--resume",session_id
+    ]).env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut resumed=resumed;
+    writeln!(resumed.stdin.take().unwrap(),
+        "{}",json!({"type":"control","action":"cost"})).unwrap();
+    let resumed_out=resumed.wait_with_output().unwrap();
+    assert!(resumed_out.status.success(),"{}",String::from_utf8_lossy(&resumed_out.stderr));
+    let resumed_json=String::from_utf8(resumed_out.stdout).unwrap();
+    assert!(resumed_json.lines().any(|l|{
+        let v:Value=serde_json::from_str(l).unwrap();
+        v["action"]=="cost" && v["cost"]["models"].as_array().is_some_and(|a|a.len()==2)
+    }));
+}
