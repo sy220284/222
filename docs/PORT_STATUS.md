@@ -158,3 +158,9 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：已验收路径的订阅行为复审
 
 复核原始 `src/services/compact/compactWarningState.ts` 与其依赖 `src/state/store.ts`，发现 `createStore` 通过 `Object.is` 忽略相同布尔值的重复赋值，且通过同步 JavaScript Set 向监听器通知；Rust `watch::send_replace` 之前会对相同值重复发送变更。现使用 `send_if_modified` 修复重复通知并加入测试。但 Rust watch 接收端的合并通知、同步回调和动态订阅仍未与原版逐项验证，因此将该源路径从“已验收”降为“部分实现”。更新 1,906 路径台账与汇总，验收数由 30 调整为 29，不以局部测试冒充全链等价。
+
+### 2026-10-29：SDK 消息 UUID、原始内容回放与合并批次确认
+
+对照 2.1.88 原始 `src/cli/print.ts` 的 `drainCommandQueue`、`batchUuids`、`replayUserMessages` 和 `src/utils/messageQueueManager.ts` 的队列身份语义。修复 Rust SDK 入队 `user` 事件丢弃 `uuid`、`origin`、`pastedContents`、`preExpansionValue` 和 `bridgeOrigin` 的问题；合并同 workload/isMeta 提示时保留每条原始消息及身份。启用 `replay_user_messages`（兼容 `replayUserMessages`）后，在模型请求前按实际出队次序为每条有 UUID 的消息输出原始内容的 `user/isReplay` 事件，避免合并请求只确认最后一条；直接 SDK 提问也使用同一回放格式。保留原始内容块数组，不将回放替换为文本扁平化结果。
+
+真实进程与模拟模型 HTTP 回归：`sdk_queued_uuid_replays_survive_prompt_batching_and_preserve_source_content`、`sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http`，检查错误 UUID 输入不终止 SDK、批次 HTTP 调用次数、每条 UUID、原始结构化内容、来源信息和回放先于结果的时序。**当前仅补充现有部分实现的 SDK/Headless 调用链，1,906 条分类仍为 22 排除、362 部分实现、1,493 未迁移、29 源路径独立已验收；1,855 条未完成全量等价验收。** 当前仍缺 QueryEngine 原生消息确认回调、失败重试全时序、远端传输、全量权限/Hook 交互和非文本内容模型传输。最新 CI 以对应 HEAD 工作流为准。
