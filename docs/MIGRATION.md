@@ -29,6 +29,7 @@
 | 本地同步 Hooks | `hooks.rs` / `agent.rs` | Pre/PostToolUse、Stop、用户输入、会话与压缩事件 |
 | 插件管理、异步 HTTP/Prompt/Agent Hooks | — | 未实现 |
 | Git 只读操作 | `tools.rs` | status / diff / log 已实现 |
+| Jupyter Notebook 编辑 | `notebook.rs` / `tools.rs` | 单元格 ID / 索引、插入/替换/删除、读后修改检测（输出与编码仍待对照） |
 | LSP、Git 修改与工作树管理 | — | 未实现 |
 | 一级子 Agent 委派与工作树隔离 | `agent.rs` / `worktree.rs` | 已实现独立会话、隔离、清理 |
 | 完整多 Agent 团队、任务消息与并行管理 | — | 未实现 |

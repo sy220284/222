@@ -1,4 +1,4 @@
-use crate::protocol::ToolCall;
+use crate::{protocol::ToolCall, notebook};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -7,6 +7,8 @@ use std::{
     io::{self, Write},
     path::{Component, Path, PathBuf},
     process::Stdio,
+    sync::Mutex,
+    collections::HashMap,
     time::Duration,
 };
 use tokio::{process::Command, time::timeout};
@@ -26,11 +28,12 @@ pub struct ToolExecutor {
     root: PathBuf,
     approval: Approval,
     interactive: bool,
+    reads: Mutex<HashMap<PathBuf, u64>>,
 }
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, approval, interactive }
+        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()) }
     }
 
     pub async fn execute(&self, call: &ToolCall) -> String {
@@ -46,6 +49,10 @@ impl ToolExecutor {
         if !args.is_object() { bail!("Tool arguments must be a JSON object") }
         match call.function.name.as_str() {
             "read_file" => self.read_file(&args),
+            "notebook_edit" => {
+                self.require_approval("notebook_edit", &args)?;
+                self.notebook_edit(&args)
+            },
             "list_files" => self.list_files(&args),
             "search_text" => self.search_text(&args),
             "list_skills" => self.list_skills(),
@@ -136,12 +143,22 @@ impl ToolExecutor {
         }
         let content = fs::read_to_string(&path)
             .with_context(|| format!("Reading {}", path.display()))?;
+        self.reads.lock().unwrap().insert(path, notebook::revision(&content));
         let start = args.get("start_line").and_then(Value::as_u64).unwrap_or(1).max(1) as usize;
         let count = args.get("line_count").and_then(Value::as_u64).unwrap_or(250).clamp(1, 500) as usize;
         let result = content.lines().enumerate()
             .skip(start - 1).take(count)
             .map(|(i, line)| format!("{}: {}", i + 1, line))
             .collect::<Vec<_>>().join("\n");
+        Ok(result)
+    }
+
+    fn notebook_edit(&self, args: &Value) -> Result<String> {
+        let raw = required(args, "notebook_path")?;
+        let path = self.checked_path(raw)?;
+        let known = self.reads.lock().unwrap().get(&path).copied();
+        let (result, revision) = notebook::edit(&path, args, known)?;
+        self.reads.lock().unwrap().insert(path, revision);
         Ok(result)
     }
 
@@ -350,7 +367,7 @@ fn truncate(input: &str, max: usize) -> String {
 }
 
 pub fn definitions() -> Vec<Value> {
-    vec![
+    let mut tools = vec![
         json!({"type":"function","function":{"name":"read_file",
             "description":"Read numbered lines from a workspace text file.",
             "parameters":{"type":"object","properties":{
@@ -403,7 +420,9 @@ pub fn definitions() -> Vec<Value> {
             "parameters":{"type":"object","properties":{
                 "command":{"type":"string"},"timeout_seconds":{"type":"integer"}
             },"required":["command"]}}}),
-    ]
+    ];
+    tools.push(notebook::definition());
+    tools
 }
 
 #[cfg(test)]

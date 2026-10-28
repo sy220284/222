@@ -8,6 +8,7 @@ mod provider;
 mod session;
 mod task;
 mod tools;
+mod notebook;
 
 use agent::Agent;
 use anyhow::{bail, Result};
