@@ -3,8 +3,8 @@
 **目标：1906 个原始文件的功能逐项重写、等价验证。**
 
 - 明确归入环境/行为遥测删除项：22 个原始文件路径（仅是第一轮整文件分类；其他混合文件也需排除隐式上报）。
-- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：349 个原始文件路径。
-- 当前台账仍标注“未迁移”的文件路径：1508 个（与部分实现项互斥，按当前状态字段分类）。
+- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：350 个原始文件路径。
+- 当前台账仍标注“未迁移”的文件路径：1507 个（与部分实现项互斥，按当前状态字段分类）。
 - **达到原始文件纯函数行为/边界等价且有验证证据的路径：27 个（包括独立纯函数、状态模块与固定常量文件；完整调用链仍需逐项验证）；其上下游业务逻辑仍需完整验证。** 其他当前已实现的功能仅在特定测试场景验证，不能把“部分实现”升级为“完成”。
 - 非排除项的原始文件级等价验收仍未闭环：1857 个。
 
@@ -78,3 +78,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 直接对照原始 `src/tools/TaskUpdateTool/TaskUpdateTool.ts`：`TaskCompleted` Hook 拒绝完成时，原版返回成功调用通道中的普通工具反馈（`success:false`），不会升级成执行器异常导致同轮兄弟工具取消。Rust `Agent::run_task_graph` 现在保留未修改的状态/字段，并返回原版前缀消息。新测试 `blocked_completion_is_non_error_feedback_and_does_not_mutate_fields` 覆盖状态、字段、元数据未被提交。
 
 原版设置新负责人后 `await writeToMailbox`，若投递失败会让工具调用报错，但之前的任务更新已落盘。Rust 先前只记录日志并返回成功，属于行为差异，现改为向上传播失败，增加模拟不安全收件箱的 `failed_task_assignment_delivery_surfaces_error_after_task_persistence` 回归测试。未更改原始路径验收数量：其他任务状态、竞争时序、收件端和跨模块生命周期仍待核验。
+
+### SDK 控制请求的兼容与关联（2026-10-29）
+
+参考原始 `src/utils/controlMessageCompat.ts`：顶层和 `response` 的 `requestId` 仅在 `request_id` 不存在时转换，后者已存在则保留全部字段，原地对象之外的数组/基础值不受影响。Rust `control_message_compat.rs` 实现并接入 SDK，`control_request` 与 `control` 两种包型共享处理，成功/失败的 `control_response` 回带关联 ID；该路径只标部分实现，`replBridge` 等后续协议仍缺。

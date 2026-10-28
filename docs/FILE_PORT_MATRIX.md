@@ -1453,7 +1453,7 @@
 | `src/utils/context.ts` | 222 | 6871 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/contextAnalysis.ts` | 273 | 7733 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/contextSuggestions.ts` | 236 | 7258 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/controlMessageCompat.ts` | 33 | 1216 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/controlMessageCompat.ts` | 33 | 1216 | 重写：保持通用行为 | `src/control_message_compat.rs / src/main.rs` | 部分实现：请求 ID 两种命名兼容、嵌套 response、优先级与 SDK 回复 ID；其余控制协议未全量验证 |
 | `src/utils/conversationRecovery.ts` | 598 | 21077 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cron.ts` | 309 | 9462 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cronJitterConfig.ts` | 76 | 3414 | 重写：保持通用行为 | 待定 | 未迁移 |

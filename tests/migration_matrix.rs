@@ -36,7 +36,7 @@ fn every_original_path_is_tracked_once_and_no_partial_work_is_called_complete(){
     }
     assert_eq!(tracked,1906);
     assert_eq!(omitted,22);
-    assert_eq!(partial,349);
-    assert_eq!(unported,1508);
+    assert_eq!(partial,350);
+    assert_eq!(unported,1507);
     assert_eq!(accepted,27);
 }

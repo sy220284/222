@@ -855,3 +855,40 @@ fn chat_permission_mode_cycle_controls_real_model_tool_mutations() {
         assert!(stdout.contains("Completed."),"{stdout}");
     }
 }
+
+#[test]
+fn sdk_control_request_recovers_legacy_ids_without_network() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let config=root.path().join("config.json");
+    assert!(binary().args(["init"]).env("ATLAS_CONFIG",&config)
+        .output().unwrap().status.success());
+    let mut child=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut stdin=child.stdin.take().unwrap();
+        for input in [
+            json!({"type":"control_request","action":"permission_mode",
+                "requestId":"legacy"}),
+            json!({"type":"control","action":"tasks","request_id":"correct",
+                "requestId":"old"}),
+            json!({"type":"control_request","action":"unknown_action",
+                "requestId":"invalid"})
+        ] {
+            writeln!(stdin,"{input}").unwrap();
+        }
+    }
+    let output=child.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let decoded=String::from_utf8(output.stdout).unwrap();
+    let messages=decoded.lines().map(|x|serde_json::from_str::<Value>(x).unwrap())
+        .filter(|v|v["type"]=="control_response").collect::<Vec<_>>();
+    assert_eq!(messages.len(),3);
+    assert_eq!(messages[0]["request_id"],"legacy");
+    assert_eq!(messages[0]["ok"],true);
+    assert_eq!(messages[1]["request_id"],"correct");
+    assert_eq!(messages[1]["ok"],true);
+    assert_eq!(messages[2]["request_id"],"invalid");
+    assert_eq!(messages[2]["ok"],false);
+}

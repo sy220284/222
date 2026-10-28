@@ -36,6 +36,7 @@ mod ndjson;
 mod array_utils;
 mod ink_constants;
 mod command_lifecycle;
+mod control_message_compat;
 mod permission_rules;
 mod permission_mode;
 mod reactive_store;
@@ -273,6 +274,7 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                 continue;
             }
         };
+        let event=control_message_compat::normalize_control_message_keys(event);
         let kind=event.get("type").and_then(Value::as_str).unwrap_or("user");
         match kind {
             "user"=>{
@@ -293,7 +295,16 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     })),
                 }
             },
-            "control"=>{
+            "control" | "control_request"=>{
+                macro_rules! send_control {
+                    ($reply:expr) => {{
+                        let mut response:Value=$reply;
+                        if let Some(id)=event.get("request_id"){
+                            response["request_id"]=id.clone();
+                        }
+                        print_json!(response);
+                    }};
+                }
                 let action=event.get("action").and_then(Value::as_str).unwrap_or("");
                 if action=="mailbox_send" {
                     let parsed=event.get("message").cloned()
@@ -303,32 +314,32 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     match parsed {
                         Ok(message)=>{
                             let revision=agent.send_transient(message);
-                            print_json!(json!({"type":"control_response","action":action,
+                            send_control!(json!({"type":"control_response","action":action,
                                 "ok":true,"revision":revision}));
                         }
-                        Err(error)=>print_json!(json!({"type":"control_response",
+                        Err(error)=>send_control!(json!({"type":"control_response",
                             "action":action,"ok":false,"error":format!("{error:#}")})),
                     }
                     continue;
                 }
                 if action=="mailbox_poll" {
                     let message=agent.poll_transient();
-                    print_json!(json!({"type":"control_response","action":action,
+                    send_control!(json!({"type":"control_response","action":action,
                         "ok":true,"message":message,"revision":agent.transient_revision()}));
                     continue;
                 }
                 if action=="permission_mode" {
-                    print_json!(json!({"type":"control_response","action":action,
+                    send_control!(json!({"type":"control_response","action":action,
                         "ok":true,"mode":agent.current_permission_mode()}));
                     continue;
                 }
                 if action=="tasks" {
                     match agent.background_tasks() {
-                        Ok(tasks)=>print_json!(json!({
+                        Ok(tasks)=>send_control!(json!({
                             "type":"control_response","action":action,
                             "ok":true,"result":serde_json::from_str::<Value>(&tasks)?
                         })),
-                        Err(error)=>print_json!(json!({
+                        Err(error)=>send_control!(json!({
                             "type":"control_response","action":action,
                             "ok":false,"error":format!("{error:#}")
                         })),
@@ -346,9 +357,9 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     _=>Err(anyhow::anyhow!("Unknown control action: {action}")),
                 };
                 match result{
-                    Ok(())=>print_json!(json!({"type":"control_response",
+                    Ok(())=>send_control!(json!({"type":"control_response",
                         "action":action,"ok":true})),
-                    Err(error)=>print_json!(json!({"type":"control_response",
+                    Err(error)=>send_control!(json!({"type":"control_response",
                         "action":action,"ok":false,"error":format!("{error:#}")})),
                 };
             },
