@@ -300,15 +300,15 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
         let kind=event.get("type").and_then(Value::as_str).unwrap_or("user");
         match kind {
             "user"=>{
-                let prompt=event.get("content").and_then(Value::as_str)
-                    .or_else(||event.pointer("/message/content").and_then(Value::as_str));
-                let Some(prompt)=prompt else{
+                let prompt_value=event.get("content")
+                    .or_else(||event.pointer("/message/content"));
+                let Some(prompt_value)=prompt_value else{
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
                 };
                 if event.get("queued").and_then(Value::as_bool)==Some(true){
                     let mut command:message_queue::Command=match serde_json::from_value(json!({
-                        "value":prompt,"mode":"prompt","priority":event.get("priority")
+                        "value":prompt_value,"mode":"prompt","priority":event.get("priority")
                             .cloned().unwrap_or(json!("next")),
                         "skipSlashCommands":event.get("skipSlashCommands").cloned()
                             .unwrap_or(json!(false)),
@@ -328,7 +328,18 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                         "revision":queue.revision(),"length":queue.len()}));
                     continue;
                 }
-                match agent.ask(prompt).await{
+                // The SDK accepts structured user content. This text-only
+                // Agent flattens valid text blocks and rejects unsupported
+                // blocks explicitly instead of silently dropping them.
+                let prompt=match sdk_queue::text_only_value(prompt_value){
+                    Ok(prompt)=>prompt,
+                    Err(error)=>{
+                        print_json!(json!({"type":"error",
+                            "message":format!("Unsupported user content: {error:#}")}));
+                        continue;
+                    }
+                };
+                match agent.ask(&prompt).await{
                     Ok(answer)=>print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
                         "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
