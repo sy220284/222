@@ -545,6 +545,26 @@ impl Agent {
     pub fn session_id(&self) -> String { self.session.id.to_string() }
     pub fn usage(&self) -> crate::protocol::TokenUsage { self.session.usage }
     pub fn background_tasks(&self) -> Result<String> { self.background.list() }
+    pub async fn stop_background_task(&self,id:&str)->Result<String>{
+        self.background.stop(id).await
+    }
+    pub fn set_sdk_permission_mode(&mut self,label:&str)->Result<()>{
+        let mode=permission_mode::Mode::parse(label)
+            .with_context(||format!("Unknown permission mode: {label}"))?;
+        if mode==permission_mode::Mode::BypassPermissions
+            && self.approval!=Approval::Full{
+            bail!("Bypass permissions requires --approval full")
+        }
+        if mode==permission_mode::Mode::AcceptEdits
+            && self.approval==Approval::ReadOnly{
+            bail!("acceptEdits is incompatible with --approval read-only")
+        }
+        if mode==permission_mode::Mode::Auto{
+            bail!("Automatic permission mode requires an enabled classifier")
+        }
+        self.permission_mode=mode;
+        Ok(())
+    }
     pub fn current_permission_mode(&self)->&'static str{
         self.permission_mode.label()
     }

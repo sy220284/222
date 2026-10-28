@@ -892,3 +892,52 @@ fn sdk_control_request_recovers_legacy_ids_without_network() {
     assert_eq!(messages[2]["request_id"],"invalid");
     assert_eq!(messages[2]["ok"],false);
 }
+
+#[test]
+fn sdk_native_control_envelopes_switch_model_enforce_approval_and_preserve_ids(){
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let config=root.path().join("config.json");
+    assert!(binary().args(["init"]).env("ATLAS_CONFIG",&config)
+        .output().unwrap().status.success());
+    let mut child=binary().args([
+        "--workspace",root.path().to_str().unwrap(),"--approval","read-only","sdk"
+    ]).env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut stdin=child.stdin.take().unwrap();
+        for event in [
+            json!({"type":"control_request","requestId":"m-1",
+                "request":{"subtype":"set_model","model":"my-custom-model"}}),
+            json!({"type":"control_request","request_id":"p-2",
+                "request":{"subtype":"set_permission_mode","mode":"bypassPermissions"}}),
+            json!({"type":"control_request","request_id":"p-3",
+                "request":{"subtype":"set_permission_mode","mode":"plan"}}),
+            json!({"type":"control_request","request_id":"t-4",
+                "request":{"subtype":"stop_task","task_id":"invalid"}}),
+            json!({"type":"control_request","request_id":"z-5",
+                "request":{"subtype":"not_implemented"}}),
+        ]{
+            writeln!(stdin,"{event}").unwrap();
+        }
+    }
+    let output=child.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let wire=String::from_utf8(output.stdout).unwrap();
+    let messages=wire.lines().map(|line|serde_json::from_str::<Value>(line).unwrap())
+        .filter(|x|x["type"]=="control_response")
+        .collect::<Vec<_>>();
+    assert_eq!(messages.len(),5);
+    for(index,id)in ["m-1","p-2","p-3","t-4","z-5"].iter().enumerate(){
+        assert_eq!(messages[index]["response"]["request_id"],*id);
+    }
+    assert_eq!(messages[0]["response"]["subtype"],"success");
+    assert_eq!(messages[0]["response"]["response"]["model"],"my-custom-model");
+    assert_eq!(messages[1]["response"]["subtype"],"error");
+    assert!(messages[1]["response"]["error"].as_str().unwrap()
+        .contains("requires --approval full"));
+    assert_eq!(messages[2]["response"]["subtype"],"success");
+    assert_eq!(messages[2]["response"]["response"]["mode"],"plan");
+    assert_eq!(messages[3]["response"]["subtype"],"error");
+    assert_eq!(messages[4]["response"]["subtype"],"error");
+}

@@ -295,6 +295,9 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     })),
                 }
             },
+            "control_request" if event.get("request").is_some()=>{
+                print_json!(sdk_nested_control(agent,config,&event).await);
+            },
             "control" | "control_request"=>{
                 macro_rules! send_control {
                     ($reply:expr) => {{
@@ -368,4 +371,50 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
         }
     }
     Ok(())
+}
+
+
+/// Standard SDK request envelope; the legacy flat local command protocol
+/// remains available through "control" messages.
+async fn sdk_nested_control(agent:&mut Agent,config:&Config,event:&Value)->Value{
+    let id=event.get("request_id").and_then(Value::as_str).unwrap_or("");
+    let outcome:Result<Value>=async {
+        if id.is_empty(){bail!("control_request requires request_id")}
+        let request=event.get("request").and_then(Value::as_object)
+            .ok_or_else(||anyhow::anyhow!("control_request requires request object"))?;
+        let subtype=request.get("subtype").and_then(Value::as_str)
+            .ok_or_else(||anyhow::anyhow!("control request requires subtype"))?;
+        match subtype{
+            "set_model"=>{
+                if let Some(name)=request.get("model"){
+                    let model=name.as_str().ok_or_else(||
+                        anyhow::anyhow!("set_model model must be a string"))?;
+                    let profile=config.select(Some(&agent.profile().id),Some(model))?;
+                    agent.switch_model(profile)?;
+                }
+                Ok(json!({"model":agent.profile().model,"provider":agent.profile().id}))
+            },
+            "set_permission_mode"=>{
+                let mode=request.get("mode").and_then(Value::as_str)
+                    .ok_or_else(||anyhow::anyhow!("set_permission_mode requires mode"))?;
+                agent.set_sdk_permission_mode(mode)?;
+                Ok(json!({"mode":agent.current_permission_mode()}))
+            },
+            "stop_task"=>{
+                let task_id=request.get("task_id").and_then(Value::as_str)
+                    .ok_or_else(||anyhow::anyhow!("stop_task requires task_id"))?;
+                let result=agent.stop_background_task(task_id).await?;
+                Ok(json!({"task":serde_json::from_str::<Value>(&result)?}))
+            },
+            other=>bail!("Unsupported SDK control subtype: {other}"),
+        }
+    }.await;
+    match outcome{
+        Ok(response)=>json!({"type":"control_response","response":{
+            "subtype":"success","request_id":id,"response":response
+        }}),
+        Err(error)=>json!({"type":"control_response","response":{
+            "subtype":"error","request_id":id,"error":format!("{error:#}")
+        }}),
+    }
 }
