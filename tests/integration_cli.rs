@@ -1946,7 +1946,7 @@ fn agent_invalid_tool_json_preserves_sibling_calls_and_model_followup(){
         for index in 0..2 {
             let (mut conn,_)=listener.accept().unwrap();
             requests.push(read_request(&mut conn));
-            let body=if index==0 {
+            let response=if index==0 {
                 json!({"choices":[{"message":{"role":"assistant","content":null,
                     "tool_calls":[
                         {"id":"bad-json","type":"function","function":{
@@ -1956,13 +1956,14 @@ fn agent_invalid_tool_json_preserves_sibling_calls_and_model_followup(){
                         {"id":"good-write","type":"function","function":{
                             "name":"write_file",
                             "arguments":json!({"path":"survived.txt",
-                                "content":"persisted despite sibling failures\\n"}).to_string()}}
+                                "content":"persisted despite sibling failures\n"}).to_string()}}
                     ]},"finish_reason":"tool_calls"}]})
             }else{
                 json!({"choices":[{"message":{"role":"assistant",
                     "content":"All tool calls acknowledged"},"finish_reason":"stop"}]})
-            }.to_string();
-            write!(conn,"HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}",
+            };
+            let body=response.to_string();
+            write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 body.len(),body).unwrap();
             conn.flush().unwrap();
         }
