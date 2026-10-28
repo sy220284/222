@@ -4,6 +4,7 @@ mod config;
 mod protocol;
 mod provider;
 mod session;
+mod task;
 mod tools;
 
 use agent::Agent;

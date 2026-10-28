@@ -1,4 +1,4 @@
-use crate::protocol::Message;
+use crate::{protocol::Message, task::Task};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{path::{Path, PathBuf}, fs};
@@ -10,11 +10,13 @@ pub struct Session {
     pub messages: Vec<Message>,
     #[serde(default)]
     pub summary: Option<String>,
+    #[serde(default)]
+    pub tasks: Vec<Task>,
 }
 
 impl Session {
     pub fn fresh() -> Self {
-        Self { id: Uuid::new_v4(), messages: Vec::new(), summary: None }
+        Self { id: Uuid::new_v4(), messages: Vec::new(), summary: None, tasks: Vec::new() }
     }
 
     fn path(root: &Path, id: Uuid) -> PathBuf {
@@ -44,6 +46,7 @@ impl Session {
     pub fn clear(&mut self) {
         self.summary = None;
         self.messages.clear();
+        self.tasks.clear();
     }
 }
 

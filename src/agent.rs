@@ -4,6 +4,7 @@ use crate::{
     provider::{self, ModelProvider},
     session::Session,
     mcp::McpManager,
+    task,
     config::McpServerConfig,
     tools::{self, Approval, ToolExecutor},
 };
@@ -17,6 +18,7 @@ Before editing, inspect relevant files. Keep edits minimal and verify them when 
 The filesystem tools are scoped to the active workspace. Shell commands require user authorization
 and may affect the wider machine. Do not assume authorization.
 If a tool fails, analyze its error and make a concrete correction or explain the blocker.
+Use task tools to track multi-step work; mark tasks completed only when verified.
 Project skills can be discovered with list_skills and loaded with read_skill when relevant.
 Never reveal secrets from configuration, environment variables, or private files.
 When finished, report the verified result and any remaining limitations accurately."#;
@@ -114,6 +116,7 @@ impl Agent {
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive);
         for _ in 0..self.max_steps {
             let mut available_tools = tools::definitions();
+            available_tools.extend(task::definitions());
             if let Some(mcp) = &self.mcp {
                 available_tools.extend(mcp.definitions());
             }
@@ -139,7 +142,9 @@ impl Agent {
             }
             for call in calls {
                 eprintln!("Executing tool: {}", call.function.name);
-                let result = if let Some(mcp) = &mut self.mcp {
+                let result = if task::handles(&call.function.name) {
+                    task::execute(&mut self.session, &call)
+                } else if let Some(mcp) = &mut self.mcp {
                     if mcp.handles(&call.function.name) {
                         match executor.approve_external(&call) {
                             Ok(()) => mcp.execute(&call).await,

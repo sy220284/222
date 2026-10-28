@@ -15,6 +15,7 @@
 | 工具权限 | `tools.rs::Approval` | read-only / ask / full |
 | 文件、搜索与命令 | `tools.rs` | 有限制的工作区文件工具、明确授权 Shell |
 | 历史记录及恢复 | `session.rs` | UUID/JSON 文件 |
+| 会话任务管理 | `task.rs` | 创建、状态更新、查询及持久化 |
 | 项目提示词 | `agent.rs::system_prompt` | AGENTS.md / 本地 instructions |
 | 模型选择与配置 | `config.rs` | 可自定义提供商配置 |
 | CLI 和交互 REPL | `main.rs` | run/chat/models/init |
