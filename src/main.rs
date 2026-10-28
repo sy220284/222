@@ -306,13 +306,20 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     continue;
                 };
                 if event.get("queued").and_then(Value::as_bool)==Some(true){
-                    let mut command:message_queue::Command=serde_json::from_value(json!({
+                    let mut command:message_queue::Command=match serde_json::from_value(json!({
                         "value":prompt,"mode":"prompt","priority":event.get("priority")
                             .cloned().unwrap_or(json!("next")),
                         "skipSlashCommands":event.get("skipSlashCommands").cloned()
                             .unwrap_or(json!(false)),
                         "isMeta":event.get("isMeta").cloned().unwrap_or(json!(false))
-                    }))?;
+                    })) {
+                        Ok(command)=>command,
+                        Err(error)=>{
+                            print_json!(json!({"type":"error",
+                                "message":format!("Invalid queued user command: {error}")}));
+                            continue;
+                        }
+                    };
                     command.agent_id=event.get("agentId").and_then(Value::as_str).map(str::to_owned);
                     let identity=queue.enqueue(command,false);
                     print_json!(json!({"type":"queued","identity":identity,
