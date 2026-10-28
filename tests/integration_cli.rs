@@ -1353,3 +1353,95 @@ fn model_invokes_skill_with_quote_aware_named_arguments_in_real_tool_loop(){
     assert!(result.contains("Indexed: safety and reliability"),"{result}");
     assert!(result.contains("Raw: src/lib.rs 'safety and reliability'"),"{result}");
 }
+
+#[test]
+fn sdk_queue_drain_preserves_results_before_blocked_item() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let (mut conn,_)=listener.accept().unwrap();
+        let request=read_request(&mut conn);
+        let response=json!({"choices":[{"message":{"role":"assistant",
+            "content":"First completed"},"finish_reason":"stop"}],
+            "usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}})
+            .to_string();
+        write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response.len(),response).unwrap();
+        conn.flush().unwrap();
+        request
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=sdk.stdin.take().unwrap();
+        for value in [
+            json!({"type":"control","action":"queue_enqueue","command":{
+                "mode":"prompt","value":"SAFE_PROMPT","priority":"now"}}),
+            json!({"type":"control","action":"queue_enqueue","command":{
+                "mode":"bash","value":"echo do-not-run","priority":"next"}}),
+            json!({"type":"control","action":"queue_drain","request_id":"drain"}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"after"})
+        ]{writeln!(input,"{value}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    let request=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(request.contains("SAFE_PROMPT"));
+    assert!(!request.contains("do-not-run"));
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+    let drain=events.iter().find(|v|v["request_id"]=="drain").unwrap();
+    assert_eq!(drain["ok"],true,"{drain}");
+    assert_eq!(drain["result"]["results"].as_array().unwrap().len(),1);
+    assert_eq!(drain["result"]["results"][0]["content"],"First completed");
+    assert_eq!(drain["result"]["blocked"]["reason"],"bash");
+    let after=events.iter().find(|v|v["request_id"]=="after").unwrap();
+    assert_eq!(after["result"]["length"],1);
+    assert_eq!(after["result"]["commands"][0]["value"],"echo do-not-run");
+    assert_eq!(drain["result"]["blocked"]["identity"],
+        after["result"]["commands"][0]["identity"]);
+}
+
+#[test]
+fn sdk_invalid_queue_input_and_slash_routing_keep_session_alive() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"local","providers":[{
+        "id":"local","kind":"openai-compatible","model":"offline",
+        "base_url":"http://127.0.0.1:9/v1"
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=sdk.stdin.take().unwrap();
+        for value in [
+            json!({"type":"user","content":"INVALID","queued":true,"priority":"urgent"}),
+            json!({"type":"user","content":"/model other","queued":true,"priority":"now"}),
+            json!({"type":"control","action":"queue_drain","request_id":"drain"}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"after"})
+        ]{writeln!(input,"{value}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+    assert!(events.iter().any(|v|v["type"]=="error" && v["message"]
+        .as_str().unwrap_or("").contains("Invalid queued user command")));
+    let drain=events.iter().find(|v|v["request_id"]=="drain").unwrap();
+    assert_eq!(drain["ok"],false);
+    assert!(drain["error"].as_str().unwrap().contains("slash-command"));
+    let after=events.iter().find(|v|v["request_id"]=="after").unwrap();
+    assert_eq!(after["ok"],true);
+    assert_eq!(after["result"]["length"],1);
+    assert_eq!(after["result"]["commands"][0]["value"],"/model other");
+}
