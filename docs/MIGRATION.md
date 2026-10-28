@@ -95,3 +95,7 @@
 ### 子代理与并发团队会话费用合并
 
 原始 `cost-tracker` 维护进程内会话累计用量；Rust 子会话之前单独记账、父会话漏算。新 `CostLedger::merge` 在真实委托和并行团队回收路径合并账本，保留同模型聚合、不同模型独立计数、未知费率显式状态；文件增删行指标同步合并而不覆盖。真实三轮模型委托测试验证根会话计入子会话 Token 与成本。异常退出和跨会话重试时长未声称等价。
+
+### 模型缓存计费来源差异
+
+原版计费将 input、cache_read、cache_creation 作为三类费用来源分别计算；部分通用 OpenAI 兼容服务却把缓存 Token 计入 prompt_tokens。费用配置按模型新增 `cache_read_included_in_input` 与 `cache_write_included_in_input` 标志：计入输入的缓存部分先减掉，再按缓存价格计费；独立上报时不减。普通 HTTP、SSE、Gemini 扩展用量解析统一记录 cache_creation 和 web_search_requests。既有费率 JSON 不提供这些字段时保持默认向后兼容。

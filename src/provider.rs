@@ -190,7 +190,15 @@ fn parse_openai_usage(value: &Value) -> Option<TokenUsage> {
         output_tokens: output,
         total_tokens: usage.get("total_tokens").and_then(Value::as_u64)
             .unwrap_or(input.saturating_add(output)),
-        cache_read_input_tokens: usage.pointer("/prompt_tokens_details/cached_tokens").and_then(Value::as_u64).unwrap_or(0),
+        cache_read_input_tokens: usage.pointer("/prompt_tokens_details/cached_tokens")
+            .or_else(||usage.get("cache_read_input_tokens"))
+            .and_then(Value::as_u64).unwrap_or(0),
+        cache_creation_input_tokens: usage.get("cache_creation_input_tokens")
+            .or_else(||usage.get("cache_write_input_tokens"))
+            .and_then(Value::as_u64).unwrap_or(0),
+        web_search_requests: usage.pointer("/server_tool_use/web_search_requests")
+            .or_else(||usage.get("web_search_requests"))
+            .and_then(Value::as_u64).unwrap_or(0),
         ..Default::default()
     })
 }
@@ -205,6 +213,8 @@ pub(crate) fn parse_gemini_usage(value: &Value) -> Option<TokenUsage> {
         total_tokens: usage.get("totalTokenCount").and_then(Value::as_u64)
             .unwrap_or(input.saturating_add(output)),
         cache_read_input_tokens: usage.get("cachedContentTokenCount").and_then(Value::as_u64).unwrap_or(0),
+        cache_creation_input_tokens: usage.get("cacheCreationInputTokenCount").and_then(Value::as_u64).unwrap_or(0),
+        web_search_requests: usage.get("webSearchRequests").and_then(Value::as_u64).unwrap_or(0),
         ..Default::default()
     })
 }
@@ -251,6 +261,23 @@ mod tests {
             "candidatesTokenCount":9,"totalTokenCount":16}})),
             Some(TokenUsage {input_tokens:7,output_tokens:9,total_tokens:16, ..Default::default()}));
         assert!(parse_gemini_usage(&json!({})).is_none());
+        let openai=parse_openai_usage(&json!({"usage":{
+            "prompt_tokens":100,"completion_tokens":15,"total_tokens":115,
+            "prompt_tokens_details":{"cached_tokens":30},
+            "cache_creation_input_tokens":10,
+            "server_tool_use":{"web_search_requests":2}
+        }})).unwrap();
+        assert_eq!(openai.cache_read_input_tokens,30);
+        assert_eq!(openai.cache_creation_input_tokens,10);
+        assert_eq!(openai.web_search_requests,2);
+        let gemini=parse_gemini_usage(&json!({"usageMetadata":{
+            "promptTokenCount":200,"candidatesTokenCount":20,
+            "cachedContentTokenCount":40,"cacheCreationInputTokenCount":12,
+            "webSearchRequests":3
+        }})).unwrap();
+        assert_eq!(gemini.cache_read_input_tokens,40);
+        assert_eq!(gemini.cache_creation_input_tokens,12);
+        assert_eq!(gemini.web_search_requests,3);
     }
 
     #[test]

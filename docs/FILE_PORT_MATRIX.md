@@ -1617,7 +1617,7 @@
 | `src/utils/model/modelSupportOverrides.ts` | 51 | 1537 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/providers.ts` | 41 | 1340 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/validateModel.ts` | 160 | 4633 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/modelCost.ts` | 232 | 7520 | 重写：多模型价格计算 | `src/cost.rs` / `src/config.rs` | 部分实现：用户可配五类费率、缓存独立计费、未知价格提示；原厂固定费率不保留 |
+| `src/utils/modelCost.ts` | 232 | 7520 | 重写：多模型价格计算 | `src/cost.rs` / `src/config.rs` | 部分实现：五类可配置费率、按服务区分缓存是否计入输入 Token、未知价格提示及模型价格格式；原厂价格常量不保留 |
 | `src/utils/modifiers.ts` | 37 | 1112 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mtls.ts` | 180 | 4655 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/nativeInstaller/download.ts` | 524 | 15191 | 重写：保持通用行为 | 待定 | 未迁移 |

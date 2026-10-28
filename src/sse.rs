@@ -24,7 +24,15 @@ impl Assembler{
                     input_tokens:input,output_tokens:output,
                     total_tokens:usage.get("total_tokens").and_then(Value::as_u64)
                         .unwrap_or(input.saturating_add(output)),
-                    cache_read_input_tokens: usage.pointer("/prompt_tokens_details/cached_tokens").and_then(Value::as_u64).unwrap_or(0),
+                    cache_read_input_tokens: usage.pointer("/prompt_tokens_details/cached_tokens")
+                        .or_else(||usage.get("cache_read_input_tokens"))
+                        .and_then(Value::as_u64).unwrap_or(0),
+                    cache_creation_input_tokens: usage.get("cache_creation_input_tokens")
+                        .or_else(||usage.get("cache_write_input_tokens"))
+                        .and_then(Value::as_u64).unwrap_or(0),
+                    web_search_requests: usage.pointer("/server_tool_use/web_search_requests")
+                        .or_else(||usage.get("web_search_requests"))
+                        .and_then(Value::as_u64).unwrap_or(0),
                     ..Default::default()
                 });
             }
@@ -159,7 +167,17 @@ mod tests{
         parser.consume(&json!({"choices":[{"delta":{"tool_calls":[{
             "index":0,"function":{"arguments":"\"a.rs\"}"}
         }]},"finish_reason":"tool_calls"}]}),&tx).unwrap();
+        parser.consume(&json!({"choices":[],"usage":{
+            "prompt_tokens":100,"completion_tokens":10,"total_tokens":110,
+            "prompt_tokens_details":{"cached_tokens":40},
+            "cache_creation_input_tokens":15,
+            "server_tool_use":{"web_search_requests":3}
+        }}),&tx).unwrap();
         let response=parser.finish().unwrap();
+        let usage=response.usage.unwrap();
+        assert_eq!(usage.cache_read_input_tokens,40);
+        assert_eq!(usage.cache_creation_input_tokens,15);
+        assert_eq!(usage.web_search_requests,3);
         let call=&response.message.tool_calls.unwrap()[0];
         assert_eq!(call.id,"abc");
         assert_eq!(call.function.name,"read_file");

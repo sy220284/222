@@ -16,7 +16,14 @@ pub struct ModelPrice {
     pub cache_write_per_million: f64,
     #[serde(default)]
     pub web_search_per_request: f64,
+    // Some providers include cache tokens in the input total, others report
+    // input/cache-read/cache-write as separate usage categories.
+    #[serde(default="included_by_default")]
+    pub cache_read_included_in_input: bool,
+    #[serde(default)]
+    pub cache_write_included_in_input: bool,
 }
+fn included_by_default()->bool{true}
 impl ModelPrice {
     pub fn validate(&self) -> Result<()> {
         if self.provider.trim().is_empty() || self.model.trim().is_empty() {
@@ -49,7 +56,14 @@ impl ModelPrice {
         })
     }
     pub fn cost(&self, usage: TokenUsage) -> f64 {
-        let uncached = usage.input_tokens.saturating_sub(usage.cache_read_input_tokens);
+        let included_read=if self.cache_read_included_in_input {
+            usage.cache_read_input_tokens
+        }else{0};
+        let included_write=if self.cache_write_included_in_input {
+            usage.cache_creation_input_tokens
+        }else{0};
+        let uncached = usage.input_tokens.saturating_sub(
+            included_read.saturating_add(included_write));
         (uncached as f64 * self.input_per_million
             + usage.output_tokens as f64 * self.output_per_million
             + usage.cache_read_input_tokens as f64 * self.cache_read_per_million
@@ -174,7 +188,8 @@ mod tests {
         ModelPrice {
             provider: "a".into(), model: "m".into(), input_per_million: 3.0,
             output_per_million: 15.0, cache_read_per_million: 0.3,
-            cache_write_per_million: 3.75, web_search_per_request: 0.01
+            cache_write_per_million: 3.75, web_search_per_request: 0.01,
+            cache_read_included_in_input:true,cache_write_included_in_input:false
         }
     }
     #[test]
@@ -191,6 +206,30 @@ mod tests {
         assert!(!ledger.has_unknown_prices());
         let copy: CostLedger = serde_json::from_str(&serde_json::to_string(&ledger).unwrap()).unwrap();
         assert_eq!(copy, ledger);
+    }
+    #[test]
+    fn cache_inclusion_flags_preserve_legacy_separate_and_inclusive_providers(){
+        let mut p=price();
+        let usage=TokenUsage{
+            input_tokens:1_000_000,output_tokens:0,total_tokens:1_000_000,
+            cache_read_input_tokens:400_000,cache_creation_input_tokens:200_000,
+            ..Default::default()
+        };
+        // Default includes cached reads but not cache writes: 600k regular + cache tiers.
+        assert!((p.cost(usage)-2.67).abs()<1e-9);
+        p.cache_read_included_in_input=false;
+        p.cache_write_included_in_input=false;
+        // Separate count sources: 1M regular + 400k cache reads + 200k cache writes.
+        assert!((p.cost(usage)-3.87).abs()<1e-9);
+        p.cache_read_included_in_input=true;
+        p.cache_write_included_in_input=true;
+        // Both are inclusive: 400k regular + separate cache tiers.
+        assert!((p.cost(usage)-2.07).abs()<1e-9);
+        let old:ModelPrice=serde_json::from_str(
+            r#"{"provider":"a","model":"m","input_per_million":3,"output_per_million":15}"#
+        ).unwrap();
+        assert!(old.cache_read_included_in_input);
+        assert!(!old.cache_write_included_in_input);
     }
     #[test]
     fn model_switch_and_unknown_prices_preserve_separate_usage() {

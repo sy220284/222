@@ -241,3 +241,5 @@ cargo run -- chat --resume <上次输出的UUID>
 模型费用查询 `/cost` 还显示当前会话累计的 API/工具/交互耗时（毫秒）以及文件修改增删行数。新增与替换操作的行数来自实际文本差异，费用与统计均随会话恢复；未知模型单价仍然明确提示。
 
 子代理 `spawn_agent` 与并行团队 `spawn_team` 的费用和 Token 会合并进入父会话总览，同时保留子会话各自的历史文件和独立执行结果。
+
+缓存计费的输入口径可按模型配置：`cache_read_included_in_input` 默认为 `true`，`cache_write_included_in_input` 默认为 `false`。如果模型服务把缓存读取独立于 `input_tokens` 上报，将前者设置为 `false`，避免错误扣减；如缓存创建已包含在输入 Token 总量，将后者设置为 `true`。两项均属于每个 `model_prices` 条目的可选布尔字段。
