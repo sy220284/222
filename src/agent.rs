@@ -99,7 +99,11 @@ fn system_prompt(root: &Path) -> Result<String> {
     for name in ["AGENTS.md", ".atlas/instructions.md"] {
         let path = root.join(name);
         if !path.is_file() { continue; }
-        let bytes = fs::read(&path).with_context(|| format!("Read project instructions: {}", path.display()))?;
+        let real_path = path.canonicalize()?;
+        if !real_path.starts_with(root) {
+            bail!("Project instructions cannot point outside the workspace: {}", path.display());
+        }
+        let bytes = fs::read(&real_path).with_context(|| format!("Read project instructions: {}", path.display()))?;
         if bytes.len() > 50_000 {
             bail!("Project instruction file too large: {}", path.display());
         }
