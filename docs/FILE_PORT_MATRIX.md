@@ -72,7 +72,7 @@
 | `src/cli/handlers/mcp.tsx` | 362 | 56167 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/plugins.ts` | 879 | 31073 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/util.tsx` | 110 | 14501 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cli/ndjsonSafeStringify.ts` | 33 | 1408 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/cli/ndjsonSafeStringify.ts` | 33 | 1408 | 重写：保持通用行为 | `src/ndjson.rs / src/main.rs / src/agent.rs` | 部分实现：JS 特殊行分隔符转义、SDK 输出回环与 JSON 值保持；jsonStringify 的非标准对象语义待核对 |
 | `src/cli/print.ts` | 5595 | 212735 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/remoteIO.ts` | 256 | 9946 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/structuredIO.ts` | 860 | 28720 | 重写：保持通用行为 | `src/main.rs / src/agent.rs / src/sse.rs` | 部分实现：NDJSON SDK 多轮、事件和实时文本增量；控制请求体系未全等 |
@@ -845,7 +845,7 @@
 | `src/ink/components/TerminalFocusContext.tsx` | 52 | 5955 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/TerminalSizeContext.tsx` | 7 | 983 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/Text.tsx` | 254 | 16811 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/constants.ts` | 3 | 107 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/constants.ts` | 3 | 107 | 重写：终端 UI／交互 | `src/ink_constants.rs` | 已验收：原始唯一帧间隔常量数值 16ms；证据 ink_constants::tests::original_render_frame_interval |
 | `src/ink/dom.ts` | 485 | 15126 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/events/click-event.ts` | 39 | 1332 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/events/dispatcher.ts` | 234 | 6004 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -1359,7 +1359,7 @@
 | `src/utils/apiPreconnect.ts` | 72 | 2843 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/appleTerminalBackup.ts` | 125 | 2798 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/argumentSubstitution.ts` | 146 | 5079 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/array.ts` | 14 | 364 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/array.ts` | 14 | 364 | 重写：保持通用行为 | `src/array_utils.rs` | 部分实现：intersperse 序号、count 布尔谓词、uniq 基础值去重；JS 对象引用身份与非布尔 Truthy 待核对 |
 | `src/utils/asciicast.ts` | 240 | 7755 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/attachments.ts` | 3998 | 127423 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/attribution.ts` | 394 | 13346 | 重写：保持通用行为 | 待定 | 未迁移 |

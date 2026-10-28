@@ -25,6 +25,13 @@ mod task_output_format;
 mod compat_helpers;
 mod runtime_contracts;
 mod tool_names;
+mod ndjson;
+mod array_utils;
+mod ink_constants;
+
+macro_rules! print_json {
+    ($value:expr)=>{ println!("{}",crate::ndjson::stringify_value(&$value)); };
+}
 
 use agent::Agent;
 use anyhow::{bail, Result};
@@ -233,7 +240,7 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
 }
 
 async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
-    println!("{}",json!({"type":"system","subtype":"init",
+    print_json!(json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
         "usage_schema":runtime_contracts::empty_usage()}));
@@ -244,7 +251,7 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
         let event:Value=match serde_json::from_str(&line){
             Ok(value)=>value,
             Err(error)=>{
-                println!("{}",json!({"type":"error","message":error.to_string()}));
+                print_json!(json!({"type":"error","message":error.to_string()}));
                 continue;
             }
         };
@@ -254,15 +261,15 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                 let prompt=event.get("content").and_then(Value::as_str)
                     .or_else(||event.pointer("/message/content").and_then(Value::as_str));
                 let Some(prompt)=prompt else{
-                    println!("{}",json!({"type":"error","message":"User event requires content"}));
+                    print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
                 };
                 match agent.ask(prompt).await{
-                    Ok(answer)=>println!("{}",json!({
+                    Ok(answer)=>print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
                         "content":answer,"usage":agent.usage()
                     })),
-                    Err(error)=>println!("{}",json!({
+                    Err(error)=>print_json!(json!({
                         "type":"error","session_id":agent.session_id(),
                         "message":format!("{error:#}")
                     })),
@@ -272,11 +279,11 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                 let action=event.get("action").and_then(Value::as_str).unwrap_or("");
                 if action=="tasks" {
                     match agent.background_tasks() {
-                        Ok(tasks)=>println!("{}",json!({
+                        Ok(tasks)=>print_json!(json!({
                             "type":"control_response","action":action,
                             "ok":true,"result":serde_json::from_str::<Value>(&tasks)?
                         })),
-                        Err(error)=>println!("{}",json!({
+                        Err(error)=>print_json!(json!({
                             "type":"control_response","action":action,
                             "ok":false,"error":format!("{error:#}")
                         })),
@@ -294,13 +301,13 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     _=>Err(anyhow::anyhow!("Unknown control action: {action}")),
                 };
                 match result{
-                    Ok(())=>println!("{}",json!({"type":"control_response",
+                    Ok(())=>print_json!(json!({"type":"control_response",
                         "action":action,"ok":true})),
-                    Err(error)=>println!("{}",json!({"type":"control_response",
+                    Err(error)=>print_json!(json!({"type":"control_response",
                         "action":action,"ok":false,"error":format!("{error:#}")})),
                 };
             },
-            other=>println!("{}",json!({"type":"error",
+            other=>print_json!(json!({"type":"error",
                 "message":format!("Unsupported SDK event {other}")})),
         }
     }

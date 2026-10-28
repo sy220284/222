@@ -252,7 +252,7 @@ impl Agent {
 
     fn emit(&self, event: serde_json::Value) {
         if self.structured_output {
-            println!("{}",event);
+            println!("{}",crate::ndjson::stringify_value(&event));
         }
     }
 
