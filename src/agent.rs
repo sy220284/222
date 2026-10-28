@@ -489,7 +489,7 @@ impl Agent {
             let mut available_tools = tools::definitions();
             available_tools.extend(task::definitions());
             available_tools.extend(task_graph::definitions());
-            if self.child_depth==0 { available_tools.extend(crate::team_registry_tools()); }
+            available_tools.extend(crate::team_registry::definitions(self.child_depth==0,self.team_name.is_some()));
             if self.search_backend.is_some(){available_tools.push(crate::websearch::definition());}
             if self.child_depth == 0 {
                 available_tools.push(json!({"type":"function","function":{

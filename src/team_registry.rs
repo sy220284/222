@@ -36,6 +36,7 @@ impl Teams {
         }
         Ok(path)
     }
+    pub fn config_path(&self,name:&str)->Result<PathBuf>{self.path(name)}
     pub fn read(&self,name:&str)->Result<Option<Team>>{
         let path=self.path(name)?;
         match fs::read(path){
@@ -134,4 +135,42 @@ mod tests {
         teams.active("project","worker",false).unwrap();
         assert_eq!(teams.delete(Some("project")).unwrap()["success"],true);
     }
+}
+
+pub fn definitions(leader:bool,team_active:bool)->Vec<Value>{
+    let mut result=Vec::new();
+    if leader {
+        result.push(json!({"type":"function","function":{
+            "name":"TeamCreate",
+            "description":"Create a persistent local multi-agent team and task list.",
+            "parameters":{"type":"object","properties":{
+                "team_name":{"type":"string"},"description":{"type":"string"}
+            },"required":["team_name"]}
+        }}));
+        result.push(json!({"type":"function","function":{
+            "name":"TeamDelete",
+            "description":"Clean up a team after all teammates have stopped.",
+            "parameters":{"type":"object","properties":{}}
+        }}));
+    }
+    if team_active {
+        result.push(json!({"type":"function","function":{
+            "name":"SendMessage",
+            "description":"Send a plain-text message to a teammate or broadcast to all other members. A short summary is required.",
+            "parameters":{"type":"object","properties":{
+                "to":{"type":"string"},
+                "summary":{"type":"string"},
+                "message":{"type":"string"}
+            },"required":["to","summary","message"]}
+        }}));
+        result.push(json!({"type":"function","function":{
+            "name":"TeamInbox",
+            "description":"Read your team's local mailbox, optionally acknowledging messages.",
+            "parameters":{"type":"object","properties":{
+                "recipient":{"type":"string"},
+                "mark_read":{"type":"boolean"}
+            }}
+        }}));
+    }
+    result
 }
