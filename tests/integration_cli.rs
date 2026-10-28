@@ -1551,3 +1551,111 @@ fn sdk_queue_emits_structured_task_notification_before_model_result(){
     assert_eq!(notice["usage"]["duration_ms"],220);
     assert_eq!(events[result_pos]["ok"],true);
 }
+
+
+#[test]
+fn sdk_failed_model_turn_stops_drain_without_consuming_following_work() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let (mut conn,_)=listener.accept().unwrap();
+        let request=read_request(&mut conn);
+        let body=r#"{"error":{"message":"model unavailable"}}"#;
+        write!(conn,"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),body).unwrap();
+        conn.flush().unwrap();
+        request
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=sdk.stdin.take().unwrap();
+        for event in [
+            json!({"type":"user","content":"FAIL_ME","queued":true,"workload":"one"}),
+            json!({"type":"user","content":"DO_NOT_SEND","queued":true,"workload":"two"}),
+            json!({"type":"control","action":"queue_drain","request_id":"failed"}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"remaining"})
+        ]{writeln!(input,"{event}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    let request=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(request.contains("FAIL_ME"));
+    assert!(!request.contains("DO_NOT_SEND"));
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+    let drain=events.iter().find(|v|v["request_id"]=="failed").unwrap();
+    assert_eq!(drain["ok"],true,"{drain}");
+    assert_eq!(drain["result"]["results"].as_array().unwrap().len(),1);
+    assert_eq!(drain["result"]["results"][0]["ok"],false);
+    assert_eq!(drain["result"]["halted"]["reason"],"model-error");
+    assert_eq!(drain["result"]["halted"]["identities"],json!([1]));
+    let remaining=events.iter().find(|v|v["request_id"]=="remaining").unwrap();
+    assert_eq!(remaining["result"]["length"],1);
+    assert_eq!(remaining["result"]["commands"][0]["value"],"DO_NOT_SEND");
+}
+
+#[test]
+fn sdk_unsupported_content_blocks_are_preserved_until_explicitly_removed() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let (mut conn,_)=listener.accept().unwrap();
+        let request=read_request(&mut conn);
+        let body=json!({"choices":[{"message":{"role":"assistant",
+            "content":"Text blocks accepted"},"finish_reason":"stop"}]}).to_string();
+        write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),body).unwrap();
+        conn.flush().unwrap();
+        request
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=sdk.stdin.take().unwrap();
+        for event in [
+            json!({"type":"control","action":"queue_enqueue","command":{
+                "mode":"prompt","value":[{"type":"text","text":"SAFE"},
+                    {"type":"document","source":{"type":"text","data":"MUST_NOT_DROP"}}]}}),
+            json!({"type":"control","action":"queue_drain","request_id":"blocked"}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"preserved"}),
+            json!({"type":"control","action":"queue_remove_identity","identities":[1]}),
+            json!({"type":"control","action":"queue_enqueue","command":{
+                "mode":"prompt","value":[{"type":"text","text":"first"},
+                    {"type":"text","text":"second"}]}}),
+            json!({"type":"control","action":"queue_drain","request_id":"accepted"})
+        ]{writeln!(input,"{event}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    let request=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(request.contains("first\\nsecond"),"{request}");
+    assert!(!request.contains("MUST_NOT_DROP"));
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+    let blocked=events.iter().find(|v|v["request_id"]=="blocked").unwrap();
+    assert_eq!(blocked["ok"],false);
+    assert!(blocked["error"].as_str().unwrap().contains("unsupported-content"));
+    let preserved=events.iter().find(|v|v["request_id"]=="preserved").unwrap();
+    assert_eq!(preserved["result"]["length"],1);
+    assert_eq!(preserved["result"]["commands"][0]["value"][1]["type"],"document");
+    let accepted=events.iter().find(|v|v["request_id"]=="accepted").unwrap();
+    assert_eq!(accepted["ok"],true,"{accepted}");
+    assert_eq!(accepted["result"]["results"][0]["content"],"Text blocks accepted");
+}
