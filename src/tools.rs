@@ -1,4 +1,4 @@
-use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins, websearch, config::SearchBackend};
+use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins, websearch, config::SearchBackend, background::BackgroundTasks};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -7,7 +7,7 @@ use std::{
     io::{self, Write},
     path::{Component, Path, PathBuf},
     process::Stdio,
-    sync::Mutex,
+    sync::{Mutex, Arc},
     collections::HashMap,
     time::Duration,
 };
@@ -31,11 +31,17 @@ pub struct ToolExecutor {
     reads: Mutex<HashMap<PathBuf, u64>>,
     enabled_plugins: Vec<String>,
     search_backend: Option<SearchBackend>,
+    background: Option<Arc<BackgroundTasks>>,
 }
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None }
+        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None }
+    }
+
+    pub fn with_background(mut self, background: Arc<BackgroundTasks>) -> Self {
+        self.background = Some(background);
+        self
     }
 
     pub fn with_search(mut self,backend:Option<SearchBackend>)->Self{
@@ -118,7 +124,24 @@ impl ToolExecutor {
             },
             "run_command" => {
                 self.require_approval("run_command", &args)?;
-                self.run_command(&args).await
+                if args.get("run_in_background").and_then(Value::as_bool).unwrap_or(false) {
+                    let manager = self.background.as_ref().context("Background tasks unavailable")?;
+                    manager.start(required(&args,"command")?,
+                        args.get("description").and_then(Value::as_str).unwrap_or("Shell command")).await
+                } else {
+                    self.run_command(&args).await
+                }
+            }
+            "task_output" => {
+                let manager = self.background.as_ref().context("Background tasks unavailable")?;
+                manager.output(required(&args,"task_id")?,
+                    args.get("block").and_then(Value::as_bool).unwrap_or(true),
+                    args.get("timeout").and_then(Value::as_u64).unwrap_or(30_000)).await
+            }
+            "task_stop" => {
+                self.require_approval("task_stop",&args)?;
+                let manager = self.background.as_ref().context("Background tasks unavailable")?;
+                manager.stop(required(&args,"task_id")?).await
             }
             other => bail!("Unknown tool: {other}"),
         }
@@ -469,13 +492,15 @@ pub fn definitions() -> Vec<Value> {
         json!({"type":"function","function":{"name":"run_command",
             "description":"Execute a shell command from the workspace. Requires explicit approval. Commands can access the entire host.",
             "parameters":{"type":"object","properties":{
-                "command":{"type":"string"},"timeout_seconds":{"type":"integer"}
+                "command":{"type":"string"},"timeout_seconds":{"type":"integer"},
+                "run_in_background":{"type":"boolean"},"description":{"type":"string"}
             },"required":["command"]}}}),
     ];
     tools.push(notebook::definition());
     tools.extend(search::definitions());
     tools.push(webfetch::definition());
     tools.extend(history::definitions());
+    tools.extend(crate::background::definitions());
     tools
 }
 

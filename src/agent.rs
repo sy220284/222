@@ -6,6 +6,7 @@ use crate::{
     mcp::McpManager,
     lsp::LspManager,
     task,
+    background::BackgroundTasks,
     hooks::{HookRule, HookRunner, HookEvent},
     worktree::Worktree,
     protocol::ToolCall,
@@ -13,7 +14,7 @@ use crate::{
     tools::{self, Approval, ToolExecutor},
 };
 use anyhow::{bail, Context, Result};
-use std::{fs, path::{Path, PathBuf}};
+use std::{fs, path::{Path, PathBuf}, sync::Arc};
 use serde_json::json;
 
 const DEFAULT_SYSTEM: &str = r#"You are Atlas, a terminal-based software engineering assistant.
@@ -46,6 +47,7 @@ pub struct Agent {
     lsp_configs: Vec<LspServerConfig>,
     enabled_plugins: Vec<String>,
     search_backend: Option<SearchBackend>,
+    background: Arc<BackgroundTasks>,
     hook_rules: Vec<HookRule>,
 }
 
@@ -59,7 +61,8 @@ impl Agent {
         session: Session,
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, hook_rules: Vec::new() })
+        let background = Arc::new(BackgroundTasks::new(&root)?);
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -81,6 +84,7 @@ impl Agent {
     }
 
     pub async fn finish(&self) -> Result<()> {
+        self.background.stop_all().await;
         self.hooks.run(HookEvent::SessionEnd, None,
             json!({"session_id":self.session.id,"workspace":self.root})).await?;
         Ok(())
@@ -331,7 +335,8 @@ impl Agent {
         }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_plugins(self.enabled_plugins.clone())
-            .with_search(self.search_backend.clone());
+            .with_search(self.search_backend.clone())
+            .with_background(self.background.clone());
         let mut stop_hook_active = false;
         for _ in 0..self.max_steps {
             let mut available_tools = tools::definitions();
@@ -549,6 +554,7 @@ mod tests {
             lsp_configs: Vec::new(),
             enabled_plugins: Vec::new(),
             search_backend: None,
+            background: Arc::new(BackgroundTasks::new(dir.path()).unwrap()),
             hook_rules: Vec::new(),
         };
         agent.compact_history().await.unwrap();

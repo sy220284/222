@@ -1,6 +1,7 @@
 /target/
 /.atlas/sessions/
 /.atlas/history/
+/.atlas/background/
 *.swp
 *.bak
 .env

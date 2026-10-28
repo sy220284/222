@@ -16,6 +16,7 @@ mod history;
 mod plugins;
 mod websearch;
 mod sse;
+mod background;
 
 use agent::Agent;
 use anyhow::{bail, Result};
