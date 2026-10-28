@@ -11,6 +11,7 @@ mod tools;
 mod notebook;
 mod search;
 mod lsp;
+mod webfetch;
 
 use agent::Agent;
 use anyhow::{bail, Result};

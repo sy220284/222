@@ -1,4 +1,4 @@
-use crate::{protocol::ToolCall, notebook, search};
+use crate::{protocol::ToolCall, notebook, search, webfetch};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -65,6 +65,10 @@ impl ToolExecutor {
             "search_text" => self.search_text(&args),
             "list_skills" => self.list_skills(),
             "read_skill" => self.read_skill(&args),
+            "web_fetch" => {
+                self.require_approval("web_fetch", &args)?;
+                webfetch::execute(&args).await
+            },
             "git_status" => self.git_read(vec!["status".into(), "--short".into()]).await,
             "git_diff" => self.git_diff(&args).await,
             "git_log" => self.git_log(&args).await,
@@ -431,6 +435,7 @@ pub fn definitions() -> Vec<Value> {
     ];
     tools.push(notebook::definition());
     tools.extend(search::definitions());
+    tools.push(webfetch::definition());
     tools
 }
 
