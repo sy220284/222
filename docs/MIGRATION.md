@@ -28,7 +28,8 @@
 | MCP stdio 工具连接 | `mcp.rs` | 已实现工具发现、调用、权限接入 |
 | 项目 Skills | `tools.rs` | 已实现 SKILL.md 发现和读取 |
 | 本地同步 Hooks | `hooks.rs` / `agent.rs` | Pre/PostToolUse、Stop、用户输入、会话与压缩事件 |
-| 插件管理、异步 HTTP/Prompt/Agent Hooks | — | 未实现 |
+| 本地插件装载与技能组合 | `plugins.rs` | 启用式插件装载、合并 MCP/Hooks、技能发现与读取 |
+| 插件安装更新管理、异步 HTTP/Prompt/Agent Hooks | — | 未实现 |
 | Git 只读操作 | `tools.rs` | status / diff / log 已实现 |
 | Jupyter Notebook 编辑 | `notebook.rs` / `tools.rs` | 单元格 ID / 索引、插入/替换/删除、读后修改检测（输出与编码仍待对照） |
 | Glob / Grep 高级检索 | `search.rs` | 文件模式、分页、内容/计数/路径输出；ripgrep 各项语义仍需逐项核实 |

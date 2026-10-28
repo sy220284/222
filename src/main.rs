@@ -13,11 +13,13 @@ mod search;
 mod lsp;
 mod webfetch;
 mod history;
+mod plugins;
 
 use agent::Agent;
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use config::{canonical_workspace, Config};
+use plugins::PluginSet;
 use session::Session;
 use std::{
     io::{self, Read, Write},
@@ -109,6 +111,7 @@ async fn main() -> Result<()> {
     }
     if cli.max_steps == 0 { bail!("--max-steps must be at least 1") }
     let root = canonical_workspace(&cli.workspace)?;
+    let plugins = PluginSet::load(&root,&config.enabled_plugins)?;
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. });
     let session = match &cli.command {
@@ -118,9 +121,14 @@ async fn main() -> Result<()> {
     let mut agent = Agent::new(
         profile, root, cli.approval.into(), interactive, cli.max_steps, session
     )?;
-    agent.attach_mcp(&config.mcp_servers).await?;
+    agent.set_enabled_plugins(config.enabled_plugins.clone());
+    let mut mcp_profiles = config.mcp_servers.clone();
+    mcp_profiles.extend(plugins.mcp_servers);
+    agent.attach_mcp(&mcp_profiles).await?;
     agent.attach_lsp(&config.lsp_servers).await?;
-    agent.attach_hooks(&config.hooks).await?;
+    let mut hooks = config.hooks.clone();
+    hooks.extend(plugins.hooks);
+    agent.attach_hooks(&hooks).await?;
     if matches!(&cli.command,Commands::Sdk { .. }) {
         agent.set_structured_output(true);
     }

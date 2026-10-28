@@ -1,4 +1,4 @@
-use crate::{protocol::ToolCall, notebook, search, webfetch, history};
+use crate::{protocol::ToolCall, notebook, search, webfetch, history, plugins};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -29,11 +29,17 @@ pub struct ToolExecutor {
     approval: Approval,
     interactive: bool,
     reads: Mutex<HashMap<PathBuf, u64>>,
+    enabled_plugins: Vec<String>,
 }
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()) }
+        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new() }
+    }
+
+    pub fn with_plugins(mut self,enabled:Vec<String>)->Self{
+        self.enabled_plugins=enabled;
+        self
     }
 
     pub async fn execute(&self, call: &ToolCall) -> String {
@@ -241,12 +247,14 @@ impl ToolExecutor {
             let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
             if path.is_file() { skills.push(name); }
         }
+        skills.extend(plugins::list_skills(&self.root,&self.enabled_plugins)?);
         skills.sort();
         Ok(skills.join("\n"))
     }
 
     fn read_skill(&self, args: &Value) -> Result<String> {
         let name = required(args, "name")?;
+        if name.contains(':') { return plugins::read_skill(&self.root,&self.enabled_plugins,name); }
         if !valid_skill_name(name) { bail!("Invalid skill name") }
         let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
         if fs::metadata(&path)?.len() > 64_000 { bail!("Skill file too large") }

@@ -43,6 +43,8 @@ pub struct Config {
     pub hooks: Vec<HookRule>,
     #[serde(default)]
     pub lsp_servers: Vec<LspServerConfig>,
+    #[serde(default)]
+    pub enabled_plugins: Vec<String>,
 }
 
 impl Default for Config {
@@ -75,6 +77,7 @@ impl Default for Config {
             mcp_servers: vec![],
             hooks: vec![],
             lsp_servers: vec![],
+            enabled_plugins: vec![],
         }
     }
 }

@@ -25,6 +25,7 @@
 - 经授权的 WebFetch：读取公开 HTTP(S) 文本、限制跳转和响应体积、阻止本地/内网目标；不使用原厂代理。
 - 本地文件修改检查点：写入/替换/笔记本编辑前保存旧内容、查看修改历史、校验文件未被后续修改后回退。历史默认保存在工作区 `.atlas/history/`，不会自动同步。
 - SDK JSON Lines 标准输入输出（`sdk` 命令）：结构化用户消息、模型消息、工具结果、请求结果及控制响应；不使用第三方私有传输。
+- 本地插件加载器：仅在 `enabled_plugins` 明确启用后加载本地 `plugin.json`，合并本地 MCP、Hooks 和 `plugin:skill` 技能，不连接专有插件市场。
 - `spawn_agent` 子智能体工具：独立会话、模型可覆盖、最多一级子任务；可选择临时 Git 工作树隔离，未修改自动清理，有修改保留路径与分支供复查。
 - 独立编写的单元测试和 GitHub Actions 编译测试。
 
@@ -87,6 +88,12 @@ Hook 经 stdin 接收 JSON，返回 JSON（`decision:block`、`hookSpecificOutpu
 
 服务器从用户指定的本地可执行程序启动，不会自行下载；按文件后缀选择语言服务。仅当前 Rust LSP 客户端协议与消息帧实现通过自动测试，不等同所有语言服务器都已端到端验收。
 
+## 插件配置
+
+插件放在工作区 `.atlas/plugins/<插件标识>/plugin.json`，并通过配置文件中 `"enabled_plugins":["formatter"]` 明确启用。插件清单可含 `hooks`、`mcp_servers` 字段，技能放在插件目录下 `skills/<技能名>/SKILL.md`，通过 `read_skill` 的 `plugin:skill` 名称读取。
+
+插件只从本地加载，不执行自动下载或更新；任何配置的 Hook/MCP 子进程可能具备外部访问权限，启用前应审查内容。
+
 ## 本地 SDK 标准输入输出
 
 `cargo run -- --approval read-only sdk` 从标准输入接收每行一个 JSON 消息：
@@ -141,7 +148,8 @@ cargo run -- chat --resume <上次输出的UUID>
 | 项目技能读取 | 已实现基础 SKILL.md 发现和加载 |
 | 本地 Hooks 基础生命周期 | 已实现（同步命令 Hook） |
 | LSP 标准请求客户端 | 已实现基础查询，尚未完成各服务器端到端兼容验收 |
-| 插件管理、完整异步 Hooks | 未实现 |
+| 本地插件装载和组合 | 已实现启用的 Hooks、MCP、技能 |
+| 插件市场安装/更新、完整异步 Hooks | 未实现 |
 | 独立子 Agent 与 Git Worktree | 已实现一级委派与 Git 工作树隔离 |
 | 多成员 Agent 团队、后台任务 | 未实现 |
 | SDK JSON Lines 标准输入输出 | 已实现基础多轮交互、工具及控制消息 |
