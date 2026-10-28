@@ -708,4 +708,54 @@ mod tests {
         assert!(tools.execute(&call).await.contains("needs approval"));
         assert!(!root.path().join("a.txt").exists());
     }
+    #[tokio::test]
+    async fn permission_modes_enforce_edit_auto_accept_and_plan_block() {
+        let root=tempfile::tempdir().unwrap();
+        let payload=json!({"path":"mode-check.txt","content":"reviewed content"});
+        let call=ToolCall {
+            id:"mode-tool".into(),kind:"function".into(),
+            function:FunctionCall{
+                name:"write_file".into(),arguments:payload.to_string(),
+            },
+        };
+        let allow=executor(root.path(),Approval::Ask)
+            .with_permission_mode(permission_mode::Mode::AcceptEdits);
+        let result=allow.execute(&call).await;
+        assert!(!result.starts_with("ERROR:"),"{result}");
+        assert_eq!(fs::read_to_string(root.path().join("mode-check.txt")).unwrap(),
+            "reviewed content");
+        let plan=executor(root.path(),Approval::Full)
+            .with_permission_mode(permission_mode::Mode::Plan);
+        let result=plan.execute(&call).await;
+        assert!(result.contains("denied by permission mode"),"{result}");
+        let readonly=executor(root.path(),Approval::ReadOnly)
+            .with_permission_mode(permission_mode::Mode::AcceptEdits);
+        let result=readonly.execute(&call).await;
+        assert!(result.contains("read-only mode"),"{result}");
+    }
+
+    #[tokio::test]
+    async fn permission_mode_cannot_override_explicit_deny() {
+        let root=tempfile::tempdir().unwrap();
+        let call=ToolCall{
+            id:"blocked".into(),kind:"function".into(),
+            function:FunctionCall{
+                name:"write_file".into(),arguments:json!({
+                    "path":"forbidden.txt","content":"should not appear"
+                }).to_string(),
+            },
+        };
+        let rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{
+                behavior:"deny".into(),rule:"Write".into()
+            }
+        ]).unwrap();
+        let tools=executor(root.path(),Approval::Full)
+            .with_permission_rules(rules)
+            .with_permission_mode(permission_mode::Mode::AcceptEdits);
+        let output=tools.execute(&call).await;
+        assert!(output.contains("denied by explicit permission rule"),"{output}");
+        assert!(!root.path().join("forbidden.txt").exists());
+    }
+
 }
