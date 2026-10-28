@@ -251,3 +251,5 @@ cargo run -- chat --resume <上次输出的UUID>
 以 `sdk` 子命令发送 `{"type":"user","content":"任务","queued":true,"priority":"now"}` 可排队；优先级支持 `now`、`next`、`later`。发送 `{"type":"control","action":"queue_drain","max_priority":"next"}` 将主 Agent 的 `now/next` 消息按优先级和同级 FIFO 执行，其他优先级或指定给其他 agentId 的消息仍保留。`queue_snapshot`、`queue_peek`、`queue_dequeue`、`queue_pop_editable`、`queue_remove_identity`、`queue_remove_agent`、`queue_clear` 可查看和操纵本地队列。Bash、孤立权限审批、内嵌图片的队列项在该 SDK 的纯文本执行通道暂不自动执行，以免误当模型文本或丢失多模态内容。
 
 `read_skill` 工具现在可携带 `arguments`，例如 `{"name":"review","arguments":"src/lib.rs 'security audit'"}`；会根据 SKILL.md frontmatter 的 `arguments` 参数名单替换 `$0`、`$1`、`$ARGUMENTS` 和命名占位符。未传参时返回原始内容，未使用占位符时默认附加 `ARGUMENTS: ...`。该替换不执行任何 shell 命令。
+
+SDK 队列的普通 prompt 会在 workload 与 isMeta 相同时按到达顺序自动合并为一次模型调用。可在排队的 user 消息中增加 `workload` 区分独立任务；`queue_drain` 仍逐条返回消息 ID 的处理结果，但相同批次不会重复计费。Shell、权限审批、斜杠及图像消息不会被冒充普通文字参与合并。

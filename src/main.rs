@@ -5,6 +5,7 @@ mod collections;
 mod message_queue;
 mod query_guard;
 mod sdk_queue;
+mod queued_prompt_batch;
 mod shell_quote;
 mod skill_arguments;
 mod semantic_inputs;
@@ -311,7 +312,8 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                             .cloned().unwrap_or(json!("next")),
                         "skipSlashCommands":event.get("skipSlashCommands").cloned()
                             .unwrap_or(json!(false)),
-                        "isMeta":event.get("isMeta").cloned().unwrap_or(json!(false))
+                        "isMeta":event.get("isMeta").cloned().unwrap_or(json!(false)),
+                        "workload":event.get("workload").cloned().unwrap_or(Value::Null)
                     })) {
                         Ok(command)=>command,
                         Err(error)=>{

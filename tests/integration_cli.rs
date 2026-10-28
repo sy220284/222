@@ -1229,7 +1229,7 @@ fn sdk_queue_drain_honors_priority_fifo_and_worker_isolation() {
         for value in [
             json!({"type":"user","content":"NEXT_REQUEST","queued":true}),
             json!({"type":"user","content":"LATER_REQUEST","queued":true,"priority":"later"}),
-            json!({"type":"user","content":"NOW_REQUEST","queued":true,"priority":"now"}),
+            json!({"type":"user","content":"NOW_REQUEST","queued":true,"priority":"now","workload":"urgent"}),
             json!({"type":"user","content":"WORKER_REQUEST","queued":true,
                 "priority":"now","agentId":"worker"}),
             json!({"type":"control","action":"queue_drain","request_id":"drain",
@@ -1444,4 +1444,55 @@ fn sdk_invalid_queue_input_and_slash_routing_keep_session_alive() {
     assert_eq!(after["ok"],true);
     assert_eq!(after["result"]["length"],1);
     assert_eq!(after["result"]["commands"][0]["value"],"/model other");
+}
+
+
+#[test]
+fn sdk_headless_queue_batches_consecutive_prompts_by_workload_and_meta(){
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let (mut conn,_)=listener.accept().unwrap();
+        let request=read_request(&mut conn);
+        let response=json!({"choices":[{"message":{"role":"assistant",
+            "content":"Handled combined request"},"finish_reason":"stop"}],
+            "usage":{"prompt_tokens":40,"completion_tokens":8,"total_tokens":48}})
+            .to_string();
+        write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response.len(),response).unwrap();
+        conn.flush().unwrap();
+        request
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=sdk.stdin.take().unwrap();
+        for event in [
+            json!({"type":"user","content":"AUDIT_FIRST","queued":true,"workload":"review"}),
+            json!({"type":"user","content":"AUDIT_SECOND","queued":true,"workload":"review"}),
+            json!({"type":"control","action":"queue_drain","request_id":"batch"}),
+        ]{writeln!(input,"{event}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    let request=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(request.contains("AUDIT_FIRST\\nAUDIT_SECOND"),"{request}");
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+    let batch=events.iter().find(|v|v["request_id"]=="batch").unwrap();
+    assert_eq!(batch["ok"],true);
+    assert_eq!(batch["result"]["results"].as_array().unwrap().len(),2);
+    assert_eq!(batch["result"]["results"][0]["content"],"Handled combined request");
+    assert_eq!(batch["result"]["results"][1]["content"],"Handled combined request");
+    // The one model round-trip is billed once, not twice for each queued ID.
+    assert_eq!(batch["result"]["usage"]["input_tokens"],40);
+    assert_eq!(batch["result"]["length"],0);
 }

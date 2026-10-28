@@ -2,7 +2,7 @@
 //! not route worker-specific messages to the main Agent, nor interpret a
 //! queued shell command as a model prompt.
 use crate::{agent::Agent,message_queue::{Queue,Command,Priority,Mode},
-    query_guard::QueryGuard};
+    query_guard::QueryGuard,queued_prompt_batch};
 use anyhow::{bail,Context,Result};
 use serde_json::{json,Value};
 
@@ -78,7 +78,8 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                 .map(|v|v as usize).unwrap_or(usize::MAX);
             let mut results=Vec::new();
             let mut blocked=None;
-            for _ in 0..max{
+            let mut processed=0usize;
+            while processed<max{
                 let ready=queue.peek(|c|c.agent_id.is_none() &&
                     c.priority().rank_for_sdk()<=threshold.rank_for_sdk()).cloned();
                 let Some(next)=ready else {break};
@@ -100,7 +101,6 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                     blocked=Some(json!({"identity":next.identity,"reason":reason}));
                     break;
                 }
-                let prompt=next.command.text().context("queued text unavailable")?;
                 if !guard.reserve(){
                     bail!("Query already running; queue unchanged");
                 }
@@ -108,15 +108,46 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                 let item=queue.dequeue(|c|c.agent_id.is_none() &&
                     c.priority().rank_for_sdk()<=threshold.rank_for_sdk())
                     .context("queued command disappeared after reservation")?;
+                let mut batch=vec![item];
+                // Original headless drain batches consecutive prompt commands
+                // with equal workload and meta status into ONE model request.
+                while processed+batch.len()<max {
+                    let candidate=queue.peek(|c|c.agent_id.is_none() &&
+                        c.priority().rank_for_sdk()<=threshold.rank_for_sdk()).cloned();
+                    let Some(candidate)=candidate else{break};
+                    if !queued_prompt_batch::can_batch_with(
+                        &batch[0].command,Some(&candidate.command))
+                        || candidate.command.is_slash() || candidate.command.contains_image(){
+                        break;
+                    }
+                    let follower=queue.dequeue(|c|c.agent_id.is_none() &&
+                        c.priority().rank_for_sdk()<=threshold.rank_for_sdk())
+                        .context("queued follower disappeared")?;
+                    batch.push(follower);
+                }
+                let joined=queued_prompt_batch::join_prompt_values(
+                    &batch.iter().map(|i|i.command.value.clone()).collect::<Vec<_>>());
+                let prompt=if let Some(text)=joined.as_str(){
+                    text.to_owned()
+                }else{
+                    // The text-only Agent accepts flattened text blocks. Images
+                    // were rejected before dequeuing; no multimodal bytes lost.
+                    batch.iter().filter_map(|i|i.command.text())
+                        .collect::<Vec<_>>().join("
+")
+                };
                 let generation=guard.try_start().context("Cannot begin reserved query")?;
                 let answer=agent.ask(&prompt).await;
                 let ended=guard.end(generation);
                 if !ended{bail!("Query generation changed during execution")}
-                match answer{
-                    Ok(answer)=>results.push(json!({"identity":item.identity,"ok":true,
-                        "content":answer,"session_id":agent.session_id()})),
-                    Err(error)=>results.push(json!({"identity":item.identity,"ok":false,
-                        "error":format!("{error:#}"),"session_id":agent.session_id()})),
+                processed+=batch.len();
+                for item in batch{
+                    match &answer{
+                        Ok(answer)=>results.push(json!({"identity":item.identity,"ok":true,
+                            "content":answer,"session_id":agent.session_id()})),
+                        Err(error)=>results.push(json!({"identity":item.identity,"ok":false,
+                            "error":format!("{error:#}"),"session_id":agent.session_id()})),
+                    }
                 }
             }
             Ok(json!({"results":results,"blocked":blocked,"revision":queue.revision(),

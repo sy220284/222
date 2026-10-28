@@ -119,3 +119,7 @@
 ### Bash 原始解析歧义引发的二次权限检查
 
 对照 `BashTool/bashSecurity.ts`，Shell 命令如果包含非打印控制符、单引号反斜杠差异或未闭合引号，应触发单独的人工审批。本轮将此检查接到真实 ToolExecutor，阻止 `--approval full` 在非交互执行时绕过这一类安全审查；使用可观察文件的执行测试确认被拒绝命令没有副作用。其他复杂 Bash 特殊语法、tree-sitter、管道与 here-doc 安全规则尚待全量对照。
+
+### Headless 模型提示批处理与原始队列订阅语义
+
+原版 `cli/print.ts` 在 drain 时连续读取同工作负载、同 meta 状态的 prompt，然后用 `joinPromptValues` 合并后仅调用一次 ask。Rust 新增对应两导出函数，并修改 SDK queue_drain 保留每条命令的身份但只对同批调用一次实际模型；费用也只归集一次。`message_queue.rs` 补齐同步订阅、字段化 channel 可见性以及按 JS 数字属性顺序提取图片粘贴内容。多模态 Block 到模型服务端的结构化传输以及原版无界面模式后续远程协议尚未对齐。
