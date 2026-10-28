@@ -20,6 +20,7 @@
 | 模型选择与配置 | `config.rs` | 可自定义提供商配置 |
 | Token 用量归一化及持久化 | `protocol.rs` / `provider.rs` / `session.rs` | OpenAI 兼容与 Gemini 原生用量字段 |
 | CLI 和交互 REPL | `main.rs` | run/chat/models/init |
+| JSON Lines SDK 标准输入输出 | `main.rs` / `agent.rs` | 多轮输入、工具结果、控制响应、用量；取消与远程 SDK 功能未齐 |
 | Web 搜索、Web 抓取 | — | 未实现 |
 | 流式执行和并发编排 | — | 未实现 |
 | 会话摘要压缩 | `agent.rs` / `session.rs` | 已实现手动及字符阈值触发 |

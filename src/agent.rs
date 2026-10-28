@@ -40,6 +40,7 @@ pub struct Agent {
     lsp: Option<LspManager>,
     hooks: HookRunner,
     session_context: String,
+    structured_output: bool,
     child_depth: u8,
     mcp_configs: Vec<McpServerConfig>,
     lsp_configs: Vec<LspServerConfig>,
@@ -56,7 +57,7 @@ impl Agent {
         session: Session,
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), hook_rules: Vec::new() })
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -138,6 +139,16 @@ impl Agent {
     }
 
     pub fn profile(&self) -> &ProviderProfile { &self.profile }
+    pub fn set_structured_output(&mut self, enabled: bool) {
+        self.structured_output = enabled;
+    }
+
+    fn emit(&self, event: serde_json::Value) {
+        if self.structured_output {
+            println!("{}",event);
+        }
+    }
+
     pub fn session_id(&self) -> String { self.session.id.to_string() }
     pub fn usage(&self) -> crate::protocol::TokenUsage { self.session.usage }
 
@@ -247,6 +258,10 @@ impl Agent {
             let calls = response.message.tool_calls.clone().unwrap_or_default();
             let text = response.message.content.clone().unwrap_or_default();
             let finish = response.finish_reason.clone();
+            self.emit(json!({
+                "type":"assistant","message":response.message,
+                "session_id":self.session.id,
+            }));
             self.session.messages.push(response.message);
             self.session.save(&self.root)?;
             if calls.is_empty() {
@@ -310,6 +325,11 @@ impl Agent {
                 for context in post.additional_context {
                     result.push_str(&format!("\n[Local hook context] {context}"));
                 }
+                self.emit(json!({
+                    "type":"tool_result","tool_use_id":call.id,
+                    "name":call.function.name,"content":result,
+                    "session_id":self.session.id,
+                }));
                 self.session.messages.push(Message::tool_result(&call, result));
                 self.session.save(&self.root)?;
             }
@@ -379,6 +399,7 @@ mod tests {
             lsp: None,
             hooks: HookRunner::default(),
             session_context: String::new(),
+            structured_output: false,
             child_depth: 0,
             mcp_configs: Vec::new(),
             lsp_configs: Vec::new(),

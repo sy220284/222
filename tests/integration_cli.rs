@@ -223,3 +223,46 @@ fn stop_hook_block_causes_one_additional_model_round() {
     assert!(String::from_utf8_lossy(&output.stdout).contains("Verified final answer"));
     assert!(requests[1].contains("Confirm tests"));
 }
+
+#[test]
+fn sdk_mode_emits_json_lines_and_preserves_context() {
+    use std::process::Stdio;
+    let dir=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for step in 0..2 {
+            let (mut stream,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut stream));
+            let body=json!({"choices":[{"message":{"role":"assistant",
+                "content":if step==0{"First reply"}else{"Second reply"}},"finish_reason":"stop"}]})
+                .to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let conf=dir.path().join("config.json");
+    fs::write(&conf,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","base_url":format!("http://{addr}/v1"),
+        "model":"fake"}]}).to_string()).unwrap();
+    let mut process=binary().args(["--workspace",dir.path().to_str().unwrap(),
+        "--approval","read-only","sdk"]).env("ATLAS_CONFIG",&conf)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    {
+        let mut writer=process.stdin.take().unwrap();
+        writeln!(writer,"{}",json!({"type":"user","content":"First"})).unwrap();
+        writeln!(writer,"{}",json!({"type":"user","content":"Second"})).unwrap();
+    }
+    let output=process.wait_with_output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(requests[1].contains("First reply"));
+    let events=String::from_utf8(output.stdout).unwrap();
+    let records:Vec<Value>=events.lines().map(|s|serde_json::from_str(s).unwrap()).collect();
+    assert_eq!(records.iter().filter(|v|v["type"]=="result").count(),2);
+    assert!(records.iter().any(|v|v["type"]=="system"));
+    assert!(records.iter().any(|v|v["type"]=="assistant"));
+}

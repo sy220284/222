@@ -24,6 +24,7 @@
 - LSP 语言服务协议：支持可配置本地语言服务器，定义／引用／悬停／符号／调用层级 9 类查询，文档同步及 JSON-RPC 标准消息帧。
 - 经授权的 WebFetch：读取公开 HTTP(S) 文本、限制跳转和响应体积、阻止本地/内网目标；不使用原厂代理。
 - 本地文件修改检查点：写入/替换/笔记本编辑前保存旧内容、查看修改历史、校验文件未被后续修改后回退。历史默认保存在工作区 `.atlas/history/`，不会自动同步。
+- SDK JSON Lines 标准输入输出（`sdk` 命令）：结构化用户消息、模型消息、工具结果、请求结果及控制响应；不使用第三方私有传输。
 - `spawn_agent` 子智能体工具：独立会话、模型可覆盖、最多一级子任务；可选择临时 Git 工作树隔离，未修改自动清理，有修改保留路径与分支供复查。
 - 独立编写的单元测试和 GitHub Actions 编译测试。
 
@@ -86,6 +87,16 @@ Hook 经 stdin 接收 JSON，返回 JSON（`decision:block`、`hookSpecificOutpu
 
 服务器从用户指定的本地可执行程序启动，不会自行下载；按文件后缀选择语言服务。仅当前 Rust LSP 客户端协议与消息帧实现通过自动测试，不等同所有语言服务器都已端到端验收。
 
+## 本地 SDK 标准输入输出
+
+`cargo run -- --approval read-only sdk` 从标准输入接收每行一个 JSON 消息：
+
+```json
+{"type":"user","content":"检查当前项目"}
+```
+
+返回以 `system`、`assistant`、`tool_result`、`result` 等事件组成的 NDJSON。支持 `{"type":"control","action":"model","provider":"local","model":"..."}`、`clear`、`compact`，无需私有 SDK 或账号登录。SDK 默认非交互，写入类工具需要明确 `--approval full`。
+
 ## MCP 本地工具
 
 在原有 JSON 配置的根对象增加 `mcp_servers`：
@@ -133,7 +144,8 @@ cargo run -- chat --resume <上次输出的UUID>
 | 插件管理、完整异步 Hooks | 未实现 |
 | 独立子 Agent 与 Git Worktree | 已实现一级委派与 Git 工作树隔离 |
 | 多成员 Agent 团队、后台任务 | 未实现 |
-| 完整终端 UI、SDK、远程桥接、语音和 IDE | 未实现 |
+| SDK JSON Lines 标准输入输出 | 已实现基础多轮交互、工具及控制消息 |
+| 完整终端 UI、完整 SDK 控制协议、远程桥接、语音和 IDE | 未实现 |
 
 具体分层及迁移清单见 `docs/MIGRATION.md`。
 

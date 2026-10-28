@@ -24,6 +24,8 @@ use std::{
     path::PathBuf,
 };
 use tools::Approval;
+use serde_json::{json, Value};
+use std::io::BufRead;
 
 #[derive(Parser, Debug)]
 #[command(name = "atlas-agent", version, about = "Standalone multi-model Rust coding agent")]
@@ -82,6 +84,11 @@ enum Commands {
         #[arg(long)]
         resume: Option<String>,
     },
+    /// JSON-lines SDK mode for external programs (no proprietary transport)
+    Sdk {
+        #[arg(long)]
+        resume: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -105,7 +112,7 @@ async fn main() -> Result<()> {
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. });
     let session = match &cli.command {
-        Commands::Chat { resume: Some(id) } => Session::load(&root, id)?,
+        Commands::Chat { resume: Some(id) } | Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
         _ => Session::fresh(),
     };
     let mut agent = Agent::new(
@@ -114,6 +121,9 @@ async fn main() -> Result<()> {
     agent.attach_mcp(&config.mcp_servers).await?;
     agent.attach_lsp(&config.lsp_servers).await?;
     agent.attach_hooks(&config.hooks).await?;
+    if matches!(&cli.command,Commands::Sdk { .. }) {
+        agent.set_structured_output(true);
+    }
     eprintln!("Session: {}", agent.session_id());
     eprintln!("Provider: {} / {}", agent.profile().id, agent.profile().model);
     let result = match &cli.command {
@@ -126,6 +136,7 @@ async fn main() -> Result<()> {
             agent.ask(&actual_prompt).await.map(|answer| println!("{answer}"))
         }
         Commands::Chat { .. } => chat(&mut agent, &config).await,
+        Commands::Sdk { .. } => sdk(&mut agent, &config).await,
         _ => unreachable!(),
     };
     let end_result = agent.finish().await;
@@ -191,6 +202,67 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
         match agent.ask(input).await {
             Ok(answer) => println!("{answer}"),
             Err(err) => eprintln!("Error: {err:#}"),
+        }
+    }
+    Ok(())
+}
+
+async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
+    println!("{}",json!({"type":"system","subtype":"init",
+        "session_id":agent.session_id(),"provider":agent.profile().id,
+        "model":agent.profile().model}));
+    let stdin=io::stdin();
+    for input in stdin.lock().lines(){
+        let line=input?;
+        if line.trim().is_empty(){continue}
+        let event:Value=match serde_json::from_str(&line){
+            Ok(value)=>value,
+            Err(error)=>{
+                println!("{}",json!({"type":"error","message":error.to_string()}));
+                continue;
+            }
+        };
+        let kind=event.get("type").and_then(Value::as_str).unwrap_or("user");
+        match kind {
+            "user"=>{
+                let prompt=event.get("content").and_then(Value::as_str)
+                    .or_else(||event.pointer("/message/content").and_then(Value::as_str));
+                let Some(prompt)=prompt else{
+                    println!("{}",json!({"type":"error","message":"User event requires content"}));
+                    continue;
+                };
+                match agent.ask(prompt).await{
+                    Ok(answer)=>println!("{}",json!({
+                        "type":"result","session_id":agent.session_id(),
+                        "content":answer,"usage":agent.usage()
+                    })),
+                    Err(error)=>println!("{}",json!({
+                        "type":"error","session_id":agent.session_id(),
+                        "message":format!("{error:#}")
+                    })),
+                }
+            },
+            "control"=>{
+                let action=event.get("action").and_then(Value::as_str).unwrap_or("");
+                let result=match action {
+                    "clear"=>agent.clear_history(),
+                    "compact"=>agent.compact_history().await,
+                    "model"=>{
+                        let provider=event.get("provider").and_then(Value::as_str);
+                        let model=event.get("model").and_then(Value::as_str);
+                        config.select(provider,model).and_then(|p|agent.switch_model(p))
+                    },
+                    _=>Err(anyhow::anyhow!("Unknown control action: {action}")),
+                };
+                match result{
+                    Ok(())=>println!("{}",json!({"type":"control_response",
+                        "action":action,"ok":true})),
+                    Err(error)=>println!("{}",json!({"type":"control_response",
+                        "action":action,"ok":false,"error":format!("{error:#}")})),
+                };
+            },
+            other=>println!("{}",json!({"type":"error",
+                "message":format!("Unsupported SDK event {other}")})),
         }
     }
     Ok(())
