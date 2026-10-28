@@ -608,3 +608,46 @@ fn model_driven_team_create_message_receive_and_cleanup() {
     assert!(results[3].contains("Cleaned up team configuration"));
     assert!(!dir.path().join(".atlas/teams/review").exists());
 }
+
+#[test]
+fn sdk_transient_mailbox_preserves_fifo_revision_and_validation() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let conf=root.path().join("config.json");
+    fs::write(&conf,json!({"default_provider":"local","providers":[{
+        "id":"local","kind":"openai-compatible","model":"offline",
+        "base_url":"http://127.0.0.1:9/v1"
+    }]}).to_string()).unwrap();
+    let mut child=binary().args([
+        "--workspace",root.path().to_str().unwrap(),"sdk"
+    ]).env("ATLAS_CONFIG",&conf)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    let payloads=[
+        json!({"type":"control","action":"mailbox_send","message":{
+            "id":"1","source":"task","content":"first","timestamp":"now"}}),
+        json!({"type":"control","action":"mailbox_send","message":{
+            "id":"2","source":"teammate","content":"second","timestamp":"now","from":"peer"}}),
+        json!({"type":"control","action":"mailbox_poll"}),
+        json!({"type":"control","action":"mailbox_poll"}),
+        json!({"type":"control","action":"mailbox_poll"}),
+        json!({"type":"control","action":"mailbox_send","message":{"id":"bad"}}),
+    ];
+    {
+        let mut stdin=child.stdin.take().unwrap();
+        for item in &payloads{writeln!(stdin,"{item}").unwrap();}
+    }
+    let output=child.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let events=String::from_utf8(output.stdout).unwrap()
+        .lines().map(|l|serde_json::from_str::<Value>(l).unwrap())
+        .filter(|v|v["type"]=="control_response").collect::<Vec<_>>();
+    assert_eq!(events.len(),6);
+    assert_eq!(events[0]["revision"],1);
+    assert_eq!(events[1]["revision"],2);
+    assert_eq!(events[2]["message"]["content"],"first");
+    assert_eq!(events[3]["message"]["content"],"second");
+    assert_eq!(events[2]["revision"],2);
+    assert_eq!(events[4]["message"],Value::Null);
+    assert_eq!(events[5]["ok"],false);
+}
