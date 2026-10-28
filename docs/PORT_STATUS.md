@@ -130,3 +130,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：技能替换与安全 Shell 词法进入真实执行链
 
 依据原始 `src/utils/argumentSubstitution.ts` 和 `src/utils/bash/shellQuote.ts` 新增 `src/skill_arguments.rs`、`src/shell_quote.rs`：保留引号组合、Shell 单引号字面语义、转义、操作符排除、禁止变量实际展开；对命名位置参数、`$ARGUMENTS[n]`、`$n`、`$ARGUMENTS` 依原版次序替换，支持 frontmatter 参数名单/列表及剩余参数提示。实际 `read_skill` 工具无论是工作区技能还是明确启用的插件技能，收到 arguments 都执行替换；未传参保留原文，错误类型直接拒绝。新增模拟模型发出 read_skill 工具调用、读取替换结果继续下一轮对话的 HTTP 集成测试。Shell 安全检测覆盖异常引号/不平衡片段及原版单引号转义差异风险。shell-quote 第三方解析库的全部边界、Glob/复杂注释、前端键盘提示/UI 尚未完成，不按已验收记。分类：22 排除、359 部分、1,494 未迁移、31 源路径独立已验收；仍有 1,853 条最终等价未闭环。
+
+### 2026-10-29：Shell 安全审查接入实际执行前门禁
+
+原始 `tools/BashTool/bashSecurity.ts` 对 `hasShellQuoteSingleQuoteBug` 返回人工审批（而非自动批准），并要求非打印控制字符单独确认。Rust `shell_quote::security_review_reason` 新增对应风险判断，实际接入 `ToolExecutor::require_approval` 的 `run_command`/Bash 执行前门禁。即使配置 `--approval full`，非交互场景也必须拒绝存在引号歧义的高风险命令；交互场景需要单独人工确认。新增真实 `ToolExecutor::execute` 测试，构造“先触碰标记文件、后跟单引号反斜杠解析歧义”的命令，验证被拒绝时标记文件未产生，并测试未闭合引号、正常命令。其他原始 Bash 安全校验超过此范围，继续保持部分实现，不表示已经完成完整命令安全审核。

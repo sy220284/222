@@ -1386,7 +1386,7 @@
 | `src/utils/bash/registry.ts` | 54 | 1433 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/shellCompletion.ts` | 260 | 7874 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/shellPrefix.ts` | 29 | 1028 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/bash/shellQuote.ts` | 305 | 10824 | 重写：Shell 解析、安全引用与歧义检测 | `src/shell_quote.rs` / `src/skill_arguments.rs` | 部分实现：单双引号、转义、命令分隔符、注释、保留变量字面值、安全引用及 H1 单引号漏洞检查；原版 shell-quote 边缘 token、glob 及完整调用方待核对 |
+| `src/utils/bash/shellQuote.ts` | 305 | 10824 | 重写：Shell 解析、安全引用与歧义检测 | `src/shell_quote.rs` / `src/skill_arguments.rs` | 部分实现：单双引号、转义、命令分隔符、安全引用；H1 单引号/反斜杠漏洞和控制字符已接入真实 Bash 审批；完整第三方 shell-quote token、glob、其他复杂 Bash 安全校验待核对 |
 | `src/utils/bash/shellQuoting.ts` | 129 | 4718 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/specs/alias.ts` | 15 | 313 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/specs/index.ts` | 19 | 380 | 重写：保持通用行为 | 待定 | 未迁移 |

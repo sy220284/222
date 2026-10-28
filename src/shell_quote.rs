@@ -107,6 +107,24 @@ pub fn has_shell_quote_single_quote_bug(command:&str)->bool{
     false
 }
 
+/// Original shell security checks escalate these cases to explicit approval.
+/// No remote telemetry or vendor-specific safety service is called.
+pub fn security_review_reason(command:&str)->Option<&'static str>{
+    if command.chars().any(|ch|{
+        let n=ch as u32;
+        n<=0x08 || n==0x0b || n==0x0c || (0x0e..=0x1f).contains(&n) || n==0x7f
+    }){
+        return Some("Command contains non-printable control characters");
+    }
+    if has_shell_quote_single_quote_bug(command){
+        return Some("Command contains a single-quoted backslash sequence that can bypass permission analysis");
+    }
+    if parse(command).is_err(){
+        return Some("Command has malformed shell quoting");
+    }
+    None
+}
+
 fn single_quote(value:&str)->String{
     if value.is_empty(){return "''".into()}
     if value.bytes().all(|b|b.is_ascii_alphanumeric()||
@@ -155,6 +173,14 @@ mod tests{
         assert!(!has_malformed_tokens("echo '{ok}'",&[ParseEntry::Word("{ok}".into())]));
         assert!(has_shell_quote_single_quote_bug(r"git ls-remote 'safe\' '--upload-pack=evil' repo"));
         assert!(!has_shell_quote_single_quote_bug("echo 'normal'"));
+    }
+    #[test]
+    fn security_review_identifies_ambiguous_inputs_before_tool_execution(){
+        assert!(security_review_reason(r"git ls-remote 'safe\' '--upload-pack=x'").is_some());
+        assert!(security_review_reason("echo 'incomplete").is_some());
+        assert!(security_review_reason("printf hello\u{0001}").is_some());
+        assert!(security_review_reason("echo 'safe'").is_none());
+        assert!(security_review_reason("printf '\\n'").is_none());
     }
     #[test]
     fn shell_quotes_never_leave_metacharacters_executable(){

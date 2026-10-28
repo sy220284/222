@@ -115,3 +115,7 @@
 ### 技能实际执行参数链与 Shell 引号安全
 
 已将原始参数解析函数直接接入 `ToolExecutor::read_skill`（同时支持本地技能与已启用插件），通过 SKILL.md frontmatter `arguments:` 获取命名参数，并开放调用参数 `arguments`、`argument_names`、`append_if_no_placeholder`。支持 `$ARGUMENTS`、位置缩写和命名参数替换；原始解析允许 Shell 引号组合，变量作为字面量不会展开。`shell_quote.rs` 增加带结构的 Shell 词法、严格/宽松安全引用和歧义防护；完整第三方 shell-quote 特殊模式仍需等价核查，两个原路径均保持部分实现。
+
+### Bash 原始解析歧义引发的二次权限检查
+
+对照 `BashTool/bashSecurity.ts`，Shell 命令如果包含非打印控制符、单引号反斜杠差异或未闭合引号，应触发单独的人工审批。本轮将此检查接到真实 ToolExecutor，阻止 `--approval full` 在非交互执行时绕过这一类安全审查；使用可观察文件的执行测试确认被拒绝命令没有副作用。其他复杂 Bash 特殊语法、tree-sitter、管道与 here-doc 安全规则尚待全量对照。

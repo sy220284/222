@@ -215,6 +215,26 @@ impl ToolExecutor {
     }
 
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
+        let mut security_approved=false;
+        if crate::tool_names::canonical_name(tool)=="run_command"{
+            if let Some(command)=args.get("command").and_then(Value::as_str){
+                if let Some(reason)=crate::shell_quote::security_review_reason(command){
+                    if !self.interactive{
+                        bail!("Shell command needs explicit security review: {reason}");
+                    }
+                    eprintln!("Security review required: {reason}");
+                    eprintln!("Command: {}",truncate(command,600));
+                    eprint!("Approve this command once? [y/N] ");
+                    io::stderr().flush()?;
+                    let mut answer=String::new();
+                    io::stdin().read_line(&mut answer)?;
+                    if !matches!(answer.trim().to_ascii_lowercase().as_str(),"y"|"yes"){
+                        bail!("Shell command rejected: {reason}");
+                    }
+                    security_approved=true;
+                }
+            }
+        }
         let matched = permission_rules::policy_for(&self.permission_rules,tool,args)?;
         if matched == Some(permission_rules::Behavior::Deny) {
             bail!("Tool {tool} denied by explicit permission rule");
@@ -238,6 +258,9 @@ impl ToolExecutor {
         }
         if self.approval == Approval::Full &&
             matched != Some(permission_rules::Behavior::Ask) {
+            return Ok(());
+        }
+        if security_approved && matched != Some(permission_rules::Behavior::Ask){
             return Ok(());
         }
         if !self.interactive {
@@ -787,6 +810,23 @@ mod tests {
         assert!(!tool.execute(&edit).await.starts_with("ERROR:"));
         assert_eq!(metrics.counts(),(4,1));
         assert_eq!(fs::read_to_string(root.path().join("count.txt")).unwrap(),"a\nc\n");
+    }
+    #[tokio::test]
+    async fn malformed_shell_commands_require_security_review_even_with_full_approval(){
+        let root=tempfile::tempdir().unwrap();
+        let tool=executor(root.path(),Approval::Full);
+        let marker=root.path().join("security-review-marker");
+        let command=format!("touch '{}'; echo 'safe\\' '--upload-pack=evil'",marker.display());
+        let call=ToolCall{id:"risk".into(),kind:"function".into(),
+            function:FunctionCall{name:"run_command".into(),
+                arguments:json!({"command":command}).to_string()}};
+        let response=tool.execute(&call).await;
+        assert!(response.contains("security review"),"{response}");
+        assert!(!marker.exists(),"shell was executed before approval");
+        let bad=ToolCall{id:"bad".into(),kind:"function".into(),
+            function:FunctionCall{name:"run_command".into(),
+                arguments:json!({"command":"echo 'unterminated"}).to_string()}};
+        assert!(tool.execute(&bad).await.contains("security review"));
     }
     #[tokio::test]
     async fn noninteractive_requires_permission_for_writes() {
