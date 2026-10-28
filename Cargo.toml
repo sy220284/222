@@ -12,6 +12,7 @@ async-trait = "0.1"
 clap = { version = "4.5", features = ["derive"] }
 dirs = "6"
 regex = "1"
+sha2 = "0.10"
 globset = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 serde = { version = "1", features = ["derive"] }

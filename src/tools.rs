@@ -1,4 +1,4 @@
-use crate::{protocol::ToolCall, notebook, search, webfetch};
+use crate::{protocol::ToolCall, notebook, search, webfetch, history};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -51,7 +51,11 @@ impl ToolExecutor {
             "read_file" => self.read_file(&args),
             "notebook_edit" => {
                 self.require_approval("notebook_edit", &args)?;
-                self.notebook_edit(&args)
+                let path=self.checked_path(required(&args,"notebook_path")?)?;
+                let previous=history::snapshot(&path)?;
+                let result=self.notebook_edit(&args)?;
+                let checkpoint=history::record(&self.root,&path,previous)?;
+                Ok(format!("{result}{}", checkpoint.map(|id|format!("\nCheckpoint: {id}")).unwrap_or_default()))
             },
             "list_files" => self.list_files(&args),
             "glob_files" => {
@@ -74,12 +78,27 @@ impl ToolExecutor {
             "git_log" => self.git_log(&args).await,
             "write_file" => {
                 self.require_approval("write_file", &args)?;
-                self.write_file(&args).await
+                let path=self.checked_path(required(&args,"path")?)?;
+                let before=history::snapshot(&path)?;
+                let result=self.write_file(&args).await?;
+                let checkpoint=history::record(&self.root,&path,before)?;
+                Ok(format!("{result}{}",checkpoint.map(|id|format!("\nCheckpoint: {id}")).unwrap_or_default()))
             }
             "edit_file" => {
                 self.require_approval("edit_file", &args)?;
-                self.edit_file(&args).await
+                let path=self.checked_path(required(&args,"path")?)?;
+                let before=history::snapshot(&path)?;
+                let result=self.edit_file(&args).await?;
+                let checkpoint=history::record(&self.root,&path,before)?;
+                Ok(format!("{result}{}",checkpoint.map(|id|format!("\nCheckpoint: {id}")).unwrap_or_default()))
             }
+            "file_history" => history::list(&self.root),
+            "file_revert" => {
+                self.require_approval("file_revert", &args)?;
+                let record=history::load(&self.root,required(&args,"id")?)?;
+                let path=self.checked_path(&record.path)?;
+                history::restore(&record,&path)
+            },
             "run_command" => {
                 self.require_approval("run_command", &args)?;
                 self.run_command(&args).await
@@ -436,6 +455,7 @@ pub fn definitions() -> Vec<Value> {
     tools.push(notebook::definition());
     tools.extend(search::definitions());
     tools.push(webfetch::definition());
+    tools.extend(history::definitions());
     tools
 }
 

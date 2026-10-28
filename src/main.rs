@@ -12,6 +12,7 @@ mod notebook;
 mod search;
 mod lsp;
 mod webfetch;
+mod history;
 
 use agent::Agent;
 use anyhow::{bail, Result};
