@@ -374,7 +374,7 @@ impl Agent {
                 let (tx,mut deltas)=tokio::sync::mpsc::unbounded_channel();
                 let future=self.provider.complete_stream(&request,tx);
                 tokio::pin!(future);
-                loop {
+                let result=loop {
                     tokio::select! {
                         result=&mut future=>break result?,
                         part=deltas.recv()=>{
@@ -384,7 +384,12 @@ impl Agent {
                             }
                         }
                     }
+                };
+                while let Ok(delta)=deltas.try_recv(){
+                    self.emit(json!({"type":"assistant_delta",
+                        "delta":delta,"session_id":self.session.id}));
                 }
+                result
             } else {
                 self.provider.complete(&request).await?
             };

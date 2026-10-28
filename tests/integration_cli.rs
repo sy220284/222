@@ -324,3 +324,46 @@ fn team_runs_two_members_with_separate_contexts_and_stable_result_order() {
     assert!(requests.iter().any(|q|q.contains("Result A")&&q.contains("Result B")));
     assert_eq!(fs::read_dir(root.path().join(".atlas/sessions")).unwrap().count(),3);
 }
+
+#[test]
+fn sdk_streaming_emits_incremental_chunks_and_final_result() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let (mut stream,_)=listener.accept().unwrap();
+        let request=read_request(&mut stream);
+        assert!(request.contains("\"stream\":true"));
+        let sse=concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",sse.len(),sse).unwrap();
+        stream.flush().unwrap();
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible",
+        "base_url":format!("http://{addr}/v1"),"model":"mock","stream":true
+    }]}).to_string()).unwrap();
+    let mut process=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","read-only","sdk"]).env("ATLAS_CONFIG",&config)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    {
+        let mut input=process.stdin.take().unwrap();
+        writeln!(input,"{}",json!({"type":"user","content":"Say hello"})).unwrap();
+    }
+    let output=process.wait_with_output().unwrap();
+    server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let result=String::from_utf8(output.stdout).unwrap();
+    let events=result.lines().map(|s|serde_json::from_str::<Value>(s).unwrap())
+        .collect::<Vec<_>>();
+    let deltas=events.iter().filter(|v|v["type"]=="assistant_delta")
+        .filter_map(|v|v["delta"].as_str()).collect::<String>();
+    assert_eq!(deltas,"Hello");
+    assert!(events.iter().any(|v|v["type"]=="result"&&v["content"]=="Hello"));
+}
