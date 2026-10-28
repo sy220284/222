@@ -2,7 +2,7 @@
 //! Waiting consumers are notified before messages enter the queued inbox.
 use crate::event_signal::{Listener,Signal,Subscription};
 use serde::{Deserialize,Serialize};
-use std::{collections::VecDeque,future::Future,pin::Pin,sync::{Arc,Mutex}};
+use std::{collections::VecDeque,future::Future,pin::Pin,sync::{Arc,Mutex},panic::{catch_unwind,AssertUnwindSafe,resume_unwind}};
 use tokio::sync::oneshot;
 
 #[derive(Clone,Debug,PartialEq,Eq,Serialize,Deserialize)]
@@ -34,8 +34,17 @@ impl Mailbox{
         let mut state=self.state.lock().unwrap();
         state.revision=state.revision.wrapping_add(1);
         let mut undelivered=Some(message);
-        while let Some(index)=state.waiters.iter().position(|w|
-            (w.accept)(undelivered.as_ref().expect("pending message"))){
+        loop {
+            // JS predicate exceptions escape send() after revision increments,
+            // but must not poison Rust's mutex or erase a pending message.
+            let index=catch_unwind(AssertUnwindSafe(||
+                state.waiters.iter().position(|w|
+                    (w.accept)(undelivered.as_ref().expect("pending message")))));
+            let index=match index{
+                Ok(Some(i))=>i,
+                Ok(None)=>break,
+                Err(panic)=>{drop(state);resume_unwind(panic)},
+            };
             let waiter=state.waiters.remove(index).expect("indexed waiter");
             match waiter.resolve.send(undelivered.take().expect("pending message")){
                 Ok(())=>break,
@@ -48,7 +57,12 @@ impl Mailbox{
     }
     pub fn poll(&self,accept:&dyn Fn(&Message)->bool)->Option<Message>{
         let mut state=self.state.lock().unwrap();
-        let index=state.queue.iter().position(accept)?;
+        let found=catch_unwind(AssertUnwindSafe(||
+            state.queue.iter().position(accept)));
+        let index=match found{
+            Ok(value)=>value?,
+            Err(panic)=>{drop(state);resume_unwind(panic)},
+        };
         state.queue.remove(index)
     }
     pub fn poll_any(&self)->Option<Message>{self.poll(&|_|true)}
@@ -56,7 +70,13 @@ impl Mailbox{
     // and waiter when called, not when the returned future is first polled.
     pub fn receive(&self,accept:Predicate)->Pin<Box<dyn Future<Output=Message>+Send>>{
         let mut state=self.state.lock().unwrap();
-        if let Some(index)=state.queue.iter().position(|msg|accept(msg)){
+        let found=catch_unwind(AssertUnwindSafe(||
+            state.queue.iter().position(|msg|accept(msg))));
+        let found=match found{
+            Ok(value)=>value,
+            Err(panic)=>{drop(state);resume_unwind(panic)},
+        };
+        if let Some(index)=found{
             let msg=state.queue.remove(index).expect("indexed message");
             drop(state);
             self.signal.emit(());
@@ -142,6 +162,23 @@ mod tests{
         let receiver=inbox.receive_any();drop(receiver);
         inbox.send(message("safe",MessageSource::System));
         assert_eq!(inbox.poll_any().unwrap().id,"safe");
+    }
+    #[test]
+    fn predicate_exception_does_not_poison_queue_or_drop_messages(){
+        let inbox=Mailbox::new();
+        inbox.send(message("held",MessageSource::System));
+        let failure=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
+            inbox.poll(&|_|panic!("predicate refused"))));
+        assert!(failure.is_err());
+        assert_eq!(inbox.len(),1);
+        assert_eq!(inbox.poll_any().unwrap().id,"held");
+        let waiting=inbox.receive(Arc::new(|_|panic!("send predicate")));
+        let failure=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
+            inbox.send(message("blocked",MessageSource::User))));
+        assert!(failure.is_err());
+        assert_eq!(inbox.revision(),2);
+        assert_eq!(inbox.len(),0);
+        drop(waiting);
     }
     #[test]
     fn bridge_does_not_consume_while_loading_and_ignores_submit_boolean(){
