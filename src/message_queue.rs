@@ -47,7 +47,13 @@ pub struct Command {
 impl Command {
     pub fn priority(&self)->Priority{self.priority.unwrap_or_default()}
     pub fn is_editable(&self)->bool{self.mode!=Mode::TaskNotification && !self.is_meta}
-    pub fn is_visible(&self)->bool{self.is_editable()}
+    pub fn is_visible(&self,channels_enabled:bool)->bool{
+        if channels_enabled && self.origin.as_ref()
+            .and_then(|origin|origin.get("kind")).and_then(Value::as_str)==Some("channel"){
+            return true;
+        }
+        self.is_editable()
+    }
     pub fn is_slash(&self)->bool{
         self.value.as_str().is_some_and(|s|s.trim().starts_with('/'))
             && !self.skip_slash_commands
@@ -88,6 +94,8 @@ pub struct Queue {
     items: Vec<Item>,
     next_identity: u64,
     revision: u64,
+    listeners: Vec<(u64, Box<dyn Fn()>)>,
+    next_listener: u64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -102,7 +110,19 @@ impl Queue{
     pub fn is_empty(&self)->bool{self.items.is_empty()}
     pub fn revision(&self)->u64{self.revision}
     pub fn snapshot(&self)->Vec<Item>{self.items.clone()}
-    fn notify(&mut self){self.revision=self.revision.saturating_add(1)}
+    fn notify(&mut self){
+        self.revision=self.revision.saturating_add(1);
+        for (_,listener) in &self.listeners{listener()}
+    }
+    pub fn subscribe(&mut self,listener:impl Fn()+'static)->u64{
+        self.next_listener+=1;
+        let id=self.next_listener;
+        self.listeners.push((id,Box::new(listener)));
+        id
+    }
+    pub fn unsubscribe(&mut self,id:u64){
+        self.listeners.retain(|(current,_)|*current!=id);
+    }
     pub fn enqueue(&mut self,mut command:Command,notification:bool)->u64{
         if command.priority.is_none(){
             command.priority=Some(if notification{Priority::Later}else{Priority::Next});
@@ -179,27 +199,40 @@ impl Queue{
         // Source JS cursor offsets are UTF-16 code units, not UTF-8 bytes.
         let cursor_offset=prefix.encode_utf16().count()+1+cursor_offset;
         let mut images=Vec::new();
+        let mut next_image_id=std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time before Unix epoch").as_millis() as u64;
         for item in &editable{
             if let Some(pastes)=item.command.pasted_contents.as_ref().and_then(Value::as_object){
-                for content in pastes.values(){
+                let mut entries=pastes.iter().collect::<Vec<_>>();
+                // Object.values on integer-key JS maps enumerates keys numerically.
+                entries.sort_by(|(a,_),(b,_)|match (a.parse::<u64>(),b.parse::<u64>()){
+                    (Ok(a),Ok(b))=>a.cmp(&b),
+                    (Ok(_),Err(_))=>std::cmp::Ordering::Less,
+                    (Err(_),Ok(_))=>std::cmp::Ordering::Greater,
+                    _=>a.cmp(b),
+                });
+                for (_,content) in entries{
                     if content.get("type").and_then(Value::as_str)==Some("image"){
                         images.push(content.clone());
                     }
                 }
             }
             if let Some(blocks)=item.command.value.as_array(){
+                let mut image_index=0u64;
                 for block in blocks{
                     if block.get("type").and_then(Value::as_str)==Some("image") &&
                         block.pointer("/source/type").and_then(Value::as_str)==Some("base64"){
-                        let index=images.len();
                         images.push(serde_json::json!({
-                            "id":index,"type":"image",
+                            "id":next_image_id+image_index,"type":"image",
                             "content":block.pointer("/source/data"),
                             "mediaType":block.pointer("/source/media_type"),
-                            "filename":format!("image{}",index+1)
+                            "filename":format!("image{}",image_index+1)
                         }));
+                        image_index+=1;
                     }
                 }
+                next_image_id+=image_index;
             }
         }
         self.items.retain(|item|!item.command.is_editable());
@@ -275,6 +308,42 @@ mod tests{
         assert!(q.revision()>1);
         assert_eq!(q.remove_identity(&[id]),0);
         let rev=q.revision();q.clear();assert_eq!(q.revision(),rev);
+    }
+    #[test]
+    fn subscribers_receive_synchronous_notifications_and_channels_remain_noneditable(){
+        use std::{cell::Cell,rc::Rc};
+        let mut queue=Queue::default();
+        let count=Rc::new(Cell::new(0));
+        let shared=count.clone();
+        let sub=queue.subscribe(move||shared.set(shared.get()+1));
+        queue.enqueue(cmd("first",None,Mode::Prompt),false);
+        queue.recheck();
+        assert_eq!(count.get(),2);
+        queue.unsubscribe(sub);
+        queue.clear();
+        assert_eq!(count.get(),2);
+        let mut channel=cmd("<remote/>",None,Mode::Prompt);
+        channel.is_meta=true;
+        channel.origin=Some(json!({"kind":"channel"}));
+        assert!(!channel.is_editable());
+        assert!(!channel.is_visible(false));
+        assert!(channel.is_visible(true));
+    }
+    #[test]
+    fn image_paste_numeric_key_enumeration_and_remote_image_ids(){
+        let mut queue=Queue::default();
+        let mut c=cmd("prompt",None,Mode::Prompt);
+        c.pasted_contents=Some(json!({
+            "12":{"id":12,"type":"image","content":"a"},
+            "2":{"id":2,"type":"image","content":"b"}
+        }));
+        c.value=json!([{"type":"text","text":"prompt"},
+            {"type":"image","source":{"type":"base64","data":"AQID","media_type":"image/png"}}]);
+        queue.enqueue(c,false);
+        let edited=queue.pop_all_editable("",0).unwrap();
+        assert_eq!(edited.images[0]["id"],2);
+        assert_eq!(edited.images[1]["id"],12);
+        assert!(edited.images[2]["id"].as_u64().unwrap()>1_700_000_000_000);
     }
     #[test]
     fn assigned_agents_preserve_filtered_priority_order(){
