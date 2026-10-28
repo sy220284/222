@@ -150,6 +150,7 @@ async fn main() -> Result<()> {
         profile, root, cli.approval.into(), interactive, cli.max_steps, session
     )?;
     agent.set_enabled_plugins(config.enabled_plugins.clone());
+    agent.set_permission_rules(&config.permission_rules)?;
     agent.set_search_backend(config.search_backend.clone());
     let mut mcp_profiles = config.mcp_servers.clone();
     mcp_profiles.extend(plugins.mcp_servers);

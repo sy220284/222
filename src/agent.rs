@@ -13,6 +13,7 @@ use crate::{
     team_registry::Teams,
     in_memory_mailbox,
     task_events,
+    permission_rules,
     hooks::{HookRule, HookRunner, HookEvent},
     worktree::Worktree,
     protocol::ToolCall,
@@ -59,6 +60,7 @@ pub struct Agent {
     agent_name: Option<String>,
     team_root: Option<PathBuf>,
     shutdown_requested: bool,
+    permission_rules: Vec<permission_rules::Rule>,
     transient_mailbox: in_memory_mailbox::Mailbox,
     hook_rules: Vec<HookRule>,
 }
@@ -79,7 +81,7 @@ impl Agent {
         let restored_team=session.team_name.clone();
         let restored_member=session.agent_name.clone();
         let restored_root=restored_team.as_ref().map(|_|root.clone());
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), hook_rules: Vec::new() })
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), hook_rules: Vec::new() })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -356,6 +358,7 @@ impl Agent {
             let hooks=self.hook_rules.clone();
             let plugins=self.enabled_plugins.clone();
             let search=self.search_backend.clone();
+            let permissions=self.permission_rules.clone();
             let shared_tasks=self.graph.clone();
             let current_team=self.team_name.clone();
             let current_team_root=self.team_root.clone();
@@ -374,6 +377,7 @@ impl Agent {
                     child.child_depth=1;
                     child.enabled_plugins=plugins;
                     child.search_backend=search;
+                    child.permission_rules=permissions;
                     let session_id=child.session_id();
                     child.attach_mcp(&mcps).await?;
                     child.attach_lsp(&lsps).await?;
@@ -471,6 +475,7 @@ impl Agent {
         child.child_depth = self.child_depth + 1;
         child.enabled_plugins = self.enabled_plugins.clone();
         child.search_backend = self.search_backend.clone();
+        child.permission_rules = self.permission_rules.clone();
         let child_id = child.session_id();
         let result = async {
             child.attach_mcp(&self.mcp_configs).await?;
@@ -521,6 +526,10 @@ impl Agent {
     pub fn session_id(&self) -> String { self.session.id.to_string() }
     pub fn usage(&self) -> crate::protocol::TokenUsage { self.session.usage }
     pub fn background_tasks(&self) -> Result<String> { self.background.list() }
+    pub fn set_permission_rules(&mut self, rules:&[permission_rules::RuleSetting])->Result<()>{
+        self.permission_rules=permission_rules::compile_rules(rules)?;
+        Ok(())
+    }
     pub fn send_transient(&self, message: in_memory_mailbox::Message) -> u64 {
         self.transient_mailbox.send(message);
         self.transient_mailbox.revision()
@@ -632,7 +641,8 @@ impl Agent {
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_plugins(self.enabled_plugins.clone())
             .with_search(self.search_backend.clone())
-            .with_background(self.background.clone());
+            .with_background(self.background.clone())
+            .with_permission_rules(self.permission_rules.clone());
         let mut stop_hook_active = false;
         for _ in 0..self.max_steps {
             self.absorb_team_messages()?;
@@ -882,6 +892,7 @@ mod tests {
             team_root: None,
             shutdown_requested: false,
             transient_mailbox: in_memory_mailbox::Mailbox::new(),
+            permission_rules: Vec::new(),
             hook_rules: Vec::new(),
         };
         agent.compact_history().await.unwrap();
