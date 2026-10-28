@@ -1,4 +1,4 @@
-use crate::{protocol::ToolCall, notebook};
+use crate::{protocol::ToolCall, notebook, search};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -54,6 +54,14 @@ impl ToolExecutor {
                 self.notebook_edit(&args)
             },
             "list_files" => self.list_files(&args),
+            "glob_files" => {
+                let path = self.checked_path(args.get("path").and_then(Value::as_str).unwrap_or("."))?;
+                search::glob_files(&self.root, &path, &args)
+            },
+            "grep_files" => {
+                let path = self.checked_path(args.get("path").and_then(Value::as_str).unwrap_or("."))?;
+                search::grep_files(&self.root, &path, &args)
+            },
             "search_text" => self.search_text(&args),
             "list_skills" => self.list_skills(),
             "read_skill" => self.read_skill(&args),
@@ -422,6 +430,7 @@ pub fn definitions() -> Vec<Value> {
             },"required":["command"]}}}),
     ];
     tools.push(notebook::definition());
+    tools.extend(search::definitions());
     tools
 }
 

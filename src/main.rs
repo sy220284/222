@@ -9,6 +9,7 @@ mod session;
 mod task;
 mod tools;
 mod notebook;
+mod search;
 
 use agent::Agent;
 use anyhow::{bail, Result};
