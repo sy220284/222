@@ -148,3 +148,9 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：任务通知不再丢失结构化状态
 
 对照原始 `cli/print.ts` 的 `drainCommandQueue` 中 `task-notification` 专用分支，SDK 队列在转发通知文本给模型前，先向 stdout 发出 `system / task_notification` 独立事件；包含任务 ID、工具调用 ID、停止/失败/完成状态（`killed` 映射 `stopped`）、输出文件、摘要和可选 usage（Token、工具次数、耗时）。不含 `<status>` 的进度流消息不再误判为完成。真实 SDK 进程+模拟模型 HTTP 测试验证事件出现在模型结果之前，内容结构正确并保留后续模型继续分析。原版其他事件与远端队列协议仍待移植，源文件保留部分实现。
+
+### 2026-10-29：SDK 队列模型错误停止与结构化内容完整性
+
+继续对照原始 `src/cli/print.ts` 的 `drainCommandQueue` 异常传播、`joinPromptValues` 与 `src/utils/messageQueueManager.ts` 消费时序。`src/sdk_queue.rs` 在模型调用失败时保留该批每条消息的错误结果、返回 `halted.reason=model-error` 和受影响身份，立即停止后续排队请求；后续消息保持在队列中，避免失败后继续向模型发送下一批。SDK 文本适配器对每个结构化块逐一检查，非文本块在出队前拒绝并保留原消息，不再静默丢弃 document/tool-result 等数据；合法文本块按顺序合并进入模型。
+
+新增真实 SDK 子进程与本地模拟 HTTP 服务测试：`sdk_failed_model_turn_stops_drain_without_consuming_following_work`、`sdk_unsupported_content_blocks_are_preserved_until_explicitly_removed`。本轮未修改逐文件状态：排除 22、部分实现 361、未迁移 1493、独立已验收 30，仍有 1854 个非排除路径未完成完整等价验收。多模态原生请求、跨进程队列取消、异步回放及 UI 调用链仍待补全；CI 结果以对应 HEAD 的实际工作流为准。
