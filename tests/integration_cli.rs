@@ -288,6 +288,9 @@ fn team_runs_two_members_with_separate_contexts_and_stable_result_order() {
                             {"name":"two","prompt":"Analyze B"}
                         ]}).to_string()}}
                     ]},"finish_reason":"tool_calls"}]})
+            }else if messages.last().is_some_and(|m|m["role"]=="tool"){
+                json!({"choices":[{"message":{"role":"assistant","content":"Team complete"},
+                    "finish_reason":"stop"}]})
             }else if serialized.contains("Analyze A"){
                 json!({"choices":[{"message":{"role":"assistant","content":"Result A"},
                     "finish_reason":"stop"}]})
