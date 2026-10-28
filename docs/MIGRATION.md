@@ -12,7 +12,7 @@
 | OpenAI 兼容 SSE 流式文本/函数调用 | `sse.rs` / `agent.rs` | 事件分片重组、增量通知、Token 用量；Gemini 和 UI 实时绘制尚未完成 |
 | 模型消息 / 工具调用 | `protocol.rs` | 统一文本、函数调用、工具结果 |
 | Agent 查询循环 | `agent.rs` | 多轮模型决策和工具反馈 |
-| 工具注册及参数 schema | `tools.rs::definitions` | 六类内置工具 |
+| 工具注册及参数 schema | `tools.rs::definitions` | 基础及扩展工具已注册；未达到原版工具全集 |
 | 工具权限 | `tools.rs::Approval` | read-only / ask / full |
 | 文件、搜索与命令 | `tools.rs` | 有限制的工作区文件工具、明确授权 Shell |
 | 历史记录及恢复 | `session.rs` | UUID/JSON 文件 |
@@ -20,10 +20,11 @@
 | 项目提示词 | `agent.rs::system_prompt` | AGENTS.md / 本地 instructions |
 | 模型选择与配置 | `config.rs` | 可自定义提供商配置 |
 | Token 用量归一化及持久化 | `protocol.rs` / `provider.rs` / `session.rs` | OpenAI 兼容与 Gemini 原生用量字段 |
-| CLI 和交互 REPL | `main.rs` | run/chat/models/init |
+| CLI 和交互 REPL | `main.rs` | run/chat/models/init/sdk |
 | JSON Lines SDK 标准输入输出 | `main.rs` / `agent.rs` | 多轮输入、工具结果、控制响应、用量；取消与远程 SDK 功能未齐 |
-| Web 搜索、Web 抓取 | — | 未实现 |
-| 流式执行和并发编排 | — | 未实现 |
+| Web 搜索与网页抓取 | `websearch.rs` / `webfetch.rs` | 可配置搜索与有权限网页读取，原版过滤和摘要仍待对齐 |
+| 模型流式输出 | `sse.rs` / `agent.rs` | SSE 文本增量、函数调用分片、SDK 事件已实现 |
+| 工具级流式并发编排 | — | 未实现；模型流式输出不等于流式工具执行 |
 | 会话摘要压缩 | `agent.rs` / `session.rs` | 已实现手动及字符阈值触发 |
 | 长期记忆检索 | — | 未实现 |
 | MCP stdio 工具连接 | `mcp.rs` | 已实现工具发现、调用、权限接入 |
