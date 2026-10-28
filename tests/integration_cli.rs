@@ -432,3 +432,47 @@ fn background_shell_model_tool_roundtrip_runs_and_reads_real_process() {
     assert_eq!(logs[1]["task"]["status"], "completed");
     assert!(logs[1]["task"]["output"].as_str().unwrap().contains("background-ready"));
 }
+
+#[test]
+fn sdk_json_lines_never_contain_javascript_unicode_line_separators() {
+    use std::process::Stdio;
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let _request = read_request(&mut stream);
+        let message = "first\u{2028}middle\u{2029}last";
+        let body = json!({"choices":[{"message":{
+            "role":"assistant","content":message
+        },"finish_reason":"stop"}]}).to_string();
+        write!(stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),body).unwrap();
+        stream.flush().unwrap();
+    });
+    let config = root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible",
+        "base_url":format!("http://{addr}/v1"),"model":"mock"
+    }]}).to_string()).unwrap();
+    let mut child = binary().args([
+        "--workspace",root.path().to_str().unwrap(),"--approval","read-only","sdk"
+    ]).env("ATLAS_CONFIG",&config)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    {
+        let mut input=child.stdin.take().unwrap();
+        writeln!(input,"{}",json!({"type":"user","content":"Reply with separators"})).unwrap();
+    }
+    let output=child.wait_with_output().unwrap();
+    server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let wire=String::from_utf8(output.stdout).unwrap();
+    assert!(!wire.contains('\u{2028}'));
+    assert!(!wire.contains('\u{2029}'));
+    let events=wire.lines().map(|line|serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    let result=events.iter().find(|e|e["type"]=="result").unwrap();
+    assert_eq!(result["content"],"first\u{2028}middle\u{2029}last");
+}
