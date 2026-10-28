@@ -29,9 +29,21 @@ impl Session {
         root.join(".atlas").join("sessions").join(format!("{id}.json"))
     }
 
+    fn checked_path(root:&Path,id:Uuid)->Result<PathBuf>{
+        let root=root.canonicalize().context("Workspace unavailable")?;
+        let base=root.join(".atlas/sessions");
+        fs::create_dir_all(&base)?;
+        let real=base.canonicalize()?;
+        if !real.starts_with(&root){anyhow::bail!("Session storage escapes workspace")}
+        let path=real.join(format!("{id}.json"));
+        if path.symlink_metadata().is_ok_and(|m|m.file_type().is_symlink()){
+            anyhow::bail!("Unsafe session file link")
+        }
+        Ok(path)
+    }
     pub fn load(root: &Path, id: &str) -> Result<Self> {
         let id = Uuid::parse_str(id).context("Session id must be a UUID")?;
-        let file = Self::path(root, id);
+        let file = Self::checked_path(root, id)?;
         let data = fs::read(&file)
             .with_context(|| format!("Cannot resume {}", file.display()))?;
         let session: Self = serde_json::from_slice(&data)?;
@@ -40,7 +52,7 @@ impl Session {
     }
 
     pub fn save(&self, root: &Path) -> Result<()> {
-        let path = Self::path(root, self.id);
+        let path = Self::checked_path(root, self.id)?;
         fs::create_dir_all(path.parent().context("Invalid session path")?)?;
         let data = serde_json::to_vec_pretty(self)?;
         let temp=path.with_extension(format!("{}.tmp",Uuid::new_v4()));
@@ -66,6 +78,19 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn session_storage_rejects_symlink_escape(){
+        #[cfg(unix)]{
+            use std::os::unix::fs::symlink;
+            let root=tempfile::tempdir().unwrap();
+            let external=tempfile::tempdir().unwrap();
+            fs::create_dir_all(root.path().join(".atlas")).unwrap();
+            symlink(external.path(),root.path().join(".atlas/sessions")).unwrap();
+            let session=Session::fresh();
+            assert!(session.save(root.path()).is_err());
+            assert!(Session::load(root.path(),&session.id.to_string()).is_err());
+        }
+    }
     #[test]
     fn legacy_session_without_team_fields_remains_loadable(){
         let dir=tempfile::tempdir().unwrap();
