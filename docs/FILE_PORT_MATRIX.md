@@ -1428,7 +1428,7 @@
 | `src/utils/collapseReadSearch.ts` | 1110 | 37902 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/collapseTeammateShutdowns.ts` | 56 | 1322 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/combinedAbortSignal.ts` | 48 | 1714 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/commandLifecycle.ts` | 22 | 440 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/commandLifecycle.ts` | 22 | 440 | 重写：保持通用行为 | `src/command_lifecycle.rs / src/tools.rs` | 已验收：单监听器设置/替换/清除、通知同步顺序；证据 command_lifecycle::tests::single_listener_replace_clear_and_event_order |
 | `src/utils/commitAttribution.ts` | 962 | 29594 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/completionCache.ts` | 167 | 5654 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/appNames.ts` | 197 | 6575 | 重写：保持通用行为 | 待定 | 未迁移 |

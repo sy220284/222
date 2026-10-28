@@ -28,6 +28,7 @@ mod tool_names;
 mod ndjson;
 mod array_utils;
 mod ink_constants;
+mod command_lifecycle;
 
 macro_rules! print_json {
     ($value:expr)=>{ println!("{}",crate::ndjson::stringify_value(&$value)); };

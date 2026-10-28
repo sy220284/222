@@ -55,10 +55,20 @@ impl ToolExecutor {
     }
 
     pub async fn execute(&self, call: &ToolCall) -> String {
-        match self.dispatch(call).await {
+        let shell=crate::tool_names::canonical_name(&call.function.name)=="run_command";
+        if shell {
+            crate::command_lifecycle::notify_command_lifecycle(
+                &call.id,crate::command_lifecycle::State::Started);
+        }
+        let result=match self.dispatch(call).await {
             Ok(output) => truncate(&output, MAX_OUTPUT_CHARS),
             Err(err) => format!("ERROR: {err:#}"),
+        };
+        if shell {
+            crate::command_lifecycle::notify_command_lifecycle(
+                &call.id,crate::command_lifecycle::State::Completed);
         }
+        result
     }
 
     async fn dispatch(&self, call: &ToolCall) -> Result<String> {
