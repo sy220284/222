@@ -193,7 +193,7 @@ fn parse_openai_usage(value: &Value) -> Option<TokenUsage> {
     })
 }
 
-fn parse_gemini_usage(value: &Value) -> Option<TokenUsage> {
+pub(crate) fn parse_gemini_usage(value: &Value) -> Option<TokenUsage> {
     let usage = value.get("usageMetadata")?;
     let input = usage.get("promptTokenCount").and_then(Value::as_u64).unwrap_or(0);
     let output = usage.get("candidatesTokenCount").and_then(Value::as_u64).unwrap_or(0);
