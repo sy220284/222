@@ -526,7 +526,7 @@ fn original_task_tools_end_to_end_model_calls_and_disk_graph() {
     let response=binary().args(["--workspace",root.path().to_str().unwrap(),
         "--approval","read-only","run","Create two tasks, link dependencies and finish"])
         .env("ATLAS_CONFIG",&config).output().unwrap();
-    let results=server.join().unwrap();
+    let (results,saw_auto_delivery)=server.join().unwrap();
     assert!(response.status.success(),"{}",String::from_utf8_lossy(&response.stderr));
     assert!(String::from_utf8_lossy(&response.stdout).contains("Task workflow verified."));
     assert_eq!(results.len(),7);
@@ -559,12 +559,19 @@ fn model_driven_team_create_message_receive_and_cleanup() {
             ("TeamDelete",json!({})),
         ];
         let mut outputs=Vec::new();
+        let mut saw_auto_delivery=false;
         for index in 0..=steps.len() {
             let (mut stream,_)=listener.accept().unwrap();
             let request=read_request(&mut stream);
             let payload:Value=serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
-            if let Some(last)=payload["messages"].as_array().unwrap().last(){
-                if last["role"]=="tool"{outputs.push(last["content"].as_str().unwrap().to_owned())}
+            let messages=payload["messages"].as_array().unwrap();
+            if messages.iter().any(|m|m["role"]=="user" &&
+                m["content"].as_str().unwrap_or("").contains(
+                    "<teammate-message teammate_id=\\\"team-lead\\\"")){
+                saw_auto_delivery=true;
+            }
+            if let Some(last)=messages.iter().rev().find(|m|m["role"]=="tool"){
+                outputs.push(last["content"].as_str().unwrap().to_owned());
             }
             let reply=if let Some((name,args))=steps.get(index){
                 json!({"choices":[{"message":{"role":"assistant","content":null,
@@ -580,7 +587,7 @@ fn model_driven_team_create_message_receive_and_cleanup() {
                 body.len(),body).unwrap();
             stream.flush().unwrap();
         }
-        outputs
+        (outputs,saw_auto_delivery)
     });
     let config=dir.path().join("config.json");
     fs::write(&config,json!({"default_provider":"mock","providers":[{
@@ -596,7 +603,8 @@ fn model_driven_team_create_message_receive_and_cleanup() {
     assert_eq!(results.len(),4);
     assert!(results[0].contains("review"));
     assert!(results[1].contains("success"));
-    assert!(results[2].contains("Check CI output"));
+    assert!(saw_auto_delivery,"Teammate messages must reach the next model round");
+    assert_eq!(results[2],"[]");
     assert!(results[3].contains("Cleaned up directories"));
     assert!(!dir.path().join(".atlas/teams/review").exists());
 }
