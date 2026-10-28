@@ -1764,7 +1764,14 @@ fn sdk_queued_uuid_replays_survive_prompt_batching_and_preserve_source_content()
     let requests=server.join().unwrap();
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
     assert!(requests[0].contains("FIRST") && requests[0].contains("SECOND"));
-    assert!(requests[1].contains("THIRD") && !requests[1].contains("SECOND"));
+    // The second HTTP request legitimately contains the first turn in
+    // conversation history. Verify its NEW user turn rather than asserting
+    // the prior batch disappears from context.
+    let second_body=requests[1].split_once("\r\n\r\n").unwrap().1;
+    let second_json:Value=serde_json::from_str(second_body).unwrap();
+    let last_user=second_json["messages"].as_array().unwrap().iter().rev()
+        .find(|message|message["role"]=="user").unwrap();
+    assert_eq!(last_user["content"],"THIRD");
     assert!(!requests[0].contains("INVALID_UUID"));
     let events=String::from_utf8(output.stdout).unwrap().lines()
         .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
