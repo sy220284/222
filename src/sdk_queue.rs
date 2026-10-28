@@ -76,6 +76,14 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
             let threshold=parse_priority(request.get("max_priority"))?;
             let max=request.get("max_items").and_then(Value::as_u64)
                 .map(|v|v as usize).unwrap_or(usize::MAX);
+            // The original headless protocol replays each queued UUID, even
+            // when multiple prompts are merged into a single model turn.
+            // The Rust Agent does not have QueryEngine's messagesToAck hook,
+            // so emit every replay here before dispatch instead of losing
+            // the final (or only) UUID.
+            let replay_user_messages=request.get("replay_user_messages")
+                .or_else(||request.get("replayUserMessages"))
+                .and_then(Value::as_bool).unwrap_or(false);
             let mut results=Vec::new();
             let mut blocked=None;
             let mut halted=None;
@@ -139,6 +147,20 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                     }
                 }
                 let generation=guard.try_start().context("Cannot begin reserved query")?;
+                if replay_user_messages {
+                    for item in &batch {
+                        if let Some(uuid)=item.command.uuid.as_deref() {
+                            println!("{}",crate::ndjson::stringify_value(&json!({
+                                "type":"user",
+                                "message":{"role":"user","content":item.command.value},
+                                "session_id":agent.session_id(),
+                                "parent_tool_use_id":null,
+                                "uuid":uuid,
+                                "isReplay":true
+                            })));
+                        }
+                    }
+                }
                 let answer=agent.ask(&prompt).await;
                 let ended=guard.end(generation);
                 if !ended{bail!("Query generation changed during execution")}
