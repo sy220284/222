@@ -30,6 +30,6 @@ mod tests{
         assert_eq!(count(&[1,2,3,4],|x|x%2==0),2);
         assert_eq!(count(&[] as &[i32],|_|true),0);
         assert_eq!(uniq([3,1,3,2,1,4]),vec![3,1,2,4]);
-        assert_eq!(uniq(Vec::<i32>::new()),vec![]);
+        assert_eq!(uniq(Vec::<i32>::new()),Vec::<i32>::new());
     }
 }
