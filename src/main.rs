@@ -24,6 +24,7 @@ mod env_validation;
 mod task_output_format;
 mod compat_helpers;
 mod runtime_contracts;
+mod tool_names;
 
 use agent::Agent;
 use anyhow::{bail, Result};

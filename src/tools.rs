@@ -65,7 +65,7 @@ impl ToolExecutor {
         let args: Value = serde_json::from_str(&call.function.arguments)
             .with_context(|| format!("Invalid JSON arguments for {}", call.function.name))?;
         if !args.is_object() { bail!("Tool arguments must be a JSON object") }
-        match call.function.name.as_str() {
+        match crate::tool_names::canonical_name(&call.function.name) {
             "read_file" => self.read_file(&args),
             "notebook_edit" => {
                 self.require_approval("notebook_edit", &args)?;
