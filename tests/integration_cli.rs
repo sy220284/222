@@ -567,7 +567,7 @@ fn model_driven_team_create_message_receive_and_cleanup() {
             let messages=payload["messages"].as_array().unwrap();
             if messages.iter().any(|m|m["role"]=="user" &&
                 m["content"].as_str().unwrap_or("").contains(
-                    "<teammate-message teammate_id=\"team-lead\""")){
+                    "<teammate-message teammate_id=\"team-lead\"")){
                 saw_auto_delivery=true;
             }
             if let Some(last)=messages.iter().rev().find(|m|m["role"]=="tool"){
