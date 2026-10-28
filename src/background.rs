@@ -178,8 +178,13 @@ impl BackgroundTasks {
         } else {
             self.load(id)?
         };
-        let stdout = tail(&record.output_file)?;
-        let stderr = tail(&record.error_file)?;
+        // Do not trust paths in persisted task metadata: a workspace file
+        // must never redirect output reads to a private host file.
+        let task_uuid = Uuid::parse_str(id).context("Invalid task ID")?;
+        let safe_stdout = self.directory.join(format!("{task_uuid}.stdout"));
+        let safe_stderr = self.directory.join(format!("{task_uuid}.stderr"));
+        let stdout = tail(safe_stdout.to_str().context("Invalid stdout path")?)?;
+        let stderr = tail(safe_stderr.to_str().context("Invalid stderr path")?)?;
         let text = [stdout, stderr].into_iter()
             .filter(|x| !x.is_empty()).collect::<Vec<_>>().join("\n");
         let retrieval = if record.status == "running" {
@@ -189,7 +194,7 @@ impl BackgroundTasks {
             "task_id":record.id,"task_type":"local_bash",
             "status":record.status,"description":record.description,
             "output":text,"exitCode":record.exit_code,
-            "output_file":record.output_file,"truncated":record.truncated
+            "output_file":safe_stdout.to_string_lossy(),"truncated":record.truncated
         }}).to_string())
     }
 
@@ -312,6 +317,30 @@ mod tests {
             &restarted.output(id, false, 0).await.unwrap()).unwrap();
         assert_eq!(persisted["task"]["status"], "killed");
     }
+    #[test]
+    fn persisted_metadata_cannot_redirect_output_to_arbitrary_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let tasks = BackgroundTasks::new(&root).unwrap();
+        let id = Uuid::new_v4().to_string();
+        let safe_out = tasks.directory.join(format!("{id}.stdout"));
+        let safe_err = tasks.directory.join(format!("{id}.stderr"));
+        fs::write(&safe_out, "safe output").unwrap();
+        fs::write(&safe_err, "").unwrap();
+        let private = root.join("private.txt");
+        fs::write(&private, "DO_NOT_DISCLOSE").unwrap();
+        let forged = TaskRecord {
+            id: id.clone(), description:"Forged record".into(), command:"nothing".into(),
+            status:"completed".into(), exit_code:Some(0),
+            output_file:private.to_string_lossy().to_string(),
+            error_file:safe_err.to_string_lossy().to_string(),truncated:false
+        };
+        BackgroundTasks::save(&tasks.directory,&forged).unwrap();
+        let output: Value = serde_json::from_str(&tokio_test_output(&tasks,&id)).unwrap();
+        assert!(output["task"]["output"].as_str().unwrap().contains("safe output"));
+        assert!(!output.to_string().contains("DO_NOT_DISCLOSE"));
+    }
+
     #[test]
     fn recovers_unfinished_record_as_interrupted() {
         let dir = tempfile::tempdir().unwrap();
