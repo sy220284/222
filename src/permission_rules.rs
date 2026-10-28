@@ -192,7 +192,7 @@ mod tests{
             ("git *","gitstatus",false),
             ("npm:*","npm",true),("npm:*","npm run test",true),
             ("npm:*","npminstall",false),
-            (r"echo \*","echo *",true),
+            (r"echo \*","echo *",false),
             (r"echo \*","echo hey",false),
             ("npm * install","npm local install",true),
             ("npm * install","npm local\ninstall",true),
@@ -200,6 +200,7 @@ mod tests{
         ]{
             assert_eq!(matches_content(pattern,command).unwrap(),matched,"{pattern} vs {command}");
         }
+        assert!(match_wildcard(r"echo \*","echo *",false).unwrap());
         assert!(match_wildcard("GIT *","git status",true).unwrap());
     }
     #[test]
