@@ -49,6 +49,9 @@ impl ToolExecutor {
             "search_text" => self.search_text(&args),
             "list_skills" => self.list_skills(),
             "read_skill" => self.read_skill(&args),
+            "git_status" => self.git_read(vec!["status".into(), "--short".into()]).await,
+            "git_diff" => self.git_diff(&args).await,
+            "git_log" => self.git_log(&args).await,
             "write_file" => {
                 self.require_approval("write_file", &args)?;
                 self.write_file(&args).await
@@ -201,6 +204,42 @@ impl ToolExecutor {
         Ok(fs::read_to_string(path)?)
     }
 
+    async fn git_read(&self, arguments: Vec<String>) -> Result<String> {
+        let mut command = Command::new("git");
+        command.arg("-C").arg(&self.root).arg("--no-pager")
+            .args(arguments).kill_on_drop(true);
+        let output = timeout(Duration::from_secs(30), command.output())
+            .await.context("Git command timed out")??;
+        if !output.status.success() {
+            bail!("Git error: {}", String::from_utf8_lossy(&output.stderr));
+        }
+        Ok(truncate(&String::from_utf8_lossy(&output.stdout), MAX_OUTPUT_CHARS))
+    }
+
+    async fn git_diff(&self, args: &Value) -> Result<String> {
+        let mut command = vec![
+            "diff".into(), "--no-ext-diff".into(), "--no-textconv".into(),
+            "--no-color".into()
+        ];
+        if args.get("staged").and_then(Value::as_bool).unwrap_or(false) {
+            command.push("--cached".into());
+        }
+        if let Some(path) = args.get("path").and_then(Value::as_str) {
+            let checked = self.checked_path(path)?;
+            let relative = checked.strip_prefix(&self.root)?;
+            command.push("--".into());
+            command.push(relative.to_string_lossy().to_string());
+        }
+        self.git_read(command).await
+    }
+
+    async fn git_log(&self, args: &Value) -> Result<String> {
+        let count = args.get("count").and_then(Value::as_u64).unwrap_or(5).clamp(1, 30);
+        self.git_read(vec![
+            "log".into(), format!("-{count}"), "--oneline".into()
+        ]).await
+    }
+
     async fn write_file(&self, args: &Value) -> Result<String> {
         let path = self.checked_path(required(args, "path")?)?;
         let content = required(args, "content")?;
@@ -301,6 +340,19 @@ pub fn definitions() -> Vec<Value> {
             "parameters":{"type":"object","properties":{
                 "pattern":{"type":"string"},"path":{"type":"string"},"limit":{"type":"integer"}
             },"required":["pattern"]}}}),
+        json!({"type":"function","function":{"name":"git_status",
+            "description":"View Git working tree status for the project.",
+            "parameters":{"type":"object","properties":{}}}}),
+        json!({"type":"function","function":{"name":"git_diff",
+            "description":"Show unstaged or staged Git diff, optionally limited to a file.",
+            "parameters":{"type":"object","properties":{
+                "path":{"type":"string"},"staged":{"type":"boolean"}
+            }}}}),
+        json!({"type":"function","function":{"name":"git_log",
+            "description":"Show recent Git commit summaries.",
+            "parameters":{"type":"object","properties":{
+                "count":{"type":"integer"}
+            }}}}),
         json!({"type":"function","function":{"name":"list_skills",
             "description":"List available project skills in .atlas/skills.",
             "parameters":{"type":"object","properties":{}}}}),
@@ -335,6 +387,29 @@ mod tests {
         ToolExecutor::new(root.canonicalize().unwrap(), approval, false)
     }
 
+
+    #[tokio::test]
+    async fn git_status_and_diff_read_real_repository() {
+        let root = tempfile::tempdir().unwrap();
+        let run = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .current_dir(root.path()).args(args).output().unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        };
+        run(&["init", "-q"]);
+        fs::write(root.path().join("hello.txt"), "before\n").unwrap();
+        run(&["add", "hello.txt"]);
+        run(&["-c", "user.name=Test", "-c", "user.email=test@example.com",
+            "commit", "-qm", "initial"]);
+        fs::write(root.path().join("hello.txt"), "after\n").unwrap();
+        let tool = executor(root.path(), Approval::ReadOnly);
+        let status = tool.git_read(vec!["status".into(), "--short".into()]).await.unwrap();
+        assert!(status.contains("hello.txt"));
+        let diff = tool.git_diff(&json!({"path":"hello.txt"})).await.unwrap();
+        assert!(diff.contains("-before"));
+        assert!(diff.contains("+after"));
+        assert!(tool.git_log(&json!({"count":1})).await.unwrap().contains("initial"));
+    }
 
     #[test]
     fn skills_are_discovered_and_loaded_from_workspace() {

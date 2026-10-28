@@ -8,7 +8,7 @@
 
 - 多模型提供商：OpenAI 兼容 Chat Completions（OpenAI、OpenRouter、DeepSeek、Qwen、vLLM、LM Studio 等需各自兼容函数调用）；Ollama 本地兼容接口；Gemini 原生 generateContent。
 - 通用模型消息格式，支持模型请求多次工具调用、工具结果回填与继续决策。
-- 文件读取、递归文件列表、正则全文检索、文件写入、唯一文本替换、带超时的 Shell 命令。
+- 文件读取、递归文件列表、正则全文检索、文件写入、唯一文本替换、带超时的 Shell 命令；以及 Git 只读工具。
 - 项目技能（`.atlas/skills/<名称>/SKILL.md`）列表与加载，模型可选择使用相关指导。
 - 手动 `/compact` 及历史记录超过字符阈值时的自动摘要压缩；摘要随会话保存。
 - 默认审批写操作与 Shell；非交互模式默认拒绝，需明确设置 `--approval full`。
@@ -16,6 +16,7 @@
 - `AGENTS.md` / `.atlas/instructions.md` 项目指导文件、UUID 会话保存与继续。
 - MCP stdio 外部工具服务器：工具发现、JSON-RPC 调用与结果回填，执行前沿用审批。
 - 持久化任务列表：创建、更新状态和查询；任务跟随当前会话恢复。
+- Git 仓库只读操作：状态、差异和提交摘要，使用 Git 子进程执行而不是拼接 Shell。
 - 独立编写的单元测试和 GitHub Actions 编译测试。
 
 ## 快速开始
