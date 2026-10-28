@@ -526,7 +526,7 @@ fn original_task_tools_end_to_end_model_calls_and_disk_graph() {
     let response=binary().args(["--workspace",root.path().to_str().unwrap(),
         "--approval","read-only","run","Create two tasks, link dependencies and finish"])
         .env("ATLAS_CONFIG",&config).output().unwrap();
-    let (results,saw_auto_delivery)=server.join().unwrap();
+    let results=server.join().unwrap();
     assert!(response.status.success(),"{}",String::from_utf8_lossy(&response.stderr));
     assert!(String::from_utf8_lossy(&response.stdout).contains("Task workflow verified."));
     assert_eq!(results.len(),7);
@@ -567,7 +567,7 @@ fn model_driven_team_create_message_receive_and_cleanup() {
             let messages=payload["messages"].as_array().unwrap();
             if messages.iter().any(|m|m["role"]=="user" &&
                 m["content"].as_str().unwrap_or("").contains(
-                    "<teammate-message teammate_id=\\\"team-lead\\\"")){
+                    "<teammate-message teammate_id=\"team-lead\""")){
                 saw_auto_delivery=true;
             }
             if let Some(last)=messages.iter().rev().find(|m|m["role"]=="tool"){
@@ -597,7 +597,7 @@ fn model_driven_team_create_message_receive_and_cleanup() {
     let output=binary().args(["--workspace",dir.path().to_str().unwrap(),
         "--approval","full","run","Run team lifecycle"])
         .env("ATLAS_CONFIG",&config).output().unwrap();
-    let results=server.join().unwrap();
+    let (results,saw_auto_delivery)=server.join().unwrap();
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
     assert!(String::from_utf8_lossy(&output.stdout).contains("Team lifecycle complete."));
     assert_eq!(results.len(),4);
