@@ -344,6 +344,15 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                         continue;
                     }
                 };
+                // QueryEngine normally emits this replay during ask().
+                // The Rust SDK entrypoint owns the delivery acknowledgement.
+                if event.get("replay_user_messages")
+                    .or_else(||event.get("replayUserMessages"))
+                    .and_then(Value::as_bool)==Some(true) {
+                    if let Some(uuid)=event.get("uuid").and_then(Value::as_str) {
+                        sdk_queue::emit_user_replay(prompt_value,uuid,&agent.session_id());
+                    }
+                }
                 match agent.ask(&prompt).await{
                     Ok(answer)=>print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
