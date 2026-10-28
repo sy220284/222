@@ -23,10 +23,20 @@ impl<A> Signal<A>{
 }
 impl<A:Clone> Signal<A>{
     pub fn emit(&self,args:A){
-        // Unlike the JS live Set iterator, mutations during emit affect the
-        // *next* emission. Keep this semantic gap in the port matrix.
-        let listeners=self.inner.lock().unwrap().listeners.values().cloned().collect::<Vec<_>>();
-        for listener in listeners{listener(args.clone())}
+        // JS Set iteration is live: removing a pending listener skips it,
+        // while appending a new listener visits it in the same emission.
+        let mut next=0u64;
+        loop{
+            let current={
+                let state=self.inner.lock().unwrap();
+                state.listeners.range(next..).next()
+                    .map(|(id,listener)|(*id,listener.clone()))
+            };
+            let Some((id,listener))=current else{break};
+            listener(args.clone());
+            let Some(after)=id.checked_add(1)else{break};
+            next=after;
+        }
     }
 }
 impl<A> Subscription<A>{
@@ -40,6 +50,38 @@ impl<A> Drop for Subscription<A>{fn drop(&mut self){self.unsubscribe();}}
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn live_iteration_skips_removed_and_visits_added_listeners(){
+        let signal=Signal::<usize>::new();
+        let events=Arc::new(Mutex::new(Vec::<&'static str>::new()));
+        let b_slot=Arc::new(Mutex::new(None::<Subscription<usize>>));
+        let c_slot=Arc::new(Mutex::new(None::<Subscription<usize>>));
+        let signal_for_a=signal.clone();
+        let events_a=events.clone();
+        let events_c=events.clone();
+        let b_for_a=b_slot.clone();
+        let c_for_a=c_slot.clone();
+        let _a=signal.subscribe(Arc::new(move|_|{
+            events_a.lock().unwrap().push("a");
+            b_for_a.lock().unwrap().take();
+            let mut c=c_for_a.lock().unwrap();
+            if c.is_none(){
+                *c=Some(signal_for_a.subscribe(Arc::new({
+                    let events=events_c.clone();
+                    move|_|events.lock().unwrap().push("c")
+                })));
+            }
+        }));
+        let events_b=events.clone();
+        *b_slot.lock().unwrap()=Some(signal.subscribe(Arc::new(move|_|{
+            events_b.lock().unwrap().push("b");
+        })));
+        signal.emit(1);
+        assert_eq!(*events.lock().unwrap(),vec!["a","c"]);
+        events.lock().unwrap().clear();
+        signal.emit(2);
+        assert_eq!(*events.lock().unwrap(),vec!["a","c"]);
+    }
     #[test]
     fn listener_order_identity_unsubscribe_and_clear(){
         let events=Arc::new(Mutex::new(Vec::new()));
