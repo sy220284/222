@@ -74,6 +74,54 @@ impl ModelProvider for OpenAiCompatible {
     }
 }
 
+fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
+    let mut names = HashMap::<String, String>::new();
+    for msg in &request.messages {
+        for call in msg.tool_calls.as_deref().unwrap_or(&[]) {
+            names.insert(call.id.clone(), call.function.name.clone());
+        }
+    }
+    let mut contents = Vec::new();
+    for msg in &request.messages {
+        let parts: Vec<Value> = match msg.role.as_str() {
+            "assistant" => {
+                let mut p: Vec<Value> = msg.content.as_ref().filter(|s| !s.is_empty())
+                    .map(|s| vec![json!({"text":s})]).unwrap_or_default();
+                for call in msg.tool_calls.as_deref().unwrap_or(&[]) {
+                    let args: Value = serde_json::from_str(&call.function.arguments)
+                        .with_context(|| format!("Invalid arguments for {}", call.function.name))?;
+                    p.push(json!({"functionCall":{"name": call.function.name, "args":args}}));
+                }
+                p
+            }
+            "tool" => {
+                let id = msg.tool_call_id.as_ref().context("Tool result missing call id")?;
+                let name = names.get(id).context("Tool response has no matching call")?;
+                vec![json!({"functionResponse":{"name":name,"response":{"content":msg.content}}})]
+            }
+            _ => vec![json!({"text":msg.content.as_deref().unwrap_or("")})],
+        };
+        if parts.is_empty() { continue; }
+        contents.push(json!({"role": if msg.role == "assistant" {"model"} else {"user"}, "parts":parts}));
+    }
+    let declarations: Vec<Value> = request.tools.iter().filter_map(|t| {
+        let f = t.get("function")?;
+        Some(json!({
+            "name": f.get("name")?,
+            "description": f.get("description")?,
+            "parameters": f.get("parameters")?,
+        }))
+    }).collect();
+    let mut body = json!({
+        "systemInstruction":{"parts":[{"text":request.system}]},
+        "contents":contents
+    });
+    if !declarations.is_empty() {
+        body["tools"] = json!([{"functionDeclarations":declarations}]);
+    }
+    Ok(body)
+}
+
 struct Gemini {
     client: Client,
     base_url: String,
@@ -83,50 +131,7 @@ struct Gemini {
 #[async_trait]
 impl ModelProvider for Gemini {
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
-        let mut names = HashMap::<String, String>::new();
-        for msg in &request.messages {
-            for call in msg.tool_calls.as_deref().unwrap_or(&[]) {
-                names.insert(call.id.clone(), call.function.name.clone());
-            }
-        }
-        let mut contents = Vec::new();
-        for msg in &request.messages {
-            let parts: Vec<Value> = match msg.role.as_str() {
-                "assistant" => {
-                    let mut p: Vec<Value> = msg.content.as_ref().filter(|s| !s.is_empty())
-                        .map(|s| vec![json!({"text":s})]).unwrap_or_default();
-                    for call in msg.tool_calls.as_deref().unwrap_or(&[]) {
-                        let args: Value = serde_json::from_str(&call.function.arguments)
-                            .with_context(|| format!("Invalid arguments for {}", call.function.name))?;
-                        p.push(json!({"functionCall":{"name": call.function.name, "args":args}}));
-                    }
-                    p
-                }
-                "tool" => {
-                    let id = msg.tool_call_id.as_ref().context("Tool result missing call id")?;
-                    let name = names.get(id).context("Tool response has no matching call")?;
-                    vec![json!({"functionResponse":{"name":name,"response":{"content":msg.content}}})]
-                }
-                _ => vec![json!({"text":msg.content.as_deref().unwrap_or("")})],
-            };
-            if parts.is_empty() { continue; }
-            contents.push(json!({"role": if msg.role == "assistant" {"model"} else {"user"}, "parts":parts}));
-        }
-        let declarations: Vec<Value> = request.tools.iter().filter_map(|t| {
-            let f = t.get("function")?;
-            Some(json!({
-                "name": f.get("name")?,
-                "description": f.get("description")?,
-                "parameters": f.get("parameters")?,
-            }))
-        }).collect();
-        let mut body = json!({
-            "systemInstruction":{"parts":[{"text":request.system}]},
-            "contents":contents
-        });
-        if !declarations.is_empty() {
-            body["tools"] = json!([{"functionDeclarations":declarations}]);
-        }
+        let body = gemini_request_body(request)?;
         let model = request.model.strip_prefix("models/").unwrap_or(&request.model);
         let url = format!("{}/models/{}:generateContent", self.base_url.trim_end_matches('/'), model);
         let response = self.client.post(url)
@@ -168,6 +173,12 @@ impl ModelProvider for Gemini {
             usage: parse_gemini_usage(&value),
         })
     }
+
+    async fn complete_stream(&self, request:&ModelRequest, deltas:UnboundedSender<String>) -> Result<ModelResponse> {
+        let body=gemini_request_body(request)?;
+        crate::gemini_sse::complete(&self.client,&self.base_url,&self.key,
+            &request.model,&body,deltas).await
+    }
 }
 
 fn parse_openai_usage(value: &Value) -> Option<TokenUsage> {
@@ -208,6 +219,25 @@ fn error_summary(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gemini_stream_and_nonstream_use_identical_request_body() {
+        let request=ModelRequest{
+            model:"test-model".into(),
+            system:"System instructions".into(),
+            messages:vec![
+                Message::text("user","Inspect source"),
+                Message::text("assistant","Will read"),
+            ],
+            tools:vec![json!({"type":"function","function":{
+                "name":"read_file","description":"Read text",
+                "parameters":{"type":"object","properties":{"path":{"type":"string"}}}
+            }})],
+        };
+        let body=gemini_request_body(&request).unwrap();
+        assert_eq!(body["systemInstruction"]["parts"][0]["text"],"System instructions");
+        assert_eq!(body["contents"][0]["role"],"user");
+        assert_eq!(body["tools"][0]["functionDeclarations"][0]["name"],"read_file");
+    }
     #[test]
     fn token_usage_normalization_is_provider_neutral() {
         assert_eq!(parse_openai_usage(&json!({"usage":{"prompt_tokens":20,
