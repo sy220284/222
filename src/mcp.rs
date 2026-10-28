@@ -16,6 +16,7 @@ struct Client {
     input: ChildStdin,
     output: BufReader<ChildStdout>,
     id: u64,
+    server_info: Option<Value>,
 }
 
 impl Client {
@@ -39,12 +40,13 @@ impl Client {
             .with_context(|| format!("Starting MCP server {}", server.id))?;
         let input = child.stdin.take().context("MCP stdin unavailable")?;
         let output = BufReader::new(child.stdout.take().context("MCP stdout unavailable")?);
-        let mut client = Self { name: server.id.clone(), _child: child, input, output, id: 1 };
-        timeout(RPC_TIMEOUT, client.request("initialize", json!({
+        let mut client = Self { name: server.id.clone(), _child: child, input, output, id: 1, server_info: None };
+        let initialized=timeout(RPC_TIMEOUT, client.request("initialize", json!({
             "protocolVersion":"2025-03-26",
             "capabilities":{},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
         }))).await.context("MCP initialize timed out")??;
+        client.server_info=initialized.get("serverInfo").cloned();
         client.send(&json!({"jsonrpc":"2.0","method":"notifications/initialized"})).await?;
         Ok(client)
     }
@@ -86,16 +88,18 @@ pub struct McpManager {
     clients: Vec<Client>,
     tools: Vec<Value>,
     routes: HashMap<String, (usize, String)>,
+    server_statuses: Vec<Value>,
 }
 
 impl McpManager {
     pub async fn connect(servers: &[McpServerConfig]) -> Result<Self> {
         if servers.len() > 16 { bail!("Too many MCP servers") }
-        let mut out = Self { clients: Vec::new(), tools: Vec::new(), routes: HashMap::new() };
+        let mut out = Self { clients: Vec::new(), tools: Vec::new(), routes: HashMap::new(), server_statuses: Vec::new() };
         for server in servers {
             let mut client = Client::connect(server).await?;
             let index = out.clients.len();
             let mut cursor: Option<String> = None;
+            let mut server_tools=Vec::new();
             for _ in 0..20 {
                 let params = match &cursor {
                     Some(value) => json!({"cursor":value}),
@@ -119,14 +123,36 @@ impl McpManager {
                         "name":alias,"description":description,"parameters":parameters
                     }}));
                     out.routes.insert(alias, (index, name.to_owned()));
+                    server_tools.push(json!({"name":name,
+                        "description":tool.get("description").and_then(Value::as_str)
+                            .unwrap_or("")}));
                 }
                 cursor = result.get("nextCursor").and_then(Value::as_str).map(str::to_owned);
                 if cursor.is_none() { break; }
             }
             if cursor.is_some() { bail!("MCP server {} returned too many pages", server.id) }
+            out.server_statuses.push(json!({
+                "name":server.id,"status":"connected","serverInfo":client.server_info,
+                "config":{"type":"stdio","command":server.command,"args":server.args},
+                "tools":server_tools
+            }));
             out.clients.push(client);
         }
         Ok(out)
+    }
+
+    /// SDK status comes from the live managed process, not the configured name.
+    /// Do not expose environment variables or secrets in the SDK response.
+    pub fn statuses(&mut self)->Result<Vec<Value>>{
+        let mut statuses=self.server_statuses.clone();
+        for (status,client) in statuses.iter_mut().zip(self.clients.iter_mut()){
+            if let Some(exit)=client._child.try_wait()? {
+                status["status"]=json!("failed");
+                status["error"]=json!(format!("MCP process exited: {exit}"));
+                if let Some(fields)=status.as_object_mut(){fields.remove("tools");}
+            }
+        }
+        Ok(statuses)
     }
 
     pub fn definitions(&self) -> Vec<Value> { self.tools.clone() }
@@ -190,5 +216,15 @@ done"#;
             },
         };
         assert_eq!(manager.execute(&call).await, "echo ok");
+        let online=manager.statuses().unwrap();
+        assert_eq!(online[0]["name"],"mock");
+        assert_eq!(online[0]["status"],"connected");
+        assert_eq!(online[0]["serverInfo"]["name"],"mock");
+        assert_eq!(online[0]["tools"][0]["name"],"echo");
+        assert!(online[0]["config"].get("env").is_none());
+        manager.clients[0]._child.kill().await.unwrap();
+        let offline=manager.statuses().unwrap();
+        assert_eq!(offline[0]["status"],"failed");
+        assert!(offline[0].get("tools").is_none());
     }
 }

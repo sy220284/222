@@ -584,6 +584,9 @@ impl Agent {
         self.session.usage.accumulate(usage);
         self.session.cost.record(&self.profile.id, &self.profile.model, usage, &self.model_prices);
     }
+    pub fn mcp_statuses(&mut self)->Result<Vec<serde_json::Value>>{
+        self.mcp.as_mut().map_or_else(||Ok(Vec::new()),|mcp|mcp.statuses())
+    }
     pub fn background_tasks(&self) -> Result<String> { self.background.list() }
     pub async fn stop_background_task(&self,id:&str)->Result<String>{
         self.background.stop(id).await

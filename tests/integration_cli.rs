@@ -1805,3 +1805,132 @@ fn sdk_queued_uuid_replays_survive_prompt_batching_and_preserve_source_content()
     let after=events.iter().find(|v|v["request_id"]=="after").unwrap();
     assert_eq!(after["result"]["length"],0);
 }
+
+
+#[test]
+fn sdk_native_control_cancels_pending_uuid_without_model_side_effects(){
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let (mut stream,_)=listener.accept().unwrap();
+        let request=read_request(&mut stream);
+        let response=json!({"choices":[{"message":{"role":"assistant",
+            "content":"Surviving message processed"},"finish_reason":"stop"}]}).to_string();
+        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response.len(),response).unwrap();
+        stream.flush().unwrap();
+        request
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut child=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=child.stdin.take().unwrap();
+        for event in [
+            json!({"type":"control_request","request_id":"init",
+                "request":{"subtype":"initialize"}}),
+            json!({"type":"user","content":"CANCEL_FIRST","queued":true,"uuid":"drop"}),
+            json!({"type":"user","content":"CANCEL_SECOND","queued":true,"uuid":"drop"}),
+            json!({"type":"user","content":"KEEP_ONLY","queued":true,"uuid":"keep"}),
+            json!({"type":"control_request","requestId":"cancel-1",
+                "request":{"subtype":"cancel_async_message","message_uuid":"drop"}}),
+            json!({"type":"control_request","request_id":"cancel-2",
+                "request":{"subtype":"cancel_async_message","message_uuid":"drop"}}),
+            json!({"type":"control_request","request_id":"bad",
+                "request":{"subtype":"cancel_async_message","message_uuid":7}}),
+            json!({"type":"control_request","request_id":"mcp",
+                "request":{"subtype":"mcp_status"}}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"before"}),
+            json!({"type":"control","action":"queue_drain","request_id":"run",
+                "replay_user_messages":true}),
+            json!({"type":"control","action":"queue_snapshot","request_id":"after"})
+        ] {writeln!(input,"{event}").unwrap();}
+    }
+    let output=child.wait_with_output().unwrap();
+    let actual_request=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(actual_request.contains("KEEP_ONLY"),"{actual_request}");
+    assert!(!actual_request.contains("CANCEL_FIRST"),"{actual_request}");
+    assert!(!actual_request.contains("CANCEL_SECOND"),"{actual_request}");
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|line|serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    let nested=|id:&str|events.iter().find(|v|
+        v["type"]=="control_response" && v["response"]["request_id"]==id).unwrap();
+    assert_eq!(nested("cancel-1")["response"]["response"]["cancelled"],true);
+    assert_eq!(nested("cancel-2")["response"]["response"]["cancelled"],false);
+    assert_eq!(nested("bad")["response"]["subtype"],"error");
+    assert_eq!(nested("init")["response"]["subtype"],"success");
+    assert_eq!(nested("init")["response"]["response"]["account"],json!({}));
+    assert!(nested("init")["response"]["response"]["models"].as_array().unwrap()
+        .iter().any(|v|v["value"]=="model"));
+    assert_eq!(nested("mcp")["response"]["response"]["mcpServers"],json!([]));
+    let legacy=|id:&str|events.iter().find(|v|v["request_id"]==id).unwrap();
+    assert_eq!(legacy("before")["result"]["length"],1);
+    assert_eq!(legacy("before")["result"]["commands"][0]["uuid"],"keep");
+    assert_eq!(legacy("after")["result"]["length"],0);
+    assert_eq!(legacy("run")["ok"],true);
+    let replays=events.iter().filter(|v|v["type"]=="user" && v["isReplay"]==true)
+        .collect::<Vec<_>>();
+    assert_eq!(replays.len(),1);
+    assert_eq!(replays[0]["uuid"],"keep");
+}
+
+#[cfg(unix)]
+#[test]
+fn sdk_mcp_status_reads_live_stdio_discovery_and_never_exposes_secrets(){
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let config=root.path().join("config.json");
+    let script=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}},"serverInfo":{"name":"live-mcp","version":"1.2"}}}'
+    ;;
+  *'"method":"tools/list"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"read_entry","description":"Read entry","inputSchema":{"type":"object"}}]}}'
+    ;;
+esac
+done"#;
+    fs::write(&config,json!({"default_provider":"local","providers":[{
+        "id":"local","kind":"openai-compatible","model":"local",
+        "base_url":"http://127.0.0.1:11434/v1"
+    }],"mcp_servers":[{
+        "id":"local-mcp","command":"sh","args":["-c",script],
+        "env":{"SECRET_VALUE":"must-not-leak"}
+    }]}).to_string()).unwrap();
+    let mut child=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=child.stdin.take().unwrap();
+        for id in ["one","two"] {
+            writeln!(input,"{}",json!({"type":"control_request","request_id":id,
+                "request":{"subtype":"mcp_status"}})).unwrap();
+        }
+    }
+    let output=child.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let wire=String::from_utf8(output.stdout).unwrap();
+    assert!(!wire.contains("must-not-leak"));
+    let events=wire.lines().map(|l|serde_json::from_str::<Value>(l).unwrap())
+        .filter(|v|v["type"]=="control_response").collect::<Vec<_>>();
+    assert_eq!(events.len(),2);
+    for (index,id) in ["one","two"].iter().enumerate() {
+        assert_eq!(events[index]["response"]["request_id"],*id);
+        let server=&events[index]["response"]["response"]["mcpServers"][0];
+        assert_eq!(server["name"],"local-mcp");
+        assert_eq!(server["status"],"connected");
+        assert_eq!(server["serverInfo"]["name"],"live-mcp");
+        assert_eq!(server["tools"][0]["name"],"read_entry");
+        assert_eq!(server["config"]["type"],"stdio");
+        assert!(server["config"].get("env").is_none());
+    }
+}

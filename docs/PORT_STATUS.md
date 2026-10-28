@@ -164,3 +164,15 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 对照 2.1.88 原始 `src/cli/print.ts` 的 `drainCommandQueue`、`batchUuids`、`replayUserMessages` 和 `src/utils/messageQueueManager.ts` 的队列身份语义。修复 Rust SDK 入队 `user` 事件丢弃 `uuid`、`origin`、`pastedContents`、`preExpansionValue` 和 `bridgeOrigin` 的问题；合并同 workload/isMeta 提示时保留每条原始消息及身份。启用 `replay_user_messages`（兼容 `replayUserMessages`）后，在模型请求前按实际出队次序为每条有 UUID 的消息输出原始内容的 `user/isReplay` 事件，避免合并请求只确认最后一条；直接 SDK 提问也使用同一回放格式。保留原始内容块数组，不将回放替换为文本扁平化结果。
 
 真实进程与模拟模型 HTTP 回归：`sdk_queued_uuid_replays_survive_prompt_batching_and_preserve_source_content`、`sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http`，检查错误 UUID 输入不终止 SDK、批次 HTTP 调用次数、每条 UUID、原始结构化内容、来源信息和回放先于结果的时序。**当前仅补充现有部分实现的 SDK/Headless 调用链，1,906 条分类仍为 22 排除、362 部分实现、1,493 未迁移、29 源路径独立已验收；1,855 条未完成全量等价验收。** 当前仍缺 QueryEngine 原生消息确认回调、失败重试全时序、远端传输、全量权限/Hook 交互和非文本内容模型传输。最新 CI 以对应 HEAD 工作流为准。
+
+
+### 2026-10-29：原版 SDK 异步取消与 MCP 真实状态调用链
+
+对照原始包 `src/cli/print.ts` 的 `cancel_async_message`（按 UUID `dequeueAllMatching`）、`mcp_status`（读取当前连接池）及 `src/entrypoints/sdk/controlSchemas.ts`；在 Rust SDK 正式 `control_request/request.subtype` 包络接入：
+
+- `cancel_async_message` 从共享优先级队列按 UUID 原插入顺序移除全部未执行消息；再次取消返回 `cancelled:false`；错误 UUID 按原始请求编号返回错误。已出队的模型请求不追溯取消。
+- `mcp_status` 从实际 stdio MCP 初始化、tools/list 发现结果和本地子进程存活状态返回名称、工具、版本、退出失败状态；不对 SDK 暴露服务器环境变量。没有配置 MCP 时返回空数组。
+- 无额外 SDK 自定义配置的 `initialize` 返回本地现有运行时模型列表和标准控制响应，不伪造原厂账户。对于尚未实现的 SDK hooks、SDK MCP、系统提示词覆盖等初始化请求明确报错，避免虚报配置生效。
+- Rust 单元测试覆盖 MCP 实际服务启动、工具发现、进程退出后状态变化。CLI 子进程集成测试验证重复 UUID 取消、请求编号、队列持久身份、仅存活提示实际模型 HTTP 请求与回放顺序、MCP 两次状态查询和机密环境隔离。
+
+这些是原有部分实现的主链补强，**不增加任何已验收文件数**。仍缺原版同时运行时 interrupt 取消、Hook callback/权限询问桥、SDK MCP 动态变更、远端传输和完整初始化控制。台账维持 **22 排除、362 部分、1,493 未迁移、29 已验收，未闭环 1,855**。测试通过状态须以本次提交 GitHub Actions CI 为准。

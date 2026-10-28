@@ -365,7 +365,7 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                 }
             },
             "control_request" if event.get("request").is_some()=>{
-                print_json!(sdk_nested_control(agent,config,&event).await);
+                print_json!(sdk_nested_control(agent,config,&event,&mut queue).await);
             },
             "control" | "control_request"=>{
                 macro_rules! send_control {
@@ -461,7 +461,8 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
 
 /// Standard SDK request envelope; the legacy flat local command protocol
 /// remains available through "control" messages.
-async fn sdk_nested_control(agent:&mut Agent,config:&Config,event:&Value)->Value{
+async fn sdk_nested_control(agent:&mut Agent,config:&Config,event:&Value,
+    queue:&mut message_queue::Queue)->Value{
     let id=event.get("request_id").and_then(Value::as_str).unwrap_or("");
     let outcome:Result<Value>=async {
         if id.is_empty(){bail!("control_request requires request_id")}
@@ -470,6 +471,43 @@ async fn sdk_nested_control(agent:&mut Agent,config:&Config,event:&Value)->Value
         let subtype=request.get("subtype").and_then(Value::as_str)
             .ok_or_else(||anyhow::anyhow!("control request requires subtype"))?;
         match subtype{
+            "initialize"=>{
+                // The Rust session is already attached to locally configured
+                // hooks/MCP before stdin is read. Never silently claim to have
+                // installed SDK callback hooks or SDK-owned MCP transports.
+                for key in ["hooks","sdkMcpServers","jsonSchema","systemPrompt",
+                    "appendSystemPrompt","agents","promptSuggestions",
+                    "agentProgressSummaries"] {
+                    if let Some(value)=request.get(key) {
+                        if !value.is_null() && value!=&json!({}) &&
+                            value!=&json!([]) && value!=&json!(false) {
+                            bail!("initialize {key} is not supported by this local SDK")
+                        }
+                    }
+                }
+                let models=config.providers.iter().map(|profile|json!({
+                    "value":profile.model,"displayName":format!("{} / {}",
+                        profile.id,profile.model),
+                    "description":format!("{} provider",profile.kind)
+                })).collect::<Vec<_>>();
+                Ok(json!({"commands":[],"agents":[],"output_style":"default",
+                    "available_output_styles":["default"],"models":models,
+                    "account":{},"pid":std::process::id()}))
+            },
+            "mcp_status"=>{
+                Ok(json!({"mcpServers":agent.mcp_statuses()?}))
+            },
+            "cancel_async_message"=>{
+                let uuid=request.get("message_uuid").and_then(Value::as_str)
+                    .filter(|id|!id.is_empty())
+                    .ok_or_else(||anyhow::anyhow!(
+                        "cancel_async_message requires non-empty message_uuid"))?;
+                // Original 2.1.88 uses dequeueAllMatching, not priority dequeue.
+                // Already-dispatched messages cannot be retroactively cancelled.
+                let removed=queue.dequeue_all_matching(|item|
+                    item.uuid.as_deref()==Some(uuid));
+                Ok(json!({"cancelled":!removed.is_empty()}))
+            },
             "set_model"=>{
                 if let Some(name)=request.get("model"){
                     let model=name.as_str().ok_or_else(||
