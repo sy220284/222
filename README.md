@@ -253,3 +253,5 @@ cargo run -- chat --resume <上次输出的UUID>
 `read_skill` 工具现在可携带 `arguments`，例如 `{"name":"review","arguments":"src/lib.rs 'security audit'"}`；会根据 SKILL.md frontmatter 的 `arguments` 参数名单替换 `$0`、`$1`、`$ARGUMENTS` 和命名占位符。未传参时返回原始内容，未使用占位符时默认附加 `ARGUMENTS: ...`。该替换不执行任何 shell 命令。
 
 SDK 队列的普通 prompt 会在 workload 与 isMeta 相同时按到达顺序自动合并为一次模型调用。可在排队的 user 消息中增加 `workload` 区分独立任务；`queue_drain` 仍逐条返回消息 ID 的处理结果，但相同批次不会重复计费。Shell、权限审批、斜杠及图像消息不会被冒充普通文字参与合并。
+
+SDK 排队的 `task-notification` 消息现在会在调用模型之前产生单独的 `{"type":"system","subtype":"task_notification"}` 事件，包含任务状态、任务 ID、摘要和可选使用量；无状态进度消息不会被标记为已完成。

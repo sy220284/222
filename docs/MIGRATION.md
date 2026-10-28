@@ -123,3 +123,7 @@
 ### Headless 模型提示批处理与原始队列订阅语义
 
 原版 `cli/print.ts` 在 drain 时连续读取同工作负载、同 meta 状态的 prompt，然后用 `joinPromptValues` 合并后仅调用一次 ask。Rust 新增对应两导出函数，并修改 SDK queue_drain 保留每条命令的身份但只对同批调用一次实际模型；费用也只归集一次。`message_queue.rs` 补齐同步订阅、字段化 channel 可见性以及按 JS 数字属性顺序提取图片粘贴内容。多模态 Block 到模型服务端的结构化传输以及原版无界面模式后续远程协议尚未对齐。
+
+### 模型前转发任务结构化通知
+
+无界面执行器原版会在处理 task-notification 时解析 `<task-id>`、`<tool-use-id>`、`<status>`、`<output-file>`、`<summary>`、`<usage>` 并发出 SDK system 事件，随后正常送模型。Rust `sdk_queue::parse_task_notification` 实现对应字段和 killed→stopped 兼容，状态不存在时跳过终态事件，防止进度 ping 被误报成任务完成。SDK 端到端回归验证事件在结果之前。原厂分析打点全部不移植。

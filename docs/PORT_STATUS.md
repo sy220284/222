@@ -144,3 +144,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：Headless 合并请求与消息幂等计价
 
 对照原始 `src/cli/print.ts` 的 `canBatchWith`、`joinPromptValues` 和队列 `drainCommandQueue` 路径，新建 `src/queued_prompt_batch.rs` 并接入 `src/sdk_queue.rs`。普通 prompt 仅当 workload 与 isMeta 相同、顺序相邻且允许处理时合并成单个 ModelRequest；字符串以换行合并，结构化块数组按原始顺序拼接，跨 Agent 消息和高危命令不错误混入。每条排队消息仍保留各自 identity、响应结果；同批模型费用/Token 只累计一次。另修复 `src/message_queue.rs` 的同步订阅、频道可见性和动态嵌入图片 ID、数字图片粘贴键枚举次序。增加一轮 HTTP 处理多条提示的真实进程测试。原始无界面模式 5,595 行中仍有大量 SDK、远程 IO、Hooks、取消与任务通知功能未移植，所以新增源路径只计部分实现。更新分类 22 排除、361 部分、1493 未迁移、30 源路径独立已验收；1854 条未完成整体等价。
+
+### 2026-10-29：任务通知不再丢失结构化状态
+
+对照原始 `cli/print.ts` 的 `drainCommandQueue` 中 `task-notification` 专用分支，SDK 队列在转发通知文本给模型前，先向 stdout 发出 `system / task_notification` 独立事件；包含任务 ID、工具调用 ID、停止/失败/完成状态（`killed` 映射 `stopped`）、输出文件、摘要和可选 usage（Token、工具次数、耗时）。不含 `<status>` 的进度流消息不再误判为完成。真实 SDK 进程+模拟模型 HTTP 测试验证事件出现在模型结果之前，内容结构正确并保留后续模型继续分析。原版其他事件与远端队列协议仍待移植，源文件保留部分实现。

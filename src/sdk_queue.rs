@@ -136,6 +136,11 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                         .collect::<Vec<_>>().join("
 ")
                 };
+                if next.command.mode==Mode::TaskNotification{
+                    if let Some(notification)=parse_task_notification(&prompt,&agent.session_id()){
+                        println!("{}",crate::ndjson::stringify_value(&notification));
+                    }
+                }
                 let generation=guard.try_start().context("Cannot begin reserved query")?;
                 let answer=agent.ask(&prompt).await;
                 let ended=guard.end(generation);
@@ -164,4 +169,64 @@ fn parse_priority(value:Option<&Value>)->Result<Priority>{
 trait SdkPriority {fn rank_for_sdk(self)->u8;}
 impl SdkPriority for Priority {
     fn rank_for_sdk(self)->u8{match self{Self::Now=>0,Self::Next=>1,Self::Later=>2}}
+}
+
+
+/// Structured task events from the original headless notification XML.
+/// Statusless stream pings are intentionally not mistaken for completion.
+pub fn parse_task_notification(text:&str,session_id:&str)->Option<Value>{
+    fn tag<'a>(input:&'a str,name:&str)->Option<&'a str>{
+        let open=format!("<{name}>");
+        let start=input.find(&open)?+open.len();
+        let rest=&input[start..];
+        let end=rest.find('<')?;
+        if end==0{return None}
+        let contents=&rest[..end];
+        let close=format!("</{name}>");
+        if !rest[end..].starts_with(&close){return None}
+        Some(contents)
+    }
+    let raw_status=tag(text,"status")?;
+    let status=match raw_status{
+        "completed"|"failed"|"stopped"=>raw_status,
+        "killed"=>"stopped",
+        _=>"completed",
+    };
+    let mut event=json!({"type":"system","subtype":"task_notification",
+        "task_id":tag(text,"task-id").unwrap_or(""),
+        "status":status,"output_file":tag(text,"output-file").unwrap_or(""),
+        "summary":tag(text,"summary").unwrap_or(""),
+        "session_id":session_id,"uuid":uuid::Uuid::new_v4().to_string()});
+    if let Some(tool)=tag(text,"tool-use-id"){event["tool_use_id"]=json!(tool)}
+    if let Some(usage)=text.split_once("<usage>").and_then(|(_,tail)|tail.split_once("</usage>").map(|(body,_)|body)){
+        if let (Some(total),Some(tools))=(tag(usage,"total_tokens"),tag(usage,"tool_uses")){
+            if let (Ok(total),Ok(tools))=(total.parse::<u64>(),tools.parse::<u64>()){
+                let duration=tag(usage,"duration_ms").and_then(|v|v.parse::<u64>().ok())
+                    .unwrap_or(0);
+                event["usage"]=json!({"total_tokens":total,"tool_uses":tools,
+                    "duration_ms":duration});
+            }
+        }
+    }
+    Some(event)
+}
+
+#[cfg(test)]
+mod notification_tests {
+    use super::*;
+    #[test]
+    fn terminal_notifications_are_structured_and_statusless_pings_are_silent(){
+        let xml="<task-id>abc</task-id><tool-use-id>t-1</tool-use-id><status>killed</status>\
+            <output-file>/tmp/result</output-file><summary>Terminated</summary>\
+            <usage><total_tokens>15</total_tokens><tool_uses>2</tool_uses><duration_ms>80</duration_ms></usage>";
+        let event=parse_task_notification(xml,"session").unwrap();
+        assert_eq!(event["status"],"stopped");
+        assert_eq!(event["tool_use_id"],"t-1");
+        assert_eq!(event["usage"]["total_tokens"],15);
+        assert_eq!(event["usage"]["duration_ms"],80);
+        assert!(parse_task_notification("<task-id>a</task-id><summary>progress</summary>","session").is_none());
+        let invalid=parse_task_notification("<status>unknown</status>","s").unwrap();
+        assert_eq!(invalid["status"],"completed");
+        assert!(invalid.get("usage").is_none());
+    }
 }

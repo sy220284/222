@@ -1496,3 +1496,58 @@ fn sdk_headless_queue_batches_consecutive_prompts_by_workload_and_meta(){
     assert_eq!(batch["result"]["usage"]["input_tokens"],40);
     assert_eq!(batch["result"]["length"],0);
 }
+
+
+#[test]
+fn sdk_queue_emits_structured_task_notification_before_model_result(){
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let (mut conn,_)=listener.accept().unwrap();
+        let request=read_request(&mut conn);
+        let response=json!({"choices":[{"message":{"role":"assistant",
+            "content":"Task inspected"},"finish_reason":"stop"}]}).to_string();
+        write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response.len(),response).unwrap();
+        conn.flush().unwrap();
+        request
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut stdin=sdk.stdin.take().unwrap();
+        for event in [
+            json!({"type":"control","action":"queue_enqueue","notification":true,
+                "command":{"mode":"task-notification",
+                    "value":"<task-id>job7</task-id><tool-use-id>call9</tool-use-id><status>killed</status><output-file>/tmp/out</output-file><summary>Stopped by user</summary><usage><total_tokens>45</total_tokens><tool_uses>3</tool_uses><duration_ms>220</duration_ms></usage>"
+                }}),
+            json!({"type":"control","action":"queue_drain","request_id":"done"})
+        ]{writeln!(stdin,"{event}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    let request=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(request.contains("job7"));
+    let events=String::from_utf8(output.stdout).unwrap().lines()
+        .map(|l|serde_json::from_str::<Value>(l).unwrap()).collect::<Vec<_>>();
+    let notification_pos=events.iter().position(|v|
+        v["type"]=="system" && v["subtype"]=="task_notification").unwrap();
+    let result_pos=events.iter().position(|v|v["request_id"]=="done").unwrap();
+    assert!(notification_pos<result_pos);
+    let notice=&events[notification_pos];
+    assert_eq!(notice["task_id"],"job7");
+    assert_eq!(notice["tool_use_id"],"call9");
+    assert_eq!(notice["status"],"stopped");
+    assert_eq!(notice["usage"]["total_tokens"],45);
+    assert_eq!(notice["usage"]["tool_uses"],3);
+    assert_eq!(notice["usage"]["duration_ms"],220);
+    assert_eq!(events[result_pos]["ok"],true);
+}
