@@ -83,3 +83,7 @@
 `src/semantic_inputs.rs` 对应两条原始 Zod 预处理路径，严格转换 JSON 字面值：只接收确切 `"true"` 和 `"false"`，数字只接受 `^-?\\d+(\\.\\d+)?$` 且有限。内建工具数字字段还应满足各自整数类型要求，否则拒绝，避免老实现错误降级。`src/tools.rs` 在真实工具调用前应用转换，文件编辑支持原版 `replace_all` 选择并保留现有权限和修改历史。两条输入文件仍标注部分实现，Zod 组合 schema 与全调用方未完整映射。
 
 `src/xml_escape.rs` 独立验收原始 `src/utils/xml.ts` 的两个转义函数；验收仅限该纯函数原路径，不延伸声称应用 UI/提示词处理完备。
+
+### JSON 兼容与斜杠指令解析
+
+对照原始 `src/utils/jsonRead.ts`、`src/utils/slashCommandParsing.ts`；`src/json_read.rs` 保留单次 BOM 剥离规则，并接入真实 Config 和 Session 读路径。`src/slash_command.rs` 保留按字面量空格分词、MCP 第二词标识和输入 trim 的语义，CLI 模型切换复用该解析；MCP 斜杠指令分发仍未等价。这两项仅宣称源函数自身等价。

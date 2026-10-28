@@ -48,7 +48,8 @@ impl Session {
         let file = Self::checked_path(root, id)?;
         let data = fs::read(&file)
             .with_context(|| format!("Cannot resume {}", file.display()))?;
-        let session: Self = serde_json::from_slice(&data)?;
+        let session: Self = serde_json::from_str(
+            crate::json_read::strip_bom(std::str::from_utf8(&data)?))?;
         if session.id != id { anyhow::bail!("Session id mismatch") }
         Ok(session)
     }
@@ -107,6 +108,18 @@ mod tests {
         let restored=Session::load(dir.path(),&s.id.to_string()).unwrap();
         assert!(restored.team_name.is_none());
         assert!(restored.agent_name.is_none());
+    }
+    #[test]
+    fn session_resume_accepts_bom_from_windows_tools(){
+        let root=tempfile::tempdir().unwrap();
+        let session=Session::fresh();
+        let path=Session::path(root.path(),session.id);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let raw=serde_json::to_string(&session).unwrap();
+        fs::write(&path,format!("{}{}", '\u{feff}',raw)).unwrap();
+        let restored=Session::load(root.path(),&session.id.to_string()).unwrap();
+        assert_eq!(restored.id,session.id);
+        assert!(restored.cost.models.is_empty());
     }
     #[test]
     fn roundtrip_resume() {

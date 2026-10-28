@@ -121,7 +121,7 @@ impl Config {
             return Ok(Self::default());
         }
         let raw = fs::read_to_string(&path).with_context(|| format!("Read {}", path.display()))?;
-        let config: Self = serde_json::from_str(&raw)
+        let config: Self = serde_json::from_str(crate::json_read::strip_bom(&raw))
             .with_context(|| format!("Parse {}", path.display()))?;
         config.validate()?;
         Ok(config)
@@ -211,6 +211,15 @@ pub fn canonical_workspace(path: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn config_with_utf8_bom_is_parsed_without_loose_json_coercion() {
+        let raw=serde_json::to_string(&Config::default()).unwrap();
+        let value=format!("{}{}", '\u{feff}',raw);
+        let parsed:Config=serde_json::from_str(crate::json_read::strip_bom(&value)).unwrap();
+        parsed.validate().unwrap();
+        let invalid=format!(" {}{}",'\u{feff}',raw);
+        assert!(serde_json::from_str::<Config>(crate::json_read::strip_bom(&invalid)).is_err());
+    }
     #[test]
     fn profiles_have_unique_names() {
         Config::default().validate().unwrap();

@@ -2,6 +2,8 @@ mod agent;
 mod cost;
 mod semantic_inputs;
 mod xml_escape;
+mod json_read;
+mod slash_command;
 mod hooks;
 mod worktree;
 mod mcp;
@@ -247,8 +249,9 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             _ => {}
         }
-        if let Some(rest) = input.strip_prefix("/model ") {
-            let mut args = rest.split_whitespace();
+        if let Some(parsed) = slash_command::parse_slash_command(input)
+            .filter(|parsed|parsed.command_name=="model" && !parsed.is_mcp) {
+            let mut args = parsed.args.split_whitespace();
             let Some(id) = args.next() else {
                 eprintln!("Usage: /model PROVIDER [MODEL]");
                 continue;

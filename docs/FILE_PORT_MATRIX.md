@@ -1573,7 +1573,7 @@
 | `src/utils/intl.ts` | 95 | 2824 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/jetbrains.ts` | 192 | 5805 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/json.ts` | 278 | 9144 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/jsonRead.ts` | 17 | 657 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/jsonRead.ts` | 17 | 657 | 重写：处理 UTF-8 BOM 的 JSON 读取 | `src/json_read.rs` / `src/config.rs` / `src/session.rs` | 已验收：前缀 U+FEFF 精确移除一次、空输入、非前缀保留、跨平台配置和会话读取；证据 json_read::tests / config::tests / session::tests |
 | `src/utils/keyboardShortcuts.ts` | 15 | 568 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/lazySchema.ts` | 9 | 295 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/listSessionsImpl.ts` | 455 | 15071 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1790,7 +1790,7 @@
 | `src/utils/signal.ts` | 44 | 1447 | 重写：保持通用行为 | `src/event_signal.rs` | 部分实现：事件订阅/注销/去重、清空与 JS Set 实时增删监听迭代已有测试；完整调用方和异常传播仍待核对 |
 | `src/utils/sinks.ts` | 17 | 608 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/skills/skillChangeDetector.ts` | 312 | 10033 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/slashCommandParsing.ts` | 61 | 1437 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/slashCommandParsing.ts` | 61 | 1437 | 重写：斜杠命令解析 | `src/slash_command.rs` / `src/main.rs` | 已验收：完整返回结构、MCP 标记、重复空格、无效开头、UTF-8 前后空白及 CLI /model 接入；证据 slash_command::tests |
 | `src/utils/sleep.ts` | 85 | 2882 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sliceAnsi.ts` | 92 | 3343 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/slowOperations.ts` | 287 | 9055 | 重写：保持通用行为 | 待定 | 未迁移 |
