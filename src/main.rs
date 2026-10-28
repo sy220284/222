@@ -173,6 +173,7 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
                 println!("/usage                   show provider-reported token totals");
+                println!("/tasks                   list background shell tasks");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
                 println!("/exit                    quit");
@@ -180,6 +181,10 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             "/session" => {
                 println!("{}", agent.session_id());
+                continue;
+            }
+            "/tasks" => {
+                println!("{}",agent.background_tasks()?);
                 continue;
             }
             "/usage" => {
@@ -257,6 +262,19 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
             },
             "control"=>{
                 let action=event.get("action").and_then(Value::as_str).unwrap_or("");
+                if action=="tasks" {
+                    match agent.background_tasks() {
+                        Ok(tasks)=>println!("{}",json!({
+                            "type":"control_response","action":action,
+                            "ok":true,"result":serde_json::from_str::<Value>(&tasks)?
+                        })),
+                        Err(error)=>println!("{}",json!({
+                            "type":"control_response","action":action,
+                            "ok":false,"error":format!("{error:#}")
+                        })),
+                    }
+                    continue;
+                }
                 let result=match action {
                     "clear"=>agent.clear_history(),
                     "compact"=>agent.compact_history().await,

@@ -257,6 +257,7 @@ impl Agent {
 
     pub fn session_id(&self) -> String { self.session.id.to_string() }
     pub fn usage(&self) -> crate::protocol::TokenUsage { self.session.usage }
+    pub fn background_tasks(&self) -> Result<String> { self.background.list() }
 
     pub fn switch_model(&mut self, profile: ProviderProfile) -> Result<()> {
         let new_provider = provider::create(&profile)?;

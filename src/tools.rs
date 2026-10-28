@@ -132,6 +132,10 @@ impl ToolExecutor {
                     self.run_command(&args).await
                 }
             }
+            "background_list" => {
+                let manager = self.background.as_ref().context("Background tasks unavailable")?;
+                manager.list()
+            }
             "task_output" => {
                 let manager = self.background.as_ref().context("Background tasks unavailable")?;
                 manager.output(required(&args,"task_id")?,

@@ -208,6 +208,35 @@ impl BackgroundTasks {
         }}).to_string())
     }
 
+    pub fn list(&self) -> Result<String> {
+        let live = self.entries.lock().unwrap().clone();
+        let mut records = Vec::new();
+        for entry in fs::read_dir(&self.directory)? {
+            let entry = entry?;
+            if entry.path().extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(id) = entry.path().file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            if Uuid::parse_str(id).is_err() { continue }
+            let record = if let Some(running) = live.get(id) {
+                running.record.lock().unwrap().clone()
+            } else {
+                match self.load(id) { Ok(r) => r, Err(_) => continue }
+            };
+            records.push(json!({
+                "task_id":record.id,
+                "task_type":"local_bash",
+                "description":record.description,
+                "status":record.status,
+                "exitCode":record.exit_code
+            }));
+        }
+        records.sort_by(|a,b| a["task_id"].as_str().cmp(&b["task_id"].as_str()));
+        Ok(serde_json::to_string_pretty(&records)?)
+    }
+
     pub async fn stop(&self, id: &str) -> Result<String> {
         let task = self.entries.lock().unwrap().get(id).cloned()
             .with_context(|| format!("No running task with ID {id}"))?;
@@ -273,6 +302,9 @@ async fn spool<R: AsyncRead + Unpin>(mut stream: R, path: PathBuf) -> Result<boo
 
 pub fn definitions() -> Vec<Value> {
     vec![
+        json!({"type":"function","function":{"name":"background_list",
+            "description":"List background shell tasks, including previously completed or interrupted jobs.",
+            "parameters":{"type":"object","properties":{}}}}),
         json!({"type":"function","function":{"name":"task_output",
             "description":"Return status and saved output for a background shell task. block=true waits up to timeout milliseconds.",
             "parameters":{"type":"object","properties":{
@@ -304,6 +336,9 @@ mod tests {
         assert_eq!(output["task"]["status"], "completed");
         assert!(output["task"]["output"].as_str().unwrap().contains("alpha"));
         assert_eq!(output["task"]["exitCode"], 0);
+        let listing: Value = serde_json::from_str(&tasks.list().unwrap()).unwrap();
+        assert_eq!(listing.as_array().unwrap().len(), 1);
+        assert_eq!(listing[0]["status"], "completed");
         assert!(created["output_file"].as_str().is_some_and(|p| Path::new(p).exists()));
     }
     #[cfg(unix)]
