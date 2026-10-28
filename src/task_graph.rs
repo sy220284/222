@@ -476,17 +476,22 @@ mod tests{
         let graph_for_callback=graph.clone();
         let once=Arc::new(AtomicBool::new(false));
         let gate=once.clone();
+        let seen=Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let observed=seen.clone();
         let _listener=task_events::on_tasks_updated(Arc::new(move||{
-            let relevant=graph_for_callback.peek("1").ok().flatten()
-                .is_some_and(|task|task.subject=="Original");
-            if relevant && !gate.swap(true,Ordering::SeqCst){
+            let subject=graph_for_callback.peek("1").ok().flatten()
+                .map(|task|task.subject).unwrap_or_else(||"<missing>".into());
+            observed.lock().unwrap().push(subject.clone());
+            if subject=="Original" && !gate.swap(true,Ordering::SeqCst){
                 graph_for_callback.update(&json!({
                     "taskId":"1","subject":"Updated by subscriber"
                 })).unwrap();
             }
         }));
         graph.update(&json!({"taskId":"1","subject":"Original"})).unwrap();
-        assert_eq!(graph.peek("1").unwrap().unwrap().subject,"Updated by subscriber");
+        assert_eq!(graph.peek("1").unwrap().unwrap().subject,
+            "Updated by subscriber","observed={:?} gate={}",
+            seen.lock().unwrap(),once.load(Ordering::SeqCst));
     }
     #[test]
     fn task_mutations_emit_observable_events(){
