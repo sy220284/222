@@ -224,4 +224,55 @@ mod tests{
         writer.write_all(b"Content-Length: 5\r\n\r\nhello").await.unwrap();
         assert!(read_packet(&mut BufReader::new(reader)).await.is_err());
     }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn starts_language_server_synchronizes_document_and_returns_hover(){
+        let root=tempfile::tempdir().unwrap();
+        let doc=root.path().join("main.rs");
+        tokio::fs::write(&doc,"fn main() {}\n").await.unwrap();
+        let fake_server=r#"import sys,json
+inp=sys.stdin.buffer
+out=sys.stdout.buffer
+while True:
+    length=None
+    while True:
+        line=inp.readline()
+        if not line:
+            sys.exit(0)
+        if line in (b'\r\n',b'\n'):
+            break
+        if line.lower().startswith(b'content-length:'):
+            length=int(line.split(b':',1)[1].strip())
+    if length is None:
+        sys.exit(3)
+    request=json.loads(inp.read(length))
+    method=request.get('method')
+    if 'id' not in request:
+        continue
+    if method=='initialize':
+        result={'capabilities':{'hoverProvider':True}}
+    elif method=='textDocument/hover':
+        result={'contents':{'kind':'plaintext','value':'Hover from mock'}}
+    else:
+        result=None
+    payload=json.dumps({'jsonrpc':'2.0','id':request['id'],'result':result}).encode()
+    out.write(('Content-Length: %d\r\n\r\n'%len(payload)).encode()+payload)
+    out.flush()
+"#;
+        let profiles=vec![LspServerConfig{
+            id:"mock".into(), command:"python3".into(),
+            args:vec!["-u".into(),"-c".into(),fake_server.into()],
+            extensions:vec!["rs".into()],language_id:"rust".into()
+        }];
+        let mut manager=LspManager::connect(root.path(),&profiles).await.unwrap();
+        let result=manager.execute(&json!({"operation":"hover",
+            "filePath":"main.rs","line":1,"character":1})).await;
+        assert!(result.contains("Hover from mock"),"{result}");
+        let outside=tempfile::tempdir().unwrap();
+        tokio::fs::write(outside.path().join("secret.rs"),"private").await.unwrap();
+        let attempt=manager.execute(&json!({"operation":"hover",
+            "filePath":outside.path().join("secret.rs").display().to_string()})).await;
+        assert!(attempt.contains("ERROR"),"{attempt}");
+    }
+
 }
