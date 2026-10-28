@@ -77,22 +77,28 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
             let max=request.get("max_items").and_then(Value::as_u64)
                 .map(|v|v as usize).unwrap_or(usize::MAX);
             let mut results=Vec::new();
+            let mut blocked=None;
             for _ in 0..max{
                 let ready=queue.peek(|c|c.agent_id.is_none() &&
                     c.priority().rank_for_sdk()<=threshold.rank_for_sdk()).cloned();
                 let Some(next)=ready else {break};
                 // Bail without consuming unsupported messages. A future caller
                 // can edit, inspect or explicitly remove them.
-                if !matches!(next.command.mode,Mode::Prompt|Mode::TaskNotification){
-                    bail!("queue item {} needs {} handling; left in queue",
-                        next.identity,match next.command.mode{
-                            Mode::Bash=>"bash",Mode::OrphanedPermission=>"permission",
-                            _=>"prompt"
-                        });
-                }
-                if next.command.contains_image(){
-                    bail!("queue item {} contains images; left in queue for multimodal transport",
-                        next.identity);
+                // Preserve completed results if a later item requires a different handler.
+                let reason=match &next.command.mode {
+                    Mode::Bash=>Some("bash"),
+                    Mode::OrphanedPermission=>Some("permission"),
+                    _ if next.command.is_slash()=>Some("slash-command"),
+                    _ if next.command.contains_image()=>Some("multimodal"),
+                    _=>None,
+                };
+                if let Some(reason)=reason {
+                    if results.is_empty() {
+                        bail!("queue item {} needs {} handling; left in queue",
+                            next.identity,reason);
+                    }
+                    blocked=Some(json!({"identity":next.identity,"reason":reason}));
+                    break;
                 }
                 let prompt=next.command.text().context("queued text unavailable")?;
                 if !guard.reserve(){
@@ -113,7 +119,7 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                         "error":format!("{error:#}"),"session_id":agent.session_id()})),
                 }
             }
-            Ok(json!({"results":results,"revision":queue.revision(),
+            Ok(json!({"results":results,"blocked":blocked,"revision":queue.revision(),
                 "length":queue.len(),"usage":agent.usage(),"cost":agent.cost_ledger()}))
         }
         _=>bail!("Unsupported queue control: {action}"),
