@@ -545,3 +545,58 @@ fn original_task_tools_end_to_end_model_calls_and_disk_graph() {
         .count();
     assert_eq!(tasks,2);
 }
+
+#[test]
+fn model_driven_team_create_message_receive_and_cleanup() {
+    let dir=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let steps=[
+            ("TeamCreate",json!({"team_name":"review","description":"Review code"})),
+            ("SendMessage",json!({"to":"team-lead","summary":"Review note","message":"Check CI output"})),
+            ("TeamInbox",json!({"mark_read":true})),
+            ("TeamDelete",json!({})),
+        ];
+        let mut outputs=Vec::new();
+        for index in 0..=steps.len() {
+            let (mut stream,_)=listener.accept().unwrap();
+            let request=read_request(&mut stream);
+            let payload:Value=serde_json::from_str(request.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            if let Some(last)=payload["messages"].as_array().unwrap().last(){
+                if last["role"]=="tool"{outputs.push(last["content"].as_str().unwrap().to_owned())}
+            }
+            let reply=if let Some((name,args))=steps.get(index){
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":format!("team-{index}"),"type":"function",
+                        "function":{"name":name,"arguments":args.to_string()}}]},
+                    "finish_reason":"tool_calls"}]})
+            }else{
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Team lifecycle complete."},"finish_reason":"stop"}]})
+            };
+            let body=reply.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            stream.flush().unwrap();
+        }
+        outputs
+    });
+    let config=dir.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"test",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let output=binary().args(["--workspace",dir.path().to_str().unwrap(),
+        "--approval","full","run","Run team lifecycle"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    let results=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Team lifecycle complete."));
+    assert_eq!(results.len(),4);
+    assert!(results[0].contains("review"));
+    assert!(results[1].contains("success"));
+    assert!(results[2].contains("Check CI output"));
+    assert!(results[3].contains("Cleaned up directories"));
+    assert!(!dir.path().join(".atlas/teams/review").exists());
+}
