@@ -174,6 +174,32 @@ impl ToolExecutor {
         self.require_approval(&call.function.name, &args)
     }
 
+    /// Delegating to a child does not itself grant filesystem write access:
+    /// the child inherits this executor's approval mode. However an explicit
+    /// Agent deny/ask rule must still apply even without worktree isolation.
+    pub fn approve_delegation(&self, call:&ToolCall)->Result<()> {
+        let args:Value=serde_json::from_str(&call.function.arguments)?;
+        match permission_rules::policy_for(&self.permission_rules,&call.function.name,&args)? {
+            Some(permission_rules::Behavior::Deny)=>
+                bail!("Tool {} denied by explicit permission rule",call.function.name),
+            Some(permission_rules::Behavior::Ask)=>{
+                if !self.interactive {
+                    bail!("Tool {} needs approval; noninteractive delegation denied",call.function.name)
+                }
+                eprintln!("\nProposed {}: {}",call.function.name,
+                    truncate(&args.to_string(),600));
+                eprint!("Allow delegation once? [y/N] ");
+                io::stderr().flush()?;
+                let mut answer=String::new();
+                io::stdin().read_line(&mut answer)?;
+                if answer.trim().eq_ignore_ascii_case("y") ||
+                    answer.trim().eq_ignore_ascii_case("yes"){Ok(())}
+                else{bail!("User rejected {}",call.function.name)}
+            },
+            _=>Ok(())
+        }
+    }
+
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
         let matched = permission_rules::policy_for(&self.permission_rules,tool,args)?;
         if matched == Some(permission_rules::Behavior::Deny) {
