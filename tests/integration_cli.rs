@@ -476,3 +476,72 @@ fn sdk_json_lines_never_contain_javascript_unicode_line_separators() {
     let result=events.iter().find(|e|e["type"]=="result").unwrap();
     assert_eq!(result["content"],"first\u{2028}middle\u{2029}last");
 }
+
+#[test]
+fn original_task_tools_end_to_end_model_calls_and_disk_graph() {
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut seen=Vec::<String>::new();
+        let script=[
+            ("TaskCreate",json!({"subject":"Implement","description":"Implement feature"})),
+            ("TaskCreate",json!({"subject":"Verify","description":"Run integration tests"})),
+            ("TaskUpdate",json!({"taskId":"2","addBlockedBy":["1"],"owner":"tester"})),
+            ("TaskGet",json!({"taskId":"2"})),
+            ("TaskList",json!({})),
+            ("TaskUpdate",json!({"taskId":"1","status":"completed"})),
+            ("TaskList",json!({})),
+        ];
+        for index in 0..=script.len(){
+            let (mut stream,_)=listener.accept().unwrap();
+            let raw=read_request(&mut stream);
+            let req:Value=serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            if let Some(last)=req["messages"].as_array().unwrap().last(){
+                if last["role"]=="tool"{
+                    seen.push(last["content"].as_str().unwrap().to_owned());
+                }
+            }
+            let response=if let Some((name,args))=script.get(index){
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":format!("task-{index}"),"type":"function",
+                        "function":{"name":name,"arguments":args.to_string()}}]},
+                    "finish_reason":"tool_calls"}]})
+            }else{
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Task workflow verified."},"finish_reason":"stop"}]})
+            };
+            let data=response.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                data.len(),data).unwrap();
+            stream.flush().unwrap();
+        }
+        seen
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let response=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","read-only","run","Create two tasks, link dependencies and finish"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    let results=server.join().unwrap();
+    assert!(response.status.success(),"{}",String::from_utf8_lossy(&response.stderr));
+    assert!(String::from_utf8_lossy(&response.stdout).contains("Task workflow verified."));
+    assert_eq!(results.len(),7);
+    assert!(results[0].contains("Task #1 created successfully: Implement"));
+    assert!(results[1].contains("Task #2 created successfully: Verify"));
+    assert!(results[2].contains("blockedBy"));
+    assert!(results[3].contains("Blocked by: #1"));
+    assert!(results[4].contains("[blocked by #1]"));
+    assert!(results[5].contains("status"));
+    assert!(!results[6].contains("[blocked by #1]"));
+    let list_dir=root.path().join(".atlas/task-lists");
+    let entries=fs::read_dir(&list_dir).unwrap().collect::<Vec<_>>();
+    assert_eq!(entries.len(),1);
+    let tasks=fs::read_dir(entries[0].as_ref().unwrap().path()).unwrap()
+        .filter_map(Result::ok).filter(|e|e.path().extension().is_some_and(|x|x=="json"))
+        .count();
+    assert_eq!(tasks,2);
+}
