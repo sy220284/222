@@ -472,6 +472,7 @@ mod tests{
     fn subscriber_can_reenter_task_mutation_after_unlock(){
         use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
         let (_root,graph)=store();
+        graph.create(&json!({"subject":"Before","description":"Body"})).unwrap();
         let graph_for_callback=graph.clone();
         let once=Arc::new(AtomicBool::new(false));
         let gate=once.clone();
@@ -484,7 +485,7 @@ mod tests{
                 })).unwrap();
             }
         }));
-        graph.create(&json!({"subject":"Original","description":"Body"})).unwrap();
+        graph.update(&json!({"taskId":"1","subject":"Original"})).unwrap();
         assert_eq!(graph.peek("1").unwrap().unwrap().subject,"Updated by subscriber");
     }
     #[test]
