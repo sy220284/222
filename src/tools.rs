@@ -238,14 +238,15 @@ impl ToolExecutor {
 
     fn list_skills(&self) -> Result<String> {
         let root = self.root.join(".atlas").join("skills");
-        if !root.is_dir() { return Ok(String::new()); }
         let mut skills = Vec::new();
-        for entry in fs::read_dir(root)? {
-            let entry = entry?;
-            let name = entry.file_name().to_string_lossy().to_string();
-            if !valid_skill_name(&name) { continue; }
-            let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
-            if path.is_file() { skills.push(name); }
+        if root.is_dir() {
+            for entry in fs::read_dir(root)? {
+                let entry = entry?;
+                let name = entry.file_name().to_string_lossy().to_string();
+                if !valid_skill_name(&name) { continue; }
+                let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
+                if path.is_file() { skills.push(name); }
+            }
         }
         skills.extend(plugins::list_skills(&self.root,&self.enabled_plugins)?);
         skills.sort();
@@ -521,6 +522,19 @@ mod tests {
         assert!(diff.contains("-before"));
         assert!(diff.contains("+after"));
         assert!(tool.git_log(&json!({"count":1})).await.unwrap().contains("initial"));
+    }
+
+    #[test]
+    fn enabled_plugin_skills_are_found_without_project_skills_directory() {
+        let root=tempfile::tempdir().unwrap();
+        let p=root.path().join(".atlas/plugins/demo");
+        fs::create_dir_all(p.join("skills/build")).unwrap();
+        fs::write(p.join("skills/build/SKILL.md"),"Build instructions").unwrap();
+        let tool=executor(root.path(),Approval::ReadOnly)
+            .with_plugins(vec!["demo".into()]);
+        assert_eq!(tool.list_skills().unwrap(),"demo:build");
+        assert!(tool.read_skill(&json!({"name":"demo:build"}))
+            .unwrap().contains("Build instructions"));
     }
 
     #[test]
