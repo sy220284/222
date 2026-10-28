@@ -108,7 +108,7 @@ impl Agent {
     }
 
     async fn run_task_graph(&self,call:&ToolCall)->Result<String>{
-        let args:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
+        let mut args:serde_json::Value=serde_json::from_str(&call.function.arguments)?;
         match call.function.name.as_str(){
             "TaskCreate"=>{
                 let created=self.graph.create(&args)?;
@@ -134,6 +134,18 @@ impl Agent {
                 Ok(created)
             },
             "TaskUpdate"=>{
+                // The source auto-claims unowned in-progress tasks for the
+                // teammate performing the update when no owner was supplied.
+                if args.get("status").and_then(serde_json::Value::as_str)==Some("in_progress")
+                    && args.get("owner").is_none() && self.team_name.is_some(){
+                    if let Some(member)=self.agent_name.as_deref().filter(|m|*m!="team-lead"){
+                        if let Some(id)=args.get("taskId").and_then(serde_json::Value::as_str){
+                            if self.graph.peek(id)?.is_some_and(|task|task.owner.is_none()){
+                                args["owner"]=json!(member);
+                            }
+                        }
+                    }
+                }
                 if args.get("status").and_then(serde_json::Value::as_str)==Some("completed"){
                     let id=args.get("taskId").and_then(serde_json::Value::as_str)
                         .context("Missing taskId")?;
@@ -995,6 +1007,41 @@ mod tests {
         assert!(!worker.absorb_team_messages().unwrap());
         assert_eq!(mailbox.unread("worker").unwrap().len(),1);
     }
+    #[tokio::test]
+    async fn teammate_starting_unowned_task_auto_claims_and_notifies(){
+        let root=tempfile::tempdir().unwrap();
+        let profile=ProviderProfile{
+            id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),
+            model:"mock".into(),api_key_env:None,stream:false
+        };
+        let mut worker=Agent::new(profile,root.path().to_path_buf(),
+            Approval::Full,false,5,Session::fresh()).unwrap();
+        let registry=Teams::new(root.path()).unwrap();
+        registry.create("team",None,"lead").unwrap();
+        registry.member("team",crate::team_registry::Member{
+            name:"worker".into(),id:"worker@team".into(),active:true
+        }).unwrap();
+        worker.team_name=Some("team".into());
+        worker.agent_name=Some("worker".into());
+        worker.team_root=Some(root.path().to_path_buf());
+        worker.graph=task_graph::TaskGraph::new(root.path(),"team").unwrap();
+        worker.graph.create(&json!({"subject":"Build","description":"Implement"})).unwrap();
+        let update=ToolCall{id:"start".into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall{
+                name:"TaskUpdate".into(),
+                arguments:json!({"taskId":"1","status":"in_progress"}).to_string()
+            }};
+        worker.run_task_graph(&update).await.unwrap();
+        let task=worker.graph.peek("1").unwrap().unwrap();
+        assert_eq!(task.status,"in_progress");
+        assert_eq!(task.owner.as_deref(),Some("worker"));
+        let mailbox=crate::team_mailbox::Mailbox::new(root.path(),"team").unwrap();
+        let messages=mailbox.unread("worker").unwrap();
+        assert_eq!(messages.len(),1);
+        assert!(messages[0].text.contains("task_assignment"));
+    }
+
     #[tokio::test]
     async fn task_owner_change_sends_durable_assignment_to_member(){
         let root=tempfile::tempdir().unwrap();
