@@ -367,3 +367,68 @@ fn sdk_streaming_emits_incremental_chunks_and_final_result() {
     assert_eq!(deltas,"Hello");
     assert!(events.iter().any(|v|v["type"]=="result"&&v["content"]=="Hello"));
 }
+
+#[cfg(unix)]
+#[test]
+fn background_shell_model_tool_roundtrip_runs_and_reads_real_process() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut log = Vec::new();
+        for turn in 0..3 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let raw = read_request(&mut stream);
+            let request: Value = serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+            let messages = request["messages"].as_array().unwrap();
+            let reply = if turn == 0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"start1","type":"function","function":{
+                        "name":"run_command","arguments":json!({
+                            "command":"printf background-ready",
+                            "run_in_background":true,"description":"Test shell"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else if turn == 1 {
+                let last: Value = serde_json::from_str(
+                    messages.last().unwrap()["content"].as_str().unwrap()
+                ).unwrap();
+                let task_id = last["task_id"].as_str().unwrap();
+                log.push(last);
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"read1","type":"function","function":{
+                        "name":"task_output","arguments":json!({
+                            "task_id":task_id,"block":true,"timeout":5000
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                let last: Value = serde_json::from_str(
+                    messages.last().unwrap()["content"].as_str().unwrap()
+                ).unwrap();
+                log.push(last);
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Background shell verified."},"finish_reason":"stop"}]})
+            };
+            let body = reply.to_string();
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(), body).unwrap();
+            stream.flush().unwrap();
+        }
+        log
+    });
+    let config = root.path().join("config.json");
+    fs::write(&config, json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible",
+        "base_url":format!("http://{addr}/v1"),"model":"mock"
+    }]}).to_string()).unwrap();
+    let output = binary().args(["--workspace", root.path().to_str().unwrap(),
+        "--approval", "full", "run", "Run a background test"])
+        .env("ATLAS_CONFIG", &config).output().unwrap();
+    let logs = server.join().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Background shell verified."));
+    assert_eq!(logs[0]["status"], "running");
+    assert_eq!(logs[1]["retrieval_status"], "success");
+    assert_eq!(logs[1]["task"]["status"], "completed");
+    assert!(logs[1]["task"]["output"].as_str().unwrap().contains("background-ready"));
+}
