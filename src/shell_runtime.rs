@@ -79,8 +79,18 @@ impl ShellKind {
         match self {
             Self::Bash => {
                 #[cfg(windows)]
-                let path =
-                    which("bash").context("Bash requires Git for Windows or bash in PATH")?;
+                let path = if let Some(configured) = env::var_os("ATLAS_GIT_BASH_PATH") {
+                    // The source refuses an invalid explicit Git Bash path.
+                    // Silently falling back would execute a different shell.
+                    let configured = PathBuf::from(configured);
+                    if !executable(&configured) {
+                        bail!("Configured ATLAS_GIT_BASH_PATH is not an executable file");
+                    }
+                    configured
+                } else {
+                    crate::portable_platform::find_git_bash_path(None)
+                        .context("Git Bash is unavailable; install Git for Windows or configure ATLAS_GIT_BASH_PATH")?
+                };
                 #[cfg(not(windows))]
                 let path = which("bash").context("Bash executable is not available in PATH")?;
                 let mut cmd = Command::new(path);
