@@ -339,7 +339,7 @@ impl Agent {
             prompt.replace_range(..DEFAULT_SYSTEM.len(), custom);
         }
         if let Some(append) = &self.sdk_append_system_prompt {
-            prompt.push_str("\\n");
+            prompt.push_str("\n");
             prompt.push_str(append);
         }
         Ok(prompt)
