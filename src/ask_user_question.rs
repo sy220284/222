@@ -49,9 +49,14 @@ fn html_preview_error(preview: &str) -> Option<&'static str> {
 fn validate(input: &Value) -> Result<&[Value]> {
     // The source uses z.strictObject at the tool input boundary. Preserve
     // the accepted optional SDK fields, but reject unexpected root keys.
-    let object = input.as_object().context("AskUserQuestion input must be an object")?;
+    let object = input
+        .as_object()
+        .context("AskUserQuestion input must be an object")?;
     for key in object.keys() {
-        if !matches!(key.as_str(), "questions" | "answers" | "annotations" | "metadata") {
+        if !matches!(
+            key.as_str(),
+            "questions" | "answers" | "annotations" | "metadata"
+        ) {
             bail!("Unknown AskUserQuestion input field: {key}");
         }
     }
@@ -62,9 +67,13 @@ fn validate(input: &Value) -> Result<&[Value]> {
         }
     }
     if let Some(annotations) = object.get("annotations") {
-        let values = annotations.as_object().context("annotations must be an object")?;
+        let values = annotations
+            .as_object()
+            .context("annotations must be an object")?;
         for annotation in values.values() {
-            let fields = annotation.as_object().context("annotation must be an object")?;
+            let fields = annotation
+                .as_object()
+                .context("annotation must be an object")?;
             for field in ["preview", "notes"] {
                 if fields.get(field).is_some_and(|value| !value.is_string()) {
                     bail!("annotation {field} must be a string");
@@ -74,7 +83,10 @@ fn validate(input: &Value) -> Result<&[Value]> {
     }
     if let Some(metadata) = object.get("metadata") {
         let metadata = metadata.as_object().context("metadata must be an object")?;
-        if metadata.get("source").is_some_and(|value| !value.is_string()) {
+        if metadata
+            .get("source")
+            .is_some_and(|value| !value.is_string())
+        {
             bail!("metadata.source must be a string");
         }
     }
@@ -241,7 +253,10 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
         if !previews.is_empty() {
             let mut annotation = Map::new();
             annotation.insert("preview".to_owned(), Value::String(previews.join("\n\n")));
-            write!(writer, "Optional notes for this selection (Enter to skip): ")?;
+            write!(
+                writer,
+                "Optional notes for this selection (Enter to skip): "
+            )?;
             writer.flush()?;
             let mut note = String::new();
             // A closed input stream means there are no additional notes;
