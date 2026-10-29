@@ -126,7 +126,10 @@ fn message_preview(messages: &Value) -> Vec<String> {
         if message["type"] != "user" && message["type"] != "assistant" {
             continue;
         }
-        let Some(blocks) = message.pointer("/message/content").and_then(Value::as_array) else {
+        let Some(blocks) = message
+            .pointer("/message/content")
+            .and_then(Value::as_array)
+        else {
             continue;
         };
         for block in blocks {
@@ -139,10 +142,16 @@ fn message_preview(messages: &Value) -> Vec<String> {
                     let desc = ["description", "prompt", "command", "query", "pattern"]
                         .into_iter()
                         .find_map(|key| {
-                            input.get(key).and_then(Value::as_str).filter(|v| !v.is_empty())
+                            input
+                                .get(key)
+                                .and_then(Value::as_str)
+                                .filter(|v| !v.is_empty())
                         });
                     let fallback = format!("Using {}…", block["name"].as_str().unwrap_or("tool"));
-                    lines.push(truncate(desc.unwrap_or(&fallback).lines().next().unwrap_or(""), 80));
+                    lines.push(truncate(
+                        desc.unwrap_or(&fallback).lines().next().unwrap_or(""),
+                        80,
+                    ));
                 }
                 Some("text") => {
                     if let Some(content) = block["text"].as_str() {
@@ -188,16 +197,28 @@ pub fn render_source_view(props: &Value) -> VNode {
     let highlighted = selected || foregrounded;
     let all_idle = props["allIdle"].as_bool().unwrap_or(false);
     let columns = props["columns"].as_u64().unwrap_or(80) as usize;
-    let name = teammate.pointer("/identity/agentName").and_then(Value::as_str).unwrap_or("");
-    let color = teammate.pointer("/identity/color").and_then(Value::as_str).unwrap_or("text");
+    let name = teammate
+        .pointer("/identity/agentName")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let color = teammate
+        .pointer("/identity/color")
+        .and_then(Value::as_str)
+        .unwrap_or("text");
     let tree = match (highlighted, last) {
         (true, true) => "╘═",
         (true, false) => "╞═",
         (false, true) => "└─",
         (false, false) => "├─",
     };
-    let tool_count = teammate.pointer("/progress/toolUseCount").and_then(Value::as_u64).unwrap_or(0);
-    let tokens = teammate.pointer("/progress/tokenCount").and_then(Value::as_u64).unwrap_or(0);
+    let tool_count = teammate
+        .pointer("/progress/toolUseCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let tokens = teammate
+        .pointer("/progress/tokenCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
     let stats = format!(
         " · {tool_count} tool {} · {} tokens",
         if tool_count == 1 { "use" } else { "uses" },
@@ -206,9 +227,12 @@ pub fn render_source_view(props: &Value) -> VNode {
     let select_hint = " · shift + ↑/↓ to select";
     let view_hint = " · enter to view";
     let named = format!("@{name}");
-    let show_name = columns >= 60
-        && columns.saturating_sub(8 + columns_used(&named) + 2) >= 25;
-    let name_cost = if show_name { columns_used(&named) + 2 } else { 0 };
+    let show_name = columns >= 60 && columns.saturating_sub(8 + columns_used(&named) + 2) >= 25;
+    let name_cost = if show_name {
+        columns_used(&named) + 2
+    } else {
+        0
+    };
     let available = columns.saturating_sub(8 + name_cost);
     let show_view = selected
         && !foregrounded
@@ -216,13 +240,25 @@ pub fn render_source_view(props: &Value) -> VNode {
     let show_select = highlighted
         && available
             > columns_used(select_hint)
-                + if show_view { columns_used(view_hint) } else { 0 }
+                + if show_view {
+                    columns_used(view_hint)
+                } else {
+                    0
+                }
                 + columns_used(&stats)
                 + 30;
     let show_stats = available > columns_used(&stats) + 30;
     let extra = if show_stats { columns_used(&stats) } else { 0 }
-        + if show_select { columns_used(select_hint) } else { 0 }
-        + if show_view { columns_used(view_hint) } else { 0 };
+        + if show_select {
+            columns_used(select_hint)
+        } else {
+            0
+        }
+        + if show_view {
+            columns_used(view_hint)
+        } else {
+            0
+        };
     let activity_width = 25.max(available.saturating_sub(extra + 1));
     let mut content = vec![
         text(
@@ -232,7 +268,10 @@ pub fn render_source_view(props: &Value) -> VNode {
         text(format!("{tree} "), json!({"dimColor":!selected})),
     ];
     if show_name {
-        content.push(text(named, json!({"color":if selected {"suggestion"} else {color}})));
+        content.push(text(
+            named,
+            json!({"color":if selected {"suggestion"} else {color}}),
+        ));
         content.push(text(": ", json!({"dimColor":!selected})));
     }
     if teammate["shutdownRequested"] == true {
@@ -241,29 +280,39 @@ pub fn render_source_view(props: &Value) -> VNode {
         content.push(text("[awaiting approval]", json!({"color":"warning"})));
     } else if teammate["isIdle"] == true {
         let display = if all_idle {
-            let elapsed = props["frozenDuration"].as_str().map(str::to_owned).unwrap_or_else(|| {
-                let now = props["nowMs"].as_u64().unwrap_or(0);
-                let start = teammate["startTime"].as_u64().unwrap_or(now);
-                let paused = teammate["totalPausedMs"].as_u64().unwrap_or(0);
-                duration(now.saturating_sub(start).saturating_sub(paused))
-            });
+            let elapsed = props["frozenDuration"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    let now = props["nowMs"].as_u64().unwrap_or(0);
+                    let start = teammate["startTime"].as_u64().unwrap_or(now);
+                    let paused = teammate["totalPausedMs"].as_u64().unwrap_or(0);
+                    duration(now.saturating_sub(start).saturating_sub(paused))
+                });
             format!(
                 "{} for {elapsed}",
                 teammate["pastTenseVerb"].as_str().unwrap_or("Worked")
             )
         } else {
-            let elapsed = props["idleElapsedTime"].as_str().map(str::to_owned).unwrap_or_else(|| {
-                let now = props["nowMs"].as_u64().unwrap_or(0);
-                let started = props["idleStartMs"].as_u64().unwrap_or(now);
-                duration(now.saturating_sub(started))
-            });
+            let elapsed = props["idleElapsedTime"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    let now = props["nowMs"].as_u64().unwrap_or(0);
+                    let started = props["idleStartMs"].as_u64().unwrap_or(now);
+                    duration(now.saturating_sub(started))
+                });
             format!("Idle for {elapsed}")
         };
         content.push(text(display, json!({"dimColor":true})));
     } else if !highlighted {
         let value = truncate(activity(teammate), activity_width);
         content.push(text(
-            if value.ends_with('…') { value } else { format!("{value}…") },
+            if value.ends_with('…') {
+                value
+            } else {
+                format!("{value}…")
+            },
             json!({"dimColor":true}),
         ));
     }
@@ -278,7 +327,10 @@ pub fn render_source_view(props: &Value) -> VNode {
     }
     let mut rows = vec![element("Box", json!({"paddingLeft":3}), content)];
     if props["showPreview"] == true {
-        for (index, line) in message_preview(&teammate["messages"]).into_iter().enumerate() {
+        for (index, line) in message_preview(&teammate["messages"])
+            .into_iter()
+            .enumerate()
+        {
             rows.push(element(
                 "Box",
                 json!({"key":index,"paddingLeft":3}),
@@ -305,7 +357,9 @@ mod tests {
             "columns":100
         }));
         assert_eq!(node.unresolved_node_count(), 0);
-        assert!(node.text_content().contains("Scanning files… · 2 tool uses · 1.5k tokens"));
+        assert!(node
+            .text_content()
+            .contains("Scanning files… · 2 tool uses · 1.5k tokens"));
         let node = render_source_view(&json!({
             "teammate":{"identity":{"agentName":"worker"},
                 "isIdle":true,"shutdownRequested":true,"awaitingPlanApproval":true},
