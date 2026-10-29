@@ -38,8 +38,6 @@ const ROOT_MARKERS: &[&str] = &[
     ".atlas/skills",
     ".atlas/hooks",
     ".atlas/rules",
-    "CLAUDE.md",
-    "CLAUDE.local.md",
 ];
 
 /// Reports actual paths only; no repository file content or environment
@@ -87,7 +85,7 @@ Phase 2 — Inspect actual sources with file-reading tools. Read the relevant ro
 
 Phase 3 — Ask only the remaining genuinely unknown details, via AskUserQuestion (e.g., non-obvious team conventions, personal preferences). Synthesize a concrete proposed AGENTS.md/AGENTS.local.md update plus optional hooks/skills. Show the proposal in the AskUserQuestion option previews; allow removal of individual items. Respect the initial skills/hooks selection.
 
-Phase 4 — After confirmation, use ordinary permission-checked edit/write tools to apply the proposed changes. Project document AGENTS.md remains tracked. Personal AGENTS.local.md must be excluded from version control; confirm existing ignore rules and append an exact non-broad ignore pattern only when needed. If AGENTS.md exists, read it and propose incremental improvements, never wipe it or blindly replace. Don't edit CLAUDE.md or other vendor-exclusive files; they are useful references only.
+Phase 4 — After confirmation, use ordinary permission-checked edit/write tools to apply the proposed changes. Project document AGENTS.md remains tracked. Personal AGENTS.local.md must be excluded from version control; confirm existing ignore rules and append an exact non-broad ignore pattern only when needed. If AGENTS.md exists, read it and propose incremental improvements, never wipe it or blindly replace. Do not edit vendor-specific guidance files: preserve them unchanged as references.
 
 Phase 5 — For selected skills, use .atlas/skills/<skill-name>/SKILL.md with concrete instructions and workflow entry points. For hooks, use the provider-neutral local hook config already supported by this runtime; ask before enabling any command with side effects. Do not run unexpected installers. Omit optional artifacts that the user did not select.
 
