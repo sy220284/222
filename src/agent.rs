@@ -1278,6 +1278,23 @@ impl Agent {
     pub fn search_sessions(&self, query: &str) -> Result<Vec<crate::session_control::SessionItem>> {
         crate::session_control::search(&self.root, query)
     }
+    pub async fn semantic_search_sessions(
+        &mut self,
+        query: &str,
+    ) -> Result<Vec<crate::session_control::SessionItem>> {
+        let (matches, usage) = crate::semantic_session_search::search(
+            &self.root,
+            query,
+            self.provider.as_ref(),
+            &self.profile.model,
+        )
+        .await?;
+        if let Some(usage) = usage {
+            self.record_usage(usage);
+            self.session.save(&self.root)?;
+        }
+        Ok(matches)
+    }
     pub fn search_transcript(&self, query: &str) -> Vec<crate::transcript_search::SearchHit> {
         crate::transcript_search::TranscriptIndex::from_stored(&self.session.messages).find(query)
     }
