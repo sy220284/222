@@ -2,7 +2,7 @@ use crate::config::SearchBackend;
 use anyhow::{bail, Context, Result};
 use reqwest::{Client, Url};
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub fn definition() -> Value {
     json!({"type":"function","function":{
@@ -60,6 +60,7 @@ fn domain_allowed(url: &str, allowed: &[String], blocked: &[String]) -> bool {
 }
 
 pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
+    let started = Instant::now();
     let query = args
         .get("query")
         .and_then(Value::as_str)
@@ -69,6 +70,11 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
     }
     let allowed = domain_filter(args, "allowed_domains")?;
     let blocked = domain_filter(args, "blocked_domains")?;
+    // WebSearchTool.ts::validateInput rejects mutually exclusive domain lists
+    // before dispatching any network request.
+    if !allowed.is_empty() && !blocked.is_empty() {
+        bail!("Error: Cannot specify both allowed_domains and blocked_domains in the same request");
+    }
     let limit = args
         .get("limit")
         .and_then(Value::as_u64)
@@ -135,7 +141,7 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
             })
         })
         .collect::<Vec<_>>();
-    Ok(json!({"query":query,"results":results}).to_string())
+    Ok(json!({"query":query,"results":results,"durationSeconds":started.elapsed().as_secs_f64()}).to_string())
 }
 
 #[cfg(test)]
