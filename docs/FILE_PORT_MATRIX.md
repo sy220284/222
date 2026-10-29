@@ -239,7 +239,7 @@
 | `src/commands/remote-setup/api.ts` | 183 | 5519 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/remote-setup/index.ts` | 21 | 693 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/remote-setup/remote-setup.tsx` | 187 | 21786 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/rename/generateSessionName.ts` | 68 | 2297 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/rename/generateSessionName.ts` | 68 | 2297 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：通过当前选定模型生成 JSON kebab-case 名称、验证输入并持久保存、不污染历史会话且计入模型用量；原厂专用模型与超时/中断策略按通用化要求调整 |
 | `src/commands/rename/index.ts` | 13 | 281 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/rename/rename.ts` | 88 | 2759 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | 待定 | 未迁移 |

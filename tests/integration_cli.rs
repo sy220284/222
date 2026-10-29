@@ -2814,3 +2814,54 @@ fn resume_by_unambiguous_title_uses_real_persisted_session_without_network(){
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
     assert!(String::from_utf8_lossy(&output.stdout).contains(&id.to_string()));
 }
+
+#[test]
+fn chat_auto_names_session_using_selected_provider_without_adding_chat_turn(){
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let id=uuid::Uuid::new_v4();
+    let directory=root.path().join(".atlas/sessions");
+    fs::create_dir_all(&directory).unwrap();
+    fs::write(directory.join(format!("{id}.json")),json!({
+        "id":id,"messages":[
+            {"role":"user","content":"Fix flaky integration tests"},
+            {"role":"assistant","content":"I checked the Rust test path"}
+        ]
+    }).to_string()).unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let service=thread::spawn(move||{
+        let (mut stream,_)=listener.accept().unwrap();
+        let request=read_request(&mut stream);
+        assert!(request.contains("Fix flaky integration tests"));
+        assert!(request.contains("kebab-case name"));
+        let body=json!({"choices":[{"message":{
+            "role":"assistant","content":r#"{"name":"fix-flaky-tests"}"#
+        },"finish_reason":"stop"}],
+        "usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}}).to_string();
+        write!(stream,"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),body).unwrap();
+        stream.flush().unwrap();
+    });
+    let cfg=root.path().join("config.json");
+    fs::write(&cfg,json!({"default_provider":"mock",
+        "providers":[{"id":"mock","kind":"openai-compatible",
+            "base_url":format!("http://{addr}/v1"),"model":"test-model"}]}).to_string()).unwrap();
+    let mut cli=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "chat","--resume",&id.to_string()])
+        .env("ATLAS_CONFIG",&cfg)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    {
+        let mut input=cli.stdin.take().unwrap();
+        writeln!(input,"/rename\n/exit").unwrap();
+    }
+    let result=cli.wait_with_output().unwrap();
+    service.join().unwrap();
+    assert!(result.status.success(),"{}",String::from_utf8_lossy(&result.stderr));
+    let session:Value=serde_json::from_slice(
+        &fs::read(directory.join(format!("{id}.json"))).unwrap()).unwrap();
+    assert_eq!(session["custom_title"],"fix-flaky-tests");
+    assert_eq!(session["messages"].as_array().unwrap().len(),2);
+    assert!(session["usage"]["total_tokens"].as_u64().unwrap_or(0)>=7);
+}

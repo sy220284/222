@@ -772,6 +772,39 @@ impl Agent {
     pub fn rename_session(&mut self,title:&str)->Result<String>{
         crate::session_control::rename(&mut self.session,&self.root,title)
     }
+    /// Provider-neutral counterpart of the original conversation name
+    /// generator. It is a separate model call, not a chat message.
+    pub async fn rename_session_or_generate(&mut self,title:&str)->Result<String>{
+        if !title.trim().is_empty(){return self.rename_session(title)}
+        let context=self.session.messages.iter()
+            .filter(|m|matches!(m.role.as_str(),"user"|"assistant"))
+            .filter_map(|m|m.content.as_deref().map(|t|format!("{}: {t}",m.role)))
+            .take(50).collect::<Vec<_>>().join("\n");
+        let context=context.chars().take(8_000).collect::<String>();
+        if context.trim().is_empty(){
+            bail!("Could not generate a name: no conversation context yet. Usage: /rename <name>");
+        }
+        if self.session.team_name.is_some() && self.session.agent_name.is_some(){
+            bail!("Cannot rename: This session is a swarm teammate. Teammate names are set by the team leader.");
+        }
+        let completion=self.provider.complete(&ModelRequest{
+            model:self.profile.model.clone(),
+            system:"Generate a short kebab-case name (2-4 words) that captures the main topic of this conversation. Use lowercase words separated by hyphens. Return valid JSON with exactly a \"name\" string field.".into(),
+            messages:vec![Message::text("user",context)],
+            tools:Vec::new(),
+        }).await.context("Could not generate a session name")?;
+        if let Some(usage)=completion.usage{self.record_usage(usage);}
+        if completion.message.tool_calls.as_ref().is_some_and(|v|!v.is_empty()){
+            bail!("Could not generate a name: model requested a tool");
+        }
+        let raw=completion.message.content.context("Could not generate a name: no content")?;
+        let parsed:serde_json::Value=serde_json::from_str(&raw)
+            .context("Could not generate a name: invalid model JSON")?;
+        let name=parsed.get("name").and_then(serde_json::Value::as_str)
+            .filter(|s|!s.trim().is_empty())
+            .context("Could not generate a name: JSON is missing a name string")?;
+        self.rename_session(name)
+    }
     pub fn export_session(&self,filename:Option<&str>)->Result<std::path::PathBuf>{
         crate::session_control::export(&self.session,&self.root,filename)
     }

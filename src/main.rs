@@ -262,7 +262,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("/session                 show resumable session id");
                 println!("/sessions [query]        search saved conversation titles");
                 println!("/resume TERM             find session, show restart command");
-                println!("/rename NAME             rename current conversation");
+                println!("/rename [NAME]           rename conversation or generate a name using active model");
                 println!("/export [filename]       save full conversation to a local text file");
                 println!("Resume: atlas-agent chat --resume SESSION_ID");
                 println!("/usage                   show provider-reported token totals");
@@ -347,7 +347,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             continue;
         }
         if input == "/rename" || input.starts_with("/rename ") {
-            match agent.rename_session(input.trim_start_matches("/rename").trim()){
+            match agent.rename_session_or_generate(input.trim_start_matches("/rename").trim()).await{
                 Ok(result)=>println!("{result}"),
                 Err(err)=>eprintln!("{err:#}"),
             }
