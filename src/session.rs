@@ -20,11 +20,13 @@ pub struct Session {
     pub team_name: Option<String>,
     #[serde(default,skip_serializing_if="Option::is_none")]
     pub agent_name: Option<String>,
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    pub permission_mode: Option<String>,
 }
 
 impl Session {
     pub fn fresh() -> Self {
-        Self { id: Uuid::new_v4(), messages: Vec::new(), summary: None, tasks: Vec::new(), usage: TokenUsage::default(), cost: CostLedger::default(), team_name: None, agent_name: None }
+        Self { id: Uuid::new_v4(), messages: Vec::new(), summary: None, tasks: Vec::new(), usage: TokenUsage::default(), cost: CostLedger::default(), team_name: None, agent_name: None, permission_mode: None }
     }
 
     fn path(root: &Path, id: Uuid) -> PathBuf {
@@ -108,6 +110,7 @@ mod tests {
         let restored=Session::load(dir.path(),&s.id.to_string()).unwrap();
         assert!(restored.team_name.is_none());
         assert!(restored.agent_name.is_none());
+        assert!(restored.permission_mode.is_none());
     }
     #[test]
     fn session_resume_accepts_bom_from_windows_tools(){
@@ -126,9 +129,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut s = Session::fresh();
         s.messages.push(Message::text("user", "hello"));
+        s.permission_mode=Some("acceptEdits".into());
         s.save(dir.path()).unwrap();
         let loaded = Session::load(dir.path(), &s.id.to_string()).unwrap();
         assert_eq!(loaded.messages, s.messages);
+        assert_eq!(loaded.permission_mode.as_deref(),Some("acceptEdits"));
         assert!(Session::load(dir.path(), "../invalid").is_err());
     }
 }
