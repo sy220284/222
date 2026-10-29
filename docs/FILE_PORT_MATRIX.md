@@ -453,8 +453,8 @@
 | `src/components/Spinner/ShimmerChar.tsx` | 36 | 3357 | 重写：终端 UI／交互 | `src/generated_ports/p_ec706ec57f4b9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/SpinnerAnimationRow.tsx` | 265 | 42767 | 重写：终端 UI／交互 | `src/generated_ports/p_210fb85258179.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/SpinnerGlyph.tsx` | 80 | 10291 | 重写：终端 UI／交互 | `src/generated_ports/p_3d04352c988c3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/Spinner/TeammateSpinnerLine.tsx` | 233 | 38859 | 重写：终端 UI／交互 | `src/generated_ports/p_09647f4245ece.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/Spinner/TeammateSpinnerTree.tsx` | 272 | 28052 | 重写：终端 UI／交互 | `src/generated_ports/p_024038719ca35.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner/TeammateSpinnerLine.tsx` | 233 | 38859 | 重写：终端 UI／交互 | `src/generated_ports/p_09647f4245ece.rs` | 部分实现：已完成独立队友状态行 Rust 动态渲染（状态、选择、工具用量、消息预览及宽度），通过源码 inspect/view 导出和状态树嵌套消费；已新增真实数据回归，终端生产入口、键盘事件及完整原版交互仍需验收 |
+| `src/components/Spinner/TeammateSpinnerTree.tsx` | 272 | 28052 | 重写：终端 UI／交互 | `src/generated_ports/p_024038719ca35.rs` | 部分实现：队友运行状态筛选、排序和领导行已从实际 AppState 输入生成；已接通 TeammateSpinnerLine 动态渲染、导出 inspect/view 和组合回归；终端实时刷新、可交互键盘事件及完整调用链仍待验收 |
 | `src/components/Spinner/index.ts` | 11 | 602 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/Spinner/teammateSelectHint.ts` | 2 | 64 | 重写：终端 UI／交互 | `src/generated_ports/p_9cdb888d4eefe.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/useShimmerAnimation.ts` | 32 | 1236 | 重写：终端 UI／交互 | 待定 | 未迁移 |
