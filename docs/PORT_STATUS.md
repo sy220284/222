@@ -514,3 +514,9 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - Rust 入口：`src/main.rs` 的 `/branch` → `src/agent.rs::Agent::branch_session` → `src/session.rs::Session::save`。修正原先仅保存分叉而继续写入父会话的语义偏差：分叉保存成功后切换活动会话、重绑定个人任务图及 CLI 提示历史，保持父会话不变。新会话后续消息独立保存。
 - 回归：`tests/integration_cli.rs::chat_branch_preserves_original_conversation_and_uses_collision_free_titles` 使用真实 CLI 子进程和模拟模型 HTTP，检查连续分叉的父子链、标题冲突处理、分叉后消息只写入活动子会话。代码提交后仍须核实最新 HEAD 的格式、Clippy、完整测试及 CI。
 - 尚未等价：原版 JSONL transcript 的逐消息 `forkedFrom.messageUuid`、`parentUuid`、sidechain/progress 过滤、content-replacement 重映射、`context.resume` 的完整 UI/SDK 生命周期及相关日志元数据；Rust 当前以会话 JSON 保存，不能宣称该原路径已完全验收。
+
+### Hook 同轮输入共享、并行执行和权限决策优先级（2026-10-29）
+
+- 原版源码：2.1.88 `src/utils/hooks.ts` 的 `executeHooks`（1952–2010 行）从同一 `hookInput` 构建匹配 Hook；2743–2745 行通过 `all(hookPromises)` 并行运行；2820–2847 行明确 `deny > ask > allow`，而 `executePreToolHooks`（3394–3435 行）提交原始工具参数。Rust 先前把首个 Hook 改写后的参数交给第二个 Hook，并且可能让后到的 `ask` 覆盖 `deny`，与原版语义不同。
+- Rust 修复：`src/hooks.rs::HookRunner::run` 使用 `FuturesUnordered` 并发执行匹配命令，所有 Hook 接收同一原始输入；结果汇总按拒绝 > 询问 > 允许，保留非阻断错误、工具参数改写、阻断和 PostToolUse 输出改写。工具执行前再应用最终参数改写。新增两个真实 Shell 进程同步并行回归、权限优先级回归，并恢复 `tests/integration_hook_lifecycle.rs` 的原始输入断言。此项为源码语义修复，**未完成原版全部 Hook 功能，不增加文件级验收数**。
+- 尚缺：原版 Hook 完整配置来源/匹配、所有事件、信任门禁、取消/超时反馈、prompt/agent/http/async 类型、UI/SDK 进度及输出聚合边界；仍需逐函数对照。测试结果以最新 HEAD 的 CI 为准。
