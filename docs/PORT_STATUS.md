@@ -1,3 +1,11 @@
+## 2026-10-29：插件 MCP 用户配置接线与长技能读取（已提交、待验收）
+
+- **原版源码对照**：完整 `claude-code-2.1.88-main(1).zip` 中 `source/src/utils/plugins/mcpPluginIntegration.ts:432–557::buildMcpUserConfig/resolvePluginMcpEnvironment`、`source/src/utils/plugins/pluginOptionsStorage.ts:326–375::substituteUserConfigVariables`、`source/src/utils/plugins/mcpbHandler.ts::validateUserConfig`，以及 `source/src/skills/loadSkillsDir.ts:431–448`、`source/src/utils/plugins/loadPluginCommands.ts` 的真实 Markdown 读取路径。
+- **功能 1：插件 MCP 非敏感用户配置参与启动**：`src/plugins.rs::PluginSet::load → resolve_plugin_mcp_server` 现在在 stdio 命令、参数、环境变量及 HTTP/SSE/WS URL、请求头中展开已保存的 `${user_config.KEY}`，先替换用户配置，再处理环境变量；按原版校验声明字段、基本类型、数值上下限与字符串数组，缺值/错误类型明确报错，不将敏感字段从公开设置注入进程。失败的 MCP 服务器输出可见错误，其他有效服务器继续加载。代码提交 `c959853fed1da90ce00784336f04425319894d5c`、`f3d4f20a90c163b20895c7fe4cf4c20d78bf14e7`、`e29a35d70be8ea23db22bd16dd535c61022c338f`。
+- **功能 2：插件长技能实际读取与调用**：`src/plugins.rs::read_skill / command_prompt_with_session` 去除原版没有的 64,000 字节硬拒绝；模型读取及用户斜杠调用仍走现有插件路径、Read 权限及用户可调用检查。代码提交 `c959853fed1da90ce00784336f04425319894d5c`。
+- **本轮保守计数**：2 个独立用户可感知业务功能发生真实 Rust 代码补强并已推送；MCP 错误展示归入配置功能，不另计数。**2/100，余 98；新增最终等价验收 0**。本轮未完成先行 100 项逐函数核实清单；仅做源码与提交差异静态复查，未运行 Cargo、测试或 CI。
+- **准确剩余差异**：原版 secureStorage 的敏感插件选项与每服务私密配置、配置写入/删除与热刷新、marketplace 作用域精确 ID、完整 schema 及提示交互、MCP 服务器失败状态进入 UI、技能动态加载/取消及超长上下文 token 控制均待补齐；Issue #3 冻结 362 条继续开放。
+
 ## 2026-10-29：SDK 图文技能命令与插件配置敏感值保护（已提交、待验收）
 
 - **SDK 图文命令**：原版 `source/src/utils/processUserInput/processUserInput.ts:336–343,531–550` 从内容块最后一个文本块识别斜杠命令，同时保留前置图片。Rust `src/main.rs::sdk` 已对非排队 SDK 用户消息复用 `expand_user_skill_prompt`，修改实际送往模型的最后一个 text block，保留原图片和其他文本块，`skipSlashCommands` 继续阻断展开。提交 `64e2a9b99b4f3d7a8085977a2b2bb5f6fb9c315a`。原版完整图片处理、队列及取消仍缺。
