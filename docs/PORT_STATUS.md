@@ -10,7 +10,8 @@
 - **Grep 后续补齐（不重复计数）**：`src/search.rs` 增加多模式通配和排除过滤、Git 原生忽略规则、原版 `numLines` 回执；`src/tools.rs` 修正跨域网页跳转只检查显式拒绝，避免提前触发两次授权。提交 `e47a87bb31f85b113e17b1b848ae918537813ea3`、`6f55049701cd5ab17710e5b2cdf09e766fb9afe7`、`50b8cbe16b51633f6c69b237678f578cd8ef280f`、`876474e449123dd9f9bc7adea5cf88fe6b6a9f98`。
 - **Glob 文件发现**：对照原版 `src/utils/glob.ts:66–129`、`src/tools/GlobTool/GlobTool.ts:154–171`，Rust `src/search.rs` 支持经授权搜索目录内的绝对路径通配模式、`ATLAS_GLOB_HIDDEN` 隐藏文件开关、`ATLAS_GLOB_NO_IGNORE` 是否遵循 Git 忽略规则，保留原版默认隐藏文件可见、默认不受 .gitignore 限制。提交 `091d2fe8f44d8f85b9f2310f1a7f41d47cafdc18`。完整动态数量限制、权限排除和插件缓存过滤仍缺。
 - **多模型网页搜索域名范围**：对照原版 `src/tools/WebSearchTool/WebSearchTool.ts:25–36, 76–84`，Rust `src/websearch.rs` 在 SearXNG/Brave 通用后端公开 `allowed_domains`/`blocked_domains`，按域名及子域名筛选结果，禁止黑名单结果进入 Agent，并校验原版最短查询长度。提交 `d620fcb88bb556ab55a2d605fce877d3d9a828c2`、`966e590e67a2527abc505e2c6843a1971d1dee84`、`8360caae8d120c76479bac7bf48172f447a9a032`。原版模型原生检索/引用协议及服务端域名过滤仍未等价。
-- **严格计数**：本轮完成 7 条互不重复的用户业务主链的真实源码修改与提交，**7/100**，其余 93 条未完成；未运行 Cargo、单元/集成测试或 CI，均仅“已提交待验收”，不新增已验收源路径，Issue #3 冻结 362 项保持开放。原始源码 ZIP 可用；本轮尚未完成 100 条独立用户业务缺口的全部源码级确认和实施方案，不能用路径候选替代。
+- **插件本地安装与启用**：对照原版 `src/services/plugins/pluginOperations.ts:321–417`、`src/utils/plugins/pluginInstallationHelpers.ts:333–460`，Rust `src/plugin_manager.rs` 在落盘前校验指定插件 ID 与 manifest 名称，拒绝名称不匹配而遗留已安装插件；成功安装后同步写入启用配置，使插件技能/命令在下一会话可用，保存失败回滚新安装目录。提交 `d41341b7e898e4dc11f4f1e33f3722dd0ca12c96`、`687aa4a8b36eeb14b48155b057576f144925584f`。原版插件依赖闭包、可信市场和多设置来源仍缺。
+- **严格计数**：本轮完成 8 条互不重复的用户业务主链的真实源码修改与提交，**8/100**，其余 92 条未完成；未运行 Cargo、单元/集成测试或 CI，均仅“已提交待验收”，不新增已验收源路径，Issue #3 冻结 362 项保持开放。原始源码 ZIP 可用；本轮尚未完成 100 条独立用户业务缺口的全部源码级确认和实施方案，不能用路径候选替代。
 
 
 ## 2026-10-29：本地原版源码对照——会话上下文与项目引导（代码已验证，非文件级全等价）
