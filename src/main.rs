@@ -5,6 +5,7 @@ mod ask_user_question;
 mod background;
 mod bash_permission_suggestions;
 mod bridge_core;
+mod bridge_inbound_attachments;
 mod browser_launcher;
 mod cleanup_registry;
 mod collections;
@@ -2008,6 +2009,13 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
                 };
+                let attachment_base = std::env::var("ATLAS_BRIDGE_ATTACHMENT_BASE_URL").ok();
+                let attachment_token = std::env::var("ATLAS_BRIDGE_ATTACHMENT_TOKEN").ok();
+                let resolved_content = bridge_inbound_attachments::resolve_and_prepend(
+                    &event, prompt_value, agent.workspace_root(), &agent.session_id(),
+                    attachment_base.as_deref().zip(attachment_token.as_deref()),
+                ).await;
+                let prompt_value = &resolved_content;
                 if event.get("queued").and_then(Value::as_bool) == Some(true) {
                     let mut command: message_queue::Command = match serde_json::from_value(json!({
                         "value":prompt_value,"mode":"prompt","priority":event.get("priority")
