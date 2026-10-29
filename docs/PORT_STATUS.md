@@ -229,3 +229,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 对照原版 `src/services/mcp/mcpStringUtils.ts::buildMcpToolName`、`normalization.ts` 与 `client.ts` 的工具列表刷新语义，将 Rust MCP 工具名从易重排的数字槽位改为 `mcp__规范化服务器名__规范化工具名`。此前动态刷新后同一数字槽可能指向不同真实工具，导致旧模型工具调用意外执行新工具；现旧名字被撤销、新工具必须使用新名字。连接与刷新阶段校验规范化名称冲突，拒绝重复路由，防止跨服务器覆盖。刷新某服务失败时保留其旧目录并标记重试，同时继续处理其他健康服务的变更，最后汇总错误；不再因首个失败阻塞全部 MCP 服务。
 
 真实 stdio 子进程测试覆盖两个服务同时通知目录变化、首个服务发现失败但第二个仍成功、失败服务再次发现恢复、旧工具路由撤销及新工具身份不串用。现有真实 stdio/HTTP 工具调用测试同步校验原版命名约定。权限完整匹配、重复规范化别名在所有入口的行为、远程重连及全 MCP 能力仍需进一步对照，Issue #3 的 362 条未勾选，台账数量不变。
+
+### 2026-10-29：统一 Issue #3，MCP 资源/提示/模板与 SDK 实际控制链
+
+本轮继续对照原始 `services/mcp/client.ts` 的 `fetchResourcesForClient`、`fetchCommandsForClient`、`resources/read`、`prompts/get`。新增 MCP 资源、资源模板、提示目录的逐服务器分页读取，目录项保留全部服务器元数据与服务名且单服务器失败隔离；支持 URI 资源内容（保留图片/二进制 blob 的结构）和命名提示（限定字符串参数），直接连接 Agent 与 SDK 嵌套/平铺控制指令 `mcp_resources`、`mcp_prompts`、`mcp_resource_templates`、`mcp_read_resource`、`mcp_get_prompt`。加 20 页/千项上限、重复游标检测与超时。真实 stdio 服务通过 SDK 进程完成两页资源、模板、提示内容读写和非法参数检查。原版 MCP Prompt 到 slash command 的动态挂载、资源订阅、完整重连/认证与 UI 生命周期仍未实现，保持 4 个源路径部分实现。

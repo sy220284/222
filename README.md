@@ -259,3 +259,5 @@ SDK 排队的 `task-notification` 消息现在会在调用模型之前产生单�
 ### 通用 MCP HTTP 连接
 
 `mcp_servers` 配置项可选使用 `{"id":"remote","type":"http","url":"https://example.net/mcp","headers":{"Authorization":"Bearer ${MCP_TOKEN}"}}`；`type` 未指定时保留原有 stdio 启动方式。HTTP 使用标准 MCP 2025-03-26 的初始化、会话 ID、SSE/JSON 响应解析、工具发现和调用，超时 60 秒，禁止带用户凭据的 URL 及覆盖协议保留 Header；HTTP 配置只返回 URL，不把自定义 Header 作为 SDK 状态回传。尚未实现通用 OAuth、HTTP 会话自动重连和完整 MCP 资源/提示协议。
+
+MCP 支持 SDK 控制：`mcp_resources`、`mcp_resource_templates`、`mcp_prompts` 查询所有连接的 MCP 服务目录（单服务失败不影响其他成功结果）；`mcp_read_resource` 需提供 `server` 和 `uri`；`mcp_get_prompt` 需提供 `server`、`name` 和可选字符串键值 `arguments`。`control_request.request.subtype` 与 `control.action` 均支持这五项。返回完整 MCP JSON 内容块，包含资源的二进制 base64 与提示结构。该部分仍未覆盖完整 MCP 订阅/鉴权/提示作为 slash 命令等功能。

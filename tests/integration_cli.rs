@@ -2071,3 +2071,80 @@ fn agent_pre_and_post_hook_execution_failures_preserve_sibling_results(){
     assert_eq!(fs::read_to_string(root.path().join("hooked.txt")).unwrap(),
         "write took effect");
 }
+
+
+#[cfg(unix)]
+#[test]
+fn sdk_mcp_resources_templates_and_prompts_roundtrip_preserve_structured_content(){
+    use std::process::Stdio;
+    let dir=tempfile::tempdir().unwrap();
+    let config=dir.path().join("mcp-config.json");
+    // Explicit IDs make the mock verify real JSON-RPC sequencing, not an
+    // isolated unit helper. Two resource pages must retain the original order.
+    let script=r#"while IFS= read -r line; do
+case "$line" in
+  *'"id":1'*)
+    echo '{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"catalog","version":"1"},"capabilities":{"resources":{},"prompts":{},"tools":{}}}}' ;;
+  *'"id":2'*)
+    echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}' ;;
+  *'"id":3'*)
+    echo '{"jsonrpc":"2.0","id":3,"result":{"resources":[{"uri":"file:///one","name":"one"}],"nextCursor":"page-2"}}' ;;
+  *'"id":4'*)
+    echo '{"jsonrpc":"2.0","id":4,"result":{"resources":[{"uri":"file:///two","name":"two"}]}}' ;;
+  *'"id":5'*)
+    echo '{"jsonrpc":"2.0","id":5,"result":{"prompts":[{"name":"inspect","arguments":[{"name":"goal","required":true}]}]}}' ;;
+  *'"id":6'*)
+    echo '{"jsonrpc":"2.0","id":6,"result":{"resourceTemplates":[{"uriTemplate":"file:///{path}","name":"files"}]}}' ;;
+  *'"id":7'*)
+    echo '{"jsonrpc":"2.0","id":7,"result":{"contents":[{"uri":"file:///one","mimeType":"image/png","blob":"AQID"}]}}' ;;
+  *'"id":8'*)
+    echo '{"jsonrpc":"2.0","id":8,"result":{"description":"review","messages":[{"role":"user","content":{"type":"text","text":"Analyze deeply"}}]}}' ;;
+  *)
+    echo '{"jsonrpc":"2.0","id":999,"error":{"code":-32601,"message":"unexpected request"}}' ;;
+esac
+done"#;
+    fs::write(&config,json!({"default_provider":"offline","providers":[{
+        "id":"offline","kind":"openai-compatible","model":"unused",
+        "base_url":"http://127.0.0.1:9/v1"
+    }],"mcp_servers":[{"id":"catalog","command":"sh","args":["-c",script]}]})
+        .to_string()).unwrap();
+    let mut process=binary().args(["--workspace",dir.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=process.stdin.take().unwrap();
+        for value in [
+            json!({"type":"control_request","request_id":"resources",
+                "request":{"subtype":"mcp_resources"}}),
+            json!({"type":"control_request","request_id":"prompts",
+                "request":{"subtype":"mcp_prompts"}}),
+            json!({"type":"control","request_id":"templates",
+                "action":"mcp_resource_templates"}),
+            json!({"type":"control","request_id":"read","action":"mcp_read_resource",
+                "server":"catalog","uri":"file:///one"}),
+            json!({"type":"control_request","request_id":"prompt",
+                "request":{"subtype":"mcp_get_prompt","server":"catalog","name":"inspect",
+                    "arguments":{"goal":"reliability"}}}),
+            json!({"type":"control_request","request_id":"invalid",
+                "request":{"subtype":"mcp_get_prompt","server":"catalog","name":"inspect",
+                    "arguments":{"goal":3}}})
+        ]{writeln!(input,"{value}").unwrap()}
+    }
+    let out=process.wait_with_output().unwrap();
+    assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
+    let outputs=String::from_utf8(out.stdout).unwrap();
+    let replies=outputs.lines().filter_map(|s|serde_json::from_str::<Value>(s).ok())
+        .filter(|v|v["type"]=="control_response").collect::<Vec<_>>();
+    let find=|id:&str|replies.iter().find(|v|
+        v["request_id"]==id || v["response"]["request_id"]==id).unwrap();
+    let resources=&find("resources")["response"]["response"]["servers"][0]["items"];
+    assert_eq!(resources.as_array().unwrap().len(),2,"{outputs}");
+    assert_eq!(resources[0]["server"],"catalog");
+    assert_eq!(resources[1]["uri"],"file:///two");
+    let prompts=&find("prompts")["response"];
+    assert!(prompts.to_string().contains("inspect"),"{outputs}");
+    assert!(find("templates").to_string().contains("file:///{path}"),"{outputs}");
+    assert!(find("read").to_string().contains("AQID"),"{outputs}");
+    assert!(find("prompt").to_string().contains("Analyze deeply"),"{outputs}");
+    assert!(!find("invalid").to_string().contains("Analyze deeply"));
+}

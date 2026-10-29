@@ -587,6 +587,23 @@ impl Agent {
     pub fn mcp_statuses(&mut self)->Result<Vec<serde_json::Value>>{
         self.mcp.as_mut().map_or_else(||Ok(Vec::new()),|mcp|mcp.statuses())
     }
+    pub async fn mcp_catalog(&mut self,kind:&str)->Result<serde_json::Value>{
+        match self.mcp.as_mut(){
+            Some(mcp)=>mcp.catalog(kind).await,
+            None=>Ok(json!({"kind":kind,"servers":[]}))
+        }
+    }
+    pub async fn mcp_read_resource(&mut self,server:&str,uri:&str)
+        ->Result<serde_json::Value>{
+        self.mcp.as_mut().context("No MCP servers configured")?
+            .read_resource(server,uri).await
+    }
+    pub async fn mcp_get_prompt(&mut self,server:&str,name:&str,
+        args:&serde_json::Map<String,serde_json::Value>)
+        ->Result<serde_json::Value>{
+        self.mcp.as_mut().context("No MCP servers configured")?
+            .get_prompt(server,name,args).await
+    }
     pub fn background_tasks(&self) -> Result<String> { self.background.list() }
     pub async fn stop_background_task(&self,id:&str)->Result<String>{
         self.background.stop(id).await

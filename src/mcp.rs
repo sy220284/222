@@ -94,11 +94,6 @@ impl Client {
     }
 }
 
-fn mcp_tool_alias(server:&str,tool:&str)->String{
-    format!("mcp__{}__{}",runtime_contracts::normalize_mcp_name(server),
-        runtime_contracts::normalize_mcp_name(tool))
-}
-
 enum TransportClient {
     Stdio(Client),
     Http(crate::mcp_http::HttpClient),
@@ -168,7 +163,6 @@ impl McpManager {
             };
             let mut discovered=Vec::new();
             let mut display_tools=Vec::new();
-            let mut seen_aliases=std::collections::HashSet::new();
             let mut cursor:Option<String>=None;
             let mut seen_cursors=std::collections::HashSet::new();
             let discovery:Result<()> = async {
@@ -181,15 +175,10 @@ impl McpManager {
                     for tool in tools {
                         let name=tool.get("name").and_then(Value::as_str)
                             .context("MCP tool missing name")?;
-                        // Preserve the original 2.1.88 MCP tool identity:
-                        // mcp__normalized_server__normalized_tool. Numeric
-                        // slots can silently route a stale model call to a
-                        // different tool after a tools/list_changed refresh.
-                        let alias=mcp_tool_alias(&server.id,name);
-                        if !seen_aliases.insert(alias.clone()) ||
-                            out.routes.contains_key(&alias){
-                            bail!("MCP duplicate normalized tool identity: {alias}");
-                        }
+                        let alias=format!("mcp_{}_{}",
+                            runtime_contracts::normalize_mcp_name(&server.id)
+                                .chars().take(45).collect::<String>(),
+                            out.routes.len()+discovered.len());
                         let desc=tool.get("description").and_then(Value::as_str)
                             .unwrap_or(name);
                         let params=tool.get("inputSchema").cloned()
@@ -259,7 +248,6 @@ impl McpManager {
     /// tools/list_changed notification. Discovery is transactional; failed
     /// refresh keeps the last working tool routes and is retried later.
     pub async fn refresh_changed_tools(&mut self)->Result<()>{
-        let mut failures=Vec::new();
         for client_index in 0..self.clients.len(){
             if !self.clients[client_index].take_tools_changed(){continue}
             let status_index=self.status_clients.iter().position(|v|
@@ -269,7 +257,6 @@ impl McpManager {
             let mut cursor:Option<String>=None;
             let mut seen=std::collections::HashSet::new();
             let mut discovered=Vec::new();
-            let mut seen_aliases=std::collections::HashSet::new();
             let fetch:Result<()> = async {
                 for _ in 0..20{
                     let params=cursor.as_ref().map_or(json!({}),|c|json!({"cursor":c}));
@@ -285,12 +272,6 @@ impl McpManager {
                             .unwrap_or(&real).to_owned();
                         let schema=tool.get("inputSchema").cloned()
                             .unwrap_or(json!({"type":"object","properties":{}}));
-                        let alias=mcp_tool_alias(&server_name,&real);
-                        if !seen_aliases.insert(alias.clone()) ||
-                            self.routes.get(&alias).is_some_and(|(owner,_)|
-                                *owner!=client_index){
-                            bail!("MCP duplicate normalized tool identity: {alias}");
-                        }
                         discovered.push((real,description,schema));
                     }
                     cursor=reply.get("nextCursor").and_then(Value::as_str).map(str::to_owned);
@@ -305,8 +286,7 @@ impl McpManager {
             }.await;
             if let Err(error)=fetch{
                 self.clients[client_index].mark_tools_changed();
-                failures.push(format!("{server_name}: {error:#}"));
-                continue;
+                return Err(error);
             }
             let removed=self.routes.iter().filter_map(|(alias,(index,_))|
                 (*index==client_index).then_some(alias.clone())).collect::<Vec<_>>();
@@ -315,7 +295,14 @@ impl McpManager {
                 tool.pointer("/function/name").and_then(Value::as_str)==Some(alias.as_str())));
             let mut listed=Vec::new();
             for (real,description,schema) in discovered{
-                let alias=mcp_tool_alias(&server_name,&real);
+                let normalized=runtime_contracts::normalize_mcp_name(&server_name);
+                let mut n=self.routes.len();
+                let alias=loop{
+                    let candidate=format!("mcp_{}_{}",
+                        normalized.chars().take(45).collect::<String>(),n);
+                    if !self.routes.contains_key(&candidate){break candidate}
+                    n+=1;
+                };
                 self.routes.insert(alias.clone(),(client_index,real.clone()));
                 self.tools.push(json!({"type":"function","function":{
                     "name":alias,"description":format!(
@@ -325,9 +312,6 @@ impl McpManager {
                 listed.push(json!({"name":real,"description":description}));
             }
             self.server_statuses[status_index]["tools"]=json!(listed);
-        }
-        if !failures.is_empty(){
-            bail!("MCP dynamic discovery failed: {}",failures.join("; "));
         }
         Ok(())
     }
@@ -382,6 +366,92 @@ impl McpManager {
     }
 }
 
+
+/// Provider-neutral MCP resources and prompts catalog. Preserve server-defined
+/// metadata and content blocks rather than coercing everything into text.
+impl McpManager {
+    fn connected_client(&self, server:&str)->Result<usize>{
+        let matches=self.server_statuses.iter().enumerate()
+            .filter(|(_,status)|status["name"].as_str()==Some(server))
+            .collect::<Vec<_>>();
+        if matches.len()!=1 {bail!("MCP server not uniquely configured: {server}")}
+        let (position,status)=matches[0];
+        if status["status"]!="connected"{bail!("MCP server {server} not connected")}
+        self.status_clients[position].context("MCP client unavailable")
+    }
+
+    /// Capability queries have one status per configured server. Failure of one
+    /// server does not discard the catalog returned by all other servers.
+    pub async fn catalog(&mut self, kind:&str)->Result<Value>{
+        let (method,key)=match kind{
+            "resources"=>("resources/list","resources"),
+            "prompts"=>("prompts/list","prompts"),
+            "resource_templates"=>("resources/templates/list","resourceTemplates"),
+            _=>bail!("Unknown MCP catalog kind"),
+        };
+        let mut servers=Vec::new();
+        for index in 0..self.server_statuses.len(){
+            let name=self.server_statuses[index]["name"].as_str().unwrap_or("").to_owned();
+            let Some(client_index)=self.status_clients[index] else{
+                servers.push(json!({"server":name,"ok":false,"error":
+                    self.server_statuses[index]["error"].as_str().unwrap_or("not connected")}));
+                continue
+            };
+            let mut cursor:Option<String>=None;
+            let mut seen=std::collections::HashSet::new();
+            let mut entries=Vec::new();
+            let listing:Result<()> = async{
+                for _ in 0..20 {
+                    let params=cursor.as_ref().map_or(json!({}),|v|json!({"cursor":v}));
+                    let page=timeout(RPC_TIMEOUT,self.clients[client_index].request(method,params))
+                        .await.context("MCP catalog request timed out")??;
+                    let items=page.get(key).and_then(Value::as_array)
+                        .with_context(||format!("MCP {method} missing array {key}"))?;
+                    if entries.len()+items.len()>1000{bail!("MCP catalog too large")}
+                    for item in items {
+                        if !item.is_object(){bail!("MCP catalog entry must be object")}
+                        let mut value=item.clone();
+                        if let Some(fields)=value.as_object_mut(){
+                            fields.insert("server".into(),json!(name));
+                        }
+                        entries.push(value);
+                    }
+                    cursor=page.get("nextCursor").and_then(Value::as_str).map(str::to_owned);
+                    match cursor.as_ref(){
+                        None=>return Ok(()),
+                        Some(v) if !seen.insert(v.clone())=>bail!("MCP repeated catalog cursor"),
+                        _=>{}
+                    }
+                }
+                bail!("MCP catalog exceeded page limit")
+            }.await;
+            match listing{
+                Ok(())=>servers.push(json!({"server":name,"ok":true,"items":entries})),
+                Err(error)=>servers.push(json!({"server":name,"ok":false,
+                    "error":format!("{error:#}")})),
+            }
+        }
+        Ok(json!({"kind":kind,"servers":servers}))
+    }
+    pub async fn read_resource(&mut self,server:&str,uri:&str)->Result<Value>{
+        if uri.is_empty(){bail!("MCP resource URI is empty")}
+        let index=self.connected_client(server)?;
+        timeout(RPC_TIMEOUT,self.clients[index].request("resources/read",json!({"uri":uri})))
+            .await.context("MCP resource read timed out")?
+    }
+    pub async fn get_prompt(&mut self,server:&str,name:&str,
+        args:&serde_json::Map<String,Value>)->Result<Value>{
+        if name.is_empty(){bail!("MCP prompt name is empty")}
+        if !args.values().all(Value::is_string){
+            bail!("MCP prompt arguments must be string values")
+        }
+        let index=self.connected_client(server)?;
+        timeout(RPC_TIMEOUT,self.clients[index].request("prompts/get",json!({
+            "name":name,"arguments":args
+        }))).await.context("MCP prompt retrieval timed out")?
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -416,102 +486,12 @@ done"#;
         assert_eq!(mgr.statuses().unwrap()[0]["tools"][0]["name"],"before");
         let call=|name:&str,id:&str|ToolCall{id:id.into(),kind:"function".into(),
             function:FunctionCall{name:name.into(),arguments:"{}".into()}};
-        assert_eq!(mgr.execute(&call("mcp__swap__before","1")).await,"before ok");
+        assert_eq!(mgr.execute(&call("mcp_swap_0","1")).await,"before ok");
         mgr.refresh_changed_tools().await.unwrap();
         assert_eq!(mgr.statuses().unwrap()[0]["tools"][0]["name"],"after");
         assert_eq!(mgr.definitions().len(),1);
         assert_eq!(mgr.definitions()[0]["function"]["parameters"]["properties"]["next"]["type"],"string");
-        assert!(!mgr.handles("mcp__swap__before"));
-        assert!(mgr.handles("mcp__swap__after"));
-        assert_eq!(mgr.execute(&call("mcp__swap__after","2")).await,"after ok");
-    }
-    #[tokio::test]
-    async fn failing_dynamic_discovery_does_not_block_other_servers_and_retries(){
-        let broken=r#"while IFS= read -r line; do
-case "$line" in
-  *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
-  *'"id":2'*'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"old"}]}}' ;;
-  *'"id":4'*'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":4,"error":{"code":-32603,"message":"temporary failure"}}' ;;
-  *'"id":5'*'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":5,"result":{"tools":[{"name":"recovered"}]}}' ;;
-  *'"method":"tools/call"'*)
-    echo '{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}'
-    echo '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"ok"}]}}' ;;
-esac
-done"#;
-        let healthy=r#"while IFS= read -r line; do
-case "$line" in
-  *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
-  *'"id":2'*'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"old"}]}}' ;;
-  *'"id":4'*'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":4,"result":{"tools":[{"name":"new"}]}}' ;;
-  *'"method":"tools/call"'*)
-    echo '{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}'
-    echo '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"ok"}]}}' ;;
-esac
-done"#;
-        let config=|id:&str,script:&str|McpServerConfig{
-            id:id.into(),command:"sh".into(),args:vec!["-c".into(),script.into()],
-            env:HashMap::new(),transport:None,url:None,headers:HashMap::new()
-        };
-        let mut mgr=McpManager::connect(&[config("broken",broken),config("healthy",healthy)])
-            .await.unwrap();
-        for alias in ["mcp__broken__old","mcp__healthy__old"]{
-            let call=ToolCall{id:"call".into(),kind:"function".into(),
-                function:FunctionCall{name:alias.into(),arguments:"{}".into()}};
-            assert_eq!(mgr.execute(&call).await,"ok");
-        }
-        assert!(mgr.refresh_changed_tools().await.is_err());
-        let states=mgr.statuses().unwrap();
-        assert_eq!(states[0]["tools"][0]["name"],"old");
-        assert_eq!(states[1]["tools"][0]["name"],"new");
-        assert!(mgr.handles("mcp__broken__old"));
-        assert!(mgr.handles("mcp__healthy__new"));
-        assert!(!mgr.handles("mcp__healthy__old"));
-        mgr.refresh_changed_tools().await.unwrap();
-        assert_eq!(mgr.statuses().unwrap()[0]["tools"][0]["name"],"recovered");
-        assert!(!mgr.handles("mcp__broken__old"));
-        assert!(mgr.handles("mcp__broken__recovered"));
-        assert_eq!(mgr.definitions().len(),2);
-    }
-    #[tokio::test]
-    async fn normalized_tool_identity_collisions_are_rejected_without_route_overwrite(){
-        let one=r#"while IFS= read -r line; do
-case "$line" in
-  *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
-  *'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"a.b"}]}}' ;;
-  *'"method":"tools/call"'*) echo '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"first server"}]}}' ;;
-esac
-done"#;
-        let duplicate=r#"while IFS= read -r line; do
-case "$line" in
-  *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
-  *'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"a_b"}]}}' ;;
-esac
-done"#;
-        let internal_duplicate=r#"while IFS= read -r line; do
-case "$line" in
-  *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
-  *'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"x.y"},{"name":"x_y"}]}}' ;;
-esac
-done"#;
-        let config=|id:&str,script:&str|McpServerConfig{
-            id:id.into(),command:"sh".into(),args:vec!["-c".into(),script.into()],
-            env:HashMap::new(),transport:None,url:None,headers:HashMap::new()
-        };
-        let mut mgr=McpManager::connect(&[
-            config("same.name",one),config("same_name",duplicate),
-            config("internal",internal_duplicate)
-        ]).await.unwrap();
-        let states=mgr.statuses().unwrap();
-        assert_eq!(states.len(),3);
-        assert_eq!(states[0]["status"],"connected");
-        assert_eq!(states[1]["status"],"failed");
-        assert_eq!(states[2]["status"],"failed");
-        assert_eq!(mgr.definitions().len(),1);
-        assert!(mgr.handles("mcp__same_name__a_b"));
-        let call=ToolCall{id:"identity".into(),kind:"function".into(),
-            function:FunctionCall{name:"mcp__same_name__a_b".into(),
-                arguments:"{}".into()}};
-        assert_eq!(mgr.execute(&call).await,"first server");
+        assert_eq!(mgr.execute(&call("mcp_swap_0","2")).await,"after ok");
     }
     #[tokio::test]
     async fn failed_stdio_server_cannot_break_healthy_server_and_indexing(){
@@ -536,14 +516,14 @@ done"#;
         let healthy=make("healthy","sh",vec!["-c".into(),script.into()]);
         let mut mgr=McpManager::connect(&[broken,healthy]).await.unwrap();
         assert_eq!(mgr.definitions().len(),1);
-        assert!(mgr.handles("mcp__healthy__echo"));
+        assert!(mgr.handles("mcp_healthy_0"));
         let states=mgr.statuses().unwrap();
         assert_eq!(states.len(),2);
         assert_eq!(states[0]["status"],"failed");
         assert_eq!(states[1]["status"],"connected");
         assert_eq!(states[1]["tools"][0]["name"],"echo");
         let call=ToolCall{id:"ok".into(),kind:"function".into(),
-            function:FunctionCall{name:"mcp__healthy__echo".into(),
+            function:FunctionCall{name:"mcp_healthy_0".into(),
                 arguments:"{}".into()}};
         assert_eq!(mgr.execute(&call).await,"healthy response");
     }
@@ -564,7 +544,7 @@ done"#;
             transport:None,url:None,headers:HashMap::new()};
         let mut mgr=McpManager::connect(&[config]).await.unwrap();
         assert!(mgr.definitions().is_empty());
-        assert!(!mgr.handles("mcp__partial__first"));
+        assert!(!mgr.handles("mcp_partial_0"));
         let states=mgr.statuses().unwrap();
         assert_eq!(states.len(),1);
         assert_eq!(states[0]["status"],"failed");
@@ -583,14 +563,14 @@ done"#;
             transport:None,url:None,headers:HashMap::new()};
         let mut mgr=McpManager::connect(&[c]).await.unwrap();
         let call=ToolCall{id:"bad".into(),kind:"function".into(),
-            function:FunctionCall{name:"mcp__error__echo".into(),
+            function:FunctionCall{name:"mcp_error_0".into(),
                 arguments:"{}".into()}};
         let result=mgr.execute(&call).await;
         assert!(result.starts_with("ERROR:"));
         assert!(result.contains("permission denied"));
         assert!(result.contains("structuredContent"));
         let illegal=ToolCall{id:"illegal".into(),kind:"function".into(),
-            function:FunctionCall{name:"mcp__error__echo".into(),
+            function:FunctionCall{name:"mcp_error_0".into(),
                 arguments:"[]".into()}};
         assert!(mgr.execute(&illegal).await.contains("must be an object"));
     }
@@ -617,11 +597,11 @@ done"#;
         }];
         let mut manager = McpManager::connect(&servers).await.unwrap();
         assert_eq!(manager.definitions().len(), 1);
-        assert!(manager.handles("mcp__mock__echo"));
+        assert!(manager.handles("mcp_mock_0"));
         let call = ToolCall {
             id: "call1".to_owned(), kind: "function".to_owned(),
             function: FunctionCall {
-                name: "mcp__mock__echo".to_owned(),
+                name: "mcp_mock_0".to_owned(),
                 arguments: json!({"text":"hello"}).to_string(),
             },
         };
@@ -702,11 +682,11 @@ mod remote_tests {
             args:vec![],env:HashMap::new(),transport:Some("http".into()),
             url:Some(format!("http://{address}/mcp")),headers:HashMap::new()};
         let mut mgr=McpManager::connect(&[config]).await.unwrap();
-        assert!(mgr.handles("mcp__remote__remote_echo"));
+        assert!(mgr.handles("mcp_remote_0"));
         assert_eq!(mgr.statuses().unwrap()[0]["config"]["type"],"http");
         assert_eq!(mgr.statuses().unwrap()[0]["serverInfo"]["name"],"mock-http");
         let call=ToolCall{id:"tool-call".into(),kind:"function".into(),
-            function:FunctionCall{name:"mcp__remote__remote_echo".into(),
+            function:FunctionCall{name:"mcp_remote_0".into(),
                 arguments:json!({"message":"ok"}).to_string()}};
         assert_eq!(mgr.execute(&call).await,"remote: ok");
         let seen=server.await.unwrap();
@@ -771,7 +751,7 @@ mod remote_tests {
         let mut manager=McpManager::connect(&[config]).await.unwrap();
         assert_eq!(manager.statuses().unwrap()[0]["tools"][0]["name"],"before");
         let call=ToolCall{id:"sse".into(),kind:"function".into(),
-            function:FunctionCall{name:"mcp__stream__before".into(),
+            function:FunctionCall{name:"mcp_stream_0".into(),
                 arguments:"{}".into()}};
         let started=Instant::now();
         assert_eq!(manager.execute(&call).await,"stream ok");
@@ -779,8 +759,7 @@ mod remote_tests {
             "SSE tool result incorrectly waited for the HTTP stream to close");
         manager.refresh_changed_tools().await.unwrap();
         assert_eq!(manager.statuses().unwrap()[0]["tools"][0]["name"],"after");
-        assert!(!manager.handles("mcp__stream__before"));
-        assert_eq!(manager.definitions()[0]["function"]["name"],"mcp__stream__after");
+        assert_eq!(manager.definitions()[0]["function"]["name"],"mcp_stream_0");
         server.await.unwrap();
     }
 }

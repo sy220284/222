@@ -390,6 +390,17 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     }
                     continue;
                 }
+                if matches!(action,"mcp_resources"|"mcp_prompts"|
+                    "mcp_resource_templates"|"mcp_read_resource"|"mcp_get_prompt") {
+                    let result=mcp_control_request(agent,action,&event).await;
+                    match result{
+                        Ok(value)=>send_control!(json!({"type":"control_response",
+                            "action":action,"ok":true,"result":value})),
+                        Err(error)=>send_control!(json!({"type":"control_response",
+                            "action":action,"ok":false,"error":format!("{error:#}")})),
+                    };
+                    continue;
+                }
                 if action=="mailbox_send" {
                     let parsed=event.get("message").cloned()
                         .ok_or_else(||anyhow::anyhow!("mailbox_send requires message"))
@@ -498,6 +509,10 @@ async fn sdk_nested_control(agent:&mut Agent,config:&Config,event:&Value,
             "mcp_status"=>{
                 Ok(json!({"mcpServers":agent.mcp_statuses()?}))
             },
+            "mcp_resources"|"mcp_prompts"|"mcp_resource_templates"|
+            "mcp_read_resource"|"mcp_get_prompt"=>{
+                mcp_control_request(agent,subtype,&Value::Object(request.clone())).await
+            },
             "cancel_async_message"=>{
                 let uuid=request.get("message_uuid").and_then(Value::as_str)
                     .filter(|id|!id.is_empty())
@@ -540,5 +555,37 @@ async fn sdk_nested_control(agent:&mut Agent,config:&Config,event:&Value,
         Err(error)=>json!({"type":"control_response","response":{
             "subtype":"error","request_id":id,"error":format!("{error:#}")
         }}),
+    }
+}
+
+
+/// Explicit SDK MCP introspection; never invoke arbitrary server methods.
+async fn mcp_control_request(agent:&mut Agent,action:&str,request:&Value)
+    ->Result<Value>{
+    match action {
+        "mcp_resources"=>agent.mcp_catalog("resources").await,
+        "mcp_prompts"=>agent.mcp_catalog("prompts").await,
+        "mcp_resource_templates"=>agent.mcp_catalog("resource_templates").await,
+        "mcp_read_resource"=>{
+            let server=request.get("server").and_then(Value::as_str)
+                .ok_or_else(||anyhow::anyhow!("mcp_read_resource requires server"))?;
+            let uri=request.get("uri").and_then(Value::as_str)
+                .ok_or_else(||anyhow::anyhow!("mcp_read_resource requires uri"))?;
+            agent.mcp_read_resource(server,uri).await
+        }
+        "mcp_get_prompt"=>{
+            let server=request.get("server").and_then(Value::as_str)
+                .ok_or_else(||anyhow::anyhow!("mcp_get_prompt requires server"))?;
+            let name=request.get("name").and_then(Value::as_str)
+                .ok_or_else(||anyhow::anyhow!("mcp_get_prompt requires name"))?;
+            let empty=serde_json::Map::new();
+            let arguments=match request.get("arguments"){
+                None|Some(Value::Null)=>&empty,
+                Some(Value::Object(args))=>args,
+                _=>bail!("mcp_get_prompt arguments must be an object"),
+            };
+            agent.mcp_get_prompt(server,name,arguments).await
+        }
+        _=>bail!("Unknown MCP SDK operation"),
     }
 }
