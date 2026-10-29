@@ -211,14 +211,56 @@ impl Teams {
                     };
                     (payload,request_id,approve)
                 },
+                "plan_approval_request"=>{
+                    if sender=="team-lead" || target!="team-lead" {
+                        bail!("Only a teammate can request plan approval from team-lead")
+                    }
+                    let plan_file=input.get("plan_file_path").or_else(||input.get("planFilePath"))
+                        .and_then(Value::as_str).context("plan_file_path is required")?;
+                    let plan_content=input.get("plan_content").or_else(||input.get("planContent"))
+                        .and_then(Value::as_str).context("plan_content is required")?;
+                    let request_id=input.get("request_id").or_else(||input.get("requestId"))
+                        .and_then(Value::as_str).filter(|id|!id.trim().is_empty())
+                        .map(str::to_owned)
+                        .unwrap_or_else(||format!("plan-{}",uuid::Uuid::new_v4().simple()));
+                    (json!({"type":"plan_approval_request","requestId":request_id,
+                        "from":sender,"timestamp":timestamp,"planFilePath":plan_file,
+                        "planContent":plan_content}),request_id,false)
+                },
                 "plan_approval_response"=>{
                     if sender!="team-lead"{bail!("Only the team lead can approve plans")}
                     let request_id=input.get("request_id").and_then(Value::as_str)
                         .filter(|s|!s.trim().is_empty()).context("request_id is required")?.to_owned();
                     let approve=semantic_bool(input.get("approve").context("approve is required")?)?;
+                    // A leader can only approve a persisted request addressed to
+                    // them by this exact worker. The registry lock serializes
+                    // duplicate replies across concurrent team processes.
+                    let inbox=Mailbox::new(&this.root,team)?;
+                    let issued=inbox.read("team-lead")?.iter().any(|item|{
+                        if item.from!=target {return false}
+                        serde_json::from_str::<Value>(&item.text).ok().is_some_and(|message|
+                            message.get("type").and_then(Value::as_str)==Some("plan_approval_request")
+                            && message.get("requestId").and_then(Value::as_str)==Some(&request_id)
+                            && message.get("from").and_then(Value::as_str)==Some(&target))
+                    });
+                    if !issued {bail!("No matching plan approval request from teammate")}
+                    let answered=inbox.read(&target)?.iter().any(|item|{
+                        if item.from!="team-lead" {return false}
+                        serde_json::from_str::<Value>(&item.text).ok().is_some_and(|message|
+                            message.get("type").and_then(Value::as_str)==Some("plan_approval_response")
+                            && message.get("requestId").and_then(Value::as_str)==Some(&request_id))
+                    });
+                    if answered {bail!("Plan approval request already answered")}
                     let feedback=input.get("feedback").and_then(Value::as_str);
+                    let mode=input.get("permission_mode").and_then(Value::as_str);
+                    if let Some(mode)=mode {
+                        if crate::permission_mode::Mode::parse(mode).is_none(){
+                            bail!("Unknown plan approval permission mode")
+                        }
+                    }
                     (json!({"type":"plan_approval_response","requestId":request_id,
-                        "approved":approve,"feedback":feedback,"timestamp":timestamp}),request_id,false)
+                        "approved":approve,"feedback":feedback,"timestamp":timestamp,
+                        "permissionMode":mode}),request_id,false)
                 },
                 other=>bail!("Unsupported structured message type: {other}")
             };
@@ -230,6 +272,48 @@ impl Teams {
             Ok(json!({"success":true,"request_id":request_id,
                 "target":target,"shutdown_requested":shutdown}))
         })
+    }
+    /// Mirror the original leader inbox poller: approve teammate plans and
+    /// persist a correlated response before the request is acknowledged.
+    /// Re-reading a request after a crash is safe: an existing response is
+    /// recognized and not sent again.
+    pub fn approve_pending_plans(&self,team:&str,leader_mode:&str)->Result<usize>{
+        let mode=if leader_mode=="plan"{"default"}else{leader_mode};
+        if crate::permission_mode::Mode::parse(mode).is_none(){
+            bail!("Unknown leader permission mode")
+        }
+        let inbox=Mailbox::new(&self.root,team)?;
+        let mut approved=0;
+        for item in inbox.unread("team-lead")?{
+            let Ok(payload)=serde_json::from_str::<Value>(&item.text)else{continue};
+            if payload.get("type").and_then(Value::as_str)!=Some("plan_approval_request")
+                || item.from=="team-lead"
+                || payload.get("from").and_then(Value::as_str)!=Some(&item.from){
+                continue
+            }
+            let Some(request_id)=payload.get("requestId").and_then(Value::as_str)
+                .filter(|id|!id.is_empty()) else{continue};
+            let already_answered=||->Result<bool>{
+                Ok(inbox.read(&item.from)?.iter().any(|answer|{
+                    answer.from=="team-lead" &&
+                    serde_json::from_str::<Value>(&answer.text).ok().is_some_and(|v|
+                        v.get("type").and_then(Value::as_str)==Some("plan_approval_response")
+                        && v.get("requestId").and_then(Value::as_str)==Some(request_id))
+                }))
+            };
+            if already_answered()?{continue}
+            let reply=json!({"type":"plan_approval_response",
+                "request_id":request_id,"approve":true,"permission_mode":mode});
+            match self.send_structured(team,&item.from,"team-lead",&reply){
+                Ok(_)=>approved+=1,
+                Err(error)=>{
+                    // A concurrent leader poll may have answered under the
+                    // same registry lock. Do not fail a valid model turn.
+                    if !already_answered()?{return Err(error)}
+                }
+            }
+        }
+        Ok(approved)
     }
     pub fn send(&self,team:&str,recipient:&str,sender:&str,text:&str,summary:&str)->Result<Value>{
         if summary.trim().is_empty(){bail!("summary is required when message is a string")}
@@ -330,7 +414,7 @@ pub fn definitions(leader:bool,team_active:bool)->Vec<Value>{
     if team_active {
         result.push(json!({"type":"function","function":{
             "name":"SendMessage",
-            "description":"Send a teammate a plain message or shutdown/plan approval protocol response. Plain messages require a short summary; broadcast supports only plain messages.",
+            "description":"Send a teammate a plain message, shutdown request/response or correlated plan approval request/response. Plain messages require a short summary; broadcast supports only plain messages.",
             "parameters":{"type":"object","properties":{
                 "to":{"type":"string"},
                 "summary":{"type":"string"},
@@ -345,9 +429,14 @@ pub fn definitions(leader:bool,team_active:bool)->Vec<Value>{
                         "reason":{"type":"string"}
                     },"required":["type","request_id","approve"]},
                     {"type":"object","properties":{
+                        "type":{"const":"plan_approval_request"},
+                        "request_id":{"type":"string"},
+                        "plan_file_path":{"type":"string"},"plan_content":{"type":"string"}
+                    },"required":["type","plan_file_path","plan_content"]},
+                    {"type":"object","properties":{
                         "type":{"const":"plan_approval_response"},
                         "request_id":{"type":"string"},"approve":{"type":"boolean"},
-                        "feedback":{"type":"string"}
+                        "feedback":{"type":"string"},"permission_mode":{"type":"string"}
                     },"required":["type","request_id","approve"]}
                 ]}
             },"required":["to","message"]}
@@ -537,5 +626,66 @@ mod shutdown_handshake_tests {
         let payload:Value=serde_json::from_str(&replies[0].text).unwrap();
         assert_eq!(payload["type"],"shutdown_rejected");
         assert_eq!(payload["reason"],"busy");
+    }
+}
+
+
+#[cfg(test)]
+mod plan_approval_lifecycle_tests {
+    use super::*;
+    #[test]
+    fn persisted_plan_request_approval_replay_and_restart() {
+        let root=tempfile::tempdir().unwrap();
+        let teams=Teams::new(root.path()).unwrap();
+        teams.create("team",None,"leader").unwrap();
+        teams.member("team",Member{name:"worker".into(),id:"worker@team".into(),active:true}).unwrap();
+        let request=teams.send_structured("team","team-lead","worker",
+            &json!({"type":"plan_approval_request","plan_file_path":"/tmp/plan.md",
+                "plan_content":"Review changes"})).unwrap();
+        let id=request["request_id"].as_str().unwrap();
+        let inbox=Mailbox::new(root.path(),"team").unwrap();
+        let pending=inbox.unread("team-lead").unwrap();
+        assert_eq!(pending.len(),1);
+        let raw:Value=serde_json::from_str(&pending[0].text).unwrap();
+        assert_eq!(raw["requestId"],id);
+        assert_eq!(raw["planContent"],"Review changes");
+        assert!(teams.send_structured("team","worker","team-lead",
+            &json!({"type":"plan_approval_response","request_id":"forged",
+                "approve":true})).is_err());
+        assert_eq!(teams.approve_pending_plans("team","plan").unwrap(),1);
+        let replies=inbox.unread("worker").unwrap();
+        assert_eq!(replies.len(),1);
+        let approval:Value=serde_json::from_str(&replies[0].text).unwrap();
+        assert_eq!(approval["requestId"],id);
+        assert_eq!(approval["approved"],true);
+        assert_eq!(approval["permissionMode"],"default");
+        assert_eq!(Teams::new(root.path()).unwrap()
+            .approve_pending_plans("team","plan").unwrap(),0);
+        assert_eq!(inbox.unread("worker").unwrap().len(),1);
+        assert!(teams.send_structured("team","worker","team-lead",
+            &json!({"type":"plan_approval_response","request_id":id,
+                "approve":false})).is_err());
+    }
+    #[test]
+    fn plan_request_cannot_be_spoofed_or_sent_to_another_worker() {
+        let root=tempfile::tempdir().unwrap();
+        let teams=Teams::new(root.path()).unwrap();
+        teams.create("team",None,"leader").unwrap();
+        for name in ["alice","bob"] {
+            teams.member("team",Member{name:name.into(),id:format!("{name}@team"),active:true}).unwrap();
+        }
+        let request=json!({"type":"plan_approval_request",
+            "plan_file_path":"/tmp/plan","plan_content":"Work"});
+        assert!(teams.send_structured("team","bob","alice",&request).is_err());
+        assert!(teams.send_structured("team","team-lead","team-lead",&request).is_err());
+        let sent=teams.send_structured("team","team-lead","alice",&request).unwrap();
+        let id=sent["request_id"].as_str().unwrap();
+        assert!(teams.send_structured("team","bob","team-lead",
+            &json!({"type":"plan_approval_response","request_id":id,
+                "approve":true})).is_err());
+        assert_eq!(teams.approve_pending_plans("team","default").unwrap(),1);
+        let inbox=Mailbox::new(root.path(),"team").unwrap();
+        assert!(inbox.unread("bob").unwrap().is_empty());
+        assert_eq!(inbox.unread("alice").unwrap().len(),1);
     }
 }
