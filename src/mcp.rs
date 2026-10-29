@@ -756,12 +756,12 @@ done"#,marker=marker.display());
             args:vec!["-c".into(),script],env:HashMap::new(),
             transport:None,url:None,headers:HashMap::new()};
         let mut mgr=McpManager::connect(&[config]).await.unwrap();
-        assert!(mgr.definitions().to_string().contains("mcp__restart__before"));
+        assert!(serde_json::to_string(&mgr.definitions()).unwrap().contains("mcp__restart__before"));
         tokio::time::sleep(std::time::Duration::from_millis(35)).await;
         mgr.refresh_changed_tools().await.unwrap();
         let definitions=mgr.definitions();
         assert_eq!(definitions.len(),1);
-        assert!(definitions.to_string().contains("mcp__restart__after"),"{definitions:?}");
+        assert!(serde_json::to_string(&definitions).unwrap().contains("mcp__restart__after"),"{definitions:?}");
         assert!(!mgr.handles("mcp__restart__before"));
         assert!(mgr.handles("mcp__restart__after"));
         assert_eq!(mgr.statuses().unwrap()[0]["status"],"connected");
