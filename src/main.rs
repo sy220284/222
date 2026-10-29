@@ -77,6 +77,7 @@ mod task_guards;
 mod task_output_format;
 mod team_mailbox;
 mod team_registry;
+mod tool_errors;
 mod tool_metrics;
 mod tool_names;
 mod tool_search;
