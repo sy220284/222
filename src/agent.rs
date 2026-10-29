@@ -905,6 +905,7 @@ impl Agent {
                                 Some(&name),
                                 {
                                     let mut input = child.base_hook_input();
+                                    input["permission_mode"] = json!(child.permission_mode.label());
                                     input["stop_hook_active"] = json!(false);
                                     input["agent_id"] = json!(session_id);
                                     input["agent_type"] = json!(name);
@@ -923,6 +924,7 @@ impl Agent {
                                 None,
                                 {
                                     let mut input = child.base_hook_input();
+                                    input["permission_mode"] = json!(child.permission_mode.label());
                                     input["teammate_name"] = json!(name);
                                     input["team_name"] = json!(child.team_name);
                                     input
@@ -1137,6 +1139,7 @@ impl Agent {
                     Some(&agent_type),
                     {
                         let mut input = self.base_hook_input();
+                        input["permission_mode"] = json!(self.permission_mode.label());
                         input["stop_hook_active"] = json!(false);
                         input["agent_id"] = json!(child_id);
                         input["agent_type"] = json!(agent_type);
@@ -2741,6 +2744,7 @@ impl Agent {
                         {
                             let mut input = self.base_hook_input();
                             input["last_assistant_message"] = json!(text);
+                            input["permission_mode"] = json!(self.permission_mode.label());
                             input["stop_hook_active"] = json!(stop_hook_active);
                             input
                         },
