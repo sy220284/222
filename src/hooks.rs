@@ -225,13 +225,10 @@ impl HookRunner {
             if !(1..=600).contains(&rule.timeout_seconds) {
                 bail!("Hook timeout must be between 1 and 600 seconds");
             }
+            // hooks.ts::matchesPattern treats a malformed regex as a
+            // non-match. A broken matcher must not prevent other user hooks
+            // from running or stop the Agent from starting.
             let matcher = HookMatcher::compile(rule.matcher.as_deref());
-            if matches!(matcher, HookMatcher::Invalid) {
-                bail!(
-                    "Invalid hook matcher regex: {}",
-                    rule.matcher.as_deref().unwrap_or_default()
-                );
-            }
             compiled.push((rule.clone(), matcher));
         }
         Ok(Self {
@@ -1102,13 +1099,15 @@ mod tests {
     }
     #[test]
     fn validates_hook_configuration() {
-        assert!(HookRunner::new(&[HookRule {
+        let invalid = HookRunner::new(&[HookRule {
             event: HookEvent::PreToolUse,
             matcher: Some("[".into()),
             command: "true".into(),
             timeout_seconds: 20,
         }])
-        .is_err());
+        .unwrap();
+        assert!(matches!(invalid.rules[0].1, HookMatcher::Invalid));
+        assert!(!invalid.rules[0].1.matches(Some("Bash")));
         assert!(HookRunner::new(&[HookRule {
             event: HookEvent::Stop,
             matcher: None,
