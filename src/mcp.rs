@@ -84,8 +84,40 @@ impl Client {
     }
 }
 
+enum TransportClient {
+    Stdio(Client),
+    Http(crate::mcp_http::HttpClient),
+}
+impl TransportClient {
+    async fn connect(config:&McpServerConfig)->Result<Self>{
+        match config.transport.as_deref().unwrap_or("stdio"){
+            "stdio"=>Ok(Self::Stdio(Client::connect(config).await?)),
+            "http"=>Ok(Self::Http(crate::mcp_http::HttpClient::connect(config).await?)),
+            other=>bail!("Unsupported MCP transport: {other}"),
+        }
+    }
+    async fn request(&mut self,method:&str,params:Value)->Result<Value>{
+        match self{
+            Self::Stdio(c)=>c.request(method,params).await,
+            Self::Http(c)=>c.request(method,params).await,
+        }
+    }
+    fn server_info(&self)->Option<Value>{
+        match self{
+            Self::Stdio(c)=>c.server_info.clone(),
+            Self::Http(c)=>c.server_info.clone(),
+        }
+    }
+    fn failed_process(&mut self)->Result<Option<String>>{
+        match self {
+            Self::Stdio(c)=>Ok(c._child.try_wait()?.map(|status|
+                format!("MCP process exited: {status}"))),
+            Self::Http(_)=>Ok(None),
+        }
+    }
+}
 pub struct McpManager {
-    clients: Vec<Client>,
+    clients: Vec<TransportClient>,
     tools: Vec<Value>,
     routes: HashMap<String, (usize, String)>,
     server_statuses: Vec<Value>,
@@ -96,7 +128,7 @@ impl McpManager {
         if servers.len() > 16 { bail!("Too many MCP servers") }
         let mut out = Self { clients: Vec::new(), tools: Vec::new(), routes: HashMap::new(), server_statuses: Vec::new() };
         for server in servers {
-            let mut client = Client::connect(server).await?;
+            let mut client = TransportClient::connect(server).await?;
             let index = out.clients.len();
             let mut cursor: Option<String> = None;
             let mut server_tools=Vec::new();
@@ -132,8 +164,11 @@ impl McpManager {
             }
             if cursor.is_some() { bail!("MCP server {} returned too many pages", server.id) }
             out.server_statuses.push(json!({
-                "name":server.id,"status":"connected","serverInfo":client.server_info,
-                "config":{"type":"stdio","command":server.command,"args":server.args},
+                "name":server.id,"status":"connected","serverInfo":client.server_info(),
+                "config": match server.transport.as_deref().unwrap_or("stdio"){
+                    "stdio"=>json!({"type":"stdio","command":server.command,"args":server.args}),
+                    _=>json!({"type":"http","url":server.url}),
+                },
                 "tools":server_tools
             }));
             out.clients.push(client);
@@ -146,9 +181,9 @@ impl McpManager {
     pub fn statuses(&mut self)->Result<Vec<Value>>{
         let mut statuses=self.server_statuses.clone();
         for (status,client) in statuses.iter_mut().zip(self.clients.iter_mut()){
-            if let Some(exit)=client._child.try_wait()? {
+            if let Some(error)=client.failed_process()? {
                 status["status"]=json!("failed");
-                status["error"]=json!(format!("MCP process exited: {exit}"));
+                status["error"]=json!(error);
                 if let Some(fields)=status.as_object_mut(){fields.remove("tools");}
             }
         }
@@ -204,6 +239,7 @@ done"#;
             id: "mock".to_owned(), command: "sh".to_owned(),
             args: vec!["-c".to_owned(), script.to_owned()],
             env: std::collections::HashMap::new(),
+            transport:None,url:None,headers:std::collections::HashMap::new(),
         }];
         let mut manager = McpManager::connect(&servers).await.unwrap();
         assert_eq!(manager.definitions().len(), 1);
@@ -222,9 +258,90 @@ done"#;
         assert_eq!(online[0]["serverInfo"]["name"],"mock");
         assert_eq!(online[0]["tools"][0]["name"],"echo");
         assert!(online[0]["config"].get("env").is_none());
-        manager.clients[0]._child.kill().await.unwrap();
+        if let TransportClient::Stdio(client)=&mut manager.clients[0]{
+            client._child.kill().await.unwrap();
+        }else{panic!("expected stdio client")}
         let offline=manager.statuses().unwrap();
         assert_eq!(offline[0]["status"],"failed");
         assert!(offline[0].get("tools").is_none());
+    }
+}
+
+
+#[cfg(test)]
+mod remote_tests {
+    use super::*;
+    use crate::protocol::FunctionCall;
+    use tokio::{io::{AsyncReadExt,AsyncWriteExt},net::TcpListener};
+
+    async fn take_http(stream:&mut tokio::net::TcpStream)->String{
+        let mut bytes=Vec::new();let mut buf=[0u8;4096];
+        loop {
+            let read=stream.read(&mut buf).await.unwrap();
+            if read==0{break}
+            bytes.extend_from_slice(&buf[..read]);
+            if let Some(pos)=bytes.windows(4).position(|s|s==b"\r\n\r\n"){
+                let head=String::from_utf8_lossy(&bytes[..pos]).to_ascii_lowercase();
+                let length=head.lines().find_map(|line|
+                    line.strip_prefix("content-length:")
+                        .and_then(|v|v.trim().parse::<usize>().ok())).unwrap_or(0);
+                if bytes.len()>=pos+4+length{break}
+            }
+        }
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+    #[tokio::test]
+    async fn generic_http_mcp_negotiates_session_sse_discovery_and_tool_dispatch(){
+        let listener=TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let server=tokio::spawn(async move {
+            let mut requests=Vec::new();
+            for n in 0..4{
+                let (mut conn,_)=listener.accept().await.unwrap();
+                let request=take_http(&mut conn).await;
+                requests.push(request);
+                let (type_name,body)=match n{
+                    0=>("application/json",json!({"jsonrpc":"2.0","id":1,
+                        "result":{"protocolVersion":"2025-03-26",
+                            "serverInfo":{"name":"mock-http","version":"1"},
+                            "capabilities":{"tools":{}}}}).to_string()),
+                    1=>("application/json",String::new()),
+                    2=>("text/event-stream",
+                        "event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":2,\r\n\
+                         data: \"result\":{\"tools\":[{\"name\":\"remote_echo\",\
+                         \"description\":\"remote text\",\
+                         \"inputSchema\":{\"type\":\"object\",\"properties\":{}}}]}}\r\n\r\n"
+                         .to_owned()),
+                    _=>("application/json",json!({"jsonrpc":"2.0","id":3,
+                        "result":{"content":[{"type":"text","text":"remote: ok"}]}})
+                         .to_string())
+                };
+                let reply=format!("HTTP/1.1 {} OK\r\nContent-Type: {type_name}\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n{body}",
+                    if n==1{202}else{200},body.len(),
+                    if n==0{"Mcp-Session-Id: local-123\r\n"}else{""});
+                conn.write_all(reply.as_bytes()).await.unwrap();
+                conn.shutdown().await.unwrap();
+            }
+            requests
+        });
+        let config=McpServerConfig{id:"remote".into(),command:String::new(),
+            args:vec![],env:HashMap::new(),transport:Some("http".into()),
+            url:Some(format!("http://{address}/mcp")),headers:HashMap::new()};
+        let mut mgr=McpManager::connect(&[config]).await.unwrap();
+        assert!(mgr.handles("mcp_remote_0"));
+        assert_eq!(mgr.statuses().unwrap()[0]["config"]["type"],"http");
+        assert_eq!(mgr.statuses().unwrap()[0]["serverInfo"]["name"],"mock-http");
+        let call=ToolCall{id:"tool-call".into(),kind:"function".into(),
+            function:FunctionCall{name:"mcp_remote_0".into(),
+                arguments:json!({"message":"ok"}).to_string()}};
+        assert_eq!(mgr.execute(&call).await,"remote: ok");
+        let seen=server.await.unwrap();
+        assert!(seen[0].to_ascii_lowercase()
+            .contains("accept: application/json, text/event-stream"));
+        assert!(seen[1].to_ascii_lowercase().contains("mcp-session-id: local-123"));
+        assert!(seen[2].to_ascii_lowercase()
+            .contains("mcp-protocol-version: 2025-03-26"));
+        assert!(seen[3].contains("tools/call"));
+        assert!(seen[3].contains("remote_echo"));
     }
 }

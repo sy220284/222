@@ -255,3 +255,7 @@ cargo run -- chat --resume <上次输出的UUID>
 SDK 队列的普通 prompt 会在 workload 与 isMeta 相同时按到达顺序自动合并为一次模型调用。可在排队的 user 消息中增加 `workload` 区分独立任务；`queue_drain` 仍逐条返回消息 ID 的处理结果，但相同批次不会重复计费。Shell、权限审批、斜杠及图像消息不会被冒充普通文字参与合并。
 
 SDK 排队的 `task-notification` 消息现在会在调用模型之前产生单独的 `{"type":"system","subtype":"task_notification"}` 事件，包含任务状态、任务 ID、摘要和可选使用量；无状态进度消息不会被标记为已完成。
+
+### 通用 MCP HTTP 连接
+
+`mcp_servers` 配置项可选使用 `{"id":"remote","type":"http","url":"https://example.net/mcp","headers":{"Authorization":"Bearer ${MCP_TOKEN}"}}`；`type` 未指定时保留原有 stdio 启动方式。HTTP 使用标准 MCP 2025-03-26 的初始化、会话 ID、SSE/JSON 响应解析、工具发现和调用，超时 60 秒，禁止带用户凭据的 URL 及覆盖协议保留 Header；HTTP 配置只返回 URL，不把自定义 Header 作为 SDK 状态回传。尚未实现通用 OAuth、HTTP 会话自动重连和完整 MCP 资源/提示协议。

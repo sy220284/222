@@ -202,3 +202,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 原始 2.1.88 Hook 协议逐行核验（2026-10-29）
 
 已从资料库取回 `claude-code-2.1.88-main.zip`（SHA-256：`23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d`），逐段对照 `src/services/tools/toolExecution.ts` 第 800–861、995–1050、1483–1493、1696–1713 行和 `src/utils/hooks.ts` 第 3418–3424、3460–3467、3509–3517 行。原版阻止执行时不触发执行后 Hook；成功 Hook 标准输入为顶层 `tool_input` 对象和 `tool_response`，失败 Hook 为顶层 `tool_input`、`error`、`is_interrupt`，均含 `tool_use_id`。Rust 已修正此前的额外 `input` 包装和错误事件字段，独立 CLI/HTTP/Hook 子进程集成测试同时核验前置、成功、失败三种真实标准输入结构。另复审 `src/utils/commandLifecycle.ts` 原始全部导出，未发现当前已验收登记与其单监听器行为冲突；其他已验收行仍须持续核查。未实现原版全部 Hook 事件、异步取消和并行工具时序，保持部分实现。
+
+### 2026-10-29：通用 MCP Streamable HTTP（统一任务 #3）
+
+对照 2.1.88 源码 `src/services/mcp/client.ts` 的 HTTP 2025-03-26 连接、请求超时、JSON/SSE 返回、session ID 和 `headersHelper`/`types.ts` 配置，新建 `src/mcp_http.rs` 并在真实 `McpManager::connect`、工具发现/调用、SDK 状态查询中接入 `type=http`。支持 POST JSON-RPC、SSE 分片消息、会话 Header、协议版本、单请求 60s 超时、安全禁止带账号密码的 URL 与覆盖协议控制 Header、拒绝跨站重定向，不在状态 API 泄露 HTTP Header 密钥。新增本地 TCP 模拟 MCP 服务器全握手、tool discovery、SSE、session header 和工具调用测试；验证是否成功以最新 CI 结果为准。原厂 OAuth/身份登录被要求排除，其厂商无关身份验证机制、SSE 旧式传输、WS、重连、资源/提示、列表更新、OAuth 通用流程仍需要逐源码实现，四条原路径一律保留部分实现。不得将 HTTP 部分验收说成 3,349 行原始客户端已等价。

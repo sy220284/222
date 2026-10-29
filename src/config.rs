@@ -19,11 +19,18 @@ pub struct ProviderProfile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
     pub id: String,
+    #[serde(default)]
     pub command: String,
+    #[serde(default, rename="type")]
+    pub transport: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
     #[serde(default)]
     pub args: Vec<String>,
     #[serde(default)]
     pub env: std::collections::HashMap<String,String>,
+    #[serde(default)]
+    pub headers: std::collections::HashMap<String,String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,7 +168,26 @@ impl Config {
                 bail!("Invalid MCP server id: {}", s.id);
             }
             if !server_ids.insert(&s.id) { bail!("Duplicate MCP server id: {}", s.id); }
-            if s.command.trim().is_empty() { bail!("MCP server command cannot be empty"); }
+            match s.transport.as_deref().unwrap_or("stdio") {
+                "stdio" => {
+                    if s.command.trim().is_empty(){bail!("MCP stdio server command cannot be empty")}
+                    if s.url.is_some() || !s.headers.is_empty(){
+                        bail!("MCP stdio server cannot define HTTP url/headers");
+                    }
+                },
+                "http" => {
+                    if !s.command.is_empty()||!s.args.is_empty()||!s.env.is_empty(){
+                        bail!("MCP HTTP server cannot define stdio command, args or env");
+                    }
+                    let url=s.url.as_deref().context("MCP HTTP server requires url")?;
+                    let parsed=reqwest::Url::parse(url)?;
+                    if !matches!(parsed.scheme(),"http"|"https") ||
+                        !parsed.username().is_empty() || parsed.password().is_some(){
+                        bail!("MCP HTTP server requires http(s) URL without credentials");
+                    }
+                },
+                _=>bail!("Unsupported MCP transport; use stdio or http"),
+            }
         }
         if let Some(search) = &self.search_backend {
             if !matches!(search.kind.as_str(),"searxng"|"brave"){
@@ -219,6 +245,26 @@ mod tests {
         parsed.validate().unwrap();
         let invalid=format!(" {}{}",'\u{feff}',raw);
         assert!(serde_json::from_str::<Config>(crate::json_read::strip_bom(&invalid)).is_err());
+    }
+    #[test]
+    fn validates_mcp_transport_variants_and_secret_avoidance() {
+        let mut config=Config::default();
+        config.mcp_servers.push(McpServerConfig {
+            id:"remote".into(),transport:Some("http".into()),
+            command:String::new(),args:Vec::new(),
+            env:std::collections::HashMap::new(),
+            url:Some("http://127.0.0.1:9876/mcp".into()),
+            headers:std::collections::HashMap::new(),
+        });
+        assert!(config.validate().is_ok());
+        config.mcp_servers[0].command="echo".into();
+        assert!(config.validate().is_err());
+        config.mcp_servers[0].command.clear();
+        config.mcp_servers[0].url=Some("http://user:secret@example.com/mcp".into());
+        assert!(config.validate().is_err());
+        config.mcp_servers[0].url=Some("http://127.0.0.1:9876/mcp".into());
+        config.mcp_servers[0].transport=Some("unknown".into());
+        assert!(config.validate().is_err());
     }
     #[test]
     fn profiles_have_unique_names() {

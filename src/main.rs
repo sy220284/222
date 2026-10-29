@@ -15,6 +15,7 @@ mod slash_command;
 mod hooks;
 mod worktree;
 mod mcp;
+mod mcp_http;
 mod config;
 mod protocol;
 mod provider;
