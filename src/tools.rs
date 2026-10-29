@@ -119,7 +119,7 @@ fn preserve_curly_quotes(requested: &str, actual: &str, replacement: &str) -> St
     let double = actual.contains('“') || actual.contains('”');
     let single = actual.contains('‘') || actual.contains('’');
     let chars: Vec<char> = replacement.chars().collect();
-    chars.iter().enumerate().map(|(i, ch)| match ch {
+    chars.iter().enumerate().map(|(i, ch)| match *ch {
         '"' if double => if opening_quote_context(&chars, i) { '“' } else { '”' },
         '\'' if single => {
             if i > 0 && i + 1 < chars.len()
@@ -127,7 +127,7 @@ fn preserve_curly_quotes(requested: &str, actual: &str, replacement: &str) -> St
                 '’'
             } else if opening_quote_context(&chars, i) { '‘' } else { '’' }
         }
-        other => *other,
+        other => other,
     }).collect()
 }
 
