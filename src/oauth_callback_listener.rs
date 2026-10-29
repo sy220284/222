@@ -76,7 +76,13 @@ impl AuthCodeListener {
             let request = match read_headers(&mut stream).await {
                 Ok(request) => request,
                 Err(HeaderReadError::TooLarge) => {
-                    let _ = send_response(&mut stream, 431, "Request Header Fields Too Large", None).await;
+                    let _ = send_response(
+                        &mut stream,
+                        431,
+                        "Request Header Fields Too Large",
+                        None,
+                    )
+                    .await;
                     continue;
                 }
                 Err(HeaderReadError::Timeout) => {
