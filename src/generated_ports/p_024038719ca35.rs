@@ -113,7 +113,7 @@ pub fn render_source_view(props: &Value) -> VNode {
         ));
     }
     if leader_highlighted {
-        leadereader.h(text(" · shift + ↑/↓ to select", json!({"dimColor":true})));
+        leader.push(text(" · shift + ↑/↓ to select", json!({"dimColor":true})));
     }
     if leader_selected && !leader_foregrounded {
         leader.push(text(" · enter to view", json!({"dimColor":true})));
@@ -122,7 +122,7 @@ pub fn render_source_view(props: &Value) -> VNode {
     let viewer = props["viewingAgentTaskId"].as_str();
     for (index, teammate) in teammates.iter().enumerate() {
         let id = teammate["id"].as_str().unwrap_or_default();
-        childreneader.h(element(
+        children.push(element(
             "TeammateSpinnerLine",
             json!({
                 "key":id,
@@ -158,9 +158,9 @@ pub fn render_source_view(props: &Value) -> VNode {
         ];
         let mut row = row;
         if is_hide_selected {
-            roweader.h(text(" · enter to collapse", json!({"dimColor":true})));
+            row.push(text(" · enter to collapse", json!({"dimColor":true})));
         }
-        childreneader.h(element("Box", json!({"paddingLeft":3}), row));
+        children.push(element("Box", json!({"paddingLeft":3}), row));
     }
     element(
         "Box",
@@ -201,7 +201,7 @@ mod tests {
             panic!("tree root missing")
         };
         assert_eq!(attrs.get("flexDirection"), Some(&json!("column")));
-        assert_eq!(childrenelen(), 4);
+        assert_eq!(children.len(), 4);
         assert!(children[0]
             .text_content()
             .contains("team-lead: thinking… · 1,200 tokens"));
