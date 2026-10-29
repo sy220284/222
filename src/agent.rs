@@ -1318,10 +1318,10 @@ impl Agent {
         {
             bail!("Could not generate a name: model requested a tool");
         }
-        let raw = completion
-            .message
-            .content
-            .context("Could not generate a name: no content")?;
+        let raw = completion.message.visible_text();
+        if raw.trim().is_empty() {
+            bail!("Could not generate a name: no content")
+        }
         let parsed: serde_json::Value =
             serde_json::from_str(&raw).context("Could not generate a name: invalid model JSON")?;
         let name = parsed
@@ -1684,23 +1684,10 @@ impl Agent {
         if let Some(usage) = response.usage {
             self.record_usage(usage);
         }
-        if !response.message.tool_calls.unwrap_or_default().is_empty() {
+        if response.message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
             bail!("Compaction model unexpectedly requested tools");
         }
-        let summary = response
-            .message
-            .content
-            .filter(|value| !value.trim().is_empty())
-            .or_else(|| {
-                response.message.content_blocks.as_ref().map(|blocks| {
-                    blocks.iter().filter_map(|block| {
-                        if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
-                            block.get("text").and_then(serde_json::Value::as_str)
-                        } else { None }
-                    }).collect::<Vec<_>>().join("\n")
-                })
-            })
-            .context("Compaction returned no text")?;
+        let summary = response.message.visible_text();
         if summary.trim().is_empty() {
             bail!("Compaction returned empty text")
         }
@@ -2052,7 +2039,7 @@ impl Agent {
                 self.record_usage(usage);
             }
             let calls = response.message.tool_calls.clone().unwrap_or_default();
-            let text = response.message.content.clone().unwrap_or_default();
+            let text = response.message.visible_text();
             let finish = response.finish_reason.clone();
             self.emit(json!({
                 "type":"assistant","message":response.message,
