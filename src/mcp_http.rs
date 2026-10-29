@@ -217,6 +217,15 @@ impl HttpClient {
         if reply.status() == reqwest::StatusCode::UNAUTHORIZED {
             bail!("MCP authentication expired; reconnect required");
         }
+        // RFC 6750: a 403 insufficient_scope requires renewed user
+        // authorization. Refreshing the same credential cannot add scope.
+        if reply.status() == reqwest::StatusCode::FORBIDDEN
+            && reply.headers().get("www-authenticate")
+                .and_then(|header| header.to_str().ok())
+                .is_some_and(|header| header.contains("insufficient_scope"))
+        {
+            bail!("MCP authorization needs additional scope; user reauthorization required");
+        }
         if !reply.status().is_success() {
             bail!("MCP {} server responded {}", self.name, reply.status())
         }
