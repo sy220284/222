@@ -94,16 +94,39 @@ fn bounded_reader<R: Read + Send + 'static>(
     rx
 }
 
-fn read_result(rx: Option<mpsc::Receiver<std::io::Result<Vec<u8>>>>) -> anyhow::Result<Vec<u8>> {
-    use anyhow::Context;
+fn read_result(
+    rx: Option<mpsc::Receiver<std::io::Result<Vec<u8>>>>,
+    started: Instant,
+    timeout: Duration,
+    abort: Option<&Arc<AtomicBool>>,
+) -> anyhow::Result<Vec<u8>> {
+    use anyhow::{bail, Context};
     let Some(rx) = rx else {
         return Ok(Vec::new());
     };
-    // Grandchildren can inherit pipes even when the shell has exited.
-    // Never let a synchronous caller block forever waiting on such a pipe.
-    rx.recv_timeout(Duration::from_millis(250))
-        .context("Process output pipe stayed open after the shell exited")?
-        .map_err(Into::into)
+    // A descendant may keep stdout/stderr open after its parent exits.
+    // Continue waiting while the caller's original timeout permits it;
+    // a fixed post-exit deadline discards valid, slow pipe output.
+    loop {
+        if abort.is_some_and(|a| a.load(Ordering::Acquire)) {
+            bail!("Process aborted while draining output");
+        }
+        let remaining = timeout.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            // Accept a result that arrived exactly as the deadline elapsed.
+            return rx
+                .try_recv()
+                .context("Process output timed out")?
+                .map_err(Into::into);
+        }
+        match rx.recv_timeout(remaining.min(Duration::from_millis(30))) {
+            Ok(result) => return result.map_err(Into::into),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                bail!("Process output reader disconnected before completion");
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+        }
+    }
 }
 
 /// Shell semantics are intentional: the input is a complete user-authorized
@@ -200,8 +223,8 @@ pub fn run_shell(command: &str, options: SyncOptions) -> anyhow::Result<SyncOutp
         }
         std::thread::sleep(Duration::from_millis(5));
     };
-    let stdout = read_result(out)?;
-    let stderr = read_result(err)?;
+    let stdout = read_result(out, started, options.timeout, options.abort.as_ref())?;
+    let stderr = read_result(err, started, options.timeout, options.abort.as_ref())?;
     Ok(SyncOutput {
         code: result.code().unwrap_or(1),
         stdout,
@@ -334,6 +357,60 @@ mod tests {
         )
         .is_err());
     }
+    #[cfg(unix)]
+    #[test]
+    fn output_from_inherited_pipe_after_shell_exit_respects_global_deadline() {
+        // A child may exit while a descendant legitimately holds stdout open.
+        // The original wrapper awaits the pipe; a fixed 250 ms cutoff loses it.
+        let output = run_shell(
+            "sh -c 'sleep 0.38; printf delayed' &",
+            SyncOptions {
+                timeout: Duration::from_secs(2),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(output.code, 0);
+        assert_eq!(output.stdout, b"delayed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inherited_pipe_still_honors_global_timeout() {
+        let started = Instant::now();
+        let error = run_shell(
+            "sh -c 'sleep 0.35' &",
+            SyncOptions {
+                timeout: Duration::from_millis(80),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("timed out"));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inherited_pipe_wait_can_be_cancelled_after_parent_exit() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let signal = flag.clone();
+        let cancel = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(75));
+            signal.store(true, Ordering::Release);
+        });
+        let result = run_shell(
+            "sh -c 'sleep 0.35' &",
+            SyncOptions {
+                abort: Some(flag),
+                timeout: Duration::from_secs(1),
+                ..Default::default()
+            },
+        );
+        cancel.join().unwrap();
+        assert!(result.unwrap_err().to_string().contains("aborted"));
+    }
+
     #[cfg(unix)]
     #[test]
     fn stdio_options_and_empty_stdout_are_honored() {
