@@ -2023,9 +2023,13 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 let attachment_base = std::env::var("ATLAS_BRIDGE_ATTACHMENT_BASE_URL").ok();
                 let attachment_token = std::env::var("ATLAS_BRIDGE_ATTACHMENT_TOKEN").ok();
                 let resolved_content = bridge_inbound_attachments::resolve_and_prepend(
-                    &event, prompt_value, agent.workspace_root(), &agent.session_id(),
+                    &event,
+                    prompt_value,
+                    agent.workspace_root(),
+                    &agent.session_id(),
                     attachment_base.as_deref().zip(attachment_token.as_deref()),
-                ).await;
+                )
+                .await;
                 let prompt_value = &resolved_content;
                 if event.get("queued").and_then(Value::as_bool) == Some(true) {
                     let mut command: message_queue::Command = match serde_json::from_value(json!({
@@ -2220,12 +2224,17 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 }
                 let result = match action {
                     "clear" => agent.clear_history().await,
-                    "compact" => agent.compact_history_custom(
-                        event.get("instructions")
-                            .or_else(|| event.get("customInstructions"))
-                            .and_then(Value::as_str)
-                            .unwrap_or(""),
-                    ).await,
+                    "compact" => {
+                        agent
+                            .compact_history_custom(
+                                event
+                                    .get("instructions")
+                                    .or_else(|| event.get("customInstructions"))
+                                    .and_then(Value::as_str)
+                                    .unwrap_or(""),
+                            )
+                            .await
+                    }
                     "model" => {
                         let provider = event.get("provider").and_then(Value::as_str);
                         let model = event.get("model").and_then(Value::as_str);
