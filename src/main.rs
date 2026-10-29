@@ -2435,6 +2435,13 @@ async fn sdk_nested_control(
                     "available_output_styles":["default"],"models":models,
                     "account":{},"pid":std::process::id()}))
             }
+            "mcp_reconnect" => {
+                let server = request.get("serverName").and_then(Value::as_str)
+                    .filter(|name| !name.is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("mcp_reconnect requires serverName"))?;
+                agent.reconnect_named_mcp(server).await?;
+                Ok(json!({}))
+            }
             "mcp_status" => Ok(json!({"mcpServers":agent.mcp_statuses()?})),
             "get_context_usage" => agent.context_usage(),
             "get_settings" => {
