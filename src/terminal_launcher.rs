@@ -381,6 +381,42 @@ fn cmd_quote(arg: &str) -> String {
     format!("\"{escaped}\"")
 }
 
+/// macOS launches via short-lived osascript/open helpers. The original
+/// terminalLauncher.ts waits for their exit status and falls back to
+/// Terminal.app when a preferred emulator cannot be opened.
+#[cfg(target_os = "macos")]
+fn run_macos_plan(plan: &LaunchPlan) -> Result<bool> {
+    let status = Command::new(&plan.executable)
+        .args(&plan.args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .with_context(|| format!("Cannot launch {}", plan.executable.display()))?;
+    Ok(status.success())
+}
+
+#[cfg(target_os = "macos")]
+pub fn launch_in_terminal(executable: &Path, action: &TerminalLaunch) -> Result<()> {
+    let selected = detect_terminal().context("No supported terminal emulator installed")?;
+    let primary = build_terminal_plan(&selected, executable, action)?;
+    if matches!(run_macos_plan(&primary), Ok(true)) {
+        return Ok(());
+    }
+    if selected.name != "Terminal" {
+        let fallback = TerminalInfo {
+            name: "Terminal".into(),
+            command: PathBuf::from("Terminal"),
+        };
+        let plan = build_terminal_plan(&fallback, executable, action)?;
+        if run_macos_plan(&plan)? {
+            return Ok(());
+        }
+    }
+    bail!("Failed to open a supported macOS terminal emulator")
+}
+
+#[cfg(not(target_os = "macos"))]
 pub fn launch_in_terminal(executable: &Path, action: &TerminalLaunch) -> Result<()> {
     let selected = detect_terminal().context("No supported terminal emulator installed")?;
     let plan = build_terminal_plan(&selected, executable, action)?;
