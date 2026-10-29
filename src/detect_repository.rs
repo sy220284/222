@@ -21,7 +21,10 @@ fn repository_cache() -> &'static Mutex<HashMap<PathBuf, Option<ParsedRepository
 }
 
 pub fn clear_repository_caches() {
-    repository_cache().lock().expect("repository cache poisoned").clear();
+    repository_cache()
+        .lock()
+        .expect("repository cache poisoned")
+        .clear();
 }
 
 fn looks_like_real_hostname(host: &str) -> bool {
@@ -126,7 +129,9 @@ pub fn detect_current_repository(root: &Path) -> Option<String> {
 
 pub fn get_cached_repository(root: &Path) -> Option<String> {
     let root = root.canonicalize().ok()?;
-    let cache = repository_cache().lock().expect("repository cache poisoned");
+    let cache = repository_cache()
+        .lock()
+        .expect("repository cache poisoned");
     let repo = cache.get(&root)?.as_ref()?;
     (repo.host == "github.com").then(|| format!("{}/{}", repo.owner, repo.name))
 }
@@ -207,12 +212,23 @@ mod tests {
         assert!(Command::new("git")
             .arg("-C")
             .arg(root.path())
-            .args(["remote", "set-url", "origin", "https://github.com/team/second.git"])
+            .args([
+                "remote",
+                "set-url",
+                "origin",
+                "https://github.com/team/second.git"
+            ])
             .status()
             .unwrap()
             .success());
-        assert_eq!(detect_current_repository(root.path()), Some("team/first".into()));
+        assert_eq!(
+            detect_current_repository(root.path()),
+            Some("team/first".into())
+        );
         clear_repository_caches();
-        assert_eq!(detect_current_repository(root.path()), Some("team/second".into()));
+        assert_eq!(
+            detect_current_repository(root.path()),
+            Some("team/second".into())
+        );
     }
 }

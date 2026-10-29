@@ -5935,7 +5935,10 @@ fn doctor_reads_real_git_remote_but_never_displays_embedded_credentials() {
         .unwrap();
     assert!(result.status.success());
     let out = String::from_utf8_lossy(&result.stdout);
-    assert!(out.contains("Repository: github.com/acme/real-project"), "{out}");
+    assert!(
+        out.contains("Repository: github.com/acme/real-project"),
+        "{out}"
+    );
     assert!(!out.contains("DOCTOR_SECRET"));
     assert!(!out.contains("internal-user"));
 }
