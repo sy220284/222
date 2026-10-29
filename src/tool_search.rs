@@ -84,7 +84,7 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
             _ => bail!("max_results must be an integer between 1 and 100"),
         },
     };
-    let catalog: Vec<(&str, &str)> = tools
+    let catalog: Vec<(&str, &str, &str)> = tools
         .iter()
         .filter_map(|item| {
             let function = item.get("function")?;
@@ -94,15 +94,19 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
                     .get("description")
                     .and_then(Value::as_str)
                     .unwrap_or(""),
+                item.get("searchHint")
+                    .or_else(|| function.get("searchHint"))
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
             ))
         })
-        .filter(|(name, _)| *name != "ToolSearch")
+        .filter(|(name, _, _)| *name != "ToolSearch")
         .collect();
     // Current provider-neutral protocol exposes active tools, including MCP,
     // directly. Report deferred MCP count without misrepresenting unavailable tools.
     let deferred_count = catalog
         .iter()
-        .filter(|(name, _)| name.starts_with("mcp__"))
+        .filter(|(name, _, _)| name.starts_with("mcp__"))
         .count();
     let matches: Vec<String>;
     if query
@@ -115,9 +119,9 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            if let Some((name, _)) = catalog
+            if let Some((name, _, _)) = catalog
                 .iter()
-                .find(|(name, _)| name.eq_ignore_ascii_case(requested))
+                .find(|(name, _, _)| name.eq_ignore_ascii_case(requested))
             {
                 if !found.iter().any(|existing: &String| existing == name) {
                     found.push((*name).to_owned());
@@ -125,25 +129,25 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
             }
         }
         matches = found;
-    } else if let Some((name, _)) = catalog
+    } else if let Some((name, _, _)) = catalog
         .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(query))
+        .find(|(name, _, _)| name.eq_ignore_ascii_case(query))
     {
         matches = vec![(*name).to_owned()];
     } else if query.starts_with("mcp__")
-        && catalog.iter().any(|(name, _)| {
+        && catalog.iter().any(|(name, _, _)| {
             name.to_ascii_lowercase()
                 .starts_with(&query.to_ascii_lowercase())
         })
     {
         matches = catalog
             .iter()
-            .filter(|(name, _)| {
+            .filter(|(name, _, _)| {
                 name.to_ascii_lowercase()
                     .starts_with(&query.to_ascii_lowercase())
             })
             .take(max)
-            .map(|(name, _)| (*name).to_owned())
+            .map(|(name, _, _)| (*name).to_owned())
             .collect();
     } else {
         let words: Vec<String> = query
@@ -164,9 +168,11 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
             .map(|w| Regex::new(&format!(r"\b{}\b", regex::escape(w))))
             .collect::<std::result::Result<_, _>>()?;
         let mut scored = Vec::new();
-        for (name, description) in &catalog {
+        for (name, description, hint) in &catalog {
             let components = parts(name);
+            let full_name = components.join(" ");
             let desc = description.to_ascii_lowercase();
+            let hint = hint.to_ascii_lowercase();
             let mcp = name.starts_with("mcp__");
             let mut score = 0i32;
             let mut required_match = true;
@@ -174,7 +180,8 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
                 let exact = components.iter().any(|p| p == term);
                 let partial = components.iter().any(|p| p.contains(term));
                 let in_description = pattern.is_match(&desc);
-                if required.contains(term) && !partial && !in_description {
+                let in_hint = pattern.is_match(&hint);
+                if required.contains(term) && !partial && !in_description && !in_hint {
                     required_match = false;
                     break;
                 }
@@ -182,6 +189,14 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
                     score += if mcp { 12 } else { 10 };
                 } else if partial {
                     score += if mcp { 6 } else { 5 };
+                }
+                // Source ToolSearchTool.ts:277-290: full-name fallback and
+                // curated search hints rank ahead of generic descriptions.
+                if full_name.contains(term) && score == 0 {
+                    score += 3;
+                }
+                if in_hint {
+                    score += 4;
                 }
                 if in_description {
                     score += 2;
@@ -192,7 +207,7 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
             }
         }
         scored.sort_by(|a, b| b.1.cmp(&a.1));
-        matches = scored.into_iter().take(max).map(|(name, _)| name).collect();
+        matches = scored.into_iter().take(max).map(|(name, _, _)| name).collect();
     }
     let schemas: Vec<Value> = tools
         .iter()
