@@ -825,7 +825,7 @@
 | `src/hooks/useVoiceIntegration.tsx` | 677 | 99464 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/Ansi.tsx` | 292 | 33264 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/bidi.ts` | 140 | 4290 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/clearTerminal.ts` | 75 | 1901 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/clearTerminal.ts` | 75 | 1901 | 重写：终端 UI／交互 | `src/platform_source_utilities.rs / src/main.rs` | 部分实现：Win32 传统终端、Windows Terminal、VS Code ConPTY、Mintty 和类 Unix 清屏与 scrollback ANSI 序列已实现并接通 clear-screen CLI；原版全部调用链待完整移植 |
 | `src/ink/colorize.ts` | 232 | 7647 | 重写：终端 UI／交互 | `src/generated_ports/p_36ccb582d72f4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/components/AlternateScreen.tsx` | 80 | 10377 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/App.tsx` | 658 | 98330 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -1400,7 +1400,7 @@
 | `src/utils/betas.ts` | 435 | 15682 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/billing.ts` | 79 | 2413 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/binaryCheck.ts` | 54 | 1466 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/browser.ts` | 69 | 1867 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/browser.ts` | 69 | 1867 | 重写：保持通用行为 | `src/browser_launcher.rs / src/main.rs` | 部分实现：真实 OS 启动浏览器及文件默认处理器、HTTP/HTTPS URL 校验、BROWSER 环境选择和平台命令已通过 Tokio 子进程接入；原版全部调用链待完整移植 |
 | `src/utils/bufferedWriter.ts` | 101 | 2584 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/bundledMode.ts` | 23 | 618 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/caCerts.ts` | 116 | 4401 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1630,7 +1630,7 @@
 | `src/utils/pasteStore.ts` | 105 | 2950 | 重写：保持通用行为 | `src/prompt_history.rs` | 部分实现：SHA-256 内容寻址、长粘贴持久化/恢复与过期清理；图像缓存及 UI 生命周期仍待验证 |
 | `src/utils/path.ts` | 156 | 5700 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/pdf.ts` | 301 | 8148 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/pdfUtils.ts` | 71 | 2190 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/pdfUtils.ts` | 71 | 2190 | 重写：保持通用行为 | `src/platform_source_utilities.rs / src/main.rs` | 部分实现：按原始 JS parseInt 前缀、页码单值/区间/开区间、文档扩展名大小写、模型 PDF 支持边界实现并接入 inspect-source；原版全部调用链待完整移植 |
 | `src/utils/peerAddress.ts` | 22 | 981 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/permissions/PermissionMode.ts` | 142 | 3489 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/permissions/PermissionPromptToolResultSchema.ts` | 128 | 4108 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
