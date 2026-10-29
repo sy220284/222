@@ -123,6 +123,31 @@ pub fn markdown_body(content: &str) -> &str {
     content
 }
 
+/// Read an explicit top-level YAML boolean from a closed frontmatter header.
+/// Original parseBooleanFrontmatter treats only the boolean/string true as true;
+/// a missing field remains None so each caller can choose its own default.
+pub fn frontmatter_boolean(content: &str, key: &str) -> Option<bool> {
+    let mut lines = content.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return None;
+    }
+    let mut found = None;
+    let mut closed = false;
+    for line in lines {
+        if line.trim() == "---" {
+            closed = true;
+            break;
+        }
+        let Some(value) = line.strip_prefix(key).and_then(|v| v.strip_prefix(':')) else {
+            continue;
+        };
+        let value = value.trim().split(" #").next().unwrap_or("").trim();
+        let value = value.trim_matches(|c| c == '\'' || c == '"');
+        found = Some(value == "true");
+    }
+    if closed { found } else { None }
+}
+
 /// Reads optional arguments frontmatter declaration from SKILL.md.
 /// Supports whitespace-separated string, inline arrays, YAML multiline arrays.
 pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
@@ -182,6 +207,16 @@ pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn frontmatter_flags_respect_top_level_and_defaults() {
+        assert_eq!(frontmatter_boolean("---\ndisable-model-invocation: true\n---\nbody",
+            "disable-model-invocation"), Some(true));
+        assert_eq!(frontmatter_boolean("---\nmetadata:\n  disable-model-invocation: true\n---\nbody",
+            "disable-model-invocation"), None);
+        assert_eq!(frontmatter_boolean("---\nuser-invocable: false\n---\nbody",
+            "user-invocable"), Some(false));
+        assert_eq!(frontmatter_boolean("body", "user-invocable"), None);
+    }
     #[test]
     fn shell_argument_quotes_operators_and_literal_variables() {
         assert_eq!(
