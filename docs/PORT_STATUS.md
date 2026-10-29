@@ -1334,7 +1334,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **Rust 真正调用链**：`Agent::attach_hooks` → `HookRunner::new/with_workspace` → `before_tool_with_context/after_tool_with_context` → `HookRunner::run` → `run_command`。新增 `HookRule.if_condition` 对 JSON 的 `if` 字段反序列化，工具事件按当前 `tool_name/tool_input` 与现有权限规则匹配器过滤，无法证明匹配的条件保持不执行；同命令、同 shell 但不同 `if` 条件独立保留。旧配置缺省 `if` 不受影响，已同步 `src/hooks.rs` 与 `src/agent.rs` 的构造入口。
 - **工作树清理**：`HookRunner::new` 保存启动时有效工作目录；执行时如会话工作树已删除，则在原始目录启动 SessionEnd 等命令 Hook，同时继续提供项目目录环境变量；原始目录也无效时显式报告错误，避免静默忽略。
 - **提交**：`fbef84db81f60c3a19b247f106afd89eedf47c5d`、`aed233d9e259a0abd9f280a27f6a98500768c857`、`cd6d175d37ef8c651ce6a063af83c2947e9081e6`。按 **2 项独立用户业务行为** 记录：①Hook `if` 条件过滤；②删除临时工作树后的清理 Hook 继续执行。已在远端静态复核新增字段、全部现有 HookRule 构造与真实执行入口；按本任务最新流程未运行 Cargo/测试/CI，**源码已提交、待行为验收**。
-- **剩余差异**：原版 `preparePermissionMatcher` 的全部工具专用 AST、复杂 Bash/PowerShell 参数匹配尚需逐函数对照；原版 `Read/Edit/Write` 的 `file_path` 已在条件判断前复制转换成 Rust 权限匹配所需的 `path`，原 Hook 输入保持不变（`dcaf34f5`）；Hook 的插件/技能来源隔离、异步执行、HTTP/prompt/agent 回调、动态注册、完整取消与事件时序仍缺。此轮尚未形成经逐项原版与 Rust 验证的 100 项问题清单，100 项目标未完成；Issue #3 冻结 362 条继续全部开放，完整等价验收新增 0 项。
+- **剩余差异**：原版 `preparePermissionMatcher` 的全部工具专用 AST、复杂 Bash/PowerShell 参数匹配尚需逐函数对照；PowerShell 的 `if` 条件现复用现有独立 PowerShell 权限匹配器（`d233258e`），避免误走 Bash/通用路径；原版 `Read/Edit/Write` 的 `file_path` 已在条件判断前复制转换成 Rust 权限匹配所需的 `path`，原 Hook 输入保持不变（`dcaf34f5`）；Hook 的插件/技能来源隔离、异步执行、HTTP/prompt/agent 回调、动态注册、完整取消与事件时序仍缺。此轮尚未形成经逐项原版与 Rust 验证的 100 项问题清单，100 项目标未完成；Issue #3 冻结 362 条继续全部开放，完整等价验收新增 0 项。
 
 ### 2026-10-29：隔离子代理 Hook 的稳定项目根目录（源码已提交，待验收）
 
