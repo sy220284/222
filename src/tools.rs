@@ -380,16 +380,17 @@ impl ToolExecutor {
         if self.approval == Approval::ReadOnly {
             bail!("Tool {tool} denied in read-only mode");
         }
-        // Plan and don't-ask never auto-authorize mutations. A read-only
-        // permission mode must not be bypassed by an inherited allow rule.
-        if matches!(
-            self.mode,
-            Some(permission_mode::Mode::Plan | permission_mode::Mode::DontAsk)
-        ) {
+        // Plan mode forbids mutations. In don't-ask mode, explicit allow
+        // rules still work: only decisions that would ask are denied.
+        // Original permissions.ts hasPermissionsToUseTool (lines 480-516).
+        if self.mode == Some(permission_mode::Mode::Plan) {
             bail!("Tool {tool} denied by permission mode");
         }
         if matched == Some(permission_rules::Behavior::Allow) {
             return Ok(());
+        }
+        if self.mode == Some(permission_mode::Mode::DontAsk) {
+            bail!("Tool {tool} denied by permission mode");
         }
         if self.mode == Some(permission_mode::Mode::AcceptEdits)
             && matched != Some(permission_rules::Behavior::Ask)
@@ -1658,6 +1659,64 @@ mod tests {
             .with_permission_mode(permission_mode::Mode::AcceptEdits);
         let result = readonly.execute(&call).await;
         assert!(result.contains("read-only mode"), "{result}");
+    }
+
+    #[tokio::test]
+    async fn dont_ask_respects_explicit_allow_but_denies_implicit_and_ask() {
+        // Source: permissions.ts::hasPermissionsToUseTool, 480-516.
+        // dontAsk converts only 'ask' to 'deny', not an explicit allow.
+        let root = tempfile::tempdir().unwrap();
+        let call = |path: &str| ToolCall {
+            id: path.to_owned(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "write_file".into(),
+                arguments: json!({"path":path,"content":"permitted"}).to_string(),
+            },
+        };
+        let allow = permission_rules::compile_rules(&[permission_rules::RuleSetting {
+            behavior: "allow".into(),
+            rule: "Write".into(),
+        }])
+        .unwrap();
+        for approval in [Approval::Ask, Approval::Full] {
+            let tool = executor(root.path(), approval)
+                .with_permission_mode(permission_mode::Mode::DontAsk)
+                .with_permission_rules(allow.clone());
+            let path = format!("allowed-{approval:?}.txt");
+            let result = tool.execute(&call(&path)).await;
+            assert!(!result.starts_with("ERROR:"), "{result}");
+            assert_eq!(fs::read_to_string(root.path().join(&path)).unwrap(), "permitted");
+        }
+        let unruled = executor(root.path(), Approval::Full)
+            .with_permission_mode(permission_mode::Mode::DontAsk);
+        let result = unruled.execute(&call("implicit.txt")).await;
+        assert!(result.contains("denied by permission mode"), "{result}");
+        assert!(!root.path().join("implicit.txt").exists());
+
+        let ask = permission_rules::compile_rules(&[permission_rules::RuleSetting {
+            behavior: "ask".into(),
+            rule: "Write".into(),
+        }])
+        .unwrap();
+        let needs_ask = executor(root.path(), Approval::Full)
+            .with_permission_mode(permission_mode::Mode::DontAsk)
+            .with_permission_rules(ask);
+        let result = needs_ask.execute(&call("ask.txt")).await;
+        assert!(result.contains("denied by permission mode"), "{result}");
+        assert!(!root.path().join("ask.txt").exists());
+
+        let deny = permission_rules::compile_rules(&[permission_rules::RuleSetting {
+            behavior: "deny".into(),
+            rule: "Write".into(),
+        }])
+        .unwrap();
+        let denied = executor(root.path(), Approval::Full)
+            .with_permission_mode(permission_mode::Mode::DontAsk)
+            .with_permission_rules(deny);
+        let result = denied.execute(&call("denied.txt")).await;
+        assert!(result.contains("denied by explicit permission rule"), "{result}");
+        assert!(!root.path().join("denied.txt").exists());
     }
 
     #[tokio::test]
