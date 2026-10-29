@@ -43,7 +43,9 @@ fn exclusive_lock(root: &Path) -> Result<File> {
     // Marketplace registration is a user-visible filesystem mutation.
     // Reject redirected storage before opening the lock or reading the
     // registry, so a malicious workspace link cannot reach host files.
-    for path in [&home, &home.join("marketplaces.lock"), &home.join("marketplaces.json")] {
+    let lock_path = home.join("marketplaces.lock");
+    let registry_path = home.join("marketplaces.json");
+    for path in [&home, &lock_path, &registry_path] {
         match fs::symlink_metadata(path) {
             Ok(meta) if meta.file_type().is_symlink() => {
                 bail!("Marketplace storage cannot be a symbolic link: {}", path.display())
@@ -64,7 +66,7 @@ fn exclusive_lock(root: &Path) -> Result<File> {
         .truncate(false)
         .read(true)
         .write(true)
-        .open(home.join("marketplaces.lock"))?;
+        .open(&lock_path)?;
     lock.lock_exclusive()?;
     Ok(lock)
 }
