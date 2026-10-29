@@ -1,3 +1,11 @@
+## 2026-10-29：SDK 与交互命令目录读取真实技能说明（已提交、待验收）
+
+- **原版逐函数依据**：完整原始 ZIP 的 `source/src/cli/print.ts:4453–4460` 中 SDK initialize 按用户可调用命令输出 `description` 和 `argumentHint`；`source/src/skills/loadSkillsDir.ts:208–258,316–324`、`source/src/utils/plugins/loadPluginCommands.ts:230–263,288–313` 从 Markdown frontmatter 和正文提取描述及参数提示。
+- **已接通 Rust 业务入口**：`src/main.rs::sdk_nested_control(initialize)` → `plugins::command_descriptors` → 插件清单实际命令/嵌套技能文件 → `skill_arguments::command_metadata`；本地技能经过 `Agent::list_user_skills` 用户可调用与 Read 过滤后读取真实 `SKILL.md`。交互 `/commands` 与 `/skills` 同步使用真实说明及参数提示，不再统一展示空参数或笼统标签。隐藏的用户不可调用技能仍不出现在 SDK/交互目录。
+- **本轮真实 Rust 提交**：`48e34f9629034ce4fefbc6459e44919f062c4cf2`、`94f217d70638f1554cb574e8e147cc6a130b8ee1`、`2da7e57576a5299e6b162584797d9b9743c56739`、`ffd105671e61104091c849cf698f98baa6503964`、`629f3193d62ed3e02668ddbfa1ade0fcbc42832c`、`68d854542ccaa476dea4515e259018e6000acbbd`；修改 `src/skill_arguments.rs`、`src/plugins.rs`、`src/main.rs`。按三个可独立访问的用户业务入口保守计 **3/100 项**：SDK 初始化命令说明、交互 /commands、交互 /skills。只计本轮新增可达代码，多个内部修正不重复计数。
+- **静态复查**：逐函数核对原版字段、Rust 调用入口、插件来源解析、用户可调用过滤、权限目录与提交 SHA；未运行 cargo fmt/check/clippy/test、CI 或行为测试，均登记 **源码已提交、待验收**，新增完整等价验收 0。
+- **准确剩余差异**：完整 YAML 锚点/复杂标量及原版描述格式化、插件命令用户配置变量与敏感值处理、插件热刷新、SDK 排队斜杠执行、异步取消、SDK/交互目录跨平台文件变化竞态仍缺。完整 100 项先行逐函数缺口清单未形成，本轮剩余 **97 项**；Issue #3 冻结 362 项不勾选，全量 1,884 非排除路径目标不变。
+
 ## 2026-10-29：SDK 初始化真实插件与技能命令目录（已提交、待验收）
 
 - **原版**：`source/src/cli/print.ts:4453–4460` 的 SDK initialize 返回用户可调用命令的名称、说明及参数提示，隐藏 `userInvocable=false` 项。
