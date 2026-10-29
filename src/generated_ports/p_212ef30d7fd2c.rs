@@ -1,6 +1,5 @@
 //! Rust exports derived from original: src/keybindings/schema.ts
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub fn KEYBINDING_CONTEXTS() -> Value {
     serde_json::from_str(r#"["Global","Chat","Autocomplete","Confirmation","Help","Transcript","HistorySearch","Task","ThemePicker","Settings","Tabs","Attachments","Footer","MessageSelector","DiffDialog","ModelPicker","Select","Plugin"]"#).expect("Valid source constant")

@@ -37,12 +37,12 @@ use serde_json::json;
 pub fn isValidImagePaste(args: &[Value]) -> Value {
     super::runtime::and(
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "type"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "type"),
             &Value::String("image".into()),
         ),
         &super::runtime::gt(
             &super::runtime::property(
-                &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "content"),
+                &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "content"),
                 "length",
             ),
             &json!(0),

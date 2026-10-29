@@ -18,12 +18,10 @@ pub enum EmptyMarketplaceReason {
     all_plugins_installed,
 }
 
-use serde_json::json;
-
 pub fn createPluginId(args: &[Value]) -> Value {
     super::runtime::concat(&[
         Value::String("".into()),
-        args.get(0).cloned().unwrap_or(Value::Null),
+        args.first().cloned().unwrap_or(Value::Null),
         Value::String("@".into()),
         args.get(1).cloned().unwrap_or(Value::Null),
         Value::String("".into()),

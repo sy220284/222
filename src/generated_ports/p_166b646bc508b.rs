@@ -1,6 +1,5 @@
 //! Rust exports derived from original: src/native-ts/yoga-layout/enums.ts
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub fn Align() -> Value {
     serde_json::from_str(r#"{"Auto":0,"FlexStart":1,"Center":2,"FlexEnd":3,"Stretch":4,"Baseline":5,"SpaceBetween":6,"SpaceAround":7,"SpaceEvenly":8}"#).expect("Valid source constant")

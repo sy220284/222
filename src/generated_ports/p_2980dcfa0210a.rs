@@ -5,12 +5,12 @@ use serde_json::{json, Value};
 pub fn toolMatchesName(args: &[Value]) -> Value {
     super::runtime::or(
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "name"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "name"),
             &args.get(1).cloned().unwrap_or(Value::Null),
         ),
         &super::runtime::nullish(
             &super::runtime::call_method(
-                &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "aliases"),
+                &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "aliases"),
                 "includes",
                 &[args.get(1).cloned().unwrap_or(Value::Null)],
             ),
