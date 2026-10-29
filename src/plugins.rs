@@ -1,4 +1,5 @@
-use crate::{config::McpServerConfig, hooks::HookRule};
+use crate::{config::McpServerConfig, hooks::{HookEvent, HookRule}};
+use serde_json::Value;
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 use std::{
@@ -12,10 +13,136 @@ struct Manifest {
     #[serde(default)]
     version: Option<String>,
     #[serde(default)]
-    hooks: Vec<HookRule>,
-    #[serde(default)]
-    mcp_servers: Vec<McpServerConfig>,
+    hooks: Value,
+    #[serde(default, alias = "mcpServers")]
+    mcp_servers: Value,
 }
+
+fn checked_component(root: &Path, path: &Path) -> Result<PathBuf> {
+    let canonical = path.canonicalize()
+        .with_context(|| format!("Cannot read plugin component {}", path.display()))?;
+    if !canonical.starts_with(root) {
+        bail!("Plugin component leaves plugin root: {}", path.display())
+    }
+    Ok(canonical)
+}
+
+/// Original pluginLoader.ts::loadPluginManifest allows a plugin with only
+/// commands, agents or skills, and reads .claude-plugin/plugin.json.
+fn read_manifest(root: &Path, fallback: &str) -> Result<Manifest> {
+    let standard = root.join(".claude-plugin/plugin.json");
+    let legacy = root.join("plugin.json");
+    let path = if standard.exists() { Some(standard) }
+        else if legacy.exists() { Some(legacy) } else { None };
+    let Some(path) = path else {
+        return Ok(Manifest {
+            name: fallback.to_owned(), version: None,
+            hooks: Value::Null, mcp_servers: Value::Null,
+        });
+    };
+    let path = checked_component(root, &path)?;
+    let manifest: Manifest = serde_json::from_slice(&fs::read(&path)?)
+        .with_context(|| format!("Invalid plugin manifest {}", path.display()))?;
+    if !valid_name(&manifest.name) {
+        bail!("Invalid plugin name in manifest")
+    }
+    Ok(manifest)
+}
+
+fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
+    let mut rules = Vec::new();
+    let events = value.as_object().context("Plugin hooks must be an event map")?;
+    for (event_name, matchers) in events {
+        let event: HookEvent = serde_json::from_value(Value::String(event_name.clone()))
+            .with_context(|| format!("Unsupported plugin hook event {event_name}"))?;
+        for matcher in matchers.as_array().context("Plugin hook matchers must be an array")? {
+            let matcher_name = matcher.get("matcher").and_then(Value::as_str).map(str::to_owned);
+            let entries = matcher.get("hooks").and_then(Value::as_array)
+                .context("Plugin hook matcher requires hooks array")?;
+            for hook in entries {
+                if hook.get("type").and_then(Value::as_str) != Some("command") {
+                    bail!("Plugin hook type requires a command handler")
+                }
+                let command = hook.get("command").and_then(Value::as_str)
+                    .context("Plugin command hook requires command")?;
+                let timeout_seconds = match hook.get("timeout") {
+                    Some(v) => v.as_u64().context("Plugin hook timeout must be a nonnegative integer")?,
+                    None => 600,
+                };
+                if hook.get("async").and_then(Value::as_bool) == Some(true) {
+                    bail!("Asynchronous plugin command hooks are not yet supported")
+                }
+                rules.push(HookRule {
+                    event: event.clone(), matcher: matcher_name.clone(),
+                    if_condition: None, plugin_root: Some(root.to_owned()),
+                    command: command.to_owned(), shell: None, timeout_seconds,
+                });
+            }
+        }
+    }
+    Ok(rules)
+}
+
+fn hook_file(root: &Path, path: &Path) -> Result<Vec<HookRule>> {
+    let path = checked_component(root, path)?;
+    let document: Value = serde_json::from_slice(&fs::read(&path)?)
+        .with_context(|| format!("Invalid plugin hooks file {}", path.display()))?;
+    let hooks = document.get("hooks").context("Plugin hooks file requires hooks object")?;
+    source_hooks(root, hooks)
+}
+
+fn manifest_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
+    let mut hooks = Vec::new();
+    let mut loaded = std::collections::HashSet::new();
+    let standard = root.join("hooks/hooks.json");
+    if standard.exists() {
+        let real = checked_component(root, &standard)?;
+        loaded.insert(real.clone());
+        hooks.extend(hook_file(root, &real)?);
+    }
+    let specifications: Vec<&Value> = match value {
+        Value::Null => Vec::new(),
+        Value::Array(items) => items.iter().collect(),
+        other => vec![other],
+    };
+    for spec in specifications {
+        if let Some(relative) = spec.as_str() {
+            let path = checked_component(root, &root.join(relative))?;
+            if !loaded.insert(path.clone()) {
+                continue;
+            }
+            hooks.extend(hook_file(root, &path)?);
+        } else if spec.get("event").is_some() && spec.get("command").is_some() {
+            let mut hook: HookRule = serde_json::from_value(spec.clone())?;
+            hook.plugin_root = Some(root.to_owned());
+            hooks.push(hook);
+        } else if spec.is_object() {
+            hooks.extend(source_hooks(root, spec)?);
+        } else {
+            bail!("Invalid plugin hook specification")
+        }
+    }
+    Ok(hooks)
+}
+
+fn manifest_servers(value: &Value) -> Result<Vec<McpServerConfig>> {
+    match value {
+        Value::Null => Ok(Vec::new()),
+        Value::Array(_) => Ok(serde_json::from_value(value.clone())?),
+        Value::Object(entries) => {
+            let mut servers = Vec::new();
+            for (name, config) in entries {
+                let mut config = config.clone();
+                let object = config.as_object_mut().context("Plugin MCP server must be an object")?;
+                object.insert("id".into(), Value::String(name.clone()));
+                servers.push(serde_json::from_value(config)?);
+            }
+            Ok(servers)
+        }
+        _ => bail!("Plugin MCP servers must be a map or array"),
+    }
+}
+
 pub struct PluginSet {
     pub hooks: Vec<HookRule>,
     pub mcp_servers: Vec<McpServerConfig>,
@@ -55,11 +182,7 @@ impl PluginSet {
                 bail!("Plugin {name} enabled twice")
             }
             let location = directory(root, name)?;
-            let manifest_path = location.join("plugin.json");
-            let manifest: Manifest = serde_json::from_slice(
-                &fs::read(&manifest_path)
-                    .with_context(|| format!("Plugin {name} missing plugin.json"))?,
-            )?;
+            let manifest = read_manifest(&location, name)?;
             if manifest.name != *name {
                 bail!("Plugin name does not match directory: {name}")
             }
@@ -68,11 +191,11 @@ impl PluginSet {
             // Keep the validated canonical plugin directory attached to each
             // hook. Two plugins using the same template command must both
             // execute, and substitution must resolve inside the right plugin.
-            for mut hook in manifest.hooks {
+            for mut hook in manifest_hooks(&location, &manifest.hooks)? {
                 hook.plugin_root = Some(location.clone());
                 set.hooks.push(hook);
             }
-            for mut server in manifest.mcp_servers {
+            for mut server in manifest_servers(&manifest.mcp_servers)? {
                 server.id = format!("{}_{}", name, server.id);
                 if server.id.len() > 64 {
                     bail!("Plugin MCP tool prefix too long")
