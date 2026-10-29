@@ -427,3 +427,14 @@
 **真实调用与验证：** `permission_settings::tests::malformed_source_json_does_not_abort_other_valid_permission_sources` 使用三个来源的真实磁盘设置、实际 `ToolExecutor::execute` 启动 Shell，验证有效来源允许的文件落盘、另一个来源明确拒绝的文件未生成、损坏的项目设置不能被 `add` 覆盖。代码提交 `b89c0f0442af2c6f8d6542d855a0d04217f3e868`，CI 以该提交对应 Actions 最终结果为准。
 
 **验收状态：** 冻结 #19 及其关联源路径仍为部分实现；固定 362 条完整验收仍为 **0/362**。本次不调整全仓动态台账，也不以单项恢复测试勾选冻结条目。
+
+
+### 同一 #19／#16 权限规则来源：单条损坏不丢弃合法规则
+
+**原版证据：** `src/utils/settings/settings.ts::parseSettingsFileUncached`（213–225 行）在 Schema 验证前调用 `src/utils/settings/validation.ts::filterInvalidPermissionRules`，逐条过滤非字符串和非法规则；具体规则依据 `src/utils/settings/permissionValidation.ts::validatePermissionRule`，包括转义括号、空括号、MCP 禁止括号内容、Bash `：*` 位置、文件 Glob、WebFetch 域名和 WebSearch 精确匹配。该过滤保留同一设置文件里的有效规则。
+
+**Rust 真实缺口与修复：** 之前 `SettingsPaths::append_rules` 遇到一个非字符串就中止所有来源加载，非法字符串则未经原版规则校验进入执行器。新增 `permission_rules::valid_stored_rule`，执行加载时逐条过滤并提示错误，继续使用有效的 allow/deny/ask；保留原本对非数组等结构性错误的拒绝以及编辑时的严格检查，不让运行时恢复逻辑覆盖用户配置。
+
+**真实验证：** `permission_rules::tests::persisted_rule_validation_matches_original_settings_filter` 覆盖有效与无效规则格式；`permission_settings::tests::invalid_rules_are_filtered_without_discarding_valid_siblings` 通过真实 JSON 文件、`SettingsPaths::load`、`compile_rules` 和 `ToolExecutor::execute` 实际运行 Shell，验证有效 allow 的文件生成、有效 deny 的文件未生成，其他非法条目不会破坏正常执行。代码提交 `acbf8f00dc832137228813ca4b28454280d3766d`、`2994a1cb62b7e3d076f63b096e75d7160b3b7456`；CI 以最终 HEAD 结果为准。
+
+**仍缺：** 原版 SettingsSchema 全字段校验、特殊自定义规则、来源启用开关、配置变更时的实时缓存失效、MDM/远程托管、审批 UI 和取消／重启完整路径。因此冻结 #16、#19 继续**未验收**，全部 362 项仍为 0 项最终勾选。
