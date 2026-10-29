@@ -1655,15 +1655,89 @@ impl Agent {
         .any(|marker| error.contains(marker))
     }
 
-    fn truncate_compact_rounds(history: &mut Vec<Message>) -> bool {
-        const MARKER: &str = "[earlier conversation truncated for compaction retry]";
-        if history.first().is_some_and(|message| {
-            message.role == "user" && message.content.as_deref() == Some(MARKER)
-        }) {
-            history.remove(0);
+    // Source services/api/errors.ts::parsePromptTooLongTokenCounts.
+    // The reported token gap lets compact.ts remove enough whole API rounds
+    // in one pass; unknown provider formats keep the 20% fallback.
+    fn compact_token_gap(raw: &str) -> Option<usize> {
+        let lower = raw.to_ascii_lowercase();
+        let input = lower
+            .split_once("prompt is too long")
+            .map(|(_, trailing)| trailing)?;
+        let number_start = input.find(|ch: char| ch.is_ascii_digit())?;
+        let number = &input[number_start..];
+        let actual_end = number.find(|ch: char| !ch.is_ascii_digit())?;
+        let actual = number[..actual_end].parse::<usize>().ok()?;
+        let remaining = number[actual_end..].trim_start();
+        let suffix = remaining.strip_prefix("tokens").or_else(|| remaining.strip_prefix("token"))?;
+        let after_delimiter = suffix.trim_start().strip_prefix('>')?.trim_start();
+        let limit_end = after_delimiter
+            .find(|ch: char| !ch.is_ascii_digit())
+            .unwrap_or(after_delimiter.len());
+        let limit = after_delimiter[..limit_end].parse::<usize>().ok()?;
+        actual.checked_sub(limit).filter(|gap| *gap > 0)
+    }
+
+    fn compact_round_token_estimate(messages: &[Message]) -> usize {
+        fn estimate(text: &str) -> usize {
+            // Source tokenEstimation.ts: Math.round(JS UTF-16 length / 4).
+            (text.encode_utf16().count() + 2) / 4
         }
+        fn estimate_block(block: &serde_json::Value) -> usize {
+            if let Some(text) = block.as_str() {
+                return estimate(text);
+            }
+            match block.get("type").and_then(serde_json::Value::as_str) {
+                Some("text" | "input_text" | "output_text") => block
+                    .get("text")
+                    .and_then(serde_json::Value::as_str)
+                    .map(estimate)
+                    .unwrap_or(0),
+                Some("image" | "document") => 2_000,
+                Some("tool_result") => match block.get("content") {
+                    Some(serde_json::Value::String(content)) => estimate(content),
+                    Some(serde_json::Value::Array(contents)) => {
+                        contents.iter().map(estimate_block).sum()
+                    }
+                    _ => 0,
+                },
+                Some("tool_use") => {
+                    let name = block.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
+                    estimate(name)
+                        + block.get("input").map(|v| estimate(&v.to_string())).unwrap_or(0)
+                }
+                Some("thinking") => block.get("thinking")
+                    .and_then(serde_json::Value::as_str)
+                    .map(estimate)
+                    .unwrap_or(0),
+                _ => estimate(&block.to_string()),
+            }
+        }
+        messages.iter().map(|message| {
+            let block_tokens = message.content_blocks.as_ref()
+                .filter(|blocks| !blocks.is_empty())
+                .map(|blocks| blocks.iter().map(estimate_block).sum::<usize>());
+            let text_tokens = block_tokens.unwrap_or_else(|| {
+                message.content.as_deref().map(estimate).unwrap_or(0)
+            });
+            let calls = message.tool_calls.as_ref()
+                .map(|calls| calls.iter().map(|call| {
+                    estimate(&call.function.name) + estimate(&call.function.arguments)
+                }).sum::<usize>())
+                .unwrap_or(0);
+            text_tokens.saturating_add(calls)
+        }).sum()
+    }
+
+    fn truncate_compact_rounds(history: &mut Vec<Message>, token_gap: Option<usize>) -> bool {
+        const MARKER: &str = "[earlier conversation truncated for compaction retry]";
+        // Remove a marker from a previous retry before regrouping, otherwise
+        // repeated fallback rounds may discard only the marker.
+        let previous_marker = history.first().is_some_and(|message| {
+            message.role == "user" && message.content.as_deref() == Some(MARKER)
+        });
+        let original = if previous_marker { &history[1..] } else { &history[..] };
         let mut boundaries = vec![0];
-        for (index, message) in history.iter().enumerate() {
+        for (index, message) in original.iter().enumerate() {
             if message.role == "assistant" && index > 0 {
                 boundaries.push(index);
             }
@@ -1671,15 +1745,30 @@ impl Agent {
         if boundaries.len() < 2 {
             return false;
         }
-        // All messages between adjacent boundaries stay together. The
-        // previous tool result remains attached to its assistant turn.
-        let groups_to_drop = std::cmp::max(1, boundaries.len() / 5);
-        let drop_index = boundaries[std::cmp::min(groups_to_drop, boundaries.len() - 1)];
+        let max_drop = boundaries.len() - 1;
+        let groups_to_drop = if let Some(gap) = token_gap.filter(|gap| *gap > 0) {
+            let mut estimated = 0usize;
+            let mut count = 0;
+            for index in 0..boundaries.len() {
+                let first = boundaries[index];
+                let last = boundaries.get(index + 1).copied().unwrap_or(original.len());
+                estimated = estimated.saturating_add(
+                    Self::compact_round_token_estimate(&original[first..last])
+                );
+                count += 1;
+                if estimated >= gap {
+                    break;
+                }
+            }
+            count.min(max_drop)
+        } else {
+            // Source compact.ts uses floor(20%) of the API-round groups.
+            std::cmp::max(1, boundaries.len() / 5).min(max_drop)
+        };
+        let offset = usize::from(previous_marker);
+        let drop_index = boundaries[groups_to_drop] + offset;
         let mut remaining = history.split_off(drop_index);
-        if remaining
-            .first()
-            .is_some_and(|message| message.role != "user")
-        {
+        if remaining.first().is_some_and(|message| message.role == "assistant") {
             remaining.insert(0, Message::text("user", MARKER));
         }
         *history = remaining;
@@ -1774,7 +1863,7 @@ impl Agent {
                         if let Some(usage) = response.usage {
                             self.record_usage(usage);
                         }
-                        if retries < 3 && Self::truncate_compact_rounds(&mut history) {
+                        if retries < 3 && Self::truncate_compact_rounds(&mut history, Self::compact_token_gap(&visible)) {
                             retries += 1;
                             continue;
                         }
@@ -1784,7 +1873,7 @@ impl Agent {
                     break response;
                 }
                 Err(error) if Self::compact_context_limit(&format!("{error:#}")) => {
-                    if retries < 3 && Self::truncate_compact_rounds(&mut history) {
+                    if retries < 3 && Self::truncate_compact_rounds(&mut history, Self::compact_token_gap(&format!("{error:#}"))) {
                         retries += 1;
                         continue;
                     }
