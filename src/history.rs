@@ -141,16 +141,27 @@ pub fn load(root: &Path, session_id: Option<&str>, id: &str) -> Result<Record> {
     Ok(record)
 }
 pub fn restore(record: &Record, path: &Path) -> Result<String> {
-    let current = fs::read(path).context("History target disappeared since modification")?;
-    if fingerprint(&current) != record.updated_hash {
-        bail!("File changed since checkpoint; refusing to overwrite later edits")
-    }
-    if let Some(expected_mode) = record.updated_mode {
-        if snapshot_mode(path)? != Some(expected_mode) {
-            bail!("File permissions changed since checkpoint; refusing to overwrite later edits")
+    // Original applySnapshot/restoreBackup can restore a tracked file that was
+    // deleted after the snapshot, and recreates missing parent directories.
+    let current = match fs::read(path) {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+    if let Some(current) = &current {
+        if fingerprint(current) != record.updated_hash {
+            bail!("File changed since checkpoint; refusing to overwrite later edits")
+        }
+        if let Some(expected_mode) = record.updated_mode {
+            if snapshot_mode(path)? != Some(expected_mode) {
+                bail!("File permissions changed since checkpoint; refusing to overwrite later edits")
+            }
         }
     }
     if let Some(previous) = &record.previous {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
         fs::write(path, previous)?;
         #[cfg(unix)]
         if let Some(mode) = record.previous_mode {
@@ -159,8 +170,10 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
         }
         Ok(format!("Restored {} to previous version", record.path))
     } else {
-        fs::remove_file(path)?;
-        Ok(format!("Removed newly created {}", record.path))
+        if current.is_some() {
+            fs::remove_file(path)?;
+        }
+        Ok(format!("Removed newly created {} (if present)", record.path))
     }
 }
 pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
