@@ -284,11 +284,17 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
     let mut seen = HashSet::new();
     let mut visited = HashSet::new();
 
-    if let Ok(config) = crate::config::Config::path() {
-        if let Some(home) = config.parent() {
-            let home = home.canonicalize().unwrap_or_else(|_| home.to_path_buf());
-            add_file(&home.join("AGENTS.md"), &home, false, &mut seen, &mut output)?;
-            add_rules(&home.join("rules"), &home, 0, &mut visited, &mut seen, &mut output)?;
+    let config = crate::config::Config::path()?;
+    if let Some(home) = config.parent() {
+        match fs::metadata(home) {
+            Ok(metadata) if metadata.is_dir() => {
+                let home = home.canonicalize()?;
+                add_file(&home.join("AGENTS.md"), &home, false, &mut seen, &mut output)?;
+                add_rules(&home.join("rules"), &home, 0, &mut visited, &mut seen, &mut output)?;
+            }
+            Ok(_) => anyhow::bail!("Configuration home is not a directory: {}", home.display()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
         }
     }
 
