@@ -75,6 +75,7 @@ struct Running {
 }
 
 pub struct BackgroundTasks {
+    workspace: PathBuf,
     directory: PathBuf,
     entries: Mutex<HashMap<String, Arc<Running>>>,
     shell_kind: Mutex<crate::shell_runtime::ShellKind>,
@@ -102,6 +103,7 @@ impl BackgroundTasks {
             bail!("Background task directory escapes workspace");
         }
         Ok(Self {
+            workspace: root.to_path_buf(),
             directory,
             entries: Mutex::new(HashMap::new()),
             shell_kind: Mutex::new(crate::shell_runtime::ShellKind::default()),
@@ -185,11 +187,9 @@ impl BackgroundTasks {
         let mut proc = kind.build_command(command)?;
         proc.envs(self.session_env.lock().unwrap().iter());
         crate::subprocess_env::apply(&mut proc);
-        let workspace = self
-            .directory
-            .parent()
-            .and_then(Path::parent)
-            .context("Background task workspace missing")?;
+        // Output directories are session-scoped; shell execution must still
+        // run in the actual project root, never inside .atlas/background.
+        let workspace = &self.workspace;
         // Place the shell and its descendants into a new process group.
         // Stopping only the shell can otherwise leave children holding pipes.
         #[cfg(unix)]
