@@ -60,6 +60,7 @@ mod skill_arguments;
 mod slash_command;
 mod source_semantics;
 mod source_semantics_osc;
+mod source_semantics_types;
 mod sse;
 mod subprocess_env;
 mod task;
@@ -234,6 +235,7 @@ async fn main() -> Result<()> {
             };
             match source_semantics::inspect(source, name, &args)
                 .or_else(|| source_semantics_osc::inspect(source, name, &args))
+                .or_else(|| source_semantics_types::inspect(source, name, &args))
                 .or_else(|| generated_ports::inspect(source, name, &args))
             {
                 Some(value) => {
@@ -266,6 +268,13 @@ async fn main() -> Result<()> {
                 }
             }
             if let Some(source_exports) = source_semantics_osc::exports(source) {
+                for name in source_exports {
+                    if !exports.contains(name) {
+                        exports.push(*name);
+                    }
+                }
+            }
+            if let Some(source_exports) = source_semantics_types::exports(source) {
                 for name in source_exports {
                     if !exports.contains(name) {
                         exports.push(*name);
