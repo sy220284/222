@@ -1,5 +1,12 @@
 # Issue #3：冻结 362 项源码级等价验收登记表
 
+## 2026-10-29：权限规则来源与持久化主链补齐（仍未验收）
+
+本轮直接读取用户原始 `claude-code-2.1.88-main(1).zip` 中 `src/utils/permissions/permissionsLoader.ts`（1–296 行）、`src/utils/settings/constants.ts`（8–22、159–167 行）、`src/utils/settings/settings.ts`（274–309、416–535 行）、`src/utils/permissions/permissionRuleParser.ts`。新增 `src/permission_settings.rs`，并在 `src/main.rs` 的真实 Agent 初始化入口接入来源规则加载；来源顺序为用户、项目、项目本地、现有配置规则、托管策略，且 `allowManagedPermissionRulesOnly` 启用时只接受托管策略并阻止持久化新增授权。新增加/删规则时保留其他设置字段、兼容旧工具名，跨进程文件锁与原子替换保护并发，拒绝损坏 JSON 覆盖与项目设置符号链接越界。新增多来源优先级、托管策略独占、规则增删、损坏文件、16 线程并发、符号链接、真实 Shell/文件系统副作用测试。厂商绑定目录改为 `.atlas`，托管策略通过 `ATLAS_POLICY_SETTINGS` 指定。
+
+**尚未完成等价**：原版启用来源开关、MDM/注册表/远程托管策略、动态缓存失效、设置 UI 与审批更新、全部 schema 校验及重载时序；`permissionsLoader.ts` 和关联冻结路径继续保持未验收，不勾选、不增加台账已验收数。GitHub CI 结果以对应提交实际运行记录为准。
+
+
 ### 2026-10-29：PowerShell 原版工具名贯通 Agent／权限／前后台进程（仍未验收）
 
 原版对照：`src/tools/PowerShellTool/PowerShellTool.tsx`（工具名 `PowerShell`、`command`、毫秒 `timeout`、`run_in_background`），`src/tools/PowerShellTool/toolName.ts`，`PowerShellTool/powershellPermissions.ts`。此前 Rust 只把默认 shell 设为 PowerShell 时执行通用 `run_command`，但原版 `PowerShell` 工具名没有进入模型工具列表，也没有接入执行器，存在真实调用链缺口。
