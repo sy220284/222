@@ -353,3 +353,8 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 2026-10-29：原始提示历史与粘贴缓存进入交互式会话主链
 
 对照 2.1.88 原版 `src/history.ts` 与 `src/utils/pasteStore.ts`：新增 `src/prompt_history.rs`，提供按项目隔离的全局 JSONL 历史、同一会话优先的 100 条浏览窗口、按显示文本去重的最近历史、已落盘提交撤销过滤、粘贴引用逆序展开、1024 UTF-16 单位内联与 SHA-256 长文本缓存、过期清理、跨进程文件锁。交互式 CLI 现在在调用模型前记录用户输入，并提供 `/history [query]` 真实检索。新增并发追加、错误 JSON、跨会话优先级、跨项目隔离、撤销、长粘贴恢复与占位符防重解析测试；真实 CLI 双进程与模拟模型 HTTP 集成测试验证持久化及会话隔离。尚未移植 React 上下键输入框、Ctrl-R 弹窗、异步 flush 重试与图像缓存，两个原路径只登记为部分实现；不得认定完整等价。原 Issue #3 的 362 冻结清单保持不变。
+
+
+### 2026-10-29：SDK 队列操作持久化与故障边界
+
+沿原始 `src/utils/messageQueueManager.ts` 的 `logOperation` 与 `src/utils/sessionStorage.ts::recordQueueOperation` 调用链，新增 `src/queue_journal.rs`，在真实 SDK 会话对入队、按优先级出队、批量出队、过滤移除、按身份移除和恢复编辑输入写入 JSONL 操作记录。记录包含原版 operation、时间戳、sessionId 及可选纯文本内容；跨进程写入使用文件锁、同步落盘，阻止会话日志路径通过符号链接逃逸。真实 SDK 子进程测试核查操作顺序、内容与会话关联，故障注入测试验证符号链接拒绝且不写入外部路径。原版完整 sessionStorage（5106 行）、React 队列订阅与远程桥接仍未等价，相关原路径不提升为已验收。
