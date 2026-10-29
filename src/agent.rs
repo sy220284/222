@@ -1215,7 +1215,11 @@ impl Agent {
         )?;
         writeln!(report, "Session ID: {}", self.session.id)?;
         writeln!(report, "cwd: {}", self.root.display())?;
-        writeln!(report, "Provider: {} ({})", self.profile.id, self.profile.kind)?;
+        writeln!(
+            report,
+            "Provider: {} ({})",
+            self.profile.id, self.profile.kind
+        )?;
         writeln!(report, "Model: {}", self.profile.model)?;
         writeln!(report, "Permission mode: {}", self.permission_mode.label())?;
         writeln!(report, "Configured workspace directories:")?;
