@@ -1021,7 +1021,7 @@
 | `src/services/claudeAiLimitsHook.ts` | 24 | 515 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/services/compact/apiMicrocompact.ts` | 154 | 4996 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/autoCompact.ts` | 352 | 12905 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/services/compact/compact.ts` | 1706 | 60814 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
+| `src/services/compact/compact.ts` | 1706 | 60814 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现：先持久化压缩摘要再执行 PostCompact，Hook 失败不回滚摘要（1b652b8b）；长期记忆、完整边界标记及恢复时序未等价 |
 | `src/services/compact/compactWarningHook.ts` | 17 | 568 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/compactWarningState.ts` | 19 | 693 | 重写：压缩与记忆 | `src/runtime_contracts.rs / src/agent.rs` | 部分实现：默认 false、压缩抑制、清除与重复赋值不通知已验证；证据 runtime_contracts::tests::compact_warning_state_and_subscriptions；原始 createStore 的同步 Set 订阅、派发时增删监听及跨 Agent/UI 调用时序尚未等价 |
 | `src/services/compact/grouping.ts` | 64 | 2794 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
@@ -1143,7 +1143,7 @@
 | `src/tasks/pillLabel.ts` | 83 | 2898 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/stopTask.ts` | 101 | 2894 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/types.ts` | 47 | 1691 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
-| `src/tools/AgentTool/AgentTool.tsx` | 1398 | 233734 | 重写：工具行为、参数和权限 | `src/agent.rs` / `src/worktree.rs` / `src/permission_rules.rs` | 部分实现：独立子任务、隔离与显式委派权限拒绝/询问；团队常驻、远程和全部权限继承未等价 |
+| `src/tools/AgentTool/AgentTool.tsx` | 1398 | 233734 | 重写：工具行为、参数和权限 | `src/agent.rs` / `src/worktree.rs` / `src/permission_rules.rs` | 部分实现：独立子任务、隔离与显式委派权限拒绝/询问；子代理 Hook 使用子会话上下文、阻断后继续工作（f3b9bac5）；团队常驻、远程和全部权限继承未等价 |
 | `src/tools/AgentTool/UI.tsx` | 872 | 125359 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/agentColorManager.ts` | 67 | 1499 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/agentDisplay.ts` | 105 | 3269 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1748,7 +1748,7 @@
 | `src/utils/sessionFileAccessHooks.ts` | 251 | 8138 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionIngressAuth.ts` | 141 | 4737 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionRestore.ts` | 552 | 20406 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sessionStart.ts` | 233 | 8151 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sessionStart.ts` | 233 | 8151 | 重写：保持通用行为 | `src/agent.rs / src/hooks.rs` | 部分实现：SessionStart 阻断不终止会话，保留上下文和警告（f2d21933）；初始用户消息、watchPaths、插件动态加载及 SDK 全时序仍未迁移 |
 | `src/utils/sessionState.ts` | 151 | 5309 | 重写：保持通用行为 | `src/generated_ports/p_000102e58d700.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/sessionStorage.ts` | 5106 | 180620 | 重写：保持通用行为 | `src/generated_ports/p_d6a11c5239e9b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/sessionStoragePortable.ts` | 794 | 25448 | 重写：保持通用行为 | `src/generated_ports/p_64e1431d70c86.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
