@@ -23,6 +23,7 @@ mod generated_ports;
 mod git_config_parser;
 mod git_filesystem;
 mod git_ignore;
+mod github_repo_mapping;
 mod history;
 mod hooks;
 mod in_memory_mailbox;
@@ -249,6 +250,13 @@ enum Commands {
         pattern: String,
         #[arg(long)]
         add_global: bool,
+    },
+    /// Resolve a link to the most recently used matching local checkout
+    ResolveDeepLink {
+        #[arg(long)]
+        cwd: Option<PathBuf>,
+        #[arg(long)]
+        repo: Option<String>,
     },
     /// Show external-link origin, checkout path and Git fetch freshness
     DeepLinkBanner {
@@ -531,6 +539,19 @@ async fn main() -> Result<()> {
             }
             return Ok(());
         }
+        Commands::ResolveDeepLink { cwd, repo } => {
+            let config = Config::load()?;
+            let resolved = github_repo_mapping::resolve_cwd(
+                &config,
+                cwd.as_deref(),
+                repo.as_deref(),
+            )?;
+            println!("{}", serde_json::to_string_pretty(&json!({
+                "cwd":resolved.cwd,
+                "resolved_repo":resolved.resolved_repo
+            }))?);
+            return Ok(());
+        }
         Commands::DeepLinkBanner {
             cwd,
             repo,
@@ -800,6 +821,9 @@ async fn main() -> Result<()> {
         bail!("--max-steps must be at least 1")
     }
     let root = canonical_workspace(&cli.workspace)?;
+    if github_repo_mapping::update_repo_path_mapping(&mut config, &root)? {
+        config.save()?;
+    }
     let active_permission_rules =
         permission_settings::SettingsPaths::for_workspace(&root)?.load(&config.permission_rules)?;
     let plugins = PluginSet::load(&root, &config.enabled_plugins)?;
