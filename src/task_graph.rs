@@ -88,7 +88,7 @@ impl TaskGraph {
         {
             bail!("Unsafe task lock link")
         }
-        let lock = OpenOptions::new().write(true).create(true).open(path)?;
+        let lock = OpenOptions::new().write(true).create(true).truncate(false).open(path)?;
         lock.lock_exclusive().context("Task list lock failed")?;
         let guard = TaskMutationGuard {
             file: lock,
