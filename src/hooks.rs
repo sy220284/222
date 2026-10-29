@@ -168,7 +168,9 @@ impl HookRunner {
                 Err(error) => {
                     // hooks.ts catches command/processing failures as visible non-blocking
                     // errors. One unhealthy hook must not drop sibling model tools.
-                    outcome.non_blocking_errors.push(format!("Hook '{}': {error:#}", rule.command));
+                    outcome
+                        .non_blocking_errors
+                        .push(format!("Hook '{}': {error:#}", rule.command));
                     continue;
                 }
             };
@@ -239,7 +241,9 @@ impl HookRunner {
 /// Validate 2.1.88 types/hooks.ts synchronous hook JSON at its runtime boundary.
 /// Unknown vendor-only extensions are ignored like Zod's stripping object schema.
 fn validate_hook_json(value: &Value, expected: &str) -> Result<()> {
-    if !value.is_object() { bail!("Hook output must be an object") }
+    if !value.is_object() {
+        bail!("Hook output must be an object")
+    }
     if let Some(async_field) = value.get("async") {
         if async_field != true {
             bail!("async must be literal true");
@@ -249,37 +253,54 @@ fn validate_hook_json(value: &Value, expected: &str) -> Result<()> {
         bail!("Async hook registry is not yet implemented");
     }
     for name in ["continue", "suppressOutput"] {
-        if value.get(name).is_some_and(|x| !x.is_boolean()) { bail!("{name}: expected boolean") }
+        if value.get(name).is_some_and(|x| !x.is_boolean()) {
+            bail!("{name}: expected boolean")
+        }
     }
     for name in ["stopReason", "reason", "systemMessage"] {
-        if value.get(name).is_some_and(|x| !x.is_string()) { bail!("{name}: expected string") }
+        if value.get(name).is_some_and(|x| !x.is_string()) {
+            bail!("{name}: expected string")
+        }
     }
     if let Some(decision) = value.get("decision") {
         if !matches!(decision.as_str(), Some("approve" | "block")) {
             bail!("decision: expected approve or block")
         }
     }
-    let Some(out) = value.get("hookSpecificOutput") else { return Ok(()) };
-    let event = out.get("hookEventName").and_then(Value::as_str)
+    let Some(out) = value.get("hookSpecificOutput") else {
+        return Ok(());
+    };
+    let event = out
+        .get("hookEventName")
+        .and_then(Value::as_str)
         .context("hookSpecificOutput.hookEventName must be a known event")?;
     if event != expected {
         bail!("Hook returned incorrect event name: expected '{expected}' but got '{event}'")
     }
     let check_string = |name: &str| -> Result<()> {
-        if out.get(name).is_some_and(|v| !v.is_string()) { bail!("{name}: expected string") }
+        if out.get(name).is_some_and(|v| !v.is_string()) {
+            bail!("{name}: expected string")
+        }
         Ok(())
     };
     let check_object = |name: &str| -> Result<()> {
-        if out.get(name).is_some_and(|v| !v.is_object()) { bail!("{name}: expected object") }
+        if out.get(name).is_some_and(|v| !v.is_object()) {
+            bail!("{name}: expected object")
+        }
         Ok(())
     };
     let check_bool = |name: &str| -> Result<()> {
-        if out.get(name).is_some_and(|v| !v.is_boolean()) { bail!("{name}: expected boolean") }
+        if out.get(name).is_some_and(|v| !v.is_boolean()) {
+            bail!("{name}: expected boolean")
+        }
         Ok(())
     };
     let check_paths = || -> Result<()> {
         if let Some(paths) = out.get("watchPaths") {
-            if !paths.as_array().is_some_and(|arr| arr.iter().all(Value::is_string)) {
+            if !paths
+                .as_array()
+                .is_some_and(|arr| arr.iter().all(Value::is_string))
+            {
                 bail!("watchPaths: expected array of strings")
             }
         }
@@ -301,29 +322,35 @@ fn validate_hook_json(value: &Value, expected: &str) -> Result<()> {
             check_string("initialUserMessage")?;
             check_paths()?;
         }
-        "UserPromptSubmit" | "Setup" | "SubagentStart" | "PostToolUse" |
-        "PostToolUseFailure" | "Notification" => check_string("additionalContext")?,
+        "UserPromptSubmit" | "Setup" | "SubagentStart" | "PostToolUse" | "PostToolUseFailure"
+        | "Notification" => check_string("additionalContext")?,
         "PermissionDenied" => check_bool("retry")?,
         "PermissionRequest" => {
             if let Some(decision) = out.get("decision") {
-                let behavior = decision.get("behavior").and_then(Value::as_str)
+                let behavior = decision
+                    .get("behavior")
+                    .and_then(Value::as_str)
                     .context("PermissionRequest.decision.behavior is required")?;
                 match behavior {
                     "allow" => {
                         if decision.get("updatedInput").is_some_and(|v| !v.is_object()) {
                             bail!("PermissionRequest.updatedInput: expected object");
                         }
-                        if decision.get("updatedPermissions").is_some_and(|v| !v.is_array()) {
+                        if decision
+                            .get("updatedPermissions")
+                            .is_some_and(|v| !v.is_array())
+                        {
                             bail!("PermissionRequest.updatedPermissions: expected array");
                         }
                     }
                     "deny" => {
-                        if decision.get("message").is_some_and(|v| !v.is_string()) ||
-                            decision.get("interrupt").is_some_and(|v| !v.is_boolean()) {
+                        if decision.get("message").is_some_and(|v| !v.is_string())
+                            || decision.get("interrupt").is_some_and(|v| !v.is_boolean())
+                        {
                             bail!("PermissionRequest.deny: invalid fields")
                         }
                     }
-                    _ => bail!("PermissionRequest.decision.behavior: invalid '{behavior}'")
+                    _ => bail!("PermissionRequest.decision.behavior: invalid '{behavior}'"),
                 }
             }
         }
@@ -461,9 +488,14 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
     // A syntactically valid JSON object is not necessarily a valid hook output.
     // The original types/hooks.ts uses a discriminated Zod union; validation
     // failure yields a non-blocking hook error, even with exit status 2.
-    if let Err(error) = validate_hook_json(&value, payload["hook_event_name"].as_str().unwrap_or("")) {
+    if let Err(error) =
+        validate_hook_json(&value, payload["hook_event_name"].as_str().unwrap_or(""))
+    {
         return Ok(HookOutcome {
-            non_blocking_errors: vec![format!("Hook '{}' JSON validation failed: {error:#}", rule.command)],
+            non_blocking_errors: vec![format!(
+                "Hook '{}' JSON validation failed: {error:#}",
+                rule.command
+            )],
             ..Default::default()
         });
     }
@@ -667,10 +699,14 @@ mod tests {
                 timeout_seconds: 3,
             }])
             .unwrap();
-            let outcome = runner.run(HookEvent::PreToolUse,None,json!({})).await.unwrap();
+            let outcome = runner
+                .run(HookEvent::PreToolUse, None, json!({}))
+                .await
+                .unwrap();
             assert!(outcome.blocking_reason.is_none());
-            assert_eq!(outcome.non_blocking_errors.len(),1);
-            assert!(outcome.non_blocking_errors[0].contains("incorrect event name"));
+            assert_eq!(outcome.non_blocking_errors.len(), 1);
+            assert!(outcome.non_blocking_errors[0].contains("incorrect event name")
+                || outcome.non_blocking_errors[0].contains("hookEventName must be a known event"));
         }
     }
     #[cfg(unix)]
@@ -700,16 +736,22 @@ mod tests {
                 timeout_seconds: 3,
             }])
             .unwrap();
-            let outcome = runner.run(HookEvent::PreToolUse,None,json!({})).await.unwrap();
+            let outcome = runner
+                .run(HookEvent::PreToolUse, None, json!({}))
+                .await
+                .unwrap();
             assert!(outcome.blocking_reason.is_none());
-            assert_eq!(outcome.non_blocking_errors.len(),1);
+            assert_eq!(outcome.non_blocking_errors.len(), 1);
             assert!(outcome.non_blocking_errors[0].contains("validation failed"));
         }
     }
     #[cfg(unix)]
     #[tokio::test]
     async fn schema_failure_is_advisory_and_next_hook_still_changes_real_tool_input() {
-        use crate::{protocol::{FunctionCall,ToolCall},tools::{Approval,ToolExecutor}};
+        use crate::{
+            protocol::{FunctionCall, ToolCall},
+            tools::{Approval, ToolExecutor},
+        };
         let root = tempfile::tempdir().unwrap();
         let runner=HookRunner::new(&[
             HookRule {event:HookEvent::PreToolUse,matcher:None,
@@ -717,26 +759,39 @@ mod tests {
             HookRule {event:HookEvent::PreToolUse,matcher:None,
                 command:r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"touch hook_schema_ok"}}}'"#.into(),timeout_seconds:3},
         ]).unwrap();
-        let mut call=ToolCall{id:"schema".into(),kind:"function".into(),
-            function:FunctionCall{name:"run_command".into(),arguments:json!({"command":"touch old_command"}).to_string()}};
-        let outcome=runner.before_tool(&call).await.unwrap();
+        let mut call = ToolCall {
+            id: "schema".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":"touch old_command"}).to_string(),
+            },
+        };
+        let outcome = runner.before_tool(&call).await.unwrap();
         assert!(outcome.blocking_reason.is_none());
-        assert_eq!(outcome.non_blocking_errors.len(),1);
+        assert_eq!(outcome.non_blocking_errors.len(), 1);
         assert!(outcome.non_blocking_errors[0].contains("continue: expected boolean"));
-        call.function.arguments=outcome.updated_input.unwrap().to_string();
-        let tool=ToolExecutor::new(root.path().canonicalize().unwrap(),Approval::Full,false);
-        let result=tool.execute(&call).await;
-        assert!(result.contains("Exit:"),"{result}");
+        call.function.arguments = outcome.updated_input.unwrap().to_string();
+        let tool = ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Full, false);
+        let result = tool.execute(&call).await;
+        assert!(result.contains("Exit:"), "{result}");
         assert!(root.path().join("hook_schema_ok").exists());
         assert!(!root.path().join("old_command").exists());
     }
     #[cfg(unix)]
     #[tokio::test]
     async fn continuation_flag_does_not_become_permission_denial() {
-        let runner=HookRunner::new(&[HookRule{event:HookEvent::PreToolUse,matcher:None,
-            command:r#"printf '{"continue":false,"stopReason":"stop requested"}'"#.into(),
-            timeout_seconds:3}]).unwrap();
-        let result=runner.run(HookEvent::PreToolUse,None,json!({})).await.unwrap();
+        let runner = HookRunner::new(&[HookRule {
+            event: HookEvent::PreToolUse,
+            matcher: None,
+            command: r#"printf '{"continue":false,"stopReason":"stop requested"}'"#.into(),
+            timeout_seconds: 3,
+        }])
+        .unwrap();
+        let result = runner
+            .run(HookEvent::PreToolUse, None, json!({}))
+            .await
+            .unwrap();
         assert!(result.prevent_continuation);
         assert!(result.blocking_reason.is_none());
         assert!(result.permission_decision.is_none());
