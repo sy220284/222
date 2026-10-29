@@ -114,6 +114,58 @@ fn mcp_check(server: &McpServerConfig) -> Finding {
     }
 }
 
+/// Report specific allow rules that a tool-wide deny/ask rule makes
+/// unreachable. Mirrors shadowedRuleDetection.ts: deny wins over ask and
+/// tool-wide allow rules are not flagged as shadowed.
+fn shadowed_permission_findings(
+    settings: &[crate::permission_rules::RuleSetting],
+) -> Vec<Finding> {
+    use crate::permission_rules::{canonical_tool, compile_rules, Behavior};
+    let rules = match compile_rules(settings) {
+        Ok(rules) => rules,
+        Err(error) => {
+            return vec![Finding::warning(
+                "Permissions",
+                format!("Invalid permission rule configuration: {error}"),
+            )];
+        }
+    };
+    let mut findings = Vec::new();
+    for rule in &rules {
+        if rule.behavior != Behavior::Allow || rule.value.rule_content.is_none() {
+            continue;
+        }
+        let name = canonical_tool(&rule.value.tool_name);
+        let blocker = [Behavior::Deny, Behavior::Ask]
+            .into_iter()
+            .find_map(|behavior| {
+                rules.iter().find(|other| {
+                    other.behavior == behavior
+                        && other.value.rule_content.is_none()
+                        && canonical_tool(&other.value.tool_name) == name
+                })
+            });
+        if let Some(blocker) = blocker {
+            let action = if blocker.behavior == Behavior::Deny {
+                "denied"
+            } else {
+                "always prompts"
+            };
+            findings.push(Finding::warning(
+                "Permissions",
+                format!(
+                    "Specific allow rule {} is unreachable: tool-wide {} rule {} {}. Remove the conflicting rule or the ineffective allow.",
+                    crate::permission_rules::format_rule(&rule.value),
+                    name,
+                    crate::permission_rules::format_rule(&blocker.value),
+                    action,
+                ),
+            ));
+        }
+    }
+    findings
+}
+
 pub fn inspect(root: &Path, config: Option<&Config>) -> Vec<Finding> {
     let mut findings = vec![Finding::passed("Version", env!("CARGO_PKG_VERSION"))];
     match std::env::current_exe() {
@@ -183,6 +235,17 @@ pub fn inspect(root: &Path, config: Option<&Config>) -> Vec<Finding> {
         ));
         for server in &config.mcp_servers {
             findings.push(mcp_check(server));
+        }
+        // Include effective user/project/local/managed settings, not only the
+        // global provider configuration, when explaining ineffective rules.
+        match crate::permission_settings::SettingsPaths::for_workspace(root)
+            .and_then(|paths| paths.load(&config.permission_rules))
+        {
+            Ok(rules) => findings.extend(shadowed_permission_findings(&rules)),
+            Err(error) => findings.push(Finding::warning(
+                "Permissions",
+                format!("Unable to inspect active permission rules: {error:#}"),
+            )),
         }
         if let Some(shell) = &config.default_shell {
             findings.push(Finding::passed(
