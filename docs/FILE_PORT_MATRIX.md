@@ -1385,9 +1385,9 @@
 | `src/utils/bash/prefix.ts` | 205 | 6222 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/registry.ts` | 54 | 1433 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/shellCompletion.ts` | 260 | 7874 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/bash/shellPrefix.ts` | 29 | 1028 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/bash/shellPrefix.ts` | 29 | 1028 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/bash/shellQuote.ts` | 305 | 10824 | 重写：Shell 解析、安全引用与歧义检测 | `src/shell_quote.rs` / `src/skill_arguments.rs` | 部分实现：单双引号、转义、命令分隔符、安全引用；H1 单引号/反斜杠漏洞和控制字符已接入真实 Bash 审批；完整第三方 shell-quote token、glob、其他复杂 Bash 安全校验待核对 |
-| `src/utils/bash/shellQuoting.ts` | 129 | 4718 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/bash/shellQuoting.ts` | 129 | 4718 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/bash/specs/alias.ts` | 15 | 313 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/specs/index.ts` | 19 | 380 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/specs/nohup.ts` | 14 | 274 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1456,7 +1456,7 @@
 | `src/utils/controlMessageCompat.ts` | 33 | 1216 | 重写：保持通用行为 | `src/control_message_compat.rs / src/main.rs` | 部分实现：请求 ID 两种命名兼容、嵌套 response、优先级与 SDK 回复 ID；其余控制协议未全量验证 |
 | `src/utils/conversationRecovery.ts` | 598 | 21077 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cron.ts` | 309 | 9462 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/cronJitterConfig.ts` | 76 | 3414 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/cronJitterConfig.ts` | 76 | 3414 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/cronScheduler.ts` | 566 | 21478 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cronTasks.ts` | 459 | 17301 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cronTasksLock.ts` | 196 | 6259 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1510,7 +1510,7 @@
 | `src/utils/fingerprint.ts` | 77 | 2248 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/forkedAgent.ts` | 690 | 24635 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/format.ts` | 309 | 9375 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/formatBriefTimestamp.ts` | 82 | 2223 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/formatBriefTimestamp.ts` | 82 | 2223 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/fpsTracker.ts` | 48 | 1299 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/frontmatterParser.ts` | 371 | 12404 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/fsOperations.ts` | 771 | 24230 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1561,7 +1561,7 @@
 | `src/utils/hyperlink.ts` | 40 | 1465 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/iTermBackup.ts` | 74 | 1608 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ide.ts` | 1495 | 46585 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/idePathConversion.ts` | 91 | 2602 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/idePathConversion.ts` | 91 | 2602 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/idleTimeout.ts` | 54 | 1574 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/imagePaste.ts` | 417 | 14509 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/imageResizer.ts` | 881 | 26699 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1708,7 +1708,7 @@
 | `src/utils/powershell/staticPrefix.ts` | 317 | 12277 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/preflightChecks.tsx` | 151 | 19309 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/privacyLevel.ts` | 56 | 1886 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/process.ts` | 69 | 2333 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/process.ts` | 69 | 2333 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/processUserInput/processBashCommand.tsx` | 140 | 22279 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/processUserInput/processSlashCommand.tsx` | 922 | 144807 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/processUserInput/processTextPrompt.ts` | 101 | 3272 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1740,7 +1740,7 @@
 | `src/utils/secureStorage/plainTextStorage.ts` | 85 | 2430 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/semanticBoolean.ts` | 30 | 1167 | 重写：严格布尔字符串转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：仅精确 true/false 字符串归一化并接入工具参数；Zod 可选/默认 schema 泛型组合待核对 |
 | `src/utils/semanticNumber.ts` | 37 | 1486 | 重写：严格十进制数字转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：十进制词法、非有限拒绝、IEEE-754 数字精度与负零、工具整数参数及 JSON 数值字面量对齐；Zod 泛型输出与全部调用方待核对 |
-| `src/utils/semver.ts` | 60 | 1713 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/semver.ts` | 60 | 1713 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/sequential.ts` | 57 | 1641 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/sessionActivity.ts` | 134 | 4081 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionEnvVars.ts` | 23 | 590 | 重写：保持通用行为 | `src/agent.rs / src/tools.rs / src/background.rs / src/main.rs` | 部分实现：会话变量增删查、前台/后台 Shell 和子代理继承、真实 CLI 回归；Hooks/MCP/LSP 完整透传未对照 |
@@ -1894,7 +1894,7 @@
 | `src/utils/uuid.ts` | 28 | 888 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/warningHandler.ts` | 122 | 4486 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/which.ts` | 83 | 2392 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
-| `src/utils/windowsPaths.ts` | 174 | 6008 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/windowsPaths.ts` | 174 | 6008 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/withResolvers.ts` | 14 | 444 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/words.ts` | 801 | 10960 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/workloadContext.ts` | 58 | 2337 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
