@@ -22,8 +22,9 @@ pub fn allows(settings: &Value, server: &McpServerConfig) -> Result<bool> {
             .find(|source| source.get("source").and_then(Value::as_str)
                 == Some("policySettings")))
         .and_then(|source| source.get("settings"));
-    let allow_source = if managed_only { managed.unwrap_or(&Value::Null) } else { effective };
-    let Some(allowed) = allow_source.get("allowedMcpServers").filter(|v| !v.is_null()) else {
+    let allow_source = if managed_only { managed } else { Some(effective) };
+    let Some(allowed) = allow_source.and_then(|source| source.get("allowedMcpServers"))
+        .filter(|v| !v.is_null()) else {
         return Ok(true);
     };
     let entries = allowed.as_array().context("allowedMcpServers must be an array")?;
