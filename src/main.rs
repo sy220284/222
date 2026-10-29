@@ -39,8 +39,10 @@ mod multimodal;
 mod ndjson;
 mod notebook;
 mod oauth_callback_listener;
+mod oauth_client;
 mod oauth_crypto;
 mod oauth_profile;
+mod oauth_service;
 mod permission_mode;
 mod permission_rules;
 mod permission_settings;
@@ -189,6 +191,38 @@ enum Commands {
         #[arg(long)]
         port: Option<u16>,
     },
+    /// Run OAuth 2.0 authorization-code flow for any compatible provider
+    OauthLogin {
+        #[arg(long)]
+        authorization_url: String,
+        #[arg(long)]
+        token_url: String,
+        #[arg(long)]
+        client_id: String,
+        #[arg(long = "scope", required = true)]
+        scopes: Vec<String>,
+        #[arg(long)]
+        manual_redirect_url: String,
+        #[arg(long)]
+        credentials_file: PathBuf,
+        #[arg(long)]
+        success_url: Option<String>,
+        #[arg(long)]
+        error_url: Option<String>,
+        #[arg(long)]
+        manual: bool,
+        #[arg(long)]
+        login_hint: Option<String>,
+    },
+    /// Refresh an existing provider OAuth token and atomically save it
+    OauthRefresh {
+        #[arg(long)]
+        token_url: String,
+        #[arg(long)]
+        client_id: String,
+        #[arg(long)]
+        credentials_file: PathBuf,
+    },
     /// Create a user-owned JSON config file with example providers
     Init,
     /// Inspect local installation, settings, Git and MCP availability offline
@@ -321,6 +355,87 @@ async fn main() -> Result<()> {
                     return Err(error);
                 }
             }
+            return Ok(());
+        }
+        Commands::OauthLogin {
+            authorization_url,
+            token_url,
+            client_id,
+            scopes,
+            manual_redirect_url,
+            credentials_file,
+            success_url,
+            error_url,
+            manual,
+            login_hint,
+        } => {
+            let provider = oauth_client::OAuthProvider::new(
+                authorization_url,
+                token_url,
+                client_id,
+                scopes.clone(),
+                manual_redirect_url,
+            )?;
+            let service = oauth_service::OAuthService::new()?;
+            let options = oauth_client::AuthorizationOptions {
+                login_hint: login_hint.clone(),
+                ..Default::default()
+            };
+            if *manual {
+                println!(
+                    "Open the following authorization URL:\n{}",
+                    service.manual_authorization_url(&provider, &options)
+                );
+                println!("Paste the authorization code:");
+                io::stdout().flush()?;
+                let mut code = String::new();
+                io::stdin().read_line(&mut code)?;
+                let tokens = service.finish_manual(&provider, code.trim()).await?;
+                oauth_service::save_oauth_tokens(credentials_file, &tokens)?;
+            } else {
+                let success = success_url
+                    .as_deref()
+                    .unwrap_or("http://localhost/oauth/success");
+                let error = error_url
+                    .as_deref()
+                    .unwrap_or("http://localhost/oauth/error");
+                service
+                    .run_automatic(
+                        &provider,
+                        &options,
+                        success,
+                        error,
+                        credentials_file,
+                        |links| async move {
+                            println!("Open the automatic authorization URL:\n{}", links.automatic);
+                            println!("Manual authorization URL (for other devices):\n{}", links.manual);
+                            io::stdout().flush()?;
+                            Ok(())
+                        },
+                    )
+                    .await?;
+            }
+            println!("OAuth credentials saved: {}", credentials_file.display());
+            return Ok(());
+        }
+        Commands::OauthRefresh {
+            token_url,
+            client_id,
+            credentials_file,
+        } => {
+            let existing = oauth_service::load_oauth_tokens(credentials_file)?;
+            let provider = oauth_client::OAuthProvider::new(
+                token_url,
+                token_url,
+                client_id,
+                existing.scopes.clone(),
+                token_url,
+            )?;
+            let refreshed = provider
+                .refresh_oauth_token(&existing.refresh_token, Some(&existing.scopes))
+                .await?;
+            oauth_service::save_oauth_tokens(credentials_file, &refreshed)?;
+            println!("OAuth credentials refreshed: {}", credentials_file.display());
             return Ok(());
         }
         Commands::OauthPkce => {
