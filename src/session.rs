@@ -35,6 +35,13 @@ pub struct Session {
     pub tag: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forked_from: Option<Uuid>,
+    /// Usage already charged to the parent, excluded from fork stats.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork_baseline_usage: Option<TokenUsage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork_baseline_cost: Option<CostLedger>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fork_baseline_messages: Option<usize>,
 }
 
 impl Session {
@@ -52,6 +59,9 @@ impl Session {
             custom_title: None,
             tag: None,
             forked_from: None,
+            fork_baseline_usage: None,
+            fork_baseline_cost: None,
+            fork_baseline_messages: None,
         }
     }
 
