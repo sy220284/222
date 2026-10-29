@@ -1,6 +1,5 @@
 //! Rust exports derived from original: src/constants/betas.ts
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub fn INTERLEAVED_THINKING_BETA_HEADER() -> Value {
     serde_json::from_str(r#""interleaved-thinking-2025-05-14""#).expect("Valid source constant")

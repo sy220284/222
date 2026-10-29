@@ -7,12 +7,12 @@ pub fn getTokenCountFromUsage(args: &[Value]) -> Value {
         &super::runtime::add(
             &super::runtime::add(
                 &super::runtime::property(
-                    &args.get(0).cloned().unwrap_or(Value::Null),
+                    &args.first().cloned().unwrap_or(Value::Null),
                     "input_tokens",
                 ),
                 &super::runtime::nullish(
                     &super::runtime::property(
-                        &args.get(0).cloned().unwrap_or(Value::Null),
+                        &args.first().cloned().unwrap_or(Value::Null),
                         "cache_creation_input_tokens",
                     ),
                     &json!(0),
@@ -20,14 +20,14 @@ pub fn getTokenCountFromUsage(args: &[Value]) -> Value {
             ),
             &super::runtime::nullish(
                 &super::runtime::property(
-                    &args.get(0).cloned().unwrap_or(Value::Null),
+                    &args.first().cloned().unwrap_or(Value::Null),
                     "cache_read_input_tokens",
                 ),
                 &json!(0),
             ),
         ),
         &super::runtime::property(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             "output_tokens",
         ),
     )

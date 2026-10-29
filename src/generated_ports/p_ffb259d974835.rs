@@ -30,14 +30,12 @@ pub struct IDEDiffChangeInput {
     pub edits: Vec<Value>,
 }
 
-use serde_json::json;
-
 pub fn createSingleEditDiffConfig(args: &[Value]) -> Value {
     {
         let mut map = serde_json::Map::new();
         map.insert(
             "filePath".into(),
-            args.get(0).cloned().unwrap_or(Value::Null),
+            args.first().cloned().unwrap_or(Value::Null),
         );
         map.insert(
             "edits".into(),
