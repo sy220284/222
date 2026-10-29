@@ -1,3 +1,13 @@
+## 2026-10-29：SDK 动态思考预算接入实际 Gemini 模型请求（源码已提交、待验收）
+
+- **原版完整源码**：`source/src/cli/print.ts:2945–2956` 的 `set_max_thinking_tokens` 区分 `null`（恢复默认）、`0`（关闭）和正整数预算；`source/src/utils/sideQuestion.ts:50–84` 要求独立提问继承父会话思考配置。
+- **原 Rust 缺口**：`src/main.rs::sdk_nested_control` 不识别思考预算控制请求，模型请求也未接线。用户设置不会生效。
+- **真实代码**：`src/provider.rs::ModelProvider::set_thinking_budget` 定义明确能力门禁；Gemini 提供商将预算注入普通 `generateContent` 和流式 `streamGenerateContent` 的 `generationConfig.thinkingConfig.thinkingBudget`，并在请求中保留零/正整数语义。其他未提供精确 token 预算接口的 OpenAI-compatible 端点明确返回不支持错误，不假装成功。
+- **运行链**：`src/main.rs::sdk_nested_control(set_max_thinking_tokens)` → `src/agent.rs::set_sdk_thinking_budget` → 当前模型提供商，切换模型时重新应用或明确拒绝不兼容切换；SDK 独立提问 `src/side_question.rs::answer` 接收父会话预算快照。设置失败时保留旧配置。
+- **提交 SHA**：`4d9c1b3ad66d7de3ce96d5a2ceff3eda49796b04`、`98c4defc54bfacd79c398345732c137a15921c1b`、`c556fc2d28c3a91432a0a7c96b594188cd25cde7`、`d027387ff9361db3f8f77983e451c9036d56b674`、`fbfb94849ee01bd8b02c0943979b810c21b3eaf1`、`375744cace69243088528d947357dd494da13f66`。
+- **保守计数**：独立用户业务功能 **1 项**（SDK 会话动态思考预算），SDK 独立提问的继承修复归入同一功能，不重复计数。加上本轮前述 SDK 系统提示词替换/追加 **2 项**，当前合计 **3/100，剩余 97**。
+- **剩余差异**：其他模型接口的 token 精确预算映射、模型特定上限、跨进程 SDK 运行时状态及主查询并发中断仍待实现；本轮未建立先行恰好 100 项逐函数验证清单。未运行 Cargo/测试/CI，所有新增代码均为**已提交、待行为验收**；Issue #3 冻结 362 条继续开放，PR #2 保持 Draft。
+
 ## 2026-10-29：SDK 初始化自定义系统提示词进入真实模型请求（源码已提交、待验收）
 
 - **原版完整源码**：`source/src/cli/print.ts:4369–4375` 的 `handleInitializeRequest` 在 SDK 初始化时接受 `systemPrompt` / `appendSystemPrompt`；`source/src/QueryEngine.ts:310–325` 将自定义提示词替换默认系统指令并将附加提示词追加到请求；`source/src/utils/systemPrompt.ts:115–122` 确认优先级。另按 `source/src/cli/print.ts:2933–2944` 修正 SDK `set_model` 缺省参数恢复默认模型的行为。
