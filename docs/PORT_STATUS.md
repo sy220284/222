@@ -1093,3 +1093,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - `src/plugin_manager.rs` 真实 CLI 支持 `plugin marketplace add/list/remove/update` 及 `plugin install plugin@marketplace` 的本地来源安装；解析后必须验证来源路径仍属于市场根目录，避免符号链接越界。
 - 本地执行 `cargo check --offline --all-targets`、`cargo fmt --all -- --check`、`cargo test --offline --all-targets`：581 项通过，0 失败；包括 14 项市场专项测试和真实 CLI 端到端安装测试。
 - 未完成：远端 Git/HTTP 市场安全下载、信任验签、缓存和更新、完整跨平台路径语义和插件市场外部插件安装。对应原路径保持部分实现，等待跨链验收。
+
+
+### 项目指令 @引用递归加载（2026-10-29，源码已提交、待验收）
+
+- 原版依据：完整 2.1.88 `source/src/utils/claudemd.ts::extractIncludePathsFromTokens/processMemoryFile`（448–537、615–685 行），以及 `source/src/context.ts` 注入入口。原版对 Markdown 文本中的 `@path` 进行引用扩展，过滤代码块/HTML 注释，最多 5 层并防止循环；非文本文件跳过，未授权外部项目引用不能直接注入。
+- Rust 实际执行链：`src/conversation_context.rs::project_instructions` → `add_file_inner/include_paths` → `src/agent.rs::system_prompt`。新增项目与个人指令文件内部的 `@./path`、相对/绝对/用户目录引用解析、文本文件扩展名白名单、递归去重与深度限制、代码围栏/行内代码/HTML 注释过滤；工作区外项目引用不注入，用户级引用限制在配置目录。源码提交 `b7dd2cf0`、`1b670581`、`ae1f934b`，迁移矩阵提交 `6ea01a78`。
+- 保守按 **1 条用户可感知业务功能链** 计入本次源码补齐（不把解析、过滤、递归拆分刷数）。本轮未形成经逐项原版/Rust 证实的 100 个独立业务问题清单及全部实施方案，100 项硬目标尚差 99 项；**完整等价验收新增 0**。遵循本任务要求未运行 Cargo/CI/测试，仅做源代码及远端提交静态审阅。
+- 明确未闭环：完整 Markdown 词法（复杂嵌套代码/HTML）、外部引用用户审批及批准状态、跨 Git 工作树去重、按访问文件动态加载 `paths` 条件规则、SDK 附加目录及记忆排除设置；原版与 Rust 完整行为仍需后续验证。Issue #3 冻结 362 项继续开放。
