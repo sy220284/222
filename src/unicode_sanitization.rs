@@ -33,7 +33,10 @@ pub fn partially_sanitize_unicode(input: &str) -> String {
     }
     // NFKC reaches a fixed point. The source throws if the limit is hit;
     // an explicit check keeps a malicious input from silently bypassing it.
-    assert!(iterations < 10, "Unicode sanitization exceeded 10 iterations");
+    assert!(
+        iterations < 10,
+        "Unicode sanitization exceeded 10 iterations"
+    );
     current
 }
 
@@ -42,9 +45,12 @@ pub fn partially_sanitize_unicode(input: &str) -> String {
 pub fn recursively_sanitize_unicode(value: Value) -> Value {
     match value {
         Value::String(s) => Value::String(partially_sanitize_unicode(&s)),
-        Value::Array(items) => {
-            Value::Array(items.into_iter().map(recursively_sanitize_unicode).collect())
-        }
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(recursively_sanitize_unicode)
+                .collect(),
+        ),
         Value::Object(items) => {
             let mut result = Map::new();
             for (key, val) in items {
