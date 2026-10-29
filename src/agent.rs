@@ -2750,7 +2750,18 @@ impl Agent {
                         },
                     )
                     .await?;
-                if !hook.blocking_reasons.is_empty() {
+                // query.ts::handleStopHooks resolves continue:false before
+                // processing blocking feedback. A stop request must not
+                // accidentally start another model turn.
+                if hook.prevent_continuation {
+                    self.emit(json!({
+                        "type": "hook_stopped_continuation",
+                        "hook_event_name": "Stop",
+                        "session_id": self.session.id,
+                        "message": hook.stop_reason.as_deref()
+                            .unwrap_or("Stop hook prevented continuation"),
+                    }));
+                } else if !hook.blocking_reasons.is_empty() {
                     stop_hook_active = true;
                     let feedback = hook.blocking_reasons.iter()
                         .map(|reason| format!("Stop hook blocked finishing: {reason}"))
@@ -2762,15 +2773,6 @@ impl Agent {
                     ));
                     self.session.save(&self.root)?;
                     continue;
-                }
-                if hook.prevent_continuation {
-                    self.emit(json!({
-                        "type": "hook_stopped_continuation",
-                        "hook_event_name": "Stop",
-                        "session_id": self.session.id,
-                        "message": hook.stop_reason.as_deref()
-                            .unwrap_or("Stop hook prevented continuation"),
-                    }));
                 }
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
