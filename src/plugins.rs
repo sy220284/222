@@ -412,6 +412,8 @@ pub fn validate_local(location: &Path) -> Result<String> {
 pub struct PluginSet {
     pub hooks: Vec<HookRule>,
     pub mcp_servers: Vec<McpServerConfig>,
+    /// Failed plugin MCP configurations, kept visible to SDK reload callers.
+    pub errors: Vec<String>,
 }
 fn valid_name(value: &str) -> bool {
     !value.is_empty()
@@ -441,6 +443,7 @@ impl PluginSet {
         let mut set = Self {
             hooks: Vec::new(),
             mcp_servers: Vec::new(),
+            errors: Vec::new(),
         };
         let mut seen = std::collections::HashSet::new();
         for name in enabled {
@@ -468,7 +471,9 @@ impl PluginSet {
                 let mut server = match resolve_plugin_mcp_server(&location, name, &manifest, server) {
                     Ok(server) => server,
                     Err(error) => {
-                        eprintln!("Plugin '{name}' MCP server '{server_id}' unavailable: {error:#}");
+                        let diagnostic = format!("Plugin '{name}' MCP server '{server_id}' unavailable: {error:#}");
+                        eprintln!("{diagnostic}");
+                        set.errors.push(diagnostic);
                         continue;
                     }
                 };
