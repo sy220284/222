@@ -916,3 +916,325 @@ mod tests {
         );
     }
 }
+
+/// Stateful terminal bridge for the original keybinding context, input hooks and
+/// chord interceptor. A terminal frontend feeds key events before normal input
+/// handlers; `KeyDispatch::consumed` indicates whether propagation must stop.
+/// All state belongs to this run, not to a process-wide keyboard singleton.
+pub struct KeybindingRuntime {
+    bindings: Vec<Binding>,
+    warnings: Vec<Warning>,
+    pending: Option<Vec<Keystroke>>,
+    chord_deadline: Option<std::time::Instant>,
+    active_contexts: HashMap<String, usize>,
+    handlers: Vec<RegisteredHandler>,
+    next_handler_id: u64,
+}
+
+struct RegisteredHandler {
+    id: u64,
+    action: String,
+    context: String,
+    handler: Box<dyn FnMut() -> bool + Send>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyDispatch {
+    pub resolution: Resolution,
+    /// An event which starts a chord, completes a handled shortcut, or is
+    /// explicitly unbound must not become editable input.
+    pub consumed: bool,
+}
+
+impl KeybindingRuntime {
+    pub fn new(loaded: Loaded) -> Self {
+        Self {
+            bindings: loaded.bindings,
+            warnings: loaded.warnings,
+            pending: None,
+            chord_deadline: None,
+            active_contexts: HashMap::new(),
+            handlers: Vec::new(),
+            next_handler_id: 1,
+        }
+    }
+
+    pub fn from_disk(path: &Path) -> Self {
+        Self::new(load_from(path))
+    }
+
+    pub fn warnings(&self) -> &[Warning] {
+        &self.warnings
+    }
+
+    pub fn bindings(&self) -> &[Binding] {
+        &self.bindings
+    }
+
+    pub fn pending_chord(&self) -> Option<&[Keystroke]> {
+        self.pending.as_deref()
+    }
+
+    pub fn display_text(&self, action: &str, context: &str, platform: &str) -> Option<String> {
+        display_for_action(action, context, &self.bindings, platform)
+    }
+
+    /// Mirrors mount/unmount reference counting so nested components registering
+    /// the same context do not accidentally deactivate each other.
+    pub fn register_context(&mut self, context: &str) {
+        *self.active_contexts.entry(context.to_owned()).or_default() += 1;
+    }
+
+    pub fn unregister_context(&mut self, context: &str) {
+        if let Some(owners) = self.active_contexts.get_mut(context) {
+            *owners -= 1;
+            if *owners == 0 {
+                self.active_contexts.remove(context);
+            }
+        }
+    }
+
+    /// The returned ID is the registration's teardown token, matching the
+    /// original hook's unregister cleanup. Returning false permits fallthrough
+    /// on single keys, for example wheel events in nested scroll regions.
+    pub fn register_handler<F>(&mut self, action: &str, context: &str, handler: F) -> u64
+    where
+        F: FnMut() -> bool + Send + 'static,
+    {
+        let id = self.next_handler_id;
+        self.next_handler_id += 1;
+        self.handlers.push(RegisteredHandler {
+            id,
+            action: action.to_owned(),
+            context: context.to_owned(),
+            handler: Box::new(handler),
+        });
+        id
+    }
+
+    pub fn unregister_handler(&mut self, id: u64) -> bool {
+        let previous = self.handlers.len();
+        self.handlers.retain(|registration| registration.id != id);
+        self.handlers.len() != previous
+    }
+
+    /// Called by the frontend's file-watch notification. The old chord is
+    /// cancelled so a configuration switch cannot finish an obsolete action.
+    pub fn apply_reload(&mut self, loaded: Loaded) {
+        self.bindings = loaded.bindings;
+        self.warnings = loaded.warnings;
+        self.clear_chord();
+    }
+
+    pub fn reload_from_disk(&mut self, path: &Path) {
+        self.apply_reload(load_from(path));
+    }
+
+    fn clear_chord(&mut self) {
+        self.pending = None;
+        self.chord_deadline = None;
+    }
+
+    /// The UI timer calls `expire_chord` even when no further key event arrives.
+    /// A later keystroke also checks the deadline before attempting a match.
+    pub fn expire_chord(&mut self, now: std::time::Instant) -> bool {
+        if self.chord_deadline.is_some_and(|deadline| now >= deadline) {
+            self.clear_chord();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn chord_timeout(&self) -> Option<std::time::Instant> {
+        self.chord_deadline
+    }
+
+    pub fn handle_key(&mut self, key: &TerminalKey<'_>, now: std::time::Instant) -> KeyDispatch {
+        self.expire_chord(now);
+        let mut contexts: Vec<&str> = self
+            .handlers
+            .iter()
+            .map(|handler| handler.context.as_str())
+            .collect();
+        contexts.extend(self.active_contexts.keys().map(String::as_str));
+        contexts.push("Global");
+        contexts.sort_unstable();
+        contexts.dedup();
+        let was_pending = self.pending.is_some();
+        let result = resolve(key, &contexts, &self.bindings, self.pending.as_deref());
+        let consumed = match &result {
+            Resolution::ChordStarted(prefix) => {
+                self.pending = Some(prefix.clone());
+                self.chord_deadline = now.checked_add(std::time::Duration::from_millis(1000));
+                true
+            }
+            Resolution::Match(action) => {
+                self.clear_chord();
+                let mut handled = false;
+                for registration in &mut self.handlers {
+                    if registration.action == *action
+                        && (registration.context == "Global"
+                            || self.active_contexts.contains_key(&registration.context))
+                    {
+                        if (registration.handler)() {
+                            handled = true;
+                            break;
+                        }
+                        // Original hook permits a single key to fall through
+                        // when the active callback explicitly returns false.
+                        if was_pending {
+                            break;
+                        }
+                    }
+                }
+                handled
+            }
+            Resolution::Unbound | Resolution::ChordCancelled => {
+                self.clear_chord();
+                true
+            }
+            Resolution::None => false,
+        };
+        KeyDispatch {
+            resolution: result,
+            consumed,
+        }
+    }
+}
+
+#[cfg(test)]
+mod runtime_tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    fn setup() -> KeybindingRuntime {
+        let bindings = vec![
+            Binding {
+                chord: parse_chord("ctrl+k ctrl+s"),
+                action: Some("save".into()),
+                context: "Chat".into(),
+            },
+            Binding {
+                chord: parse_chord("ctrl+t"),
+                action: Some("global".into()),
+                context: "Global".into(),
+            },
+            Binding {
+                chord: parse_chord("ctrl+t"),
+                action: Some("theme".into()),
+                context: "ThemePicker".into(),
+            },
+        ];
+        KeybindingRuntime::new(Loaded {
+            bindings,
+            warnings: Vec::new(),
+        })
+    }
+
+    #[test]
+    fn chord_interceptor_executes_before_text_handler_and_respects_timeout() {
+        let now = std::time::Instant::now();
+        let fired = Arc::new(AtomicUsize::new(0));
+        let mut runtime = setup();
+        runtime.register_context("Chat");
+        let observed = Arc::clone(&fired);
+        runtime.register_handler("save", "Chat", move || {
+            observed.fetch_add(1, Ordering::SeqCst);
+            true
+        });
+        let ctrl_k = TerminalKey {
+            input: "k",
+            ctrl: true,
+            ..Default::default()
+        };
+        let ctrl_s = TerminalKey {
+            input: "s",
+            ctrl: true,
+            ..Default::default()
+        };
+        assert!(runtime.handle_key(&ctrl_k, now).consumed);
+        assert!(runtime.chord_timeout().is_some());
+        let match_result = runtime.handle_key(&ctrl_s, now + std::time::Duration::from_millis(999));
+        assert_eq!(match_result.resolution, Resolution::Match("save".into()));
+        assert!(match_result.consumed);
+        assert_eq!(fired.load(Ordering::SeqCst), 1);
+        runtime.handle_key(&ctrl_k, now);
+        assert!(runtime.expire_chord(now + std::time::Duration::from_millis(1000)));
+        let expired = runtime.handle_key(&ctrl_s, now + std::time::Duration::from_millis(1001));
+        assert_eq!(expired.resolution, Resolution::None);
+        assert_eq!(fired.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn handler_cleanup_nested_contexts_and_fallthrough_are_stateful() {
+        let now = std::time::Instant::now();
+        let global_count = Arc::new(AtomicUsize::new(0));
+        let mut runtime = setup();
+        runtime.register_context("ThemePicker");
+        runtime.register_context("ThemePicker");
+        let observed = Arc::clone(&global_count);
+        let global_id = runtime.register_handler("global", "Global", move || {
+            observed.fetch_add(1, Ordering::SeqCst);
+            true
+        });
+        let theme_id = runtime.register_handler("theme", "ThemePicker", || false);
+        let ctrl_t = TerminalKey {
+            input: "t",
+            ctrl: true,
+            ..Default::default()
+        };
+        let result = runtime.handle_key(&ctrl_t, now);
+        assert_eq!(result.resolution, Resolution::Match("theme".into()));
+        assert!(!result.consumed);
+        runtime.unregister_context("ThemePicker");
+        assert_eq!(
+            runtime.handle_key(&ctrl_t, now).resolution,
+            Resolution::Match("theme".into())
+        );
+        runtime.unregister_context("ThemePicker");
+        // React hook teardown also removes the associated callback registration.
+        assert!(runtime.unregister_handler(theme_id));
+        assert_eq!(
+            runtime.handle_key(&ctrl_t, now).resolution,
+            Resolution::Match("global".into())
+        );
+        assert_eq!(global_count.load(Ordering::SeqCst), 1);
+        assert!(!runtime.unregister_handler(theme_id));
+        assert!(runtime.unregister_handler(global_id));
+        assert!(!runtime.unregister_handler(global_id));
+        assert!(!runtime.handle_key(&ctrl_t, now).consumed);
+    }
+
+    #[test]
+    fn reloading_user_config_invalidates_inflight_chord_and_updates_help() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("keybindings.json");
+        let mut runtime = setup();
+        runtime.register_context("Chat");
+        let now = std::time::Instant::now();
+        runtime.handle_key(
+            &TerminalKey {
+                input: "k",
+                ctrl: true,
+                ..Default::default()
+            },
+            now,
+        );
+        assert!(runtime.pending_chord().is_some());
+        fs::write(
+            &path,
+            r#"{"bindings":[{"context":"Chat","bindings":{"ctrl+z":"chat:new"}}]}"#,
+        )
+        .unwrap();
+        runtime.reload_from_disk(&path);
+        assert!(runtime.pending_chord().is_none());
+        assert_eq!(
+            runtime.display_text("chat:new", "Chat", "linux"),
+            Some("ctrl+z".into())
+        );
+    }
+}

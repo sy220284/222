@@ -919,8 +919,8 @@
 | `src/ink/widest-line.ts` | 20 | 434 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/wrap-text.ts` | 75 | 1806 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/wrapAnsi.ts` | 21 | 383 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
-| `src/keybindings/KeybindingContext.tsx` | 243 | 26000 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/KeybindingProviderSetup.tsx` | 308 | 41452 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/keybindings/KeybindingContext.tsx` | 243 | 26000 | 重写：保持通用行为 | `src/keybindings.rs` | 部分实现：上下文激活/卸载计数、动作回调注册与清理、显示绑定及组合键共享状态，React UI 接线待迁 |
+| `src/keybindings/KeybindingProviderSetup.tsx` | 308 | 41452 | 重写：保持通用行为 | `src/keybindings.rs` | 部分实现：组合键拦截、1 秒限时、回调分发、状态重置、配置重载入口与警告状态；终端事件循环及实际文件监听仍缺 |
 | `src/keybindings/defaultBindings.ts` | 341 | 11635 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：默认快捷键配置、跨平台差异及核心上下文已迁入原生 Rust；原版全功能开关与各 UI 动作仍未连接 |
 | `src/keybindings/loadUserBindings.ts` | 473 | 14551 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：用户 JSON 快捷键热读取、默认与自定义优先级、错误降级和本地路径已迁入 Rust；原版文件监听通知机制仍缺 |
 | `src/keybindings/match.ts` | 121 | 3797 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：Ink 等价终端键名归一化、修饰键和 Escape 特例已迁入 Rust；原生 UI 输入派发仍待连接 |
@@ -930,8 +930,8 @@
 | `src/keybindings/schema.ts` | 237 | 6269 | 重写：保持通用行为 | `src/generated_ports/p_212ef30d7fd2c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/keybindings/shortcutFormat.ts` | 64 | 2575 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：可用动作的用户定义快捷键显示已迁入 Rust；缺失快捷键后的原版遥测按用户要求删除 |
 | `src/keybindings/template.ts` | 53 | 1721 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：用户配置模板及保留快捷键过滤、原子排他创建已迁入 Rust；文本编辑器差异待覆盖 |
-| `src/keybindings/useKeybinding.ts` | 197 | 6862 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/useShortcutDisplay.ts` | 60 | 2510 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/keybindings/useKeybinding.ts` | 197 | 6862 | 重写：保持通用行为 | `src/keybindings.rs` | 部分实现：单动作/多动作回调、主动上下文、拒绝传播与执行后解绑；React Ink useInput 实际事件链尚未等价 |
+| `src/keybindings/useShortcutDisplay.ts` | 60 | 2510 | 重写：保持通用行为 | `src/keybindings.rs` | 部分实现：按动作/上下文查当前按键显示并随运行时配置重载；UI Hook 更新时序待迁 |
 | `src/keybindings/validate.ts` | 499 | 13667 | 重写：保持通用行为 | `src/generated_ports/p_f8e473fd2917d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/memdir/findRelevantMemories.ts` | 142 | 5305 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：选用当前配置模型检索最多 5 条相关 Markdown 记忆；原版工具上下文和异常处理仍待核对 |
 | `src/memdir/memdir.ts` | 508 | 21174 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：MEMORY.md 200 行/25 KB 索引及截断提示；路径和团队记忆未等价 |
