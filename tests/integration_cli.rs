@@ -13,6 +13,50 @@ fn binary() -> Command {
 }
 
 #[test]
+fn sessions_cli_searches_persisted_summaries_and_multimodal_conversation_text() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join(".atlas/sessions");
+    fs::create_dir_all(&directory).unwrap();
+    let summary_id = uuid::Uuid::new_v4();
+    let transcript_id = uuid::Uuid::new_v4();
+    let tool_id = uuid::Uuid::new_v4();
+    for (id, summary, messages) in [
+        (
+            summary_id,
+            Some("Deployment readiness"),
+            json!([{"role":"user","content":"initial topic"}]),
+        ),
+        (
+            transcript_id,
+            None,
+            json!([{"role":"user","content_blocks":[
+                {"type":"text","text":"Review deployment rollout"}
+            ]}]),
+        ),
+        (
+            tool_id,
+            None,
+            json!([{"role":"tool","content":"deployment private output"}]),
+        ),
+    ] {
+        fs::write(
+            directory.join(format!("{id}.json")),
+            json!({"id":id,"messages":messages,"summary":summary}).to_string(),
+        )
+        .unwrap();
+    }
+    let output = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "sessions", "deployment"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains(&summary_id.to_string()));
+    assert!(text.contains(&transcript_id.to_string()));
+    assert!(!text.contains(&tool_id.to_string()));
+}
+
+#[test]
 fn cli_initialization_and_model_listing_work_offline() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config.json");
