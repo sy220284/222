@@ -1743,7 +1743,7 @@
 | `src/utils/semver.ts` | 60 | 1713 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sequential.ts` | 57 | 1641 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionActivity.ts` | 134 | 4081 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sessionEnvVars.ts` | 23 | 590 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sessionEnvVars.ts` | 23 | 590 | 重写：保持通用行为 | `src/agent.rs / src/tools.rs / src/background.rs / src/main.rs` | 部分实现：会话变量增删查、前台/后台 Shell 和子代理继承、真实 CLI 回归；Hooks/MCP/LSP 完整透传未对照 |
 | `src/utils/sessionEnvironment.ts` | 167 | 5053 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionFileAccessHooks.ts` | 251 | 8138 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionIngressAuth.ts` | 141 | 4737 | 重写：保持通用行为 | 待定 | 未迁移 |

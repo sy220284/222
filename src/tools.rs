@@ -28,6 +28,7 @@ pub struct ToolExecutor {
     root: PathBuf,
     extra_roots: Vec<PathBuf>,
     shell_kind: crate::shell_runtime::ShellKind,
+    session_env: std::collections::BTreeMap<String,String>,
     approval: Approval,
     interactive: bool,
     reads: Mutex<HashMap<PathBuf, u64>>,
@@ -41,11 +42,12 @@ pub struct ToolExecutor {
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, extra_roots: Vec::new(), shell_kind: crate::shell_runtime::ShellKind::default(), approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new(), mode: None, metrics: Arc::new(ToolMetrics::default()) }
+        Self { root, extra_roots: Vec::new(), shell_kind: crate::shell_runtime::ShellKind::default(), session_env: std::collections::BTreeMap::new(), approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new(), mode: None, metrics: Arc::new(ToolMetrics::default()) }
     }
 
     pub fn with_extra_roots(mut self,roots:Vec<PathBuf>)->Self{self.extra_roots=roots;self}
     pub fn with_shell(mut self,kind:crate::shell_runtime::ShellKind)->Self{self.shell_kind=kind;self}
+    pub fn with_environment(mut self,env:std::collections::BTreeMap<String,String>)->Self{self.session_env=env;self}
     pub fn with_metrics(mut self,metrics:Arc<ToolMetrics>)->Self{
         self.metrics=metrics;
         self
@@ -474,6 +476,7 @@ impl ToolExecutor {
         let secs = args.get("timeout_seconds").and_then(Value::as_u64)
             .unwrap_or(60).clamp(1, 300);
         let mut proc=self.shell_kind.build_command(command)?;
+        proc.envs(&self.session_env);
         proc.current_dir(&self.root).kill_on_drop(true)
             .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child = proc.spawn()?;

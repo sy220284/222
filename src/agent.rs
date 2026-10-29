@@ -81,6 +81,7 @@ pub struct Agent {
     search_backend: Option<SearchBackend>,
     background: Arc<BackgroundTasks>,
     shell_kind: crate::shell_runtime::ShellKind,
+    session_env: std::collections::BTreeMap<String,String>,
     graph: task_graph::TaskGraph,
     team_name: Option<String>,
     agent_name: Option<String>,
@@ -134,7 +135,7 @@ impl Agent {
                 Approval::Full=>permission_mode::Mode::BypassPermissions,
             }
         };
-        Ok(Self { profile, provider, root, additional_dirs: Vec::new(), approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, shell_kind: crate::shell_runtime::ShellKind::default(), graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), permission_mode:mode,
+        Ok(Self { profile, provider, root, additional_dirs: Vec::new(), approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, shell_kind: crate::shell_runtime::ShellKind::default(), session_env: std::collections::BTreeMap::new(), graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), permission_mode:mode,
         hook_rules: Vec::new(), model_prices: Vec::new(), file_metrics })
     }
 
@@ -510,6 +511,7 @@ impl Agent {
             let model_prices=self.model_prices.clone();
             let additional_dirs=self.additional_dirs.clone();
             let shell_kind=self.shell_kind;
+            let inherited_env=self.session_env.clone();
             let shared_tasks=self.graph.clone();
             let current_team=self.team_name.clone();
             let current_team_root=self.team_root.clone();
@@ -529,6 +531,7 @@ impl Agent {
                     child.enabled_plugins=plugins;
                     child.additional_dirs=additional_dirs;
                     child.set_default_shell(shell_kind);
+                    for (key,value) in inherited_env {child.set_environment_variable(&key,&value)?;}
                     child.search_backend=search;
                     child.permission_rules=permissions;
                     child.model_prices=model_prices;
@@ -662,6 +665,7 @@ impl Agent {
         child.enabled_plugins = self.enabled_plugins.clone();
         child.additional_dirs = self.additional_dirs.clone();
         child.set_default_shell(self.shell_kind);
+        for (key,value) in &self.session_env {child.set_environment_variable(key,value)?;}
         child.search_backend = self.search_backend.clone();
         child.permission_rules = self.permission_rules.clone();
         child.model_prices = self.model_prices.clone();
@@ -751,6 +755,20 @@ impl Agent {
             }
         }
         Ok(())
+    }
+    pub fn environment_variables(&self) -> &std::collections::BTreeMap<String,String> { &self.session_env }
+    pub fn set_environment_variable(&mut self, key: &str, value: &str) -> Result<()> {
+        if key.is_empty() || key.contains(['=', '\0']) {
+            bail!("Environment variable name must be nonempty and not contain '=' or NUL");
+        }
+        if value.contains('\0') { bail!("Environment variable contains NUL") }
+        self.session_env.insert(key.to_owned(), value.to_owned());
+        self.background.set_environment(&self.session_env);
+        Ok(())
+    }
+    pub fn remove_environment_variable(&mut self, key: &str) {
+        self.session_env.remove(key);
+        self.background.set_environment(&self.session_env);
     }
     pub fn set_default_shell(&mut self, kind: crate::shell_runtime::ShellKind) {
         self.shell_kind=kind;
@@ -1079,6 +1097,7 @@ impl Agent {
             .with_permission_rules(self.permission_rules.clone())
             .with_extra_roots(self.additional_dirs.clone())
             .with_shell(self.shell_kind)
+            .with_environment(self.session_env.clone())
             .with_permission_mode(self.permission_mode);
         let mut stop_hook_active = false;
         for _ in 0..self.max_steps {
@@ -1463,6 +1482,7 @@ mod tests {
             search_backend: None,
             background: Arc::new(BackgroundTasks::new(dir.path()).unwrap()),
             shell_kind: crate::shell_runtime::ShellKind::default(),
+            session_env: std::collections::BTreeMap::new(),
             graph: task_graph::TaskGraph::new(dir.path(),"test").unwrap(),
             team_name: None,
             agent_name: None,

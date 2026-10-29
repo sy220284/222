@@ -44,6 +44,7 @@ pub struct BackgroundTasks {
     directory: PathBuf,
     entries: Mutex<HashMap<String, Arc<Running>>>,
     shell_kind: Mutex<crate::shell_runtime::ShellKind>,
+    session_env: Mutex<std::collections::BTreeMap<String,String>>,
 }
 
 impl BackgroundTasks {
@@ -54,9 +55,13 @@ impl BackgroundTasks {
             bail!("Background task directory escapes workspace");
         }
         Ok(Self { directory, entries: Mutex::new(HashMap::new()),
-            shell_kind: Mutex::new(crate::shell_runtime::ShellKind::default()) })
+            shell_kind: Mutex::new(crate::shell_runtime::ShellKind::default()),
+            session_env: Mutex::new(std::collections::BTreeMap::new()) })
     }
 
+    pub fn set_environment(&self, variables:&std::collections::BTreeMap<String,String>) {
+        *self.session_env.lock().unwrap()=variables.clone();
+    }
     pub fn set_shell(&self, kind:crate::shell_runtime::ShellKind) {
         *self.shell_kind.lock().unwrap()=kind;
     }
@@ -96,6 +101,7 @@ impl BackgroundTasks {
         tokio::fs::write(&stderr_path, &[]).await?;
         let kind=*self.shell_kind.lock().unwrap();
         let mut proc=kind.build_command(command)?;
+        proc.envs(self.session_env.lock().unwrap().iter());
         let workspace = self.directory.parent().and_then(Path::parent)
             .context("Background task workspace missing")?;
         // Place the shell and its descendants into a new process group.

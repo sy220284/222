@@ -2928,3 +2928,57 @@ fn invalid_shell_selection_fails_before_model_request() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("Unsupported default shell"));
 }
+
+#[test]
+fn chat_session_environment_is_used_by_real_shell_tool_and_can_be_unset() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for step in 0..4{
+            let (mut client,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut client));
+            let message=if step==0 || step==2 {
+                json!({"role":"assistant","content":null,"tool_calls":[{
+                    "id":format!("shell-{step}"),"type":"function","function":{
+                        "name":"run_command","arguments":json!({"command":"printenv ATLAS_SESSION_TEST"}).to_string()
+                    }
+                }]})
+            } else {json!({"role":"assistant","content":"Shell environment request processed"})};
+            let body=json!({"choices":[{"message":message,
+                "finish_reason":if step%2==0 {"tool_calls"} else {"stop"}}]}).to_string();
+            write!(client,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            client.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let mut child=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","full","chat"]).env("ATLAS_CONFIG",&config)
+        .env_remove("ATLAS_SESSION_TEST").stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=child.stdin.take().unwrap();
+        write!(input,"/env ATLAS_SESSION_TEST=verified-value\nCheck environment\n/env -u ATLAS_SESSION_TEST\nCheck again\n/exit\n").unwrap();
+    }
+    let output=child.wait_with_output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(requests[1].contains("verified-value"),"{}",requests[1]);
+    let last:Value=serde_json::from_str(requests[3].split_once("\r\n\r\n").unwrap().1).unwrap();
+    let tool_result=last["messages"].as_array().unwrap().last().unwrap();
+    assert!(tool_result["content"].as_str().unwrap_or("").contains("STDOUT:"),
+        "{tool_result}");
+    assert!(!tool_result["content"].as_str().unwrap_or("").contains("verified-value"),
+        "{tool_result}");
+    let saved=fs::read_dir(root.path().join(".atlas/sessions")).unwrap()
+        .map(|e|fs::read_to_string(e.unwrap().path()).unwrap()).collect::<Vec<_>>();
+    assert!(saved.iter().all(|s|!s.contains("session_env")));
+}

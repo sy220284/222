@@ -273,6 +273,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("/mode                    cycle permission mode (default/accept edits/plan)");
                 println!("/add-dir PATH [--remember] add an authorized working directory");
                 println!("/dirs                    show authorized working directories");
+                println!("/env [NAME=VALUE | -u NAME] configure environment for child commands");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
                 println!("/mcp-prompts             list available MCP prompt commands");
@@ -281,6 +282,10 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 continue;
             }
             "/dirs" => { for dir in agent.working_directories() { println!("{}",dir.display()); } continue; }
+            "/env" => {
+                for (name,value) in agent.environment_variables() {println!("{name}={value}");}
+                continue;
+            }
             "/session" => {
                 println!("{}", agent.session_id());
                 continue;
@@ -361,6 +366,16 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 Ok(path)=>println!("Conversation exported to: {}",path.display()),
                 Err(err)=>eprintln!("Failed to export conversation: {err:#}"),
             }
+            continue;
+        }
+        if let Some(arg) = input.strip_prefix("/env ") {
+            if let Some(name)=arg.strip_prefix("-u ") {
+                agent.remove_environment_variable(name.trim());
+                println!("Unset session environment: {}", name.trim());
+            } else if let Some((name,value))=arg.split_once('=') {
+                agent.set_environment_variable(name.trim(),value)?;
+                println!("Set session environment: {}",name.trim());
+            } else {eprintln!("Usage: /env NAME=VALUE or /env -u NAME");}
             continue;
         }
         if input == "/add-dir" || input.starts_with("/add-dir ") {
