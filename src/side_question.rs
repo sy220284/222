@@ -28,8 +28,15 @@ pub fn fork_request(
     Ok(base)
 }
 
-pub async fn answer(profile: ProviderProfile, request: ModelRequest) -> Result<Value> {
-    let client = provider::create(&profile)?;
+pub async fn answer(
+    profile: ProviderProfile,
+    request: ModelRequest,
+    thinking_budget: Option<u32>,
+) -> Result<Value> {
+    let mut client = provider::create(&profile)?;
+    // sideQuestion.ts:50-84 preserves the parent's thinking configuration
+    // to avoid changing the cached request prefix for the independent fork.
+    client.set_thinking_budget(thinking_budget)?;
     // One provider completion only; never enter the Agent tool loop.
     let result = client.complete(&request).await?;
     let text = result.message.visible_text().trim().to_owned();
