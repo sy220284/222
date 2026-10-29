@@ -1,5 +1,14 @@
 # Issue #3：冻结 362 项源码级等价验收登记表
 
+## 2026-10-29：文件编辑权限规则覆盖写入与符号链接目标（冻结 #8/#17，继续开放）
+
+- **原版源码证据**：完整 `claude-code-2.1.88-main(1).zip` SHA-256 `23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d`，`src/utils/permissions/filesystem.ts:919–933` 中 `getPatternsByRoot('edit')` 使用统一的 `FILE_EDIT_TOOL_NAME`；`filesystem.ts:955–1024` 使用 gitignore 风格路径匹配并处理 `/**`；`filesystem.ts:1043–1048` 对文件检查同时包含原始路径和符号链接解析目标。
+- **原 Rust 缺口**：`src/permission_rules.rs::policy_for` 将 `Write` 与 `Edit` 当成互不关联的工具名，且对 `Write/Edit` 的路径规则使用 Shell 命令通配匹配；`src/tools.rs::require_approval` 仅提供用户输入的原路径。用户配置的 `Edit(secrets/**)` 无法拦截 `write_file`，通过符号链接别名写入秘密文件时也无法匹配真实目标。
+- **代码补强**：`src/permission_rules.rs` 将有内容的 `Edit(path)` 规则应用于 Write 和 Edit 的文件变更入口，使用路径 glob 和目录本身匹配，保留原有 `Write` 规则、明确拒绝优先、Read 独立性；`src/tools.rs` 在实际工具执行前计算请求路径、规范化路径、最近真实祖先及符号链接解析路径，并加入工作区相对路径。既有工作区授权边界仍由 `checked_path` 强制检查。
+- **针对性验证**：`permission_rules::tests::edit_path_rules_cover_write_and_resolved_targets` 对比规则优先级、目录、Read 隔离；`tools::tests::edit_path_rules_reach_write_execution_and_cannot_be_bypassed_by_symlinks` 使用真实临时工作区、符号链接、写文件副作用，验证危险目标被拒、未创建文件不落盘、公开目录经明确规则允许写入。提交 `a8cc02c`、`109f879`；CI 须以最终 HEAD 实际检查结果为准，当前不预填通过。
+- **仍未闭环**：完整原版 gitignore 的所有匹配差异、按权限来源确定规则根目录、NotebookEdit/其他文件变更工具的统一编辑权限、交互式审批、并发 TOCTOU、取消/重启及其他文件路径边界。冻结 #8/#17 继续开放，**本次仅计一个独立用户可感知功能的代码补强，完整验收仍为 0/362**。
+
+
 ## 2026-10-29：权限设置结构损坏不再阻断其他来源（冻结 #19，仍部分实现）
 
 - **原版证据**：`src/utils/settings/settings.ts::parseSettingsFile`（约 210–244 行）先执行 `SettingsSchema().safeParse(data)`，校验失败时该来源返回 `settings:null`；`src/utils/permissions/permissionsLoader.ts::loadAllPermissionRulesFromDisk` 遍历其他启用来源继续加载。原始源码包：`claude-code-2.1.88-main(1).zip`。
