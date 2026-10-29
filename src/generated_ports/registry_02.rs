@@ -278,6 +278,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/InterruptedByUser.tsx" => match export {
+            "view" => serde_json::to_value(super::p_67aa03093e173::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/InvalidConfigDialog.tsx" => match export {
@@ -445,7 +449,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/components/IdleReturnDialog.tsx",
             vec!["view", "formatIdleDuration", "formatTokens"],
         ),
-        ("src/components/InterruptedByUser.tsx", vec![]),
+        ("src/components/InterruptedByUser.tsx", vec!["view"]),
         ("src/components/InvalidConfigDialog.tsx", vec![]),
         ("src/components/InvalidSettingsDialog.tsx", vec![]),
         ("src/components/KeybindingWarnings.tsx", vec![]),
