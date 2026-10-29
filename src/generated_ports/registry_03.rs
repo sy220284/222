@@ -45,6 +45,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/NotebookEditToolUseRejectedMessage.tsx" => match export {
+            "view" => serde_json::to_value(super::p_969c9d9b904d0::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/OffscreenFreeze.tsx" => match export {
@@ -344,7 +348,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/NativeAutoUpdater.tsx", vec![]),
         (
             "src/components/NotebookEditToolUseRejectedMessage.tsx",
-            vec![],
+            vec!["view"],
         ),
         ("src/components/OffscreenFreeze.tsx", vec![]),
         ("src/components/OutputStylePicker.tsx", vec![]),
