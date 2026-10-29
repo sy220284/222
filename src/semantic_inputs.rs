@@ -14,6 +14,25 @@ pub fn boolean(value:Value)->Value{
 
 /// Original decimal grammar: ^-?\d+(\.\d+)?$
 /// Exponent notation, leading plus, whitespace, NaN and Infinity are not coerced.
+/// Reconstruct a JSON number from an IEEE-754 value, matching the Number()
+/// conversion performed by the original TypeScript/Zod preprocessor. Parsing
+/// directly as i64/u64 first would silently retain precision that JS loses.
+fn js_number_value(n:f64)->Value{
+    if n==0.0 && n.is_sign_negative(){
+        return Value::Number(Number::from_f64(n).expect("finite negative zero"));
+    }
+    if n.fract()==0.0 {
+        // The upper bound is exclusive: 2^64 cannot fit in u64.
+        if n>=0.0 && n<18_446_744_073_709_551_616.0 {
+            return Value::Number((n as u64).into());
+        }
+        if n<0.0 && n>=-9_223_372_036_854_775_808.0 {
+            return Value::Number((n as i64).into());
+        }
+    }
+    Value::Number(Number::from_f64(n).expect("finite JS number"))
+}
+
 pub fn number(value:Value)->Value{
     let Value::String(v)=value else{return value};
     let body=v.strip_prefix('-').unwrap_or(&v);
@@ -28,20 +47,10 @@ pub fn number(value:Value)->Value{
         }
     }
     if parts.next().is_some(){return Value::String(v)}
-    // Keep integer JSON representations for integer tool schemas. JavaScript
-    // Number() and Zod number/int also accept "30.0" as integer.
-    if let Ok(n)=v.parse::<i64>(){return Value::Number(n.into())}
-    if let Ok(n)=v.parse::<u64>(){return Value::Number(n.into())}
-    let Some(f)=v.parse::<f64>().ok().filter(|n|n.is_finite()) else{
+    let Some(n)=v.parse::<f64>().ok().filter(|n|n.is_finite()) else{
         return Value::String(v)
     };
-    if f.fract()==0.0 && f>=0.0 && f<9_007_199_254_740_992.0{
-        return Value::Number((f as u64).into());
-    }
-    if f.fract()==0.0 && f<0.0 && f> -9_007_199_254_740_992.0{
-        return Value::Number((f as i64).into());
-    }
-    Number::from_f64(f).map(Value::Number).unwrap_or(Value::String(v))
+    js_number_value(n)
 }
 
 /// Applies the two source preprocessors only to declared built-in tool fields.
@@ -74,7 +83,19 @@ pub fn normalize_tool_fields(tool:&str,args:&mut Value)->Result<()>{
     }
     for &key in integer_fields {
         if let Some(value)=map.get_mut(key){
-            *value=number(value.take());
+            let raw=value.take();
+            *value=match raw{
+                // JSON numeric literals are already IEEE-754 Numbers in the
+                // original JS runtime, even when they are not quoted.
+                Value::Number(n)=>n.as_f64().map(js_number_value)
+                    .unwrap_or(Value::Number(n)),
+                other=>number(other),
+            };
+            // Zod accepts -0 as an integer; convert it to the unsigned
+            // representation required by the Rust tool schemas.
+            if value.as_f64()==Some(0.0){
+                *value=Value::Number(0u64.into());
+            }
             if value.as_u64().is_none(){bail!("{tool}.{key} must be a nonnegative integer")}
         }
     }
@@ -107,6 +128,32 @@ mod tests{
         let enormous="9".repeat(1000);
         assert_eq!(number(json!(enormous)),json!(enormous));
         assert_eq!(number(json!(null)),Value::Null);
+    }
+    #[test]
+    fn js_number_precision_and_negative_zero_match_original_preprocessor(){
+        // Number("9007199254740993") rounds to 9007199254740992 in JS.
+        assert_eq!(number(json!("9007199254740993")).as_u64(),
+            Some(9_007_199_254_740_992));
+        assert_eq!(number(json!("-9007199254740993")).as_i64(),
+            Some(-9_007_199_254_740_992));
+        for input in ["-0","-0.0"]{
+            let value=number(json!(input));
+            assert_eq!(value.as_f64(),Some(0.0));
+            assert!(value.as_f64().unwrap().is_sign_negative(),"{input}");
+            let mut args=json!({"timeout_seconds":input});
+            normalize_tool_fields("run_command",&mut args).unwrap();
+            assert_eq!(args["timeout_seconds"],json!(0));
+        }
+        // Direct JSON numeric literals undergo the same JS precision rounding.
+        let mut args=json!({"timeout_seconds":9_007_199_254_740_993u64});
+        normalize_tool_fields("run_command",&mut args).unwrap();
+        assert_eq!(args["timeout_seconds"].as_u64(),Some(9_007_199_254_740_992));
+        let mut args=json!({"timeout_seconds":30.0});
+        normalize_tool_fields("run_command",&mut args).unwrap();
+        assert_eq!(args["timeout_seconds"],json!(30));
+        // JS Number() rounds this to 2^64; it cannot be an unsigned Rust int.
+        let mut args=json!({"timeout_seconds":"18446744073709551615"});
+        assert!(normalize_tool_fields("run_command",&mut args).is_err());
     }
     #[test]
     fn rejects_invalid_fields_instead_of_using_default_and_does_not_coerce_unknowns(){
