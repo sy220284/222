@@ -60,7 +60,7 @@ fn read_manifest(root: &Path, fallback: &str) -> Result<Manifest> {
     Ok(manifest)
 }
 
-fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
+pub(crate) fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
     let mut rules = Vec::new();
     let events = value.as_object().context("Plugin hooks must be an event map")?;
     for (event_name, matchers) in events {
