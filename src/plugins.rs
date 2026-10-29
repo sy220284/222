@@ -504,6 +504,46 @@ pub fn read_skill(root: &Path, enabled: &[String], identifier: &str) -> Result<S
     Ok(fs::read_to_string(path)?)
 }
 
+/// The original plugin command loader keeps user-invocable: false commands
+/// available to the model but excludes them from direct slash invocation.
+/// A frontmatter key only applies at the top level of a closed YAML header.
+fn user_invocable_command(content: &str) -> bool {
+    let mut lines = content.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return true;
+    }
+    let mut declared = None;
+    let mut closed = false;
+    for line in lines {
+        if line.trim() == "---" {
+            closed = true;
+            break;
+        }
+        if let Some(value) = line.strip_prefix("user-invocable:") {
+            let value = value.trim().split(" #").next().unwrap_or("").trim();
+            let value = value.trim_matches(|c| c == '\'' || c == '"');
+            declared = Some(value == "true");
+        }
+    }
+    if closed { declared.unwrap_or(true) } else { true }
+}
+
+/// Expand the plugin root after argument substitution, as the original
+/// getPromptForCommand does. Never treat the expanded text as a shell command.
+fn plugin_command_body(content: &str, args: &str, root: &Path) -> Option<String> {
+    if !user_invocable_command(content) {
+        return None;
+    }
+    let names = crate::skill_arguments::frontmatter_argument_names(content);
+    let prompt = crate::skill_arguments::substitute_arguments(
+        crate::skill_arguments::markdown_body(content), Some(args), true, &names,
+    );
+    let root = root.to_string_lossy();
+    #[cfg(windows)]
+    let root = root.replace('\\', "/");
+    Some(prompt.replace("${CLAUDE_PLUGIN_ROOT}", root.as_ref()))
+}
+
 /// Resolve an original plugin Markdown slash command to its model-visible
 /// prompt. The interactive entrypoint calls this before the ordinary user
 /// prompt path, so a plugin command actually executes instead of being sent
@@ -536,11 +576,7 @@ pub fn command_prompt(
             } else {
                 bail!("Plugin command requires source or content")
             };
-            let names = crate::skill_arguments::frontmatter_argument_names(&content);
-            let prompt = crate::skill_arguments::substitute_arguments(
-                crate::skill_arguments::markdown_body(&content), Some(args), true, &names,
-            );
-            return Ok(Some(prompt));
+            return Ok(plugin_command_body(&content, args, &plugin_root));
         }
         return Ok(None);
     }
@@ -609,10 +645,7 @@ pub fn command_prompt(
                 continue;
             }
             let content = fs::read_to_string(&path)?;
-            let names = crate::skill_arguments::frontmatter_argument_names(&content);
-            return Ok(Some(crate::skill_arguments::substitute_arguments(
-                crate::skill_arguments::markdown_body(&content), Some(args), true, &names,
-            )));
+            return Ok(plugin_command_body(&content, args, &plugin_root));
         }
     }
     Ok(None)
@@ -701,6 +734,17 @@ pub fn list_commands(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn plugin_command_respects_user_invocable_and_expands_root() {
+        let root = std::path::Path::new("/tmp/plugin-root");
+        let hidden = "---\\nuser-invocable: false\\n---\\nDo not expose";
+        assert_eq!(plugin_command_body(hidden, "", root), None);
+        let visible = "---\\nuser-invocable: true\\n---\\nRead ${CLAUDE_PLUGIN_ROOT}/README.md for $ARGUMENTS";
+        assert_eq!(plugin_command_body(visible, "notes", root).as_deref(),
+            Some("Read /tmp/plugin-root/README.md for notes"));
+        let nested = "---\\nmetadata:\\n  user-invocable: false\\n---\\nVisible";
+        assert_eq!(plugin_command_body(nested, "", root).as_deref(), Some("Visible"));
+    }
     #[test]
     fn loads_only_explicitly_enabled_plugins() {
         let root = tempfile::tempdir().unwrap();
