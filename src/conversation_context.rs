@@ -202,8 +202,9 @@ pub fn project_instructions_with_dirs(
             return Some(content);
         };
         let mut header_len = 0;
-        let mut conditional = false;
         let mut ended = false;
+        let mut in_paths_list = false;
+        let mut paths = Vec::new();
         for line in rest.split_inclusive('\n') {
             header_len += line.len();
             let trimmed = line.trim();
@@ -211,14 +212,33 @@ pub fn project_instructions_with_dirs(
                 ended = true;
                 break;
             }
-            if trimmed.starts_with("paths:") {
-                conditional = true;
+            let value = if let Some(value) = trimmed.strip_prefix("paths:") {
+                in_paths_list = true;
+                Some(value.trim())
+            } else if in_paths_list && trimmed.starts_with("- ") {
+                Some(trimmed.trim_start_matches("- ").trim())
+            } else {
+                if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                    in_paths_list = false;
+                }
+                None
+            };
+            if let Some(value) = value {
+                let value = value.trim_start_matches('[').trim_end_matches(']');
+                for part in value.split(',') {
+                    let pattern = part.trim().trim_matches(|c| c == '"' || c == '\'');
+                    if !pattern.is_empty() {
+                        paths.push(pattern.to_owned());
+                    }
+                }
             }
         }
         if !ended {
             return Some(content);
         }
-        if conditional {
+        // Source parseFrontmatterPaths treats an empty paths list or all "**"
+        // as unconditional; only genuinely scoped rules wait for a file match.
+        if paths.iter().any(|pattern| pattern != "**") {
             None
         } else {
             Some(&rest[header_len..])
