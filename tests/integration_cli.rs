@@ -148,6 +148,47 @@ fn provider_explicit_no_retry_and_invalid_request_do_not_replay() {
 }
 
 #[test]
+fn truncated_stream_cannot_execute_a_complete_but_unconfirmed_tool_call() {
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move || {
+        let (mut stream,_)=listener.accept().unwrap();
+        let request=read_request(&mut stream);
+        let event=json!({"choices":[{"delta":{"tool_calls":[{
+            "index":0,"id":"unconfirmed_write","type":"function",
+            "function":{"name":"write_file","arguments":
+                "{\"path\":\"must-not-exist.txt\",\"content\":\"UNCONFIRMED\"}"}
+        }]}}]});
+        let body=format!("data: {}\n\n",event);
+        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()).unwrap();
+        stream.flush().unwrap();
+        request
+    });
+    let config=root.path().join("model.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"test",
+        "base_url":format!("http://{addr}/v1"),"stream":true
+    }]}).to_string()).unwrap();
+    let output=binary().args([
+        "--workspace",root.path().to_str().unwrap(),
+        "--approval","full","run","Create a file only when complete"
+    ]).env("ATLAS_CONFIG",&config).output().unwrap();
+    let request=server.join().unwrap();
+    assert!(request.contains("Create a file only when complete"));
+    assert!(!output.status.success(),"truncated stream was treated as success");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("completion marker"));
+    assert!(!root.path().join("must-not-exist.txt").exists(),
+        "an unconfirmed streamed tool call must never touch the filesystem");
+    let session_file=fs::read_dir(root.path().join(".atlas/sessions"))
+        .unwrap().next().unwrap().unwrap().path();
+    let saved=fs::read_to_string(session_file).unwrap();
+    assert!(!saved.contains("unconfirmed_write"),
+        "partial assistant tool call must not be committed to session history");
+}
+
+#[test]
 fn real_http_tool_roundtrip_and_session_persistence() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("example.txt"), "hello from workspace\n").unwrap();
