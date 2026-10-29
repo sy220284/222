@@ -3285,7 +3285,10 @@ fn agent_nonblocking_hook_exit_codes_preserve_tool_results_and_report_warnings()
         "{followup}"
     );
     assert!(followup.contains("write took effect"), "{followup}");
-    assert!(followup.contains("SECRET_DO_NOT_LEAK_PREHOOK"), "{followup}");
+    assert!(
+        followup.contains("SECRET_DO_NOT_LEAK_PREHOOK"),
+        "{followup}"
+    );
     assert_eq!(
         fs::read_to_string(root.path().join("hooked.txt")).unwrap(),
         "write took effect"
