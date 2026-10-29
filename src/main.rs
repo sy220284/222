@@ -1588,19 +1588,20 @@ async fn chat(
                     if matches!(decision.as_str(), "y" | "yes" | "r" | "remember") {
                         agent.add_workspace_directory(path.clone());
                         if remember || matches!(decision.as_str(), "r" | "remember") {
-                            if !config
-                                .additional_directories
-                                .iter()
-                                .any(|d| d == path.to_string_lossy().as_ref())
-                            {
-                                config
-                                    .additional_directories
-                                    .push(path.to_string_lossy().to_string());
-                            }
-                            match config.save() {
-                                Ok(()) => {
+                            let result = permission_settings::SettingsPaths::for_workspace(
+                                agent.workspace_root(),
+                            )
+                            .and_then(|paths| {
+                                paths.add_directory(permission_settings::EditableSource::Local, &path)
+                            });
+                            match result {
+                                Ok(true) => {
                                     println!("Added {} and saved to local settings", path.display())
                                 }
+                                Ok(false) => eprintln!(
+                                    "Added {} for this session; managed policy blocks saving",
+                                    path.display()
+                                ),
                                 Err(err) => eprintln!(
                                     "Added {} for this session; settings save failed: {err:#}",
                                     path.display()

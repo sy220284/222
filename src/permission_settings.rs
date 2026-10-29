@@ -507,6 +507,31 @@ impl SettingsPaths {
         .map(|allowed| allowed.is_some())
     }
 
+    /// Source PermissionUpdate.ts::persistPermissionUpdate(addDirectories):
+    /// /add-dir --remember writes permissions.additionalDirectories to local
+    /// settings, not the unrelated global provider configuration.
+    pub fn add_directory(&self, source: EditableSource, path: &Path) -> Result<bool> {
+        let value = path.to_string_lossy().into_owned();
+        self.edit(source, |settings| {
+            let permissions = settings
+                .entry("permissions")
+                .or_insert_with(|| Value::Object(Map::new()))
+                .as_object_mut()
+                .context("permissions must be an object")?;
+            let entries = permissions
+                .entry("additionalDirectories")
+                .or_insert_with(|| Value::Array(Vec::new()))
+                .as_array_mut()
+                .context("additionalDirectories must be an array")?;
+            if entries.iter().any(|entry| entry.as_str() == Some(value.as_str())) {
+                return Ok(false);
+            }
+            entries.push(Value::String(value));
+            Ok(true)
+        })
+        .map(|allowed| allowed.is_some())
+    }
+
     pub fn delete(
         &self,
         source: EditableSource,

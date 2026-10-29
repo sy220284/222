@@ -620,3 +620,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 权限设置附加目录进入真实文件与命令授权范围（源码已提交，待验证）
 
 对照原版 `source/src/utils/permissions/permissionSetup.ts:978–1010` 和 `source/src/utils/settings/types.ts:79–82`，`permissions.additionalDirectories` 应与 `--add-dir` 一同经过工作区目录校验后进入文件/搜索/Shell 可访问范围。Rust `SettingsPaths::additional_directories` 按用户、项目、本地及托管策略来源合并去重，并尊重 managed-only 限制；`src/main.rs` 的 Agent 初始化现将这些路径接入既有 `attach_configured_directories` 校验及真实工具访问链。**仅源码提交，未运行测试/CI**；原版交互授权确认、沙箱刷新、跨工作树/远程路径语义仍待验证，Issue #3 冻结项保持开放。
+
+### /add-dir --remember 按原版保存至项目本地权限设置（源码已提交，待验证）
+
+原版 `source/src/commands/add-dir/add-dir.tsx` 的 `handleAddDirectory` 与 `source/src/utils/permissions/PermissionUpdate.ts:244–266` 将用户确认的附加目录保存到 `localSettings.permissions.additionalDirectories`，并去重。Rust 原先错误写入通用 `config.additional_directories`。现在 `src/main.rs` 的真实交互 `/add-dir --remember` 通过 `SettingsPaths::add_directory(EditableSource::Local)` 原子更新 `.atlas/settings.local.json`，复用已有锁、非法 JSON 保护、托管策略禁改检查，原有会话即时授权保持；下次启动由 `additional_directories` 重新加载。**仅源码提交，未运行测试/CI**；完整沙箱即时刷新、权限 UI 和跨进程设置通知仍待验收。
