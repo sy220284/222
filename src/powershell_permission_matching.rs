@@ -94,9 +94,12 @@ fn split_command(cmd: &str) -> (&str, &str) {
 }
 /// PowerShell AST classifies paths and qualified scripts as applications.
 fn looks_like_application(command: &str) -> bool {
-    let raw=split_command(command.trim()).0;
-    raw.contains('\\') || raw.contains('/') || raw.starts_with('.')
-        || raw.starts_with('&') || raw.to_ascii_lowercase().ends_with(".ps1")
+    let raw = split_command(command.trim()).0;
+    raw.contains('\\')
+        || raw.contains('/')
+        || raw.starts_with('.')
+        || raw.starts_with('&')
+        || raw.to_ascii_lowercase().ends_with(".ps1")
 }
 fn make_command(cmd_name: &str, rest: &str) -> String {
     if rest.is_empty() {
@@ -251,9 +254,9 @@ fn split_script(command: &str) -> (Vec<String>, bool) {
             }
             '#' if current.chars().last().is_none_or(char::is_whitespace) => {
                 // PowerShell #Requires is an executable parser directive.
-                let next=chars.clone().take(8).collect::<String>();
+                let next = chars.clone().take(8).collect::<String>();
                 if next.to_ascii_lowercase().starts_with("requires") {
-                    opaque=true;
+                    opaque = true;
                 }
                 comment = true;
             }
@@ -292,12 +295,13 @@ fn split_script(command: &str) -> (Vec<String>, bool) {
     if quote.is_some() || escaped {
         opaque = true;
     }
-    let lowered=command.trim_start().to_ascii_lowercase();
+    let lowered = command.trim_start().to_ascii_lowercase();
     if lowered.starts_with("using module ")
         || lowered.starts_with("using assembly ")
         || lowered.starts_with("using namespace ")
-        || command.contains("--%") {
-        opaque=true;
+        || command.contains("--%")
+    {
+        opaque = true;
     }
     if !current.trim().is_empty() {
         parts.push(current.trim().to_owned());
@@ -313,11 +317,11 @@ pub fn policy_for(rules: &[Rule], command: &str) -> Result<Option<Behavior>> {
     // Without a verified AST, directive and variable expressions require
     // review even if the parent cmdlet was previously allowed.
     if opaque {
-        if policy_for_single(rules,command)?==Some(Behavior::Deny){
+        if policy_for_single(rules, command)? == Some(Behavior::Deny) {
             return Ok(Some(Behavior::Deny));
         }
         for statement in &statements {
-            if policy_for_single(rules,statement)?==Some(Behavior::Deny){
+            if policy_for_single(rules, statement)? == Some(Behavior::Deny) {
                 return Ok(Some(Behavior::Deny));
             }
         }
@@ -382,10 +386,12 @@ mod tests {
         .unwrap()
     }
     #[test]
-    fn original_ast_security_gates_block_variable_expansion_and_scripts(){
-        let rules=compiled(&[("allow","PowerShell(Get-Content:*)"),
-            ("allow","PowerShell(Write-Output:*)"),
-            ("allow","PowerShell(Get-ChildItem:*)")]);
+    fn original_ast_security_gates_block_variable_expansion_and_scripts() {
+        let rules = compiled(&[
+            ("allow", "PowerShell(Get-Content:*)"),
+            ("allow", "PowerShell(Write-Output:*)"),
+            ("allow", "PowerShell(Get-ChildItem:*)"),
+        ]);
         for command in [
             "Get-Content $env:SECRET_API_KEY",
             "Get-Content ${env:SECRET_API_KEY}",
@@ -397,22 +403,36 @@ mod tests {
             "Get-ChildItem --% hidden",
             "Get-ChildItem .\n#Requires -Modules UnknownModule",
             "using module ./hidden.psm1\nGet-ChildItem",
-        ]{
-            assert_eq!(policy_for(&rules,command).unwrap(),Some(Behavior::Ask),
-                "should not inherit allow from cmdlet: {command}");
+        ] {
+            assert_eq!(
+                policy_for(&rules, command).unwrap(),
+                Some(Behavior::Ask),
+                "should not inherit allow from cmdlet: {command}"
+            );
         }
-        assert_eq!(policy_for(&rules,"Get-Content 'fixed.txt'").unwrap(),
-            Some(Behavior::Allow));
-        assert_eq!(policy_for(&rules,"Write-Output \"static\"").unwrap(),
-            Some(Behavior::Allow));
+        assert_eq!(
+            policy_for(&rules, "Get-Content 'fixed.txt'").unwrap(),
+            Some(Behavior::Allow)
+        );
+        assert_eq!(
+            policy_for(&rules, "Write-Output \"static\"").unwrap(),
+            Some(Behavior::Allow)
+        );
     }
     #[test]
-    fn explicit_denies_still_override_opaque_compound_statements(){
-        let rules=compiled(&[("allow","PowerShell(Get-ChildItem:*)"),
-            ("deny","PowerShell(Remove-Item:*)")]);
-        assert_eq!(policy_for(&rules,
-            "Get-ChildItem .; Remove-Item blocked; Write-Output $env:SECRET").unwrap(),
-            Some(Behavior::Deny));
+    fn explicit_denies_still_override_opaque_compound_statements() {
+        let rules = compiled(&[
+            ("allow", "PowerShell(Get-ChildItem:*)"),
+            ("deny", "PowerShell(Remove-Item:*)"),
+        ]);
+        assert_eq!(
+            policy_for(
+                &rules,
+                "Get-ChildItem .; Remove-Item blocked; Write-Output $env:SECRET"
+            )
+            .unwrap(),
+            Some(Behavior::Deny)
+        );
     }
     #[test]
     fn raw_and_canonical_powershell_rules_do_not_see_bash() {
