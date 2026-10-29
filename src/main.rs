@@ -1,4 +1,5 @@
 mod agent;
+mod agent_definition;
 mod array_utils;
 mod ask_user_question;
 mod background;
@@ -244,6 +245,17 @@ enum Commands {
     Doctor,
     /// Set up project instructions, skills and hooks through guided model tools
     ProjectInit,
+    /// Validate or save a user-defined multi-model agent from JSON
+    AgentDefinition {
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(long)]
+        user: bool,
+        #[arg(long)]
+        replace: bool,
+        #[arg(long)]
+        validate_only: bool,
+    },
     /// Edit or validate user keyboard shortcuts (without model access)
     Keybindings {
         #[arg(long)]
@@ -760,6 +772,32 @@ async fn main() -> Result<()> {
         _ => {}
     }
 
+    if let Commands::AgentDefinition {
+        file,
+        user,
+        replace,
+        validate_only,
+    } = &cli.command
+    {
+        let spec: agent_definition::AgentDefinition =
+            serde_json::from_slice(&std::fs::read(file)?)?;
+        let validation = agent_definition::validate_in_workspace(&spec, &cli.workspace, *user)?;
+        for warning in &validation.warnings {
+            eprintln!("warning: {warning}");
+        }
+        if !validation.valid() {
+            bail!("{}", validation.errors.join("; "));
+        }
+        if *validate_only {
+            println!("Agent definition valid: {}", spec.agent_type);
+        } else {
+            println!(
+                "{}",
+                agent_definition::save_agent(&spec, &cli.workspace, *user, *replace)?.display()
+            );
+        }
+        return Ok(());
+    }
     if let Commands::Keybindings {
         check,
         action,
