@@ -21,14 +21,20 @@ use walkdir::WalkDir;
 const MAX_FILE_BYTES: u64 = 1_048_576;
 const MAX_OUTPUT_CHARS: usize = 16_000;
 
-fn skill_model_invocable(path: &Path) -> Result<bool> {
+fn skill_invocable(path: &Path, for_model: bool) -> Result<bool> {
     if fs::metadata(path)?.len() > 64_000 {
         return Ok(false);
     }
     let content = fs::read_to_string(path)?;
-    Ok(!crate::skill_arguments::frontmatter_boolean(
-        &content, "disable-model-invocation",
-    ).unwrap_or(false))
+    if for_model {
+        Ok(!crate::skill_arguments::frontmatter_boolean(
+            &content, "disable-model-invocation",
+        ).unwrap_or(false))
+    } else {
+        Ok(crate::skill_arguments::frontmatter_boolean(
+            &content, "user-invocable",
+        ).unwrap_or(true))
+    }
 }
 
 /// The original Read/Edit contract is scoped to a conversation, not a
@@ -1180,6 +1186,16 @@ impl ToolExecutor {
     }
 
     pub fn list_skills(&self) -> Result<String> {
+        self.list_skills_filtered(true)
+    }
+
+    /// Interactive /skills lists user-invocable skills independently from the
+    /// model's SkillTool allowlist. A user-only skill must remain discoverable.
+    pub fn list_user_skills(&self) -> Result<String> {
+        self.list_skills_filtered(false)
+    }
+
+    fn list_skills_filtered(&self, for_model: bool) -> Result<String> {
         let root = self.root.join(".atlas").join("skills");
         let mut skills = Vec::new();
         if root.is_dir() {
@@ -1191,7 +1207,7 @@ impl ToolExecutor {
                 }
                 let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
                 if path.is_file() && self.search_read_allowed(&path)?
-                    && skill_model_invocable(&path)? {
+                    && skill_invocable(&path, for_model)? {
                     skills.push(name);
                 }
             }
@@ -1201,7 +1217,7 @@ impl ToolExecutor {
                 &self.root, &self.enabled_plugins, &name,
             )?;
             let path = self.checked_path(&resolved.to_string_lossy())?;
-            if self.search_read_allowed(&path)? && skill_model_invocable(&path)? {
+            if self.search_read_allowed(&path)? && skill_invocable(&path, for_model)? {
                 skills.push(name);
             }
         }
@@ -2375,6 +2391,7 @@ mod tests {
         let tool = executor(root.path(), Approval::ReadOnly);
         assert!(!tool.list_skills().unwrap().contains("manual"));
         assert!(tool.read_skill(&json!({"name":"manual"})).is_err());
+        assert!(tool.list_user_skills().unwrap().contains("manual"));
     }
     #[test]
     fn skills_are_discovered_and_loaded_from_workspace() {
