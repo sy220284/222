@@ -1,6 +1,6 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
-## 2026-10-29：WebFetch 与 macOS 深链终端源码补齐（本任务本轮 7/100，待验收）
+## 2026-10-29：WebFetch 与 macOS 深链终端源码补齐（本任务本轮 9/100，待验收）
 
 原始 ZIP 源码依据：source/src/tools/WebFetchTool/utils.ts（50–95、262–329、347–482）、source/src/tools/WebFetchTool/WebFetchTool.ts（214–295）、source/src/utils/mcpOutputStorage.ts（61–135、148–174）、source/src/utils/deepLink/terminalLauncher.ts（26–120）。Rust 可达链：src/tools.rs → src/webfetch.rs；src/main.rs → src/terminal_launcher.rs → src/config.rs。
 
@@ -12,7 +12,10 @@
 6. macOS 深链终端发现：持久偏好、TERM_PROGRAM、Spotlight、Applications 顺序选择，保留原有 Terminal.app 失败回退。提交 44f3c38d、3219e15f、5df20c62。
 7. 用户终端偏好设置：真实 CLI terminal-preference 命令支持查看、保存和 auto 恢复，供浏览器无环境启动使用。提交 fc19dd1c。
 
-严格状态：7 项独立用户业务行为已有新 Rust 代码并推送，均为“已提交、待验收”；没有运行 Cargo、测试或 CI。本次未建立完整且逐项核实的 100 项独立业务缺口清单，未达到 100 项硬目标，差 93 项。WebFetch 仍缺二次模型摘要、完整取消状态机、会话级附件目录及完整 DOM 等价；macOS 终端缺完整交互偏好 UI 和跨平台行为证据。Issue #3 冻结 362 项仍开放、未勾选；动态矩阵不升级为已验收。
+8. URL 校验与网络出口诊断：按原版 UTF-16 单元限制 2,000 字符及公网主机结构，区分 403 blocked-by-allowlist 代理阻断和普通 HTTP 错误，返回 HTTP 状态说明。提交 1fa2f9ad。
+9. 大型 WebFetch 结果持久化：实际工具执行器不再将超过 16,000 字符的抓取结果静默截断，完整 JSON 保存在工作区 .atlas/tool-results，返回保存路径、预览和分页读取说明；拒绝跨工作区符号链接。提交 e1a1fe02、4c10643e。
+
+严格状态：9 项独立用户业务行为已有新 Rust 代码并推送，均为“已提交、待验收”；没有运行 Cargo、测试或 CI。本次未建立完整且逐项核实的 100 项独立业务缺口清单，未达到 100 项硬目标，差 91 项。WebFetch 仍缺二次模型摘要、完整取消状态机、会话级附件目录及完整 DOM 等价；macOS 终端缺完整交互偏好 UI 和跨平台行为证据。Issue #3 冻结 362 项仍开放、未勾选；动态矩阵不升级为已验收。
 
 
 ## 2026-10-29：WebFetch 大页面与深链终端发现（本任务本轮 2/100，已提交待验收）
