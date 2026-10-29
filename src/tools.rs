@@ -169,7 +169,7 @@ impl ToolExecutor {
         let preview = result.get("content").and_then(Value::as_str).unwrap_or("");
         let binary = result.get("persistedPath").and_then(Value::as_str);
         Ok(format!(
-            "WebFetch {code} {url}\nFull response ({} bytes) saved to {}.\nUse read_file or run_command to inspect it in chunks.{}\n\nPreview:\n{}",
+            "WebFetch {code} {url}\nFull response ({} bytes) saved to {}.\nUse run_command with a paged reader or JSON query to inspect the complete saved result.{}\n\nPreview:\n{}",
             output.len(),
             relative.display(),
             binary.map(|path| format!("\nBinary attachment: {path}")).unwrap_or_default(),
