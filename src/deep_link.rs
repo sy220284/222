@@ -117,16 +117,17 @@ pub fn parse_deep_link(uri: &str) -> Result<DeepLinkAction> {
             );
         }
     }
-    Ok(DeepLinkAction {
-        query,
-        cwd: cwd.filter(|s| !s.is_empty()),
-        repo: repo.filter(|s| !s.is_empty()),
-    })
+    // URLSearchParams.get distinguishes present empty parameters from missing ones.
+    Ok(DeepLinkAction { query, cwd, repo })
 }
 
 /// Matches buildDeepLink: encode query, cwd and repo in this order.
 pub fn build_deep_link(action: &DeepLinkAction) -> Result<String> {
     let mut url = Url::parse(&format!("{DEEP_LINK_PROTOCOL}://open"))?;
+    // JS URL.toString() omits '?' when no query parameter is appended.
+    if action.query.as_deref().is_some_and(|s| !s.is_empty())
+        || action.cwd.as_deref().is_some_and(|s| !s.is_empty())
+        || action.repo.as_deref().is_some_and(|s| !s.is_empty())
     {
         let mut p = url.query_pairs_mut();
         if let Some(query) = action.query.as_deref().filter(|s| !s.is_empty()) {
@@ -145,6 +146,15 @@ pub fn build_deep_link(action: &DeepLinkAction) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn present_empty_url_params_match_original_javascript() {
+        let parsed = parse_deep_link("atlas-cli://open?cwd=&repo=&q=").unwrap();
+        assert_eq!(parsed.cwd.as_deref(), Some(""));
+        assert_eq!(parsed.repo.as_deref(), Some(""));
+        assert_eq!(parsed.query, None);
+        assert_eq!(build_deep_link(&DeepLinkAction::default()).unwrap(), "atlas-cli://open");
+        assert_eq!(build_deep_link(&parsed).unwrap(), "atlas-cli://open");
+    }
     #[test]
     fn accepts_both_uri_forms_and_decodes_first_values() {
         let a = parse_deep_link(
