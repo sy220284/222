@@ -8,7 +8,9 @@
 - **工具发现与关键词检索**：对照 `src/tools/ToolSearchTool/ToolSearchTool.ts:129–160, 218–300`，Rust `src/tool_search.rs` 接入原版完整名称回退评分及 searchHint 高优先级匹配，使名称分词不完整但提示明确的工具可被发现。提交 `d974b491b2bbd59c6c6e90ec91b7c23c901819d0`。仍缺完整原版 deferred/tool_reference 协议。
 - **PowerShell 模型输入兼容**：对照 `src/tools/PowerShellTool/PowerShellTool.tsx:230–233`、`src/utils/semanticNumber.ts` 与 `semanticBoolean.ts`，Rust `src/semantic_inputs.rs` 将 PowerShell 的字符串毫秒超时及后台执行布尔值转换为实际执行器可读类型；同次补齐 Grep 数字/布尔参数的源语义输入。提交 `a7db37058dfe1262907afa0e5d80b5e319000b45`。完整 PowerShell AST/沙箱和后台任务生命周期仍缺。
 - **Grep 后续补齐（不重复计数）**：`src/search.rs` 增加多模式通配和排除过滤、Git 原生忽略规则、原版 `numLines` 回执；`src/tools.rs` 修正跨域网页跳转只检查显式拒绝，避免提前触发两次授权。提交 `e47a87bb31f85b113e17b1b848ae918537813ea3`、`6f55049701cd5ab17710e5b2cdf09e766fb9afe7`、`50b8cbe16b51633f6c69b237678f578cd8ef280f`、`876474e449123dd9f9bc7adea5cf88fe6b6a9f98`。
-- **严格计数**：本轮完成 5 条互不重复的用户业务主链的真实源码修改与提交，**5/100**，其余 95 条未完成；未运行 Cargo、单元/集成测试或 CI，均仅“已提交待验收”，不新增已验收源路径，Issue #3 冻结 362 项保持开放。原始源码 ZIP 可用；本轮尚未完成 100 条独立用户业务缺口的全部源码级确认和实施方案，不能用路径候选替代。
+- **Glob 文件发现**：对照原版 `src/utils/glob.ts:66–129`、`src/tools/GlobTool/GlobTool.ts:154–171`，Rust `src/search.rs` 支持经授权搜索目录内的绝对路径通配模式、`ATLAS_GLOB_HIDDEN` 隐藏文件开关、`ATLAS_GLOB_NO_IGNORE` 是否遵循 Git 忽略规则，保留原版默认隐藏文件可见、默认不受 .gitignore 限制。提交 `091d2fe8f44d8f85b9f2310f1a7f41d47cafdc18`。完整动态数量限制、权限排除和插件缓存过滤仍缺。
+- **多模型网页搜索域名范围**：对照原版 `src/tools/WebSearchTool/WebSearchTool.ts:25–36, 76–84`，Rust `src/websearch.rs` 在 SearXNG/Brave 通用后端公开 `allowed_domains`/`blocked_domains`，按域名及子域名筛选结果，禁止黑名单结果进入 Agent，并校验原版最短查询长度。提交 `d620fcb88bb556ab55a2d605fce877d3d9a828c2`、`966e590e67a2527abc505e2c6843a1971d1dee84`、`8360caae8d120c76479bac7bf48172f447a9a032`。原版模型原生检索/引用协议及服务端域名过滤仍未等价。
+- **严格计数**：本轮完成 7 条互不重复的用户业务主链的真实源码修改与提交，**7/100**，其余 93 条未完成；未运行 Cargo、单元/集成测试或 CI，均仅“已提交待验收”，不新增已验收源路径，Issue #3 冻结 362 项保持开放。原始源码 ZIP 可用；本轮尚未完成 100 条独立用户业务缺口的全部源码级确认和实施方案，不能用路径候选替代。
 
 
 ## 2026-10-29：本地原版源码对照——会话上下文与项目引导（代码已验证，非文件级全等价）
