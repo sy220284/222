@@ -791,6 +791,16 @@ impl McpManager {
                 .as_str()
                 .unwrap_or("")
                 .to_owned();
+            // A previously expired MCP auth/session can recover while other
+            // servers remain healthy. Refresh only this catalog server and
+            // keep its failure isolated if reconnect still fails.
+            if self.server_statuses[index]["status"] != "connected" {
+                if let Err(error) = self.reconnect_server(index).await {
+                    servers.push(json!({"server":name,"ok":false,
+                        "error":format!("{error:#}")}));
+                    continue;
+                }
+            }
             let Some(client_index) = self.status_clients[index] else {
                 servers.push(json!({"server":name,"ok":false,"error":
                     self.server_statuses[index]["error"].as_str().unwrap_or("not connected")}));
