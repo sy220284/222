@@ -25,6 +25,7 @@ mod deep_link_protocol;
 mod deep_link_register;
 mod detect_repository;
 mod diagnostics;
+mod env_runtime;
 mod env_validation;
 mod event_signal;
 mod files_context;

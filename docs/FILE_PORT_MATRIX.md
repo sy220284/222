@@ -1487,7 +1487,7 @@
 | `src/utils/embeddedTools.ts` | 30 | 1043 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/env.ts` | 348 | 10943 | 重写：保持通用行为 | `src/generated_ports/p_1580d3dd08c1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/envDynamic.ts` | 152 | 5278 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/envUtils.ts` | 184 | 6246 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/envUtils.ts` | 184 | 6246 | 重写：保持通用行为 | `src/env_runtime.rs / src/subprocess_env.rs` | 部分实现：真值与显式假值、KEY=VALUE 解析、启动精简模式、配置目录及区域回退已有 Rust 代码和测试；多模型区域动态配置、全部 CLI 配置调用方仍未等价 |
 | `src/utils/envValidation.ts` | 39 | 1045 | 重写：保持通用行为 | `src/env_validation.rs` | 部分实现：decimal-prefix parseInt 和上下限校验；超大整数及 JS 数值精度仍需核对 |
 | `src/utils/errorLogSink.ts` | 236 | 6557 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/errors.ts` | 239 | 7655 | 重写：保持通用行为 | `src/generated_ports/p_bf458f64de43d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |

@@ -30,12 +30,7 @@ const SENSITIVE: &[&str] = &[
 ];
 
 fn scrub_enabled() -> bool {
-    std::env::var("ATLAS_SUBPROCESS_ENV_SCRUB").is_ok_and(|v| {
-        matches!(
-            v.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        )
-    })
+    crate::env_runtime::is_env_truthy(std::env::var("ATLAS_SUBPROCESS_ENV_SCRUB").ok().as_deref())
 }
 
 /// Applies to a prepared process, after all custom environment injection.
