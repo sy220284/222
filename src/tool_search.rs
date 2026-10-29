@@ -58,7 +58,7 @@ fn is_deferred(tool: &Value) -> bool {
     };
     if tool["alwaysLoad"] == true
         || function["alwaysLoad"] == true
-        || tool.pointer("/_meta/anthropic~1alwaysLoad") == Some(&Value::Bool(true))
+        || tool.pointer("/_meta/alwaysLoad") == Some(&Value::Bool(true))
     {
         return false;
     }
@@ -337,6 +337,13 @@ mod tests {
         assert!(!after
             .iter()
             .any(|tool| { tool["function"]["name"] == "mcp__github__create_issue" }));
+    }
+    #[test]
+    fn neutral_metadata_controls_deferred_schema() {
+        let deferred = json!({"function":{"name":"mcp__example__tool"}});
+        assert_eq!(visible_catalog(&[deferred], &Default::default()).0.len(), 0);
+        let always = json!({"_meta":{"alwaysLoad":true},"function":{"name":"mcp__example__tool"}});
+        assert_eq!(visible_catalog(&[always], &Default::default()).0.len(), 1);
     }
     #[test]
     fn invalid_query_is_rejected() {
