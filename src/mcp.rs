@@ -56,6 +56,66 @@ pub(crate) fn server_request_reply_for_root(message: &Value, root: &Path) -> Res
 
 const RPC_TIMEOUT: Duration = Duration::from_secs(30);
 
+const DEFAULT_MCP_TOOL_TIMEOUT: Duration = Duration::from_millis(100_000_000);
+
+/// MCP tool execution uses the original long-running timeout; discovery
+/// and control operations keep their separate short deadline.
+fn mcp_tool_timeout() -> Duration {
+    std::env::var("MCP_TOOL_TIMEOUT")
+        .ok()
+        .and_then(|raw| {
+            let digits: String = raw.trim_start().chars().take_while(|c| c.is_ascii_digit()).collect();
+            digits.parse::<u64>().ok()
+        })
+        .filter(|millis| *millis > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(DEFAULT_MCP_TOOL_TIMEOUT)
+}
+
+/// Keep complete large MCP results reachable through the active workspace's
+/// Read/Shell tools instead of silently clipping them at 16,000 characters.
+fn present_mcp_tool_output(output: String, workspace: &Path, has_images: bool) -> String {
+    let token_limit = std::env::var("MAX_MCP_OUTPUT_TOKENS")
+        .ok().and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0).unwrap_or(25_000);
+    let char_limit = token_limit.saturating_mul(4);
+    let length = output.encode_utf16().count();
+    if length <= char_limit { return output; }
+    if has_images {
+        let mut units = 0;
+        let preview: String = output.chars().take_while(|ch| {
+            let next = units + ch.len_utf16();
+            if next > char_limit { false } else { units = next; true }
+        }).collect();
+        return format!("{preview}\n\n[OUTPUT TRUNCATED - exceeded {token_limit} token limit; image blocks cannot be persisted as text]");
+    }
+    let save = (|| -> Result<PathBuf> {
+        use std::io::Write as _;
+        let root = workspace.canonicalize().context("Cannot resolve MCP workspace")?;
+        let config = root.join(".atlas");
+        std::fs::create_dir_all(&config)?;
+        let config = config.canonicalize()?;
+        if !config.starts_with(&root) { bail!("MCP output directory escapes workspace"); }
+        let directory = config.join("tool-results");
+        std::fs::create_dir_all(&directory)?;
+        let directory = directory.canonicalize()?;
+        if !directory.starts_with(&root) { bail!("MCP output directory escapes workspace"); }
+        let path = directory.join(format!("mcp-output-{}.txt", uuid::Uuid::new_v4()));
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
+        if let Err(error) = file.write_all(output.as_bytes()).and_then(|_| file.sync_all()) {
+            drop(file);
+            let _ = std::fs::remove_file(&path);
+            return Err(error).context("Cannot persist MCP output");
+        }
+        Ok(path)
+    })();
+    match save {
+        Ok(path) => format!("MCP result ({length} characters) exceeded the {token_limit}-token budget and was saved in full to {}. Use Read or Shell to inspect it.", path.display()),
+        Err(error) => format!("Error: MCP result ({length} characters) exceeds the output budget and could not be saved: {error:#}. Use server pagination or filtering."),
+    }
+}
+
+
 struct Client {
     name: String,
     _child: Child,
@@ -355,7 +415,7 @@ impl McpManager {
             let mut cursor: Option<String> = None;
             let mut seen_cursors = std::collections::HashSet::new();
             let discovery: Result<()> = async {
-                for _ in 0..20 {
+                loop {
                     let params = cursor.as_ref().map_or(json!({}), |c| json!({"cursor":c}));
                     let page = timeout(RPC_TIMEOUT, client.request("tools/list", params))
                         .await
@@ -396,9 +456,6 @@ impl McpManager {
                         }
                         _ => {}
                     }
-                }
-                if cursor.is_some() {
-                    bail!("MCP exceeded 20 discovery pages")
                 }
                 Ok(())
             }
@@ -606,7 +663,7 @@ impl McpManager {
             let mut discovered = Vec::new();
             let mut seen_aliases = std::collections::HashSet::new();
             let fetch: Result<()> = async {
-                for _ in 0..20 {
+                loop {
                     let params = cursor.as_ref().map_or(json!({}), |c| json!({"cursor":c}));
                     let reply = timeout(
                         RPC_TIMEOUT,
@@ -656,9 +713,6 @@ impl McpManager {
                         }
                         _ => {}
                     }
-                }
-                if cursor.is_some() {
-                    bail!("MCP dynamic discovery exceeded 20 pages")
                 }
                 Ok(())
             }
@@ -806,7 +860,7 @@ impl McpManager {
             bail!("MCP tool arguments must be an object")
         }
         let response = timeout(
-            RPC_TIMEOUT,
+            mcp_tool_timeout(),
             self.clients[index].request("tools/call", json!({"name":real_name,"arguments":args})),
         )
         .await
@@ -858,7 +912,10 @@ impl McpManager {
         } else {
             response.to_string()
         };
-        Ok(result.chars().take(16_000).collect())
+        let has_images = parts.is_some_and(|items| {
+            items.iter().any(|item| item.get("type").and_then(Value::as_str) == Some("image"))
+        });
+        Ok(present_mcp_tool_output(result, &self.root, has_images))
     }
 }
 
