@@ -120,7 +120,9 @@ impl PromptHistory {
                 (Some(content.content), None)
             } else {
                 let hash = paste_hash(&content.content);
-                self.store_paste(&hash, &content.content)?;
+                // The original stores large pasted text on a best-effort
+                // path; a cache write failure must not discard the prompt.
+                let _ = self.store_paste(&hash, &content.content);
                 (None, Some(hash))
             };
             stored.insert(
