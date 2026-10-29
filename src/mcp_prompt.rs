@@ -68,7 +68,13 @@ pub fn named_arguments(prompt: &Value, args: &str) -> Result<Map<String, Value>>
 fn persist_mcp_blob(data: &str, mime: Option<&str>, workspace: &Path) -> Result<String> {
     let bytes = STANDARD.decode(data).context("MCP binary resource has invalid base64")?;
     let root = workspace.canonicalize().context("Cannot resolve MCP workspace")?;
-    let directory = root.join(".atlas").join("tool-results");
+    let config_directory = root.join(".atlas");
+    fs::create_dir_all(&config_directory).context("Cannot create MCP workspace directory")?;
+    let config_directory = config_directory.canonicalize()?;
+    if !config_directory.starts_with(&root) {
+        bail!("MCP workspace directory escapes workspace");
+    }
+    let directory = config_directory.join("tool-results");
     fs::create_dir_all(&directory).context("Cannot create MCP tool results directory")?;
     let directory = directory.canonicalize()?;
     if !directory.starts_with(&root) {
