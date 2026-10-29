@@ -13,6 +13,7 @@ use uuid::Uuid;
 pub struct SessionItem {
     pub id: Uuid,
     pub title: String,
+    pub tag: Option<String>,
     pub messages: usize,
     pub modified_ms: u128,
 }
@@ -86,6 +87,7 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
         entries.push(SessionItem {
             id,
             title,
+            tag: session.tag,
             messages: session.messages.len(),
             modified_ms,
         });
@@ -102,7 +104,11 @@ pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
     Ok(matches
         .into_iter()
         .filter(|item| {
-            item.id.to_string().contains(&query) || item.title.to_lowercase().contains(&query)
+            item.id.to_string().contains(&query)
+                || item.title.to_lowercase().contains(&query)
+                || item.tag.as_ref().is_some_and(|tag| {
+                    tag.to_lowercase().contains(query.trim_start_matches('#'))
+                })
         })
         .collect())
 }
