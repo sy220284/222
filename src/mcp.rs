@@ -473,6 +473,47 @@ done"#;
         assert_eq!(mgr.definitions().len(),2);
     }
     #[tokio::test]
+    async fn normalized_tool_identity_collisions_are_rejected_without_route_overwrite(){
+        let one=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
+  *'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"a.b"}]}}' ;;
+  *'"method":"tools/call"'*) echo '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"first server"}]}}' ;;
+esac
+done"#;
+        let duplicate=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
+  *'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"a_b"}]}}' ;;
+esac
+done"#;
+        let internal_duplicate=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
+  *'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"x.y"},{"name":"x_y"}]}}' ;;
+esac
+done"#;
+        let config=|id:&str,script:&str|McpServerConfig{
+            id:id.into(),command:"sh".into(),args:vec!["-c".into(),script.into()],
+            env:HashMap::new(),transport:None,url:None,headers:HashMap::new()
+        };
+        let mut mgr=McpManager::connect(&[
+            config("same.name",one),config("same_name",duplicate),
+            config("internal",internal_duplicate)
+        ]).await.unwrap();
+        let states=mgr.statuses().unwrap();
+        assert_eq!(states.len(),3);
+        assert_eq!(states[0]["status"],"connected");
+        assert_eq!(states[1]["status"],"failed");
+        assert_eq!(states[2]["status"],"failed");
+        assert_eq!(mgr.definitions().len(),1);
+        assert!(mgr.handles("mcp__same_name__a_b"));
+        let call=ToolCall{id:"identity".into(),kind:"function".into(),
+            function:FunctionCall{name:"mcp__same_name__a_b".into(),
+                arguments:"{}".into()}};
+        assert_eq!(mgr.execute(&call).await,"first server");
+    }
+    #[tokio::test]
     async fn failed_stdio_server_cannot_break_healthy_server_and_indexing(){
         let script=r#"while IFS= read -r line; do
 case "$line" in
