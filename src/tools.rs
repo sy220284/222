@@ -483,7 +483,7 @@ impl ToolExecutor {
                 // Original GlobTool checks read permission on its search root.
                 self.require_read_rules(raw, &path)?;
                 search::glob_files_filtered(&self.root, &path, &args, &|candidate| {
-                    self.search_read_allowed(candidate)
+                    self.search_read_not_denied(candidate)
                 })
             }
             "grep_files" => {
@@ -493,7 +493,7 @@ impl ToolExecutor {
                 // Original GrepTool checks read permission on its search root.
                 self.require_read_rules(raw, &path)?;
                 search::grep_files_filtered(&self.root, &path, &args, &|candidate| {
-                    self.search_read_allowed(candidate)
+                    self.search_read_not_denied(candidate)
                 })
             }
             "search_text" => self.search_text(&args),
@@ -947,6 +947,16 @@ impl ToolExecutor {
             "read_file",
             &json!({"path":requested,"paths":paths}),
         )
+    }
+
+    /// Original Glob/Grep apply Read deny patterns to descendant files;
+    /// an Ask rule is handled at the search-root approval boundary instead
+    /// of silently hiding individual matches after that approval.
+    fn search_read_not_denied(&self, path: &Path) -> Result<bool> {
+        Ok(!matches!(
+            self.read_rule_decision(&path.to_string_lossy(), path)?,
+            Some(permission_rules::Behavior::Deny)
+        ))
     }
 
     fn search_read_allowed(&self, path: &Path) -> Result<bool> {
