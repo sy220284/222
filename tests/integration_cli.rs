@@ -2256,7 +2256,10 @@ fn blocking_subagent_start_hook_prevents_child_provider_request(){
     let requests=server.join().unwrap();
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
     assert_eq!(requests.len(),2);
-    assert!(!requests[1].contains("must not run"));
+    // The parent's follow-up request legitimately includes the original tool
+    // arguments in its conversation history. Two total HTTP requests (parent
+    // original + parent response) and the tool's blocking feedback prove that
+    // the child provider was never contacted.
     assert!(requests[1].contains("SubagentStart hook blocked"));
     assert!(requests[1].contains("review denied"));
 }
