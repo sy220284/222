@@ -1,5 +1,14 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：PowerShell 授权界面的破坏性操作提醒（源码已提交，待验收）
+
+- **原版对照**：完整原始 ZIP `source/src/tools/PowerShellTool/destructiveCommandWarning.ts::getDestructiveCommandWarning`（12–108 行），以及 `source/src/tools/PowerShellTool/UI.tsx` 的权限界面。
+- **Rust 真实缺口**：`src/tools.rs::ToolExecutor::require_approval` 仅在 Bash 的授权界面展示危险操作提示；PowerShell `Remove-Item -Recurse -Force`、`Clear-Disk`、`Format-Volume`、Git 强制推送与清理等操作缺少原版可见警告。
+- **实际补齐**：`src/powershell_permission_matching.rs::destructive_command_warning` 按原版模式与优先级识别危险操作，包含组合删除标志、PowerShell 别名、磁盘/数据库/系统命令、Git 清理干运行排除；`src/tools.rs::require_approval` 在真实 PowerShell 命令的交互授权前显示提示，保留既有拒绝优先和安全检查，不用提示替代权限判定。
+- **代码提交**：`d44012a93c06789d22660391e31f5b62634a60af`、`3b8e96e8e0cc32309a3b6dcc2efc358a3eb45aba`、`f6e598d3992312948c05d49f3b24fca545d30dfb`、`418ac48f99c1f6736d101afa8db01ae69ff40b61`、`73ac27027c47a6a02b37ca542a5440e0ecdd0c7f`。
+- **状态**：本轮新增 **1 项独立用户业务功能**，与 Hook 7 项合计 **8/100 项源码已提交、待验收**，尚差 92 项。仍缺原版完整 PowerShell AST、权限 UI 动画、动态命令解析、取消与并发时序；Issue #3 冻结项不勾选。按本任务要求未运行 Cargo、测试或 CI。
+
+
 ## 2026-10-29：Hook 标准输入、工作区、超时和模型可见输出（源码已提交，待验收）
 
 本次对照完整用户原始 ZIP 的 `source/src/utils/hooks.ts`（166–181、877–879、986–1027、1616–1645、2499–2695、2743–2880 行）、`source/src/utils/ShellCommand.ts`（337–346 行），并检查 Rust 的 `Agent::attach_hooks/ask/finish` 与 `HookRunner::run/run_command` 真实可达链，补齐下列 7 条相互独立的用户业务行为：
