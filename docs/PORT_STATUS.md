@@ -1,3 +1,9 @@
+## 2026-10-29：SDK 文本技能/插件命令展开复用交互权限（已提交、待验收）
+
+- **原版线索**：`source/src/cli/print.ts` 的 SDK 用户消息和 `skipSlashCommands` 路径，结合 `source/src/utils/plugins/loadPluginCommands.ts:169–211,326–400`、`source/src/skills/loadSkillsDir.ts:316–373` 的用户命令提示展开。
+- **Rust 真实链**：`src/main.rs::sdk` 接收非排队、纯文本 `user` 消息 → `multimodal::parse` → `expand_user_skill_prompt`（CLI 与 SDK 共用）→ 插件/本地技能路径及 `user-invocable` 校验、参数和会话变量展开 → `Agent::ask_with_blocks`。显式 `skipSlashCommands=true` 跳过展开；隐藏技能返回 SDK 错误，混合图片消息不被误改。交互 `chat` 也复用同一函数，避免权限逻辑分叉。
+- **提交**：`3476d97dd2118ef98d0a9c78e91ade23afd6cd09`。保守新增 **1 项 SDK 用户业务功能**，本轮累计 **13/100，余 87**。尚缺 SDK 排队消息执行阶段的斜杠展开、带图片消息中的文本命令、命令元数据与内嵌 Shell/权限、异步取消；未运行 Cargo/测试/CI，已提交、待验收。100 项先行完整缺口清单仍未建立，Issue #3 冻结 362 项不变。
+
 ## 2026-10-29：本地技能用户调用与模型权限双通道（已提交、待验收）
 
 - **原版依据**：`source/src/skills/loadSkillsDir.ts:216–258,316–373` 为本地 `SKILL.md` 同时提供用户可调用命令及模型调用元数据；`source/src/tools/SkillTool/SkillTool.ts:405–423` 独立检查模型调用禁用标志。
