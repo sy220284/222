@@ -632,3 +632,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 权限模式修改与默认模式保存接通（源码已提交，待验证）
 
 原版 `source/src/utils/permissions/PermissionUpdate.ts:317–325` 的 `setMode` 将权限模式写入对应设置来源，供下次启动恢复。Rust `SettingsPaths::set_default_mode` 现原子写入 `localSettings.permissions.defaultMode`，终端 `/mode set MODE [--remember]` 先经 Agent 实际授权上限校验和当前会话模式持久化，再按用户选择写入本地默认值；下次启动由已接通的 `SettingsPaths::default_mode` 读取。**仅源码提交、待验证**；原版 UI 设置界面、动态设置订阅与远程模式同步仍未全等价。
+
+### 跨平台自动发现管理员托管权限策略（源码已提交，待验证）
+
+原版 `source/src/utils/settings/managedPath.ts` 在 Linux/macOS/Windows 使用系统级托管目录，而不是要求每个用户单独配置环境变量。Rust `SettingsPaths::for_workspace` 现按平台自动寻找中立路径 `/etc/atlas-agent/managed-settings.json`、`/Library/Application Support/AtlasAgent/managed-settings.json` 或 `C:\\Program Files\\AtlasAgent\\managed-settings.json`，仍允许 `ATLAS_POLICY_SETTINGS` 显式覆盖；既有 `load_policy` 同时加载同目录的 `managed-settings.d`。无托管文件时不改变用户设置。**仅源码提交，未运行测试/CI**；完整系统 MDM、远程策略与用户级注册表优先级仍待实现。

@@ -44,7 +44,22 @@ impl SettingsPaths {
             user: std::env::var_os("ATLAS_USER_SETTINGS")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| user_root.join("settings.json")),
-            policy: std::env::var_os("ATLAS_POLICY_SETTINGS").map(PathBuf::from),
+            policy: Some(
+                std::env::var_os("ATLAS_POLICY_SETTINGS")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| {
+                        // Source managedPath.ts: system-managed policy discovery.
+                        if cfg!(target_os = "macos") {
+                            PathBuf::from(
+                                "/Library/Application Support/AtlasAgent/managed-settings.json",
+                            )
+                        } else if cfg!(windows) {
+                            PathBuf::from(r"C:\Program Files\AtlasAgent\managed-settings.json")
+                        } else {
+                            PathBuf::from("/etc/atlas-agent/managed-settings.json")
+                        }
+                    }),
+            ),
         })
     }
 
