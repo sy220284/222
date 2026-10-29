@@ -208,7 +208,7 @@ fn type_matches(path: &Path, kind: &str) -> bool {
         "ts" => matches!(extension, "ts" | "tsx" | "mts" | "cts"),
         "py" | "python" => matches!(extension, "py" | "pyi"),
         "json" => matches!(extension, "json" | "sarif")
-            || path.file_name().is_some_and(|name| name == "composer.lock"),
+            || path.file_name().and_then(|name| name.to_str()) == Some("composer.lock"),
         "md" => matches!(extension, "markdown" | "md" | "mdown" | "mdwn" | "mdx" | "mkd" | "mkdn"),
         "go" => extension == "go",
         "java" => extension == "java",
