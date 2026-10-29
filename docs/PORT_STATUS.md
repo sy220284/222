@@ -1,3 +1,11 @@
+## 2026-10-29：SDK 排队斜杠技能命令进入真实模型调用链（已提交、待验收）
+
+- **原版依据**：`source/src/utils/processUserInput/processUserInput.ts:325–343,422–445,531–550` 在队列实际处理时识别斜杠命令；数组内容取最后一个文本块，保留之前的图片；`source/src/utils/plugins/loadPluginCommands.ts` 和 `source/src/skills/loadSkillsDir.ts` 限制用户可调用命令。
+- **Rust 实际链**：`src/main.rs::sdk → sdk_queue::control(queue_drain)` 现在在出队前调用共享 `expand_user_skill_prompt`，通过现有插件/本地技能真实目录、参数、用户可调用及 Read 权限处理，将展开内容交给 `Agent::ask_with_blocks`；保留原始 UUID 回放、`skipSlashCommands` 门禁、排队顺序与取消前的队列项。未识别的斜杠命令仍留在队列供显式处理。排队图文命令取最后一个 text 块，保留前置图片，且技能命令独立成一轮，避免与后续普通提示错误合批。
+- **实际 Rust 提交**：`031082d3787e6ffe72bf1e7594f2d5bf63d05939`（`src/main.rs`、`src/sdk_queue.rs`）；`d58c30a0479335fe3901e75145221403d3c7b987`（`src/message_queue.rs`、`src/sdk_queue.rs`）。
+- **本轮累计**：新增 1 个独立 SDK 用户功能；连同上节插件 MCP 配置与长技能读取，**3/100，余 97**。文本和图文属于同一排队技能业务功能，不拆分计数。全部已提交、待验收，新增完整等价验收 0；未运行 Cargo、测试或 CI。
+- **未闭环**：原版内建斜杠命令、MCP 斜杠命令、远程安全命令白名单、异步取消与流式输出、队列控制事件时序、交互式命令结果回环及端到端行为仍需补齐；Issue #3 冻结 362 条不勾选。本轮 100 项先行完整缺口清单尚未建立。
+
 ## 2026-10-29：插件 MCP 用户配置接线与长技能读取（已提交、待验收）
 
 - **原版源码对照**：完整 `claude-code-2.1.88-main(1).zip` 中 `source/src/utils/plugins/mcpPluginIntegration.ts:432–557::buildMcpUserConfig/resolvePluginMcpEnvironment`、`source/src/utils/plugins/pluginOptionsStorage.ts:326–375::substituteUserConfigVariables`、`source/src/utils/plugins/mcpbHandler.ts::validateUserConfig`，以及 `source/src/skills/loadSkillsDir.ts:431–448`、`source/src/utils/plugins/loadPluginCommands.ts` 的真实 Markdown 读取路径。
