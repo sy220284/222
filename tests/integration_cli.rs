@@ -34,6 +34,34 @@ fn cli_initialization_and_model_listing_work_offline() {
     assert!(stdout.contains("gemini"));
 }
 
+#[test]
+fn deep_link_cli_preserves_empty_params_and_validates_unicode() {
+    let parsed = binary()
+        .args(["parse-deep-link", "atlas-cli://open?cwd=&repo=&q="])
+        .output()
+        .unwrap();
+    assert!(parsed.status.success(), "{:?}", parsed);
+    let action: Value = serde_json::from_slice(&parsed.stdout).unwrap();
+    assert_eq!(action["cwd"], "");
+    assert_eq!(action["repo"], "");
+    assert!(action["query"].is_null());
+
+    let built = binary().args(["build-deep-link"]).output().unwrap();
+    assert!(built.status.success(), "{:?}", built);
+    assert_eq!(
+        String::from_utf8(built.stdout).unwrap().trim(),
+        "atlas-cli://open"
+    );
+
+    let sanitized = binary()
+        .args(["parse-deep-link", "atlas-cli://open?q=Ｈi%E2%80%8B"])
+        .output()
+        .unwrap();
+    assert!(sanitized.status.success(), "{:?}", sanitized);
+    let result: Value = serde_json::from_slice(&sanitized.stdout).unwrap();
+    assert_eq!(result["query"], "Hi");
+}
+
 fn read_request(stream: &mut TcpStream) -> String {
     stream
         .set_read_timeout(Some(Duration::from_secs(15)))
