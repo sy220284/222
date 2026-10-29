@@ -245,7 +245,10 @@ impl TaskGraph {
             .join(format!(".highwatermark-{}.tmp", Uuid::new_v4()));
         let result = (|| -> Result<()> {
             use std::io::Write;
-            let mut file = OpenOptions::new().write(true).create_new(true).open(&temp)?;
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temp)?;
             file.write_all(id.to_string().as_bytes())?;
             file.sync_all()?;
             fs::rename(&temp, &target)?;
