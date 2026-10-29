@@ -1833,8 +1833,13 @@ impl Agent {
                     "custom_instructions":null}),
             )
             .await?;
-        if let Some(reason) = before.blocking_reason {
-            bail!("PreCompact blocked: {reason}")
+        // 2.1.88 executePreCompactHooks reports failed hook commands as
+        // display feedback; they must not prevent session summarization.
+        if let Some(reason) = &before.blocking_reason {
+            eprintln!("PreCompact hook failed: {reason}");
+        }
+        for warning in &before.non_blocking_errors {
+            eprintln!("PreCompact hook warning: {warning}");
         }
         let previous = self.session.summary.as_deref().unwrap_or("");
         let mut prompt = crate::prompt_runtime::compact_prompt(previous);
@@ -1976,8 +1981,13 @@ impl Agent {
                     "compact_summary":summary}),
             )
             .await?;
-        if let Some(reason) = after.blocking_reason {
-            bail!("PostCompact blocked: {reason}")
+        // The source reports unsuccessful PostCompact commands to the user
+        // without discarding a completed model summary.
+        if let Some(reason) = &after.blocking_reason {
+            eprintln!("PostCompact hook failed: {reason}");
+        }
+        for warning in &after.non_blocking_errors {
+            eprintln!("PostCompact hook warning: {warning}");
         }
 
         // Session::save already uses a temporary file and atomic rename.
