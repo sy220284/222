@@ -120,9 +120,15 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
         };
         // getLogDisplayTitle prioritizes teammate name, explicit title,
         // summary and a visible first prompt in that order.
-        let title = session
-            .agent_name
-            .as_deref()
+        // A team leader's agent_name is a routing identity ("team-lead"),
+        // not a user-facing session title. Teammates still display their
+        // leader-assigned names ahead of any custom title.
+        let agent_title = if is_team_leader_session(&session) {
+            None
+        } else {
+            session.agent_name.as_deref()
+        };
+        let title = agent_title
             .filter(|value| !value.trim().is_empty())
             .or_else(|| {
                 session
@@ -284,19 +290,34 @@ pub fn resolve(root: &Path, selector: &str) -> Result<Session> {
     };
     Session::load(root, &selected.id.to_string())
 }
+fn is_team_leader_session(session: &Session) -> bool {
+    session.team_name.is_some() && session.agent_name.as_deref() == Some("team-lead")
+}
+
+pub fn is_teammate_session(session: &Session) -> bool {
+    session.team_name.is_some()
+        && session
+            .agent_name
+            .as_deref()
+            .is_some_and(|name| name != "team-lead")
+}
+
 pub fn rename(session: &mut Session, root: &Path, title: &str) -> Result<String> {
     let title = title.trim();
     if title.is_empty() {
         bail!("Usage: /rename <name>")
     }
-    if session.team_name.is_some() && session.agent_name.is_some() {
+    if is_teammate_session(session) {
         bail!("Cannot rename: This session is a swarm teammate. Teammate names are set by the team leader.");
     }
-    // rename.ts saves both the user-visible custom title and the session's
-    // agent name. Session listings prefer agent_name; updating only the
-    // custom title leaves an old name visible after a successful /rename.
+    // The source allows the team leader to rename its conversation. In this
+    // Rust runtime "team-lead" is also used to route team messages and restore
+    // the coordinator prompt, so keep that identity when changing the title.
     let old_title = session.custom_title.replace(title.to_owned());
-    let old_agent_name = session.agent_name.replace(title.to_owned());
+    let old_agent_name = session.agent_name.clone();
+    if !is_team_leader_session(session) {
+        session.agent_name = Some(title.to_owned());
+    }
     if let Err(err) = session.save(root) {
         session.custom_title = old_title;
         session.agent_name = old_agent_name;
