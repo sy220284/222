@@ -1864,7 +1864,9 @@ impl Agent {
         if let Some(mcp) = &self.mcp {
             system.push_str(&mcp.instruction_context());
         }
-        let mut definitions = tools::definitions();
+        let mut definitions = tools::definitions_with_checkpointing(
+            crate::history::enabled(self.interactive, self.file_checkpointing_enabled),
+        );
         if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
             definitions.push(tools::powershell_definition());
         }
@@ -3088,7 +3090,9 @@ impl Agent {
         let mut selected_mcp_tools = std::collections::HashSet::new();
         for _ in 0..self.max_steps {
             self.absorb_team_messages()?;
-            let mut available_tools = tools::definitions();
+            let mut available_tools = tools::definitions_with_checkpointing(
+                crate::history::enabled(self.interactive, self.file_checkpointing_enabled),
+            );
             if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
                 available_tools.push(tools::powershell_definition());
             }
