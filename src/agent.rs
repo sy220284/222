@@ -1966,7 +1966,17 @@ impl Agent {
     /// same system/session context used by the normal Agent fallback.
     pub fn side_question_request(&self, question: &str) -> Result<ModelRequest> {
         let base = if let Some(last) = &self.last_side_question_request {
-            last.clone()
+            let mut fork = last.clone();
+            // Preserve the original request prefix for cache reuse while
+            // including the assistant/tool messages completed afterwards.
+            // If the transcript was replaced, use its current contents
+            // rather than accidentally resurrecting an earlier turn.
+            if self.session.messages.starts_with(&fork.messages) {
+                fork.messages.extend(self.session.messages[fork.messages.len()..].iter().cloned());
+            } else {
+                fork.messages = self.session.messages.clone();
+            }
+            fork
         } else {
             let mut system = system_prompt_with_dirs(&self.root, &self.additional_dirs)?;
             self.conversation_context.append_to(&mut system);
