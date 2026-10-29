@@ -181,9 +181,12 @@ impl HookRunner {
             }
             pending.push(async move {
                 let result = if let Some(cap) = shutdown_cap {
-                    timeout(cap, run_command(rule, &data))
-                        .await
-                        .map_err(|_| anyhow::anyhow!("SessionEnd hook exceeded shutdown timeout"))?
+                    match timeout(cap, run_command(rule, &data)).await {
+                        Ok(result) => result,
+                        Err(_) => Err(anyhow::anyhow!(
+                            "SessionEnd hook exceeded shutdown timeout"
+                        )),
+                    }
                 } else {
                     run_command(rule, &data).await
                 };
