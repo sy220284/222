@@ -272,6 +272,20 @@ impl TransportClient {
 /// Translate MCP discovery hints into provider-neutral runtime metadata.
 /// Legacy server extension keys are accepted at the boundary, but are never
 /// forwarded to model providers as part of a tool schema.
+/// Match the original MCP 2,048 UTF-16-unit cap without slicing a Rust
+/// string inside a multi-byte character. The truncation marker stays visible.
+fn truncate_mcp_description(value: &str) -> String {
+    const LIMIT: usize = 2_048;
+    let mut used = 0usize;
+    for (index, ch) in value.char_indices() {
+        if used + ch.len_utf16() > LIMIT {
+            return format!("{}… [truncated]", &value[..index]);
+        }
+        used += ch.len_utf16();
+    }
+    value.to_owned()
+}
+
 fn mcp_tool_metadata(tool: &Value) -> (bool, Option<String>) {
     let meta = tool.get("_meta");
     let always_load = tool.get("alwaysLoad").and_then(Value::as_bool) == Some(true)
@@ -400,7 +414,10 @@ impl McpManager {
             let server_info = client.server_info();
             for (alias, name, desc, params, always_load, search_hint) in discovered {
                 out.tools.push(json!({"type":"function","function":{
-                    "name":alias,"description":format!("MCP {}: {desc}. Requires approval.",server.id),
+                    "name":alias,"description":format!(
+                        "MCP {}: {}. Requires approval.", server.id,
+                        truncate_mcp_description(&desc)
+                    ),
                     "parameters":params
                 },"alwaysLoad":always_load,"searchHint":search_hint}));
                 out.routes.insert(alias, (client_index, name));
@@ -674,7 +691,9 @@ impl McpManager {
                     .insert(alias.clone(), (client_index, real.clone()));
                 self.tools.push(json!({"type":"function","function":{
                     "name":alias,"description":format!(
-                        "MCP {server_name}: {description}. Requires approval."),
+                        "MCP {server_name}: {}. Requires approval.",
+                        truncate_mcp_description(&description)
+                    ),
                     "parameters":schema
                 },"alwaysLoad":always_load,"searchHint":search_hint}));
                 listed.push(json!({"name":real,"description":description}));
@@ -721,7 +740,7 @@ impl McpManager {
             if instructions.trim().is_empty() {
                 continue;
             }
-            let text: String = instructions.chars().take(16_384).collect();
+            let text = truncate_mcp_description(instructions);
             let name = status["name"].as_str().unwrap_or("unknown");
             entries.push(format!(
                 "Server {}: {}\n",
