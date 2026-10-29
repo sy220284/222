@@ -1664,7 +1664,7 @@ impl Agent {
         if let Some(snapshot) = &self.last_context_usage {
             return Ok((snapshot.with_messages(&self.session.messages), true));
         }
-        let mut system = system_prompt(&self.root)?;
+        let mut system = system_prompt_with_dirs(&self.root, &self.additional_dirs)?;
         self.conversation_context.append_to(&mut system);
         if let Some(summary) = &self.session.summary {
             system.push_str("\nVerified session continuity summary:\n");
@@ -2618,7 +2618,7 @@ impl Agent {
         user_message.content_blocks = blocks;
         self.session.messages.push(user_message);
         self.session.save(&self.root)?;
-        let mut system = system_prompt(&self.root)?;
+        let mut system = system_prompt_with_dirs(&self.root, &self.additional_dirs)?;
         let resumed_team_worker = self.team_name.is_some()
             && self
                 .agent_name
@@ -3215,8 +3215,12 @@ impl Agent {
 }
 
 fn system_prompt(root: &Path) -> Result<String> {
+    system_prompt_with_dirs(root, &[])
+}
+
+fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<String> {
     let mut prompt = format!("{DEFAULT_SYSTEM}\nCurrent workspace: {}\n", root.display());
-    prompt.push_str(&crate::conversation_context::project_instructions(root)?);
+    prompt.push_str(&crate::conversation_context::project_instructions_with_dirs(root, additional_dirs)?);
     if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
         let instructions = crate::prompt_runtime::output_style_instructions(root, &style)?;
         prompt.push_str("\nOutput style:\n");
