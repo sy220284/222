@@ -67,6 +67,9 @@ pub struct Config {
     pub providers: Vec<ProviderProfile>,
     #[serde(default)]
     pub additional_directories: Vec<String>,
+    /// Glob patterns for project/user/local instruction files omitted from model context.
+    #[serde(default, rename = "instructionExcludes", alias = "instruction_excludes")]
+    pub instruction_excludes: Vec<String>,
     #[serde(default)]
     pub default_shell: Option<String>,
     /// Preferred terminal for browser deep links, retained across headless launches.
@@ -100,6 +103,7 @@ impl Default for Config {
         Self {
             default_provider: "local".into(),
             additional_directories: Vec::new(),
+            instruction_excludes: Vec::new(),
             default_shell: None,
             deep_link_terminal: None,
             providers: vec![
