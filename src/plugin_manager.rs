@@ -246,19 +246,27 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 bail!("Invalid plugin name");
             }
             PluginSet::load(&root, std::slice::from_ref(name))?;
-            if !config.enabled_plugins.contains(name) {
-                config.enabled_plugins.push(name.clone());
-                config.save()?;
+            if config.enabled_plugins.contains(name) {
+                bail!("Plugin '{name}' is already enabled");
             }
+            config.enabled_plugins.push(name.clone());
+            config.save()?;
             Ok(json!({"enabled":name}))
         }
         PluginCommand::Disable { plugin } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
-            let previous = config.enabled_plugins.len();
-            config.enabled_plugins.retain(|value| value != name);
-            if config.enabled_plugins.len() != previous {
-                config.save()?;
+            if !valid_name(name) {
+                bail!("Invalid plugin name");
             }
+            let installed = checked_installed_root(&root, false)?.join(name);
+            if !installed.is_dir() || installed.is_symlink() {
+                bail!("Plugin '{name}' is not installed");
+            }
+            if !config.enabled_plugins.contains(name) {
+                bail!("Plugin '{name}' is already disabled");
+            }
+            config.enabled_plugins.retain(|value| value != name);
+            config.save()?;
             Ok(json!({"disabled":name}))
         }
         PluginCommand::Uninstall { plugin, delete_data } => {
