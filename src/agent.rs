@@ -2020,7 +2020,12 @@ impl Agent {
         // The source autoCompact.ts estimates tokens from the complete API
         // messages rather than only the flat text field. Structured text,
         // tool results and media blocks all count toward context pressure.
-        let history_tokens = Self::compact_round_token_estimate(&self.session.messages);
+        let mut pending_message = Message::text("user", prompt);
+        pending_message.content_blocks = blocks.clone();
+        let history_tokens = Self::compact_round_token_estimate(&self.session.messages)
+            .saturating_add(Self::compact_round_token_estimate(std::slice::from_ref(
+                &pending_message,
+            )));
         let auto_disabled = ["ATLAS_DISABLE_COMPACT", "ATLAS_DISABLE_AUTO_COMPACT"]
             .iter()
             .any(|key| std::env::var(key).ok().is_some_and(|value| {
