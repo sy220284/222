@@ -839,15 +839,21 @@ impl ToolExecutor {
         let mut proc = kind.build_command(command)?;
         proc.envs(&self.session_env);
         crate::subprocess_env::apply(&mut proc);
+        // The original ShellCommand uses tree-kill on timeout and abort.
+        // A dropped shell process alone leaves descendants alive, possibly
+        // holding stdout/stderr pipes and continuing unauthorized side effects.
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(proc.as_std_mut(), 0);
         proc.current_dir(&self.root)
             .kill_on_drop(true)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         let mut child = proc.spawn()?;
+        let process_id = child.id();
         let stdout = child.stdout.take().context("No command stdout")?;
         let stderr = child.stderr.take().context("No command stderr")?;
-        let (status, out, err) = timeout(Duration::from_secs(secs), async {
+        let operation = timeout(Duration::from_secs(secs), async {
             let (out, err) = tokio::try_join!(
                 capped_read(
                     stdout,
@@ -858,8 +864,28 @@ impl ToolExecutor {
             let status = child.wait().await?;
             Ok::<_, anyhow::Error>((status, out, err))
         })
-        .await
-        .context("Command timed out")??;
+        .await;
+        let (status, out, err) = match operation {
+            Ok(Ok(output)) => output,
+            Ok(Err(error)) => {
+                // Readers can fail (including output-size exhaustion) while
+                // descendants are still running: terminate the whole tree.
+                #[cfg(unix)]
+                if let Some(pid) = process_id {
+                    let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+                }
+                let _ = child.kill().await;
+                return Err(error);
+            }
+            Err(_) => {
+                #[cfg(unix)]
+                if let Some(pid) = process_id {
+                    let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+                }
+                let _ = child.kill().await;
+                bail!("Command timed out after {secs} seconds");
+            }
+        };
         Ok(format!(
             "Exit: {}\nSTDOUT:\n{}\nSTDERR:\n{}",
             status,
@@ -1393,6 +1419,66 @@ mod tests {
             .contains("Command output exceeded"));
     }
 
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn foreground_timeout_kills_shell_descendants_not_just_parent() {
+        let root = tempfile::tempdir().unwrap();
+        let tool = executor(root.path(), Approval::Full);
+        let call = ToolCall {
+            id: "tree-timeout".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({
+                    "command":"sleep 30 & echo $! > descendant.pid; wait",
+                    "timeout_seconds":1
+                }).to_string(),
+            },
+        };
+        let result = tool.execute(&call).await;
+        assert!(result.contains("Command timed out"), "{result}");
+        let pid: i32 = fs::read_to_string(root.path().join("descendant.pid"))
+            .unwrap().trim().parse().unwrap();
+        for _ in 0..15 {
+            let stat = fs::read_to_string(format!("/proc/{pid}/stat"));
+            match stat {
+                Err(_) => return,
+                Ok(value) if value.split(") ").nth(1).is_some_and(|s| s.starts_with('Z')) => return,
+                _ => tokio::time::sleep(Duration::from_millis(30)).await,
+            }
+        }
+        panic!("Foreground shell timeout left descendant PID {pid} running");
+    }
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn foreground_output_cap_terminates_shell_descendants() {
+        let root = tempfile::tempdir().unwrap();
+        let tool = executor(root.path(), Approval::Full);
+        let call = ToolCall {
+            id: "tree-size".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({
+                    "command":"sleep 30 & echo $! > oversize.pid; head -c 300000 /dev/zero",
+                    "timeout_seconds":8
+                }).to_string(),
+            },
+        };
+        let result = tool.execute(&call).await;
+        assert!(result.contains("Command output exceeded"), "{result}");
+        let pid: i32 = fs::read_to_string(root.path().join("oversize.pid"))
+            .unwrap().trim().parse().unwrap();
+        for _ in 0..15 {
+            let stat = fs::read_to_string(format!("/proc/{pid}/stat"));
+            match stat {
+                Err(_) => return,
+                Ok(value) if value.split(") ").nth(1).is_some_and(|s| s.starts_with('Z')) => return,
+                _ => tokio::time::sleep(Duration::from_millis(30)).await,
+            }
+        }
+        panic!("Output-limit failure left descendant PID {pid} running");
+    }
     #[tokio::test]
     async fn git_status_and_diff_read_real_repository() {
         let root = tempfile::tempdir().unwrap();
