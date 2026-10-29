@@ -267,17 +267,21 @@ impl Agent {
 
     /// Source TaskCreated/TaskCompleted hooks receive task, session and team
     /// context; optional teammate fields are omitted for standalone sessions.
-    fn task_hook_input(&self, id: &str, subject: &str, description: &str) -> serde_json::Value {
+    fn base_hook_input(&self) -> serde_json::Value {
         let transcript = self.root.join(".atlas").join("sessions")
             .join(format!("{}.json", self.session.id));
-        let mut input = json!({
+        json!({
             "session_id": self.session.id,
             "transcript_path": transcript.to_string_lossy(),
             "cwd": self.root.to_string_lossy(),
-            "task_id": id,
-            "task_subject": subject,
-            "task_description": description,
-        });
+        })
+    }
+
+    fn task_hook_input(&self, id: &str, subject: &str, description: &str) -> serde_json::Value {
+        let mut input = self.base_hook_input();
+        input["task_id"] = json!(id);
+        input["task_subject"] = json!(subject);
+        input["task_description"] = json!(description);
         if let Some(name) = self.agent_name.as_deref() {
             input["teammate_name"] = json!(name);
         }
@@ -1045,7 +1049,12 @@ impl Agent {
                 .run(
                     HookEvent::SubagentStart,
                     Some(&agent_type),
-                    json!({"agent_id":child_id,"agent_type":agent_type}),
+                    {
+                        let mut input = self.base_hook_input();
+                        input["agent_id"] = json!(child_id);
+                        input["agent_type"] = json!(agent_type);
+                        input
+                    },
                 )
                 .await?;
             if let Some(reason) = start.blocking_reason {
@@ -1067,9 +1076,17 @@ impl Agent {
                 .run(
                     HookEvent::SubagentStop,
                     Some(&agent_type),
-                    json!({"agent_id":child_id,"agent_type":agent_type,
-                    "agent_transcript_path":transcript,
-                    "last_assistant_message":response.as_ref().ok()}),
+                    {
+                        let mut input = self.base_hook_input();
+                        input["stop_hook_active"] = json!(false);
+                        input["agent_id"] = json!(child_id);
+                        input["agent_type"] = json!(agent_type);
+                        input["agent_transcript_path"] = json!(transcript);
+                        if let Ok(answer) = &response {
+                            input["last_assistant_message"] = json!(answer);
+                        }
+                        input
+                    },
                 )
                 .await;
             if let Ok(outcome) = &stop {
