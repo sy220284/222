@@ -1843,7 +1843,13 @@ impl Agent {
                 available_tools.push(tools::powershell_definition());
             }
             available_tools.extend(task::definitions());
-            available_tools.extend(task_graph::definitions());
+            // Original TodoWriteTool is the non-interactive SDK/headless
+            // checklist; the V2 shared task graph is interactive by default.
+            if task::tasks_v2_enabled(self.interactive) {
+                available_tools.extend(task_graph::definitions());
+            } else {
+                available_tools.push(task::todo_definition());
+            }
             available_tools.extend(crate::team_registry::definitions(
                 self.child_depth == 0,
                 self.team_name.is_some(),

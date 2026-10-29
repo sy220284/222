@@ -3,6 +3,16 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+/// Legacy non-interactive TodoWrite items (2.1.88 utils/todo/types.ts).
+/// Stored with the session so SDK/headless requests can resume their checklist.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoItem {
+    pub content: String,
+    pub status: String,
+    pub active_form: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
@@ -21,7 +31,41 @@ pub struct Task {
 }
 
 pub fn handles(name: &str) -> bool {
-    matches!(name, "task_create" | "task_update" | "task_list")
+    matches!(
+        name,
+        "task_create" | "task_update" | "task_list" | "TodoWrite" | "todo_write"
+    )
+}
+
+/// The original enables TaskCreate/Get/List/Update in interactive sessions
+/// and TodoWrite in non-interactive sessions, unless tasks are explicitly
+/// enabled. Use a provider-neutral opt-in name for SDK clients.
+pub fn tasks_v2_enabled(interactive: bool) -> bool {
+    interactive
+        || std::env::var("ATLAS_ENABLE_TASKS")
+            .ok()
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+}
+
+pub fn todo_definition() -> Value {
+    json!({"type":"function","function":{
+        "name":"TodoWrite",
+        "description":"Replace the session task checklist with pending, in-progress and completed items.",
+        "parameters":{"type":"object","additionalProperties":false,
+            "properties":{"todos":{"type":"array","items":{"type":"object",
+                "properties":{
+                    "content":{"type":"string","minLength":1},
+                    "status":{"type":"string","enum":["pending","in_progress","completed"]},
+                    "activeForm":{"type":"string","minLength":1}
+                },
+                "required":["content","status","activeForm"]}}},
+            "required":["todos"]}
+    }})
 }
 
 pub fn definitions() -> Vec<Value> {
@@ -57,6 +101,33 @@ fn dispatch(session: &mut Session, call: &ToolCall) -> Result<String> {
         bail!("Task tool arguments must be an object")
     }
     match call.function.name.as_str() {
+        "TodoWrite" | "todo_write" => {
+            let object = args.as_object().context("TodoWrite arguments must be an object")?;
+            if object.len() != 1 || !object.contains_key("todos") {
+                bail!("TodoWrite accepts only the todos field")
+            }
+            let input = object["todos"].as_array().context("todos must be an array")?;
+            let mut todos = Vec::with_capacity(input.len());
+            for (index, value) in input.iter().enumerate() {
+                let item: TodoItem = serde_json::from_value(value.clone())
+                    .with_context(|| format!("Invalid todo item {index}"))?;
+                if item.content.is_empty() || item.active_form.is_empty() {
+                    bail!("Todo content and activeForm must not be empty")
+                }
+                if !matches!(item.status.as_str(), "pending" | "in_progress" | "completed") {
+                    bail!("Invalid todo status at index {index}")
+                }
+                todos.push(item);
+            }
+            // TodoWriteTool clears the stored list after the final item is
+            // completed, while returning a successful tool result.
+            session.todos = if todos.iter().all(|item| item.status == "completed") {
+                Vec::new()
+            } else {
+                todos
+            };
+            Ok("Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable".to_owned())
+        }
         "task_list" => Ok(serde_json::to_string_pretty(&session.tasks)?),
         "task_create" => {
             let title = args

@@ -20,6 +20,8 @@ pub struct Session {
     #[serde(default)]
     pub tasks: Vec<Task>,
     #[serde(default)]
+    pub todos: Vec<crate::task::TodoItem>,
+    #[serde(default)]
     pub usage: TokenUsage,
     #[serde(default)]
     pub cost: CostLedger,
@@ -51,6 +53,7 @@ impl Session {
             messages: Vec::new(),
             summary: None,
             tasks: Vec::new(),
+            todos: Vec::new(),
             usage: TokenUsage::default(),
             cost: CostLedger::default(),
             team_name: None,
@@ -126,6 +129,7 @@ impl Session {
         self.summary = None;
         self.messages.clear();
         self.tasks.clear();
+        self.todos.clear();
     }
 }
 
