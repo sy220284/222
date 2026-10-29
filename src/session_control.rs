@@ -320,12 +320,40 @@ pub fn rename_saved(root: &Path, id: &str, title: &str) -> Result<String> {
     rename(&mut session, root, title)
 }
 pub fn first_prompt(messages: &[Message]) -> String {
-    let first = preview(messages);
-    if first.chars().count() > 50 {
-        first.chars().take(49).collect::<String>() + "…"
-    } else {
-        first
+    // commands/export/export.tsx uses the first user message's first text
+    // block, not the concatenation of every block in a multimodal prompt.
+    let Some(message) = messages.iter().find(|message| message.role == "user") else {
+        return String::new();
+    };
+    let text = message.content.clone().or_else(|| {
+        message.content_blocks.as_ref().and_then(|blocks| {
+            blocks.iter().find_map(|block| {
+                if block.get("type").and_then(|value| value.as_str()) == Some("text") {
+                    block.get("text").and_then(|value| value.as_str()).map(str::to_owned)
+                } else {
+                    None
+                }
+            })
+        })
+    });
+    let text = text.unwrap_or_default();
+    let line = text.trim().lines().next().unwrap_or("");
+    let mut result = String::new();
+    let mut length = 0;
+    for ch in line.chars() {
+        if length + ch.len_utf16() > 50 {
+            break;
+        }
+        result.push(ch);
+        length += ch.len_utf16();
     }
+    if line.encode_utf16().count() > 50 {
+        while result.encode_utf16().count() > 49 {
+            result.pop();
+        }
+        result.push('…');
+    }
+    result
 }
 pub fn sanitize_filename(input: &str) -> String {
     let cleaned = input
@@ -359,12 +387,14 @@ fn filename(session: &Session, requested: Option<&str>) -> PathBuf {
         return filename;
     }
     let label = sanitize_filename(&first_prompt(&session.messages));
-    let name = if label.is_empty() {
-        "conversation".to_owned()
+    // The original export dialog proposes a local-time timestamp before
+    // the sanitized first prompt; a UUID-based name is not source-equivalent.
+    let timestamp = chrono::Local::now().format("%Y-%m-%d-%H%M%S");
+    if label.is_empty() {
+        PathBuf::from(format!("conversation-{timestamp}.txt"))
     } else {
-        label
-    };
-    PathBuf::from(format!("{name}-{}.txt", session.id))
+        PathBuf::from(format!("{timestamp}-{label}.txt"))
+    }
 }
 pub fn render(session: &Session) -> String {
     let mut lines = Vec::new();
