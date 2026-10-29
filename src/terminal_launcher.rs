@@ -21,15 +21,33 @@ pub struct TerminalLaunch {
     pub last_fetch_ms: Option<u64>,
 }
 
+/// The source uses Bun.which / POSIX which: a file that exists but cannot
+/// execute must not win terminal selection over an installed emulator.
+fn is_executable(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        return std::fs::metadata(path)
+            .is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0);
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
 fn which(command: &str) -> Option<PathBuf> {
     let path = Path::new(command);
-    if (path.is_absolute() || command.contains('/')) && path.is_file() {
+    if (path.is_absolute() || command.contains('/')) && is_executable(path) {
         return Some(path.to_owned());
     }
     let paths = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&paths) {
         let file = dir.join(command);
-        if file.is_file() {
+        if is_executable(&file) {
             return Some(file);
         }
         #[cfg(windows)]
