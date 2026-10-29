@@ -4,6 +4,9 @@
 use crate::slash_command;
 use anyhow::{bail, Context, Result};
 use serde_json::{Map, Value};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use std::{fs::{self, OpenOptions}, io::Write, path::Path};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invocation {
@@ -59,6 +62,64 @@ pub fn named_arguments(prompt: &Value, args: &str) -> Result<Map<String, Value>>
     }
     Ok(result)
 }
+/// The original MCP client persists audio and non-image resource blobs and
+/// returns a text block with the resulting file path. A random filename avoids
+/// trusting a server-controlled URI or name as a filesystem path.
+fn persist_mcp_blob(data: &str, mime: Option<&str>, workspace: &Path) -> Result<String> {
+    let bytes = STANDARD.decode(data).context("MCP binary resource has invalid base64")?;
+    let root = workspace.canonicalize().context("Cannot resolve MCP workspace")?;
+    let directory = root.join(".atlas").join("tool-results");
+    fs::create_dir_all(&directory).context("Cannot create MCP tool results directory")?;
+    let directory = directory.canonicalize()?;
+    if !directory.starts_with(&root) {
+        bail!("MCP tool results directory escapes workspace");
+    }
+    let mime = mime.unwrap_or("").split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    let extension = match mime.as_str() {
+        "application/pdf" => "pdf",
+        "application/json" => "json",
+        "text/csv" => "csv",
+        "text/plain" => "txt",
+        "text/html" => "html",
+        "text/markdown" => "md",
+        "application/zip" => "zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => "pptx",
+        "application/msword" => "doc",
+        "application/vnd.ms-excel" => "xls",
+        "audio/mpeg" => "mp3",
+        "audio/wav" => "wav",
+        "audio/ogg" => "ogg",
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "image/svg+xml" => "svg",
+        _ => "bin",
+    };
+    let path = directory.join(format!("mcp-blob-{}.{}", Uuid::new_v4(), extension));
+    let mut file = OpenOptions::new().write(true).create_new(true).open(&path)?;
+    file.write_all(&bytes)?;
+    file.sync_all()?;
+    Ok(format!("Binary content ({}, {} bytes) saved to {}",
+        if mime.is_empty() { "unknown type" } else { &mime },
+        bytes.len(), path.display()))
+}
+
+fn binary_result_text(
+    data: &str,
+    mime: Option<&str>,
+    prefix: &str,
+    workspace: &Path,
+) -> String {
+    match persist_mcp_blob(data, mime, workspace) {
+        Ok(message) => format!("{prefix}{message}"),
+        Err(error) => format!(
+            "{prefix}Binary content ({}, encoded length {} bytes) could not be saved to disk: {error:#}",
+            mime.unwrap_or("unknown type"), data.len()
+        ),
+    }
+}
+
 pub fn render_response(server: &str, name: &str, result: &Value) -> Result<String> {
     let content = render_content(server, name, result)?;
     if content.blocks.is_some() {
@@ -70,6 +131,18 @@ pub fn render_content(
     server: &str,
     name: &str,
     result: &Value,
+) -> Result<crate::multimodal::Input> {
+    let workspace = std::env::current_dir().context("Cannot locate MCP prompt workspace")?;
+    render_content_in_workspace(server, name, result, &workspace)
+}
+
+/// Render prompt blocks in the active Agent workspace, so saved MCP
+/// attachments are reachable by the same Read and Shell tools as the prompt.
+pub fn render_content_in_workspace(
+    server: &str,
+    name: &str,
+    result: &Value,
+    workspace: &Path,
 ) -> Result<crate::multimodal::Input> {
     let messages = result
         .get("messages")
@@ -130,6 +203,16 @@ pub fn render_content(
                     images = true;
                     text.push_str(&format!("[image: {mime}]"));
                 }
+                Some("audio") => {
+                    let data = part.get("data").and_then(Value::as_str)
+                        .context("MCP audio block missing data")?;
+                    let rendered = binary_result_text(
+                        data, part.get("mimeType").and_then(Value::as_str),
+                        &format!("[Audio from {server}] "), workspace,
+                    );
+                    text.push_str(&rendered);
+                    blocks.push(serde_json::json!({"type":"text","text":rendered}));
+                }
                 Some("resource") => {
                     // Original client.ts::transformResultContent keeps text
                     // embedded in a resource, and forwards image blobs as
@@ -155,11 +238,10 @@ pub fn render_content(
                             mime,
                             "image/png" | "image/jpeg" | "image/gif" | "image/webp"
                         ) {
-                            // The original persists non-image blobs and
-                            // returns a file path. No such persistence path
-                            // is connected here yet: reject instead of
-                            // silently discarding the attachment.
-                            bail!("MCP prompt non-image resource requires binary persistence");
+                            let rendered = binary_result_text(data, Some(mime), &prefix, workspace);
+                            text.push_str(&rendered);
+                            blocks.push(serde_json::json!({"type":"text","text":rendered}));
+                            continue;
                         }
                         text.push_str(&prefix);
                         text.push_str(&format!("[image: {mime}]"));
