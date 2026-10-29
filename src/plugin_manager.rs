@@ -159,19 +159,29 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             marketplace,
             plugin,
         } => {
-            let path = marketplace.as_deref().context(
-                "Local plugin install requires a directory path or registered marketplace",
-            )?;
             let local = if let Some(plugin_name) = plugin {
-                crate::marketplace_registry::resolve_local_plugin(&root, path, plugin_name)?
-            } else if let Some(uri) = path.strip_prefix("file://") {
-                let uri = reqwest::Url::parse(&format!("file://{uri}"))?;
-                uri.to_file_path()
-                    .map_err(|_| anyhow::anyhow!("Invalid file URL"))?
-            } else if path.starts_with("http://") || path.starts_with("https://") {
-                bail!("Remote plugin install requires a configured trusted marketplace");
+                if let Some(marketplace) = marketplace.as_deref() {
+                    crate::marketplace_registry::resolve_local_plugin(
+                        &root, marketplace, plugin_name,
+                    )?
+                } else {
+                    crate::marketplace_registry::resolve_local_plugin_by_name(
+                        &root, plugin_name,
+                    )?.1
+                }
             } else {
-                PathBuf::from(path)
+                let path = marketplace.as_deref().context(
+                    "Plugin name, local directory or registered marketplace is required",
+                )?;
+                if let Some(uri) = path.strip_prefix("file://") {
+                    let uri = reqwest::Url::parse(&format!("file://{uri}"))?;
+                    uri.to_file_path()
+                        .map_err(|_| anyhow::anyhow!("Invalid file URL"))?
+                } else if path.starts_with("http://") || path.starts_with("https://") {
+                    bail!("Remote plugin install requires a configured trusted marketplace");
+                } else {
+                    PathBuf::from(path)
+                }
             };
             // Validate the requested identity before copying or activating
             // files. A mismatched --plugin must not leave an installed plugin
