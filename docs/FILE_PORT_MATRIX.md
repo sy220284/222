@@ -120,7 +120,7 @@
 | `src/commands/context/context-noninteractive.ts` | 326 | 10781 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/context/context.tsx` | 64 | 9099 | 重写：保持通用行为 | `src/generated_ports/p_3225eaf0db243.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/context/index.ts` | 25 | 695 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/copy/copy.tsx` | 371 | 42252 | 重写：保持通用行为 | `src/generated_ports/p_c886837faf980.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/copy/copy.tsx` | 371 | 42252 | 重写：保持通用行为 | `src/copy_response.rs` / `src/generated_ports/p_c886837faf980.rs` | 部分实现：真实 /copy 可达执行链补齐多文本块双换行、跳过纯工具调用、未闭合代码围栏提取、UTF-16 字符与末尾换行计数、终端剪贴板优先及文件不可写时回退；源码已提交待验收，原版完整 Markdown lexer 与交互选择器仍缺 |
 | `src/commands/copy/index.ts` | 16 | 393 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/cost/cost.ts` | 25 | 909 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/cost/index.ts` | 24 | 668 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -1352,7 +1352,7 @@
 | `src/utils/agentId.ts` | 100 | 2805 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/agentSwarmsEnabled.ts` | 45 | 1417 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/agenticSessionSearch.ts` | 308 | 10067 | 重写：保持通用行为 | `src/session_control.rs / src/semantic_session_search.rs / src/agent.rs / src/main.rs` | 部分实现：保留标签、标题、摘要和首尾对话离线预筛；新增最多100会话候选、首尾50条/2000字符截断、用户配置多模型语义排序、严格结果索引过滤、Agent用量持久化、独立CLI与交互入口、模拟模型及磁盘会话测试；原版分支字段、LiteLog完整还原、模型取消与跨端UI仍未等价 |
-| `src/utils/analyzeContext.ts` | 1383 | 42931 | 重写：保持通用行为 | `src/generated_ports/p_a127d290c8efb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/analyzeContext.ts` | 1383 | 42931 | 重写：保持通用行为 | `src/context_usage.rs` / `src/generated_ports/p_a127d290c8efb.rs` | 部分实现：真实 /context 统计修复空多模态块导致文本漏计及 SDK 双表示工具调用重复计数；源码已提交待验收，原版完整工具/系统/记忆令牌精算仍缺 |
 | `src/utils/ansiToPng.ts` | 335 | 214955 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ansiToSvg.ts` | 273 | 8212 | 重写：保持通用行为 | `src/generated_ports/p_a9e775f18b3e2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/api.ts` | 719 | 26078 | 重写：保持通用行为 | `src/generated_ports/p_e7319660e090e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
