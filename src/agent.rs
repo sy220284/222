@@ -34,6 +34,40 @@ const DEFAULT_SYSTEM: &str = crate::prompt_runtime::BASE_SYSTEM;
 
 /// Persisted independently of the provider and plugin configuration so a
 /// plugin-sourced server can be toggled without rewriting its manifest.
+/// Read the metadata scalars used by the on-disk agent editor. Supports
+/// quoted values and YAML folded/literal descriptions without loading the
+/// agent's executable prompt or leaking it through the SDK.
+fn sdk_agent_metadata(markdown: &str) -> std::collections::HashMap<String, String> {
+    let mut metadata = std::collections::HashMap::new();
+    let mut lines = markdown.lines().peekable();
+    if lines.next() != Some("---") {
+        return metadata;
+    }
+    while let Some(line) = lines.next() {
+        if line.trim() == "---" { break; }
+        if line.starts_with(' ') || line.starts_with('\t') { continue; }
+        let Some((key, raw)) = line.split_once(':') else { continue; };
+        if !matches!(key, "description" | "model") { continue; }
+        let raw = raw.trim();
+        let value = if raw.starts_with('>') || raw.starts_with('|') {
+            let mut parts = Vec::new();
+            while lines.peek().is_some_and(|next| next.starts_with(' ') || next.starts_with('\t')) {
+                parts.push(lines.next().unwrap().trim().to_owned());
+            }
+            parts.join(if raw.starts_with('>') { " " } else { "\n" })
+        } else if raw.starts_with('"') && raw.ends_with('"') {
+            serde_json::from_str::<String>(raw)
+                .unwrap_or_else(|_| raw.trim_matches('"').to_owned())
+        } else if raw.starts_with('\'') && raw.ends_with('\'') && raw.len() >= 2 {
+            raw[1..raw.len()-1].replace("''", "'")
+        } else {
+            raw.split(" #").next().unwrap_or("").trim().to_owned()
+        };
+        metadata.insert(key.to_owned(), value);
+    }
+    metadata
+}
+
 fn disabled_mcp_path() -> Result<PathBuf> {
     Ok(crate::config::Config::path()?.with_file_name("mcp-disabled.json"))
 }
@@ -1798,6 +1832,42 @@ impl Agent {
             ));
         }
         output
+    }
+
+    /// Discover real user/project agent definitions for SDK initialization.
+    /// Project definitions override user definitions with the same name.
+    /// No source-only built-in agents are advertised as executable.
+    pub fn sdk_agent_descriptors(&self) -> Result<Vec<serde_json::Value>> {
+        let root = self.root.canonicalize()?;
+        let mut found = std::collections::BTreeMap::new();
+        for user in [true, false] {
+            let directory = crate::agent_definition::directory(&root, user)?;
+            if !user && directory.exists() && !directory.canonicalize()?.starts_with(&root) {
+                bail!("Project agent definitions escape workspace");
+            }
+            for name in crate::agent_definition::existing_agent_types(&directory)? {
+                if crate::agent_definition::validate_agent_type(&name).is_some() {
+                    continue;
+                }
+                let path = directory.join(format!("{name}.md"));
+                let content = fs::read_to_string(&path)
+                    .with_context(|| format!("Read agent definition {}", path.display()))?;
+                let metadata = sdk_agent_metadata(&content);
+                let Some(description) = metadata.get("description")
+                    .filter(|description| !description.trim().is_empty())
+                else {
+                    continue;
+                };
+                let mut agent = json!({"name":name,"description":description});
+                if let Some(model) = metadata.get("model")
+                    .filter(|model| !model.is_empty() && model.as_str() != "inherit")
+                {
+                    agent["model"] = json!(model);
+                }
+                found.insert(name, agent);
+            }
+        }
+        Ok(found.into_values().collect())
     }
 
     pub fn list_agents(&self) -> Result<String> {

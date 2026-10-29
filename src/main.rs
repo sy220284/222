@@ -2455,8 +2455,26 @@ async fn sdk_nested_control(
                         })
                     })
                     .collect::<Vec<_>>();
+                // Expose only commands actually wired into this Rust chat
+                // runtime. The source registration index also contains
+                // unported commands, which must not be advertised as usable.
+                let implemented = [
+                    "agents", "clear", "compact", "context", "copy", "cost",
+                    "diff", "doctor", "files", "hooks", "mcp", "permissions",
+                    "release-notes", "skills", "stats", "status", "tasks",
+                    "usage", "tag",
+                ];
+                let commands = command_manifest::visible()
+                    .filter(|command| implemented.contains(&command.name))
+                    .map(|command| json!({
+                        "name":command.name,
+                        "description":command.description,
+                        "argumentHint":command.hint.unwrap_or("")
+                    }))
+                    .collect::<Vec<_>>();
+                let agents = agent.sdk_agent_descriptors()?;
                 *sdk_initialized = true;
-                Ok(json!({"commands":[],"agents":[],"output_style":"default",
+                Ok(json!({"commands":commands,"agents":agents,"output_style":"default",
                     "available_output_styles":["default"],"models":models,
                     "account":{},"pid":std::process::id()}))
             }
