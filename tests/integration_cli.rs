@@ -5356,3 +5356,62 @@ fn chat_tag_toggles_with_confirmation_and_is_searchable_after_resume() {
     assert!(text.contains("Session tag: #feature"),"{text}");
     assert!(text.contains("Untitled conversation #feature"),"{text}");
 }
+
+
+#[test]
+fn chat_branch_preserves_original_conversation_and_uses_collision_free_titles() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request = read_request(&mut stream);
+        let body=json!({"choices":[{"message":{"role":"assistant",
+            "content":"Original completion"},"finish_reason":"stop"}]}).to_string();
+        write!(stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()).unwrap();
+        stream.flush().unwrap();
+        request
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"local","providers":[{
+        "id":"local","kind":"openai-compatible",
+        "model":"test","base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut child=binary()
+        .args(["--workspace",root.path().to_str().unwrap(),"chat"])
+        .env("ATLAS_CONFIG",&config)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped()).spawn().unwrap();
+    child.stdin.take().unwrap().write_all(
+        b"/branch\nResearch branch candidate\n/branch\n/branch\n/branch custom\n/sessions Branch\n/exit\n"
+    ).unwrap();
+    let output=child.wait_with_output().unwrap();
+    let first_request=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(first_request.contains("Research branch candidate"));
+    let stdout=String::from_utf8_lossy(&output.stdout);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("No conversation to branch"));
+    assert!(stdout.contains("Research branch candidate (Branch)"),"{stdout}");
+    assert!(stdout.contains("Research branch candidate (Branch 2)"),"{stdout}");
+    assert!(stdout.contains("custom (Branch)"),"{stdout}");
+    let mut sessions=Vec::<Value>::new();
+    for entry in fs::read_dir(root.path().join(".atlas/sessions")).unwrap() {
+        let entry=entry.unwrap();
+        sessions.push(serde_json::from_str(&fs::read_to_string(entry.path()).unwrap()).unwrap());
+    }
+    assert_eq!(sessions.len(),4);
+    let original=sessions.iter().find(|s|s["forked_from"].is_null()).unwrap();
+    let forks=sessions.iter().filter(|s|!s["forked_from"].is_null())
+        .collect::<Vec<_>>();
+    assert_eq!(forks.len(),3);
+    for session in forks {
+        assert_eq!(session["forked_from"],original["id"]);
+        assert_eq!(session["messages"],original["messages"]);
+        assert!(session["tag"].is_null());
+        assert_ne!(session["id"],original["id"]);
+    }
+    assert_eq!(original["messages"].as_array().unwrap().len(),2);
+}
