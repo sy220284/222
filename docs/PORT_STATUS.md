@@ -1,3 +1,12 @@
+## 2026-10-29：SDK 初始化自定义系统提示词进入真实模型请求（源码已提交、待验收）
+
+- **原版完整源码**：`source/src/cli/print.ts:4369–4375` 的 `handleInitializeRequest` 在 SDK 初始化时接受 `systemPrompt` / `appendSystemPrompt`；`source/src/QueryEngine.ts:310–325` 将自定义提示词替换默认系统指令并将附加提示词追加到请求；`source/src/utils/systemPrompt.ts:115–122` 确认优先级。另按 `source/src/cli/print.ts:2933–2944` 修正 SDK `set_model` 缺省参数恢复默认模型的行为。
+- **真实 Rust 缺口**：`src/main.rs::sdk_nested_control(initialize)` 以前把两个 SDK 提示词参数当作不支持直接报错；`src/agent.rs` 的正常请求、上下文用量、独立提问三处只使用固定系统提示词。SDK `set_model` 缺少 `model` 时以前无操作。
+- **真实代码补齐**：`src/main.rs` 对初始化两个字段先做类型校验、再一次性更新当前 Agent；`src/agent.rs::set_sdk_system_prompts/effective_system_prompt` 将替换/追加逻辑接到真实 `ask_with_blocks` 模型请求、`context_usage_snapshot` 和 `side_question_request`，保留工作区/项目指令及会话上下文，失效旧上下文缓存，不污染其他 Agent；SDK 缺省 `set_model` 恢复配置默认值。
+- **代码 SHA**：`bd6e0e6356a9e62b64cd2897a9119b4a461cae21`、`372e9b9abcb4f45e15f9fd7f29c80e8c7bcb3193`、`5ab91ddbe6b3ad5321466cbbedbe39b4b234ef44`、`f82b550f37b25fabcfcfb21617d7cc141cbc0a94`。换行转义在第二个提交修正。远端静态复核确认三个 Agent 请求构造入口使用同一生效提示词，SDK 初始化已接线。
+- **保守计数**：本轮新增 **2 项**互不重复的用户可感知能力：① SDK 替换系统提示词；② SDK 追加系统提示词。缺省模型恢复属于已有 SDK 模型切换链的缺口修正，不重复计数。**2/100，剩余 98 项**；未形成经原版和 Rust 双侧逐项核验的完整 100 项前置清单及方案，A/B 流程和数量目标仍未达标。
+- **待验收与差异**：按现行要求未运行 Cargo、单元/集成/端到端测试或 CI，全部仅为**已提交、待行为验收**；SDK `initialize` 之前自动执行 SessionStart 首条用户消息的时序、SDK 内存 Agent 定义、JSON Schema、回调 Hook、SDK MCP 传输、主查询并发中断及各提供商的思考预算仍未等价。Issue #3 冻结 362 条保持开放，PR #2 继续 Draft，main 不变。
+
 ## 2026-10-29：过期插件缓存搜索隔离与文件回退路径权限（已提交、待验收）
 
 - **原版依据**：完整 2.1.88 源码 `source/src/utils/plugins/orphanedPluginFilter.ts::getGlobExclusionsForPluginCache` 检查 `cache/<marketplace>/<plugin>/<version>/.orphaned_at` 并向 Grep/Glob 提供版本排除；`source/src/tools/GrepTool/GrepTool.ts::call` 与 `source/src/utils/glob.ts::glob` 实际使用排除规则。`source/src/utils/permissions/filesystem.ts::checkWritePermissionForTool` 与 `source/src/utils/fileHistory.ts::fileHistoryRewind/applySnapshot` 说明文件回退会修改真实文件，应遵循编辑路径安全边界。
