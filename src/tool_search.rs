@@ -191,7 +191,8 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
             .iter()
             .filter(|(name, _, _)| {
                 deferred_names.contains(name)
-                    && name.to_ascii_lowercase()
+                    && name
+                        .to_ascii_lowercase()
                         .starts_with(&query.to_ascii_lowercase())
             })
             .take(max)
