@@ -633,7 +633,7 @@ pub fn command_prompt_with_session(
         };
         let dir = path.parent().context("Plugin skill has no parent directory")?
             .to_string_lossy().replace('\\', "/");
-        return Ok(Some(format!("Base directory for this skill: {dir}\\n\\n{prompt}")
+        return Ok(Some(format!("Base directory for this skill: {dir}\n\n{prompt}")
             .replace("${CLAUDE_SKILL_DIR}", &dir)));
     }
 
