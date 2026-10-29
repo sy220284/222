@@ -1664,6 +1664,9 @@ impl Agent {
         self.session.summary = Some(summary);
         runtime_contracts::suppress_compact_warning();
         self.session.messages.clear();
+        // Compaction discards prior memory attachments and resets their budget.
+        self.session.surfaced_memories.clear();
+        self.session.surfaced_memory_units = 0;
         self.session.save(&self.root)?;
         let after = self
             .hooks
@@ -1828,12 +1831,14 @@ impl Agent {
             }
         }
         recent_tools.truncate(10);
-        match memory::context_with_recent_tools(
+        match memory::context_with_recent_tools_excluding(
             &self.root,
             &prompt,
             self.provider.as_ref(),
             &self.profile,
             &recent_tools,
+            &self.session.surfaced_memories,
+            self.session.surfaced_memory_units,
         )
         .await
         {
@@ -1844,6 +1849,16 @@ impl Agent {
                 if !relevant.text.is_empty() {
                     system.push_str("\nRelevant project memory:\n");
                     system.push_str(&relevant.text);
+                }
+                // Record only successfully read and surfaced topics, after
+                // selection, so future turns do not exhaust the five slots
+                // on memory files already in the model context.
+                if !relevant.surfaced.is_empty() {
+                    self.session.surfaced_memories.extend(relevant.surfaced);
+                    self.session.surfaced_memory_units = self.session
+                        .surfaced_memory_units
+                        .saturating_add(relevant.surfaced_units);
+                    self.session.save(&self.root)?;
                 }
             }
             Err(error) => {
