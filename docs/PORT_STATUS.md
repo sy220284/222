@@ -4,12 +4,16 @@
 - **Rust 真实入口**：`/plugin install` / `/plugin validate` / `/plugin manage` → `src/plugin_manager.rs::manifest_name/install_local/installed` → `src/plugins.rs::validate_local/read_manifest/PluginSet::load`；Agent 的插件初始化继续通过 `PluginSet::load` 将 Hook 与 MCP 服务接入会话。
 - **实际补齐**：①读取标准 `.claude-plugin/plugin.json`，兼容已有根目录 `plugin.json`，允许仅有 commands/agents/skills 的无清单插件以目录名安装、验证、启用与列举；②按原版读取 `hooks/hooks.json`、清单内追加 Hook 文件和内联命令 Hook，保留事件、匹配器、超时、插件根目录与重复文件去重，越界文件拒绝；③原版 `mcpServers` 名称映射转换成真实 `McpServerConfig` 并继续进入 Agent 的 MCP 初始化；④本地插件复制时排除源仓库顶层 `.git`，避免把仓库历史、远端地址与本地 Git Hooks 放入安装目录。
 - **提交 SHA**：`d8d673a11cec0430919b837bc45003d46500f06f`、`c554ea70633e99d3f2456df64722dd18ca8ec685`、`6c17c1c5784846f613afe82021d44697ff92640a`、`84f2a6e2996e19feba30b56995951585e007481a`。
-- **保守计数**：4 条独立用户可感知插件业务链获得真实代码补齐，全部**已提交、待验收**；本轮完整 100 条前置缺口清单尚未建立，初始四项 **4/100**，同轮续补后累计 **5/100，剩余 95**。没有运行 Cargo、测试或 CI；没有勾选 Issue #3 的任何冻结项。
+- **保守计数**：4 条独立用户可感知插件业务链获得真实代码补齐，全部**已提交、待验收**；本轮完整 100 条前置缺口清单尚未建立，初始四项 **4/100**，同轮续补后累计 **6/100，剩余 94**。没有运行 Cargo、测试或 CI；没有勾选 Issue #3 的任何冻结项。
 - **未实现差异**：原版插件命令/代理/技能自定义路径、内联命令、HTTP/异步/提示词 Hook、完整 MCP 配置文件引用及 SDK 传输、插件设置、市场多范围安装、插件生命周期与并发回滚、所有 UI/SDK 交互仍待补齐；无清单插件的命令和代理还需要逐入口核对实际可达性。
 
 ### 同轮续补：插件 MCP 标准文件及清单路径引用
 
-原版 `source/src/utils/plugins/mcpPluginIntegration.ts::loadPluginMcpServers`（131–211 行）先加载插件目录 `.mcp.json`，再按清单 `mcpServers` 的文件路径、路径数组、内联对象覆盖同名服务。Rust `src/plugins.rs::manifest_servers/merge_server_specs/mcp_file` 已接通 `PluginSet::load` 的真实会话初始化；新增工作区内文件规范化与循环引用拒绝，避免非法插件配置递归故障。提交 `df08c7ac2f41a5e84179dc29013cc3251c17565f`、`03e4587d723343e7863b47a70e9c476330610dc6`、`328cc963d7de75ce698a0466a492369224fa77c4`。此为额外 **1 项独立用户可感知业务功能**，本轮累计 **5/100，剩余 95**，源码已提交、待验收。MCPB 安装、完整环境变量展开、无效单服务的原版局部容错、异步恢复与跨插件冲突处理仍未等价；Issue #3 冻结 362 项保持开放。未运行 Cargo、测试或 CI。
+原版 `source/src/utils/plugins/mcpPluginIntegration.ts::loadPluginMcpServers`（131–211 行）先加载插件目录 `.mcp.json`，再按清单 `mcpServers` 的文件路径、路径数组、内联对象覆盖同名服务。Rust `src/plugins.rs::manifest_servers/merge_server_specs/mcp_file` 已接通 `PluginSet::load` 的真实会话初始化；新增工作区内文件规范化与循环引用拒绝，避免非法插件配置递归故障。提交 `df08c7ac2f41a5e84179dc29013cc3251c17565f`、`03e4587d723343e7863b47a70e9c476330610dc6`、`328cc963d7de75ce698a0466a492369224fa77c4`。此为额外 **1 项独立用户可感知业务功能**，本轮当时累计 **5/100**，继续补齐技能路径后为 **6/100，剩余 94**，源码已提交、待验收。MCPB 安装、完整环境变量展开、无效单服务的原版局部容错、异步恢复与跨插件冲突处理仍未等价；Issue #3 冻结 362 项保持开放。未运行 Cargo、测试或 CI。
+
+### 同轮续补：插件自定义技能目录与读取
+
+原版 `source/src/utils/plugins/pluginLoader.ts::createPluginFromPath`（1557–1583 行）在清单声明 `skills` 时读取自定义路径，未声明时扫描默认 `skills/`。Rust `src/plugins.rs::skill_roots/skill_files/list_skills/read_skill` 现支持相对目录或数组、直接技能目录与目录下多个技能，列表和读取共用同一解析与插件根目录安全边界，安装前 `validate_local` 也检查路径。实际可达入口为 Agent 的技能列表及读取工具。提交 `687d8850684cd2bb1ada1b1028a289344541a530`、`0b146e44253d56286f0f8c8ef9337ef0adbc4436`。**另计 1 条用户可感知业务功能，累计 6/100，剩余 94**；源码已提交、待验收。嵌套技能命名空间、全部技能元数据与 SDK/插件动态刷新仍缺；冻结 362 项不勾选。未运行 Cargo、测试或 CI。
 
 ## 2026-10-29：SDK 动态 MCP 服务配置更新进入真实执行链（源码已提交、待验收）
 
