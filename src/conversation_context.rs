@@ -718,6 +718,54 @@ pub fn project_instructions_with_dirs(
     let mut seen = HashSet::new();
     let mut visited = HashSet::new();
 
+    // Source getMemoryFiles always loads Managed instructions and rules first.
+    // These are explicitly configured vendor-neutral paths and remain active
+    // when user/project/local instruction sources are disabled.
+    let managed_excludes = build_instruction_excludes(&[])?;
+    let config_path = crate::config::Config::path()?;
+    let managed_path = |configured: &str| {
+        let path = PathBuf::from(configured);
+        if path.is_absolute() {
+            path
+        } else {
+            config_path.parent().unwrap_or(Path::new(".")).join(path)
+        }
+    };
+    if let Some(file) = config.managed_instruction_file.as_deref() {
+        let file = managed_path(file);
+        if file.exists() {
+            let file = file.canonicalize()?;
+            let scope = file.parent().context("Managed instruction has no parent directory")?;
+            add_file(
+                &file,
+                scope,
+                scope,
+                false,
+                config.approved_external_instruction_includes,
+                &managed_excludes,
+                &mut seen,
+                &mut output,
+            )?;
+        }
+    }
+    if let Some(directory) = config.managed_rules_directory.as_deref() {
+        let directory = managed_path(directory);
+        if directory.exists() {
+            let scope = directory.canonicalize()?;
+            add_rules(
+                &directory,
+                &scope,
+                &scope,
+                0,
+                &mut visited,
+                config.approved_external_instruction_includes,
+                &managed_excludes,
+                &mut seen,
+                &mut output,
+            )?;
+        }
+    }
+
     let user_config = if source_enabled("user") {
         Some(crate::config::Config::path()?)
     } else {
