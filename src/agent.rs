@@ -249,8 +249,25 @@ impl Agent {
                 "session_id":self.session.id,
             }));
         }
-        if let Some(reason) = result.blocking_reason {
-            bail!("SessionStart blocked: {reason}")
+        // Source utils/sessionStart.ts::processSessionStartHooks explicitly
+        // ignores SessionStart blocking errors while preserving context.
+        // A startup script must not prevent the user's session from opening.
+        for reason in &result.blocking_reasons {
+            eprintln!("SessionStart hook blocked (ignored): {reason}");
+            self.emit(json!({
+                "type":"hook_warning",
+                "hook_event_name":"SessionStart",
+                "message":reason,
+                "session_id":self.session.id,
+            }));
+        }
+        if result.prevent_continuation {
+            self.emit(json!({
+                "type":"hook_stopped_continuation",
+                "hook_event":"SessionStart",
+                "message":result.stop_reason.as_deref()
+                    .unwrap_or("SessionStart hook requested stop"),
+            }));
         }
         self.session_context = result.additional_context.join("\n");
         self.last_context_usage = None;
