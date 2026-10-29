@@ -1,5 +1,12 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：原版命令 Hook 非零退出与 JSON 优先级修复（冻结项未验收）
+
+原版证据：用户提供 2.1.88 源包 `src/utils/hooks.ts` 2499–2533、2543–2613、2647–2695 行。原版先解析有效 JSON，即使命令退出非零也应用 JSON 决策；没有有效 JSON 时，只有退出码 2 阻止工具，其他非零退出作为可见的非阻断错误；以 `{` 开头但无效的 JSON 产生非阻断校验错误。原 Rust 在解析 JSON 前先拒绝所有非零退出，导致 PreToolUse 的普通 Hook 失败误阻断真实工具、退出码 2 的有效 JSON 决策被忽略。
+
+现修改 `src/hooks.rs` 的命令 Hook 状态处理，记录非阻断错误并继续后续 Hook；`src/agent.rs` 向终端和结构化 SDK 输出 `hook_warning`，不伪造工具失败。回归包括真实 Hook 子进程、后续 Hook 改写输入后实际 Shell 创建文件、退出 2 有效 JSON 决策、无效 JSON 和明确退出 2 阻断。尚缺原版全部 Hook 事件的完整调度、并发、取消、HTTP Hook 和反馈 UI；冻结 `src/utils/hooks.ts` 继续未验收，362 项不勾选。CI 结果以本提交实际运行结果为准。
+
+
 ## 2026-10-29：权限规则来源接入 Agent 执行链
 
 已对照原版 `permissionsLoader.ts`、`settings/constants.ts`、`settings/settings.ts`、`permissionRuleParser.ts`，在 `src/permission_settings.rs` 实现用户/项目/本地/配置/托管规则加载、托管策略独占、规范化规则持久化增删、跨进程锁和原子写入，并从 `src/main.rs` 接入 Agent 工具权限执行。新增真实 Shell 文件副作用、16 线程并发、损坏 JSON、符号链接越界和来源优先级回归。未实现原版全部设置来源/热更新/审批 UI，**冻结 362 项不勾选，已验收数不变**。CI 以最新 HEAD 为准。

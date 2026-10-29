@@ -1735,6 +1735,18 @@ impl Agent {
                 } else {
                     None
                 };
+                if let Some(pre) = pre.as_ref() {
+                    for warning in &pre.non_blocking_errors {
+                        eprintln!("{warning}");
+                        self.emit(json!({
+                            "type":"hook_warning",
+                            "hook_event_name":"PreToolUse",
+                            "tool_use_id":call.id,
+                            "message":warning,
+                            "session_id":self.session.id,
+                        }));
+                    }
+                }
                 if let Some(updated) = pre.as_ref().and_then(|hook| hook.updated_input.as_ref()) {
                     call.function.arguments = serde_json::to_string(updated)?;
                 }
@@ -1850,6 +1862,16 @@ impl Agent {
                         )
                     }
                 };
+                for warning in &post.non_blocking_errors {
+                    eprintln!("{warning}");
+                    self.emit(json!({
+                        "type":"hook_warning",
+                        "hook_event_name":"PostToolUse",
+                        "tool_use_id":call.id,
+                        "message":warning,
+                        "session_id":self.session.id,
+                    }));
+                }
                 if self
                     .mcp
                     .as_ref()

@@ -101,6 +101,8 @@ pub struct HookOutcome {
     /// Replacement for an MCP tool's model-visible output from PostToolUse.
     pub updated_mcp_tool_output: Option<Value>,
     pub prevent_continuation: bool,
+    /// Non-blocking command-hook failures remain visible without denying the tool.
+    pub non_blocking_errors: Vec<String>,
 }
 
 #[derive(Default)]
@@ -166,6 +168,9 @@ impl HookRunner {
             outcome
                 .additional_context
                 .extend(response.additional_context);
+            outcome
+                .non_blocking_errors
+                .extend(response.non_blocking_errors);
             if let Some(updated) = response.updated_input {
                 outcome.updated_input = Some(updated);
             }
@@ -275,23 +280,48 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
         .await
         .context("Hook timed out")??;
     let stderr_text = String::from_utf8_lossy(&err).trim().to_string();
-    if status.code() == Some(2) {
-        return Ok(HookOutcome {
-            blocking_reason: Some(if stderr_text.is_empty() {
-                "Hook blocked this operation".into()
-            } else {
-                stderr_text
-            }),
-            ..Default::default()
-        });
-    }
-    if !status.success() {
-        bail!("Hook exited {}: {}", status, stderr_text);
-    }
-    if out.iter().all(|b| b.is_ascii_whitespace()) {
+    // Original hooks.ts:2499-2533, 2543-2613, 2647-2695 parses JSON
+    // before interpreting the exit status. Valid JSON decisions apply even
+    // when a command exits nonzero; plain-text status 2 alone blocks.
+    if !String::from_utf8_lossy(&out).trim_start().starts_with('{') {
+        if status.code() == Some(2) {
+            return Ok(HookOutcome {
+                blocking_reason: Some(if stderr_text.is_empty() {
+                    "Hook blocked this operation".into()
+                } else {
+                    stderr_text
+                }),
+                ..Default::default()
+            });
+        }
+        if !status.success() {
+            return Ok(HookOutcome {
+                non_blocking_errors: vec![format!(
+                    "Hook '{}' exited {status}: {}",
+                    rule.command,
+                    if stderr_text.is_empty() {
+                        "No stderr output"
+                    } else {
+                        &stderr_text
+                    }
+                )],
+                ..Default::default()
+            });
+        }
         return Ok(HookOutcome::default());
     }
-    let value: Value = serde_json::from_slice(&out).context("Hook stdout must be valid JSON")?;
+    let value: Value = match serde_json::from_slice(&out) {
+        Ok(value) => value,
+        Err(error) => {
+            return Ok(HookOutcome {
+                non_blocking_errors: vec![format!(
+                    "Hook '{}' returned invalid JSON: {error}",
+                    rule.command
+                )],
+                ..Default::default()
+            });
+        }
+    };
     let mut result = HookOutcome::default();
     let decision = value.get("decision").and_then(Value::as_str);
     let hook_output = value.get("hookSpecificOutput");
@@ -609,4 +639,106 @@ mod tests {
         let result = hooks.run(HookEvent::Stop, None, json!({})).await.unwrap();
         assert_eq!(result.blocking_reason.as_deref(), Some("Need tests"));
     }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn nonblocking_hook_failure_preserves_later_input_rewrite_and_real_shell_execution() {
+        use crate::{
+            protocol::{FunctionCall, ToolCall},
+            tools::{Approval, ToolExecutor},
+        };
+        let root = tempfile::tempdir().unwrap();
+        let runner = HookRunner::new(&[
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: Some("^run_command$".into()),
+                command: "echo 'advisory hook failed' >&2; exit 1".into(),
+                timeout_seconds: 3,
+            },
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: Some("^run_command$".into()),
+                command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"touch after_warning"}}}'"#.into(),
+                timeout_seconds: 3,
+            },
+        ])
+        .unwrap();
+        let mut call = ToolCall {
+            id: "hook-nonblocking-1".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":"touch before_warning"}).to_string(),
+            },
+        };
+        let outcome = runner.before_tool(&call).await.unwrap();
+        assert!(outcome.blocking_reason.is_none());
+        assert_eq!(outcome.non_blocking_errors.len(), 1);
+        assert!(outcome.non_blocking_errors[0].contains("advisory hook failed"));
+        call.function.arguments = outcome.updated_input.unwrap().to_string();
+        let executor = ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Full, false);
+        let result = executor.execute(&call).await;
+        assert!(result.contains("Exit: exit status: 0"), "{result}");
+        assert!(root.path().join("after_warning").exists());
+        assert!(!root.path().join("before_warning").exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn command_hook_json_precedes_exit_status_and_invalid_json_is_nonblocking() {
+        let approved = HookRunner::new(&[HookRule {
+            event: HookEvent::PreToolUse,
+            matcher: None,
+            command: "printf '{\"decision\":\"approve\"}'; exit 2".into(),
+            timeout_seconds: 3,
+        }])
+        .unwrap();
+        let outcome = approved
+            .run(HookEvent::PreToolUse, None, json!({}))
+            .await
+            .unwrap();
+        assert!(outcome.blocking_reason.is_none());
+        assert_eq!(outcome.permission_decision.as_deref(), Some("allow"));
+
+        let malformed = HookRunner::new(&[
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: "printf '{not-json'; exit 2".into(),
+                timeout_seconds: 3,
+            },
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: "printf '{\"decision\":\"approve\"}'".into(),
+                timeout_seconds: 3,
+            },
+        ])
+        .unwrap();
+        let outcome = malformed
+            .run(HookEvent::PreToolUse, None, json!({}))
+            .await
+            .unwrap();
+        assert!(outcome.blocking_reason.is_none());
+        assert_eq!(outcome.permission_decision.as_deref(), Some("allow"));
+        assert_eq!(outcome.non_blocking_errors.len(), 1);
+        assert!(outcome.non_blocking_errors[0].contains("invalid JSON"));
+
+        let blocked = HookRunner::new(&[HookRule {
+            event: HookEvent::PreToolUse,
+            matcher: None,
+            command: "echo 'explicit denial' >&2; exit 2".into(),
+            timeout_seconds: 3,
+        }])
+        .unwrap();
+        assert_eq!(
+            blocked
+                .run(HookEvent::PreToolUse, None, json!({}))
+                .await
+                .unwrap()
+                .blocking_reason
+                .as_deref(),
+            Some("explicit denial")
+        );
+    }
+
 }
