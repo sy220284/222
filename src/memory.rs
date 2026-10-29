@@ -377,25 +377,11 @@ pub async fn context_with_recent_tools_excluding(
             surfaced_units: 0,
         });
     }
-    // sideQuery in 2.1.88 reads the first text block. Providers may
-    // return structured SDK content instead of a flattened string.
-    let selected = response
-        .message
-        .content
-        .as_deref()
-        .or_else(|| {
-            response.message.content_blocks.as_ref().and_then(|blocks| {
-                blocks.iter().find_map(|block| {
-                    if block.get("type").and_then(Value::as_str) == Some("text") {
-                        block.get("text").and_then(Value::as_str)
-                    } else {
-                        None
-                    }
-                })
-            })
-        })
-        .unwrap_or("");
-    let parsed: Value = match serde_json::from_str(selected) {
+    // Use the shared 2.1.88-style text block extraction. Structured
+    // provider responses may split JSON across text blocks, with flattened
+    // content absent or stale. Keep the current provider-neutral behavior.
+    let selected = response.message.visible_text();
+    let parsed: Value = match serde_json::from_str(&selected) {
         Ok(value) => value,
         Err(_) => {
             return Ok(MemoryContext {
