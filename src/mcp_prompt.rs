@@ -151,7 +151,10 @@ pub fn render_content(
                             .get("mimeType")
                             .and_then(Value::as_str)
                             .unwrap_or("");
-                        if !matches!(mime, "image/png" | "image/jpeg" | "image/gif" | "image/webp") {
+                        if !matches!(
+                            mime,
+                            "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+                        ) {
                             // The original persists non-image blobs and
                             // returns a file path. No such persistence path
                             // is connected here yet: reject instead of
