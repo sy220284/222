@@ -1117,9 +1117,9 @@ impl Agent {
     /// Fork the live conversation without switching away from the parent.
     /// Carries over messages, tool-result history and context metadata.
     pub fn branch_session(&self, title: Option<&str>) -> Result<String> {
-        let first = self.session.messages
-            .iter()
-            .find(|m| m.role == "user" && m.content.as_deref().is_some_and(|s| !s.trim().is_empty()));
+        let first = self.session.messages.iter().find(|m| {
+            m.role == "user" && m.content.as_deref().is_some_and(|s| !s.trim().is_empty())
+        });
         if first.is_none() {
             bail!("No conversation to branch");
         }
