@@ -1,3 +1,11 @@
+## 2026-10-29：SDK 插件热重载真实运行链（源码已提交、待验收）
+
+- **原版完整源码依据**：用户资料库 `claude-code-2.1.88-main(1).zip` 的 `source/src/cli/print.ts:3065–3132`，SDK `reload_plugins` 会重新载入启用插件、Agent 与命令，协调插件 MCP 连接，并返回插件、命令、Agent、MCP 状态及错误数量；插件解析与加载还涉及 `source/src/utils/plugins/pluginLoader.ts`、`loadPluginAgents.ts`。
+- **Rust 实际入口**：`src/main.rs::sdk_nested_control("reload_plugins")` → `Config::load`（重新读取启用列表）→ `Agent::reload_plugins` → `PluginSet::load`（重新解析插件配置、Hooks、MCP）→ `McpManager::reconcile_fixed`（按配置差异卸载、重连、清理工具路由，保留 SDK 动态 MCP 与未变连接）→ 替换活动 HookRunner（不重复执行 SessionStart）及插件集合 → `sdk_visible_commands`（初始化和热重载共用实际可执行命令目录）→ 返回 Agent、插件、MCP 状态与插件加载/连接错误数量。
+- **真实代码提交**：`4ce17b5d8d4c46245f5bf9b2e0591f4c2d48e701`（MCP 固定服务增量协调）、`aef3eedad8a322e4d6375ed80e2d4f71c231ce47`（Agent 热重载）、`08576c76b21fb4f33e4db1daccc5e6474458804e`（SDK 入口和命令目录共享）、`c2591e513eb7794487d2ffb6cc1c025680853bef`、`c5924ea1141a52a7f8719e236ea3e1670a2e056f`、`181379b83acf53dcdbbfd3881aa46320a33c8ec5`（插件加载错误数量贯通）。
+- **保守计数**：本轮新增 **1/100 项**独立用户业务功能，余 **99 项**；MCP 增量连接、命令目录、错误数量均属同一“插件热重载”业务链，不拆分计数。先行 100 项源码双侧逐功能缺口清单尚未完成，流程 A/B 未达标。未运行 Cargo、测试、CI；仅做入口/调用链/提交静态审阅，均标记已提交、待行为验收，新增完整等价验收 0 项。
+- **尚存差异**：原版远程下载用户设置、插件 Marketplace 多来源、插件自定义 Agent 实际执行、插件变更事件与 SDK 并发控制、MCP 热重连失败时的精确事务恢复、动态命令运行时缓存与全套 Hook 生命周期仍未等价；Issue #3 冻结 362 项不勾选，Draft PR #2 不合并。
+
 ## 2026-10-29：文件历史恢复权限、会话隔离、SDK 开关及删除恢复（已提交、待验收）
 
 - **原版完整源码**：用户资料库 `claude-code-2.1.88-main(1).zip` 中 `source/src/utils/fileHistory.ts:63–77`（交互配置/SDK opt-in）、`:725–740`（按会话 ID 保存备份）、`:785–786,801–836`（备份和恢复 Unix 文件权限）、`:534–582`（文件不存在时的恢复或幂等删除），以及 `:39–54,196–338,345–399`（原版按消息快照与回退）。
