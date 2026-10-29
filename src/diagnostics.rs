@@ -118,6 +118,12 @@ pub fn inspect(root: &Path, config: Option<&Config>) -> Vec<Finding> {
         Some(path) => Finding::passed("Git", format!("available at {}", path.display())),
         None => Finding::warning("Git", "not found in PATH"),
     });
+    if let Some(repo) = crate::detect_repository::detect_current_repository_with_host(root) {
+        findings.push(Finding::passed(
+            "Repository",
+            format!("{}/{}/{}", repo.host, repo.owner, repo.name),
+        ));
+    }
     match Config::path() {
         Ok(path) => {
             if path.is_file() {
