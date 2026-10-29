@@ -72,31 +72,87 @@ fn index_content(content: &str) -> String {
     }
 }
 
+/// Read the YAML string fields used by memoryScan.ts. The full frontmatter
+/// schema has more fields, but memory selection consumes only these two.
+fn memory_yaml_scalar(raw: &str) -> Option<String> {
+    let value = raw.trim();
+    if value.is_empty() || matches!(value, "~" | "null") {
+        return None;
+    }
+    if value.starts_with('"') {
+        return serde_json::from_str::<String>(value).ok();
+    }
+    if value.starts_with('\'') {
+        return value.strip_suffix('\'')
+            .and_then(|v| v.strip_prefix('\''))
+            .map(|v| v.replace("''", "'"));
+    }
+    // A # begins an unquoted YAML comment only after whitespace.
+    let plain = value.split_once(" #").map(|(text, _)| text).unwrap_or(value);
+    let plain = plain.trim_end();
+    if plain.is_empty() { None } else { Some(plain.to_owned()) }
+}
+
 fn parse_header(text: &str) -> (Option<String>, Option<String>) {
+    let lines = text.lines().take(30).collect::<Vec<_>>();
+    if lines.first().map(|line| line.trim()) != Some("---") {
+        return (None, None);
+    }
+    // parseFrontmatter requires a complete closing delimiter. Incomplete
+    // headers must not leak Markdown body text into the selector manifest.
+    let Some(end) = lines.iter().enumerate().skip(1)
+        .find(|(_, line)| line.trim() == "---")
+        .map(|(index, _)| index) else {
+            return (None, None);
+        };
     let mut description = None;
     let mut memory_type = None;
-    let mut lines = text.lines();
-    if lines.next() != Some("---") {
-        return (description, memory_type);
-    }
-    for line in lines.take(29) {
-        if line.trim() == "---" {
-            break;
+    let mut index = 1;
+    while index < end {
+        let line = lines[index];
+        index += 1;
+        if line.starts_with(' ') || line.starts_with('\t') || line.trim_start().starts_with('#') {
+            continue;
         }
-        if let Some((key, value)) = line.split_once(':') {
-            let val = value.trim().trim_matches(['"', '\'']).to_string();
-            match key.trim() {
-                "description" if !val.is_empty() => description = Some(val),
-                "type" if matches!(val.as_str(), "user" | "feedback" | "project" | "reference") => {
-                    memory_type = Some(val)
+        let Some((key, raw)) = line.split_once(':') else { continue };
+        let key = key.trim();
+        if !matches!(key, "description" | "type") { continue }
+        let raw = raw.trim();
+        let value = if raw.starts_with('|') || raw.starts_with('>') {
+            let folded = raw.starts_with('>');
+            let mut block = Vec::new();
+            while index < end {
+                let next = lines[index];
+                if !next.is_empty() && !next.starts_with(' ') && !next.starts_with('\t') {
+                    break;
                 }
-                _ => {}
+                block.push(next);
+                index += 1;
             }
+            let indent = block.iter().filter(|line| !line.trim().is_empty())
+                .map(|line| line.len() - line.trim_start_matches([' ', '\t']).len())
+                .min().unwrap_or(0);
+            let values = block.iter().map(|line| {
+                let cut = indent.min(line.len());
+                line[cut..].trim_end()
+            }).collect::<Vec<_>>();
+            let joined = if folded { values.join(" ") } else { values.join("\n") };
+            let joined = joined.trim_end();
+            if joined.is_empty() { None } else { Some(joined.to_owned()) }
+        } else {
+            memory_yaml_scalar(raw)
+        };
+        match key {
+            "description" => description = value.filter(|v| !v.is_empty()),
+            "type" => {
+                memory_type = value.filter(|v| matches!(v.as_str(),
+                    "user" | "feedback" | "project" | "reference"));
+            }
+            _ => {}
         }
     }
     (description, memory_type)
 }
-
 /// Bounded memory preview matching the original 200-line/4096-byte attachment.
 fn read_topic_preview(path: &Path) -> Result<(String, usize)> {
     let mut bytes = Vec::with_capacity(MAX_PER_TOPIC_BYTES + 1);
