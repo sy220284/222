@@ -1,3 +1,11 @@
+## 2026-10-29：超大文件读取失效时清除旧编辑授权（源码已提交、待验收）
+
+- **原版依据**：`source/src/utils/fileStateCache.ts:30–48::FileStateCache.set` 使用 `lru-cache` 的 100 项、25MiB 大小限制；新值超限时同一文件的旧缓存不得继续作为有效读取状态。
+- **Rust 实际缺口**：`src/tools.rs::FileReadCache::insert` 遇到大于 25MiB 的新文件内容直接返回，原先同路径的完整 Read 缓存及 LRU 条目仍保留，后续 Edit/Write 可能错误复用旧的已读状态。
+- **实质修复**：新读取超限时主动删除同路径旧缓存、扣除占用字节并清理 LRU 顺序，保持原版缓存大小限制和编辑前必须完整读取的授权约束。调用链：read_file→FileReadCache::insert→edit_file/write_file→FileReadCache::get。
+- **代码提交**：`b28fbb4468f60b5e74c024b68716a742152cf8cc`；修改 `src/tools.rs`。计 **1 项独立用户可感知的读取后编辑安全行为**；仅源码静态审查，未运行 Cargo/测试/CI，**已提交、待验收**。
+- **剩余差异**：原版缓存克隆、合并、序列化恢复及跨会话状态仍待核对；Issue #3 冻结清单不核销。
+
 ## 2026-10-29：文件历史备份迁出工作区并迁移旧会话（源码已提交、待验收）
 
 - **原版依据**：完整 Claude Code 2.1.88 的 `source/src/utils/fileHistory.ts:733–740::resolveBackupPath` 将文件历史备份保存在用户配置目录下的 `file-history/<sessionId>/`，与工程源码隔离。
