@@ -97,6 +97,18 @@ impl BackgroundTasks {
     }
 
     pub async fn start(&self, command: &str, description: &str) -> Result<String> {
+        let kind = *self.shell_kind.lock().unwrap();
+        self.start_with_shell(command, description, kind).await
+    }
+
+    /// Explicit tool names select their own shell without changing the
+    /// session default or racing another background task's shell choice.
+    pub async fn start_with_shell(
+        &self,
+        command: &str,
+        description: &str,
+        kind: crate::shell_runtime::ShellKind,
+    ) -> Result<String> {
         if command.trim().is_empty() {
             bail!("Background shell command is empty")
         }
@@ -108,7 +120,6 @@ impl BackgroundTasks {
         let stderr_path = self.directory.join(format!("{id}.stderr"));
         tokio::fs::write(&stdout_path, &[]).await?;
         tokio::fs::write(&stderr_path, &[]).await?;
-        let kind = *self.shell_kind.lock().unwrap();
         let mut proc = kind.build_command(command)?;
         proc.envs(self.session_env.lock().unwrap().iter());
         crate::subprocess_env::apply(&mut proc);
