@@ -5518,48 +5518,76 @@ fn chat_branch_preserves_original_conversation_and_uses_collision_free_titles() 
     assert_eq!(third["messages"][2]["content"], "Only in the active branch");
 }
 
-
 #[test]
 fn stats_cli_and_chat_count_model_reported_usage_and_work_offline() {
     let root = tempfile::tempdir().unwrap();
-    let empty=binary().args(["--workspace",root.path().to_str().unwrap(),"stats"])
-        .output().unwrap();
+    let empty = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "stats"])
+        .output()
+        .unwrap();
     assert!(empty.status.success());
     assert!(String::from_utf8_lossy(&empty.stdout).contains("Sessions: 0 (0 forks)"));
-    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
-    let address=listener.local_addr().unwrap();
-    let server=thread::spawn(move||{
-        let (mut stream,_) = listener.accept().unwrap();
-        let request=read_request(&mut stream);
-        let body=json!({"choices":[{"message":{"role":"assistant",
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request = read_request(&mut stream);
+        let body = json!({"choices":[{"message":{"role":"assistant",
             "content":"Saved response"},"finish_reason":"stop"}],
-            "usage":{"prompt_tokens":5,"completion_tokens":7,"total_tokens":12}}).to_string();
+            "usage":{"prompt_tokens":5,"completion_tokens":7,"total_tokens":12}})
+        .to_string();
         write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
         stream.flush().unwrap();
         request
     });
-    let config=root.path().join("config.json");
-    fs::write(&config,json!({"default_provider":"local","providers":[{
-        "id":"local","kind":"openai-compatible",
-        "model":"mock","base_url":format!("http://{address}/v1")
-    }]}).to_string()).unwrap();
-    let mut process=binary()
-        .args(["--workspace",root.path().to_str().unwrap(),"chat"])
-        .env("ATLAS_CONFIG",&config)
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"local","providers":[{
+            "id":"local","kind":"openai-compatible",
+            "model":"mock","base_url":format!("http://{address}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut process = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "chat"])
+        .env("ATLAS_CONFIG", &config)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped()).spawn().unwrap();
-    process.stdin.take().unwrap().write_all(b"Hello\n/stats\n/exit\n").unwrap();
-    let output=process.wait_with_output().unwrap();
-    let request=server.join().unwrap();
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    process
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"Hello\n/stats\n/exit\n")
+        .unwrap();
+    let output = process.wait_with_output().unwrap();
+    let request = server.join().unwrap();
     assert!(request.contains("Hello"));
-    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
-    let stdout=String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Sessions: 1 (0 forks)"),"{stdout}");
-    assert!(stdout.contains("Model-reported tokens: input 5, output 7, total 12"),"{stdout}");
-    let offline=binary().args(["--workspace",root.path().to_str().unwrap(),"stats"])
-        .env("ATLAS_CONFIG","/invalid/should-not-be-read.json")
-        .output().unwrap();
-    assert!(offline.status.success(),"{}",String::from_utf8_lossy(&offline.stderr));
-    assert!(String::from_utf8_lossy(&offline.stdout).contains("Model-reported tokens: input 5, output 7, total 12"));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Sessions: 1 (0 forks)"), "{stdout}");
+    assert!(
+        stdout.contains("Model-reported tokens: input 5, output 7, total 12"),
+        "{stdout}"
+    );
+    let offline = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "stats"])
+        .env("ATLAS_CONFIG", "/invalid/should-not-be-read.json")
+        .output()
+        .unwrap();
+    assert!(
+        offline.status.success(),
+        "{}",
+        String::from_utf8_lossy(&offline.stderr)
+    );
+    assert!(String::from_utf8_lossy(&offline.stdout)
+        .contains("Model-reported tokens: input 5, output 7, total 12"));
 }

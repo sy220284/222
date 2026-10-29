@@ -944,7 +944,10 @@ mod tests {
             },
         };
         let outcome = runner.before_tool(&call).await.unwrap();
-        assert_eq!(outcome.blocking_reason.as_deref(), Some("changed command blocked"));
+        assert_eq!(
+            outcome.blocking_reason.as_deref(),
+            Some("changed command blocked")
+        );
     }
 
     #[cfg(unix)]
