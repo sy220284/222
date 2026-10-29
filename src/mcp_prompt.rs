@@ -130,6 +130,65 @@ pub fn render_content(
                     images = true;
                     text.push_str(&format!("[image: {mime}]"));
                 }
+                Some("resource") => {
+                    // Original client.ts::transformResultContent keeps text
+                    // embedded in a resource, and forwards image blobs as
+                    // images rather than dropping the prompt.
+                    let resource = part
+                        .get("resource")
+                        .context("MCP prompt resource missing resource")?;
+                    let uri = resource
+                        .get("uri")
+                        .and_then(Value::as_str)
+                        .context("MCP prompt resource missing uri")?;
+                    let prefix = format!("[Resource from {server} at {uri}] ");
+                    if let Some(value) = resource.get("text").and_then(Value::as_str) {
+                        let rendered = format!("{prefix}{value}");
+                        text.push_str(&rendered);
+                        blocks.push(serde_json::json!({"type":"text","text":rendered}));
+                    } else if let Some(data) = resource.get("blob").and_then(Value::as_str) {
+                        let mime = resource
+                            .get("mimeType")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        if !matches!(mime, "image/png" | "image/jpeg" | "image/gif" | "image/webp") {
+                            // The original persists non-image blobs and
+                            // returns a file path. No such persistence path
+                            // is connected here yet: reject instead of
+                            // silently discarding the attachment.
+                            bail!("MCP prompt non-image resource requires binary persistence");
+                        }
+                        text.push_str(&prefix);
+                        text.push_str(&format!("[image: {mime}]"));
+                        blocks.push(serde_json::json!({"type":"text","text":prefix}));
+                        blocks.push(serde_json::json!({"type":"image","source":{
+                            "type":"base64","media_type":mime,"data":data
+                        }}));
+                        images = true;
+                    } else {
+                        bail!("MCP prompt resource has neither text nor blob");
+                    }
+                }
+                Some("resource_link") => {
+                    // Keep the original MCP link name, URI and description
+                    // visible to the model as text; never fetch it implicitly.
+                    let name = part
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .context("MCP resource link missing name")?;
+                    let uri = part
+                        .get("uri")
+                        .and_then(Value::as_str)
+                        .context("MCP resource link missing uri")?;
+                    let mut rendered = format!("[Resource link: {name}] {uri}");
+                    if let Some(description) = part.get("description").and_then(Value::as_str) {
+                        if !description.is_empty() {
+                            rendered.push_str(&format!(" ({description})"));
+                        }
+                    }
+                    text.push_str(&rendered);
+                    blocks.push(serde_json::json!({"type":"text","text":rendered}));
+                }
                 _ => bail!("Unsupported MCP prompt block type"),
             }
             if text.len() > 128_000 {
