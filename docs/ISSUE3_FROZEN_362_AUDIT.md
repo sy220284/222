@@ -414,3 +414,16 @@
 **真实调用链回归：** `tests/integration_hook_lifecycle.rs::pre_tool_hook_ask_cannot_be_bypassed_by_full_approval` 使用独立 CLI 进程、真实 Shell Hook、模拟模型 HTTP 两轮工具调用和临时文件系统，验证 `--approval full` 下 Hook `ask` 不产生文件副作用、下一轮模型收到 `must-ask` 的拒绝结果。代码提交 `a1091560`、`2c08cb75`，格式及相邻并行改动整合 `c9e3b7b5`。最终 CI 应以最新 HEAD 的 Actions 实际结论为准。
 
 **未闭环：** 原版 `allow` 跳过一般询问但仍服从显式 deny/ask 的完整决策、复杂交互式权限回调、全部 Hook 类型/异步取消、多个 Hook 输入修改时序及重启行为尚待补全；冻结 #349 **仍为部分实现、未通过完整等价验收**，362 条均不勾选。
+
+
+## 2026-10-29：冻结 #19 权限设置损坏文件的运行时恢复（仍未验收）
+
+**原版逐行依据：** 2.1.88 `src/utils/settings/settings.ts` 的 `parseSettingsFileUncached`（201–230 行）在 JSON 解析异常时返回 `settings: null`；`getSettingsForSourceUncached`（约 340–357 行）继续加载其他来源；`src/utils/permissions/permissionsLoader.ts::loadAllPermissionRulesFromDisk` 按已启用来源逐个汇集规则。相反，编辑入口 `settings.ts::updateSettingsForSource`（416 行起）拒绝用新数据覆盖语法损坏的文件。
+
+**Rust 真实缺口：** `src/permission_settings.rs::SettingsPaths::load` 原先直接调用严格 `read_json`，一个项目设置 JSON 语法损坏会中断整个 Agent 启动，其他用户／本地有效规则无法生效；但修改权限文件时严格拒绝覆盖损坏内容的保护必须保留。
+
+**代码修复：** 增加仅供执行加载的 `read_json_for_execution`，只对确认为 JSON 语法错误的来源输出警告并跳过，其他来源继续加载；符号链接、文件类型与路径边界等安全错误仍向上传播。写入路径继续使用严格 `read_json`，保留损坏文件原内容并拒绝覆盖。原版全部设置 schema 验证、逐条非法规则过滤、启用来源配置、MDM/远端托管及动态缓存时序尚未完成。
+
+**真实调用与验证：** `permission_settings::tests::malformed_source_json_does_not_abort_other_valid_permission_sources` 使用三个来源的真实磁盘设置、实际 `ToolExecutor::execute` 启动 Shell，验证有效来源允许的文件落盘、另一个来源明确拒绝的文件未生成、损坏的项目设置不能被 `add` 覆盖。代码提交 `b89c0f0442af2c6f8d6542d855a0d04217f3e868`，CI 以该提交对应 Actions 最终结果为准。
+
+**验收状态：** 冻结 #19 及其关联源路径仍为部分实现；固定 362 条完整验收仍为 **0/362**。本次不调整全仓动态台账，也不以单项恢复测试勾选冻结条目。
