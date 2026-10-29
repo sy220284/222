@@ -92,6 +92,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/PromptInput/PromptInputStashNotice.tsx" => match export {
+            "view" => serde_json::to_value(super::p_f6470f6cbfbdc::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/PromptInput/SandboxPromptFooterHint.tsx" => match export {
@@ -377,7 +381,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ),
         (
             "src/components/PromptInput/PromptInputStashNotice.tsx",
-            vec![],
+            vec!["view"],
         ),
         (
             "src/components/PromptInput/SandboxPromptFooterHint.tsx",
