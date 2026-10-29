@@ -47,6 +47,51 @@ fn parts(name: &str) -> Vec<String> {
     words
 }
 
+/// Original ToolSearchTool/prompt.ts::isDeferredTool: selected tools are
+/// discoverable by name until the model explicitly requests their schemas.
+/// MCP tools are deferred by default; the original also defers interactive,
+/// task, web and editor tools. Tool metadata can override this per tool.
+fn is_deferred(tool: &Value) -> bool {
+    let function = &tool["function"];
+    let Some(name) = function["name"].as_str() else {
+        return false;
+    };
+    if tool["alwaysLoad"] == true
+        || function["alwaysLoad"] == true
+        || tool.pointer("/_meta/anthropic~1alwaysLoad") == Some(&Value::Bool(true))
+    {
+        return false;
+    }
+    if name == "ToolSearch" {
+        return false;
+    }
+    if tool["shouldDefer"] == true || function["shouldDefer"] == true {
+        return true;
+    }
+    name.starts_with("mcp__")
+        || matches!(
+            name,
+            "AskUserQuestion"
+                | "web_search"
+                | "web_fetch"
+                | "notebook_edit"
+                | "task_output"
+                | "task_stop"
+                | "TodoWrite"
+                | "TaskCreate"
+                | "TaskGet"
+                | "TaskList"
+                | "TaskUpdate"
+                | "task_create"
+                | "task_list"
+                | "task_update"
+                | "TeamCreate"
+                | "TeamDelete"
+                | "SendMessage"
+                | "lsp_query"
+        )
+}
+
 /// MCP definitions are discoverable by name but not sent in full on turn one.
 /// Selected schemas become visible on the next model request.
 pub fn visible_catalog(
@@ -57,7 +102,7 @@ pub fn visible_catalog(
     let mut deferred_names = Vec::new();
     for tool in all {
         let name = tool["function"]["name"].as_str().unwrap_or("");
-        if name.starts_with("mcp__") {
+        if is_deferred(tool) {
             deferred_names.push(name.to_owned());
             if !loaded.contains(name) {
                 continue;
@@ -102,12 +147,14 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
         })
         .filter(|(name, _, _)| *name != "ToolSearch")
         .collect();
-    // Current provider-neutral protocol exposes active tools, including MCP,
-    // directly. Report deferred MCP count without misrepresenting unavailable tools.
-    let deferred_count = catalog
+    // Count and rank only tools that actually require schema discovery.
+    // Exact name selection may still return an already-loaded tool.
+    let deferred_names: std::collections::HashSet<&str> = tools
         .iter()
-        .filter(|(name, _, _)| name.starts_with("mcp__"))
-        .count();
+        .filter(|tool| is_deferred(tool))
+        .filter_map(|tool| tool.pointer("/function/name").and_then(Value::as_str))
+        .collect();
+    let deferred_count = deferred_names.len();
     let matches: Vec<String>;
     if query
         .get(..7)
@@ -143,8 +190,9 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
         matches = catalog
             .iter()
             .filter(|(name, _, _)| {
-                name.to_ascii_lowercase()
-                    .starts_with(&query.to_ascii_lowercase())
+                deferred_names.contains(name)
+                    && name.to_ascii_lowercase()
+                        .starts_with(&query.to_ascii_lowercase())
             })
             .take(max)
             .map(|(name, _, _)| (*name).to_owned())
@@ -169,6 +217,9 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
             .collect::<std::result::Result<_, _>>()?;
         let mut scored = Vec::new();
         for (name, description, hint) in &catalog {
+            if !deferred_names.contains(name) {
+                continue;
+            }
             let components = parts(name);
             let full_name = components.join(" ");
             let desc = description.to_ascii_lowercase();
