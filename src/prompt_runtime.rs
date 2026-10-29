@@ -116,7 +116,8 @@ pub fn tool_allowed_for_role(role: &str, name: &str) -> bool {
         canonical,
         "read_file" | "list_files" | "search_text" | "git_status" | "git_diff"
             | "git_log" | "list_skills" | "read_skill" | "web_search" | "web_fetch"
-            | "Glob" | "Grep" | "Read" | "LSP" | "ToolSearch"
+            | "glob_files" | "grep_files" | "Read" | "LSP" | "ToolSearch"
+            | "TaskGet" | "TaskList" | "task_output"
     );
     if read_tool {
         return true;
