@@ -8,7 +8,7 @@ use crate::{
     in_memory_mailbox,
     lsp::LspManager,
     mcp::McpManager,
-    memory, permission_mode, permission_rules,
+    files_context, memory, permission_mode, permission_rules,
     protocol::ToolCall,
     protocol::{Message, ModelRequest, TokenUsage},
     provider::{self, ModelProvider},
