@@ -1,5 +1,14 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：任务列表异常记录恢复与编号一致性（源码已提交、待验收）
+
+对照原版 `source/src/utils/tasks.ts` 的 `getTask`、`findHighestTaskIdFromFiles`、`resetTaskList` 和 `TaskGetTool` / `TaskUpdateTool` 调用链，补齐 `src/task_graph.rs`：
+
+- **任务列表异常记录容错（1 项）**：损坏 JSON、超长或溢出的数字文件名不会让 TaskList / 团队状态读取整组失败；TaskGet、TaskUpdate、认领在无效编号下按原版返回任务不存在。代码提交 `8739c3b7`、`bff79ed7`。
+- **任务列表重置与编号保护（1 项）**：重置新团队时清理所有任务 JSON，包括损坏或遗留记录；重置前先保存高水位；扫描文件名计算最高编号，避免损坏记录导致后续任务 ID 复用。代码提交 `8739c3b7`。
+
+本次两条可感知业务链已写入并推送，均为**已提交、待行为验收**；未运行 Cargo、测试或 CI，Issue #3 冻结条目不勾选。原版跨进程通知、完整任务状态机、任务文件级并发、完整 SDK/UI 仍待补齐。本轮 100 项独立缺口的逐项确认和方案尚未全部完成，100 项硬目标未达成；不将本次局部源码修改标为全部等价。
+
 ## 2026-10-29：本地记忆与文件上下文真实调用链补齐（本任务本轮 5/100，已提交待验收）
 
 原始源码：`source/src/memdir/memoryScan.ts`、`source/src/memdir/findRelevantMemories.ts`、`source/src/utils/fileStateCache.ts`、`source/src/commands/files/files.ts`。Rust 可达入口：`src/agent.rs` → `src/memory.rs::context_with_recent_tools`；`/files` → `src/files_context.rs::paths`。
