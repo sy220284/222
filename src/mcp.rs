@@ -675,9 +675,11 @@ impl McpManager {
         // when the agent is still in the same model turn. No failed call is
         // replayed: its server-side effects were not necessarily reversible.
         if let Some((previous_index, _)) = self.routes.get(&call.function.name).cloned() {
-            if let Some(position) = self.status_clients.iter().position(|slot| {
-                *slot == Some(previous_index)
-            }) {
+            if let Some(position) = self
+                .status_clients
+                .iter()
+                .position(|slot| *slot == Some(previous_index))
+            {
                 if self.server_statuses[position]["status"] == "failed" {
                     self.reconnect_server(position).await?;
                 }
