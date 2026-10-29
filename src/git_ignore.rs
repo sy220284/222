@@ -154,17 +154,11 @@ mod tests {
 
         // A shorter pattern is not a duplicate of an existing longer pattern.
         assert!(add_file_glob_rule_to_gitignore_at("foo", dir.path(), &global).unwrap());
-        assert_eq!(
-            fs::read_to_string(&global).unwrap(),
-            "**/foobar\n**/foo\n"
-        );
+        assert_eq!(fs::read_to_string(&global).unwrap(), "**/foobar\n**/foo\n");
         assert!(is_path_gitignored("foo", dir.path()));
         assert!(is_path_gitignored("foobar", dir.path()));
         assert!(!add_file_glob_rule_to_gitignore_at("foo", dir.path(), &global).unwrap());
-        assert_eq!(
-            fs::read_to_string(&global).unwrap(),
-            "**/foobar\n**/foo\n"
-        );
+        assert_eq!(fs::read_to_string(&global).unwrap(), "**/foobar\n**/foo\n");
     }
 
     #[test]
