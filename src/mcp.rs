@@ -465,7 +465,22 @@ impl McpManager {
                 Ok(())
             };
             if let Err(error) = discovery {
-                out.failed_status(server, format!("Tool discovery failed: {error:#}"));
+                // The original MCP client treats tool-list discovery failure
+                // as an empty tool list. Preserve a healthy connection so its
+                // independent prompts/resources remain usable, while exposing
+                // the tool-specific error in status instead of hiding it.
+                let client_index = out.clients.len();
+                out.server_statuses.push(json!({
+                    "name":server.id,"status":"connected",
+                    "serverInfo":client.server_info(),
+                    "config":Self::public_config(server),
+                    "tools":[],
+                    "toolDiscoveryError":Self::redact_connection_error(
+                        server, format!("Tool discovery failed: {error:#}")
+                    )
+                }));
+                out.status_clients.push(Some(client_index));
+                out.clients.push(client);
                 continue;
             }
             let client_index = out.clients.len();
