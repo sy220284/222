@@ -148,6 +148,7 @@ struct SdkAgentDefinition {
     disallowed_tools: std::collections::HashSet<String>,
     max_turns: Option<usize>,
     isolation: Option<String>,
+    initial_prompt: Option<String>,
 }
 
 pub struct Agent {
@@ -457,7 +458,7 @@ impl Agent {
             let definition = value.as_object()
                 .with_context(|| format!("SDK agent {name} must be an object"))?;
             for field in definition.keys() {
-                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation") {
+                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt") {
                     bail!("SDK agent {name} field {field} is not yet supported");
                 }
             }
@@ -520,6 +521,11 @@ impl Agent {
                 Some(serde_json::Value::String(value)) if value == "worktree" => Some(value.clone()),
                 Some(_) => bail!("SDK agent {name} isolation must be worktree"),
             };
+            let initial_prompt = match definition.get("initialPrompt") {
+                None => None,
+                Some(serde_json::Value::String(value)) => Some(value.clone()),
+                Some(_) => bail!("SDK agent {name} initialPrompt must be a string"),
+            };
             parsed.insert(name.clone(), SdkAgentDefinition {
                 description: description.to_owned(),
                 prompt: prompt.to_owned(),
@@ -528,6 +534,7 @@ impl Agent {
                 disallowed_tools,
                 max_turns,
                 isolation,
+                initial_prompt,
             });
         }
         self.sdk_agent_definitions = parsed;
@@ -1500,6 +1507,8 @@ impl Agent {
             .unwrap_or("general")
             .to_owned();
         let sdk_definition = self.sdk_agent_definitions.get(&agent_type).cloned();
+        let initial_prompt = sdk_definition.as_ref()
+            .and_then(|definition| definition.initial_prompt.clone());
         let isolation = args
             .get("isolation")
             .and_then(|v| v.as_str())
@@ -1584,7 +1593,12 @@ impl Agent {
             if start.prevent_continuation {
                 bail!("SubagentStart hook stopped continuation")
             }
-            let mut continuation = prompt.to_owned();
+            // Source main.tsx prepends an agent's initialPrompt to the first
+            // user turn, preserving the caller's task as trailing context.
+            let mut continuation = match initial_prompt {
+                Some(initial) if !initial.is_empty() => format!("{initial}\\n\\n{prompt}"),
+                _ => prompt.to_owned(),
+            };
             let mut stop_hook_active = false;
             let mut continuation_rounds = 0usize;
             let answer = loop {
