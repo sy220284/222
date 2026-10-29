@@ -5145,3 +5145,48 @@ fn chat_status_reports_live_state_and_never_prints_secrets() {
     assert!(!stderr.contains("API_SECRET_NEVER_PRINT"));
     assert!(!stderr.contains("URL_SECRET_NEVER_PRINT"));
 }
+
+
+#[test]
+fn transcript_search_uses_visible_messages_not_model_only_reminders() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join(".atlas/sessions");
+    fs::create_dir_all(&directory).unwrap();
+    let id = "3c4d57ae-1a1c-474b-854d-09ad8fd1123e";
+    let session = json!({
+        "id": id,
+        "messages": [
+            {"role":"system","content":"hidden system needle"},
+            {"role":"user","content":"Café patch <system-reminder>private needle</system-reminder> file"},
+            {"role":"assistant","content":"Fixed café controller"},
+            {"role":"tool","content":"{\"stdout\":\"visible grep result\",\"rawOutputPath\":\"needle\"}"},
+            {"role":"user","content":"[Request interrupted by user]"}
+        ]
+    });
+    fs::write(directory.join(format!("{id}.json")), session.to_string()).unwrap();
+    let output = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "transcript-search", id, "CAFÉ"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("2  user"));
+    assert!(text.contains("3  assistant"));
+    assert!(!text.contains("hidden system"));
+    let phantom = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "transcript-search", id, "needle"])
+        .output()
+        .unwrap();
+    assert!(phantom.status.success());
+    assert!(phantom.stdout.is_empty(), "{}", String::from_utf8_lossy(&phantom.stdout));
+    let tool = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "transcript-search", id, "visible grep"])
+        .output()
+        .unwrap();
+    assert!(tool.status.success());
+    assert!(String::from_utf8_lossy(&tool.stdout).contains("4  tool"));
+}
