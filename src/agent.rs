@@ -1114,6 +1114,60 @@ impl Agent {
     pub fn workspace_root(&self) -> &std::path::Path {
         &self.root
     }
+    /// Fork the live conversation without switching away from the parent.
+    /// Carries over messages, tool-result history and context metadata.
+    pub fn branch_session(&self, title: Option<&str>) -> Result<String> {
+        let first = self.session.messages
+            .iter()
+            .find(|m| m.role == "user" && m.content.as_deref().is_some_and(|s| !s.trim().is_empty()));
+        if first.is_none() {
+            bail!("No conversation to branch");
+        }
+        let requested = title
+            .map(crate::unicode_sanitization::partially_sanitize_unicode)
+            .unwrap_or_default();
+        let requested = requested.trim();
+        let source = first.and_then(|m| m.content.as_deref()).unwrap_or("");
+        let derived = source.split_whitespace().collect::<Vec<_>>().join(" ");
+        let derived = derived.chars().take(100).collect::<String>();
+        let base = if !requested.is_empty() {
+            requested
+        } else if derived.is_empty() {
+            "Branched conversation"
+        } else {
+            derived.as_str()
+        };
+        let existing: std::collections::HashSet<String> = self
+            .list_sessions()?
+            .into_iter()
+            .map(|session| session.title)
+            .collect();
+        let mut index = 1usize;
+        let name = loop {
+            let candidate = if index == 1 {
+                format!("{base} (Branch)")
+            } else {
+                format!("{base} (Branch {index})")
+            };
+            if !existing.contains(&candidate) {
+                break candidate;
+            }
+            index += 1;
+        };
+        let mut child = self.session.clone();
+        child.id = uuid::Uuid::new_v4();
+        child.forked_from = Some(self.session.id);
+        child.custom_title = Some(name.clone());
+        child.tag = None;
+        child.save(&self.root)?;
+        Ok(format!(
+            "Branched conversation: {name}\nSession: {}\nResume: atlas-agent --workspace {} chat --resume {}",
+            child.id,
+            self.root.display(),
+            child.id
+        ))
+    }
+
     pub fn session_tag(&self) -> Option<&str> {
         self.session.tag.as_deref()
     }
