@@ -13,13 +13,30 @@ use std::{
     path::{Path, PathBuf},
     process::Stdio,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, UNIX_EPOCH},
 };
 use tokio::{process::Command, time::timeout};
 use walkdir::WalkDir;
 
 const MAX_FILE_BYTES: u64 = 1_048_576;
 const MAX_OUTPUT_CHARS: usize = 16_000;
+
+/// The original Read/Edit contract is scoped to a conversation, not a
+/// particular model turn. A partial Read cannot authorize a full-file Edit.
+#[derive(Clone, Debug)]
+pub struct FileReadState {
+    pub content: String,
+    pub timestamp_ms: u64,
+    pub full: bool,
+}
+
+fn modified_millis(metadata: &fs::Metadata) -> Result<u64> {
+    Ok(metadata
+        .modified()?
+        .duration_since(UNIX_EPOCH)?
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Approval {
@@ -36,7 +53,8 @@ pub struct ToolExecutor {
     session_id: Option<String>,
     approval: Approval,
     interactive: bool,
-    reads: Mutex<HashMap<PathBuf, u64>>,
+    reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
+    file_reads: Arc<Mutex<HashMap<PathBuf, FileReadState>>>,
     enabled_plugins: Vec<String>,
     search_backend: Option<SearchBackend>,
     background: Option<Arc<BackgroundTasks>>,
@@ -55,7 +73,8 @@ impl ToolExecutor {
             session_id: None,
             approval,
             interactive,
-            reads: Mutex::new(HashMap::new()),
+            reads: Arc::new(Mutex::new(HashMap::new())),
+            file_reads: Arc::new(Mutex::new(HashMap::new())),
             enabled_plugins: Vec::new(),
             search_backend: None,
             background: None,
@@ -84,6 +103,47 @@ impl ToolExecutor {
     pub fn with_metrics(mut self, metrics: Arc<ToolMetrics>) -> Self {
         self.metrics = metrics;
         self
+    }
+
+    pub fn with_shared_reads(
+        mut self,
+        notebook_reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
+        file_reads: Arc<Mutex<HashMap<PathBuf, FileReadState>>>,
+    ) -> Self {
+        self.reads = notebook_reads;
+        self.file_reads = file_reads;
+        self
+    }
+
+    /// SDK seed_read_state: an observed read may have been removed from the
+    /// transcript. Only accept it while the file is still at the observed
+    /// modification time; never manufacture a read of newer content.
+    pub fn seed_read_state(&self, requested: &str, observed_ms: u64) -> Result<()> {
+        let path = self.checked_path(requested)?;
+        self.require_read_rules(requested, &path)?;
+        let before = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        let disk_ms = modified_millis(&before)?;
+        if before.len() > MAX_FILE_BYTES || disk_ms > observed_ms {
+            return Ok(());
+        }
+        let content = fs::read_to_string(&path)?;
+        let after = fs::metadata(&path)?;
+        if modified_millis(&after)? != disk_ms || after.len() != before.len() {
+            return Ok(());
+        }
+        let mut reads = self.file_reads.lock().unwrap();
+        if reads.get(&path).is_none_or(|existing| existing.timestamp_ms < disk_ms) {
+            reads.insert(path, FileReadState {
+                content,
+                timestamp_ms: disk_ms,
+                full: true,
+            });
+        }
+        Ok(())
     }
 
     pub fn with_permission_mode(mut self, mode: permission_mode::Mode) -> Self {
@@ -717,7 +777,7 @@ impl ToolExecutor {
         self.reads
             .lock()
             .unwrap()
-            .insert(path, notebook::revision(&content));
+            .insert(path.clone(), notebook::revision(&content));
         let start = args
             .get("start_line")
             .and_then(Value::as_u64)
@@ -736,6 +796,16 @@ impl ToolExecutor {
             .map(|(i, line)| format!("{}: {}", i + 1, line))
             .collect::<Vec<_>>()
             .join("\n");
+        let after = fs::metadata(&path)?;
+        let before_ms = modified_millis(&metadata)?;
+        let unchanged = modified_millis(&after)? == before_ms && after.len() == metadata.len();
+        self.file_reads.lock().unwrap().insert(path, FileReadState {
+            full: unchanged && start == 1
+                && content.lines().count() <= count
+                && result.chars().count() <= MAX_OUTPUT_CHARS,
+            content,
+            timestamp_ms: before_ms,
+        });
         Ok(result)
     }
 
@@ -1010,6 +1080,12 @@ impl ToolExecutor {
         if !existed || before.is_some() {
             self.metrics.record_change(before.as_deref(), content);
         }
+        let metadata = fs::metadata(&path)?;
+        self.file_reads.lock().unwrap().insert(path.clone(), FileReadState {
+            content: content.to_owned(),
+            timestamp_ms: modified_millis(&metadata)?,
+            full: true,
+        });
         Ok(format!(
             "Wrote {} bytes to {}",
             content.len(),
@@ -1030,7 +1106,17 @@ impl ToolExecutor {
         if fs::metadata(&path)?.len() > MAX_FILE_BYTES {
             bail!("File too large")
         }
-        let content = tokio::fs::read_to_string(&path).await?;
+        // Validate against the complete content previously shown to the
+        // model, including reads made in earlier turns of this session.
+        let content = fs::read_to_string(&path)?;
+        let prior = self.file_reads.lock().unwrap().get(&path).cloned()
+            .context("File has not been read yet. Read it first before writing to it.")?;
+        if !prior.full {
+            bail!("File was only partially read. Read the complete file before editing");
+        }
+        if content != prior.content {
+            bail!("File has been modified since read. Read it again before editing");
+        }
         let hits = content.matches(old).count();
         let replace_all = args
             .get("replace_all")
@@ -1047,8 +1133,14 @@ impl ToolExecutor {
         if updated.len() as u64 > MAX_FILE_BYTES {
             bail!("Updated file too large")
         }
-        tokio::fs::write(&path, &updated).await?;
+        fs::write(&path, &updated)?;
         self.metrics.record_change(Some(&content), &updated);
+        let metadata = fs::metadata(&path)?;
+        self.file_reads.lock().unwrap().insert(path.clone(), FileReadState {
+            content: updated,
+            timestamp_ms: modified_millis(&metadata)?,
+            full: true,
+        });
         Ok(format!(
             "Replaced {hits} occurrence(s) in {}",
             path.display()
@@ -1999,6 +2091,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         fs::write(root.path().join("a.txt"), "x x").unwrap();
         let tools = executor(root.path(), Approval::Full);
+        tools.read_file(&json!({"path":"a.txt"})).unwrap();
         let call = ToolCall {
             id: "1".into(),
             kind: "function".into(),
@@ -2023,6 +2116,7 @@ mod tests {
         let path = root.path().join("edit.txt");
         fs::write(&path, "abc abc abc").unwrap();
         let tools = executor(root.path(), Approval::Full);
+        tools.read_file(&json!({"path":"edit.txt"})).unwrap();
         let make = |replace_all: &str| ToolCall {
             id: "quoted".into(),
             kind: "function".into(),
