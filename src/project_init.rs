@@ -5,27 +5,55 @@ use anyhow::{Context, Result};
 use std::{fs, path::Path};
 
 const ROOT_MARKERS: &[&str] = &[
-    "AGENTS.md", "AGENTS.local.md", "README.md", "README", "Cargo.toml",
-    "Cargo.lock", "package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml",
-    "bun.lock", "bun.lockb", "yarn.lock", "pyproject.toml", "uv.lock",
-    "requirements.txt", "go.mod", "go.work", "pom.xml", "build.gradle",
-    "Makefile", "justfile", ".github/copilot-instructions.md",
-    ".cursorrules", ".cursor/rules", ".windsurfrules", ".clinerules",
-    ".github/workflows", ".gitignore", ".git/info/exclude",
-    ".mcp.json", ".atlas/skills", ".atlas/hooks", ".atlas/rules",
-    "CLAUDE.md", "CLAUDE.local.md",
+    "AGENTS.md",
+    "AGENTS.local.md",
+    "README.md",
+    "README",
+    "Cargo.toml",
+    "Cargo.lock",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "pnpm-lock.yaml",
+    "bun.lock",
+    "bun.lockb",
+    "yarn.lock",
+    "pyproject.toml",
+    "uv.lock",
+    "requirements.txt",
+    "go.mod",
+    "go.work",
+    "pom.xml",
+    "build.gradle",
+    "Makefile",
+    "justfile",
+    ".github/copilot-instructions.md",
+    ".cursorrules",
+    ".cursor/rules",
+    ".windsurfrules",
+    ".clinerules",
+    ".github/workflows",
+    ".gitignore",
+    ".git/info/exclude",
+    ".mcp.json",
+    ".atlas/skills",
+    ".atlas/hooks",
+    ".atlas/rules",
+    "CLAUDE.md",
+    "CLAUDE.local.md",
 ];
 
 /// Reports actual paths only; no repository file content or environment
 /// variables are embedded into a generated prompt before tool permissions.
 pub fn markers(root: &Path) -> Result<Vec<String>> {
-    let root=root.canonicalize().context("Workspace unavailable")?;
-    let mut found=Vec::new();
+    let root = root.canonicalize().context("Workspace unavailable")?;
+    let mut found = Vec::new();
     for relative in ROOT_MARKERS {
-        let path=root.join(relative);
-        if let Ok(meta)=fs::symlink_metadata(&path) {
+        let path = root.join(relative);
+        if let Ok(meta) = fs::symlink_metadata(&path) {
             if meta.file_type().is_symlink() {
-                found.push(format!("{relative} (symbolic link: inspect target before use)"));
+                found.push(format!(
+                    "{relative} (symbolic link: inspect target before use)"
+                ));
             } else if meta.is_dir() {
                 found.push(format!("{relative}/"));
             } else if meta.is_file() {
@@ -38,14 +66,14 @@ pub fn markers(root: &Path) -> Result<Vec<String>> {
 }
 
 pub fn prompt(root: &Path) -> Result<String> {
-    let found=markers(root)?;
-    let inventory=if found.is_empty() {
+    let found = markers(root)?;
+    let inventory = if found.is_empty() {
         "No conventional root manifests were found; inspect the tree.".to_owned()
     } else {
         found.join("\n")
     };
     Ok(format!(
-r#"Initialize this repository's instructions using the provider-neutral interactive equivalent of the original /init workflow. Work entirely in the active workspace, preserve existing content, and use real model tools to inspect files and implement only what the user approves.
+        r#"Initialize this repository's instructions using the provider-neutral interactive equivalent of the original /init workflow. Work entirely in the active workspace, preserve existing content, and use real model tools to inspect files and implement only what the user approves.
 
 Detected root landmarks (names only, not their contents):
 {inventory}
@@ -74,13 +102,13 @@ mod tests {
     use super::*;
     #[test]
     fn detects_real_landmarks_without_reading_secrets_or_following_links() {
-        let root=tempfile::tempdir().unwrap();
-        fs::write(root.path().join("README.md"),"token=DO_NOT_COPY").unwrap();
-        fs::write(root.path().join("Cargo.toml"),"[package]").unwrap();
-        let found=markers(root.path()).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("README.md"), "token=DO_NOT_COPY").unwrap();
+        fs::write(root.path().join("Cargo.toml"), "[package]").unwrap();
+        let found = markers(root.path()).unwrap();
         assert!(found.contains(&"README.md".to_owned()));
         assert!(found.contains(&"Cargo.toml".to_owned()));
-        let prompt=prompt(root.path()).unwrap();
+        let prompt = prompt(root.path()).unwrap();
         assert!(!prompt.contains("DO_NOT_COPY"));
         assert!(prompt.contains("AGENTS.md"));
         assert!(prompt.contains("AskUserQuestion"));
@@ -91,11 +119,15 @@ mod tests {
     #[test]
     fn symlink_source_is_not_silently_followed() {
         use std::os::unix::fs::symlink;
-        let root=tempfile::tempdir().unwrap();
-        let outside=tempfile::tempdir().unwrap();
-        fs::write(outside.path().join("README.md"),"PRIVATE").unwrap();
-        symlink(outside.path().join("README.md"),root.path().join("README.md")).unwrap();
-        let prompt=prompt(root.path()).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("README.md"), "PRIVATE").unwrap();
+        symlink(
+            outside.path().join("README.md"),
+            root.path().join("README.md"),
+        )
+        .unwrap();
+        let prompt = prompt(root.path()).unwrap();
         assert!(prompt.contains("README.md (symbolic link"));
         assert!(!prompt.contains("PRIVATE"));
     }
