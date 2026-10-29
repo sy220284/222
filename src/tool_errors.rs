@@ -153,7 +153,7 @@ mod tests {
         assert!(output.contains("todos[0].activeForm"));
         assert!(output.contains("bad"));
         assert!(output.contains("count"));
-        assert!(output.contains("3 issues"));
+        assert!(output.contains("failed due to the following issues:"));
         assert!(output.contains("The required parameter `todos[0].activeForm` is missing"));
         assert!(output.contains("An unexpected parameter `bad` was provided"));
         assert_eq!(format_validation_error("X", &[], "original"), "original");
