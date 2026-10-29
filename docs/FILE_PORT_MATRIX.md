@@ -854,8 +854,8 @@
 | `src/ink/events/event.ts` | 12 | 250 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/events/focus-event.ts` | 22 | 687 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/events/input-event.ts` | 206 | 7306 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/events/keyboard-event.ts` | 52 | 1765 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/events/terminal-event.ts` | 108 | 2526 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/events/keyboard-event.ts` | 52 | 1765 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust DOM 事件传播/键盘事件及 Unicode 宽度路径已编写，完整 TUI 与分割符号待验 |
+| `src/ink/events/terminal-event.ts` | 108 | 2526 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust DOM 事件传播/键盘事件及 Unicode 宽度路径已编写，完整 TUI 与分割符号待验 |
 | `src/ink/events/terminal-focus-event.ts` | 20 | 512 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/focus.ts` | 182 | 5142 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/frame.ts` | 125 | 4209 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -897,7 +897,7 @@
 | `src/ink/searchHighlight.ts` | 94 | 3325 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/selection.ts` | 918 | 34933 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/squash-text-nodes.ts` | 93 | 2293 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/stringWidth.ts` | 223 | 7156 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/stringWidth.ts` | 223 | 7156 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust DOM 事件传播/键盘事件及 Unicode 宽度路径已编写，完整 TUI 与分割符号待验 |
 | `src/ink/styles.ts` | 772 | 20889 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/supports-hyperlinks.ts` | 58 | 1596 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/tabstops.ts` | 47 | 1113 | 重写：终端 UI／交互 | 待定 | 未迁移 |

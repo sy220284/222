@@ -11,6 +11,63 @@ impl TerminalEventState {
     pub fn stop_immediate_propagation(&self){self.stopped.store(true,Ordering::Release)}
     pub fn did_stop_immediate_propagation(&self)->bool{self.stopped.load(Ordering::Acquire)}
 }
+// src/ink/events/terminal-event.ts
+#[derive(Clone,Copy,Debug,PartialEq,Eq)]
+pub enum EventPhase{None,Capturing,AtTarget,Bubbling}
+#[derive(Clone,Debug)]
+pub struct DomTerminalEvent{
+    pub event_type:String,
+    pub time_stamp:std::time::Instant,
+    pub bubbles:bool,pub cancelable:bool,
+    pub target:Option<u64>,pub current_target:Option<u64>,
+    pub phase:EventPhase,pub base:TerminalEventState,
+    propagation_stopped:bool,default_prevented:bool,
+}
+impl DomTerminalEvent{
+    pub fn new(kind:&str,bubbles:bool,cancelable:bool)->Self{
+        Self{event_type:kind.into(),time_stamp:std::time::Instant::now(),
+            bubbles,cancelable,target:None,current_target:None,
+            phase:EventPhase::None,base:TerminalEventState::default(),
+            propagation_stopped:false,default_prevented:false}
+    }
+    pub fn stop_propagation(&mut self){self.propagation_stopped=true}
+    pub fn stop_immediate_propagation(&mut self){
+        self.base.stop_immediate_propagation();self.propagation_stopped=true;
+    }
+    pub fn prevent_default(&mut self){if self.cancelable{self.default_prevented=true}}
+    pub fn is_default_prevented(&self)->bool{self.default_prevented}
+    pub fn is_propagation_stopped(&self)->bool{self.propagation_stopped}
+    pub fn set_target(&mut self,target:Option<u64>){self.target=target}
+    pub fn set_current_target(&mut self,target:Option<u64>){self.current_target=target}
+    pub fn set_phase(&mut self,phase:EventPhase){self.phase=phase}
+}
+// src/ink/events/keyboard-event.ts
+#[derive(Clone,Debug,Default)]
+pub struct ParsedKey{
+    pub sequence:Option<String>,pub name:Option<String>,
+    pub ctrl:bool,pub shift:bool,pub meta:bool,pub option:bool,
+    pub super_key:bool,pub fn_key:bool
+}
+#[derive(Clone,Debug)]
+pub struct KeyboardEvent{
+    pub base:DomTerminalEvent,
+    pub key:String,pub ctrl:bool,pub shift:bool,
+    pub meta:bool,pub super_key:bool,pub fn_key:bool
+}
+impl KeyboardEvent{
+    pub fn from_parsed(parsed:&ParsedKey)->Self{
+        let seq=parsed.sequence.as_deref().unwrap_or("");
+        let name=parsed.name.as_deref().unwrap_or("");
+        let literal=seq.chars().count()==1&&seq.chars().next()
+            .is_some_and(|c|c as u32>=0x20&&c as u32!=0x7f);
+        let key=if parsed.ctrl{name}else if literal{seq}
+            else if !name.is_empty(){name}else{seq};
+        Self{base:DomTerminalEvent::new("keydown",true,true),
+            key:key.into(),ctrl:parsed.ctrl,shift:parsed.shift,
+            meta:parsed.meta||parsed.option,super_key:parsed.super_key,fn_key:parsed.fn_key}
+    }
+}
+
 // src/ink/events/focus-event.ts
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub enum FocusEventKind{Focus,Blur}
@@ -100,7 +157,11 @@ impl LineWidthCache{
                 || ('\u{2e80}'..='\u{a4cf}').contains(&ch)
                 || ('\u{ac00}'..='\u{d7a3}').contains(&ch)
                 || ('\u{f900}'..='\u{faff}').contains(&ch)
-                || ('\u{ff01}'..='\u{ff60}').contains(&ch){2}else{1};
+                || ('\u{ff01}'..='\u{ff60}').contains(&ch)
+                || ('\u{1f300}'..='\u{1faff}').contains(&ch){2}
+                else if ('\u{0300}'..='\u{036f}').contains(&ch)
+                    || ('\u{fe00}'..='\u{fe0f}').contains(&ch)
+                    || ch=='\u{200d}' {0}else{1};
         }
         if self.values.len()>=MAX_CACHE_SIZE {self.values.clear()}
         self.values.insert(line.into(),width);width
@@ -247,6 +308,15 @@ mod tests{
         assert_eq!(mode_from_input("!ls"),InputMode::Bash);
         assert_eq!(value_from_input("!ls"),"ls");
         assert_eq!(prepend_mode_character("ls",InputMode::Bash),"!ls");
+        let parsed=ParsedKey{name:Some("c".into()),sequence:Some("\u{3}".into()),
+            ctrl:true,..Default::default()};
+        let key=KeyboardEvent::from_parsed(&parsed);
+        assert_eq!(key.key,"c");
+        assert!(key.base.cancelable);
+        let mut e=DomTerminalEvent::new("focus",true,false);
+        e.prevent_default();assert!(!e.is_default_prevented());
+        e.stop_immediate_propagation();assert!(e.is_propagation_stopped());
+        assert_eq!(cache.line_width("👍"),2);
         assert_eq!(NO_CONTENT_MESSAGE,"(no content)");
         assert_eq!(TURN_COMPLETION_VERBS.len(),8);
         assert_eq!(osc_terminal_title(Some("Hello")).unwrap(),"\x1b]0;Hello\x07");
