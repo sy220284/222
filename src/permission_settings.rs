@@ -98,6 +98,58 @@ impl SettingsPaths {
             .context("Plugin public options must be an object")
     }
 
+    /// Delete the last local installation's public plugin options while
+    /// preserving all unrelated user settings. The source uninstall removes
+    /// pluginConfigs on last-scope removal; our local installation currently
+    /// has a single scope. Sensitive keychain values are not stored here.
+    pub fn delete_plugin_public_options(&self, plugin_name: &str) -> Result<bool> {
+        if plugin_name.is_empty() {
+            bail!("Plugin name is required");
+        }
+        let path = &self.user;
+        if !path.exists() {
+            return Ok(false);
+        }
+        self.validate_edit_path(path)?;
+        let lock_path = path.with_extension(format!(
+            "{}.lock",
+            path.extension().and_then(|value| value.to_str()).unwrap_or("json")
+        ));
+        if fs::symlink_metadata(&lock_path)
+            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+        {
+            bail!("Refusing symlinked plugin settings lock");
+        }
+        let lock = OpenOptions::new().create(true).read(true).write(true)
+            .truncate(false).open(&lock_path)?;
+        lock.lock_exclusive()?;
+        let Some(mut settings) = Self::read_json(path)? else {
+            return Ok(false);
+        };
+        let object = settings.as_object_mut().context("User settings must be an object")?;
+        let Some(configs) = object.get_mut("pluginConfigs") else {
+            return Ok(false);
+        };
+        let configs = configs.as_object_mut().context("User pluginConfigs must be an object")?;
+        let key = if configs.contains_key(plugin_name) {
+            Some(plugin_name.to_owned())
+        } else {
+            let prefix = format!("{plugin_name}@");
+            let mut matches = configs.keys().filter(|name| name.starts_with(&prefix));
+            let first = matches.next().cloned();
+            if first.is_some() && matches.next().is_some() {
+                bail!("Ambiguous plugin settings for {plugin_name}");
+            }
+            first
+        };
+        let Some(key) = key else {
+            return Ok(false);
+        };
+        configs.remove(&key);
+        Self::write_atomic(path, &settings)?;
+        Ok(true)
+    }
+
     fn path(&self, source: EditableSource) -> &Path {
         match source {
             EditableSource::User => &self.user,
