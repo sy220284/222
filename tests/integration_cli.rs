@@ -113,7 +113,11 @@ fn provider_explicit_no_retry_and_invalid_request_do_not_replay() {
             let (mut stream, _) = listener.accept().unwrap();
             let request = read_request(&mut stream);
             thread::sleep(Duration::from_millis(35));
-            let body = json!({"error":{"message":"not retryable"}}).to_string();
+            let body = if status.starts_with("400") {
+                "invalid model parameters".to_string()
+            } else {
+                json!({"error":{"message":"not retryable"}}).to_string()
+            };
             write!(stream,
                 "HTTP/1.1 {status}\r\nContent-Type: application/json\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()).unwrap();
