@@ -2128,6 +2128,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
                 };
+                // First SDK user message implicitly initializes the stream,
+                // matching the original print.ts user-message path.
+                sdk_initialized = true;
                 let attachment_base = std::env::var("ATLAS_BRIDGE_ATTACHMENT_BASE_URL").ok();
                 let attachment_token = std::env::var("ATLAS_BRIDGE_ATTACHMENT_TOKEN").ok();
                 let resolved_content = bridge_inbound_attachments::resolve_and_prepend(
