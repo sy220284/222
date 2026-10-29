@@ -115,14 +115,8 @@ pub fn detect_current_repository_with_host(root: &Path) -> Option<ParsedReposito
     // The original Git filesystem utility reads origin from the config when
     // spawning Git is unavailable. Local reads do not access the network.
     let value = from_command.or_else(|| {
-        let git_directory = root.join(".git");
-        crate::git_config_parser::parse_git_config_value(
-            &git_directory,
-            "remote",
-            Some("origin"),
-            "url",
-        )
-        .and_then(|remote| parse_git_remote(&remote))
+        crate::git_filesystem::get_remote_url_for_dir(&root)
+            .and_then(|remote| parse_git_remote(&remote))
     });
     repository_cache()
         .lock()
