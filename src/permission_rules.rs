@@ -113,6 +113,7 @@ pub fn canonical_tool(name:&str)->&str{
         "spawn_agent"|"spawn_team"|"Agent"|"Task"=>"Agent",
         "write_file"|"Write"=>"Write",
         "edit_file"|"Edit"=>"Edit",
+        "web_fetch"|"WebFetch"=>"WebFetch",
         other=>normalize_legacy_tool(other),
     }
 }
@@ -268,7 +269,21 @@ pub fn policy_for(rules:&[Rule],tool:&str,args:&Value)->Result<Option<Behavior>>
                     "TaskStop"=>args.get("task_id").or_else(||args.get("shell_id")).and_then(Value::as_str),
                     _=>None,
                 };
-                match argument{Some(argument)=>matches_content(pattern,argument)?,None=>false}
+                if name=="WebFetch"{
+                    // WebFetchTool.ts constructs domain:<URL.hostname> and
+                    // looks up that exact content key (not a prefix/wildcard).
+                    match args.get("url").and_then(Value::as_str)
+                        .and_then(|url|reqwest::Url::parse(url).ok())
+                        .and_then(|url|url.host_str().map(str::to_owned)){
+                        Some(host)=>pattern==format!("domain:{host}"),
+                        None=>false,
+                    }
+                }else{
+                    match argument{
+                        Some(argument)=>matches_content(pattern,argument)?,
+                        None=>false,
+                    }
+                }
             },
         };
         if !matched{continue}
@@ -287,6 +302,39 @@ mod tests{
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn webfetch_domain_content_rules_match_exact_url_hostname_only(){
+        let rules=compile_rules(&[
+            RuleSetting{behavior:"allow".into(),rule:"WebFetch(domain:api.example.com)".into()},
+            RuleSetting{behavior:"deny".into(),rule:"WebFetch(domain:blocked.example.com)".into()},
+            RuleSetting{behavior:"ask".into(),rule:"WebFetch(domain:api.example.com)".into()},
+        ]).unwrap();
+        assert_eq!(policy_for(&rules,"web_fetch",
+            &json!({"url":"https://API.EXAMPLE.COM:8443/path?q=1"})).unwrap(),
+            Some(Behavior::Ask));
+        assert_eq!(policy_for(&rules,"WebFetch",
+            &json!({"url":"https://blocked.example.com/"})).unwrap(),
+            Some(Behavior::Deny));
+        assert_eq!(policy_for(&rules,"web_fetch",
+            &json!({"url":"https://api.example.com.evil.invalid/"})).unwrap(),None);
+        assert_eq!(policy_for(&rules,"web_fetch",
+            &json!({"url":"invalid url"})).unwrap(),None);
+        assert_eq!(policy_for(&rules,"web_fetch",
+            &json!({"url":"https://other.example.com"})).unwrap(),None);
+        let only_allow=compile_rules(&[RuleSetting{
+            behavior:"allow".into(),rule:"WebFetch(domain:example.org)".into()
+        }]).unwrap();
+        assert_eq!(policy_for(&only_allow,"web_fetch",
+            &json!({"url":"https://example.org/index.html"})).unwrap(),Some(Behavior::Allow));
+        assert_eq!(policy_for(&only_allow,"web_fetch",
+            &json!({"url":"https://example.org.evil.invalid/"})).unwrap(),None);
+        // Original getRuleByContentsForTool performs an exact key lookup.
+        let wildcard=compile_rules(&[RuleSetting{
+            behavior:"allow".into(),rule:"WebFetch(domain:*)".into()
+        }]).unwrap();
+        assert_eq!(policy_for(&wildcard,"web_fetch",
+            &json!({"url":"https://example.org"})).unwrap(),None);
+    }
     #[test]
     fn mcp_server_permissions_match_original_server_and_wildcard_scope(){
         let rules=compile_rules(&[

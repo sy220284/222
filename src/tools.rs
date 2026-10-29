@@ -622,6 +622,29 @@ mod tests {
 
 
     #[test]
+    fn webfetch_domain_deny_is_enforced_before_network_even_in_full_mode(){
+        let root=tempfile::tempdir().unwrap();
+        let rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{behavior:"deny".into(),
+                rule:"WebFetch(domain:blocked.example.com)".into()},
+            permission_rules::RuleSetting{behavior:"allow".into(),
+                rule:"WebFetch(domain:trusted.example.com)".into()},
+        ]).unwrap();
+        let call=|url:&str|ToolCall{
+            id:"fetch".into(),kind:"function".into(),
+            function:FunctionCall{name:"web_fetch".into(),
+                arguments:json!({"url":url}).to_string()},
+        };
+        let full=executor(root.path(),Approval::Full)
+            .with_permission_rules(rules.clone());
+        assert!(full.approve_external(&call("https://blocked.example.com/"))
+            .unwrap_err().to_string().contains("explicit permission rule"));
+        let ask=executor(root.path(),Approval::Ask).with_permission_rules(rules);
+        assert!(ask.approve_external(&call("https://trusted.example.com/page")).is_ok());
+        assert!(ask.approve_external(&call("https://trusted.example.com.evil.invalid/"))
+            .is_err());
+    }
+    #[test]
     fn mcp_server_level_rules_reach_real_external_approval_boundary(){
         let root=tempfile::tempdir().unwrap();
         let rules=permission_rules::compile_rules(&[

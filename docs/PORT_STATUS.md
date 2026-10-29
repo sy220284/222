@@ -369,3 +369,9 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ## 2026-10-29：用户调整执行顺序——先写 200 条源码路径的 Rust，再统一完整验收
 
 这次先交付实现，不把“Rust 函数存在”冒充原版全链路等价。`src/portable_source_utils.rs` 已根据原版逐一写出 24 条源路径对应的核心算法，覆盖环形缓存、二进制查找缓存、模型内容块排序、hash/DJB2、缓存路径、URI 地址、沙箱标记处理、XDG、CLI 参数、UUID/Tagged ID、临时文件、Shell 超时、键盘键位、人类对话判定、系统提示类型、通知/编辑模式、Token 预算、插件策略、技能使用评分、目录判断、团队功能闸门；其中 Shell 超时实际接通 `ToolExecutor::run_command`。对应台账状态暂记“部分实现（代码已写，待验收）”，不是已验收。后续继续按功能地图推进至用户要求的 200 项，再统一做原版语义、调用链、UI/SDK 和边界验收。
+
+### 2026-10-29：WebFetch 细粒度主机授权规则与执行链（Issue #3）
+
+对照原始 2.1.88 `src/tools/WebFetchTool/WebFetchTool.ts` 50–63、104–173 行，其 `webFetchToolInputToPermissionRuleContent` 使用 `domain:${new URL(url).hostname}` 并经 `getRuleByContentsForTool` 按**精确内容键**查找 deny/ask/allow。Rust 之前只支持整个 WebFetch 工具名称，不检查 `WebFetch(domain:example.com)`，导致配置的单域名拒绝规则可能失效。
+
+修复 `permission_rules::canonical_tool` 对 `WebFetch/web_fetch` 归一化，在权限引擎中使用规范 URL.hostname（不包含端口/路径）做完全匹配，不把通配 `domain:*` 随意扩大为允许；deny 优先于 ask/allow。真实 `ToolExecutor::approve_external` 测试确保即使全局 Full 权限也不能绕过域名 deny，配置明确允许的 host 在非交互 Ask 模式下可执行，而同后缀恶意主机名不可绕过。保留原版 URL 解析失败后回退为普通审批。完整代理分类器、预批准来源、全部 Hook 和跨重定向最终主机检查仍未完全等价。
