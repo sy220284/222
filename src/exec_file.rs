@@ -5,6 +5,7 @@ use std::{
     ffi::{OsStr, OsString},
     path::PathBuf,
     process::Stdio,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::{
@@ -97,17 +98,33 @@ impl Output {
         self.code = code;
         self
     }
+    fn with_partial_output(mut self, stdout: &[u8], stderr: &[u8], preserve: bool) -> Self {
+        if preserve {
+            self.stdout = String::from_utf8_lossy(stdout).into_owned();
+            self.stderr = String::from_utf8_lossy(stderr).into_owned();
+        }
+        self
+    }
 }
 
-async fn read_bounded(mut stream: impl AsyncRead + Unpin, max: usize) -> std::io::Result<Vec<u8>> {
-    let mut out = Vec::new();
+/// Capture partial output as it arrives. Keeping a bounded shared snapshot
+/// lets cancellation/timeout retain the bytes received before the process
+/// stopped, matching the original non-throwing process wrapper.
+async fn read_bounded(
+    mut stream: impl AsyncRead + Unpin,
+    max: usize,
+    captured: &Arc<Mutex<Vec<u8>>>,
+) -> std::io::Result<()> {
     let mut block = [0_u8; 8192];
     loop {
         let n = stream.read(&mut block).await?;
         if n == 0 {
-            return Ok(out);
+            return Ok(());
         }
-        if n > max.saturating_sub(out.len()) {
+        let mut out = captured.lock().expect("output capture mutex poisoned");
+        let room = max.saturating_sub(out.len());
+        if n > room {
+            out.extend_from_slice(&block[..room]);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Process output exceeded maxBuffer ({max} bytes)"),
@@ -115,6 +132,13 @@ async fn read_bounded(mut stream: impl AsyncRead + Unpin, max: usize) -> std::io
         }
         out.extend_from_slice(&block[..n]);
     }
+}
+
+fn snapshot(captured: &Arc<Mutex<Vec<u8>>>) -> Vec<u8> {
+    captured
+        .lock()
+        .expect("output capture mutex poisoned")
+        .clone()
 }
 
 async fn wait_for_abort(abort: &mut watch::Receiver<bool>) {
@@ -174,6 +198,8 @@ pub async fn execute(mut command: Command, mut options: Options) -> Output {
     let stdin = child.stdin.take();
     let input = options.input.take();
     let max_buffer = options.max_buffer;
+    let stdout_capture = Arc::new(Mutex::new(Vec::new()));
+    let stderr_capture = Arc::new(Mutex::new(Vec::new()));
     let operation = async {
         let write = async {
             if let Some(mut pipe) = stdin {
@@ -189,13 +215,13 @@ pub async fn execute(mut command: Command, mut options: Options) -> Output {
             }
             Ok::<(), std::io::Error>(())
         };
-        let ((), out, err, status) = tokio::try_join!(
+        let ((), (), (), status) = tokio::try_join!(
             write,
-            read_bounded(stdout, max_buffer),
-            read_bounded(stderr, max_buffer),
+            read_bounded(stdout, max_buffer, &stdout_capture),
+            read_bounded(stderr, max_buffer, &stderr_capture),
             child.wait()
         )?;
-        Ok::<_, std::io::Error>((status, out, err))
+        Ok::<_, std::io::Error>(status)
     };
     let preserve = options.preserve_output_on_error;
     let result = match options.abort.as_mut() {
@@ -207,13 +233,15 @@ pub async fn execute(mut command: Command, mut options: Options) -> Output {
         }
         None => Some(tokio::time::timeout(options.timeout, operation).await),
     };
+    let (stdout, stderr) = (snapshot(&stdout_capture), snapshot(&stderr_capture));
     match result {
-        None => Output::failed("Process aborted", preserve),
-        Some(Err(_)) => Output::failed("Process timed out", preserve),
-        Some(Ok(Err(error))) => Output::failed(error.to_string(), preserve),
-        Some(Ok(Ok((status, stdout, stderr)))) => {
-            Output::from_exit(status, stdout, stderr, preserve)
-        }
+        None => Output::failed("Process aborted", preserve)
+            .with_partial_output(&stdout, &stderr, preserve),
+        Some(Err(_)) => Output::failed("Process timed out", preserve)
+            .with_partial_output(&stdout, &stderr, preserve),
+        Some(Ok(Err(error))) => Output::failed(error.to_string(), preserve)
+            .with_partial_output(&stdout, &stderr, preserve),
+        Some(Ok(Ok(status))) => Output::from_exit(status, stdout, stderr, preserve),
     }
 }
 
@@ -345,6 +373,63 @@ mod tests {
         assert_eq!(result.code, 1);
         assert!(result.error.unwrap().contains("maxBuffer"));
     }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn timeout_keeps_output_received_before_the_deadline() {
+        let result = sh(
+            "printf 'progress'; printf 'diagnostic' >&2; sleep 4",
+            Options {
+                timeout: Duration::from_millis(110),
+                ..Options::default()
+            },
+        )
+        .await;
+        assert_eq!(result.code, 1);
+        assert_eq!(result.stdout, "progress");
+        assert_eq!(result.stderr, "diagnostic");
+        assert!(result.error.unwrap().contains("timed out"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cancellation_keeps_prior_output_without_waiting_for_child_exit() {
+        let (send, receive) = watch::channel(false);
+        let execution = sh(
+            "printf 'partial'; printf 'trace' >&2; sleep 4",
+            Options {
+                abort: Some(receive),
+                ..Options::default()
+            },
+        );
+        let cancellation = async {
+            tokio::time::sleep(Duration::from_millis(110)).await;
+            send.send(true).unwrap();
+        };
+        let (result, ()) = tokio::join!(execution, cancellation);
+        assert_eq!(result.code, 1);
+        assert_eq!(result.stdout, "partial");
+        assert_eq!(result.stderr, "trace");
+        assert!(result.error.unwrap().contains("aborted"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn disabled_preservation_does_not_leak_partial_error_output() {
+        let result = sh(
+            "printf secret; printf private >&2; sleep 4",
+            Options {
+                timeout: Duration::from_millis(110),
+                preserve_output_on_error: false,
+                ..Options::default()
+            },
+        )
+        .await;
+        assert_eq!(result.code, 1);
+        assert!(result.stdout.is_empty());
+        assert!(result.stderr.is_empty());
+        assert!(result.error.is_none());
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn stdout_stderr_are_drained_concurrently() {
