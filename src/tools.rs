@@ -1312,6 +1312,13 @@ impl ToolExecutor {
         } else {
             rendered
         };
+        let rendered = if name.contains(':') {
+            plugins::expand_skill_user_config(
+                &self.root, &self.enabled_plugins, name, &rendered,
+            )?
+        } else {
+            rendered
+        };
         Ok(match self.session_id.as_deref() {
             Some(id) => rendered.replace("${SESSION_ID}", id)
                 .replace("${CLAUDE_SESSION_ID}", id),
