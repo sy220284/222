@@ -2896,19 +2896,18 @@ async fn sdk_nested_control(
                 Ok(json!({"cancelled":!removed.is_empty()}))
             }
             "set_model" => {
-                if let Some(name) = request.get("model") {
-                    let model = name
-                        .as_str()
-                        .ok_or_else(|| anyhow::anyhow!("set_model model must be a string"))?;
-                    // The original SDK treats "default" as a request to
-                    // restore the configured default model, not a literal ID.
-                    let profile = if model == "default" {
-                        config.select(None, None)?
-                    } else {
-                        config.select(Some(&agent.profile().id), Some(model))?
-                    };
-                    agent.switch_model(profile)?;
-                }
+                // print.ts:2933-2944: omitted model also restores the default.
+                let model = match request.get("model") {
+                    None => "default",
+                    Some(Value::String(model)) => model.as_str(),
+                    Some(_) => bail!("set_model model must be a string"),
+                };
+                let profile = if model == "default" {
+                    config.select(None, None)?
+                } else {
+                    config.select(Some(&agent.profile().id), Some(model))?
+                };
+                agent.switch_model(profile)?;
                 Ok(json!({"model":agent.profile().model,"provider":agent.profile().id}))
             }
             "set_permission_mode" => {
