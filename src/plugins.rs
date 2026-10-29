@@ -503,6 +503,85 @@ pub fn command_prompt(
     Ok(None)
 }
 
+/// Discover commands that can actually be resolved by command_prompt.
+/// Keep the /commands view aligned with executable plugin command paths.
+pub fn list_commands(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
+    let mut names = std::collections::BTreeSet::new();
+    for plugin in enabled {
+        let location = directory(root, plugin)?;
+        let manifest = read_manifest(&location, plugin)?;
+        let mut candidates = Vec::new();
+        match &manifest.commands {
+            Value::Object(entries) => {
+                candidates.extend(entries.keys().cloned());
+            }
+            value => {
+                let paths: Vec<String> = match value {
+                    Value::Null => vec!["commands".into()],
+                    Value::String(path) => vec![path.clone()],
+                    Value::Array(paths) => paths.iter().map(|path| path.as_str()
+                        .map(str::to_owned).context("Plugin command path must be a string"))
+                        .collect::<Result<Vec<_>>>()?,
+                    _ => bail!("Plugin commands must be a path, array or metadata map"),
+                };
+                for relative in paths {
+                    let candidate = location.join(&relative);
+                    if !candidate.exists() {
+                        if value.is_null() { continue; }
+                        bail!("Plugin command path does not exist: {relative}")
+                    }
+                    let candidate = checked_component(&location, &candidate)?;
+                    let paths = if candidate.is_file() {
+                        vec![candidate.clone()]
+                    } else {
+                        walkdir::WalkDir::new(&candidate).follow_links(false)
+                            .into_iter().filter_map(|entry| entry.ok())
+                            .filter(|entry| entry.file_type().is_file())
+                            .map(|entry| entry.into_path()).collect::<Vec<_>>()
+                    };
+                    for path in paths {
+                        if !path.extension().and_then(|ext| ext.to_str())
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("md")) {
+                            continue;
+                        }
+                        let relative_path = path.strip_prefix(&candidate).unwrap_or(path.as_path());
+                        let skill = path.file_name().and_then(|name| name.to_str())
+                            .is_some_and(|name| name.eq_ignore_ascii_case("SKILL.md"));
+                        let mut parts = Vec::new();
+                        if let Some(parent) = relative_path.parent() {
+                            for component in parent.components() {
+                                let part = component.as_os_str().to_str()
+                                    .context("Invalid plugin command namespace")?;
+                                if !part.is_empty() { parts.push(part.to_owned()); }
+                            }
+                        }
+                        if !skill {
+                            let stem = path.file_stem().and_then(|stem| stem.to_str())
+                                .context("Invalid plugin command name")?;
+                            parts.push(stem.to_owned());
+                        } else if parts.is_empty() {
+                            let parent = path.parent().and_then(|parent| parent.file_name())
+                                .and_then(|name| name.to_str())
+                                .context("Invalid skill command directory")?;
+                            parts.push(parent.to_owned());
+                        }
+                        if parts.iter().all(|part| valid_name(part)) {
+                            candidates.push(parts.join(":"));
+                        }
+                    }
+                }
+            }
+        }
+        for candidate in candidates {
+            let name = format!("{plugin}:{candidate}");
+            if command_prompt(root, enabled, &name, "")?.is_some() {
+                names.insert(name);
+            }
+        }
+    }
+    Ok(names.into_iter().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
