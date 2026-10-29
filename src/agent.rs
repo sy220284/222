@@ -3220,7 +3220,10 @@ fn system_prompt(root: &Path) -> Result<String> {
 
 fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<String> {
     let mut prompt = format!("{DEFAULT_SYSTEM}\nCurrent workspace: {}\n", root.display());
-    prompt.push_str(&crate::conversation_context::project_instructions_with_dirs(root, additional_dirs)?);
+    prompt.push_str(&crate::conversation_context::project_instructions_with_dirs(
+        root,
+        additional_dirs,
+    )?);
     if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
         let instructions = crate::prompt_runtime::output_style_instructions(root, &style)?;
         prompt.push_str("\nOutput style:\n");
