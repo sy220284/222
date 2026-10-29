@@ -143,6 +143,24 @@ fn manifest_servers(value: &Value) -> Result<Vec<McpServerConfig>> {
     }
 }
 
+/// Validate an unpacked plugin before installing it. The original loader
+/// accepts a directory name when .claude-plugin/plugin.json is absent.
+pub fn validate_local(location: &Path) -> Result<String> {
+    let location = location.canonicalize().context("Plugin directory unavailable")?;
+    if !location.is_dir() {
+        bail!("Plugin source must be a directory")
+    }
+    let fallback = location.file_name().and_then(|name| name.to_str())
+        .context("Plugin source has no valid directory name")?;
+    if !valid_name(fallback) {
+        bail!("Invalid plugin directory name")
+    }
+    let manifest = read_manifest(&location, fallback)?;
+    let _ = manifest_hooks(&location, &manifest.hooks)?;
+    let _ = manifest_servers(&manifest.mcp_servers)?;
+    Ok(manifest.name)
+}
+
 pub struct PluginSet {
     pub hooks: Vec<HookRule>,
     pub mcp_servers: Vec<McpServerConfig>,
