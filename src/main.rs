@@ -40,6 +40,7 @@ mod ndjson;
 mod notebook;
 mod oauth_callback_listener;
 mod oauth_crypto;
+mod oauth_profile;
 mod permission_mode;
 mod permission_rules;
 mod permission_settings;
