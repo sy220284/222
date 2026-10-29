@@ -38,8 +38,25 @@ fn storage(root: &Path) -> PathBuf {
     root.join(".atlas/marketplaces.json")
 }
 fn exclusive_lock(root: &Path) -> Result<File> {
+    let root = root.canonicalize().context("Workspace unavailable")?;
     let home = root.join(".atlas");
+    // Marketplace registration is a user-visible filesystem mutation.
+    // Reject redirected storage before opening the lock or reading the
+    // registry, so a malicious workspace link cannot reach host files.
+    for path in [&home, &home.join("marketplaces.lock"), &home.join("marketplaces.json")] {
+        match fs::symlink_metadata(path) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                bail!("Marketplace storage cannot be a symbolic link: {}", path.display())
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
     fs::create_dir_all(&home)?;
+    if !home.canonicalize()?.starts_with(&root) {
+        bail!("Marketplace storage escapes workspace")
+    }
     // The lock file is persistent synchronization state; never truncate it
     // when a second process opens it to acquire the same advisory lock.
     let lock = File::options()
