@@ -535,8 +535,9 @@ pub fn list_commands(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
                         vec![candidate.clone()]
                     } else {
                         walkdir::WalkDir::new(&candidate).follow_links(false)
-                            .into_iter().filter_map(|entry| entry.ok())
-                            .filter(|entry| entry.file_type().is_file())
+                            .into_iter().map(|entry| entry.map_err(anyhow::Error::from))
+                            .collect::<Result<Vec<_>>>()?
+                            .into_iter().filter(|entry| entry.file_type().is_file())
                             .map(|entry| entry.into_path()).collect::<Vec<_>>()
                     };
                     for path in paths {
