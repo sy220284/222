@@ -21,6 +21,25 @@ fn allowed(entry: &DirEntry, exclude_vcs: bool) -> bool {
         Some(".git" | ".hg" | ".svn" | ".jj" | ".bzr" | ".sl")
     )
 }
+/// Original utils/glob.ts::extractGlobBaseDirectory searches an absolute
+/// pattern from its static directory prefix, even when no path argument was
+/// provided. The caller must authorize this directory before traversal.
+pub fn absolute_glob_base(pattern: &str) -> Option<PathBuf> {
+    let path = Path::new(pattern);
+    if !path.is_absolute() {
+        return None;
+    }
+    let wildcard = pattern.find(|ch| matches!(ch, '*' | '?' | '[' | '{'));
+    match wildcard {
+        Some(index) => {
+            let prefix = &pattern[..index];
+            let separator = prefix.rfind(std::path::MAIN_SEPARATOR)?;
+            Some(PathBuf::from(&prefix[..=separator]))
+        }
+        None => path.parent().map(Path::to_path_buf),
+    }
+}
+
 fn matcher(pattern: &str) -> Result<GlobMatcher> {
     if pattern.is_empty() {
         bail!("Glob pattern cannot be empty")
