@@ -9,6 +9,7 @@
 - **补齐 3**：原版 `source/src/tools/AgentTool/loadAgentsDir.ts::parseAgentFromJson` 的 `disallowedTools` 在 SDK Agent 模型工具目录和实际工具执行前双重拦截，避免工具隐藏后仍被直接调用；`maxTurns` 限制委派子 Agent 的实际模型迭代次数，不能超过父级上限。代码提交 `7c6a945f023a12e30c769e86bbd16656ee4de4cf`。黑名单属于上述工具权限同一功能的深化，不重复计数；独立的最大轮次限制另计 1 项。
 - **补齐 4**：SDK Agent 定义的 `isolation: "worktree"` 现在实际进入 `run_subagent` 的工作树创建与外部操作权限检查；显式委派参数优先于定义默认值，子 Agent 在隔离工作区运行，继续保留原有工作树生命周期。代码提交 `cb4b6c9aa630accb9e84d1cb73ad62a76f7a9f3f`。此项按独立的用户工作区隔离行为计 1 项。
 - **补齐 5**：对照 `source/src/main.tsx` 与 `source/src/tools/AgentTool/loadAgentsDir.ts` 的 `initialPrompt` 首轮提示词语义，SDK 自定义 Agent 现在会在首次子模型请求中将初始提示词放在用户委派任务之前，后续 Stop Hook 续问不重复注入。提交 `6f4bac9aa7603bcbe378e8cfc062e86003bf09e9`、换行修正 `5abf665595297ffd8f216cb54a0f5d863b72e9f3`。此项作为独立的首轮 Agent 引导行为计 1 项。
+- **最终静态复核**：在远端 HEAD `d5ebd9cd34156b9709b53dcc811d9658b7157413` 重新核对初始化、定义替换、目录、子模型提示词、模型选择、白/黑名单、参数化规则拒绝、轮次限制、工作树隔离、初始提示词等 11 个关键入口与关联分支均存在；PR #2 仍是中文标题 Draft，Issue #3 仍开放。未进行行为验收或 Cargo/CI。
 - **本轮数量**：**5/100，剩余 95**。先行恰好 100 项逐功能源码缺口清单及全量实施方案仍未完成，A/B 流程和本轮数量目标未达标；冻结 Issue #3 的 362 项全部继续开放，新增完整等价验收 0。仅更新现有 Draft PR #2 分支，未修改 main、未合并。
 
 ## 2026-10-29：分支会话保留文件历史备份（源码已提交、待验收）
