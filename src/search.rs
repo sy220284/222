@@ -479,19 +479,34 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
 
 /// Return the line numbers covered by a regex match. In multiline mode a
 /// single match can cover several lines, all of which ripgrep displays.
-fn matching_lines(content: &str, regex: &regex::Regex, multiline: bool) -> Vec<bool> {
+/// Search large files cooperatively under the same deadline as directory
+/// traversal. The source ripgrep process can be killed on timeout; this Rust
+/// matcher must check its budget while processing lines and multiline hits.
+fn matching_lines(
+    content: &str,
+    regex: &regex::Regex,
+    multiline: bool,
+    deadline: Instant,
+) -> Result<Vec<bool>> {
     let lines: Vec<&str> = content.lines().collect();
     let mut matched = vec![false; lines.len()];
     if !multiline {
         for (index, line) in lines.iter().enumerate() {
+            if index % 256 == 0 {
+                check_search_deadline(Some(deadline))?;
+            }
             matched[index] = regex.is_match(line);
         }
-        return matched;
+        check_search_deadline(Some(deadline))?;
+        return Ok(matched);
     }
     let starts: Vec<usize> = std::iter::once(0)
         .chain(content.match_indices('\n').map(|(offset, _)| offset + 1))
         .collect();
-    for found in regex.find_iter(content) {
+    for (match_index, found) in regex.find_iter(content).enumerate() {
+        if match_index % 256 == 0 {
+            check_search_deadline(Some(deadline))?;
+        }
         if lines.is_empty() {
             break;
         }
@@ -506,7 +521,8 @@ fn matching_lines(content: &str, regex: &regex::Regex, multiline: bool) -> Vec<b
             matched[index] = true;
         }
     }
-    matched
+    check_search_deadline(Some(deadline))?;
+    Ok(matched)
 }
 
 pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
@@ -631,7 +647,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         let content = String::from_utf8_lossy(&bytes);
         let filename = relative(root, &path)?.to_string_lossy().to_string();
         if binary && mode == "content" {
-            if matching_lines(&content, &regex, multiline)
+            if matching_lines(&content, &regex, multiline, deadline)?
                 .into_iter()
                 .any(|matched| matched)
             {
@@ -646,7 +662,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
             // rg -l matches line-by-line unless -U is enabled. Checking the
             // whole file with a non-multiline regex incorrectly makes ^/$
             // anchors refer only to the beginning/end of the entire file.
-            if matching_lines(&content, &regex, multiline)
+            if matching_lines(&content, &regex, multiline, deadline)?
                 .into_iter()
                 .any(|matched| matched)
             {
@@ -655,7 +671,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
             continue;
         }
         let lines: Vec<&str> = content.lines().collect();
-        let matched = matching_lines(&content, &regex, multiline);
+        let matched = matching_lines(&content, &regex, multiline, deadline)?;
         if mode == "count" {
             // ripgrep -c counts matching lines, not every occurrence on a line.
             let hits = matched.iter().filter(|m| **m).count();
