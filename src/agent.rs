@@ -1827,7 +1827,7 @@ impl Agent {
             .hooks
             .run(
                 HookEvent::PreCompact,
-                None,
+                Some(if automatic { "auto" } else { "manual" }),
                 json!({"session_id":self.session.id, "message_count":self.session.messages.len(),
                     "trigger":if automatic {"auto"} else {"manual"},
                     "custom_instructions":null}),
@@ -1837,7 +1837,13 @@ impl Agent {
             bail!("PreCompact blocked: {reason}")
         }
         let previous = self.session.summary.as_deref().unwrap_or("");
-        let prompt = crate::prompt_runtime::compact_prompt(previous);
+        let mut prompt = crate::prompt_runtime::compact_prompt(previous);
+        // 2.1.88 executePreCompactHooks merges successful hook stdout as
+        // custom compaction instructions, respecting auto/manual matchers.
+        if !before.additional_context.is_empty() {
+            prompt.push_str("\n\n[Additional PreCompact hook instructions]\n");
+            prompt.push_str(&before.additional_context.join("\n\n"));
+        }
         // The original stripImagesFromMessages removes binary payloads only
         // from the summarization request, never from saved conversation data.
         let mut history = self.session.messages.clone();
