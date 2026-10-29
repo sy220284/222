@@ -2399,30 +2399,6 @@ impl Agent {
             bail!("Compaction returned empty text")
         }
 
-        // The original executes PostCompact hooks before returning the new
-        // message set. Keep the old transcript if a blocking hook fails.
-        let after = self
-            .hooks
-            .run(
-                HookEvent::PostCompact,
-                Some(if automatic { "auto" } else { "manual" }),
-                {
-                    let mut input = self.base_hook_input();
-                    input["trigger"] = json!(if automatic { "auto" } else { "manual" });
-                    input["compact_summary"] = json!(summary);
-                    input
-                },
-            )
-            .await?;
-        // The source reports unsuccessful PostCompact commands to the user
-        // without discarding a completed model summary.
-        if let Some(reason) = &after.blocking_reason {
-            eprintln!("PostCompact hook failed: {reason}");
-        }
-        for warning in &after.non_blocking_errors {
-            eprintln!("PostCompact hook warning: {warning}");
-        }
-
         // Session::save already uses a temporary file and atomic rename.
         // Persist a candidate before swapping it into the live Agent so a
         // disk failure cannot destroy the conversation in memory.
@@ -2435,6 +2411,45 @@ impl Agent {
         self.session = candidate;
         self.last_context_usage = None;
         self.last_model_usage = None;
+        // Source services/compact/compact.ts marks compaction complete and
+        // persists its reduced transcript before PostCompact hooks run.
+        // A failed notification hook must never roll back a saved summary.
+        let after = self
+            .hooks
+            .run(
+                HookEvent::PostCompact,
+                Some(if automatic { "auto" } else { "manual" }),
+                {
+                    let mut input = self.base_hook_input();
+                    input["trigger"] = json!(if automatic { "auto" } else { "manual" });
+                    input["compact_summary"] = json!(self.session.summary);
+                    input
+                },
+            )
+            .await;
+        match after {
+            Ok(outcome) => {
+                for reason in &outcome.blocking_reasons {
+                    eprintln!("PostCompact hook failed: {reason}");
+                    self.emit(json!({
+                        "type":"hook_warning",
+                        "hook_event_name":"PostCompact",
+                        "message":reason,
+                        "session_id":self.session.id,
+                    }));
+                }
+                self.report_hook_warnings(HookEvent::PostCompact, &outcome);
+            }
+            Err(error) => {
+                eprintln!("PostCompact hook error after summary was saved: {error:#}");
+                self.emit(json!({
+                    "type":"hook_warning",
+                    "hook_event_name":"PostCompact",
+                    "message":format!("{error:#}"),
+                    "session_id":self.session.id,
+                }));
+            }
+        }
         self.auto_compact_failures = 0;
         runtime_contracts::suppress_compact_warning();
         Ok(())
