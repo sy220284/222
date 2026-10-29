@@ -4,6 +4,57 @@
 //! Only rule-content matching is implemented; AST danger checks remain open.
 use crate::permission_rules::{extract_prefix, has_wildcards, match_wildcard, Behavior, Rule};
 use anyhow::Result;
+use regex::Regex;
+use std::sync::OnceLock;
+
+/// Source: PowerShellTool/destructiveCommandWarning.ts. These are informational
+/// warnings shown with an actual permission prompt; they never grant access.
+pub fn destructive_command_warning(command: &str) -> Option<&'static str> {
+    static PATTERNS: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
+    let patterns = PATTERNS.get_or_init(|| {
+        [
+            (r"(?i)(?:^|[|;&\n({])\s*(?:Remove-Item|rm|del|rd|rmdir|ri)\b[^|;&\n}]*-Recurse\b[^|;&\n}]*-Force\b", "Note: may recursively force-remove files"),
+            (r"(?i)(?:^|[|;&\n({])\s*(?:Remove-Item|rm|del|rd|rmdir|ri)\b[^|;&\n}]*-Force\b[^|;&\n}]*-Recurse\b", "Note: may recursively force-remove files"),
+            (r"(?i)(?:^|[|;&\n({])\s*(?:Remove-Item|rm|del|rd|rmdir|ri)\b[^|;&\n}]*-Recurse\b", "Note: may recursively remove files"),
+            (r"(?i)(?:^|[|;&\n({])\s*(?:Remove-Item|rm|del|rd|rmdir|ri)\b[^|;&\n}]*-Force\b", "Note: may force-remove files"),
+            (r"(?i)\bClear-Content\b[^|;&\n]*\*", "Note: may clear content of multiple files"),
+            (r"(?i)\bFormat-Volume\b", "Note: may format a disk volume"),
+            (r"(?i)\bClear-Disk\b", "Note: may clear a disk"),
+            (r"(?i)\bgit\s+reset\s+--hard\b", "Note: may discard uncommitted changes"),
+            (r"(?i)\bgit\s+push\b[^|;&\n]*\s+(?:--force|--force-with-lease|-f)\b", "Note: may overwrite remote history"),
+            (r"(?i)\bgit\s+stash\s+(?:drop|clear)\b", "Note: may permanently remove stashed changes"),
+            (r"(?i)\b(?:DROP|TRUNCATE)\s+(?:TABLE|DATABASE|SCHEMA)\b", "Note: may drop or truncate database objects"),
+            (r"(?i)\bStop-Computer\b", "Note: will shut down the computer"),
+            (r"(?i)\bRestart-Computer\b", "Note: will restart the computer"),
+            (r"(?i)\bClear-RecycleBin\b", "Note: permanently deletes recycled files"),
+        ]
+        .into_iter()
+        .map(|(pattern, warning)| {
+            (Regex::new(pattern).expect("static destructive warning pattern"), warning)
+        })
+        .collect()
+    });
+    for (pattern, warning) in patterns {
+        if pattern.is_match(command) {
+            return Some(warning);
+        }
+    }
+    // Rust regex intentionally has no lookahead. Preserve the original
+    // git-clean dry-run exclusion by inspecting the matched statement.
+    static GIT_CLEAN: OnceLock<Regex> = OnceLock::new();
+    static FORCE: OnceLock<Regex> = OnceLock::new();
+    static DRY_RUN: OnceLock<Regex> = OnceLock::new();
+    let clean = GIT_CLEAN.get_or_init(|| Regex::new(r"(?i)\bgit\s+clean\b([^|;&\n]*)").expect("git clean"));
+    let force = FORCE.get_or_init(|| Regex::new(r"(?i)(?:^|\s)-[a-z]*f\b").expect("git force"));
+    let dry = DRY_RUN.get_or_init(|| Regex::new(r"(?i)(?:^|\s)(?:--dry-run|-[a-z]*n)\b").expect("git dry-run"));
+    for matched in clean.captures_iter(command) {
+        let args = matched.get(1).map(|part| part.as_str()).unwrap_or("");
+        if force.is_match(args) && !dry.is_match(args) {
+            return Some("Note: may permanently delete untracked files");
+        }
+    }
+    None
+}
 
 fn strip_module_prefix(value: &str) -> &str {
     if value.len() > 1 && value.as_bytes()[1] == b':' && value.as_bytes()[0].is_ascii_alphabetic()
