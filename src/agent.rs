@@ -1542,6 +1542,26 @@ impl Agent {
         let sdk_definition = self.sdk_agent_definitions.get(&agent_type).cloned();
         let initial_prompt = sdk_definition.as_ref()
             .and_then(|definition| definition.initial_prompt.clone());
+        // Validate the requested permission mode before creating a worktree
+        // or starting any child process, so denied modes leave no side effects.
+        if let Some(mode) = sdk_definition.as_ref().and_then(|definition| definition.permission_mode) {
+            let parent = self.permission_mode;
+            let allowed = match mode {
+                permission_mode::Mode::Plan => true,
+                permission_mode::Mode::DontAsk => parent != permission_mode::Mode::Plan,
+                permission_mode::Mode::Default => matches!(parent,
+                    permission_mode::Mode::Default | permission_mode::Mode::AcceptEdits
+                    | permission_mode::Mode::BypassPermissions),
+                permission_mode::Mode::AcceptEdits => matches!(parent,
+                    permission_mode::Mode::AcceptEdits | permission_mode::Mode::BypassPermissions),
+                permission_mode::Mode::BypassPermissions => parent == permission_mode::Mode::BypassPermissions
+                    && self.approval == Approval::Full,
+                permission_mode::Mode::Auto => false,
+            };
+            if !allowed {
+                bail!("SDK agent permissionMode would exceed the parent permission ceiling");
+            }
+        }
         let isolation = args
             .get("isolation")
             .and_then(|v| v.as_str())
@@ -1602,24 +1622,6 @@ impl Agent {
                 child.max_steps = child.max_steps.min(limit);
             }
             if let Some(mode) = definition.permission_mode {
-                // A definition cannot grant a child more authority than its
-                // parent, regardless of the process-level approval ceiling.
-                let parent = self.permission_mode;
-                let allowed = match mode {
-                    permission_mode::Mode::Plan => true,
-                    permission_mode::Mode::DontAsk => parent != permission_mode::Mode::Plan,
-                    permission_mode::Mode::Default => matches!(parent,
-                        permission_mode::Mode::Default | permission_mode::Mode::AcceptEdits
-                        | permission_mode::Mode::BypassPermissions),
-                    permission_mode::Mode::AcceptEdits => matches!(parent,
-                        permission_mode::Mode::AcceptEdits | permission_mode::Mode::BypassPermissions),
-                    permission_mode::Mode::BypassPermissions => parent == permission_mode::Mode::BypassPermissions
-                        && self.approval == Approval::Full,
-                    permission_mode::Mode::Auto => false,
-                };
-                if !allowed {
-                    bail!("SDK agent permissionMode would exceed the parent permission ceiling");
-                }
                 child.permission_mode = mode;
             }
         }
