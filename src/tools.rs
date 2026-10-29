@@ -28,6 +28,9 @@ pub struct FileReadState {
     pub content: String,
     pub timestamp_ms: u64,
     pub full: bool,
+    /// Read range metadata is only present for an actual Read result.
+    pub read_offset: Option<usize>,
+    pub read_limit: Option<usize>,
 }
 
 /// Match the source FileStateCache's 100-entry / 25 MiB LRU limits.
@@ -271,6 +274,8 @@ impl ToolExecutor {
                 content,
                 timestamp_ms: disk_ms,
                 full: true,
+                read_offset: None,
+                read_limit: None,
             });
         }
         Ok(())
@@ -907,6 +912,23 @@ impl ToolExecutor {
         let path = self.checked_path(requested)?;
         self.require_read_rules(requested, &path)?;
         let metadata = fs::metadata(&path)?;
+        // The original FileReadTool returns a small unchanged marker when
+        // the same range was already shown and its mtime is unchanged.
+        // Edited/written/SDK-seeded cache entries have no read_offset and
+        // must never deduplicate against an old tool result.
+        let requested_offset = args.get("start_line").and_then(Value::as_u64)
+            .unwrap_or(1).max(1).min(usize::MAX as u64) as usize;
+        let requested_limit = args.get("line_count").and_then(Value::as_u64)
+            .map(|n| n.min(usize::MAX as u64) as usize);
+        if source_read {
+            let key = path.canonicalize()?;
+            let prior = self.file_reads.lock().unwrap().get(&key);
+            if prior.is_some_and(|state| state.read_offset == Some(requested_offset)
+                && state.read_limit == requested_limit
+                && state.timestamp_ms == modified_millis(&metadata).unwrap_or(u64::MAX)) {
+                return Ok(format!("File unchanged since last read: {requested}"));
+            }
+        }
         let max_bytes = if source_read { 256 * 1024 } else { MAX_FILE_BYTES };
         if metadata.len() > max_bytes {
             bail!("File too large (limit {max_bytes} bytes)");
@@ -950,6 +972,8 @@ impl ToolExecutor {
                 && (source_read || result.chars().count() <= MAX_OUTPUT_CHARS),
             content,
             timestamp_ms: before_ms,
+            read_offset: if source_read { Some(requested_offset) } else { None },
+            read_limit: if source_read { requested_limit } else { None },
         });
         Ok(result)
     }
@@ -1244,6 +1268,8 @@ impl ToolExecutor {
             content: content.to_owned(),
             timestamp_ms: modified_millis(&metadata)?,
             full: true,
+            read_offset: None,
+            read_limit: None,
         });
         Ok(format!(
             "Wrote {} bytes to {}",
@@ -1303,6 +1329,8 @@ impl ToolExecutor {
             content: updated,
             timestamp_ms: modified_millis(&metadata)?,
             full: true,
+            read_offset: None,
+            read_limit: None,
         });
         Ok(format!(
             "Replaced {hits} occurrence(s) in {}",
