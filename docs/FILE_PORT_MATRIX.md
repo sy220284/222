@@ -962,7 +962,7 @@
 | `src/plugins/bundled/index.ts` | 24 | 843 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/query/config.ts` | 47 | 1808 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/query/deps.ts` | 41 | 1445 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/query/stopHooks.ts` | 474 | 17290 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移 |
+| `src/query/stopHooks.ts` | 474 | 17290 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移；队友完成时在办任务 TaskCompleted→TeammateIdle 原版顺序及阻断继续已接入真实团队执行链（dd67ffc1、984410a6），待验收 |
 | `src/query/tokenBudget.ts` | 94 | 2320 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/remote/RemoteSessionManager.ts` | 344 | 9320 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/remote/SessionsWebSocket.ts` | 405 | 12505 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
@@ -1555,7 +1555,7 @@
 | `src/utils/hooks/sessionHooks.ts` | 448 | 12132 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` |部分实现，复杂子类型仍未迁移；SubagentStart/Stop、TeammateIdle Rust 实际代理链与测试已补，未覆盖其余全部子类型 |
 | `src/utils/hooks/skillImprovement.ts` | 268 | 8362 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移 |
 | `src/utils/hooks/ssrfGuard.ts` | 295 | 8732 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移 |
-| `src/utils/hooks.ts` | 5023 | 159458 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` |部分实现，复杂子类型仍未迁移；SubagentStart/Stop、TeammateIdle Rust 实际代理链与测试已补，PostToolUse MCP 结果覆盖已进入真实模型调用链，未覆盖其余全部子类型；对照原版 2.1.88 对 hookSpecificOutput.hookEventName 强制匹配当前事件，缺失/错事件不能修改工具输入或权限；完整并行 Hook、消息/中止/异步时序仍待验收 |
+| `src/utils/hooks.ts` | 5023 | 159458 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` |部分实现，复杂子类型仍未迁移；SubagentStart/Stop、TeammateIdle Rust 实际代理链与测试已补，PostToolUse MCP 结果覆盖已进入真实模型调用链，未覆盖其余全部子类型；对照原版 2.1.88 对 hookSpecificOutput.hookEventName 强制匹配当前事件，缺失/错事件不能修改工具输入或权限；完整并行 Hook、消息/中止/异步时序仍待验收；队友停止、任务完成与空闲 Hook 非阻断错误在终端/SDK 可见（4e058e87），停止原因事件已接线，待验收 |
 | `src/utils/horizontalScroll.ts` | 138 | 4302 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/http.ts` | 137 | 4928 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/hyperlink.ts` | 40 | 1465 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
@@ -1844,7 +1844,7 @@
 | `src/utils/task/framework.ts` | 309 | 9869 | 重写：保持通用行为 | `src/background.rs / src/task.rs` | 部分实现：任务状态与后台状态持久化；新增批量退出取消的共享等待期限，源码已提交待验收；通知队列及通用生命周期未等价 |
 | `src/utils/task/outputFormatting.ts` | 39 | 1188 | 重写：保持通用行为 | `src/task_output_format.rs` | 部分实现：长度上限、UTF-16 计数、尾部截断和日志路径；代理项边界与任务目录待核对 |
 | `src/utils/task/sdkProgress.ts` | 37 | 1153 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/tasks.ts` | 863 | 26354 | 重写：保持通用行为 | `src/task_graph.rs / src/task_events.rs / src/agent.rs` | 部分实现：CRUD、依赖/认领、高水位、重置、退出收回、订阅回调锁外派发；已补齐损坏/超长任务文件名、不可读/超大任务记录隔离、异常 JSON 重置清理、创建仅落任务记录、删除/重置时更新高水位，避免额外计数写失败误报；损坏记录占用编号不复用、无效编号读取返回任务不存在；新增 ATLAS_TASK_LIST_ID 跨会话共享任务列表优先级及团队清理隔离；原版全部状态迁移、跨进程通知与文件级并发仍未等价 |
+| `src/utils/tasks.ts` | 863 | 26354 | 重写：保持通用行为 | `src/task_graph.rs / src/task_events.rs / src/agent.rs` | 部分实现：CRUD、依赖/认领、高水位、重置、退出收回、订阅回调锁外派发；已补齐损坏/超长任务文件名、不可读/超大任务记录隔离、异常 JSON 重置清理、创建仅落任务记录、删除/重置时更新高水位，避免额外计数写失败误报；损坏记录占用编号不复用、无效编号读取返回任务不存在；新增 ATLAS_TASK_LIST_ID 跨会话共享任务列表优先级及团队清理隔离；原版全部状态迁移、跨进程通知与文件级并发仍未等价；队友空闲前从共享任务列表逐条读取本人 in_progress 任务并执行 TaskCompleted Hook（dd67ffc1），待验收 |
 | `src/utils/teamDiscovery.ts` | 82 | 2323 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teamMemoryOps.ts` | 89 | 2471 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teammate.ts` | 293 | 9206 | 重写：保持通用行为 | 待定 | 未迁移 |
