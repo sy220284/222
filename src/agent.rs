@@ -2888,6 +2888,14 @@ mod tests {
     #[async_trait::async_trait]
     impl ModelProvider for PromptCaptureModel {
         async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
+            if request.system.contains("# Independent verification agent") {
+                for tool in &request.tools {
+                    let name = tool.pointer("/function/name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("");
+                    assert!(!matches!(name, "write_file" | "edit_file" | "spawn_agent"));
+                }
+            }
             self.0.lock().unwrap().push(request.system.clone());
             Ok(crate::protocol::ModelResponse {
                 message: Message::text("assistant", "Validated the supplied prompt."),
