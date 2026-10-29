@@ -688,13 +688,19 @@ impl McpManager {
         let response = match response {
             Ok(response) => response,
             Err(error) => {
-                if format!("{error:#}").contains("session expired") {
+                let diagnostic = format!("{error:#}");
+                if diagnostic.contains("session expired")
+                    || diagnostic.contains("authentication expired")
+                {
                     if let Some(status_index) =
                         self.status_clients.iter().position(|v| *v == Some(index))
                     {
                         self.server_statuses[status_index]["status"] = json!("failed");
-                        self.server_statuses[status_index]["error"] =
-                            json!("MCP session expired; reconnect on next request");
+                        // A fresh connection reloads headersHelper credentials;
+                        // never retry an ambiguous tool side effect blindly.
+                        self.server_statuses[status_index]["error"] = json!(
+                            "MCP session or authentication expired; reconnect on next request"
+                        );
                     }
                 }
                 return Err(error);
