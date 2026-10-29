@@ -187,7 +187,7 @@ impl HookMatcher {
             Self::Any => true,
             Self::Invalid => false,
             Self::Exact(names) => names.iter().any(|name| {
-                name == query || canonical_hook_tool(name) == canonical_hook_tool(query)
+                name.as_str() == query || canonical_hook_tool(name) == canonical_hook_tool(query)
             }),
             Self::Pattern(pattern) => {
                 pattern.is_match(query)
