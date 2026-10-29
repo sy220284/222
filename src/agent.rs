@@ -1232,16 +1232,7 @@ impl Agent {
         if !title.trim().is_empty() {
             return self.rename_session(title);
         }
-        let context = self
-            .session
-            .messages
-            .iter()
-            .filter(|m| matches!(m.role.as_str(), "user" | "assistant"))
-            .filter_map(|m| m.content.as_deref().map(|t| format!("{}: {t}", m.role)))
-            .take(50)
-            .collect::<Vec<_>>()
-            .join("\n");
-        let context = context.chars().take(8_000).collect::<String>();
+        let context = crate::session_control::conversation_text_for_name(&self.session.messages);
         if context.trim().is_empty() {
             bail!("Could not generate a name: no conversation context yet. Usage: /rename <name>");
         }

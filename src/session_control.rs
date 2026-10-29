@@ -39,6 +39,42 @@ fn preview(messages: &[Message]) -> String {
         .take(80)
         .collect()
 }
+/// The original 2.1.88 sessionTitle.extractConversationText uses the
+/// recent tail of user/assistant text for model-generated names. Keep text
+/// blocks from multimodal messages, but never feed tool output to the model.
+pub fn conversation_text_for_name(messages: &[Message]) -> String {
+    let mut parts = Vec::new();
+    for message in messages {
+        if !matches!(message.role.as_str(), "user" | "assistant") {
+            continue;
+        }
+        if let Some(content) = message.content.as_deref() {
+            parts.push(content);
+        } else if let Some(blocks) = message.content_blocks.as_deref() {
+            for block in blocks {
+                if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
+                    if let Some(text) = block.get("text").and_then(serde_json::Value::as_str) {
+                        parts.push(text);
+                    }
+                }
+            }
+        }
+    }
+    let text = parts.join("\n");
+    // JS slices the last 1,000 UTF-16 units; preserve valid Rust Unicode
+    // scalar boundaries rather than splitting an emoji's surrogate pair.
+    let mut used = 0;
+    let mut start = text.len();
+    for (offset, ch) in text.char_indices().rev() {
+        if used + ch.len_utf16() > 1_000 {
+            break;
+        }
+        used += ch.len_utf16();
+        start = offset;
+    }
+    text[start..].to_owned()
+}
+
 pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
     let root = root.canonicalize().context("Workspace unavailable")?;
     let directory = root.join(".atlas/sessions");
@@ -371,6 +407,46 @@ pub fn export_saved(root: &Path, id: &str, path: Option<&str>) -> Result<PathBuf
 mod tests {
     use super::*;
     use crate::protocol::{FunctionCall, ToolCall};
+    #[test]
+    fn generated_name_context_uses_recent_text_and_excludes_tool_results() {
+        let messages = vec![
+            Message::text("user", "first request"),
+            Message::text("tool", "secret tool output"),
+            Message {
+                role: "assistant".into(),
+                content: None,
+                content_blocks: Some(vec![
+                    serde_json::json!({"type":"text","text":"latest fix"}),
+                    serde_json::json!({"type":"image","data":"image bytes"}),
+                    serde_json::json!({"type":"text","text":"next step"}),
+                ]),
+                tool_calls: None,
+                tool_call_id: None,
+            },
+        ];
+        assert_eq!(
+            conversation_text_for_name(&messages),
+            "first request\nlatest fix\nnext step"
+        );
+        assert!(conversation_text_for_name(&[Message::text("tool", "hidden")]).is_empty());
+
+        let long = vec![
+            Message::text("user", "old context ".repeat(200)),
+            Message::text("assistant", "newest task"),
+        ];
+        let text = conversation_text_for_name(&long);
+        assert!(text.ends_with("newest task"));
+        assert!(text.encode_utf16().count() <= 1_000);
+        assert!(!text.starts_with("old context old context old context old context old context"));
+
+        let unicode = conversation_text_for_name(&[Message::text(
+            "user",
+            format!("{}🦀", "x".repeat(999)),
+        )]);
+        assert_eq!(unicode.encode_utf16().count(), 1_000);
+        assert!(unicode.ends_with("🦀"));
+    }
+
     #[test]
     fn rename_list_export_and_restore_full_conversation() {
         let tmp = tempfile::tempdir().unwrap();
