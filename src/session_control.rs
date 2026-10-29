@@ -114,9 +114,10 @@ pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
         .filter(|item| {
             item.id.to_string().contains(&query)
                 || item.title.to_lowercase().contains(&query)
-                || item.tag.as_ref().is_some_and(|tag| {
-                    tag.to_lowercase().contains(query.trim_start_matches('#'))
-                })
+                || item
+                    .tag
+                    .as_ref()
+                    .is_some_and(|tag| tag.to_lowercase().contains(query.trim_start_matches('#')))
         })
         .collect())
 }
