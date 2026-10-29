@@ -959,6 +959,7 @@ done"#;
             transport: None,
             url: None,
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut manager =
             tokio::time::timeout(Duration::from_secs(4), McpManager::connect(&[config]))
@@ -1026,6 +1027,7 @@ done"#;
             transport: None,
             url: None,
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[config]).await.unwrap();
         assert_eq!(mgr.statuses().unwrap()[0]["tools"][0]["name"], "before");
@@ -1086,6 +1088,7 @@ done"#;
             transport: None,
             url: None,
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[config("broken", broken), config("healthy", healthy)])
             .await
@@ -1150,6 +1153,7 @@ done"#;
             transport: None,
             url: None,
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let manager = McpManager::connect_with_root(&[config], workspace.path())
             .await
@@ -1207,6 +1211,7 @@ done"#;
             transport: None,
             url: None,
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[
             config("same.name", one),
@@ -1261,6 +1266,7 @@ done"#,
             transport: None,
             url: None,
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[config]).await.unwrap();
         assert!(serde_json::to_string(&mgr.definitions())
@@ -1303,6 +1309,7 @@ done"#;
             transport: None,
             url: None,
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let broken = make("broken", "nonexistent_mcp_executable_for_test", vec![]);
         let healthy = make("healthy", "sh", vec!["-c".into(), script.into()]);
@@ -1344,6 +1351,7 @@ done"#;
             transport: None,
             url: None,
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[config]).await.unwrap();
         assert!(mgr.definitions().is_empty());
@@ -1369,6 +1377,7 @@ done"#;
             transport: None,
             url: None,
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[c]).await.unwrap();
         let call = ToolCall {
@@ -1533,6 +1542,7 @@ mod remote_tests {
             transport: Some("http".into()),
             url: Some(format!("http://{address}/mcp")),
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[cfg]).await.unwrap();
         assert!(mgr.handles("mcp__restore__before"));
@@ -1609,6 +1619,7 @@ mod remote_tests {
             transport: Some("http".into()),
             url: Some(format!("http://{address}/mcp")),
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[config]).await.unwrap();
         assert!(mgr.handles("mcp__remote__remote_echo"));
@@ -1694,6 +1705,7 @@ mod remote_tests {
             transport: Some("http".into()),
             url: Some(format!("http://{address}/mcp")),
             headers: HashMap::new(),
+            headers_helper: None,
         };
         let mut manager = McpManager::connect(&[config]).await.unwrap();
         assert_eq!(manager.statuses().unwrap()[0]["tools"][0]["name"], "before");
