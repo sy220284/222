@@ -86,9 +86,23 @@ pub fn is_pdf_extension(ext: &str) -> bool {
         .eq_ignore_ascii_case("pdf")
 }
 
+/// Model-neutral PDF capability policy. Integrations may explicitly name
+/// unsupported model IDs through ATLAS_PDF_UNSUPPORTED_MODELS; no provider
+/// names, credentials, or proprietary model identifiers are hard-coded.
 pub fn is_pdf_supported(model: &str) -> bool {
-    // The original excludes only the legacy Haiku 3 identifier.
-    !model.to_ascii_lowercase().contains("claude-3-haiku")
+    let candidate = model.trim();
+    if candidate.is_empty() {
+        return false;
+    }
+    let deny_list = std::env::var("ATLAS_PDF_UNSUPPORTED_MODELS").unwrap_or_default();
+    pdf_supported_with_deny_list(candidate, &deny_list)
+}
+
+fn pdf_supported_with_deny_list(model: &str, deny_list: &str) -> bool {
+    !deny_list.split(',').any(|denied| {
+        let value = denied.trim();
+        !value.is_empty() && model.eq_ignore_ascii_case(value)
+    })
 }
 
 pub fn exports(source: &str) -> Option<&'static [&'static str]> {
@@ -154,10 +168,11 @@ mod tests {
         }
         assert!(is_pdf_extension(".PDF"));
         assert!(!is_pdf_extension("pdfx"));
-        assert!(!is_pdf_supported(
-            "bedrock.anthropic.claude-3-haiku-20240307"
-        ));
         assert!(is_pdf_supported("gpt-6"));
+        assert!(!is_pdf_supported(""));
+        assert!(!pdf_supported_with_deny_list("local-pdf", "local-pdf,other"));
+        assert!(pdf_supported_with_deny_list("other-model", "local-pdf"));
+        assert!(!pdf_supported_with_deny_list("CUSTOM", "custom"));
     }
 
     #[test]
