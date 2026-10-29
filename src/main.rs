@@ -3,6 +3,7 @@ mod cost;
 mod tool_metrics;
 mod collections;
 mod message_queue;
+mod queue_journal;
 mod query_guard;
 mod sdk_queue;
 mod queued_prompt_batch;
@@ -451,6 +452,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
 
 async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
     let mut queue=message_queue::Queue::default();
+    queue.enable_journal(agent.workspace_root(), &agent.session_id())?;
     let mut query_guard=query_guard::QueryGuard::default();
     print_json!(json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,

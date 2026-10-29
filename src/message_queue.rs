@@ -96,6 +96,7 @@ pub struct Queue {
     revision: u64,
     listeners: Vec<(u64, Box<dyn Fn()>)>,
     next_listener: u64,
+    journal: Option<crate::queue_journal::Journal>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -106,6 +107,17 @@ pub struct PopEditable {
 }
 
 impl Queue{
+    pub fn enable_journal(&mut self,root:&std::path::Path,session:&str)->anyhow::Result<()>{
+        self.journal=Some(crate::queue_journal::Journal::new(root,session)?);
+        Ok(())
+    }
+    fn record(&self,operation:&str,content:Option<&str>){
+        if let Some(journal)=&self.journal{
+            if let Err(error)=journal.record(operation,content){
+                eprintln!("Queue operation journal failed: {error:#}");
+            }
+        }
+    }
     pub fn len(&self)->usize{self.items.len()}
     pub fn is_empty(&self)->bool{self.items.is_empty()}
     pub fn revision(&self)->u64{self.revision}
@@ -131,6 +143,7 @@ impl Queue{
         let identity=self.next_identity;
         self.items.push(Item{identity,command});
         self.notify();
+        self.record("enqueue",self.items.last().and_then(|item|item.command.value.as_str()));
         identity
     }
     fn best_index(&self, filter:impl Fn(&Command)->bool)->Option<usize>{
@@ -144,6 +157,7 @@ impl Queue{
         let index=self.best_index(filter)?;
         let result=self.items.remove(index);
         self.notify();
+        self.record("dequeue",None);
         Some(result)
     }
     /// Unlike dequeue(), original dequeueAll() returns raw insertion order.
@@ -151,26 +165,36 @@ impl Queue{
         if self.items.is_empty(){return Vec::new()}
         let items=std::mem::take(&mut self.items);
         self.notify();
+        for _ in &items{self.record("dequeue",None)}
         items
     }
     /// Original dequeueAllMatching also preserves insertion order, *not*
     /// priority order, despite the comment in the TypeScript source.
     pub fn dequeue_all_matching(&mut self,filter:impl Fn(&Command)->bool)->Vec<Item>{
-        self.remove_matching(filter)
+        self.remove_filtered(filter,"dequeue")
     }
     pub fn remove_matching(&mut self,filter:impl Fn(&Command)->bool)->Vec<Item>{
+        self.remove_filtered(filter,"remove")
+    }
+    fn remove_filtered(&mut self,filter:impl Fn(&Command)->bool,operation:&str)->Vec<Item>{
         let mut removed=Vec::new();
         self.items.retain(|item|{
             if filter(&item.command){removed.push(item.clone());false}else{true}
         });
-        if !removed.is_empty(){self.notify()}
+        if !removed.is_empty(){
+            self.notify();
+            for _ in &removed{self.record(operation,None)}
+        }
         removed
     }
     pub fn remove_identity(&mut self, identities:&[u64])->usize{
         let before=self.items.len();
         self.items.retain(|item|!identities.contains(&item.identity));
         let removed=before-self.items.len();
-        if removed>0{self.notify()}
+        if removed>0{
+            self.notify();
+            for _ in 0..removed{self.record("remove",None)}
+        }
         removed
     }
     pub fn clear(&mut self){
@@ -237,6 +261,9 @@ impl Queue{
         }
         self.items.retain(|item|!item.command.is_editable());
         self.notify();
+        for item in &editable{
+            self.record("popAll",item.command.value.as_str());
+        }
         Some(PopEditable{text,cursor_offset,images})
     }
 }
