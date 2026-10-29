@@ -477,6 +477,30 @@ fn mcp_server_rule_matches(rule: &str, tool: &str) -> bool {
     actual_tool.is_some() && actual_server == rule_server && matches!(rule_tool, None | Some("*"))
 }
 
+/// Filesystem permission patterns use path globs, not shell command
+/// wildcards. The original filesystem.ts::matchingRuleForInput applies Edit
+/// path rules to all file-mutating tools and matches resolved symlink targets.
+fn file_pattern_matches(pattern: &str, args: &Value) -> Result<bool> {
+    let pattern = pattern.strip_prefix("./").unwrap_or(pattern);
+    let glob = globset::Glob::new(pattern)?.compile_matcher();
+    let directory = pattern.strip_suffix("/**");
+    let matches = |path: &str| {
+        let normalized = path.replace('\\', "/");
+        glob.is_match(&normalized) || directory.is_some_and(|root| normalized == root)
+    };
+    Ok(args
+        .get("paths")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .any(&matches)
+        || args
+            .get("path")
+            .and_then(Value::as_str)
+            .is_some_and(matches))
+}
+
 pub fn policy_for(rules: &[Rule], tool: &str, args: &Value) -> Result<Option<Behavior>> {
     let name = canonical_tool(tool);
     if name == "Bash" {
@@ -487,7 +511,15 @@ pub fn policy_for(rules: &[Rule], tool: &str, args: &Value) -> Result<Option<Beh
     let mut allow = false;
     let mut ask = false;
     for rule in rules {
-        if canonical_tool(&rule.value.tool_name) != name
+        let rule_name = canonical_tool(&rule.value.tool_name);
+        // Edit(path) is the original shared filesystem edit permission:
+        // it also governs Write, but a tool-wide Edit rule is not a
+        // blanket grant for every other tool.
+        let shared_edit_path_rule = matches!(name, "Write" | "Edit")
+            && rule_name == "Edit"
+            && rule.value.rule_content.is_some();
+        if rule_name != name
+            && !shared_edit_path_rule
             && (rule.value.rule_content.is_some()
                 || !mcp_server_rule_matches(&rule.value.tool_name, name))
         {
@@ -505,26 +537,8 @@ pub fn policy_for(rules: &[Rule], tool: &str, args: &Value) -> Result<Option<Beh
                         .and_then(Value::as_str),
                     _ => None,
                 };
-                if name == "Read" {
-                    // The original filesystem read policy tests both the
-                    // requested path and the resolved symlink target. Read
-                    // patterns are filesystem globs, not shell command rules.
-                    let glob = globset::Glob::new(pattern)?.compile_matcher();
-                    // filesystem.ts strips /** before ignore() matching, so
-                    // a directory rule also matches the directory itself.
-                    let directory = pattern.strip_suffix("/**");
-                    let matches = |path: &str| {
-                        let normalized = path.replace('\\', "/");
-                        glob.is_match(&normalized)
-                            || directory.is_some_and(|root| normalized == root)
-                    };
-                    args.get("paths")
-                        .and_then(Value::as_array)
-                        .into_iter()
-                        .flatten()
-                        .filter_map(Value::as_str)
-                        .any(&matches)
-                        || argument.is_some_and(matches)
+                if matches!(name, "Read" | "Write" | "Edit") {
+                    file_pattern_matches(pattern, args)?
                 } else if name == "WebFetch" {
                     // WebFetchTool.ts constructs domain:<URL.hostname> and
                     // looks up that exact content key (not a prefix/wildcard).
@@ -566,6 +580,52 @@ pub fn policy_for(rules: &[Rule], tool: &str, args: &Value) -> Result<Option<Beh
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn edit_path_rules_cover_write_and_resolved_targets() {
+        // filesystem.ts::getPatternsByRoot('edit') uses Edit rules for
+        // every file-mutating tool; path matching is gitignore-style.
+        let rules = compile_rules(&[
+            RuleSetting {
+                behavior: "deny".into(),
+                rule: "Edit(secrets/**)".into(),
+            },
+            RuleSetting {
+                behavior: "allow".into(),
+                rule: "Write(alias.txt)".into(),
+            },
+            RuleSetting {
+                behavior: "allow".into(),
+                rule: "Edit(public/**)".into(),
+            },
+        ])
+        .unwrap();
+        assert_eq!(
+            policy_for(&rules, "write_file", &json!({
+                "path":"alias.txt",
+                "paths":["alias.txt", "secrets/key.txt"]
+            })).unwrap(),
+            Some(Behavior::Deny)
+        );
+        assert_eq!(
+            policy_for(&rules, "write_file", &json!({
+                "path":"public/new.txt", "paths":["public/new.txt"]
+            })).unwrap(),
+            Some(Behavior::Allow)
+        );
+        assert_eq!(
+            policy_for(&rules, "edit_file", &json!({
+                "path":"secrets", "paths":["secrets"]
+            })).unwrap(),
+            Some(Behavior::Deny)
+        );
+        assert_eq!(
+            policy_for(&rules, "read_file", &json!({
+                "path":"secrets/key.txt", "paths":["secrets/key.txt"]
+            })).unwrap(),
+            None
+        );
+    }
 
     #[test]
     fn original_shell_rule_permission_suggestions_are_exact() {
