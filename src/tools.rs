@@ -954,9 +954,26 @@ impl ToolExecutor {
                 bail!("Command timed out after {secs} seconds");
             }
         };
+        let interpretation = if kind == crate::shell_runtime::ShellKind::Bash {
+            let (is_error, note) = crate::shell_runtime::interpret_bash_exit(
+                command,
+                status.code().unwrap_or(-1),
+            );
+            match (is_error, note) {
+                (_, Some(note)) => format!("Interpretation: {note}\n"),
+                (true, None) => format!(
+                    "Interpretation: Command failed with exit code {}\n",
+                    status.code().unwrap_or(-1)
+                ),
+                (false, None) => String::new(),
+            }
+        } else {
+            String::new()
+        };
         Ok(format!(
-            "Exit: {}\nSTDOUT:\n{}\nSTDERR:\n{}",
+            "Exit: {}\n{}STDOUT:\n{}\nSTDERR:\n{}",
             status,
+            interpretation,
             truncate(
                 &String::from_utf8_lossy(&out),
                 crate::shell_runtime::max_output_length()
