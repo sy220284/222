@@ -261,7 +261,7 @@
 | `src/commands/skills/index.ts` | 11 | 226 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/skills/skills.tsx` | 8 | 1888 | 重写：保持通用行为 | `src/generated_ports/p_d54f470418286.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/stats/index.ts` | 11 | 252 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/stats/stats.tsx` | 7 | 1141 | 重写：保持通用行为 | `src/generated_ports/p_b1cd3e4d8150c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/stats/stats.tsx` | 7 | 1141 | 重写：保持通用行为 | `src/stats.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：/stats 和独立 stats 命令已经真实读取本地持久会话，按供应商/模型汇总使用量和已知费用、缓存/搜索/工具调用及代码行统计；分支按保存的基线扣除继承历史，未知费率不猜。原版多标签页/日期热力图/趋势图与每消息时间戳尚未等价 |
 | `src/commands/status/index.ts` | 13 | 322 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/status/status.tsx` | 8 | 1855 | 重写：保持通用行为 | `src/agent.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：/status 已连入交互终端，展示真实会话标题/ID、工作区、模型/供应商、权限模式、MCP 服务及工具数，测试覆盖动态改名与不泄露凭据；原版 Settings 各页、IDE、完整安装/沙箱诊断 UI 仍未等价 |
 | `src/commands/statusline.tsx` | 24 | 3568 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -461,7 +461,7 @@
 | `src/components/Spinner/useStalledAnimation.ts` | 76 | 2500 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/Spinner/utils.ts` | 85 | 2261 | 重写：终端 UI／交互 | `src/generated_ports/p_43185acc13130.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner.tsx` | 562 | 87940 | 重写：终端 UI／交互 | `src/generated_ports/p_752a76791bf16.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/Stats.tsx` | 1228 | 152782 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/Stats.tsx` | 1228 | 152782 | 重写：终端 UI／交互 | `src/stats.rs / src/main.rs` | 部分实现：已有可运行离线文本统计面板和分供应商用量视图；原版热力图、区间切换、键盘交互、ANSI 截图等终端 UI 尚未等价 |
 | `src/components/StatusLine.tsx` | 324 | 49465 | 重写：终端 UI／交互 | `src/generated_ports/p_b297abdcbeb6f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/StatusNotices.tsx` | 55 | 5694 | 重写：终端 UI／交互 | `src/generated_ports/p_1f9cbcf671874.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/StructuredDiff/Fallback.tsx` | 487 | 56579 | 重写：终端 UI／交互 | `src/generated_ports/p_d32fceeb42c6c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -1797,7 +1797,7 @@
 | `src/utils/standaloneAgent.ts` | 24 | 803 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/startupProfiler.ts` | 195 | 6079 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/staticRender.tsx` | 116 | 12236 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/stats.ts` | 1062 | 33790 | 重写：保持通用行为 | `src/generated_ports/p_7fc0f8955381a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/stats.ts` | 1062 | 33790 | 重写：保持通用行为 | `src/stats.rs / src/session_control.rs / src/session.rs` | 部分实现：迁移本地会话累计、模型 Tokens/费用、分支基线去重与时间范围读取；原版 JSONL 每消息时间聚合、每日活动、连续使用天数与 statsCache 锁/增量策略尚未等价 |
 | `src/utils/statsCache.ts` | 435 | 13891 | 重写：保持通用行为 | `src/generated_ports/p_b9afda97bc9a8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/status.tsx` | 362 | 48635 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/statusNoticeDefinitions.tsx` | 198 | 30638 | 重写：保持通用行为 | `src/generated_ports/p_381af97c9f891.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
