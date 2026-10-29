@@ -63,6 +63,9 @@ pub struct SearchBackend {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    /// Original fileHistoryEnabled user setting, enabled for interactive sessions.
+    #[serde(default = "default_file_checkpointing", rename = "fileCheckpointingEnabled", alias = "file_checkpointing_enabled")]
+    pub file_checkpointing_enabled: bool,
     pub default_provider: String,
     pub providers: Vec<ProviderProfile>,
     #[serde(default)]
@@ -109,10 +112,13 @@ pub struct Config {
     pub model_prices: Vec<ModelPrice>,
 }
 
+fn default_file_checkpointing() -> bool { true }
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             default_provider: "local".into(),
+            file_checkpointing_enabled: true,
             additional_directories: Vec::new(),
             instruction_excludes: Vec::new(),
             instruction_sources: std::collections::HashMap::new(),
