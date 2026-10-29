@@ -3030,27 +3030,7 @@ impl Agent {
 
 fn system_prompt(root: &Path) -> Result<String> {
     let mut prompt = format!("{DEFAULT_SYSTEM}\nCurrent workspace: {}\n", root.display());
-    for name in ["AGENTS.md", ".atlas/instructions.md"] {
-        let path = root.join(name);
-        if !path.is_file() {
-            continue;
-        }
-        let real_path = path.canonicalize()?;
-        if !real_path.starts_with(root) {
-            bail!(
-                "Project instructions cannot point outside the workspace: {}",
-                path.display()
-            );
-        }
-        let bytes = fs::read(&real_path)
-            .with_context(|| format!("Read project instructions: {}", path.display()))?;
-        if bytes.len() > 50_000 {
-            bail!("Project instruction file too large: {}", path.display());
-        }
-        let content = String::from_utf8(bytes)
-            .with_context(|| format!("Project instructions must be UTF-8: {}", path.display()))?;
-        prompt.push_str(&format!("\nProject instructions from {name}:\n{content}\n"));
-    }
+    prompt.push_str(&crate::conversation_context::project_instructions(root)?);
     if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
         let instructions = crate::prompt_runtime::output_style_instructions(root, &style)?;
         prompt.push_str("\nOutput style:\n");
