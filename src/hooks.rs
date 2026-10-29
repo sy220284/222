@@ -111,6 +111,9 @@ fn session_end_timeout() -> Duration {
 #[derive(Default, Debug, Clone)]
 pub struct HookOutcome {
     pub blocking_reason: Option<String>,
+    /// Every independent blocking hook, retained in configured order for
+    /// TaskCreated/TaskCompleted feedback. Other callers may use the first.
+    pub blocking_reasons: Vec<String>,
     pub additional_context: Vec<String>,
     pub updated_input: Option<Value>,
     /// PreToolUse hook decision. An explicit `ask` requires user approval
@@ -224,8 +227,9 @@ impl HookRunner {
             };
             if let Some(reason) = response.blocking_reason {
                 if outcome.blocking_reason.is_none() {
-                    outcome.blocking_reason = Some(reason);
+                    outcome.blocking_reason = Some(reason.clone());
                 }
+                outcome.blocking_reasons.push(reason);
             }
             outcome
                 .additional_context
