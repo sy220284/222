@@ -134,7 +134,7 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
         .find(|(name, _, _)| name.eq_ignore_ascii_case(query))
     {
         matches = vec![(*name).to_owned()];
-    } else if query.starts_with("mcp__")
+    } else if query.to_ascii_lowercase().starts_with("mcp__")
         && catalog.iter().any(|(name, _, _)| {
             name.to_ascii_lowercase()
                 .starts_with(&query.to_ascii_lowercase())
