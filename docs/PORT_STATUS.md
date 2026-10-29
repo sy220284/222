@@ -1070,10 +1070,15 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 
 原版完整包 SHA-256 `23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d`；本轮阅读 `source/src/query/stopHooks.ts::handleStopHooks`（330–455 行）、`source/src/utils/hooks.ts::executeStopHooks/executeTeammateIdleHooks/executeTaskCompletedHooks`（3639–3830 行）与 Rust `src/agent.rs::run_team/run_task_graph`、`src/task_graph.rs::all`。提交 `dd67ffc1a5802afa12171f85a4448951398e066c`、`90fc78bf46417748bf85ac0ee3f2cafb994a0648`、`984410a6f67be892ef8860278221e639b43a6069`、`4e058e875f11da7eecf35c77a53d282642fee32a`；迁移矩阵同步 `7245deca10a2c40db1de0a4012a6c7cf3d35a007`。
 
-本轮保守计为 **3 个互不重复、真实可感知的业务功能补齐，源码已提交、待行为验收**：
+本轮保守计为 **5 个互不重复、真实可感知的业务功能补齐，源码已提交、待行为验收**：
 
 1. **队友在办任务的完成前检查**：真实共享任务图查询该成员 `in_progress` 任务，依原版先运行 SubagentStop、再对每个在办任务执行 TaskCompleted、最后执行 TeammateIdle；任务 Hook 补齐实时 `permission_mode`。涉及 `src/task_graph.rs::in_progress_owned_by`、`src/agent.rs::run_team/task_hook_input`。
 2. **阻断反馈后的队友继续工作**：SubagentStop、TaskCompleted、TeammateIdle 的阻断原因进入下一轮真实模型对话，重新检查直到通过或达到原有模型步数边界；`continue:false` 聚合处理、保留 `stopReason` 并向结构化 SDK 发出停止事件；模型失败仍调用 SubagentStop。涉及 `src/agent.rs::run_team`。
 3. **任务及队友 Hook 的非阻断错误可见**：TaskCreated、TaskCompleted、SubagentStart、SubagentStop、TeammateIdle 的脚本错误保留为终端警告及 SDK `hook_warning` 事件，不会直接误拒绝工具或跳过其他任务。涉及 `src/agent.rs::report_hook_warnings` 与真实调用点。
 
-**精确未闭环差异**：原版 Hook 进度消息、取消信号与外部中断、异步/HTTP/agent/prompt/callback Hook、SDK 控制回调、真实队友邮箱唤醒、Hook 阻断的原版元消息类型、并发事件时序与跨进程恢复尚未等价；当前继续工作通过带反馈的下一轮提示触发，原版元消息标记尚未对齐；超过步数上限时明确报错并保留会话。冻结 Issue #3 的 362 条继续全部开放，0 条据此升级完整等价。本轮按要求**未运行 Cargo、CI 或任何测试**，只做原版/Rust 源码及远端提交静态核对。100 项硬目标仍未完成，本轮缺口 97 项；本轮亦尚未形成经逐项证明的完整 100 项先行问题清单，后续须先完成该步骤并去重，禁止把本轮 3 项重复计入。
+4. **会话启动 Hook 阻断不终止会话**：原版 `source/src/utils/sessionStart.ts::processSessionStartHooks`（118–159 行）明确忽略 SessionStart 阻断；Rust `src/agent.rs::attach_hooks` 现保留上下文与警告、继续启动，避免启动脚本返回退出码 2 使会话无法进入。提交 `f2d2193365eab66c47c1a5d383df0d3f7cb4c41c`。
+5. **会话压缩先落盘再运行后置 Hook**：原版 `source/src/services/compact/compact.ts`（700–740 行）在 PostCompact 之前完成压缩标记和摘要保存；Rust `src/agent.rs::compact_history_with_trigger` 现先原子保存摘要，再调用 PostCompact；脚本失败保留用户可见警告且不回滚压缩。提交 `1b652b8b11ae7a4dfd8409a7c14ab1b0c35eb0cf`。
+
+独立子代理的 SubagentStart/SubagentStop Hook 现使用子会话及隔离工作树上下文，阻断反馈会继续实际模型轮次，模型失败仍执行停止 Hook；提交 `f3b9bac59755fe30658bf0b3ea3fa39bf958d49e`。此项属于上述第 2 项的同一业务功能，不重复计数。迁移矩阵进一步同步 `4667cd26a68a338929475148cf93eebd8ce1d020`。
+
+**精确未闭环差异**：原版 Hook 进度消息、取消信号与外部中断、异步/HTTP/agent/prompt/callback Hook、SDK 控制回调、真实队友邮箱唤醒、Hook 阻断的原版元消息类型、并发事件时序与跨进程恢复尚未等价；当前继续工作通过带反馈的下一轮提示触发，原版元消息标记尚未对齐；超过步数上限时明确报错并保留会话。冻结 Issue #3 的 362 条继续全部开放，0 条据此升级完整等价。本轮按要求**未运行 Cargo、CI 或任何测试**，只做原版/Rust 源码及远端提交静态核对。100 项硬目标仍未完成，本轮缺口 95 项；本轮亦尚未形成经逐项证明的完整 100 项先行问题清单，后续须先完成该步骤并去重，禁止把本轮 3 项重复计入。
