@@ -31,17 +31,17 @@ pub fn definition() -> Value {
 /// tags, and non-HTML text. In the provider-neutral terminal runtime this
 /// mode can be selected explicitly without vendor SDK dependencies.
 fn html_preview_error(preview: &str) -> Option<&'static str> {
-    let full_document = Regex::new(r"(?i)<\\s*(html|body|!doctype)\\b").expect("valid regex");
+    let full_document = Regex::new(r"(?i)<\s*(html|body|!doctype)\b").expect("valid regex");
     if full_document.is_match(preview) {
         return Some("preview must be an HTML fragment, not a full document (no <html>, <body>, or <!DOCTYPE>)");
     }
-    let executable = Regex::new(r"(?i)<\\s*(script|style)\\b").expect("valid regex");
+    let executable = Regex::new(r"(?i)<\s*(script|style)\b").expect("valid regex");
     if executable.is_match(preview) {
         return Some("preview must not contain <script> or <style> tags. Use inline styles via the style attribute if needed.");
     }
     let has_html = Regex::new(r"(?i)<[a-z][^>]*>").expect("valid regex");
     if !has_html.is_match(preview) {
-        return Some("preview must contain HTML (previewFormat is set to \\"html\\"). Wrap content in a tag like <div> or <pre>.");
+        return Some("preview must contain HTML (previewFormat is set to \"html\"). Wrap content in a tag like <div> or <pre>.");
     }
     None
 }
@@ -126,7 +126,7 @@ fn validate(input: &Value) -> Result<&[Value]> {
             {
                 if let Some(preview) = opt.get("preview").and_then(Value::as_str) {
                     if let Some(error) = html_preview_error(preview) {
-                        bail!("Option \\"{label}\\" in question \\"{question}\\": {error}");
+                        bail!("Option \"{label}\" in question \"{question}\": {error}");
                     }
                 }
             }
