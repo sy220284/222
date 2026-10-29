@@ -384,10 +384,10 @@ impl PluginSet {
                 let Ok(mut server) = resolve_plugin_mcp_server(&location, name, server) else {
                     continue;
                 };
+                // Plugin-scoped MCP names may exceed the local config's
+                // short identifier limit; the original source scopes the full
+                // plugin and server names without truncating or rejecting them.
                 server.id = format!("{}_{}", name, server.id);
-                if server.id.len() > 64 {
-                    bail!("Plugin MCP tool prefix too long")
-                }
                 set.mcp_servers.push(server);
             }
         }
