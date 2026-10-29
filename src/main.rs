@@ -12,6 +12,7 @@ mod config;
 mod control_message_compat;
 mod cost;
 mod deep_link;
+mod deep_link_banner;
 mod detect_repository;
 mod diagnostics;
 mod env_validation;
@@ -199,6 +200,15 @@ enum Commands {
         #[arg(long)]
         add_global: bool,
     },
+    /// Show external-link origin, checkout path and Git fetch freshness
+    DeepLinkBanner {
+        #[arg(long)]
+        cwd: Option<PathBuf>,
+        #[arg(long)]
+        repo: Option<String>,
+        #[arg(long)]
+        prefill_length: Option<usize>,
+    },
     /// Parse a provider-neutral deep link without opening a terminal
     ParseDeepLink { uri: String },
     /// Encode an atlas-cli://open link for a reviewable prompt/workspace
@@ -339,6 +349,31 @@ async fn main() -> Result<()> {
             } else {
                 println!("{}", git_ignore::is_path_gitignored(pattern, &root));
             }
+            return Ok(());
+        }
+        Commands::DeepLinkBanner {
+            cwd,
+            repo,
+            prefill_length,
+        } => {
+            let root = canonical_workspace(cwd.as_deref().unwrap_or(&cli.workspace))?;
+            // Only report the repository as resolved when it really is the
+            // origin of the selected local checkout.
+            let found = detect_repository::detect_current_repository(&root);
+            let resolved = repo
+                .as_deref()
+                .filter(|slug| found.as_deref() == Some(*slug))
+                .map(ToOwned::to_owned);
+            let last_fetch = resolved
+                .as_ref()
+                .and_then(|_| deep_link_banner::read_last_fetch_time(&root));
+            let info = deep_link_banner::DeepLinkBannerInfo {
+                cwd: root,
+                repo: resolved,
+                prefill_length: *prefill_length,
+                last_fetch,
+            };
+            println!("{}", deep_link_banner::build_deep_link_banner(&info));
             return Ok(());
         }
         Commands::ParseDeepLink { uri } => {
