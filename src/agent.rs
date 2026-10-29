@@ -145,6 +145,8 @@ struct SdkAgentDefinition {
     prompt: String,
     model: Option<String>,
     tools: Option<std::collections::HashSet<String>>,
+    disallowed_tools: std::collections::HashSet<String>,
+    max_turns: Option<usize>,
 }
 
 pub struct Agent {
@@ -206,6 +208,7 @@ pub struct Agent {
     sdk_thinking_budget: Option<u32>,
     sdk_agent_definitions: std::collections::BTreeMap<String, SdkAgentDefinition>,
     sdk_allowed_tools: Option<std::collections::HashSet<String>>,
+    sdk_disallowed_tools: std::collections::HashSet<String>,
 }
 
 /// Match the source getTaskListId priority, with a provider-neutral explicit
@@ -329,6 +332,7 @@ impl Agent {
             sdk_thinking_budget: None,
             sdk_agent_definitions: std::collections::BTreeMap::new(),
             sdk_allowed_tools: None,
+            sdk_disallowed_tools: std::collections::HashSet::new(),
         })
     }
 
@@ -452,7 +456,7 @@ impl Agent {
             let definition = value.as_object()
                 .with_context(|| format!("SDK agent {name} must be an object"))?;
             for field in definition.keys() {
-                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools") {
+                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns") {
                     bail!("SDK agent {name} field {field} is not yet supported");
                 }
             }
@@ -486,11 +490,37 @@ impl Agent {
                 }
                 Some(_) => bail!("SDK agent {name} tools must be a list or comma-separated string"),
             };
+            let disallowed_tools = match definition.get("disallowedTools") {
+                None => std::collections::HashSet::new(),
+                Some(serde_json::Value::String(value)) => value.split(',')
+                    .map(str::trim).filter(|tool| !tool.is_empty())
+                    .map(str::to_owned).collect(),
+                Some(serde_json::Value::Array(values)) => {
+                    let mut names = std::collections::HashSet::new();
+                    for value in values {
+                        let tool = value.as_str().filter(|value| !value.trim().is_empty())
+                            .with_context(|| format!("SDK agent {name} disallowedTools must be strings"))?;
+                        names.insert(tool.to_owned());
+                    }
+                    names
+                }
+                Some(_) => bail!("SDK agent {name} disallowedTools must be a list or comma-separated string"),
+            };
+            let max_turns = match definition.get("maxTurns") {
+                None => None,
+                Some(value) => {
+                    let limit = value.as_u64().filter(|value| *value > 0 && *value <= usize::MAX as u64)
+                        .with_context(|| format!("SDK agent {name} maxTurns must be a positive integer"))?;
+                    Some(limit as usize)
+                }
+            };
             parsed.insert(name.clone(), SdkAgentDefinition {
                 description: description.to_owned(),
                 prompt: prompt.to_owned(),
                 model,
                 tools,
+                disallowed_tools,
+                max_turns,
             });
         }
         self.sdk_agent_definitions = parsed;
@@ -1517,6 +1547,10 @@ impl Agent {
         if let Some(definition) = sdk_definition {
             child.set_sdk_system_prompts(Some(&definition.prompt), None);
             child.sdk_allowed_tools = definition.tools;
+            child.sdk_disallowed_tools = definition.disallowed_tools;
+            if let Some(limit) = definition.max_turns {
+                child.max_steps = child.max_steps.min(limit);
+            }
         }
         let result = async {
             let inherited_mcp = self.mcp.as_ref().map_or_else(
@@ -3463,6 +3497,14 @@ impl Agent {
                     });
                 }
             }
+            if !self.sdk_disallowed_tools.is_empty() {
+                available_tools.retain(|tool| {
+                    tool.pointer("/function/name").or_else(|| tool.get("name"))
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|name| !self.sdk_disallowed_tools.contains(name)
+                            && !self.sdk_disallowed_tools.contains(crate::tool_names::canonical_name(name)))
+                });
+            }
             if let Some(allowed) = &self.sdk_allowed_tools {
                 available_tools.retain(|tool| {
                     tool.pointer("/function/name").or_else(|| tool.get("name"))
@@ -3621,7 +3663,8 @@ impl Agent {
                     })) || self.sdk_allowed_tools.as_ref().is_some_and(|allowed| {
                         !allowed.contains(&call.function.name)
                             && !allowed.contains(crate::tool_names::canonical_name(&call.function.name))
-                    });
+                    }) || self.sdk_disallowed_tools.contains(&call.function.name)
+                        || self.sdk_disallowed_tools.contains(crate::tool_names::canonical_name(&call.function.name));
                 let invalid_input = if restricted_by_role {
                     Some(format!(
                         "Tool {} is unavailable to this agent's tool policy",
