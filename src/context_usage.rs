@@ -18,6 +18,7 @@ pub struct Snapshot {
     pub attachment_tokens: u64,
     pub tool_calls: BTreeMap<String, (u64, u64)>,
     pub mcp_tools: Vec<Value>,
+    pub system_tools: Vec<Value>,
 }
 
 fn estimate(text: &str) -> u64 {
@@ -77,6 +78,7 @@ impl Snapshot {
             attachment_tokens: 0,
             tool_calls: BTreeMap::new(),
             mcp_tools: Vec::new(),
+            system_tools: Vec::new(),
         };
         for definition in &request.tools {
             let name = definition.pointer("/function/name")
@@ -89,6 +91,7 @@ impl Snapshot {
                     "tokens":tokens,"isLoaded":true}));
             } else {
                 result.built_in_tokens += tokens;
+                result.system_tools.push(json!({"name":name,"tokens":tokens}));
             }
         }
         result.count_messages(&request.messages);
@@ -158,7 +161,7 @@ impl Snapshot {
             + self.tool_result_tokens + self.attachment_tokens
     }
 
-    pub fn to_json(&self, usage: Option<TokenUsage>, from_last_request: bool) -> Value {
+    pub fn to_json(&self, usage: Option<TokenUsage>, from_last_request: bool, compact_available: bool) -> Value {
         let window = std::env::var("ATLAS_CONTEXT_WINDOW_TOKENS").ok()
             .and_then(|raw| raw.parse::<u64>().ok()).filter(|v| *v > 0);
         let total = self.total_tokens();
@@ -180,6 +183,52 @@ impl Snapshot {
             json!({"name":name,"callTokens":call,"resultTokens":result})
         ).collect::<Vec<_>>();
         let max = window.unwrap_or(0);
+        let auto_disabled = ["ATLAS_DISABLE_COMPACT", "ATLAS_DISABLE_AUTO_COMPACT"]
+            .iter().any(|key| std::env::var(key).ok().is_some_and(|value| {
+                matches!(value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on")
+            }));
+        let auto_enabled = compact_available && !auto_disabled;
+        let compact_threshold = window.map(|limit| {
+            if limit > 13_000 { limit - 13_000 } else { limit - limit / 4 }
+        }).unwrap_or(25_000);
+        let mut squares = Vec::new();
+        if max > 0 {
+            let width = if max >= 1_000_000 { 20 } else { 10 };
+            let count = width * 10;
+            for category in &categories {
+                let name = category["name"].as_str().unwrap_or("");
+                if name == "Free space" { continue; }
+                let tokens = category["tokens"].as_u64().unwrap_or(0);
+                if tokens == 0 { continue; }
+                let squares_for_category = ((tokens as f64 / max as f64)
+                    * count as f64).round().max(1.0) as usize;
+                for _ in 0..squares_for_category {
+                    if squares.len() >= count { break; }
+                    squares.push(json!({
+                        "color":category["color"],
+                        "isFilled":true,
+                        "categoryName":name,
+                        "tokens":tokens,
+                        "percentage":(tokens as f64 * 100.0 / max as f64).round(),
+                        "squareFullness":1.0
+                    }));
+                }
+            }
+            while squares.len() < count {
+                squares.push(json!({
+                    "color":"promptBorder","isFilled":true,
+                    "categoryName":"Free space",
+                    "tokens":max.saturating_sub(total),
+                    "percentage":(max.saturating_sub(total) as f64 * 100.0 / max as f64).round(),
+                    "squareFullness":1.0
+                }));
+            }
+        }
+        let grid_rows = if max == 0 { Vec::<Vec<Value>>::new() } else {
+            let width = if max >= 1_000_000 { 20 } else { 10 };
+            squares.chunks(width).map(|chunk| chunk.to_vec()).collect::<Vec<_>>()
+        };
         let api_usage = usage.map(|usage| json!({
             "input_tokens":usage.input_tokens,
             "output_tokens":usage.output_tokens,
@@ -192,12 +241,14 @@ impl Snapshot {
             "maxTokens":max,
             "rawMaxTokens":max,
             "percentage":if max > 0 { (total as f64 * 100.0 / max as f64).round() } else { 0.0 },
-            "gridRows":[],
+            "gridRows":grid_rows,
             "model":self.model,
             "memoryFiles":[],
             "mcpTools":self.mcp_tools,
+            "systemTools":self.system_tools,
             "agents":[],
-            "isAutoCompactEnabled":false,
+            "isAutoCompactEnabled":auto_enabled,
+            "autoCompactThreshold":compact_threshold,
             "messageBreakdown":{
                 "toolCallTokens":self.tool_call_tokens,
                 "toolResultTokens":self.tool_result_tokens,
@@ -214,8 +265,8 @@ impl Snapshot {
         })
     }
 
-    pub fn render(&self, usage: Option<TokenUsage>, from_last_request: bool) -> String {
-        let data = self.to_json(usage, from_last_request);
+    pub fn render(&self, usage: Option<TokenUsage>, from_last_request: bool, compact_available: bool) -> String {
+        let data = self.to_json(usage, from_last_request, compact_available);
         let mut output = format!("## Context Usage\n\nModel: {}\nEstimated tokens: {}\n",
             self.model, self.total_tokens());
         if data["windowKnown"] == true {
