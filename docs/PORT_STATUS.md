@@ -1,3 +1,10 @@
+## 2026-10-29：SDK 图文技能命令与插件配置敏感值保护（已提交、待验收）
+
+- **SDK 图文命令**：原版 `source/src/utils/processUserInput/processUserInput.ts:336–343,531–550` 从内容块最后一个文本块识别斜杠命令，同时保留前置图片。Rust `src/main.rs::sdk` 已对非排队 SDK 用户消息复用 `expand_user_skill_prompt`，修改实际送往模型的最后一个 text block，保留原图片和其他文本块，`skipSlashCommands` 继续阻断展开。提交 `64e2a9b99b4f3d7a8085977a2b2bb5f6fb9c315a`。原版完整图片处理、队列及取消仍缺。
+- **插件用户配置**：原版 `source/src/utils/plugins/pluginOptionsStorage.ts:34–77,385–400` 读取 `pluginConfigs[pluginId].options` 非敏感值、将 `userConfig.sensitive` 字段替换成说明性占位，避免真实秘密进入模型提示。Rust `src/permission_settings.rs::plugin_public_options` 从用户设置读取唯一插件配置来源；`src/plugins.rs::substitute_plugin_user_config` 依据 manifest.userConfig 遮蔽敏感字段并展开普通选项，用户插件斜杠命令和 `src/tools.rs::ToolExecutor::render_skill` 模型技能读取均已接入。提交 `f49b28cb0e0957e5e79f22720fcec8f56e9f0e0f`、`0b29f0a42bb19f444d3fa55b506f72cfbaa70d08`、`0b0ba2a76361d7f0b90e2ff8f06a4f3b6130d681`、`33257169c9782faccddcf13f646fe629c8d67f29`。
+- **本轮累计**：上述 SDK 图文命令 1 项、插件用户配置及敏感值保护 1 项，加上同轮 SDK/交互技能目录 3 项，共 **5/100 项，剩余 95 项**；按独立业务链保守计数，模型和用户双入口不拆分凑数。全部源码已提交、待行为验收，新增完整等价验收 0 项。
+- **剩余差异**：完整插件安全存储、选项保存与 schema 校验、市场作用域与多个同名插件、配置热重载、完整 YAML、SDK 队列与异步取消、图文输入后续模型/界面等价仍缺；先行100项逐函数确认清单尚未建立，Issue #3 冻结362项继续开放。按要求未运行 Cargo、测试或 CI。
+
 ## 2026-10-29：SDK 与交互命令目录读取真实技能说明（已提交、待验收）
 
 - **原版逐函数依据**：完整原始 ZIP 的 `source/src/cli/print.ts:4453–4460` 中 SDK initialize 按用户可调用命令输出 `description` 和 `argumentHint`；`source/src/skills/loadSkillsDir.ts:208–258,316–324`、`source/src/utils/plugins/loadPluginCommands.ts:230–263,288–313` 从 Markdown frontmatter 和正文提取描述及参数提示。
