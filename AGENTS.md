@@ -44,9 +44,15 @@ Issue #3 冻结的 362 条部分实现路径属于同一个完整闭环工单，
 
 原版源码及 Rust 真实调用链核对 → 明确缺口 → 完整实现相关业务链 → 正常/异常/恢复测试 → 修复失败 → 回归相邻模块 → 更新台账 → 真实提交 → 读取最新 HEAD/CI → 继续剩余内容。
 
-本仓库当前 CI 执行：
-- cargo check --all-targets
-- cargo test --all-targets
+本仓库当前 CI 使用锁定的依赖和 Rust 1.99.1 工具链执行：
+- `python3 scripts/port_workbench.py check --repo .` 及工作台测试
+- `cargo fmt --all -- --check`
+- `cargo clippy --locked --all-targets -- -D clippy::correctness -D clippy::suspicious`
+- `cargo check --locked --all-targets`
+- `cargo test --locked --all-targets`
+- 依赖安全公告检查。
+
+**提交前必须运行 `cargo fmt --all` 并复查上述门禁**。持续开发中的并行提交经常在完成后取消先前 CI，只有与当前 HEAD 对应且三个检查任务全部完成并成功，才可报告该版本 CI 通过。
 
 按需要增加格式、静态检查、CLI 子进程、模拟模型 HTTP、MCP/Hook 真实进程、文件系统、并发、权限、会话恢复、终端 UI、SDK 和远程协议等专项验证。未实际运行的命令不能声称通过；本地结果不能替代最新 PR HEAD 的 CI。
 
@@ -110,6 +116,6 @@ docs/FILE_PORT_MATRIX.md 是原路径唯一状态台账；docs/PORT_STATUS.md �
 
 - 每次恢复都以最新 PR Head、冻结 Issue #3 清单、源路径矩阵、真实代码/测试和 GitHub CI 重新计算未完成义务；历史聊天或 Agent 自称已完成不能成为跳过依据。工具与外部副作用先核对已落盘事实，不盲目重复。
 - 当代码、依赖、协议、权限、配置、验收规则或最新 Head 改变时，找出真正受影响的原路径和测试，重新验证并更正过期结论。保留其他仍有效的证据；不得全量重复研究已证实且未变化的部分。
-- 当前 CI 的正式配置只有 `cargo check --all-targets` 和 `cargo test --all-targets`。相关代码改动还应检查 `cargo fmt --all -- --check`、`cargo clippy --all-targets -- -D warnings`，以及实际影响的 CLI、HTTP 模拟模型、MCP/Hook 子进程、工具/权限/并发、会话/团队恢复、TUI、SDK、远程协议等专项测试；未执行或尚未纳入 CI 的项目必须如实标明，不能把文档新增规则冒充 CI 已执行。
+- 当前正式 CI 同时执行格式、Clippy 严格正确性/可疑代码检查、编译、完整测试、工作台验收与依赖安全检查。提交前运行 `cargo fmt --all`，再按实际影响运行上述命令及 CLI、HTTP 模拟模型、MCP/Hook 子进程、权限/并发、会话/团队恢复、TUI、SDK 和远程协议专项测试。CI 会因并行提交取消旧 HEAD 的运行，必须核验最新 HEAD 的实际完成状态；未执行或被取消的测试不得报告为通过。
 - 需要强化正式门禁时，应核对当前工具链和代码适配后实际修改工作流、执行并验证；不得降低现有门禁或者凭旧 SHA 宣布新提交通过。
 - 完成前同时核对 1,884 条非排除路径、Issue #3 固定工单、三级适用证据、用户入口、跨模块回归、真实 HEAD/CI 和未解决差异。任何重要条件尚未满足，继续处理或明确保持未完成；不能因为达到调用次数、当前回复结束或产出一份报告而宣称完整交付。
