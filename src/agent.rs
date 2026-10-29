@@ -1200,51 +1200,81 @@ impl Agent {
             let start = child
                 .hooks
                 .run(HookEvent::SubagentStart, Some(&agent_type), {
-                    let mut input = self.base_hook_input();
+                    // The hook belongs to the child session and worktree.
+                    let mut input = child.base_hook_input();
+                    input["permission_mode"] = json!(child.permission_mode.label());
                     input["agent_id"] = json!(child_id);
                     input["agent_type"] = json!(agent_type);
                     input
                 })
                 .await?;
+            child.report_hook_warnings(HookEvent::SubagentStart, &start);
             if let Some(reason) = start.blocking_reason {
                 bail!("SubagentStart hook blocked: {reason}")
             }
             if start.prevent_continuation {
                 bail!("SubagentStart hook stopped continuation")
             }
-            // Box the nested agent future to keep the recursive async type finite.
-            let response = Box::pin(child.ask(prompt)).await;
-            // The finish hook is invoked even if the provider request failed,
-            // so external cleanup hooks are not silently skipped.
-            let transcript = child
-                .root
-                .join(".atlas/sessions")
-                .join(format!("{child_id}.json"));
-            let stop = child
-                .hooks
-                .run(HookEvent::SubagentStop, Some(&agent_type), {
-                    let mut input = self.base_hook_input();
-                    input["permission_mode"] = json!(self.permission_mode.label());
-                    input["stop_hook_active"] = json!(false);
-                    input["agent_id"] = json!(child_id);
-                    input["agent_type"] = json!(agent_type);
-                    input["agent_transcript_path"] = json!(transcript);
-                    if let Ok(answer) = &response {
-                        input["last_assistant_message"] = json!(answer);
-                    }
-                    input
-                })
-                .await;
-            if let Ok(outcome) = &stop {
-                if let Some(reason) = &outcome.blocking_reason {
-                    bail!("SubagentStop hook blocked: {reason}")
+            let mut continuation = prompt.to_owned();
+            let mut stop_hook_active = false;
+            let mut continuation_rounds = 0usize;
+            let answer = loop {
+                // Box the recursive agent future. SubagentStop must run even
+                // if the model request fails, including isolated worktrees.
+                let response = Box::pin(child.ask(&continuation)).await;
+                let transcript = child
+                    .root
+                    .join(".atlas/sessions")
+                    .join(format!("{child_id}.json"));
+                let stop = child
+                    .hooks
+                    .run(HookEvent::SubagentStop, Some(&agent_type), {
+                        let mut input = child.base_hook_input();
+                        input["permission_mode"] = json!(child.permission_mode.label());
+                        input["stop_hook_active"] = json!(stop_hook_active);
+                        input["agent_id"] = json!(child_id);
+                        input["agent_type"] = json!(agent_type);
+                        input["agent_transcript_path"] = json!(transcript);
+                        if let Ok(answer) = &response {
+                            input["last_assistant_message"] = json!(answer);
+                        }
+                        input
+                    })
+                    .await?;
+                child.report_hook_warnings(HookEvent::SubagentStop, &stop);
+                if stop.prevent_continuation {
+                    let reason = stop
+                        .stop_reason
+                        .as_deref()
+                        .unwrap_or("SubagentStop hook prevented continuation");
+                    child.emit(json!({
+                        "type":"hook_stopped_continuation",
+                        "hook_event":"SubagentStop",
+                        "message":reason,
+                    }));
+                    bail!("SubagentStop hook stopped continuation: {reason}")
                 }
-                if outcome.prevent_continuation {
-                    bail!("SubagentStop hook stopped continuation")
+                let answer = response?;
+                if stop.blocking_reasons.is_empty() {
+                    break answer;
                 }
-            }
-            let answer = response?;
-            stop?;
+                stop_hook_active = true;
+                continuation_rounds += 1;
+                if continuation_rounds >= child.max_steps {
+                    bail!(
+                        "Subagent exceeded {} stop-hook continuation rounds; session saved",
+                        child.max_steps
+                    )
+                }
+                continuation = format!(
+                    "{}\nContinue the assigned work before finishing.",
+                    stop.blocking_reasons
+                        .iter()
+                        .map(|reason| format!("SubagentStop hook feedback:\n{reason}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                );
+            };
             Ok::<_, anyhow::Error>(answer)
         }
         .await;
