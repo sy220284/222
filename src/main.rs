@@ -1559,6 +1559,7 @@ async fn chat(
                 println!("/copy [N] [--code K]     copy recent assistant text or a fenced code block");
                 println!("/diff                    view staged, unstaged and untracked Git changes");
                 println!("/skills                  list accessible project and plugin skills");
+                println!("/agents                  list project and user custom agent definitions");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
@@ -1657,6 +1658,13 @@ async fn chat(
                     Ok(skills) if skills.is_empty() => println!("No accessible skills."),
                     Ok(skills) => println!("{skills}"),
                     Err(error) => eprintln!("Cannot list skills: {error:#}"),
+                }
+                continue;
+            }
+            "/agents" => {
+                match agent.list_agents() {
+                    Ok(agents) => println!("{agents}"),
+                    Err(error) => eprintln!("Cannot list agents: {error:#}"),
                 }
                 continue;
             }
