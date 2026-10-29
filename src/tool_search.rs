@@ -207,7 +207,7 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
             }
         }
         scored.sort_by(|a, b| b.1.cmp(&a.1));
-        matches = scored.into_iter().take(max).map(|(name, _, _)| name).collect();
+        matches = scored.into_iter().take(max).map(|(name, _)| name).collect();
     }
     let schemas: Vec<Value> = tools
         .iter()
