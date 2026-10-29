@@ -23,12 +23,14 @@ pub struct Task {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "activeForm", alias = "active_form")]
     pub active_form: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
     #[serde(default)]
     pub blocks: Vec<u64>,
     #[serde(default)]
+    #[serde(rename = "blockedBy", alias = "blocked_by")]
     pub blocked_by: Vec<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Map<String, Value>>,
@@ -130,6 +132,7 @@ fn dispatch(session: &mut Session, call: &ToolCall) -> Result<String> {
                     continue;
                 }
                 let mut item = serde_json::to_value(task)?;
+                item["subject"] = json!(task.title);
                 item["blockedBy"] = json!(task.blocked_by.iter()
                     .filter(|id| !completed.contains(id))
                     .collect::<Vec<_>>());
