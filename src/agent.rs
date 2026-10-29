@@ -2575,6 +2575,10 @@ impl Agent {
         candidate.surfaced_memory_units = 0;
         candidate.save(&self.root)?;
         self.session = candidate;
+        // Source compact.ts clears the read cache when the transcript is
+        // replaced. Stale read authority must not survive compaction.
+        self.notebook_reads.lock().unwrap().clear();
+        self.file_reads.lock().unwrap().clear();
         self.last_context_usage = None;
         self.last_model_usage = None;
         // Source services/compact/compact.ts marks compaction complete and
@@ -2647,6 +2651,10 @@ impl Agent {
         // Prepare the new durable session before swapping the active state.
         next.save(&self.root)?;
         self.session = next;
+        // A new session cannot inherit file-read authorization from the
+        // previous conversation, even when the workspace is unchanged.
+        self.notebook_reads.lock().unwrap().clear();
+        self.file_reads.lock().unwrap().clear();
         self.last_context_usage = None;
         self.last_model_usage = None;
         self.auto_compact_failures = 0;
