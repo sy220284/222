@@ -335,7 +335,25 @@ pub fn policy_for(rules: &[Rule], command: &str) -> Result<Option<Behavior>> {
         // cmdlet. With no matching rule this must still force a prompt:
         // returning None would let --approval full execute it silently.
         if decision != Some(Behavior::Deny) && looks_like_application(command) {
-            return Ok(Some(Behavior::Ask));
+            let (raw, rest) = split_command(command.trim());
+            let basename = raw.rsplit(['\\', '/']).next().unwrap_or(raw);
+            let unqualified = make_command(basename, rest);
+            // Ask only when a cmdlet allow rule would otherwise be inherited
+            // by this script/executable path. An unrelated application keeps
+            // its normal no-match result; a module-specific allow must not
+            // authorize a different module with the same basename.
+            for rule in rules {
+                if rule.behavior != Behavior::Allow || rule.value.tool_name != "PowerShell" {
+                    continue;
+                }
+                let matched = match rule.value.rule_content.as_deref() {
+                    Some(pattern) => matches_rule(pattern, &unqualified, true)?,
+                    None => true,
+                };
+                if matched {
+                    return Ok(Some(Behavior::Ask));
+                }
+            }
         }
         return Ok(decision);
     }
@@ -504,7 +522,10 @@ mod tests {
         );
         let rules = compiled(&[("allow", "PowerShell(Get-ChildItem:*)")]);
         assert_eq!(policy_for(&rules, "sort test").unwrap(), None);
-        assert_eq!(policy_for(&rules, r".\Get-ChildItem foo").unwrap(), None);
+        assert_eq!(
+            policy_for(&rules, r".\Get-ChildItem foo").unwrap(),
+            Some(Behavior::Ask)
+        );
     }
     #[test]
     fn compound_scripts_cannot_bypass_later_denies_or_unknown_statements() {
