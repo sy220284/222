@@ -33,6 +33,7 @@ pub struct ToolExecutor {
     extra_roots: Vec<PathBuf>,
     shell_kind: crate::shell_runtime::ShellKind,
     session_env: std::collections::BTreeMap<String, String>,
+    session_id: Option<String>,
     approval: Approval,
     interactive: bool,
     reads: Mutex<HashMap<PathBuf, u64>>,
@@ -51,6 +52,7 @@ impl ToolExecutor {
             extra_roots: Vec::new(),
             shell_kind: crate::shell_runtime::ShellKind::default(),
             session_env: std::collections::BTreeMap::new(),
+            session_id: None,
             approval,
             interactive,
             reads: Mutex::new(HashMap::new()),
@@ -73,6 +75,10 @@ impl ToolExecutor {
     }
     pub fn with_environment(mut self, env: std::collections::BTreeMap<String, String>) -> Self {
         self.session_env = env;
+        self
+    }
+    pub fn with_session_id(mut self, session_id: String) -> Self {
+        self.session_id = Some(session_id);
         self
     }
     pub fn with_metrics(mut self, metrics: Arc<ToolMetrics>) -> Self {
@@ -825,7 +831,14 @@ impl ToolExecutor {
             &names,
         );
         // Provider-neutral equivalent of the original skill directory macro.
-        Ok(rendered.replace("${SKILL_DIR}", &dir))
+        let rendered = rendered.replace("${SKILL_DIR}", &dir);
+        // Source loadSkillsDir.ts replaces the active session identifier
+        // after positional argument expansion. Keep the token neutral to
+        // the configured model provider.
+        Ok(match self.session_id.as_deref() {
+            Some(id) => rendered.replace("${SESSION_ID}", id),
+            None => rendered,
+        })
     }
 
     async fn git_read(&self, arguments: Vec<String>) -> Result<String> {
