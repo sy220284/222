@@ -5739,7 +5739,10 @@ fn project_init_uses_real_repo_landmarks_and_interactive_model_questions() {
         .unwrap();
     // The source AskUserQuestion result is the human-readable tool message
     // produced from the actual terminal answer; no model-forged JSON answers.
-    assert!(returned.contains("User has answered your questions:"), "{returned}");
+    assert!(
+        returned.contains("User has answered your questions:"),
+        "{returned}"
+    );
     assert!(
         returned.contains("\"Which instruction documents?\"=\"Project AGENTS.md\""),
         "{returned}"
