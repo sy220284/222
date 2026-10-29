@@ -2331,3 +2331,64 @@ done"#;
     assert_eq!(item("unsubscribe")["response"]["response"]["subscribed"],false);
     assert_eq!(item("duplicate-unsub")["result"]["already_unsubscribed"],true);
 }
+
+
+#[cfg(unix)]
+#[test]
+fn sdk_mcp_prompt_slash_command_binds_arguments_and_sends_real_model_request(){
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let http=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=http.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let (mut stream,_)=http.accept().unwrap();
+        let request=read_request(&mut stream);
+        let output=json!({"choices":[{"message":{"role":"assistant",
+            "content":"MCP command executed and sent to model."},
+            "finish_reason":"stop"}]}).to_string();
+        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{output}",output.len()).unwrap();
+        stream.flush().unwrap();
+        request
+    });
+    let script=r#"while IFS= read -r line; do
+case "$line" in
+ *'"id":1'*) echo '{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"prompts"},"capabilities":{"tools":{},"prompts":{}}}}' ;;
+ *'"id":2'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}' ;;
+ *'"id":3'*) echo '{"jsonrpc":"2.0","id":3,"result":{"prompts":[{"name":"review","description":"Review a change","arguments":[{"name":"goal"},{"name":"mode"}]}]}}' ;;
+ *'"id":5'*) echo '{"jsonrpc":"2.0","id":5,"result":{"prompts":[{"name":"review","description":"Review a change","arguments":[{"name":"goal"},{"name":"mode"}]}]}}' ;;
+ *'"id":4'*)
+   case "$line" in
+     *'"goal":"alpha"'*'"mode":"beta"'*)
+       echo '{"jsonrpc":"2.0","id":4,"result":{"messages":[{"role":"user","content":{"type":"text","text":"review alpha beta"}},{"role":"assistant","content":{"type":"text","text":"Use safe checks"}}]}}' ;;
+     *)
+       echo '{"jsonrpc":"2.0","id":4,"error":{"code":-32602,"message":"wrong prompt arguments"}}' ;;
+   esac ;;
+esac
+done"#;
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","base_url":format!("http://{addr}/v1"),
+        "model":"mcp-test"
+    }],"mcp_servers":[{"id":"docs","command":"sh","args":["-c",script]}]})
+    .to_string()).unwrap();
+    let mut child=binary().args(["--workspace",root.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped()).stdout(Stdio::piped())
+        .stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=child.stdin.take().unwrap();
+        writeln!(input,"{}",json!({"type":"user","content":
+            "/docs:review (MCP) alpha beta"})).unwrap();
+        writeln!(input,"{}",json!({"type":"control",
+            "action":"mcp_prompt_commands","request_id":"listing"})).unwrap();
+    }
+    let result=child.wait_with_output().unwrap();
+    assert!(result.status.success(),"{}",String::from_utf8_lossy(&result.stderr));
+    let output=String::from_utf8(result.stdout).unwrap();
+    assert!(output.contains("MCP command executed and sent to model."),"{output}");
+    assert!(output.contains("mcp__docs__review"),"{output}");
+    assert!(output.contains("docs:review (MCP)"),"{output}");
+    let request=server.join().unwrap();
+    assert!(request.contains("review alpha beta"),"{request}");
+    assert!(request.contains("Use safe checks"),"{request}");
+    assert!(!request.contains("/docs:review (MCP)"),"{request}");
+}

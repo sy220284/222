@@ -12,6 +12,7 @@ mod semantic_inputs;
 mod xml_escape;
 mod json_read;
 mod slash_command;
+mod mcp_prompt;
 mod hooks;
 mod worktree;
 mod mcp;
@@ -221,6 +222,8 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
                 println!("/mode                    cycle permission mode (default/accept edits/plan)");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
+                println!("/mcp-prompts             list available MCP prompt commands");
+                println!("/server:prompt (MCP) ARGS  execute an MCP prompt");
                 println!("/exit                    quit");
                 continue;
             }
@@ -234,6 +237,16 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             "/tasks" => {
                 println!("{}",agent.background_tasks()?);
+                continue;
+            }
+            "/mcp-prompts" => {
+                let catalog=agent.list_mcp_prompt_commands().await?;
+                let cmds=catalog.as_array().expect("MCP commands are an array");
+                if cmds.is_empty() {println!("No MCP prompt commands are available.");}
+                for cmd in cmds{
+                    println!("/{} — {}",cmd["userFacingName"].as_str().unwrap_or(""),
+                        cmd["description"].as_str().unwrap_or(""));
+                }
                 continue;
             }
             "/cost" => {
@@ -390,6 +403,16 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     }
                     continue;
                 }
+                if action=="mcp_prompt_commands" {
+                    let outcome=agent.list_mcp_prompt_commands().await;
+                    match outcome{
+                        Ok(value)=>send_control!(json!({"type":"control_response",
+                            "action":action,"ok":true,"result":value})),
+                        Err(error)=>send_control!(json!({"type":"control_response",
+                            "action":action,"ok":false,"error":format!("{error:#}")})),
+                    }
+                    continue;
+                }
                 if matches!(action,"mcp_resources"|"mcp_prompts"|
                     "mcp_resource_templates"|"mcp_read_resource"|"mcp_get_prompt"|
                     "mcp_resource_subscribe"|"mcp_resource_unsubscribe"|
@@ -511,6 +534,7 @@ async fn sdk_nested_control(agent:&mut Agent,config:&Config,event:&Value,
             "mcp_status"=>{
                 Ok(json!({"mcpServers":agent.mcp_statuses()?}))
             },
+            "mcp_prompt_commands"=>agent.list_mcp_prompt_commands().await,
             "mcp_resources"|"mcp_prompts"|"mcp_resource_templates"|
             "mcp_read_resource"|"mcp_get_prompt"|
             "mcp_resource_subscribe"|"mcp_resource_unsubscribe"|

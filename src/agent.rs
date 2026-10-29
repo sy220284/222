@@ -784,6 +784,37 @@ impl Agent {
         self.mcp.as_mut().context("No MCP servers configured")?
             .get_prompt(server,name,args).await
     }
+
+    pub async fn list_mcp_prompt_commands(&mut self)->Result<serde_json::Value>{
+        let catalog=self.mcp_catalog("prompts").await?;
+        Ok(json!(crate::mcp_prompt::listed_commands(&catalog)?))
+    }
+
+    /// An MCP prompt is only invoked by an explicit /server:prompt (MCP)
+    /// command. Discover its metadata first, then bind positional arguments.
+    /// This is a user request, not a privileged system instruction.
+    async fn expand_mcp_prompt_command(&mut self,text:&str)->Result<Option<String>>{
+        let Some(call)=crate::mcp_prompt::parse(text)? else{return Ok(None)};
+        let mcp=self.mcp.as_mut().context("No MCP servers configured")?;
+        let catalog=mcp.catalog("prompts").await?;
+        let servers=catalog.get("servers").and_then(serde_json::Value::as_array)
+            .context("Invalid MCP prompt catalog")?;
+        let found=servers.iter().filter(|s|s["server"].as_str()==Some(call.server.as_str()))
+            .collect::<Vec<_>>();
+        if found.len()!=1{bail!("Unknown or ambiguous MCP server: {}",call.server)}
+        let listing=found[0];
+        if listing["ok"]!=true {
+            bail!("MCP prompt catalog unavailable for {}",call.server)
+        }
+        let prompt=listing.get("items").and_then(serde_json::Value::as_array)
+            .context("MCP prompt items missing")?.iter()
+            .find(|item|item["name"].as_str()==Some(call.name.as_str()))
+            .with_context(||format!("Unknown MCP prompt {}:{}",call.server,call.name))?;
+        let args=crate::mcp_prompt::named_arguments(prompt,&call.args)?;
+        let result=mcp.get_prompt(&call.server,&call.name,&args).await?;
+        crate::mcp_prompt::render_response(&call.server,&call.name,&result).map(Some)
+    }
+
     pub fn background_tasks(&self) -> Result<String> { self.background.list() }
     pub async fn stop_background_task(&self,id:&str)->Result<String>{
         self.background.stop(id).await
@@ -898,6 +929,10 @@ impl Agent {
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
         let ask_started=Instant::now();
         if prompt.trim().is_empty() { bail!("Prompt cannot be empty") }
+        // Expand only explicitly marked MCP commands. A failed resource/prompt
+        // request must not fall through to the normal provider as raw syntax.
+        let expansion=self.expand_mcp_prompt_command(prompt).await?;
+        let prompt=expansion.as_deref().unwrap_or(prompt);
         let history_chars: usize = self.session.messages.iter()
             .map(|m| m.content.as_deref().unwrap_or("").len()
                 + m.tool_calls.as_ref().map(|c| c.iter()

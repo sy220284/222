@@ -263,3 +263,7 @@ SDK 排队的 `task-notification` 消息现在会在调用模型之前产生单�
 MCP 支持 SDK 控制：`mcp_resources`、`mcp_resource_templates`、`mcp_prompts` 查询所有连接的 MCP 服务目录（单服务失败不影响其他成功结果）；`mcp_read_resource` 需提供 `server` 和 `uri`；`mcp_get_prompt` 需提供 `server`、`name` 和可选字符串键值 `arguments`。`control_request.request.subtype` 与 `control.action` 均支持这五项。返回完整 MCP JSON 内容块，包含资源的二进制 base64 与提示结构。该部分仍未覆盖完整 MCP 订阅/鉴权/提示作为 slash 命令等功能。
 
 MCP SDK 新增 `mcp_resource_subscribe`、`mcp_resource_unsubscribe`（均需 `server` 与 `uri`），以及 `mcp_resource_updates`（取走已收到的结构化资源更新通知）。只有 MCP 服务声明 `capabilities.resources.subscribe=true` 时才允许订阅，同一资源重复请求不会重复发 RPC；目前 stdio 和正在处理的 HTTP SSE 响应中收到的通知可用，独立 GET 事件流及断线恢复仍待补齐。
+
+### MCP Prompt 命令
+
+在 `chat` 终端中输入 `/mcp-prompts` 显示已连接 MCP 服务的 Prompt，或执行 `/服务器名:Prompt名称 (MCP) 参数1 参数2`。SDK 的 `user.content` 也接受同样命令，`mcp_prompt_commands`（平铺 `action` 或嵌套 `subtype`）返回命令名称、可见名称、描述及参数名。仅用户显式调用，服务端文本作为普通用户上下文交给配置的模型；不支持的图片、音频或嵌入资源会明确报错。

@@ -275,3 +275,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：MCP 单服务断线恢复和工具请求安全重试（Issue #3）
 
 原版 `services/mcp/client.ts` 对 SSE/进程断开后清除失效连接和工具缓存，下一次操作应重新建立连接；且原样重放已发送的 `tools/call` 可能产生重复副作用。Rust `McpManager` 保存每个配置，新增逐服务 `reconnect_failed`：运行时检测子进程退出、HTTP MCP Session 404，将该服务标记失效；下一模型轮次独立重建会话、完成工具重新发现、校验 alias 冲突并恢复显式订阅。所有 I/O 与校验通过后再一次性替换目标客户端、路由/工具定义和 SDK 状态；其他健康服务不受影响。执行过但未收到结果的 `tools/call` 不自动重放，防止未知远端副作用重复发生。新增真实 stdio 进程首轮退出后重新启动并识别新工具 schema 的集成测试；原版完整退避、并发重连去重、HTTP GET 长连订阅与 OAuth 等仍待实现，源路径保持部分实现。
+
+### 2026-10-29：原始 MCP Prompt 命令至真实模型请求的调用链（统一 Issue #3）
+
+对照原始 `src/services/mcp/client.ts` 第 2033–2096 行 `fetchCommandsForClient`：新增 `src/mcp_prompt.rs`，只识别显式 `/server:prompt (MCP) 参数` 标记；按原版 `args.split(' ')` 的位置顺序绑定 `arguments` 名称。`Agent::ask` 在 UserPromptSubmit Hook 和会话持久化前，从 MCP `prompts/list` 验证显式请求的来源/名称，再调用 `prompts/get`，将文本消息（按 role 顺序）作为普通用户上下文交给现有多模型 Agent。禁止将服务端 Prompt 升格为系统指令；图片/音频/嵌入资源等目前 ModelRequest 不支持的内容显式拒绝而非静默丢弃。SDK 和终端均通过此 Agent 主链使用，增加 `/mcp-prompts` 与 SDK `mcp_prompt_commands` 的列表、描述与 argNames。新增真实 stdio MCP 子进程+HTTP 模型模拟服务+SDK 输入的端到端集成测试，断言参数、模型请求内容和命令可见性；另有空格、非法名称、非文本拒绝单测。仍需多模态消息、完整 Prompt 命令生命周期、远程认证/重连等完整等价；**没有升级任何源文件验收状态**。
