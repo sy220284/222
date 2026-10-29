@@ -184,6 +184,13 @@ impl HookRunner {
                 .non_blocking_errors
                 .extend(response.non_blocking_errors);
             if let Some(updated) = response.updated_input {
+                // Sequential PreToolUse hooks must see the same effective
+                // arguments that will eventually reach the executor.
+                // Updating only the final outcome lets later hooks approve
+                // a different command from the one that actually runs.
+                if event.name() == "PreToolUse" {
+                    effective_input["tool_input"] = updated.clone();
+                }
                 outcome.updated_input = Some(updated);
             }
             if let Some(decision) = response.permission_decision {
@@ -909,6 +916,35 @@ mod tests {
         assert!(result.contains("Exit: exit status: 0"), "{result}");
         assert!(root.path().join("after_warning").exists());
         assert!(!root.path().join("before_warning").exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn chained_pretool_hooks_validate_rewritten_input_before_execution() {
+        let runner = HookRunner::new(&[
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"rm sensitive"}}}'"#.into(),
+                timeout_seconds: 3,
+            },
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: r#"cat | grep -q 'rm sensitive' && { echo 'changed command blocked' >&2; exit 2; } || { echo 'expected rewritten input' >&2; exit 2; }"#.into(),
+                timeout_seconds: 3,
+            },
+        ]).unwrap();
+        let call = ToolCall {
+            id: "rewrite-check".into(),
+            kind: "function".into(),
+            function: crate::protocol::FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":"echo safe"}).to_string(),
+            },
+        };
+        let outcome = runner.before_tool(&call).await.unwrap();
+        assert_eq!(outcome.blocking_reason.as_deref(), Some("changed command blocked"));
     }
 
     #[cfg(unix)]
