@@ -89,7 +89,7 @@ pub struct HookRule {
     /// User-configured local command. Never downloaded or installed automatically.
     pub command: String,
     /// The source selects a shell per hook; legacy hooks default to Bash.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell: Option<crate::shell_runtime::ShellKind>,
     #[serde(default = "default_timeout")]
     pub timeout_seconds: u64,
