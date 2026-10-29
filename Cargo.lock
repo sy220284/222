@@ -93,11 +93,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "dirs",
  "fs2",
  "futures",
+ "getrandom 0.2.17",
  "globset",
  "indexmap",
  "libc",
