@@ -1,5 +1,13 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：OAuth 浏览器回调异步时序与非法 HTTP 请求恢复（源码已修复，文件未验收）
+
+- **原版源码对照**：用户上传 `claude-code-2.1.88-main(1).zip` 中 `source/src/services/oauth/auth-code-listener.ts` 的 `startLocalListener`（先安装请求监听、`void onReady()`，不等待浏览器启动结束）、`handleRedirect`、`validateAndRespond`、`close`；关联 Rust 实际入口 `src/main.rs` 的 `oauth-listen` 命令。
+- **真实代码补齐**：`src/oauth_callback_listener.rs` 通过独立异步启动任务与 `tokio::select!` 同时等待浏览器回调，解决原 Rust 先 `await on_ready()` 再 `accept()` 导致的授权死锁；即使回调先完成，启动任务也不被取消。请求头无效、超长、超时或 URI 无法解析时发送 400/431/408 并继续等待后续合法回调，不让恶意或误发请求中断授权；16 KiB 边界按真实字节检查。保留 CSRF state 校验、回环地址限制、延后成功 302。
+- **实际验证**：`oauth_callback_listener::tests::browser_callback_is_accepted_while_on_ready_is_still_pending` 使用真实 TCP 回调与未完成的浏览器启动任务证明并发与后续继续执行；`malformed_http_and_oversized_headers_do_not_abort_browser_authorization` 注入非法 UTF-8、超长头并随后用正确 code/state 完成 302。完整 GitHub Actions [40852563169](https://github.com/sy220284/222/actions/runs/40852563169) 在代码 HEAD `79333e56f758e0672d3acdc692fac8de80f29e4f` 通过格式、静态分析、依赖检查、编译和全部测试，两个新增测试均通过。
+- **验收限制**：原版自定义成功回调、完整 token 客户端、SDK/UI 与取消生命周期仍缺，`src/services/oauth/auth-code-listener.ts` 继续“部分实现”，不计源文件完整验收。此轮按两个独立用户可感知的异常恢复/并发授权场景补齐，**100 项硬目标未完成**；Issue #3 冻结 362 项不勾选。
+
+
 ## 2026-10-29：OAuth 用户资料查询的真实 HTTP 移植
 
 原 `src/services/oauth/getOauthProfile.ts` 两条真实请求路径迁为 `src/oauth_profile.rs`：账户 UUID + API key 查询和 OAuth Bearer 用户资料查询，10 秒超时、成功 JSON 返回、4xx/5xx、网络失败/无效 JSON 返回无资料。原固定厂商域名和请求扩展头改成用户可配置的多提供商端点。通过 Tokio 本机 TCP 服务器确认实际请求头、查询参数、真实响应与错误，不伪造网络结果。原账号资料持久化及 OAuth 主客户端尚未对接，该源文件仍是部分实现。
