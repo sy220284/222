@@ -587,6 +587,21 @@ fn command_with_user_config(
     prompt.map(|text| substitute_plugin_user_config(&text, manifest, plugin_root)).transpose()
 }
 
+/// Apply the same user-config safety rules when the model reads a plugin
+/// skill directly, rather than through the user's slash command.
+pub fn expand_skill_user_config(
+    root: &Path, enabled: &[String], identifier: &str, prompt: &str,
+) -> Result<String> {
+    let (plugin, _) = identifier.split_once(':')
+        .context("Plugin skill requires plugin:name")?;
+    if !valid_name(plugin) || !enabled.iter().any(|name| name == plugin) {
+        bail!("Plugin skill not enabled")
+    }
+    let location = directory(root, plugin)?;
+    let manifest = read_manifest(&location, plugin)?;
+    substitute_plugin_user_config(prompt, &manifest, &location)
+}
+
 /// Expand the plugin root after argument substitution, as the original
 /// getPromptForCommand does. Never treat the expanded text as a shell command.
 fn plugin_command_body(content: &str, args: &str, root: &Path, session_id: Option<&str>) -> Result<Option<String>> {
