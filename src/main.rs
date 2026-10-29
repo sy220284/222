@@ -1302,7 +1302,7 @@ async fn run_cli() -> Result<()> {
 
 /// Resolve a real user-invocable skill or plugin command. Shared by the
 /// interactive CLI and SDK so the same frontmatter restrictions apply.
-fn expand_user_skill_prompt(
+pub(crate) fn expand_user_skill_prompt(
     agent: &Agent, config: &Config, command: &str, args: &str, is_mcp: bool,
 ) -> Result<Option<String>> {
     if is_mcp {
@@ -2425,7 +2425,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 }
                 if action.starts_with("queue_") {
                     let outcome =
-                        sdk_queue::control(action, &event, &mut queue, &mut query_guard, agent)
+                        sdk_queue::control(action, &event, &mut queue, &mut query_guard, agent, config)
                             .await;
                     match outcome {
                         Ok(result) => send_control!(json!({"type":"control_response",

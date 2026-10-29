@@ -16,6 +16,7 @@ pub async fn control(
     queue: &mut Queue,
     guard: &mut QueryGuard,
     agent: &mut Agent,
+    config: &crate::config::Config,
 ) -> Result<Value> {
     match action {
         "queue_enqueue" => {
@@ -136,13 +137,30 @@ pub async fn control(
                     })
                     .cloned();
                 let Some(next) = ready else { break };
+                // processUserInput.ts::processUserInputBase expands queued
+                // user-invocable slash skills when they reach the query engine.
+                // Resolve before dequeue so a denied or malformed skill stays
+                // available for inspection instead of disappearing.
+                let slash_expansion = if next.command.mode == Mode::Prompt
+                    && next.command.is_slash() {
+                    let parsed = next.command.value.as_str()
+                        .and_then(|value| crate::slash_command::parse_slash_command(value.trim_start()));
+                    match parsed {
+                        Some(parsed) => crate::expand_user_skill_prompt(
+                            agent, config, &parsed.command_name, &parsed.args, parsed.is_mcp,
+                        )?,
+                        None => None,
+                    }
+                } else {
+                    None
+                };
                 // Bail without consuming unsupported messages. A future caller
                 // can edit, inspect or explicitly remove them.
                 // Preserve completed results if a later item requires a different handler.
                 let reason = match &next.command.mode {
                     Mode::Bash => Some("bash"),
                     Mode::OrphanedPermission => Some("permission"),
-                    _ if next.command.is_slash() => Some("slash-command"),
+                    _ if next.command.is_slash() && slash_expansion.is_none() => Some("slash-command"),
                     _ if crate::multimodal::parse(&next.command.value).is_err() => {
                         Some("unsupported-content")
                     }
@@ -174,6 +192,9 @@ pub async fn control(
                 // with equal workload/meta even when values mix text and
                 // image blocks: join_prompt_values preserves their order.
                 while processed + batch.len() < max {
+                    // A slash skill is a complete user turn, never batch it
+                    // with the following prompt even if workload matches.
+                    if slash_expansion.is_some() { break; }
                     let candidate = queue
                         .peek(|c| {
                             c.agent_id.is_none()
@@ -197,12 +218,13 @@ pub async fn control(
                         .context("queued follower disappeared")?;
                     batch.push(follower);
                 }
-                let joined = queued_prompt_batch::join_prompt_values(
-                    &batch
-                        .iter()
-                        .map(|i| i.command.value.clone())
-                        .collect::<Vec<_>>(),
-                );
+                let joined = if let Some(expanded) = slash_expansion {
+                    Value::String(expanded)
+                } else {
+                    queued_prompt_batch::join_prompt_values(
+                        &batch.iter().map(|i| i.command.value.clone()).collect::<Vec<_>>(),
+                    )
+                };
                 // Content is validated before dequeue; retain image blocks
                 // through real provider wire conversion and session persistence.
                 let structured = crate::multimodal::parse(&joined)?;
