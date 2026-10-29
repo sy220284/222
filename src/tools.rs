@@ -729,7 +729,7 @@ mod tests {
         }
     }
     #[tokio::test]
-    async fn read_deny_cannot_be_bypassed_through_search_or_listing(){
+    async fn read_rules_apply_to_search_roots_and_custom_scanners(){
         let root=tempfile::tempdir().unwrap();
         fs::create_dir(root.path().join("secrets")).unwrap();
         fs::write(root.path().join("secrets/key.txt"),"secret-marker").unwrap();
