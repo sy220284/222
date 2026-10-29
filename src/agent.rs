@@ -1895,11 +1895,12 @@ impl Agent {
     pub async fn toggle_named_mcp(
         &mut self, name: &str, enabled: bool,
     ) -> Result<serde_json::Value> {
-        let manager = self.mcp.as_ref().context("No MCP servers configured")?;
+        if self.mcp.is_none() {
+            bail!("No MCP servers configured");
+        }
         if !self.mcp_configs.iter().any(|server| server.id == name) {
             bail!("MCP server {name:?} not found");
         }
-        let _ = manager;
         let mut disabled = load_disabled_mcp_servers()?;
         if enabled { disabled.remove(name); } else { disabled.insert(name.to_owned()); }
         save_disabled_mcp_servers(&disabled)?;

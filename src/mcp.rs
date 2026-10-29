@@ -635,7 +635,6 @@ impl McpManager {
         Ok(())
     }
 
-    /// Reconnect one exact server without disrupting healthy peers.
     /// Enable or disable one configured MCP server without touching healthy
     /// peers. Disabling drops its transport (stdio children use kill_on_drop),
     /// tool routes and resource subscriptions before returning to the SDK.
@@ -643,7 +642,10 @@ impl McpManager {
         let position = self.configs.iter().position(|server| server.id == name)
             .with_context(|| format!("MCP server {name:?} not found"))?;
         if enabled {
-            if self.disabled.remove(name) {
+            let was_disabled = self.disabled.remove(name);
+            // An already-enabled server can have failed since its last
+            // request; an explicit enable also acts as a safe reconnect.
+            if was_disabled || self.server_statuses[position]["status"] != "connected" {
                 if let Err(error) = self.reconnect_server(position).await {
                     let diagnostic = Self::redact_connection_error(
                         &self.configs[position], format!("{error:#}"));
@@ -684,6 +686,7 @@ impl McpManager {
         Ok(self.server_statuses[position].clone())
     }
 
+    /// Reconnect one exact server without disrupting healthy peers.
     pub async fn reconnect_named(&mut self, name: &str) -> Result<Value> {
         let position = self
             .configs
