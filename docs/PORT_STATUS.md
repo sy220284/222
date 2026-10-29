@@ -1,5 +1,16 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+
+## 2026-10-29：原版指令发现链路补齐（源码已提交、待行为验收）
+
+对照用户原始 2.1.88 源码包 source/src/context.ts::getUserContext、source/src/utils/claudemd.ts::getMemoryFiles/getClaudeMds/processMdRules，核对 Rust src/agent.rs::system_prompt 与 src/conversation_context.rs，发现原先仅加载当前目录的 AGENTS.md 和 .atlas/instructions.md，父目录/个人级指令、递归规则均未进入真实模型请求。
+
+- Rust 实际代码：src/conversation_context.rs 新增 project_instructions，按用户→父目录→当前目录顺序发现厂商中立的 AGENTS.md、.atlas/AGENTS.md、.atlas/instructions.md、AGENTS.local.md、.atlas/instructions.local.md、.atlas/rules/*.md 和个人配置目录规则；规则递归、规范路径去重、文件数/大小边界、符号链接作用域检查、ATLAS_DISABLE_PROJECT_INSTRUCTIONS 显式关闭。
+- 原版 frontmatter 的 paths 条件规则只允许在命中文件后加载；当前没有目标文件时，Rust 不把这些规则误当作全局指令。原版还包含外部 @include 审批、工作树去重、按访问文件动态条件规则、managed/user/SDK 来源过滤等，本次均未宣称等价。
+- 实际 Agent 接线：src/agent.rs::system_prompt 在模型请求前追加该函数输出；保留现有输出风格处理。代码提交 42b729ca、549f12b2；台账提交 052034cf。
+- 本轮保守计数：**1 个用户可感知业务功能链（项目指令继承与规则发现）源码已提交待验收**，完整等价验收 0；本轮目标 100 项尚差 99。按用户要求未运行 cargo、测试或 CI，只静态复查远端源代码及调用入口。Issue #3 冻结 362 条继续全部开放，PR #2 保持 Draft。
+
+
 ## 2026-10-29：搜索与交互工具源码补强（本轮四项，待行为验收）
 
 基准：用户资料库完整 `claude-code-2.1.88-main(1).zip` 的 `source/src/`，逐项读取对应原始 TS/TSX 与 Rust 真实 Agent/工具调用入口。以下按**四个独立用户可感知功能**计数；同一功能内部的多个修正合并计一次。全部只提交至 `feat/full-rust-parity` / Draft PR #2。
