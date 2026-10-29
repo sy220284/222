@@ -138,8 +138,12 @@ impl HookRunner {
         tool_name: Option<&str>,
         input: Value,
     ) -> Result<HookOutcome> {
-        let mut outcome = HookOutcome::default();
-        let mut effective_input = input;
+        use futures::{stream::FuturesUnordered, StreamExt};
+
+        // 2.1.88 hooks.ts executes all matching hooks concurrently with the
+        // same original hookInput. A rewrite is applied to the tool only
+        // after the hook results have been collected.
+        let mut pending = FuturesUnordered::new();
         for (rule, matcher) in &self.rules {
             if rule.event.name() != event.name() {
                 continue;
@@ -149,67 +153,70 @@ impl HookRunner {
                     continue;
                 }
             }
-            // Original hook stdin fields are top-level, not nested in input.
             let mut data = json!({"hook_event_name": event.name()});
             if let Some(name) = tool_name {
                 data["tool_name"] = json!(name);
             }
-            if let Some(fields) = effective_input.as_object() {
+            if let Some(fields) = input.as_object() {
                 for (key, value) in fields {
                     if key != "hook_event_name" && key != "tool_name" {
                         data[key] = value.clone();
                     }
                 }
             } else {
-                data["input"] = effective_input.clone();
+                data["input"] = input.clone();
             }
-            let response = match run_command(rule, &data).await {
+            pending.push(async move { (rule, run_command(rule, &data).await) });
+        }
+
+        let mut outcome = HookOutcome::default();
+        while let Some((rule, result)) = pending.next().await {
+            let response = match result {
                 Ok(result) => result,
                 Err(error) => {
-                    // hooks.ts catches command/processing failures as visible non-blocking
-                    // errors. One unhealthy hook must not drop sibling model tools.
                     outcome
                         .non_blocking_errors
                         .push(format!("Hook '{}': {error:#}", rule.command));
                     continue;
                 }
             };
-            if response.blocking_reason.is_some() {
-                return Ok(response);
+            if let Some(reason) = response.blocking_reason {
+                if outcome.blocking_reason.is_none() {
+                    outcome.blocking_reason = Some(reason);
+                }
             }
-            outcome
-                .additional_context
-                .extend(response.additional_context);
+            outcome.additional_context.extend(response.additional_context);
             outcome
                 .non_blocking_errors
                 .extend(response.non_blocking_errors);
             if let Some(updated) = response.updated_input {
-                // Sequential PreToolUse hooks must see the same effective
-                // arguments that will eventually reach the executor.
-                // Updating only the final outcome lets later hooks approve
-                // a different command from the one that actually runs.
-                if event.name() == "PreToolUse" {
-                    effective_input["tool_input"] = updated.clone();
-                }
                 outcome.updated_input = Some(updated);
             }
             if let Some(decision) = response.permission_decision {
-                // An ask from any hook cannot be overridden by a later allow.
-                if decision == "ask" || outcome.permission_decision.is_none() {
+                // Original hooks.ts:2820-2847: deny > ask > allow, regardless
+                // of completion order or the configured hook order.
+                let priority = |value: &str| match value {
+                    "deny" => 3,
+                    "ask" => 2,
+                    "allow" => 1,
+                    _ => 0,
+                };
+                let previous = outcome
+                    .permission_decision
+                    .as_deref()
+                    .map(priority)
+                    .unwrap_or(0);
+                if priority(&decision) > previous {
                     outcome.permission_decision = Some(decision);
                 }
             }
             if let Some(updated) = response.updated_mcp_tool_output {
                 if event.name() == "PostToolUse" {
-                    // The next hook observes the effective output, not the
-                    // pre-redaction payload from an earlier PostToolUse hook.
-                    effective_input["tool_response"] = updated.clone();
                     outcome.updated_mcp_tool_output = Some(updated);
                 }
             }
             if response.prevent_continuation {
                 outcome.prevent_continuation = true;
-                break;
             }
         }
         Ok(outcome)
@@ -920,7 +927,7 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn chained_pretool_hooks_validate_rewritten_input_before_execution() {
+    async fn pretool_hooks_observe_original_input_like_the_source() {
         let runner = HookRunner::new(&[
             HookRule {
                 event: HookEvent::PreToolUse,
@@ -931,7 +938,7 @@ mod tests {
             HookRule {
                 event: HookEvent::PreToolUse,
                 matcher: None,
-                command: r#"cat | grep -q 'rm sensitive' && { echo 'changed command blocked' >&2; exit 2; } || { echo 'expected rewritten input' >&2; exit 2; }"#.into(),
+                command: r#"cat | grep -q 'echo safe' && { echo 'original input observed' >&2; exit 2; } || { echo 'unexpected rewritten input' >&2; exit 2; }"#.into(),
                 timeout_seconds: 3,
             },
         ]).unwrap();
@@ -946,8 +953,40 @@ mod tests {
         let outcome = runner.before_tool(&call).await.unwrap();
         assert_eq!(
             outcome.blocking_reason.as_deref(),
-            Some("changed command blocked")
+            Some("original input observed")
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn hook_permission_decisions_keep_deny_over_ask_over_allow() {
+        let runner = HookRunner::new(&[
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'"#.into(),
+                timeout_seconds: 3,
+            },
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask"}}'"#.into(),
+                timeout_seconds: 3,
+            },
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}'"#.into(),
+                timeout_seconds: 3,
+            },
+        ])
+        .unwrap();
+        let result = runner
+            .run(HookEvent::PreToolUse, Some("run_command"), json!({}))
+            .await
+            .unwrap();
+        assert_eq!(result.permission_decision.as_deref(), Some("deny"));
+        assert!(result.blocking_reason.is_some());
     }
 
     #[cfg(unix)]
