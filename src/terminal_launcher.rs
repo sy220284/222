@@ -41,8 +41,10 @@ fn is_executable(path: &Path) -> bool {
 
 fn which(command: &str) -> Option<PathBuf> {
     let path = Path::new(command);
-    if (path.is_absolute() || command.contains('/')) && is_executable(path) {
-        return Some(path.to_owned());
+    // A path containing a separator is a direct lookup, not a PATH search.
+    // A non-executable explicit path must never resolve to another program.
+    if path.is_absolute() || command.contains('/') {
+        return is_executable(path).then(|| path.to_owned());
     }
     let paths = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&paths) {
