@@ -1782,6 +1782,11 @@ impl Agent {
     }
 
     async fn compact_history_with_trigger(&mut self, automatic: bool) -> Result<()> {
+        if std::env::var("ATLAS_DISABLE_COMPACT").ok().is_some_and(|value| {
+            matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+        }) {
+            bail!("Compaction is disabled by ATLAS_DISABLE_COMPACT")
+        }
         if self.session.messages.is_empty() {
             bail!("No history to compact")
         }
@@ -2005,22 +2010,28 @@ impl Agent {
             .map(|value| value.preview.as_str())
             .unwrap_or(prompt);
         let blocks = blocks.or_else(|| expansion.as_ref().and_then(|value| value.blocks.clone()));
-        let history_chars: usize = self
-            .session
-            .messages
+        // The source autoCompact.ts estimates tokens from the complete API
+        // messages rather than only the flat text field. Structured text,
+        // tool results and media blocks all count toward context pressure.
+        let history_tokens = Self::compact_round_token_estimate(&self.session.messages);
+        let auto_disabled = ["ATLAS_DISABLE_COMPACT", "ATLAS_DISABLE_AUTO_COMPACT"]
             .iter()
-            .map(|m| {
-                m.content.as_deref().unwrap_or("").len()
-                    + m.tool_calls
-                        .as_ref()
-                        .map(|c| c.iter().map(|t| t.function.arguments.len()).sum::<usize>())
-                        .unwrap_or(0)
-            })
-            .sum();
+            .any(|key| std::env::var(key).ok().is_some_and(|value| {
+                matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+            }));
+        // Model providers have different context windows. When the user
+        // supplies the known window, use the original 13k-token headroom.
+        // Without window metadata retain the prior ~25k-token threshold.
+        let threshold = std::env::var("ATLAS_CONTEXT_WINDOW_TOKENS")
+            .ok()
+            .and_then(|text| text.parse::<usize>().ok())
+            .filter(|window| *window > 13_000)
+            .map(|window| window - 13_000)
+            .unwrap_or(25_000);
         // Match autoCompact.ts: auto-compaction is best-effort, with a
         // per-session circuit breaker after three consecutive failures.
         // A failed summarizer must not discard the user's new prompt.
-        if history_chars > 100_000 && self.auto_compact_failures < 3 {
+        if !auto_disabled && history_tokens >= threshold && self.auto_compact_failures < 3 {
             match self.compact_history_with_trigger(true).await {
                 Ok(()) => self.auto_compact_failures = 0,
                 Err(error) => {
