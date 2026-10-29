@@ -1070,7 +1070,7 @@
 | `src/services/oauth/auth-code-listener.ts` | 212 | 6650 | 重写：保持通用行为 | `src/oauth_callback_listener.rs / src/main.rs` | 部分实现：原版 localhost 动态端口监听、GET 回调地址匹配、授权码与 state 检查、404/400 及延后 302 响应已真实 Rust 实现并接入 oauth-listen CLI，覆盖真实 TCP/HTTP 回归；原版自定义成功回调及完整 OAuth token 客户端仍待对接 |
 | `src/services/oauth/client.ts` | 567 | 18254 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/oauth/crypto.ts` | 24 | 566 | 重写：保持通用行为 | `src/oauth_crypto.rs / src/main.rs` | 部分实现：32 字节系统级安全随机数、无填充 Base64URL、SHA-256 PKCE challenge 和独立 state 已有原生 Rust、RFC 7636 向量及真实 CLI 测试；OAuth 授权回调尚未接入 |
-| `src/services/oauth/getOauthProfile.ts` | 54 | 1611 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/oauth/getOauthProfile.ts` | 54 | 1611 | 重写：保持通用行为 | `src/oauth_profile.rs / src/main.rs` | 部分实现：API key/account_uuid 请求及 OAuth Bearer 资料查询真实 HTTP、10 秒超时、非 2xx/无效响应处理与可配置多提供商端点已在 Rust 落地；真实本地 HTTP 服务测试已覆盖，OAuth 主客户端持久化调用方待接 |
 | `src/services/oauth/index.ts` | 199 | 6554 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/plugins/PluginInstallationManager.ts` | 185 | 6017 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/plugins/pluginCliCommands.ts` | 345 | 10894 | 重写：保持通用行为 | 待定 | 未迁移 |
