@@ -109,14 +109,27 @@ fn hook_file(root: &Path, path: &Path) -> Result<Vec<HookRule>> {
     source_hooks(root, hooks)
 }
 
-fn manifest_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
+fn manifest_hooks(
+    root: &Path, value: &Value, mut errors: Option<&mut Vec<String>>,
+) -> Result<Vec<HookRule>> {
     let mut hooks = Vec::new();
     let mut loaded = std::collections::HashSet::new();
     let standard = root.join("hooks/hooks.json");
     if standard.exists() {
-        let real = checked_component(root, &standard)?;
-        loaded.insert(real.clone());
-        hooks.extend(hook_file(root, &real)?);
+        let parsed = checked_component(root, &standard)
+            .and_then(|real| hook_file(root, &real).map(|hooks| (real, hooks)));
+        match parsed {
+            Ok((real, parsed)) => {
+                loaded.insert(real);
+                hooks.extend(parsed);
+            }
+            Err(error) => match errors.as_deref_mut() {
+                Some(warnings) => warnings.push(format!(
+                    "hooks/hooks.json: {error:#}"
+                )),
+                None => return Err(error),
+            },
+        }
     }
     let specifications: Vec<&Value> = match value {
         Value::Null => Vec::new(),
@@ -124,20 +137,38 @@ fn manifest_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
         other => vec![other],
     };
     for spec in specifications {
-        if let Some(relative) = spec.as_str() {
-            let path = checked_component(root, &root.join(relative))?;
-            if !loaded.insert(path.clone()) {
-                continue;
+        let parsed = (|| -> Result<Option<(Option<PathBuf>, Vec<HookRule>)>> {
+            if let Some(relative) = spec.as_str() {
+                let path = checked_component(root, &root.join(relative))?;
+                if loaded.contains(&path) {
+                    return Ok(None);
+                }
+                return Ok(Some((Some(path.clone()), hook_file(root, &path)?)));
             }
-            hooks.extend(hook_file(root, &path)?);
-        } else if spec.get("event").is_some() && spec.get("command").is_some() {
-            let mut hook: HookRule = serde_json::from_value(spec.clone())?;
-            hook.plugin_root = Some(root.to_owned());
-            hooks.push(hook);
-        } else if spec.is_object() {
-            hooks.extend(source_hooks(root, spec)?);
-        } else {
+            if spec.get("event").is_some() && spec.get("command").is_some() {
+                let mut hook: HookRule = serde_json::from_value(spec.clone())?;
+                hook.plugin_root = Some(root.to_owned());
+                return Ok(Some((None, vec![hook])));
+            }
+            if spec.is_object() {
+                return Ok(Some((None, source_hooks(root, spec)?)));
+            }
             bail!("Invalid plugin hook specification")
+        })();
+        match parsed {
+            Ok(Some((path, rules))) => {
+                if let Some(path) = path {
+                    loaded.insert(path);
+                }
+                hooks.extend(rules);
+            }
+            Ok(None) => {}
+            Err(error) => match errors.as_deref_mut() {
+                Some(warnings) => warnings.push(format!(
+                    "manifest hook entry: {error:#}"
+                )),
+                None => return Err(error),
+            },
         }
     }
     Ok(hooks)
@@ -403,7 +434,7 @@ pub fn validate_local(location: &Path) -> Result<String> {
         bail!("Invalid plugin directory name")
     }
     let manifest = read_manifest(&location, fallback)?;
-    let _ = manifest_hooks(&location, &manifest.hooks)?;
+    let _ = manifest_hooks(&location, &manifest.hooks, None)?;
     let _ = manifest_servers(&location, &manifest.mcp_servers)?;
     let _ = skill_roots(&location, &manifest)?;
     Ok(manifest.name)
@@ -506,19 +537,20 @@ impl PluginSet {
                 }
             };
             let _version = &manifest.version;
-            // The source records hook-load errors separately from MCP errors.
-            // Publish a component only after it has parsed completely, so a
-            // malformed hook file cannot leave a half-registered hook list.
-            match manifest_hooks(&location, &manifest.hooks) {
+            // Preserve healthy hook entries when another hook file is broken,
+            // while retaining every diagnostic for the user.
+            let mut hook_errors = Vec::new();
+            match manifest_hooks(&location, &manifest.hooks, Some(&mut hook_errors)) {
                 Ok(hooks) => {
                     for mut hook in hooks {
                         hook.plugin_root = Some(location.clone());
                         set.hooks.push(hook);
                     }
                 }
-                Err(error) => set.errors.push(format!(
-                    "Plugin '{name}' hooks unavailable: {error:#}"
-                )),
+                Err(error) => hook_errors.push(format!("{error:#}")),
+            }
+            for error in hook_errors {
+                set.errors.push(format!("Plugin '{name}' hooks unavailable: {error}"));
             }
             let servers = match manifest_servers(&location, &manifest.mcp_servers) {
                 Ok(servers) => servers,
@@ -1193,12 +1225,12 @@ mod tests {
             r#"{"name":"good","hooks":[{"event":"Stop","command":"true"}]}"#).unwrap();
         fs::write(bad.join("plugin.json"), "{invalid json").unwrap();
         fs::write(broken_hooks.join("plugin.json"),
-            r#"{"name":"broken-hooks","mcp_servers":[{"id":"ok","command":"echo"}]}"#).unwrap();
+            r#"{"name":"broken-hooks","mcp_servers":[{"id":"ok","command":"echo"}],"hooks":{"Stop":[{"hooks":[{"type":"command","command":"true"}]}]}}"#).unwrap();
         fs::write(broken_hooks.join("hooks/hooks.json"), "{invalid json").unwrap();
         let loaded = PluginSet::load(root.path(), &[
             "bad".into(), "good".into(), "broken-hooks".into(),
         ]).unwrap();
-        assert_eq!(loaded.hooks.len(), 1);
+        assert_eq!(loaded.hooks.len(), 2);
         assert_eq!(loaded.mcp_servers.len(), 1);
         assert_eq!(loaded.mcp_servers[0].id, "broken-hooks_ok");
         assert!(loaded.errors.iter().any(|error| error.contains("Plugin 'bad'")));
