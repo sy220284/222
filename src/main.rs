@@ -2593,20 +2593,33 @@ async fn sdk_nested_control(
                     .filter_map(|command| command.get("name").and_then(Value::as_str))
                     .map(str::to_owned)
                     .collect::<std::collections::HashSet<_>>();
-                let mut skill_commands = plugins::list_commands(
+                for command in plugins::command_descriptors(
                     agent.workspace_root(), &config.enabled_plugins,
-                )?;
-                skill_commands.extend(agent.list_user_skills()?.lines().map(str::to_owned));
-                for name in skill_commands {
-                    if known.insert(name.clone()) {
-                        let description = if name.contains(':') {
-                            "Installed plugin command or skill"
-                        } else {
-                            "Project skill"
-                        };
-                        commands.push(json!({"name":name,"description":description,
-                            "argumentHint":""}));
+                )? {
+                    let name = command.get("name").and_then(Value::as_str)
+                        .ok_or_else(|| anyhow::anyhow!("Plugin command descriptor missing name"))?;
+                    if known.insert(name.to_owned()) {
+                        commands.push(command);
                     }
+                }
+                // list_user_skills already applies the real user-invocable
+                // flag and Read permissions. Plugin skills are described
+                // above using their manifest-resolved paths.
+                for name in agent.list_user_skills()?.lines() {
+                    if name.contains(':') || !known.insert(name.to_owned()) {
+                        continue;
+                    }
+                    let skill = agent.workspace_root().join(".atlas/skills")
+                        .join(name).join("SKILL.md").canonicalize()?;
+                    if !skill.starts_with(agent.workspace_root()) {
+                        bail!("Skill command source leaves authorized workspace")
+                    }
+                    let source = std::fs::read_to_string(&skill)?;
+                    let (description, hint) = skill_arguments::command_metadata(
+                        &source, "Project skill",
+                    );
+                    commands.push(json!({"name":name,"description":description,
+                        "argumentHint":hint}));
                 }
                 let agents = agent.sdk_agent_descriptors()?;
                 *sdk_initialized = true;
