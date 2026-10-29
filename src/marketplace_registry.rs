@@ -231,6 +231,27 @@ pub fn resolve_local_plugin(project: &Path, marketplace: &str, plugin: &str) -> 
     Ok(canonical)
 }
 
+/// The original dependency resolver trusts only the ROOT marketplace's
+/// explicit allowlist; trust never propagates from transitive dependencies.
+pub fn local_marketplace_dependency_allowlist(project: &Path, marketplace: &str) -> Result<Vec<String>> {
+    let _guard = exclusive_lock(project)?;
+    let registry = load(project)?;
+    let record = registry.get(marketplace)
+        .with_context(|| format!("Marketplace '{marketplace}' is not registered"))?;
+    let (actual, manifest) = inspect_local(&record.source)?;
+    if actual != marketplace { bail!("Marketplace '{marketplace}' changed its name on disk"); }
+    let document: Value = serde_json::from_slice(&fs::read(manifest)?)?;
+    match document.get("allowCrossMarketplaceDependenciesOn") {
+        None | Some(Value::Null) => Ok(Vec::new()),
+        Some(Value::Array(items)) => items.iter().map(|item| {
+            let name = item.as_str().context("Trusted marketplace name must be a string")?;
+            if !valid_marketplace_name(name) { bail!("Invalid trusted marketplace name"); }
+            Ok(name.to_owned())
+        }).collect(),
+        _ => bail!("Marketplace cross-dependency allowlist must be an array"),
+    }
+}
+
 /// Read dependencies declared by the registered marketplace entry. The
 /// original installer resolves its dependency closure from marketplace.json,
 /// which can declare dependencies absent from the installed plugin.json.
