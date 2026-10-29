@@ -112,6 +112,7 @@ fn provider_explicit_no_retry_and_invalid_request_do_not_replay() {
         let server = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
             let request = read_request(&mut stream);
+            thread::sleep(Duration::from_millis(35));
             let body = json!({"error":{"message":"not retryable"}}).to_string();
             write!(stream,
                 "HTTP/1.1 {status}\r\nContent-Type: application/json\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -132,6 +133,13 @@ fn provider_explicit_no_retry_and_invalid_request_do_not_replay() {
         assert!(!output.status.success(),"non-retryable model error unexpectedly succeeded");
         let stderr=String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains(&status[..3]),"expected original HTTP error, got {stderr}");
+        let session_file=fs::read_dir(root.path().join(".atlas/sessions"))
+            .unwrap().next().unwrap().unwrap().path();
+        let saved:Value=serde_json::from_slice(&fs::read(session_file).unwrap()).unwrap();
+        assert!(saved["cost"]["total_api_duration_ms"].as_u64().unwrap_or(0)>=20,
+            "failed API time must survive session persistence: {saved}");
+        assert!(saved["cost"]["total_wall_duration_ms"].as_u64().unwrap_or(0)>=20,
+            "failed turn wall time must survive session persistence: {saved}");
     }
 }
 
