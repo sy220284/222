@@ -425,7 +425,7 @@
 | `src/components/PromptInput/SandboxPromptFooterHint.tsx` | 64 | 8031 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PromptInput/ShimmeredInput.tsx` | 143 | 16680 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PromptInput/VoiceIndicator.tsx` | 137 | 10810 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/inputModes.ts` | 34 | 731 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/PromptInput/inputModes.ts` | 34 | 731 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/components/PromptInput/inputPaste.ts` | 91 | 2693 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PromptInput/useMaybeTruncateInput.ts` | 59 | 1468 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PromptInput/usePromptInputPlaceholder.ts` | 77 | 2391 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -465,7 +465,7 @@
 | `src/components/StatusLine.tsx` | 324 | 49465 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/StatusNotices.tsx` | 55 | 5694 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/StructuredDiff/Fallback.tsx` | 487 | 56579 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/StructuredDiff/colorDiff.ts` | 38 | 1137 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/StructuredDiff/colorDiff.ts` | 38 | 1137 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/components/StructuredDiff.tsx` | 190 | 25007 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/StructuredDiffList.tsx` | 30 | 4252 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/TagTabs.tsx` | 139 | 20853 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -512,7 +512,7 @@
 | `src/components/agents/new-agent-creation/wizard-steps/ToolsStep.tsx` | 61 | 7220 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/agents/new-agent-creation/wizard-steps/TypeStep.tsx` | 103 | 12474 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/agents/types.ts` | 28 | 915 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/utils.ts` | 19 | 528 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/agents/utils.ts` | 19 | 528 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/components/agents/validateAgent.ts` | 110 | 3150 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/design-system/Byline.tsx` | 77 | 6493 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/design-system/Dialog.tsx` | 138 | 14112 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -529,7 +529,7 @@
 | `src/components/design-system/ThemeProvider.tsx` | 170 | 18852 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/design-system/ThemedBox.tsx` | 156 | 18043 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/design-system/ThemedText.tsx` | 124 | 13877 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/color.ts` | 31 | 853 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/design-system/color.ts` | 31 | 853 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/components/diff/DiffDetailView.tsx` | 281 | 22615 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/diff/DiffDialog.tsx` | 383 | 43407 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/diff/DiffFileList.tsx` | 292 | 25342 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -684,12 +684,12 @@
 | `src/constants/betas.ts` | 53 | 2218 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/common.ts` | 34 | 1516 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/cyberRiskInstruction.ts` | 25 | 1525 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/constants/errorIds.ts` | 16 | 476 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/constants/errorIds.ts` | 16 | 476 | 重写：保持通用行为 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/constants/figures.ts` | 46 | 2063 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/files.ts` | 157 | 2625 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/github-app.ts` | 145 | 5347 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/keys.ts` | 12 | 444 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/constants/messages.ts` | 2 | 49 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/constants/messages.ts` | 2 | 49 | 重写：保持通用行为 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/constants/oauth.ts` | 235 | 8970 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/outputStyles.ts` | 217 | 9886 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/product.ts` | 77 | 2563 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -699,7 +699,7 @@
 | `src/constants/systemPromptSections.ts` | 69 | 1794 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/toolLimits.ts` | 57 | 2169 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/tools.ts` | 113 | 4690 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/constants/turnCompletionVerbs.ts` | 13 | 269 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/constants/turnCompletionVerbs.ts` | 13 | 269 | 重写：保持通用行为 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/constants/xml.ts` | 87 | 3325 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context/QueuedMessageContext.tsx` | 63 | 5598 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context/fpsMetrics.tsx` | 30 | 3158 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -847,19 +847,19 @@
 | `src/ink/components/Text.tsx` | 254 | 16811 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/constants.ts` | 3 | 107 | 重写：终端 UI／交互 | `src/ink_constants.rs` | 已验收：原始唯一帧间隔常量数值 16ms；证据 ink_constants::tests::original_render_frame_interval |
 | `src/ink/dom.ts` | 485 | 15126 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/events/click-event.ts` | 39 | 1332 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/events/click-event.ts` | 39 | 1332 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/events/dispatcher.ts` | 234 | 6004 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/events/emitter.ts` | 40 | 1125 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/events/emitter.ts` | 40 | 1125 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/events/event-handlers.ts` | 74 | 2202 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/events/event.ts` | 12 | 250 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/events/focus-event.ts` | 22 | 687 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/events/event.ts` | 12 | 250 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
+| `src/ink/events/focus-event.ts` | 22 | 687 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/events/input-event.ts` | 206 | 7306 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/events/keyboard-event.ts` | 52 | 1765 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/events/terminal-event.ts` | 108 | 2526 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/events/terminal-focus-event.ts` | 20 | 512 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/events/terminal-focus-event.ts` | 20 | 512 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/focus.ts` | 182 | 5142 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/frame.ts` | 125 | 4209 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/get-max-width.ts` | 28 | 1149 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/get-max-width.ts` | 28 | 1149 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/hit-test.ts` | 131 | 4228 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-animation-frame.ts` | 58 | 1933 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-app.ts` | 9 | 251 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -870,8 +870,8 @@
 | `src/ink/hooks/use-selection.ts` | 105 | 4421 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-stdin.ts` | 9 | 232 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-tab-status.ts` | 73 | 2175 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/hooks/use-terminal-focus.ts` | 17 | 556 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/hooks/use-terminal-title.ts` | 32 | 1020 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/hooks/use-terminal-focus.ts` | 17 | 556 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
+| `src/ink/hooks/use-terminal-title.ts` | 32 | 1020 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/hooks/use-terminal-viewport.ts` | 97 | 3977 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/ink.tsx` | 1723 | 251886 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/instances.ts` | 11 | 410 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -879,9 +879,9 @@
 | `src/ink/layout/geometry.ts` | 98 | 2471 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/layout/node.ts` | 153 | 4346 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/layout/yoga.ts` | 309 | 7400 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/line-width-cache.ts` | 25 | 734 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/line-width-cache.ts` | 25 | 734 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/log-update.ts` | 774 | 27210 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/measure-element.ts` | 24 | 419 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/measure-element.ts` | 24 | 419 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/measure-text.ts` | 48 | 1138 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/node-cache.ts` | 55 | 1654 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/optimizer.ts` | 94 | 2588 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -915,10 +915,10 @@
 | `src/ink/termio/types.ts` | 237 | 7076 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/termio.ts` | 43 | 1036 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/useTerminalNotification.ts` | 127 | 3857 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/warn.ts` | 10 | 295 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/widest-line.ts` | 20 | 434 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/warn.ts` | 10 | 295 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
+| `src/ink/widest-line.ts` | 20 | 434 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/wrap-text.ts` | 75 | 1806 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/wrapAnsi.ts` | 21 | 383 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/wrapAnsi.ts` | 21 | 383 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/keybindings/KeybindingContext.tsx` | 243 | 26000 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/KeybindingProviderSetup.tsx` | 308 | 41452 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/defaultBindings.ts` | 341 | 11635 | 重写：保持通用行为 | 待定 | 未迁移 |

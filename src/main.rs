@@ -15,6 +15,7 @@ mod portable_ui_runtime;
 mod portable_async_runtime;
 mod portable_platform;
 mod command_manifest;
+mod portable_ink_core;
 mod skill_arguments;
 mod semantic_inputs;
 mod xml_escape;
