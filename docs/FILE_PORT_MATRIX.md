@@ -1628,7 +1628,7 @@
 | `src/utils/notebook.ts` | 225 | 6368 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/objectGroupBy.ts` | 19 | 511 | 重写：迭代分组、索引与防原型污染 | `src/collections.rs` | 部分实现：逐项回调、零起始索引、键分组和 __proto__ 安全；JS Symbol/整数属性枚举次序及对象标识待核对 |
 | `src/utils/pasteStore.ts` | 105 | 2950 | 重写：保持通用行为 | `src/prompt_history.rs` | 部分实现：SHA-256 内容寻址、长粘贴持久化/恢复与过期清理；图像缓存及 UI 生命周期仍待验证 |
-| `src/utils/path.ts` | 156 | 5700 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/path.ts` | 156 | 5700 | 重写：保持通用行为 | `src/path_support.rs / src/workspace_dirs.rs` | 部分实现：路径展开、NFC、配置键、目录识别、相对路径、穿越检测及文件名清洗已落入真实工作区校验链；Windows 原生语义、旧会话路径兼容与其它下游入口待验收 |
 | `src/utils/pdf.ts` | 301 | 8148 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/pdfUtils.ts` | 71 | 2190 | 重写：保持通用行为 | `src/platform_source_utilities.rs / src/main.rs` | 部分实现：按原始 JS parseInt 前缀、页码单值/区间/开区间、文档扩展名大小写、模型 PDF 支持边界实现并接入 inspect-source；原版全部调用链待完整移植 |
 | `src/utils/peerAddress.ts` | 22 | 981 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |

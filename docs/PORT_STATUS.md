@@ -970,3 +970,12 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - 原版对照 `src/bridge/inboundAttachments.ts`：字段整组校验、附件下载、文件名清洗、当前会话目录、文本及混合内容的末尾文本块 @引用插入、无 token/失败时保留用户原文。用户明确配置 `ATLAS_BRIDGE_ATTACHMENT_BASE_URL` 和 `ATLAS_BRIDGE_ATTACHMENT_TOKEN`；不调用厂商专属服务。与原版相比加入单文件 16MiB、最多 8 个附件及 create_new 隔离机制。
 - 本地验证：新增 3 项附件模块测试（含真实 HTTP 下载、授权头及目录、异常输入）；新增 1 项真实 SDK 子进程+两台 HTTP 服务（文件服务和模型请求）测试。合并后的本地快照 `cargo test --offline --locked --all-targets` 共 576 项通过，`cargo check --offline --locked --all-targets`、`cargo fmt --all -- --check` 通过。
 - 当前仅标记部分实现：远端完整桥接协议、身份刷新、断线重连、取消传播及真实多会话并发未达等价；新的 GitHub HEAD 必须单独核验。
+
+
+### 原版路径模块与任务查询回归（2026-10-29）
+
+- 统一 Rust 路径逻辑 `src/path_support.rs`，由工作区授权入口 `src/workspace_dirs.rs` 实际调用；保持原有真实路径与符号链接权限边界。
+- `src/utils/path.ts` 仍登记部分实现：其展开、NFC、相对路径、配置键、目录探测、穿越检查及清洗行为已有对应逻辑，但 Windows 原生特殊路径、旧会话路径兼容以及其它动态下游仍有未对照项。
+- `src/task_graph.rs` 只读非法任务 ID 的结果恢复为“Task not found”，修改仍拒绝非法 ID；针对对应真实回归测试修复。
+- 本地在离线源码快照中运行 `cargo fmt --all -- --check`、`cargo check --offline --all-targets -q` 与 `cargo test --offline --all-targets -q`；557 项测试通过，0 失败。最新远端 HEAD 的 CI 另行核实。
+- 六条完整业务链的串行推进顺序及逐路径完成标准见 `docs/PORT_CLOSURE_PLAN.md`。
