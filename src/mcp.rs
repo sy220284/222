@@ -642,6 +642,10 @@ impl McpManager {
         self.configs.iter().any(|config| config.id == name)
     }
 
+    pub fn configured_servers(&self) -> Vec<McpServerConfig> {
+        self.configs.clone()
+    }
+
     /// Reconcile SDK-owned process servers without restarting healthy fixed
     /// or unchanged dynamic connections. Changed transports are torn down
     /// before replacement so stale tool aliases and subscriptions cannot leak.
