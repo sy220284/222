@@ -178,6 +178,18 @@ pub async fn context(
     provider: &dyn ModelProvider,
     profile: &ProviderProfile,
 ) -> Result<MemoryContext> {
+    context_with_recent_tools(root, query, provider, profile, &[]).await
+}
+
+/// The original memory selector receives recently used tools so that API
+/// reference memories do not crowd out actionable warnings and gotchas.
+pub async fn context_with_recent_tools(
+    root: &Path,
+    query: &str,
+    provider: &dyn ModelProvider,
+    profile: &ProviderProfile,
+    recent_tools: &[String],
+) -> Result<MemoryContext> {
     let (index, files) = scan(root)?;
     let mut text = String::new();
     if !index.is_empty() {
@@ -206,16 +218,16 @@ pub async fn context(
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let selection = provider
+    let recent_tool_section = if recent_tools.is_empty() {\n        String::new()\n    } else {\n        format!("\\n\\nRecently used tools: {}", recent_tools.join(", "))\n    };\n    let selection = provider
         .complete(&ModelRequest {
             model: profile.model.clone(),
             system: "Select up to five filenames of memories clearly relevant to the query. \
             Return only JSON: {\"selected_memories\":[\"filename.md\"]}. \
-            If none are relevant return an empty array. Never invent filenames."
+            If none are relevant return an empty array. Never invent filenames. \\\n            Do not select usage reference or API documentation for recently used tools; \\\n            do select their warnings, gotchas and known issues."
                 .into(),
             messages: vec![Message::text(
                 "user",
-                format!("Query:\n{query}\n\nMemory file manifest:\n{manifest}"),
+                format!("Query:\n{query}\n\nMemory file manifest:\n{manifest}{recent_tool_section}"),
             )],
             tools: vec![],
         })
