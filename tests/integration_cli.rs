@@ -3193,7 +3193,7 @@ fn agent_invalid_tool_json_preserves_sibling_calls_and_model_followup() {
 
 #[cfg(unix)]
 #[test]
-fn agent_pre_and_post_hook_execution_failures_preserve_sibling_results() {
+fn agent_nonblocking_hook_exit_codes_preserve_tool_results_and_report_warnings() {
     let root = tempfile::tempdir().unwrap();
     fs::write(
         root.path().join("secret.txt"),
@@ -3273,16 +3273,19 @@ fn agent_pre_and_post_hook_execution_failures_preserve_sibling_results() {
     assert!(followup.contains("pre-failure"), "{followup}");
     assert!(followup.contains("post-failure"), "{followup}");
     assert!(followup.contains("sibling-continues"), "{followup}");
-    assert!(followup.contains("PreToolUse hook failed"), "{followup}");
+    // Original hooks.ts:2670-2695: exit codes other than 2 are visible
+    // non-blocking errors. The tools still execute and their real outputs
+    // reach the next model request; hook failures are reported separately.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("pre-hook boom"), "{stderr}");
+    assert!(stderr.contains("post-hook boom"), "{stderr}");
+    assert!(!followup.contains("PreToolUse hook failed"), "{followup}");
     assert!(
-        followup.contains("PostToolUse hook failed after tool execution"),
+        !followup.contains("PostToolUse hook failed after tool execution"),
         "{followup}"
     );
     assert!(followup.contains("write took effect"), "{followup}");
-    assert!(
-        !followup.contains("SECRET_DO_NOT_LEAK_PREHOOK"),
-        "{followup}"
-    );
+    assert!(followup.contains("SECRET_DO_NOT_LEAK_PREHOOK"), "{followup}");
     assert_eq!(
         fs::read_to_string(root.path().join("hooked.txt")).unwrap(),
         "write took effect"
