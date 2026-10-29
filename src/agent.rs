@@ -150,6 +150,8 @@ pub struct Agent {
     lsp: Option<LspManager>,
     hooks: HookRunner,
     session_context: String,
+    /// One-shot first user turn supplied by a SessionStart hook in headless mode.
+    pending_initial_user_message: Option<String>,
     conversation_context: ConversationContext,
     structured_output: bool,
     child_depth: u8,
@@ -260,6 +262,7 @@ impl Agent {
             lsp: None,
             hooks: HookRunner::default(),
             session_context: String::new(),
+            pending_initial_user_message: None,
             conversation_context,
             structured_output: false,
             child_depth: 0,
@@ -345,6 +348,11 @@ impl Agent {
             }));
         }
         self.session_context = result.additional_context.join("\n");
+        self.pending_initial_user_message = if self.interactive {
+            None
+        } else {
+            result.initial_user_message
+        };
         self.last_context_usage = None;
         Ok(())
     }
@@ -2646,6 +2654,11 @@ impl Agent {
             }));
         }
         self.session_context = start.additional_context.join("\n");
+        self.pending_initial_user_message = if self.interactive {
+            None
+        } else {
+            start.initial_user_message
+        };
         Ok(())
     }
 
@@ -2658,9 +2671,22 @@ impl Agent {
         blocks: Option<Vec<serde_json::Value>>,
     ) -> Result<String> {
         let ask_started = Instant::now();
-        if prompt.trim().is_empty() {
+        // Original sessionStart.ts + cli/print.ts prepend a one-shot
+        // initialUserMessage to the headless input stream. Keep it as an
+        // actual user turn (not a system instruction or hook attachment).
+        let mut startup_message = self.pending_initial_user_message.take();
+        if prompt.trim().is_empty() && startup_message.is_none() {
             bail!("Prompt cannot be empty")
         }
+        let prompt_text = if prompt.trim().is_empty() {
+            startup_message.take().unwrap_or_default()
+        } else {
+            prompt.to_owned()
+        };
+        if let Some(message) = startup_message {
+            self.session.messages.push(Message::text("user", &message));
+        }
+        let prompt = prompt_text.as_str();
         // MCP prompts are explicit text commands, never inferred from
         // structured multimodal SDK content.
         let expansion = if blocks.is_none() {
@@ -3595,6 +3621,7 @@ mod tests {
             lsp: None,
             hooks: HookRunner::default(),
             session_context: String::new(),
+            pending_initial_user_message: None,
             conversation_context: ConversationContext::capture(dir.path()),
             structured_output: false,
             child_depth: 0,
