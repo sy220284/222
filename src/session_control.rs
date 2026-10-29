@@ -174,21 +174,9 @@ fn searchable_transcript(messages: &[Message]) -> String {
         if message.role != "user" && message.role != "assistant" {
             continue;
         }
-        if let Some(text) = message.content.as_deref().filter(|s| !s.is_empty()) {
-            parts.push(text.to_owned());
-        } else if let Some(blocks) = &message.content_blocks {
-            let text = blocks
-                .iter()
-                .filter_map(|block| {
-                    block
-                        .as_str()
-                        .or_else(|| block.get("text").and_then(|v| v.as_str()))
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
-            if !text.is_empty() {
-                parts.push(text);
-            }
+        let text = message.visible_text();
+        if !text.is_empty() {
+            parts.push(text);
         }
     }
     let text = parts
