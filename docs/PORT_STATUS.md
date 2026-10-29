@@ -23,6 +23,7 @@
 - **最新静态复核**：远端 HEAD `d44a735694fd7ae953e04bc236e90401401f602b` 的 SDK 初始化、Agent 定义目录、实际委派、模型/提示词、工具权限、工作树、轮次、首轮提示词、技能预加载等接线均可追踪；权限拒绝在 `run_subagent` 中位于工作树创建之前。未运行 Cargo、测试或 CI，尚无行为等价结论。
 - **补齐 8**：原版 `source/src/tools/AgentTool/runAgent.ts` 会将 Agent 定义中的 Hooks 注册到该子代理生命周期；现在 SDK `agents.<name>.hooks` 经共享的原版事件映射结构解析，按子 Agent 作用域合并父级 Hooks 并进入真实 SessionStart、工具执行前后及 SubagentStop 调度；自定义 Stop 事件转换为 SubagentStop，解析阶段拒绝尚未支持的异步/一次性命令 Hook。提交 `fde1e58e250f275e91cbadee608f2bd74e270c11`、`a9b852b34a70497eb08dfbb2b48e7a6b605748f3`。独立计 1 项子 Agent Hooks 执行能力；完整 Hook 并发、取消和所有原版事件仍待验收。
 - **补齐 9**：对照 `source/src/tools/AgentTool/runAgent.ts::initializeAgentMcpServers`，SDK Agent `mcpServers` 现支持引用现有服务和内联命名 MCP 配置；新增服务与父会话的实际 MCP 列表合并后交给子 Agent 的连接管理器，进入真实工具发现与调用链。创建工作树/子进程前检查重复名称、传输类型、配置有效性和托管 MCP allow/deny 策略，禁止绕过策略。代码提交 `b79cac7720d95ae1d3f1be863cc836f93b908a4b`。独立计 1 项 Agent 专属 MCP 服务；仍缺原版全部 OAuth、服务断线恢复、跨子代理资源订阅及独立服务状态 UI。
+- **本轮最终源码复核**：在远端 HEAD `2489a22d230d6b847151024c4e8423c27928216b` 检查 SDK initialize、Agent 定义、目录、子模型提示词/模型、白名单/黑名单、权限上限、工作树、轮次、初始提示词、技能、Hooks、MCP 等 12 条真实入口/关联模块接线；Issue #3 仍开放，PR #2 仍为中文 Draft。没有运行 Cargo、测试或 CI，**9 项全部已提交、待行为验收**，新增完整等价验收为 0。
 - **本轮数量**：**9/100，剩余 91**。先行恰好 100 项逐功能源码缺口清单及全量实施方案仍未完成，A/B 流程和本轮数量目标未达标；冻结 Issue #3 的 362 项全部继续开放，新增完整等价验收 0。仅更新现有 Draft PR #2 分支，未修改 main、未合并。
 
 ## 2026-10-29：分支会话保留文件历史备份（源码已提交、待验收）
