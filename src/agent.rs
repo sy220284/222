@@ -140,6 +140,8 @@ pub struct Agent {
     profile: ProviderProfile,
     provider: Box<dyn ModelProvider>,
     root: PathBuf,
+    /// Original project root remains unchanged inside delegated worktrees.
+    project_root: PathBuf,
     additional_dirs: Vec<PathBuf>,
     approval: Approval,
     interactive: bool,
@@ -252,10 +254,12 @@ impl Agent {
             }
         };
         let conversation_context = ConversationContext::capture(&root);
+        let project_root = root.clone();
         Ok(Self {
             profile,
             provider,
             root,
+            project_root,
             additional_dirs: Vec::new(),
             approval,
             interactive,
@@ -327,7 +331,9 @@ impl Agent {
     }
 
     pub async fn attach_hooks(&mut self, rules: &[HookRule]) -> Result<()> {
-        self.hooks = HookRunner::new(rules)?.with_workspace(self.root.clone());
+        self.hooks = HookRunner::new(rules)?
+            .with_workspace(self.root.clone())
+            .with_project_root(self.project_root.clone());
         self.hook_rules = rules.to_vec();
         let result = self
             .hooks
@@ -975,6 +981,7 @@ impl Agent {
             let shared_tasks = self.graph.clone();
             let current_team = self.team_name.clone();
             let current_team_root = self.team_root.clone();
+            let stable_project_root = self.project_root.clone();
             let cleanup_graph = self.graph.clone();
             running.push(async move {
                 let result = async {
@@ -987,6 +994,7 @@ impl Agent {
                         Session::fresh(),
                     )?;
                     // Teammates share one persistent task list even with isolated code worktrees.
+                    child.project_root = stable_project_root;
                     child.graph = shared_tasks;
                     child.team_name = current_team.clone();
                     child.team_root = current_team_root.clone();
@@ -1296,6 +1304,7 @@ impl Agent {
             self.max_steps,
             Session::fresh(),
         )?;
+        child.project_root = self.project_root.clone();
         child.graph = self.graph.clone();
         child.team_name = self.team_name.clone();
         child.child_depth = self.child_depth + 1;
@@ -3655,6 +3664,7 @@ mod tests {
             },
             provider: Box::new(SummaryModel),
             root: dir.path().canonicalize().unwrap(),
+            project_root: dir.path().canonicalize().unwrap(),
             additional_dirs: Vec::new(),
             approval: Approval::ReadOnly,
             interactive: false,
