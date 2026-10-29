@@ -1764,7 +1764,47 @@ impl Agent {
         }
         // The memory index is always visible; topic selection uses the active
         // model rather than a hardwired provider. No telemetry side channel.
-        match memory::context(&self.root, &prompt, self.provider.as_ref(), &self.profile).await {
+        // Match 2.1.88's recall selector: recently exercised tools should
+        // suppress redundant usage/API reference memories, while keeping
+        // warnings and known-issue memories eligible.
+        let mut recent_tools = Vec::new();
+        let mut seen_tools = std::collections::HashSet::new();
+        for message in self.session.messages.iter().rev().take(100) {
+            if let Some(calls) = message.tool_calls.as_ref() {
+                for call in calls.iter().rev() {
+                    if seen_tools.insert(call.function.name.clone()) {
+                        recent_tools.push(call.function.name.clone());
+                    }
+                }
+            }
+            if let Some(blocks) = message.content_blocks.as_ref() {
+                for block in blocks.iter().rev() {
+                    if block.get("type").and_then(serde_json::Value::as_str)
+                        != Some("tool_use")
+                    {
+                        continue;
+                    }
+                    if let Some(name) = block.get("name").and_then(serde_json::Value::as_str) {
+                        if seen_tools.insert(name.to_owned()) {
+                            recent_tools.push(name.to_owned());
+                        }
+                    }
+                }
+            }
+            if recent_tools.len() >= 10 {
+                break;
+            }
+        }
+        recent_tools.truncate(10);
+        match memory::context_with_recent_tools(
+            &self.root,
+            &prompt,
+            self.provider.as_ref(),
+            &self.profile,
+            &recent_tools,
+        )
+        .await
+        {
             Ok(relevant) => {
                 if let Some(usage) = relevant.usage {
                     self.record_usage(usage);
