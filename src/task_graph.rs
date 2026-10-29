@@ -353,6 +353,17 @@ impl TaskGraph {
             ))
         })
     }
+    /// Read the shared task list before a teammate becomes idle.
+    pub fn in_progress_owned_by(&self, owner: &str) -> Result<Vec<Item>> {
+        Ok(self
+            .all()?
+            .into_iter()
+            .filter(|task| {
+                task.status == "in_progress" && task.owner.as_deref() == Some(owner)
+            })
+            .collect())
+    }
+
     pub fn peek(&self, id: &str) -> Result<Option<Item>> {
         if !Self::valid_task_id(id) {
             return Ok(None);

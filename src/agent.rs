@@ -314,6 +314,7 @@ impl Agent {
         input["task_id"] = json!(id);
         input["task_subject"] = json!(subject);
         input["task_description"] = json!(description);
+        input["permission_mode"] = json!(self.permission_mode.label());
         if let Some(name) = self.agent_name.as_deref() {
             input["teammate_name"] = json!(name);
         }
@@ -885,51 +886,116 @@ impl Agent {
                         if start.prevent_continuation {
                             bail!("SubagentStart hook stopped continuation")
                         }
-                        let output = Box::pin(child.ask(&prompt)).await;
-                        let transcript = child
-                            .root
-                            .join(".atlas/sessions")
-                            .join(format!("{session_id}.json"));
-                        let stop = child
-                            .hooks
-                            .run(HookEvent::SubagentStop, Some(&name), {
-                                let mut input = child.base_hook_input();
-                                input["permission_mode"] = json!(child.permission_mode.label());
-                                input["stop_hook_active"] = json!(false);
-                                input["agent_id"] = json!(session_id);
-                                input["agent_type"] = json!(name);
-                                input["agent_transcript_path"] = json!(transcript);
-                                if let Ok(answer) = &output {
+                        // Source query/stopHooks.ts: run the teammate's
+                        // completion hooks before idle and feed blockers back
+                        // into the ongoing worker conversation.
+                        let mut continuation = prompt.to_owned();
+                        let mut continuation_rounds = 0usize;
+                        let mut subagent_stop_active = false;
+                        let answer = loop {
+                            let answer = Box::pin(child.ask(&continuation)).await?;
+                            let transcript = child
+                                .root
+                                .join(".atlas/sessions")
+                                .join(format!("{session_id}.json"));
+                            let stop = child
+                                .hooks
+                                .run(HookEvent::SubagentStop, Some(&name), {
+                                    let mut input = child.base_hook_input();
+                                    input["permission_mode"] = json!(child.permission_mode.label());
+                                    input["stop_hook_active"] = json!(subagent_stop_active);
+                                    input["agent_id"] = json!(session_id);
+                                    input["agent_type"] = json!(name);
+                                    input["agent_transcript_path"] = json!(transcript);
                                     input["last_assistant_message"] = json!(answer);
+                                    input
+                                })
+                                .await?;
+                            if stop.prevent_continuation {
+                                bail!(
+                                    "SubagentStop hook stopped continuation: {}",
+                                    stop.stop_reason.as_deref().unwrap_or("no reason provided")
+                                )
+                            }
+                            let mut feedback = stop
+                                .blocking_reasons
+                                .iter()
+                                .map(|reason| format!("SubagentStop hook feedback:\n{reason}"))
+                                .collect::<Vec<_>>();
+                            if !feedback.is_empty() {
+                                subagent_stop_active = true;
+                            } else if child.team_name.is_some() {
+                                // Each task is checked independently, including
+                                // tasks the worker left in progress at turn end.
+                                for task in child.graph.in_progress_owned_by(&name)? {
+                                    let outcome = child
+                                        .hooks
+                                        .run(
+                                            HookEvent::TaskCompleted,
+                                            None,
+                                            child.task_hook_input(
+                                                &task.id,
+                                                &task.subject,
+                                                &task.description,
+                                            ),
+                                        )
+                                        .await?;
+                                    if outcome.prevent_continuation {
+                                        bail!(
+                                            "TaskCompleted hook stopped continuation for task {}: {}",
+                                            task.id,
+                                            outcome
+                                                .stop_reason
+                                                .as_deref()
+                                                .unwrap_or("no reason provided")
+                                        )
+                                    }
+                                    feedback.extend(outcome.blocking_reasons.into_iter().map(
+                                        |reason| {
+                                            format!(
+                                                "TaskCompleted hook feedback for task {}:\n{reason}",
+                                                task.id
+                                            )
+                                        },
+                                    ));
                                 }
-                                input
-                            })
-                            .await;
-                        let idle = child
-                            .hooks
-                            .run(HookEvent::TeammateIdle, None, {
-                                let mut input = child.base_hook_input();
-                                input["permission_mode"] = json!(child.permission_mode.label());
-                                input["teammate_name"] = json!(name);
-                                input["team_name"] = json!(child.team_name);
-                                input
-                            })
-                            .await;
-                        let answer = output?;
-                        let stop = stop?;
-                        if let Some(reason) = stop.blocking_reason {
-                            bail!("SubagentStop hook blocked: {reason}")
-                        }
-                        if stop.prevent_continuation {
-                            bail!("SubagentStop hook stopped continuation")
-                        }
-                        let idle = idle?;
-                        if let Some(reason) = idle.blocking_reason {
-                            bail!("TeammateIdle hook blocked: {reason}")
-                        }
-                        if idle.prevent_continuation {
-                            bail!("TeammateIdle hook stopped continuation")
-                        }
+                                let idle = child
+                                    .hooks
+                                    .run(HookEvent::TeammateIdle, None, {
+                                        let mut input = child.base_hook_input();
+                                        input["permission_mode"] = json!(child.permission_mode.label());
+                                        input["teammate_name"] = json!(name);
+                                        input["team_name"] = json!(child.team_name);
+                                        input
+                                    })
+                                    .await?;
+                                if idle.prevent_continuation {
+                                    bail!(
+                                        "TeammateIdle hook stopped continuation: {}",
+                                        idle.stop_reason.as_deref().unwrap_or("no reason provided")
+                                    )
+                                }
+                                feedback.extend(
+                                    idle.blocking_reasons
+                                        .into_iter()
+                                        .map(|reason| format!("TeammateIdle hook feedback:\n{reason}")),
+                                );
+                            }
+                            if feedback.is_empty() {
+                                break answer;
+                            }
+                            continuation_rounds += 1;
+                            if continuation_rounds >= steps {
+                                bail!(
+                                    "Teammate {name} exceeded {steps} hook continuation rounds; \
+                                     task state and session were preserved for recovery"
+                                )
+                            }
+                            continuation = format!(
+                                "{}\nContinue working on the outstanding tasks before going idle.",
+                                feedback.join("\n")
+                            );
+                        };
                         Ok::<_, anyhow::Error>(answer)
                     }
                     .await;
