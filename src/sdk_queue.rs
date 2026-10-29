@@ -227,7 +227,9 @@ pub async fn control(
                 } else {
                     prompt
                 };
-                let answer = agent.ask_with_blocks(&model_prompt, structured.blocks).await;
+                let answer = agent
+                    .ask_with_blocks(&model_prompt, structured.blocks)
+                    .await;
                 let ended = guard.end(generation);
                 if !ended {
                     bail!("Query generation changed during execution")
