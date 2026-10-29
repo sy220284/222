@@ -1,3 +1,10 @@
+## 2026-10-29：本地技能用户调用与模型权限双通道（已提交、待验收）
+
+- **原版依据**：`source/src/skills/loadSkillsDir.ts:216–258,316–373` 为本地 `SKILL.md` 同时提供用户可调用命令及模型调用元数据；`source/src/tools/SkillTool/SkillTool.ts:405–423` 独立检查模型调用禁用标志。
+- **Rust 可达链**：交互 `src/main.rs::chat` 识别 `/本地技能名` 并检查实际 `.atlas/skills/<name>/SKILL.md` → `Agent::invoke_user_skill` → `ToolExecutor::invoke_user_skill/render_skill` → 文件授权、Read 规则、`user-invocable` → 技能参数/目录/会话变量展开 → `Agent::ask`；`/skills` 通过 `Agent::list_user_skills` 只列用户可调用技能。模型 `list_skills/read_skill` 独立按 `disable-model-invocation` 过滤，隐藏技能禁止回落成普通模型文本。
+- **代码提交**：`61ddae6e18a1b61eb6aee29dd804e21bee1e3613`、`7854bf27aa93aefc7d8a2f079fdb8d6bd6cda6aa`、`be77ed494f993dfa095618b8343a63b8baaa88ca`、`28ecf4cf04e8510345f189e6526bfa963bed7d25`、`0c1f62671107fb904ae951362710ae4675391321`、`b3b63dc4d4d37114de9e9fd916e82dd0120feda8`。保守计 **2 项独立用户功能**：①交互 `/skills` 按用户权限展示技能，用户专用技能不会被模型白名单过滤误隐藏；②用户直接调用本地技能斜杠命令，含模型禁止调用但允许用户调用的技能。
+- **累计**：本轮 **12/100，余 88**；先行 100 项逐项核实清单尚未完成，未运行 Cargo、测试、CI，所有提交均待行为验收，Issue #3 冻结 362 项保持开放。完整用户 UI/技能自动发现/技能元数据与跨平台行为仍缺。
+
 ## 2026-10-29：技能仅用户调用标志进入真实模型权限边界（已提交、待验收）
 
 - **原版**：`source/src/skills/loadSkillsDir.ts:216–258` 解析 `disable-model-invocation`；`source/src/tools/SkillTool/SkillTool.ts:405–423` 在模型调用前明确拒绝该技能。
