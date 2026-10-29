@@ -187,7 +187,7 @@ impl ToolExecutor {
             }
             "web_fetch" => {
                 self.require_approval("web_fetch", &args)?;
-                webfetch::execute_with_redirect_policy(&args, &|target| {
+                webfetch::execute_with_redirect_policy_in_workspace(&args, &self.root, &|target| {
                     // Check explicit denies now; a new tool invocation handles
                     // the redirected origin's interactive approval separately.
                     let policy = permission_rules::policy_for(
