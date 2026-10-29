@@ -24,9 +24,10 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use serde_json::json;
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Instant,
 };
 
@@ -176,6 +177,9 @@ pub struct Agent {
     hook_rules: Vec<HookRule>,
     model_prices: Vec<ModelPrice>,
     file_metrics: Arc<ToolMetrics>,
+    /// Read/Edit and NotebookEdit observations survive subsequent model turns.
+    notebook_reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
+    file_reads: Arc<Mutex<HashMap<PathBuf, tools::FileReadState>>>,
     last_context_usage: Option<crate::context_usage::Snapshot>,
     last_model_usage: Option<TokenUsage>,
 }
@@ -286,6 +290,8 @@ impl Agent {
             hook_rules: Vec::new(),
             model_prices: Vec::new(),
             file_metrics,
+            notebook_reads: Arc::new(Mutex::new(HashMap::new())),
+            file_reads: Arc::new(Mutex::new(HashMap::new())),
             last_context_usage: None,
             last_model_usage: None,
         })
@@ -301,6 +307,17 @@ impl Agent {
             ).await?);
         }
         Ok(())
+    }
+
+    /// An SDK client can restore a previously observed file read after its
+    /// transcript entry was removed. The shared cache is consumed by the
+    /// next actual Edit tool, including after a model turn boundary.
+    pub fn seed_read_state(&self, path: &str, observed_ms: u64) -> Result<()> {
+        ToolExecutor::new(self.root.clone(), self.approval, false)
+            .with_extra_roots(self.additional_dirs.clone())
+            .with_permission_rules(self.permission_rules.clone())
+            .with_shared_reads(self.notebook_reads.clone(), self.file_reads.clone())
+            .seed_read_state(path, observed_ms)
     }
 
     /// A headless SessionStart hook may provide the first user turn before
@@ -2902,6 +2919,7 @@ impl Agent {
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_session_id(self.session.id.to_string())
             .with_metrics(self.file_metrics.clone())
+            .with_shared_reads(self.notebook_reads.clone(), self.file_reads.clone())
             .with_plugins(self.enabled_plugins.clone())
             .with_search(self.search_backend.clone())
             .with_background(self.background.clone())
