@@ -2185,6 +2185,7 @@ impl Agent {
             }
         }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+            .with_session_id(self.session.id.to_string())
             .with_metrics(self.file_metrics.clone())
             .with_plugins(self.enabled_plugins.clone())
             .with_search(self.search_backend.clone())
