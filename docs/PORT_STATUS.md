@@ -780,3 +780,12 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 5. **语义会话搜索自定义标题与完整摘要（1 项）**：`src/utils/agenticSessionSearch.ts::agenticSessionSearch` 在显示名不同于 customTitle 时仍将后者送给检索模型，摘要不作额外 2000 字符截断。Rust `src/semantic_session_search.rs::prompt` 现补入两个原版字段语义，真实入口 `main.rs::SemanticSessions`。提交 `f476503335c096417d5a92c9a878a7ee3a7e79e3`、`c6e3f6f52479c42b50b9af99f508832ce9783c7d`。
 
 **本轮准确进度**：5 个互不重复用户业务行为有新 Rust 代码并推送，95 项未完成；尚未形成并逐项核实本轮完整 100 项问题清单，也未完成 100 项源码补齐。无行为测试、无完整等价验收，Issue #3 冻结 362 项继续全部开放。下一轮应复用本页未闭环差异，优先推进剩余真实功能，严禁以原始文件数、纯审计或重复功能凑数。
+
+
+## 2026-10-29：无交互 TodoWrite 与队员完成任务提示（源码已提交，待验收）
+
+对照完整 2.1.88 原版 `src/tools/TodoWriteTool/TodoWriteTool.ts`、`src/utils/todo/types.ts`、`src/utils/tasks.ts::isTodoV2Enabled`，补齐 Rust `src/task.rs`、`src/session.rs`、`src/agent.rs` 的无交互任务清单主链：在普通 SDK/单次运行提供原版 `TodoWrite` 工具，验证 `content/status/activeForm`，支持整表替换、最后一项完成自动清空，保存到会话并在恢复时读取；交互模式继续使用 Task V2，`ATLAS_ENABLE_TASKS` 允许无交互显式启用 V2。代码提交 `b4b03addbf2c94fe5c42632284d5db60dd74b8a8`。
+
+对照原版 `src/tools/TaskUpdateTool/TaskUpdateTool.ts::mapToolResultToToolResultBlockParam`，补齐队员成功完成任务后向模型反馈下一项 TaskList 检索提示；仅对真实状态从非 completed 转 completed 且处于团队队员身份时发出，不重复提醒。代码提交 `090137302528e0550003bb2e66fa0e77bbe08998`。
+
+本轮两条独立用户业务链源码已提交，均**待行为验收**；未运行 Cargo、测试或 CI，未提升任何原路径的完整等价验收状态，Issue #3 冻结 362 项继续开放。后续需要核对无交互/交互 SDK 工具模式、原版 Todo UI 状态和复杂团队任务时序。100 项本轮硬目标仍未完成，禁止将这两项当作 100 项闭环。

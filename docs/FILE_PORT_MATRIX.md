@@ -1298,7 +1298,7 @@
 | `src/tools/TaskStopTool/TaskStopTool.ts` | 132 | 3935 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs` | 部分实现：task_id、shell_id、KillShell、成功返回和异常状态对齐；其余任务类型/完整生命周期待验收 |
 | `src/tools/TaskStopTool/UI.tsx` | 41 | 5672 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskStopTool/prompt.ts` | 9 | 280 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/TaskUpdateTool/TaskUpdateTool.ts` | 407 | 12161 | 重写：工具行为、参数和权限 | `src/task_graph.rs / src/agent.rs / src/team_mailbox.rs` | 部分实现：状态/所有者/元数据、双向依赖与删除级联、TaskCompleted hook 阻断、队员启动任务自动认领及负责人邮箱通知；验证提醒、UI 与完整时序未等价 |
+| `src/tools/TaskUpdateTool/TaskUpdateTool.ts` | 407 | 12161 | 重写：工具行为、参数和权限 | `src/task_graph.rs / src/agent.rs / src/team_mailbox.rs` | 部分实现：状态/所有者/元数据、双向依赖与删除级联、TaskCompleted hook 阻断、队员启动任务自动认领及负责人邮箱通知；队员完成任务后收到领取下一任务的提示；验证提醒、UI 与完整时序未等价 |
 | `src/tools/TaskUpdateTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/TaskUpdateTool/prompt.ts` | 78 | 2375 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TeamCreateTool/TeamCreateTool.ts` | 241 | 7665 | 重写：工具行为、参数和权限 | `src/team_registry.rs / src/agent.rs` | 部分实现：团队配置、任务图、成员登记与工具入口；原版全部成员字段、后端与生命周期未等价 |
@@ -1309,7 +1309,7 @@
 | `src/tools/TeamDeleteTool/UI.tsx` | 20 | 2906 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TeamDeleteTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/TeamDeleteTool/prompt.ts` | 17 | 684 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/TodoWriteTool/TodoWriteTool.ts` | 116 | 3881 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/TodoWriteTool/TodoWriteTool.ts` | 116 | 3881 | 重写：工具行为、参数和权限 | `src/task.rs / src/session.rs / src/agent.rs` | 部分实现：无交互 SDK/单次运行暴露 TodoWrite；严格清单字段与状态校验、整表替换、全部完成自动清空、会话保存恢复；原版 UI 状态与跨会话边界待验收 |
 | `src/tools/TodoWriteTool/constants.ts` | 2 | 48 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TodoWriteTool/prompt.ts` | 185 | 9527 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ToolSearchTool/ToolSearchTool.ts` | 472 | 14275 | 重写：工具行为、参数和权限 | `src/tool_search.rs / src/agent.rs` | 部分实现：已接入模型可调用工具搜索，精确选择、MCP前缀、关键词权重和必须词、数量限制；新增 MCP 工具名称延迟目录、模型选中后下一轮动态注入 schema、JSON 模式定义回传。CLI→HTTP模型→查询结果→会话保存测试通过；原版 tool_reference 原生协议及更多动态同步场景尚未等价；新增完整工具名回退评分及 searchHint 关键词权重，完整 deferred/tool_reference 协议仍缺 |
@@ -1873,7 +1873,7 @@
 | `src/utils/thinking.ts` | 163 | 5514 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/timeouts.ts` | 40 | 1410 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/tmuxSocket.ts` | 428 | 13693 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/todo/types.ts` | 19 | 602 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
+| `src/utils/todo/types.ts` | 19 | 602 | 重写：保持通用行为 | `src/portable_settings_runtime.rs / src/task.rs` | 部分实现：TodoItem content/status/activeForm 实际序列化与输入校验已接无交互 Agent，全部边界待行为验收 |
 | `src/utils/tokenBudget.ts` | 74 | 2675 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/tokens.ts` | 262 | 9606 | 重写：保持通用行为 | `src/generated_ports/p_faf3dbb033a1d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/toolErrors.ts` | 133 | 4012 | 重写：保持通用行为 | `src/tool_errors.rs / src/tools.rs` | 部分实现：按原版补充错误头尾保留、Shell 错误字段、JSON 参数校验提示，接入真实工具执行错误输出；原版 Zod Schema 输入与 AbortError 类型传播仍待验收 |
