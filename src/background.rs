@@ -420,6 +420,36 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     #[tokio::test]
+    async fn explicit_shell_override_does_not_mutate_background_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let tasks = BackgroundTasks::new(&dir.path().canonicalize().unwrap()).unwrap();
+        tasks.set_shell(crate::shell_runtime::ShellKind::Powershell);
+        let started: Value = serde_json::from_str(
+            &tasks
+                .start_with_shell(
+                    "printf 'isolated-shell'",
+                    "Explicit Bash despite PowerShell default",
+                    crate::shell_runtime::ShellKind::Bash,
+                )
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let id = started["task_id"].as_str().unwrap();
+        let output: Value =
+            serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
+        assert!(output["task"]["output"]
+            .as_str()
+            .unwrap()
+            .contains("isolated-shell"));
+        assert_eq!(
+            *tasks.shell_kind.lock().unwrap(),
+            crate::shell_runtime::ShellKind::Powershell
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
     async fn completes_and_reads_output() {
         let dir = tempfile::tempdir().unwrap();
         let tasks = BackgroundTasks::new(&dir.path().canonicalize().unwrap()).unwrap();
