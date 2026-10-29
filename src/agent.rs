@@ -1923,10 +1923,17 @@ impl Agent {
         let mut system = system_prompt(&self.root)?;
         if self.child_depth > 0 {
             let role = self.prompt_role.as_deref().unwrap_or("general");
-            system.push_str(crate::prompt_runtime::role_instructions(
-                role,
-                self.team_name.is_some(),
-            ));
+            if let Some(custom) =
+                crate::prompt_runtime::custom_role_instructions(&self.root, role)?
+            {
+                system.push_str("\n# Custom Agent Instructions\n");
+                system.push_str(&custom);
+            } else {
+                system.push_str(crate::prompt_runtime::role_instructions(
+                    role,
+                    self.team_name.is_some(),
+                ));
+            }
         } else if self.team_name.is_some() && self.agent_name.as_deref() == Some("team-lead") {
             system.push_str(crate::prompt_runtime::COORDINATOR);
         }
