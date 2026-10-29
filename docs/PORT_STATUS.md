@@ -1,3 +1,11 @@
+## 2026-10-29：SDK SessionStart 首条用户消息等待初始化后执行（源码已提交、待验收）
+
+- **原版依据**：`source/src/cli/print.ts:2914–2917` 在 `initialize` 设置系统提示词、Agent 与 Hooks 后才处理预先入队的消息；`source/src/cli/print.ts:4369–4375` 同时接受 SDK 传入的自定义提示词。
+- **原 Rust 缺口**：`src/main.rs::sdk` 以前在读取 stdin 前立即执行 SessionStart Hook 注入的初始用户消息，并提前将 SDK 标记为已初始化，导致随后合法的 `initialize` 请求被拒绝，自定义系统提示词来不及生效。
+- **实质修复**：`sdk_run_initial_turn` 保留真实 Agent 模型调用和 result/error 回执；SDK 初始化成功后才运行初始用户轮次。没有显式 initialize 时，首个用户事件之前仍先执行 SessionStart 消息；失败初始化不消费初始消息，避免错误配置使会话提前启动。
+- **提交**：`82f8bb97eee90f591fa391fe3da0ac8b86f17190`，静态复核 SDK 初始化响应结构、状态变量及两个真实运行入口。
+- **计数**：这是与自定义系统提示词、思考预算不同的**第 4 项独立用户可感知业务功能**，本轮累计 **4/100，剩余 96**。仍未形成先行完整 100 项缺口清单及方案；不宣称达到 A/B/C 的完整目标。未运行 Cargo/测试/CI，新增代码**已提交、待行为验收**。原版完整排队/中断/异步并发、初始化前其他控制消息及跨进程恢复时序仍待补齐，Issue #3 冻结 362 项保持开放，PR #2 仍为 Draft。
+
 ## 2026-10-29：SDK 动态思考预算接入实际 Gemini 模型请求（源码已提交、待验收）
 
 - **原版完整源码**：`source/src/cli/print.ts:2945–2956` 的 `set_max_thinking_tokens` 区分 `null`（恢复默认）、`0`（关闭）和正整数预算；`source/src/utils/sideQuestion.ts:50–84` 要求独立提问继承父会话思考配置。
