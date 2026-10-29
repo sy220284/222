@@ -185,7 +185,9 @@ impl HookRunner {
                     outcome.blocking_reason = Some(reason);
                 }
             }
-            outcome.additional_context.extend(response.additional_context);
+            outcome
+                .additional_context
+                .extend(response.additional_context);
             outcome
                 .non_blocking_errors
                 .extend(response.non_blocking_errors);
