@@ -13,6 +13,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/MessageModel.tsx" => match export {
+            "view" => serde_json::to_value(super::p_0ae9a8bbc4878::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/MessageResponse.tsx" => match export {
@@ -25,6 +29,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/MessageTimestamp.tsx" => match export {
+            "view" => serde_json::to_value(super::p_ce48428997d07::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/Messages.tsx" => match export {
@@ -49,6 +57,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/PrBadge.tsx" => match export {
+            "view" => serde_json::to_value(super::p_6da763d87b5ad::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/PressEnterToContinue.tsx" => match export {
@@ -322,11 +334,11 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/MarkdownTable.tsx", vec![]),
         ("src/components/MemoryUsageIndicator.tsx", vec![]),
         ("src/components/Message.tsx", vec![]),
-        ("src/components/MessageModel.tsx", vec![]),
+        ("src/components/MessageModel.tsx", vec!["view"]),
         ("src/components/MessageResponse.tsx", vec![]),
         ("src/components/MessageRow.tsx", vec![]),
         ("src/components/MessageSelector.tsx", vec![]),
-        ("src/components/MessageTimestamp.tsx", vec![]),
+        ("src/components/MessageTimestamp.tsx", vec!["view"]),
         ("src/components/Messages.tsx", vec![]),
         ("src/components/ModelPicker.tsx", vec![]),
         ("src/components/NativeAutoUpdater.tsx", vec![]),
@@ -337,7 +349,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/OffscreenFreeze.tsx", vec![]),
         ("src/components/OutputStylePicker.tsx", vec![]),
         ("src/components/PackageManagerAutoUpdater.tsx", vec![]),
-        ("src/components/PrBadge.tsx", vec![]),
+        ("src/components/PrBadge.tsx", vec!["view"]),
         ("src/components/PressEnterToContinue.tsx", vec![]),
         ("src/components/PromptInput/HistorySearchInput.tsx", vec![]),
         ("src/components/PromptInput/PromptInput.tsx", vec![]),
@@ -480,4 +492,43 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/design-system/Pane.tsx", vec![]),
         ("src/components/design-system/ProgressBar.tsx", vec![]),
     ]
+}
+
+#[cfg(test)]
+mod source_view_dispatch_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn message_pr_views_are_reachable_via_source_inspection() {
+        let assistant = json!({"type":"assistant","timestamp":"2026-10-29T14:00:00Z","message":{"model":"gpt-6","content":[{"type":"text","text":"hello"}]}});
+        for (path, data, text) in [
+            (
+                "src/components/MessageModel.tsx",
+                json!({"message":assistant,"isTranscriptMode":true}),
+                "gpt-6",
+            ),
+            (
+                "src/components/MessageTimestamp.tsx",
+                json!({"message":assistant,"isTranscriptMode":true}),
+                ":",
+            ),
+            (
+                "src/components/PrBadge.tsx",
+                json!({"number":22,"url":"https://github.com/example/repo/pull/22","reviewState":"approved"}),
+                "#22",
+            ),
+        ] {
+            let wire = inspect(path, "view", &[data]).expect("view must be registered");
+            let node: super::super::ui::VNode = serde_json::from_value(wire).unwrap();
+            assert_eq!(node.unresolved_node_count(), 0, "{path}");
+            assert!(node.text_content().contains(text), "{path}");
+            assert!(
+                catalog()
+                    .iter()
+                    .any(|(source, exports)| *source == path && exports.contains(&"view")),
+                "{path} catalog"
+            );
+        }
+    }
 }
