@@ -1556,12 +1556,14 @@ impl Agent {
         if !title.trim().is_empty() {
             return self.rename_session(title);
         }
+        // rename.ts::call checks teammate identity before attempting model
+        // generation, including when the teammate has no conversation yet.
+        if crate::session_control::is_teammate_session(&self.session) {
+            bail!("Cannot rename: This session is a swarm teammate. Teammate names are set by the team leader.");
+        }
         let context = crate::session_control::conversation_text_for_name(&self.session.messages);
         if context.trim().is_empty() {
             bail!("Could not generate a name: no conversation context yet. Usage: /rename <name>");
-        }
-        if crate::session_control::is_teammate_session(&self.session) {
-            bail!("Cannot rename: This session is a swarm teammate. Teammate names are set by the team leader.");
         }
         let started = Instant::now();
         let response = self.provider.complete(&ModelRequest {
