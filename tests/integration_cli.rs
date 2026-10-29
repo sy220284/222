@@ -5228,7 +5228,6 @@ fn transcript_search_uses_visible_messages_not_model_only_reminders() {
     assert!(String::from_utf8_lossy(&tool.stdout).contains("4  tool"));
 }
 
-
 #[test]
 fn doctor_cli_and_chat_report_real_local_environment_offline() {
     let root = tempfile::tempdir().unwrap();
@@ -5241,30 +5240,54 @@ fn doctor_cli_and_chat_report_real_local_environment_offline() {
             "base_url":"http://127.0.0.1:9/v1"
         }],"mcp_servers":[{
             "id":"missing","command":"fake-executable-for-doctor-test"
-        }]}).to_string(),
-    ).unwrap();
+        }]})
+        .to_string(),
+    )
+    .unwrap();
     let output = binary()
         .args(["--workspace", root.path().to_str().unwrap(), "doctor"])
         .env("ATLAS_CONFIG", &config)
-        .output().unwrap();
-    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let text = String::from_utf8_lossy(&output.stdout);
-    assert!(text.contains("Version:"),"{text}");
-    assert!(text.contains("Provider: 1 model profile"),"{text}");
-    assert!(text.contains("MCP: missing: command"),"{text}");
-    assert!(text.contains("Context: AGENTS.md is 50001 bytes"),"{text}");
+    assert!(text.contains("Version:"), "{text}");
+    assert!(text.contains("Provider: 1 model profile"), "{text}");
+    assert!(text.contains("MCP: missing: command"), "{text}");
+    assert!(text.contains("Context: AGENTS.md is 50001 bytes"), "{text}");
     let mut child = binary()
         .args(["--workspace", root.path().to_str().unwrap(), "chat"])
         .env("ATLAS_CONFIG", &config)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped()).spawn().unwrap();
-    child.stdin.take().unwrap().write_all(b"/doctor\n/exit\n").unwrap();
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"/doctor\n/exit\n")
+        .unwrap();
     let chat = child.wait_with_output().unwrap();
-    assert!(chat.status.success(),"{}",String::from_utf8_lossy(&chat.stderr));
+    assert!(
+        chat.status.success(),
+        "{}",
+        String::from_utf8_lossy(&chat.stderr)
+    );
     let chat_text = String::from_utf8_lossy(&chat.stdout);
-    assert!(chat_text.contains("Context: AGENTS.md is 50001 bytes"),"{chat_text}");
-    assert!(chat_text.contains("Live MCP: missing: failed"),"{chat_text}");
+    assert!(
+        chat_text.contains("Context: AGENTS.md is 50001 bytes"),
+        "{chat_text}"
+    );
+    assert!(
+        chat_text.contains("Live MCP: missing: failed"),
+        "{chat_text}"
+    );
 }
 
 #[test]
@@ -5273,10 +5296,16 @@ fn doctor_inspects_invalid_config_without_starting_model() {
     let config = root.path().join("bad-config.json");
     fs::write(&config, "{this is invalid JSON}").unwrap();
     let output = binary()
-        .args(["--workspace",root.path().to_str().unwrap(),"doctor"])
-        .env("ATLAS_CONFIG",&config).output().unwrap();
-    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
-    let text=String::from_utf8_lossy(&output.stdout);
-    assert!(text.contains("[WARN] Configuration:"),"{text}");
-    assert!(text.contains("settings could not be loaded"),"{text}");
+        .args(["--workspace", root.path().to_str().unwrap(), "doctor"])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("[WARN] Configuration:"), "{text}");
+    assert!(text.contains("settings could not be loaded"), "{text}");
 }
