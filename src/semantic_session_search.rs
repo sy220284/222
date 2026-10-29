@@ -30,23 +30,7 @@ fn excerpt(messages: &[Message]) -> String {
     let text = selected
         .into_iter()
         .filter(|message| matches!(message.role.as_str(), "user" | "assistant"))
-        .map(|message| {
-            let mut parts = Vec::new();
-            if let Some(text) = message.content.as_deref() {
-                parts.push(text);
-            }
-            if let Some(blocks) = &message.content_blocks {
-                for block in blocks {
-                    if let Some(text) = block
-                        .as_str()
-                        .or_else(|| block.get("text").and_then(Value::as_str))
-                    {
-                        parts.push(text);
-                    }
-                }
-            }
-            parts.join(" ")
-        })
+        .map(Message::visible_text)
         .collect::<Vec<_>>()
         .join(" ");
     let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -176,12 +160,7 @@ pub async fn search(
             return Ok((Vec::new(), None));
         }
     };
-    let ranked = result
-        .message
-        .content
-        .as_deref()
-        .map(|text| parse_indices(text, candidates.len()))
-        .unwrap_or_default()
+    let ranked = parse_indices(&result.message.visible_text(), candidates.len())
         .into_iter()
         .map(|index| candidates[index].0.clone())
         .collect();
