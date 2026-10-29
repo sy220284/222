@@ -22,11 +22,42 @@ pub fn definition() -> Value {
                         },"required":["label","description"]}},
                     "multiSelect":{"type":"boolean","default":false}
                 },"required":["question","header","options"]}}
-        },"required":["questions"]}
+        },"required":["questions"],"additionalProperties":false}
     }})
 }
 
 fn validate(input: &Value) -> Result<&[Value]> {
+    // The source uses z.strictObject at the tool input boundary. Preserve
+    // the accepted optional SDK fields, but reject unexpected root keys.
+    let object = input.as_object().context("AskUserQuestion input must be an object")?;
+    for key in object.keys() {
+        if !matches!(key.as_str(), "questions" | "answers" | "annotations" | "metadata") {
+            bail!("Unknown AskUserQuestion input field: {key}");
+        }
+    }
+    if let Some(answers) = object.get("answers") {
+        let values = answers.as_object().context("answers must be an object")?;
+        if values.values().any(|value| !value.is_string()) {
+            bail!("answers values must be strings");
+        }
+    }
+    if let Some(annotations) = object.get("annotations") {
+        let values = annotations.as_object().context("annotations must be an object")?;
+        for annotation in values.values() {
+            let fields = annotation.as_object().context("annotation must be an object")?;
+            for field in ["preview", "notes"] {
+                if fields.get(field).is_some_and(|value| !value.is_string()) {
+                    bail!("annotation {field} must be a string");
+                }
+            }
+        }
+    }
+    if let Some(metadata) = object.get("metadata") {
+        let metadata = metadata.as_object().context("metadata must be an object")?;
+        if metadata.get("source").is_some_and(|value| !value.is_string()) {
+            bail!("metadata.source must be a string");
+        }
+    }
     let questions = input
         .get("questions")
         .and_then(Value::as_array)
@@ -67,6 +98,9 @@ fn validate(input: &Value) -> Result<&[Value]> {
             opt.get("description")
                 .and_then(Value::as_str)
                 .context("option description required")?;
+            if opt.get("preview").is_some_and(|value| !value.is_string()) {
+                bail!("option preview must be a string");
+            }
             if label.is_empty() || label.eq_ignore_ascii_case("other") || !labels.insert(label) {
                 bail!("Option labels must be nonempty, unique and cannot be Other");
             }
