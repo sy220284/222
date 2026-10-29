@@ -67,6 +67,14 @@ impl FileReadCache {
         const MAX_ENTRIES: usize = 100;
         const MAX_BYTES: usize = 25 * 1024 * 1024;
         if state.content.len() > MAX_BYTES {
+            // Source FileStateCache uses lru-cache.set(): an oversized
+            // replacement invalidates the prior value for the same key.
+            // Retaining a previously full Read would let Edit/Write rely on
+            // stale authorization after the new large Read was not cached.
+            if let Some(old) = self.entries.remove(&path) {
+                self.bytes = self.bytes.saturating_sub(old.content.len().max(1));
+            }
+            self.recency.retain(|entry| entry != &path);
             return;
         }
         if let Some(old) = self.entries.remove(&path) {
