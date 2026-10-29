@@ -313,6 +313,22 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
     let value: Value = match serde_json::from_slice(&out) {
         Ok(value) => value,
         Err(error) => {
+            // Syntax errors fall back to plain-text exit-code handling in
+            // hooks.ts:399-450; only a schema validation error is reported
+            // separately. Exit code 2 must still block in this case.
+            if status.code() == Some(2) {
+                return Ok(HookOutcome {
+                    blocking_reason: Some(if stderr_text.is_empty() {
+                        "Hook blocked this operation".into()
+                    } else {
+                        stderr_text
+                    }),
+                    ..Default::default()
+                });
+            }
+            if status.success() {
+                return Ok(HookOutcome::default());
+            }
             return Ok(HookOutcome {
                 non_blocking_errors: vec![format!(
                     "Hook '{}' returned invalid JSON: {error}",
@@ -704,7 +720,7 @@ mod tests {
             HookRule {
                 event: HookEvent::PreToolUse,
                 matcher: None,
-                command: "printf '{not-json'; exit 2".into(),
+                command: "printf '{not-json'; exit 1".into(),
                 timeout_seconds: 3,
             },
             HookRule {
@@ -723,6 +739,23 @@ mod tests {
         assert_eq!(outcome.permission_decision.as_deref(), Some("allow"));
         assert_eq!(outcome.non_blocking_errors.len(), 1);
         assert!(outcome.non_blocking_errors[0].contains("invalid JSON"));
+
+        let malformed_block = HookRunner::new(&[HookRule {
+            event: HookEvent::PreToolUse,
+            matcher: None,
+            command: "printf '{not-json'; echo 'blocked syntax' >&2; exit 2".into(),
+            timeout_seconds: 3,
+        }])
+        .unwrap();
+        assert_eq!(
+            malformed_block
+                .run(HookEvent::PreToolUse, None, json!({}))
+                .await
+                .unwrap()
+                .blocking_reason
+                .as_deref(),
+            Some("blocked syntax")
+        );
 
         let blocked = HookRunner::new(&[HookRule {
             event: HookEvent::PreToolUse,
