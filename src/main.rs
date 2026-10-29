@@ -298,6 +298,16 @@ async fn main() -> Result<()> {
                 .or_else(|| source_semantics_osc::inspect(source, name, &args))
                 .or_else(|| source_semantics_types::inspect(source, name, &args))
                 .or_else(|| generated_ports::inspect(source, name, &args))
+                .or_else(|| {
+                    if source != "src/utils/transcriptSearch.ts" { return None; }
+                    let value = args.first().unwrap_or(&Value::Null);
+                    match name {
+                        "renderableSearchText" => Some(json!(transcript_search::renderable_search_text(value))),
+                        "toolUseSearchText" => Some(json!(transcript_search::tool_use_search_text(value))),
+                        "toolResultSearchText" => Some(json!(transcript_search::tool_result_search_text(value))),
+                        _ => None,
+                    }
+                })
             {
                 Some(value) => {
                     if name == "view" {
@@ -340,6 +350,11 @@ async fn main() -> Result<()> {
                     if !exports.contains(name) {
                         exports.push(*name);
                     }
+                }
+            }
+            if source == "src/utils/transcriptSearch.ts" {
+                for name in ["renderableSearchText", "toolUseSearchText", "toolResultSearchText"] {
+                    exports.push(name);
                 }
             }
             if exports.is_empty() {
