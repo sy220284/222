@@ -429,22 +429,32 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
             } else {
                 registry.keys().cloned().collect::<Vec<_>>()
             };
-            // Preflight *all* sources before mutating registry. A missing local
-            // directory must never cause a partially refreshed list.
-            for name in &names {
-                let record = &registry[name];
-                let (manifest_name, _) = inspect_local(&record.source)?;
-                if manifest_name != *name {
-                    bail!("Marketplace name changed from '{name}' to '{manifest_name}'");
+            // marketplaceManager.ts::refreshAllMarketplaces isolates a broken
+            // catalog from healthy ones. A targeted refresh still reports
+            // failure directly, while bulk refresh returns per-source errors.
+            let single = target.is_some_and(|value| !value.trim().is_empty());
+            let mut updated = Vec::new();
+            let mut failed = Vec::new();
+            for name in names {
+                let result = inspect_local(&registry[&name].source).and_then(|(actual, _)| {
+                    if actual != name {
+                        bail!("Marketplace name changed from '{name}' to '{actual}'");
+                    }
+                    Ok(())
+                });
+                match result {
+                    Ok(()) => {
+                        registry.get_mut(&name).expect("marketplace exists").last_updated = now();
+                        updated.push(name);
+                    }
+                    Err(error) if single => return Err(error),
+                    Err(error) => failed.push(json!({"name":name,"error":format!("{error:#}")})),
                 }
             }
-            for name in &names {
-                registry.get_mut(name).unwrap().last_updated = now();
-            }
-            if !names.is_empty() {
+            if !updated.is_empty() {
                 save(root, &registry)?;
             }
-            Ok(json!({"updated":names}))
+            Ok(json!({"updated":updated,"failed":failed}))
         }
         _ => bail!("Unsupported marketplace action: {action}"),
     }
