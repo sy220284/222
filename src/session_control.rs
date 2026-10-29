@@ -103,23 +103,87 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
     entries.sort_by(|a, b| b.modified_ms.cmp(&a.modified_ms).then(a.id.cmp(&b.id)));
     Ok(entries)
 }
+// 2.1.88 utils/agenticSessionSearch.ts scans the first and last 50 messages,
+// skips non-conversation roles and searches only the first 2000 text characters.
+// This is the deterministic local pre-filter; semantic model ranking remains
+// a separate feature and must not be claimed as implemented here.
+fn searchable_transcript(messages: &[Message]) -> String {
+    let mut parts = Vec::new();
+    let first = messages.len().min(50);
+    let tail = if messages.len() > 100 { messages.len() - 50 } else { first };
+    let selected = messages.iter().take(if messages.len() <= 100 { messages.len() } else { first });
+    let selected = selected.chain(messages.iter().skip(tail));
+    for message in selected {
+        if message.role != "user" && message.role != "assistant" {
+            continue;
+        }
+        if let Some(text) = message.content.as_deref().filter(|s| !s.is_empty()) {
+            parts.push(text.to_owned());
+        } else if let Some(blocks) = &message.content_blocks {
+            let text = blocks
+                .iter()
+                .filter_map(|block| {
+                    block.as_str().or_else(|| block.get("text").and_then(|v| v.as_str()))
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            if !text.is_empty() {
+                parts.push(text);
+            }
+        }
+    }
+    parts
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(2000)
+        .collect()
+}
+
 pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
     let matches = list(root)?;
     let query = query.trim().to_lowercase();
     if query.is_empty() {
         return Ok(matches);
     }
-    Ok(matches
-        .into_iter()
-        .filter(|item| {
-            item.id.to_string().contains(&query)
-                || item.title.to_lowercase().contains(&query)
-                || item
-                    .tag
-                    .as_ref()
-                    .is_some_and(|tag| tag.to_lowercase().contains(query.trim_start_matches('#')))
-        })
-        .collect())
+    let tag_query = query.trim_start_matches('#');
+    let mut ranked = Vec::new();
+    for item in matches {
+        let tag = item.tag.as_deref().unwrap_or("").to_lowercase();
+        let rank = if !tag.is_empty() && tag == tag_query {
+            Some(0u8)
+        } else if !tag.is_empty() && tag.contains(tag_query) {
+            Some(1)
+        } else if item.title.to_lowercase().contains(&query) {
+            Some(2)
+        } else if item.id.to_string().contains(&query) {
+            Some(3)
+        } else {
+            // The original searches the summary and the first/last transcript
+            // excerpts as well as the title and user tag.
+            Session::load(root, &item.id.to_string()).ok().and_then(|session| {
+                if session.summary.as_deref().is_some_and(|s| s.to_lowercase().contains(&query)) {
+                    Some(4)
+                } else if searchable_transcript(&session.messages)
+                    .to_lowercase()
+                    .contains(&query)
+                {
+                    Some(5)
+                } else {
+                    None
+                }
+            })
+        };
+        if let Some(rank) = rank {
+            ranked.push((rank, item));
+        }
+    }
+    ranked.sort_by(|(rank_a, a), (rank_b, b)| {
+        rank_a.cmp(rank_b).then(b.modified_ms.cmp(&a.modified_ms))
+    });
+    Ok(ranked.into_iter().map(|(_, item)| item).collect())
 }
 
 /// Resolve a UUID, exact title, or unambiguous title/UUID substring. Do not
@@ -383,6 +447,55 @@ mod tests {
         );
         assert!(resolve(root.path(), "nonexistent").is_err());
     }
+    #[test]
+    fn session_search_uses_original_tag_summary_and_transcript_pre_filter() {
+        let root = tempfile::tempdir().unwrap();
+        let mut tagged = Session::fresh();
+        tagged.tag = Some("release".into());
+        tagged.messages.push(Message::text("user", "unrelated"));
+        tagged.save(root.path()).unwrap();
+
+        let mut summarized = Session::fresh();
+        summarized.summary = Some("Release preparation checklist".into());
+        summarized.messages.push(Message::text("user", "other topic"));
+        summarized.save(root.path()).unwrap();
+
+        let mut transcript = Session::fresh();
+        transcript.messages.push(Message {
+            role: "user".into(),
+            content: None,
+            content_blocks: Some(vec![serde_json::json!({
+                "type": "text", "text": "Review release readiness"
+            })]),
+            tool_calls: None,
+            tool_call_id: None,
+        });
+        transcript.save(root.path()).unwrap();
+
+        let mut tool_only = Session::fresh();
+        tool_only.messages.push(Message::text("tool", "release secret output"));
+        tool_only.save(root.path()).unwrap();
+
+        let found = search(root.path(), "release").unwrap();
+        assert_eq!(found.iter().map(|s| s.id).collect::<Vec<_>>(), vec![
+            tagged.id, summarized.id, transcript.id
+        ]);
+        assert_eq!(search(root.path(), "#release").unwrap()[0].id, tagged.id);
+        assert!(search(root.path(), "secret").unwrap().is_empty());
+    }
+
+    #[test]
+    fn transcript_search_scans_both_ends_without_leaking_middle_or_tool_output() {
+        let mut messages = vec![Message::text("user", "opening match")];
+        messages.extend((0..110).map(|i| Message::text("user", format!("middle {i}"))));
+        messages.push(Message::text("assistant", "closing match"));
+        let text = searchable_transcript(&messages);
+        assert!(text.contains("opening match"));
+        assert!(text.contains("closing match"));
+        assert!(!text.contains("middle 55"));
+        assert!(text.chars().count() <= 2000);
+    }
+
     #[cfg(unix)]
     #[test]
     fn refuses_workspace_escape_and_symlink_exports() {
