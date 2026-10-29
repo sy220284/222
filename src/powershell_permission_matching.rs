@@ -92,6 +92,12 @@ fn split_command(cmd: &str) -> (&str, &str) {
     let rest = cmd[split..].trim_start();
     (name, rest)
 }
+/// PowerShell AST classifies paths and qualified scripts as applications.
+fn looks_like_application(command: &str) -> bool {
+    let raw=split_command(command.trim()).0;
+    raw.contains('\\') || raw.contains('/') || raw.starts_with('.')
+        || raw.starts_with('&') || raw.to_ascii_lowercase().ends_with(".ps1")
+}
 fn make_command(cmd_name: &str, rest: &str) -> String {
     if rest.is_empty() {
         cmd_name.to_string()
@@ -180,7 +186,8 @@ fn policy_for_single(rules: &[Rule], command: &str) -> Result<Option<Behavior>> 
             Behavior::Allow => allow = true,
         }
     }
-    Ok(if ask {
+    Ok(if ask || (allow && looks_like_application(actual)) {
+        // Original powershellPermissions.ts:1300-1315,1458-1503.
         Some(Behavior::Ask)
     } else if allow {
         Some(Behavior::Allow)
@@ -223,8 +230,8 @@ fn split_script(command: &str) -> (Vec<String>, bool) {
         }
         if let Some(delimiter) = quote {
             current.push(ch);
-            if delimiter == '"' && ch == '$' && chars.peek() == Some(&'(') {
-                // Double-quoted subexpressions execute code.
+            if delimiter == '"' && ch == '$' {
+                // Both expandable variables and subexpressions need approval.
                 opaque = true;
             }
             if ch == delimiter {
@@ -243,6 +250,11 @@ fn split_script(command: &str) -> (Vec<String>, bool) {
                 current.push(ch);
             }
             '#' if current.chars().last().is_none_or(char::is_whitespace) => {
+                // PowerShell #Requires is an executable parser directive.
+                let next=chars.clone().take(8).collect::<String>();
+                if next.to_ascii_lowercase().starts_with("requires") {
+                    opaque=true;
+                }
                 comment = true;
             }
             ';' | '\n' | '\r' | '|' => {
@@ -268,7 +280,9 @@ fn split_script(command: &str) -> (Vec<String>, bool) {
                 opaque = true;
                 current.push(ch);
             }
-            '$' if chars.peek() == Some(&'(') => {
+            '$' | '@' => {
+                // Original argLeaksValue also rejects variable and splatted
+                // arguments. PowerShell @args and @() can expand at runtime.
                 opaque = true;
                 current.push(ch);
             }
@@ -277,6 +291,13 @@ fn split_script(command: &str) -> (Vec<String>, bool) {
     }
     if quote.is_some() || escaped {
         opaque = true;
+    }
+    let lowered=command.trim_start().to_ascii_lowercase();
+    if lowered.starts_with("using module ")
+        || lowered.starts_with("using assembly ")
+        || lowered.starts_with("using namespace ")
+        || command.contains("--%") {
+        opaque=true;
     }
     if !current.trim().is_empty() {
         parts.push(current.trim().to_owned());
@@ -287,6 +308,19 @@ fn split_script(command: &str) -> (Vec<String>, bool) {
 pub fn policy_for(rules: &[Rule], command: &str) -> Result<Option<Behavior>> {
     let (statements, opaque) = split_script(command);
     if statements.is_empty() {
+        return Ok(Some(Behavior::Ask));
+    }
+    // Without a verified AST, directive and variable expressions require
+    // review even if the parent cmdlet was previously allowed.
+    if opaque {
+        if policy_for_single(rules,command)?==Some(Behavior::Deny){
+            return Ok(Some(Behavior::Deny));
+        }
+        for statement in &statements {
+            if policy_for_single(rules,statement)?==Some(Behavior::Deny){
+                return Ok(Some(Behavior::Deny));
+            }
+        }
         return Ok(Some(Behavior::Ask));
     }
     // Preserve exact, alias and wildcard behavior for ordinary commands.
@@ -346,6 +380,39 @@ mod tests {
                 .collect::<Vec<_>>(),
         )
         .unwrap()
+    }
+    #[test]
+    fn original_ast_security_gates_block_variable_expansion_and_scripts(){
+        let rules=compiled(&[("allow","PowerShell(Get-Content:*)"),
+            ("allow","PowerShell(Write-Output:*)"),
+            ("allow","PowerShell(Get-ChildItem:*)")]);
+        for command in [
+            "Get-Content $env:SECRET_API_KEY",
+            "Get-Content ${env:SECRET_API_KEY}",
+            "Get-Content @args",
+            "Write-Output \"$env:SECRET_API_KEY\"",
+            "Write-Output \"safe $(Get-Content secret)\"",
+            "scripts\\Get-Content secret",
+            "./Get-Content secret",
+            "Get-ChildItem --% hidden",
+            "Get-ChildItem .\n#Requires -Modules UnknownModule",
+            "using module ./hidden.psm1\nGet-ChildItem",
+        ]{
+            assert_eq!(policy_for(&rules,command).unwrap(),Some(Behavior::Ask),
+                "should not inherit allow from cmdlet: {command}");
+        }
+        assert_eq!(policy_for(&rules,"Get-Content 'fixed.txt'").unwrap(),
+            Some(Behavior::Allow));
+        assert_eq!(policy_for(&rules,"Write-Output \"static\"").unwrap(),
+            Some(Behavior::Allow));
+    }
+    #[test]
+    fn explicit_denies_still_override_opaque_compound_statements(){
+        let rules=compiled(&[("allow","PowerShell(Get-ChildItem:*)"),
+            ("deny","PowerShell(Remove-Item:*)")]);
+        assert_eq!(policy_for(&rules,
+            "Get-ChildItem .; Remove-Item blocked; Write-Output $env:SECRET").unwrap(),
+            Some(Behavior::Deny));
     }
     #[test]
     fn raw_and_canonical_powershell_rules_do_not_see_bash() {

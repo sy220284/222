@@ -475,3 +475,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 按 2.1.88 原始源码回查，发现前一轮 `generated_ports` 为 AST 首轮投影：对类 React/Ink 的交互/Hook、复杂表达式与调用副作用没有完成重写；部分 JSX 动态属性和子节点被替换为 `Value::Null`，虽通过编译但**不能视为用户可用完整 UI**。另发现通用 JS 数字转换对空字符串、数组、负号、对象 `length` 的处理错误。已按源码修改 `generated_ports/runtime.rs`，对投影节点新增缺失绑定检测并在 `inspect-source` 输出警告，阻止无声充当已完成界面。过往 400 项的已验收数仍为 0，新代码仍在待统一最终验收状态。
 
 从剩余未迁移中继续补 `src/portable_missing_utilities.rs` 的 11 条实际 Rust 行为：Shell 内置命令规格与路径过滤、交互环境下 `@teammate` 直接写团队邮箱、文字匹配逆色显示节点、Tips 展示会话间隔、终端记忆、通用客户端身份字符串、CLI 退出消息/退出码。实际 CLI 接入 `@teammate`、`/shell-spec`。动态 Fig 规格的远端加载、完整 UI/SDK 入口、原版全边界和恢复路径留待统一验收。
+
+### 2026-10-29：Issue #3 PowerShell 变量泄露与伪装应用授权漏洞
+
+对照原始 2.1.88 `src/tools/PowerShellTool/powershellPermissions.ts` 539–624、932–962、1300–1315、1458–1515 行：原版在准许 cmdlet 前验证 AST 的变量/子表达式/脚本路径属性；Rust 词法权限曾将 `Get-Content $env:SECRET_API_KEY`、`Write-Output "$env:SECRET_API_KEY"`、`scripts\\Get-Content secret` 当作已授权命令执行。现补上动态/环境变量、@splat、path-qualified executable、#Requires、using 和 stop-parsing 的保守拒绝自动放行规则；拒绝仍优先，静态单引号命令保持通过。新增权限匹配回归及真实 `ToolExecutor::approve_external` 授权链回归。原版完整 PowerShell AST、控制流/脚本块、反馈 UI 仍未等价，本次不勾选 Issue #3 冻结项，自动生成模块不作为等价证据。

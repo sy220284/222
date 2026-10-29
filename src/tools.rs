@@ -1236,6 +1236,38 @@ mod tests {
     }
 
     #[test]
+    fn powershell_saved_cmdlet_allow_cannot_execute_variable_or_application_paths(){
+        let root=tempfile::tempdir().unwrap();
+        let rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{
+                behavior:"allow".into(),
+                rule:"PowerShell(Get-Content:*)".into(),
+            },
+            permission_rules::RuleSetting{
+                behavior:"allow".into(),
+                rule:"PowerShell(Write-Output:*)".into(),
+            },
+        ]).unwrap();
+        let executor=executor(root.path(),Approval::Full)
+            .with_shell(crate::shell_runtime::ShellKind::Powershell)
+            .with_permission_rules(rules);
+        for command in [
+            "Get-Content $env:SECRET_API_KEY",
+            "Get-Content @args",
+            "Write-Output \"$env:API_KEY\"",
+            "scripts\\Get-Content secret.txt",
+        ]{
+            let error=executor.approve_external(&ToolCall{
+                id:"blocked".into(),kind:"function".into(),
+                function:FunctionCall{
+                    name:"PowerShell".into(),
+                    arguments:json!({"command":command}).to_string()
+                }
+            }).unwrap_err().to_string();
+            assert!(error.contains("needs approval"),"{command}: {error}");
+        }
+    }
+    #[test]
     fn powershell_compound_permission_checks_reach_actual_tool_dispatch_gate() {
         let root = tempfile::tempdir().unwrap();
         let rules = permission_rules::compile_rules(&[
