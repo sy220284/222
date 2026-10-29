@@ -18,6 +18,8 @@ struct Manifest {
     mcp_servers: Value,
     #[serde(default)]
     skills: Value,
+    #[serde(default)]
+    commands: Value,
 }
 
 fn checked_component(root: &Path, path: &Path) -> Result<PathBuf> {
@@ -40,7 +42,7 @@ fn read_manifest(root: &Path, fallback: &str) -> Result<Manifest> {
         return Ok(Manifest {
             name: fallback.to_owned(), version: None,
             hooks: Value::Null, mcp_servers: Value::Null,
-            skills: Value::Null,
+            skills: Value::Null, commands: Value::Null,
         });
     };
     let path = checked_component(root, &path)?;
@@ -385,6 +387,120 @@ pub fn read_skill(root: &Path, enabled: &[String], identifier: &str) -> Result<S
         bail!("Plugin skill too large")
     }
     Ok(fs::read_to_string(path)?)
+}
+
+/// Resolve an original plugin Markdown slash command to its model-visible
+/// prompt. The interactive entrypoint calls this before the ordinary user
+/// prompt path, so a plugin command actually executes instead of being sent
+/// as unrecognized literal text.
+pub fn command_prompt(
+    root: &Path, enabled: &[String], command: &str, args: &str,
+) -> Result<Option<String>> {
+    let Some((plugin, suffix)) = command.split_once(':') else {
+        return Ok(None);
+    };
+    if !enabled.iter().any(|name| name == plugin)
+        || !valid_name(plugin) || !suffix.split(':').all(valid_name) {
+        return Ok(None);
+    }
+    let plugin_root = directory(root, plugin)?;
+    let manifest = read_manifest(&plugin_root, plugin)?;
+    if manifest.name != plugin {
+        bail!("Plugin manifest identity does not match installed name")
+    }
+
+    // Manifest commands may be inline content or a source file, or an
+    // alternate directory list. These are distinct source formats.
+    if let Some(entries) = manifest.commands.as_object() {
+        if let Some(spec) = entries.get(suffix) {
+            let content = if let Some(content) = spec.get("content").and_then(Value::as_str) {
+                content.to_owned()
+            } else if let Some(relative) = spec.get("source").and_then(Value::as_str) {
+                let path = checked_component(&plugin_root, &plugin_root.join(relative))?;
+                fs::read_to_string(path)?
+            } else {
+                bail!("Plugin command requires source or content")
+            };
+            let names = crate::skill_arguments::frontmatter_argument_names(&content);
+            let prompt = crate::skill_arguments::substitute_arguments(
+                crate::skill_arguments::markdown_body(&content), Some(args), true, &names,
+            );
+            return Ok(Some(prompt));
+        }
+        return Ok(None);
+    }
+
+    let paths: Vec<String> = match &manifest.commands {
+        Value::Null => vec!["commands".into()],
+        Value::String(path) => vec![path.clone()],
+        Value::Array(paths) => paths.iter().map(|path| path.as_str()
+            .map(str::to_owned).context("Plugin command path must be a string"))
+            .collect::<Result<Vec<_>>>()?,
+        _ => bail!("Plugin commands must be a path, array or metadata map"),
+    };
+    for relative in paths {
+        let candidate = plugin_root.join(&relative);
+        if !candidate.exists() {
+            if manifest.commands.is_null() {
+                continue;
+            }
+            bail!("Plugin command path does not exist: {relative}")
+        }
+        let candidate = checked_component(&plugin_root, &candidate)?;
+        let mut markdown = Vec::new();
+        if candidate.is_file() {
+            markdown.push(candidate.clone());
+        } else if candidate.is_dir() {
+            for entry in walkdir::WalkDir::new(&candidate).follow_links(false) {
+                let entry = entry?;
+                if entry.file_type().is_file()
+                    && entry.path().extension().and_then(|ext| ext.to_str())
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("md")) {
+                    markdown.push(checked_component(&plugin_root, entry.path())?);
+                }
+            }
+        } else {
+            bail!("Plugin command source is not a file or directory")
+        }
+        for path in markdown {
+            let relative_path = path.strip_prefix(&candidate).unwrap_or(path.as_path());
+            let is_skill = path.file_name().and_then(|name| name.to_str())
+                .is_some_and(|name| name.eq_ignore_ascii_case("SKILL.md"));
+            if !is_skill && path.parent().is_some_and(|parent| parent.join("SKILL.md").is_file()) {
+                continue;
+            }
+            let mut components = Vec::new();
+            if let Some(parent) = relative_path.parent() {
+                for component in parent.components() {
+                    let part = component.as_os_str().to_str().context("Invalid plugin command path")?;
+                    if !part.is_empty() {
+                        components.push(part.to_owned());
+                    }
+                }
+            }
+            if !is_skill {
+                let stem = path.file_stem().and_then(|stem| stem.to_str())
+                    .context("Invalid plugin command filename")?;
+                components.push(stem.to_owned());
+            } else if components.is_empty() {
+                let parent = path.parent().and_then(|parent| parent.file_name())
+                    .and_then(|name| name.to_str()).context("Invalid skill command directory")?;
+                components.push(parent.to_owned());
+            }
+            if !components.iter().all(|component| valid_name(component)) {
+                continue;
+            }
+            if components.join(":") != suffix {
+                continue;
+            }
+            let content = fs::read_to_string(&path)?;
+            let names = crate::skill_arguments::frontmatter_argument_names(&content);
+            return Ok(Some(crate::skill_arguments::substitute_arguments(
+                crate::skill_arguments::markdown_body(&content), Some(args), true, &names,
+            )));
+        }
+    }
+    Ok(None)
 }
 
 #[cfg(test)]
