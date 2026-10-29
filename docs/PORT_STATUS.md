@@ -1,6 +1,7 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
 ## 2026-10-29：定时任务遗留差异续接：会话压缩与记忆召回（源码已提交、待验收）
+- **自动/手动压缩 Hook 来源**：src/agent.rs::compact_history_with_trigger 使 PreCompact 与 PostCompact 获得正确 auto/manual trigger，并传递压缩摘要；独立的手动 /compact 保留原命令入口。提交 fbbcccd7，待行为验收。
 - **自动压缩失败后的提问连续性**：按原版 source/src/services/compact/autoCompact.ts 的连续失败熔断（3 次），为 Rust Agent 增加会话级失败计数。自动压缩失败继续用户提问，三次后停止无效自动压缩尝试，手动压缩成功/清空会话重置计数。提交 2e9ba408；阈值模型上下文计算、取消和重试时序仍待验收。
 - **失败重试的模型用量**：超长上下文以模型文本响应返回时记录该次用量，压缩返回空摘要、异常工具调用或重试耗尽时保存已发生的用量；不提前清空历史。提交 3c7e910b。
 
