@@ -139,33 +139,55 @@ pub fn copy(messages: &[Message], age: usize, code: Option<usize>) -> Result<Str
         (selected.clone(), "response.md".to_owned())
     };
 
-    // A new, unpredictable directory prevents following a preexisting
-    // symlink in a shared temporary location.
-    let directory = std::env::temp_dir().join(format!("atlas-copy-{}", Uuid::new_v4()));
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut builder = fs::DirBuilder::new();
-        builder.mode(0o700);
-        builder.create(&directory).context("Create private copy output directory")?;
-    }
-    #[cfg(not(unix))]
-    fs::create_dir(&directory).context("Create private copy output directory")?;
-    let path: PathBuf = directory.join(name);
-    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
-    file.write_all(text.as_bytes())?;
-    file.sync_all()?;
-
-    // OSC 52 may be disabled by a terminal; never treat it as confirmed.
-    let clipboard = if io::stdout().is_terminal() {
+    // OSC 52 is a best-effort terminal clipboard operation in copy.tsx.
+    // Attempt it before the fallback file: an unavailable temp directory
+    // must not prevent copying text to a working interactive terminal.
+    let clipboard_sent = false;
+    if io::stdout().is_terminal() {
         let encoded = base64::engine::general_purpose::STANDARD.encode(text.as_bytes());
         let mut stdout = io::stdout().lock();
         stdout.write_all(format!("\u{1b}]52;c;{encoded}\u{7}").as_bytes())?;
         stdout.flush()?;
-        "Clipboard sequence sent to terminal (terminal support varies)"
-    } else {
-        "No interactive clipboard; file fallback available"
-    };
-    Ok(format!("{clipboard}. {} characters, {} lines. Saved: {}",
-        text.encode_utf16().count(), text.bytes().filter(|b| *b == b'\n').count() + 1, path.display()))
+        clipboard_sent = true;
+    }
+
+    // A private, unpredictable directory prevents following a preexisting
+    // symlink in the shared temporary location.
+    let write_result = (|| -> Result<PathBuf> {
+        let directory = std::env::temp_dir().join(format!("atlas-copy-{}", Uuid::new_v4()));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            let mut builder = fs::DirBuilder::new();
+            builder.mode(0o700);
+            builder.create(&directory).context("Create private copy output directory")?;
+        }
+        #[cfg(not(unix))]
+        fs::create_dir(&directory).context("Create private copy output directory")?;
+        let path = directory.join(name);
+        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
+        file.write_all(text.as_bytes())?;
+        file.sync_all()?;
+        Ok(path)
+    })();
+
+    let char_count = text.encode_utf16().count();
+    let line_count = text.bytes().filter(|b| *b == b'\n').count() + 1;
+    match write_result {
+        Ok(path) => {
+            let clipboard = if clipboard_sent {
+                "Clipboard sequence sent to terminal (terminal support varies)"
+            } else {
+                "No interactive clipboard; file fallback available"
+            };
+            Ok(format!("{clipboard}. {char_count} characters, {line_count} lines. Saved: {}",
+                path.display()))
+        }
+        Err(error) if clipboard_sent => Ok(format!(
+            "Clipboard sequence sent to terminal (terminal support varies). \
+             {char_count} characters, {line_count} lines. \
+             File fallback unavailable: {error}"
+        )),
+        Err(error) => Err(error).context("Unable to copy: no interactive clipboard or file fallback"),
+    }
 }
