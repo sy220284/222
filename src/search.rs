@@ -159,14 +159,41 @@ pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         .get("pattern")
         .and_then(Value::as_str)
         .context("glob_files requires pattern")?;
-    let compiled = matcher(pattern)?;
+    // The original Glob utility accepts absolute patterns. Resolve them
+    // relative to the already permission-checked search root.
+    let relative_pattern = if Path::new(pattern).is_absolute() {
+        Path::new(pattern)
+            .strip_prefix(base)
+            .context("Absolute glob must be inside the approved search directory")?
+            .to_str()
+            .context("Glob pattern must be UTF-8")?
+    } else {
+        pattern
+    };
+    let compiled = matcher(relative_pattern)?;
+    let hidden = std::env::var("ATLAS_GLOB_HIDDEN")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "true".to_owned());
+    let include_hidden = matches!(hidden.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on");
+    let no_ignore = std::env::var("ATLAS_GLOB_NO_IGNORE")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "true".to_owned());
+    let skip_gitignore = matches!(no_ignore.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on");
     let mut matches = files(base)?
         .into_iter()
         .filter(|p| {
-            p.strip_prefix(base)
-                .is_ok_and(|rel| matching(&compiled, rel))
+            p.strip_prefix(base).is_ok_and(|rel| {
+                matching(&compiled, rel)
+                    && (include_hidden || !rel.components().any(|part| part.as_os_str().to_string_lossy().starts_with('.')))
+            })
         })
         .collect::<Vec<_>>();
+    if !skip_gitignore {
+        let ignored = git_ignored_paths(base, &matches);
+        matches.retain(|path| !ignored.contains(path));
+    }
     sort_newest(&mut matches);
     let truncated = matches.len() > 100;
     let paths = matches
