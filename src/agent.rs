@@ -1649,13 +1649,13 @@ impl Agent {
                         if message.role != "user" { continue; }
                         if let Some(blocks) = message.content_blocks.as_mut() {
                             for block in blocks.iter_mut() {
-                                match block.get("type").and_then(serde_json::Value::as_str) {
+                                match block.get("type").and_then(serde_json::Value::as_str).map(str::to_owned).as_deref() {
                                     Some("image") => *block = json!({"type":"text","text":"[image]"}),
                                     Some("document") => *block = json!({"type":"text","text":"[document]"}),
                                     Some("tool_result") => {
                                         if let Some(content) = block.get_mut("content").and_then(serde_json::Value::as_array_mut) {
                                             for item in content {
-                                                match item.get("type").and_then(serde_json::Value::as_str) {
+                                                match item.get("type").and_then(serde_json::Value::as_str).map(str::to_owned).as_deref() {
                                                     Some("image") => *item = json!({"type":"text","text":"[image]"}),
                                                     Some("document") => *item = json!({"type":"text","text":"[document]"}),
                                                     _ => {}
