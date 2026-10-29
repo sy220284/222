@@ -214,6 +214,9 @@ impl HookRunner {
                 bail!("Hook timeout must be between 1 and 600 seconds");
             }
             let matcher = HookMatcher::compile(rule.matcher.as_deref());
+            if matches!(matcher, HookMatcher::Invalid) {
+                bail!("Invalid hook matcher regex: {}", rule.matcher.as_deref().unwrap_or_default());
+            }
             compiled.push((rule.clone(), matcher));
         }
         Ok(Self {
