@@ -330,26 +330,111 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
             if let Some(extension) = candidate.extension().and_then(|ext| ext.to_str()) {
                 if !matches!(
                     extension.to_ascii_lowercase().as_str(),
-                    "md" | "txt" | "text" | "json" | "yaml" | "yml" | "toml"
-                        | "xml" | "csv" | "html" | "htm" | "css" | "scss"
-                        | "sass" | "less" | "js" | "ts" | "tsx" | "jsx"
-                        | "mjs" | "cjs" | "mts" | "cts" | "py" | "pyi"
-                        | "pyw" | "rb" | "erb" | "rake" | "go" | "rs"
-                        | "java" | "kt" | "kts" | "scala" | "c" | "cpp"
-                        | "cc" | "cxx" | "h" | "hpp" | "hxx" | "cs"
-                        | "swift" | "sh" | "bash" | "zsh" | "fish"
-                        | "ps1" | "bat" | "cmd" | "env" | "ini" | "cfg"
-                        | "conf" | "config" | "properties" | "sql"
-                        | "graphql" | "gql" | "proto" | "vue" | "svelte"
-                        | "astro" | "ejs" | "hbs" | "pug" | "jade"
-                        | "php" | "pl" | "pm" | "lua" | "r" | "dart"
-                        | "ex" | "exs" | "erl" | "hrl" | "clj"
-                        | "cljs" | "cljc" | "edn" | "hs" | "lhs"
-                        | "elm" | "ml" | "mli" | "f" | "f90"
-                        | "f95" | "for" | "cmake" | "make"
-                        | "makefile" | "gradle" | "sbt" | "rst"
-                        | "adoc" | "asciidoc" | "org" | "tex"
-                        | "latex" | "lock" | "log" | "diff" | "patch"
+                    "md" | "txt"
+                        | "text"
+                        | "json"
+                        | "yaml"
+                        | "yml"
+                        | "toml"
+                        | "xml"
+                        | "csv"
+                        | "html"
+                        | "htm"
+                        | "css"
+                        | "scss"
+                        | "sass"
+                        | "less"
+                        | "js"
+                        | "ts"
+                        | "tsx"
+                        | "jsx"
+                        | "mjs"
+                        | "cjs"
+                        | "mts"
+                        | "cts"
+                        | "py"
+                        | "pyi"
+                        | "pyw"
+                        | "rb"
+                        | "erb"
+                        | "rake"
+                        | "go"
+                        | "rs"
+                        | "java"
+                        | "kt"
+                        | "kts"
+                        | "scala"
+                        | "c"
+                        | "cpp"
+                        | "cc"
+                        | "cxx"
+                        | "h"
+                        | "hpp"
+                        | "hxx"
+                        | "cs"
+                        | "swift"
+                        | "sh"
+                        | "bash"
+                        | "zsh"
+                        | "fish"
+                        | "ps1"
+                        | "bat"
+                        | "cmd"
+                        | "env"
+                        | "ini"
+                        | "cfg"
+                        | "conf"
+                        | "config"
+                        | "properties"
+                        | "sql"
+                        | "graphql"
+                        | "gql"
+                        | "proto"
+                        | "vue"
+                        | "svelte"
+                        | "astro"
+                        | "ejs"
+                        | "hbs"
+                        | "pug"
+                        | "jade"
+                        | "php"
+                        | "pl"
+                        | "pm"
+                        | "lua"
+                        | "r"
+                        | "dart"
+                        | "ex"
+                        | "exs"
+                        | "erl"
+                        | "hrl"
+                        | "clj"
+                        | "cljs"
+                        | "cljc"
+                        | "edn"
+                        | "hs"
+                        | "lhs"
+                        | "elm"
+                        | "ml"
+                        | "mli"
+                        | "f"
+                        | "f90"
+                        | "f95"
+                        | "for"
+                        | "cmake"
+                        | "make"
+                        | "makefile"
+                        | "gradle"
+                        | "sbt"
+                        | "rst"
+                        | "adoc"
+                        | "asciidoc"
+                        | "org"
+                        | "tex"
+                        | "latex"
+                        | "lock"
+                        | "log"
+                        | "diff"
+                        | "patch"
                 ) {
                     continue;
                 }
@@ -444,7 +529,15 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
                     }
                 };
                 if resolved.starts_with(include_scope) {
-                    add_file_inner(&resolved, scope, include_scope, false, seen, output, depth + 1)?;
+                    add_file_inner(
+                        &resolved,
+                        scope,
+                        include_scope,
+                        false,
+                        seen,
+                        output,
+                        depth + 1,
+                    )?;
                 }
             }
         }
@@ -488,7 +581,15 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         for entry in entries {
             let metadata = fs::metadata(&entry)?;
             if metadata.is_dir() {
-                add_rules(&entry, scope, include_scope, depth + 1, visited, seen, output)?;
+                add_rules(
+                    &entry,
+                    scope,
+                    include_scope,
+                    depth + 1,
+                    visited,
+                    seen,
+                    output,
+                )?;
             } else if metadata.is_file()
                 && entry.extension().and_then(|extension| extension.to_str()) == Some("md")
             {
