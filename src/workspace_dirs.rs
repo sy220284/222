@@ -81,7 +81,7 @@ mod tests {
         assert!(matches!(validate("file",&root,&root,&[]).unwrap(),Validation::NotADirectory(_)));
         assert!(matches!(validate("child/",&root,&root,&[]).unwrap(),Validation::AlreadyAccessible{..}));
         assert_eq!(validate(external.to_str().unwrap(),&root,&root,&[]).unwrap(),Validation::Success(external.clone()));
-        assert!(matches!(validate(external.to_str().unwrap(),&root,&root,&[external]).unwrap(),Validation::AlreadyAccessible{..}));
+        assert!(matches!(validate(external.to_str().unwrap(),&root,&root,&[external.clone()]).unwrap(),Validation::AlreadyAccessible{..}));
     }
     #[test]
     fn authorized_access_and_symlink_escapes() {
