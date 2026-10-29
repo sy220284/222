@@ -155,7 +155,11 @@ fn matches_rule(rule: &str, actual: &str, allow: bool) -> Result<bool> {
     }
     same_canonical(rule, actual, allow)
 }
-pub fn policy_for(rules: &[Rule], command: &str) -> Result<Option<Behavior>> {
+// Source: PowerShellTool/powershellPermissions.ts, especially
+// getSubCommandsForPermissionCheck and the post-parse deny > ask > allow
+// reduction. A rule for the first cmdlet must never authorize an entire
+// pipeline or statement list.
+fn policy_for_single(rules: &[Rule], command: &str) -> Result<Option<Behavior>> {
     let actual = command.trim();
     let mut allow = false;
     let mut ask = false;
@@ -183,6 +187,149 @@ pub fn policy_for(rules: &[Rule], command: &str) -> Result<Option<Behavior>> {
     } else {
         None
     })
+}
+
+/// Split statement and pipeline operators outside quoted strings. This is
+/// deliberately not an AST substitute: PowerShell interpolation, script
+/// blocks, call operators and redirections are marked opaque and require
+/// an explicit one-time approval rather than inheriting a prefix allow.
+/// The original parser handles these through AST security checks.
+fn split_script(command: &str) -> (Vec<String>, bool) {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+    let mut comment = false;
+    let mut escaped = false;
+    let mut opaque = false;
+    let mut chars = command.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if comment {
+            if ch != '\n' && ch != '\r' {
+                continue;
+            }
+            comment = false;
+        }
+        if escaped {
+            current.push(ch);
+            escaped = false;
+            continue;
+        }
+        if ch == '`' {
+            // Backtick escapes may hide operators or a newline.
+            opaque = true;
+            current.push(ch);
+            escaped = true;
+            continue;
+        }
+        if let Some(delimiter) = quote {
+            current.push(ch);
+            if delimiter == '"' && ch == '$' && chars.peek() == Some(&'(') {
+                // Double-quoted subexpressions execute code.
+                opaque = true;
+            }
+            if ch == delimiter {
+                if delimiter == '\'' && chars.peek() == Some(&'\'') {
+                    // PowerShell single-quoted strings escape ' as ''.
+                    current.push(chars.next().expect("peeked quote"));
+                } else {
+                    quote = None;
+                }
+            }
+            continue;
+        }
+        match ch {
+            '\'' | '"' => {
+                quote = Some(ch);
+                current.push(ch);
+            }
+            '#' if current.chars().last().is_none_or(char::is_whitespace) => {
+                comment = true;
+            }
+            ';' | '\n' | '\r' | '|' => {
+                if ch == '|' && chars.peek() == Some(&'|') {
+                    chars.next();
+                }
+                let part = current.trim();
+                if !part.is_empty() {
+                    parts.push(part.to_owned());
+                }
+                current.clear();
+            }
+            '&' if chars.peek() == Some(&'&') => {
+                chars.next();
+                let part = current.trim();
+                if !part.is_empty() {
+                    parts.push(part.to_owned());
+                }
+                current.clear();
+            }
+            // A single & is the call operator, not a statement separator.
+            '&' | '{' | '}' | '(' | ')' | '>' | '<' => {
+                opaque = true;
+                current.push(ch);
+            }
+            '$' if chars.peek() == Some(&'(') => {
+                opaque = true;
+                current.push(ch);
+            }
+            _ => current.push(ch),
+        }
+    }
+    if quote.is_some() || escaped {
+        opaque = true;
+    }
+    if !current.trim().is_empty() {
+        parts.push(current.trim().to_owned());
+    }
+    (parts, opaque)
+}
+
+pub fn policy_for(rules: &[Rule], command: &str) -> Result<Option<Behavior>> {
+    let (statements, opaque) = split_script(command);
+    if statements.is_empty() {
+        return Ok(Some(Behavior::Ask));
+    }
+    // Preserve exact, alias and wildcard behavior for ordinary commands.
+    if statements.len() == 1 && !opaque {
+        return policy_for_single(rules, command);
+    }
+
+    // A whole-script deny/ask still takes precedence, but a broad allow
+    // cannot mask a denied command further down the script.
+    let whole = policy_for_single(rules, command)?;
+    if whole == Some(Behavior::Deny) {
+        return Ok(whole);
+    }
+    let mut needs_approval = opaque || whole == Some(Behavior::Ask);
+    let mut all_allowed = true;
+    for statement in &statements {
+        match policy_for_single(rules, statement)? {
+            Some(Behavior::Deny) => return Ok(Some(Behavior::Deny)),
+            Some(Behavior::Ask) => needs_approval = true,
+            Some(Behavior::Allow) => {}
+            None => all_allowed = false,
+        }
+    }
+    if needs_approval {
+        return Ok(Some(Behavior::Ask));
+    }
+    if all_allowed {
+        return Ok(Some(Behavior::Allow));
+    }
+    // A user may have explicitly allowed this exact compound script.
+    // Prefix/wildcard rules are insufficient for this exception.
+    let exact_whole_allow = rules.iter().any(|rule| {
+        rule.behavior == Behavior::Allow
+            && rule.value.tool_name == "PowerShell"
+            && rule.value.rule_content.as_deref() == Some(command.trim())
+            && !has_wildcards(command)
+            && extract_prefix(command).is_none()
+    });
+    if exact_whole_allow {
+        Ok(Some(Behavior::Allow))
+    } else {
+        Ok(Some(Behavior::Ask))
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -264,4 +411,63 @@ mod tests {
         assert_eq!(policy_for(&rules, "sort test").unwrap(), None);
         assert_eq!(policy_for(&rules, r".\Get-ChildItem foo").unwrap(), None);
     }
+    #[test]
+    fn compound_scripts_cannot_bypass_later_denies_or_unknown_statements() {
+        let rules = compiled(&[
+            ("allow", "PowerShell(Get-ChildItem:*)"),
+            ("allow", "PowerShell(Get-Content:*)"),
+            ("deny", "PowerShell(Remove-Item:*)"),
+        ]);
+        for command in [
+            "Get-ChildItem .; rm secret.txt",
+            "Get-ChildItem . | Remove-Item secret.txt",
+            "Get-ChildItem . && del secret.txt",
+            "Get-ChildItem .\nRemove-Item secret.txt",
+            "Get-ChildItem .; Get-Content foo; rm secret.txt",
+        ] {
+            assert_eq!(policy_for(&rules, command).unwrap(), Some(Behavior::Deny), "{command}");
+        }
+        assert_eq!(
+            policy_for(&rules, "Get-ChildItem .; Invoke-Expression 'oops'").unwrap(),
+            Some(Behavior::Ask)
+        );
+        assert_eq!(
+            policy_for(&rules, "Get-ChildItem . | Get-Content file").unwrap(),
+            Some(Behavior::Allow)
+        );
+    }
+
+    #[test]
+    fn quotes_comments_and_dynamic_script_blocks_do_not_inherit_prefix_allow() {
+        let rules = compiled(&[
+            ("allow", "PowerShell(Get-ChildItem:*)"),
+            ("deny", "PowerShell(Remove-Item:*)"),
+        ]);
+        // Semicolons in quoted arguments and comments do not create commands.
+        assert_eq!(
+            policy_for(&rules, "Get-ChildItem 'a; rm b'").unwrap(),
+            Some(Behavior::Allow)
+        );
+        assert_eq!(
+            policy_for(&rules, "Get-ChildItem . # ; rm ignored").unwrap(),
+            Some(Behavior::Allow)
+        );
+        // Scriptblocks, nested expressions and PowerShell escaping require
+        // review even when the first cmdlet has a persisted allow rule.
+        for command in [
+            "Get-ChildItem . $(Remove-Item secret)",
+            "Get-ChildItem . | %{ Remove-Item secret }",
+            "Get-ChildItem . > output.txt",
+            "Get-ChildItem . ` ; Remove-Item secret",
+            "Get-ChildItem \"$(Remove-Item secret)\"",
+            "Get-ChildItem 'unterminated",
+        ] {
+            assert_eq!(policy_for(&rules, command).unwrap(), Some(Behavior::Ask), "{command}");
+        }
+        assert_eq!(
+            policy_for(&rules, "Get-ChildItem . # comment\nrm secret").unwrap(),
+            Some(Behavior::Deny)
+        );
+    }
+
 }
