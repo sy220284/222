@@ -2034,12 +2034,21 @@ impl Agent {
         // Model providers have different context windows. When the user
         // supplies the known window, use the original 13k-token headroom.
         // Without window metadata retain the prior ~25k-token threshold.
-        let threshold = std::env::var("ATLAS_CONTEXT_WINDOW_TOKENS")
-            .ok()
-            .and_then(|text| text.parse::<usize>().ok())
-            .filter(|window| *window > 13_000)
-            .map(|window| window - 13_000)
-            .unwrap_or(25_000);
+        let threshold = match std::env::var("ATLAS_CONTEXT_WINDOW_TOKENS") {
+            Ok(raw) => {
+                let window = raw.parse::<usize>()
+                    .context("ATLAS_CONTEXT_WINDOW_TOKENS must be a positive integer")?;
+                if window < 1_024 {
+                    bail!("ATLAS_CONTEXT_WINDOW_TOKENS must be at least 1024")
+                }
+                // The original reserves 13k tokens for large contexts.
+                // Provider-neutral small models cannot reserve more tokens
+                // than their entire context window; use a quarter headroom.
+                if window > 13_000 { window - 13_000 } else { window - window / 4 }
+            }
+            Err(std::env::VarError::NotPresent) => 25_000,
+            Err(error) => return Err(error.into()),
+        };
         // Match autoCompact.ts: auto-compaction is best-effort, with a
         // per-session circuit breaker after three consecutive failures.
         // A failed summarizer must not discard the user's new prompt.
