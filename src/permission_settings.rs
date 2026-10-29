@@ -1,6 +1,6 @@
 //! Source parity: permissionsLoader.ts, settings/constants.ts and settings/settings.ts.
 //! Paths and policy injection are vendor-neutral; incomplete UI/MDM behavior is audited.
-use crate::permission_rules::{format_rule, parse_rule, Behavior, RuleSetting, RuleValue};
+use crate::permission_rules::{format_rule, parse_rule, valid_stored_rule, Behavior, RuleSetting, RuleValue};
 use anyhow::{bail, Context, Result};
 use fs2::FileExt;
 use serde_json::{Map, Value};
@@ -119,9 +119,14 @@ impl SettingsPaths {
                     .as_array()
                     .with_context(|| format!("Permission {behavior} must be an array"))?;
                 for value in values {
-                    let raw = value
-                        .as_str()
-                        .with_context(|| format!("Permission {behavior} must contain strings"))?;
+                    let Some(raw) = value.as_str() else {
+                        eprintln!("Skipping non-string permission {behavior} entry");
+                        continue;
+                    };
+                    if !valid_stored_rule(raw) {
+                        eprintln!("Skipping invalid permission {behavior} rule: {raw}");
+                        continue;
+                    }
                     result.push(RuleSetting {
                         behavior: behavior.to_owned(),
                         rule: raw.to_owned(),
@@ -447,6 +452,45 @@ mod tests {
             )
             .is_err());
         assert_eq!(fs::read_to_string(&paths.project).unwrap(), "{invalid json");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn invalid_rules_are_filtered_without_discarding_valid_siblings() {
+        use crate::{
+            protocol::{FunctionCall, ToolCall},
+            tools::{Approval, ToolExecutor},
+        };
+        let root = tempfile::tempdir().unwrap();
+        let paths = paths(root.path());
+        write(
+            &paths.project,
+            &json!({"permissions":{"allow":[
+                17,
+                "Bash()",
+                "Bash(touch allowed)",
+                "Bash(npm:* run)",
+                "WebFetch(https://example.com)"
+            ],"deny":["Bash(touch forbidden)"]}}),
+        );
+        let loaded = paths.load(&[]).unwrap();
+        assert_eq!(loaded.len(), 2);
+        let executor = ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Ask, false)
+            .with_permission_rules(compile_rules(&loaded).unwrap());
+        let call = |command: &str| ToolCall {
+            id: "invalid-rule-filter".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":command}).to_string(),
+            },
+        };
+        let allowed = executor.execute(&call("touch allowed")).await;
+        assert!(allowed.contains("Exit: exit status: 0"), "{allowed}");
+        assert!(root.path().join("allowed").exists());
+        let denied = executor.execute(&call("touch forbidden")).await;
+        assert!(denied.starts_with("ERROR:"), "{denied}");
+        assert!(!root.path().join("forbidden").exists());
     }
 
     #[test]
