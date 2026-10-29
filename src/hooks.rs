@@ -675,7 +675,8 @@ mod tests {
         assert_eq!(outcome.non_blocking_errors.len(), 1);
         assert!(outcome.non_blocking_errors[0].contains("advisory hook failed"));
         call.function.arguments = outcome.updated_input.unwrap().to_string();
-        let executor = ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Full, false);
+        let executor =
+            ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Full, false);
         let result = executor.execute(&call).await;
         assert!(result.contains("Exit: exit status: 0"), "{result}");
         assert!(root.path().join("after_warning").exists());
@@ -740,5 +741,4 @@ mod tests {
             Some("explicit denial")
         );
     }
-
 }
