@@ -1,5 +1,13 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：Grep、网页重定向与工作树退出的源码级缺口补齐（已提交待验收）
+
+- **Grep 搜索主链**：对照原版 `src/tools/GrepTool/GrepTool.ts:104–126, 314–570`，修复 Rust `src/search.rs` 的跨行正则匹配、匹配行数统计（同一行多次出现不重复计数）、`context/-C` 对 `-A/-B` 的优先级、`-n` 行号开关、`head_limit=0` 不限量及分页后计数。真实模型工具定义同步公开 `-n`。提交 `19073b725e1eb942a2829ca52daad215e2d6764e`。仍缺原版 ripgrep 忽略规则、超长行、取消及全部匹配边界。
+- **网页抓取跨域跳转**：对照原版 `src/tools/WebFetchTool/WebFetchTool.ts:214–249`、`utils.ts:205–243`，Rust `src/webfetch.rs` 现在对非同来源（含协议/端口变化）跳转返回目标 URL 而非自动抓取，要求 Agent 新一轮工具调用重新授权；保留显式拒绝优先，并把经过公网检查的 DNS 地址绑定到实际请求，避免解析后重绑定。提交 `0d70b71c3e44e569ba980ba2a05da794a497bdf6`、`eeac41f1338d6a5dc185a2f833e429c9e6ba4e21`。仍缺原版 Markdown 提取、缓存和完整网页摘要链。
+- **工作树退出保护**：对照原版 `src/tools/ExitWorktreeTool/ExitWorktreeTool.ts:79–112, 190–225`、`src/components/WorktreeExitDialog.tsx:39–79`，Rust `src/worktree.rs` 保存创建时 HEAD 基线，在退出时统计新提交；即使目录没有未提交文件，只要分支存在新提交也保留工作树，避免自动删除用户成果。提交 `f8d8840fb9aca6dfffda78be47cd80d9e77e946a`。仍缺原版保留/删除交互、命名复用、恢复和沙箱/Hook。
+- **严格计数**：本轮完成上述 3 条独立用户业务主链的真实源码修改与提交，**3/100**，其余 97 条未完成；未运行 Cargo、单元/集成测试或 CI，均仅“已提交待验收”，不新增已验收源路径，Issue #3 冻结 362 项保持开放。原始源码 ZIP 可用；本轮尚未完成 100 条独立用户业务缺口的全部源码级确认和实施方案，不能用路径候选替代。
+
+
 ## 2026-10-29：本地原版源码对照——会话上下文与项目引导（代码已验证，非文件级全等价）
 
 对照用户原始 `source/src/context.ts` 与 `source/src/projectOnboardingState.ts`：
