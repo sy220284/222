@@ -1,3 +1,10 @@
+## 2026-10-29：Grep 内容/计数模式的分页顺序（已提交、待验收）
+
+- **原版依据**：完整 2.1.88 ZIP `source/src/tools/GrepTool/GrepTool.ts::call` 第 443–524 行：`content` 和 `count` 直接对 ripgrep 返回行应用 `head_limit/offset`；第 526–563 行只有 `files_with_matches` 先按文件修改时间从新到旧排序。
+- **Rust 缺口与修复**：`src/search.rs::grep_files_filtered` 原先无条件 `sort_newest(&mut candidates)`，使内容/计数模式也按文件时间重排，改变用户分页看到的结果顺序。现仅文件名模式按时间排序，内容和计数保留文件发现顺序，再应用原有 offset/head_limit。
+- **实际提交**：`98b6fc423336725358075dde4b9d2d3ee6dce9c4`，新增 **1 项独立 Grep 分页行为补齐**；本轮合计 **5/100 项**，余 **95 项**。按要求未运行 Cargo、测试或 CI，均已提交、待行为验收；Issue #3 冻结 362 项继续开放，新增完整等价验收 0 项。
+- **剩余差异**：WalkDir 与原版 ripgrep 默认发现顺序仍需跨平台验证；忽略规则、外部取消、完整错误与并发文件变化仍待核对。100 项逐函数问题清单和完整实施方案未形成。
+
 ## 2026-10-29：GlobTool 否定通配符实际排除（已提交、待验收）
 
 - **原版源码**：完整 2.1.88 ZIP `source/src/utils/glob.ts::glob` 第 91–107 行直接将用户 `filePattern` 传给 ripgrep 的 `--glob`，其 `!pattern` 语义为排除匹配文件。
