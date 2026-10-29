@@ -2487,7 +2487,13 @@ async fn sdk_nested_control(
                     let model = name
                         .as_str()
                         .ok_or_else(|| anyhow::anyhow!("set_model model must be a string"))?;
-                    let profile = config.select(Some(&agent.profile().id), Some(model))?;
+                    // The original SDK treats "default" as a request to
+                    // restore the configured default model, not a literal ID.
+                    let profile = if model == "default" {
+                        config.select(None, None)?
+                    } else {
+                        config.select(Some(&agent.profile().id), Some(model))?
+                    };
                     agent.switch_model(profile)?;
                 }
                 Ok(json!({"model":agent.profile().model,"provider":agent.profile().id}))
