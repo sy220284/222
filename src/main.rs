@@ -391,7 +391,7 @@ async fn main() -> Result<()> {
         match &cli.command {
             Commands::Sessions { query } => {
                 for item in session_control::search(&root, query.as_deref().unwrap_or(""))? {
-                    println!("{}  {}  ({} messages)", item.id, item.title, item.messages);
+                    println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
                 }
                 return Ok(());
             }
@@ -636,6 +636,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!(
                     "/doctor                  run local installation and configuration diagnostics"
                 );
+                println!("/tag NAME                add/replace a searchable session tag; repeat to remove");
                 println!("/history [query]         search saved prompt history");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
@@ -702,6 +703,11 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("{}", agent.status_report()?);
                 continue;
             }
+            "/tag" => {
+                println!("Usage: /tag <tag-name> — add a searchable session tag; repeat to remove.");
+                continue;
+            }
+
             "/doctor" => {
                 println!(
                     "{}",
@@ -719,7 +725,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             }
             "/sessions" => {
                 for item in agent.list_sessions()? {
-                    println!("{}  {}  ({} messages)", item.id, item.title, item.messages);
+                    println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
                 }
                 continue;
             }
@@ -772,7 +778,29 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
         }
         if input.starts_with("/sessions ") {
             for item in agent.search_sessions(input.trim_start_matches("/sessions").trim())? {
-                println!("{}  {}  ({} messages)", item.id, item.title, item.messages);
+                println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
+            }
+            continue;
+        }
+        if let Some(raw) = input.strip_prefix("/tag ") {
+            let tag = crate::unicode_sanitization::partially_sanitize_unicode(raw);
+            let tag = tag.trim();
+            if tag.is_empty() || matches!(tag, "--help" | "-h" | "help") {
+                println!("Usage: /tag <tag-name> — toggle a searchable session tag.");
+                continue;
+            }
+            if agent.session_tag() == Some(tag) {
+                print!("Current tag is #{tag}. Remove from session? [y/N]: ");
+                io::stdout().flush()?;
+                let mut response = String::new();
+                io::stdin().read_line(&mut response)?;
+                if matches!(response.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+                    println!("{}", agent.set_session_tag(None)?);
+                } else {
+                    println!("Kept tag #{tag}");
+                }
+            } else {
+                println!("{}", agent.set_session_tag(Some(tag))?);
             }
             continue;
         }
