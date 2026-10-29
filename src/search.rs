@@ -396,6 +396,9 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
     };
     let show_line_numbers = args.get("-n").and_then(Value::as_bool).unwrap_or(true);
     let mut matches = Vec::new();
+    // ripgrep separates disjoint context groups (including adjacent files).
+    // The separators are part of its returned lines and count toward pagination.
+    let mut emitted_context_file = false;
     // GrepTool.ts explicitly passes --hidden. Hidden project files and
     // directories must be searchable; only the six VCS directories above
     // are excluded. GlobTool uses a separate --hidden configuration.
@@ -457,18 +460,48 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
                 }
             }
         }
+        let context_enabled = before > 0 || after > 0;
+        if context_enabled && emitted_context_file {
+            matches.push("--".to_owned());
+        }
+        // rg --max-columns=500 measures bytes, including the line ending.
+        // split_inclusive preserves LF/CRLF byte lengths while lines() strips them.
+        let line_byte_lengths = content
+            .split_inclusive('\n')
+            .map(str::len)
+            .collect::<Vec<_>>();
+        let mut previous_selected = None;
         for (index, line) in lines.iter().enumerate() {
             if !selected[index] {
                 continue;
             }
-            let marker = if matched[index] { ":" } else { "-" };
+            if context_enabled && previous_selected.is_some_and(|last| index > last + 1) {
+                matches.push("--".to_owned());
+            }
+            let is_match = matched[index];
+            let marker = if is_match { ":" } else { "-" };
             let location = if show_line_numbers {
                 format!("{}{marker}", index + 1)
             } else {
                 String::new()
             };
-            matches.push(format!("{filename}{marker}{location}{line}"));
+            let displayed_line = if line_byte_lengths
+                .get(index)
+                .copied()
+                .unwrap_or(line.len()) > 500
+            {
+                if is_match {
+                    "[Omitted long matching line]"
+                } else {
+                    "[Omitted long context line]"
+                }
+            } else {
+                line
+            };
+            matches.push(format!("{filename}{marker}{location}{displayed_line}"));
+            previous_selected = Some(index);
         }
+        emitted_context_file = context_enabled;
     }
     let total = matches.len();
     let page = matches
