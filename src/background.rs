@@ -146,7 +146,10 @@ impl BackgroundTasks {
             let _ = fs::remove_file(&temp);
             return Err(error);
         }
-        fs::rename(&temp, &path)?;
+        if let Err(error) = fs::rename(&temp, &path) {
+            let _ = fs::remove_file(&temp);
+            return Err(error.into());
+        }
         Ok(())
     }
 
