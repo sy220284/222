@@ -32,8 +32,6 @@ use std::{
 
 const DEFAULT_SYSTEM: &str = crate::prompt_runtime::BASE_SYSTEM;
 
-/// Persisted independently of the provider and plugin configuration so a
-/// plugin-sourced server can be toggled without rewriting its manifest.
 /// Read the metadata scalars used by the on-disk agent editor. Supports
 /// quoted values and YAML folded/literal descriptions without loading the
 /// agent's executable prompt or leaking it through the SDK.
@@ -68,6 +66,8 @@ fn sdk_agent_metadata(markdown: &str) -> std::collections::HashMap<String, Strin
     metadata
 }
 
+/// Persisted independently of the provider and plugin configuration so a
+/// plugin-sourced server can be toggled without rewriting its manifest.
 fn disabled_mcp_path() -> Result<PathBuf> {
     Ok(crate::config::Config::path()?.with_file_name("mcp-disabled.json"))
 }

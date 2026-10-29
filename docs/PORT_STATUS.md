@@ -1,3 +1,12 @@
+## 2026-10-29：SDK MCP 服务启停与初始化真实能力发现（已提交、待验收）
+
+- 原版依据：完整 2.1.88 `source/src/cli/print.ts:3206–3296` 的 `mcp_toggle` 持久禁用、断开并清理工具/提示词/资源；`source/src/cli/print.ts:4336–4495` 的 `handleInitializeRequest` 返回真实可调用命令与自定义代理目录。
+- 已补齐的三个独立用户业务行为：① SDK 通过 `mcp_toggle` 按服务名启停 stdio/HTTP MCP，禁用状态跨会话保存，实时清理路由与资源订阅，禁止目录查询和自动重连偷偷重启禁用服务，重新启用时独立重连并恢复工具；② SDK 初始化返回已接入交互 CLI 的真实命令及说明，不暴露尚未迁移的静态注册命令；③ SDK 初始化读取项目/用户磁盘自定义代理定义的名称、描述和模型，项目同名优先，跳过无效元数据，不返回代理系统提示词。
+- Rust 实际接线：`src/main.rs::sdk_nested_control` → `src/agent.rs::toggle_named_mcp/sdk_agent_descriptors` → `src/mcp.rs::McpManager::toggle_named/connect_with_root_filtered`、`src/agent_definition.rs::existing_agent_types`、`src/command_manifest.rs::visible`。代码提交 `6dbe7e97b7ed7fd0ff4aed9c2e02d183c1cd9171`、`a24b095ea653815f4332c93a5bb950c24ba0e47f`、`eb248f8674555d2a524dd17d8bdc2cf883fa7575`。
+- 源码级检查：SDK 请求名/响应封装、磁盘配置保存与加载、禁用后工具路由清理、其他服务索引更新、失败后重连、项目与用户代理优先级、命令对应真实交互入口均已核对。按本任务要求没有运行 Cargo、测试或 CI；**3 项已提交、待行为验收，最终等价验收 0**。
+- 未实现差异：SDK 动态 `mcp_set_servers`、`reload_plugins`、`rewind_files`、`seed_read_state`、`side_question`、`generate_session_title` 等控制链；完整 YAML 代理元数据、多来源代理动态加载、MCP 跨进程开关一致性、HTTP 会话显式终止、SDK 并发中断。Issue #3 冻结 362 项全部保持开放。
+- 本轮 100 项前置独立缺口清单尚未逐项核实；仅按上述 3 项已提交的真实业务功能计数，**3/100，剩余 97 项**，不将文件数、静态注册或辅助修复另计。
+
 ## 2026-10-29：插件市场注册表与锁文件路径安全（源码已提交、待验收）
 
 对照原版 `source/src/utils/plugins/pluginInstallationHelpers.ts::checkPathTraversal` 及 `source/src/utils/plugins/marketplaceManager.ts` 的市场存储/注册行为，复核 Rust `src/marketplace_registry.rs::exclusive_lock/load/save/execute/resolve_local_plugin`。原实现直接打开 `.atlas/marketplaces.lock` 和 `.atlas/marketplaces.json`，当工作区存储目录或文件被符号链接重定向时可能读取或写入外部位置。现拒绝 `.atlas`、锁文件和注册表的符号链接，确认规范化存储目录位于工作区内，锁文件保持非截断打开，所有现有市场操作继续共用同一安全门禁。代码 `b9027b6d25c95fe5cddde0f0925334725fd9905c`、`80e3be9439ba001a619df08c7cb0e6ee4c99bd1d`。
