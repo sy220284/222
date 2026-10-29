@@ -1,5 +1,13 @@
 # Issue #3：冻结 362 项源码级等价验收登记表
 
+## 2026-10-29：笔记本单元格编辑的共享权限规则接入（冻结文件系统权限链，继续开放）
+
+- **原版源码**：`src/tools/NotebookEditTool/NotebookEditTool.ts:122–130` 的 `getPath`、`checkPermissions` 调用 `filesystem.ts::checkWritePermissionForTool`，使用与普通编辑相同的 `Edit(path)` 权限规则；`filesystem.ts:919–933,955–1024` 提供实际路径匹配。
+- **Rust 真实差异**：`src/tools.rs::dispatch("notebook_edit")` 原先只按工具名 `notebook_edit` 审批，忽略 `Edit(secrets/**)` 等用户规则，可能在完整授权下修改明确拒绝的笔记本文件。
+- **修复**：`src/permission_rules.rs::policy_for` 将有路径内容的 `Edit` 规则应用于 `notebook_edit`，但不把无内容的 Edit 整工具授权错误扩展到 NotebookEdit；`src/tools.rs::require_approval` 从 `notebook_path` 收集原始、规范化及符号链接目标路径，在真实编辑前统一检查。保留原有 NotebookEdit 专属规则与权限模式。
+- **测试**：`tools::tests::notebook_edit_obeys_shared_edit_path_permissions_before_mutation` 通过真实临时工作区、笔记本 JSON、先读取再编辑、实际文件变更检查：秘密笔记本拒绝后原内容不变，公开笔记本经 Edit 明确允许后成功修改单元格。提交 `d3c2d1a`、`6ff452e`，CI 仍待最终 HEAD 运行结果核实。
+- **剩余**：其他文件变更工具的共享权限、所有 gitignore 路径边界、来源相对根目录、交互批准/中断/重启及竞态；冻结 362 项不勾选。本轮作为与普通文件写入不同的**第二个用户可感知功能的实质补强**，完整验收 0 项。
+
 ## 2026-10-29：文件编辑权限规则覆盖写入与符号链接目标（冻结 #8/#17，继续开放）
 
 - **原版源码证据**：完整 `claude-code-2.1.88-main(1).zip` SHA-256 `23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d`，`src/utils/permissions/filesystem.ts:919–933` 中 `getPatternsByRoot('edit')` 使用统一的 `FILE_EDIT_TOOL_NAME`；`filesystem.ts:955–1024` 使用 gitignore 风格路径匹配并处理 `/**`；`filesystem.ts:1043–1048` 对文件检查同时包含原始路径和符号链接解析目标。
