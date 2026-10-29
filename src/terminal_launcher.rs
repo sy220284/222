@@ -75,7 +75,10 @@ const MACOS_TERMINALS: [(&str, &str, &str); 6] = [
 
 #[cfg(target_os = "macos")]
 fn macos_terminal_preference(preference: &str) -> Option<TerminalInfo> {
-    let normalized = preference.trim().trim_end_matches(".app").to_ascii_lowercase();
+    let normalized = preference
+        .trim()
+        .trim_end_matches(".app")
+        .to_ascii_lowercase();
     MACOS_TERMINALS.iter().find_map(|(name, app, _)| {
         let matches = name.to_ascii_lowercase() == normalized
             || app.to_ascii_lowercase() == normalized
@@ -89,7 +92,11 @@ fn macos_terminal_preference(preference: &str) -> Option<TerminalInfo> {
 
 #[cfg(target_os = "macos")]
 fn spotlight_has_bundle(bundle: &str) -> bool {
-    use std::{io::Read, thread, time::{Duration, Instant}};
+    use std::{
+        io::Read,
+        thread,
+        time::{Duration, Instant},
+    };
     let query = format!("kMDItemCFBundleIdentifier == \"{bundle}\"");
     let mut child = match Command::new("/usr/bin/mdfind")
         .arg("-count")
@@ -151,7 +158,11 @@ fn detect_macos_terminal() -> TerminalInfo {
     }
     for (name, app, _) in MACOS_TERMINALS {
         if Path::new(&format!("/Applications/{app}.app")).is_dir()
-            || dirs::home_dir().is_some_and(|home| home.join("Applications").join(format!("{app}.app")).is_dir())
+            || dirs::home_dir().is_some_and(|home| {
+                home.join("Applications")
+                    .join(format!("{app}.app"))
+                    .is_dir()
+            })
         {
             return TerminalInfo {
                 name: name.to_owned(),

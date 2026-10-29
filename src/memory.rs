@@ -206,7 +206,8 @@ pub async fn context_with_recent_tools(
             let description = m.description.as_deref().unwrap_or("(no description)");
             let timestamp = chrono::DateTime::<chrono::Utc>::from(m.modified)
                 .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-            let kind = m.memory_type
+            let kind = m
+                .memory_type
                 .as_ref()
                 .map(|kind| format!("[{kind}] "))
                 .unwrap_or_default();
@@ -236,7 +237,9 @@ pub async fn context_with_recent_tools(
             .into(),
             messages: vec![Message::text(
                 "user",
-                format!("Query:\n{query}\n\nMemory file manifest:\n{manifest}{recent_tool_section}"),
+                format!(
+                    "Query:\n{query}\n\nMemory file manifest:\n{manifest}{recent_tool_section}"
+                ),
             )],
             tools: vec![],
         })

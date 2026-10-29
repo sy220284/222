@@ -1779,9 +1779,7 @@ impl Agent {
             }
             if let Some(blocks) = message.content_blocks.as_ref() {
                 for block in blocks.iter().rev() {
-                    if block.get("type").and_then(serde_json::Value::as_str)
-                        != Some("tool_use")
-                    {
+                    if block.get("type").and_then(serde_json::Value::as_str) != Some("tool_use") {
                         continue;
                     }
                     if let Some(name) = block.get("name").and_then(serde_json::Value::as_str) {

@@ -80,13 +80,11 @@ pub fn paths(messages: &[Message], root: &Path) -> Vec<String> {
                     }
                 }
             }
-            // SDK/Anthropic transcripts encode tool_use inside content
+            // SDK structured transcripts encode tool_use inside content
             // blocks instead of the OpenAI tool_calls field.
             if let Some(blocks) = message.content_blocks.as_ref() {
                 for block in blocks {
-                    if block.get("type").and_then(serde_json::Value::as_str)
-                        != Some("tool_use")
-                    {
+                    if block.get("type").and_then(serde_json::Value::as_str) != Some("tool_use") {
                         continue;
                     }
                     let (Some(id), Some(name), Some(input)) = (
@@ -109,8 +107,7 @@ pub fn paths(messages: &[Message], root: &Path) -> Vec<String> {
                 // includes content blocks alongside a tool-call identifier.
                 let has_structured_result = message.content_blocks.as_ref().is_some_and(|blocks| {
                     blocks.iter().any(|block| {
-                        block.get("type").and_then(serde_json::Value::as_str)
-                            == Some("tool_result")
+                        block.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
                             && block.get("tool_use_id").and_then(serde_json::Value::as_str)
                                 == Some(id)
                     })
@@ -132,21 +129,14 @@ pub fn paths(messages: &[Message], root: &Path) -> Vec<String> {
         // block; a successful result can be text, image, or structured data.
         if let Some(blocks) = message.content_blocks.as_ref() {
             for block in blocks {
-                if block.get("type").and_then(serde_json::Value::as_str)
-                    != Some("tool_result")
-                {
+                if block.get("type").and_then(serde_json::Value::as_str) != Some("tool_result") {
                     continue;
                 }
-                let Some(id) = block
-                    .get("tool_use_id")
-                    .and_then(serde_json::Value::as_str)
-                else {
+                let Some(id) = block.get("tool_use_id").and_then(serde_json::Value::as_str) else {
                     continue;
                 };
                 if let Some(path) = pending.remove(id) {
-                    if block.get("is_error").and_then(serde_json::Value::as_bool)
-                        != Some(true)
-                    {
+                    if block.get("is_error").and_then(serde_json::Value::as_bool) != Some(true) {
                         add_successful_file(&mut recent, &canonical_root, path);
                     }
                 }

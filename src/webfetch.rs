@@ -39,8 +39,11 @@ fn cached_page(key: &str) -> Option<Value> {
     let entry = entries.remove(position)?;
     let value = entry.value.clone();
     // An evicted session attachment must be fetched and saved again.
-    if value.get("persistedPath").and_then(Value::as_str)
-        .is_some_and(|path| !Path::new(path).is_file()) {
+    if value
+        .get("persistedPath")
+        .and_then(Value::as_str)
+        .is_some_and(|path| !Path::new(path).is_file())
+    {
         return None;
     }
     entries.push_back(entry);
@@ -48,24 +51,40 @@ fn cached_page(key: &str) -> Option<Value> {
 }
 
 fn cache_page(key: String, value: Value, size: usize) {
-    if size > CACHE_CAP_BYTES { return; }
+    if size > CACHE_CAP_BYTES {
+        return;
+    }
     let mut entries = cache().lock().unwrap();
     entries.retain(|entry| entry.key != key && entry.fetched.elapsed() < CACHE_TTL);
     let mut total: usize = entries.iter().map(|entry| entry.size).sum();
     while total.saturating_add(size) > CACHE_CAP_BYTES {
-        let Some(evicted) = entries.pop_front() else { break; };
+        let Some(evicted) = entries.pop_front() else {
+            break;
+        };
         total = total.saturating_sub(evicted.size);
     }
-    entries.push_back(CachedPage { key, value, size: size.max(1), fetched: Instant::now() });
+    entries.push_back(CachedPage {
+        key,
+        value,
+        size: size.max(1),
+        fetched: Instant::now(),
+    });
 }
 
 fn binary_mime(mime: &str) -> bool {
     let mime = mime.split(';').next().unwrap_or("").trim();
-    if mime.is_empty() || mime.starts_with("text/") { return false; }
-    if mime == "application/json" || mime.ends_with("+json")
-        || mime == "application/xml" || mime.ends_with("+xml")
+    if mime.is_empty() || mime.starts_with("text/") {
+        return false;
+    }
+    if mime == "application/json"
+        || mime.ends_with("+json")
+        || mime == "application/xml"
+        || mime.ends_with("+xml")
         || mime.starts_with("application/javascript")
-        || mime == "application/x-www-form-urlencoded" { return false; }
+        || mime == "application/x-www-form-urlencoded"
+    {
+        return false;
+    }
     true
 }
 
@@ -99,9 +118,18 @@ fn persist_binary(bytes: &[u8], mime: &str, root: &Path) -> Result<PathBuf> {
     fs::create_dir_all(&directory)?;
     let directory = directory.canonicalize()?;
     let root = root.canonicalize()?;
-    if !directory.starts_with(&root) { bail!("Tool results directory escapes workspace"); }
-    let target = directory.join(format!("webfetch-{}.{}", Uuid::new_v4(), binary_extension(mime)));
-    let mut file = OpenOptions::new().write(true).create_new(true).open(&target)?;
+    if !directory.starts_with(&root) {
+        bail!("Tool results directory escapes workspace");
+    }
+    let target = directory.join(format!(
+        "webfetch-{}.{}",
+        Uuid::new_v4(),
+        binary_extension(mime)
+    ));
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)?;
     file.write_all(bytes)?;
     file.sync_all()?;
     Ok(target)
@@ -215,15 +243,17 @@ fn decode_html_entities(text: &str) -> String {
                 "mdash" => Some('—'),
                 "ndash" => Some('–'),
                 "hellip" => Some('…'),
-                _ if entity.starts_with("#x") => {
-                    u32::from_str_radix(&entity[2..], 16).ok().and_then(char::from_u32)
-                }
+                _ if entity.starts_with("#x") => u32::from_str_radix(&entity[2..], 16)
+                    .ok()
+                    .and_then(char::from_u32),
                 _ if entity.starts_with('#') => {
                     entity[1..].parse::<u32>().ok().and_then(char::from_u32)
                 }
                 _ => None,
             };
-            decoded.map(|ch| ch.to_string()).unwrap_or_else(|| caps[0].to_owned())
+            decoded
+                .map(|ch| ch.to_string())
+                .unwrap_or_else(|| caps[0].to_owned())
         })
         .into_owned()
 }
@@ -233,7 +263,8 @@ fn decode_html_entities(text: &str) -> String {
 fn sanitize_html(body: &str) -> String {
     let invisible = Regex::new(
         r"(?is)<(script|style|noscript|template)\b[^>]*>.*?</(script|style|noscript|template)\s*>",
-    ).unwrap();
+    )
+    .unwrap();
     let cleaned = invisible.replace_all(body, "");
     let tokens = Regex::new(r"(?s)<!--.*?-->|<[^>]+>|[^<]+").unwrap();
     let mut output = String::new();
@@ -242,7 +273,9 @@ fn sanitize_html(body: &str) -> String {
     let mut preformatted = false;
     for token in tokens.find_iter(&cleaned) {
         let token = token.as_str();
-        if token.starts_with("<!--") { continue; }
+        if token.starts_with("<!--") {
+            continue;
+        }
         if !token.starts_with('<') {
             let decoded = decode_html_entities(token);
             if preformatted {
@@ -251,7 +284,8 @@ fn sanitize_html(body: &str) -> String {
                 let collapsed = decoded.split_whitespace().collect::<Vec<_>>().join(" ");
                 if !collapsed.is_empty() {
                     if decoded.chars().next().is_some_and(char::is_whitespace)
-                        && !output.chars().last().is_some_and(char::is_whitespace) {
+                        && !output.chars().last().is_some_and(char::is_whitespace)
+                    {
                         output.push(' ');
                     }
                     output.push_str(&collapsed);
@@ -264,11 +298,18 @@ fn sanitize_html(body: &str) -> String {
         }
         let closing = token.starts_with("</");
         let raw = token.trim_start_matches('<').trim_start_matches('/').trim();
-        let tag = raw.split(|ch: char| ch.is_whitespace() || ch == '/' || ch == '>')
-            .next().unwrap_or("").to_ascii_lowercase();
+        let tag = raw
+            .split(|ch: char| ch.is_whitespace() || ch == '/' || ch == '>')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
         let heading = if tag.len() == 2 && tag.starts_with('h') {
-            tag.as_bytes()[1].checked_sub(b'0').filter(|n| (1..=6).contains(n))
-        } else { None };
+            tag.as_bytes()[1]
+                .checked_sub(b'0')
+                .filter(|n| (1..=6).contains(n))
+        } else {
+            None
+        };
         if let Some(level) = heading {
             if !closing {
                 output.push_str("\n\n");
@@ -296,9 +337,18 @@ fn sanitize_html(body: &str) -> String {
             (_, "strong" | "b") => output.push_str("**"),
             (_, "em" | "i") => output.push('*'),
             (_, "del" | "s" | "strike") => output.push_str("~~"),
-            (false, "ul") => { lists.push((false, 0)); output.push('\n'); }
-            (false, "ol") => { lists.push((true, 0)); output.push('\n'); }
-            (true, "ul" | "ol") => { lists.pop(); output.push('\n'); }
+            (false, "ul") => {
+                lists.push((false, 0));
+                output.push('\n');
+            }
+            (false, "ol") => {
+                lists.push((true, 0));
+                output.push('\n');
+            }
+            (true, "ul" | "ol") => {
+                lists.pop();
+                output.push('\n');
+            }
             (false, "li") => {
                 output.push('\n');
                 output.push_str(&"  ".repeat(lists.len().saturating_sub(1)));
@@ -306,13 +356,19 @@ fn sanitize_html(body: &str) -> String {
                     if *ordered {
                         *count += 1;
                         output.push_str(&format!("{}. ", count));
-                    } else { output.push_str("- "); }
-                } else { output.push_str("- "); }
+                    } else {
+                        output.push_str("- ");
+                    }
+                } else {
+                    output.push_str("- ");
+                }
             }
             (true, "li") => output.push('\n'),
             (false, "a") => {
                 let href = html_attribute(token, "href").filter(|url| safe_html_link(url));
-                if href.is_some() { output.push('['); }
+                if href.is_some() {
+                    output.push('[');
+                }
                 links.push(href);
             }
             (true, "a") => {
@@ -344,7 +400,9 @@ fn sanitize_html(body: &str) -> String {
     for line in output.lines() {
         let line = line.trim_end();
         if line.is_empty() {
-            if !blank { lines.push(""); }
+            if !blank {
+                lines.push("");
+            }
             blank = true;
         } else {
             lines.push(line);
@@ -454,10 +512,16 @@ async fn fetch_with_redirect_policy_in_workspace(
         }
         let code = response.status();
         if code.as_u16() == 403
-            && response.headers().get("x-proxy-error")
-                .and_then(|header| header.to_str().ok()) == Some("blocked-by-allowlist")
+            && response
+                .headers()
+                .get("x-proxy-error")
+                .and_then(|header| header.to_str().ok())
+                == Some("blocked-by-allowlist")
         {
-            bail!("WebFetch egress policy blocked access to {}", current.host_str().unwrap_or(""));
+            bail!(
+                "WebFetch egress policy blocked access to {}",
+                current.host_str().unwrap_or("")
+            );
         }
         if !code.is_success() {
             bail!("HTTP {code} at {current}")
@@ -497,12 +561,16 @@ async fn fetch_with_redirect_policy_in_workspace(
                     None
                 }
             })
-        } else { None };
+        } else {
+            None
+        };
         let mut content = truncate_source_markdown(&text);
         if let Some(path) = persisted.as_ref() {
             content.push_str(&format!(
                 "\n\n[Binary content ({}, {} bytes) also saved to {}]",
-                kind, bytes.len(), path.display()
+                kind,
+                bytes.len(),
+                path.display()
             ));
         }
         let mut output = json!({
@@ -527,7 +595,8 @@ async fn fetch_with_redirect_policy(
     allow_private_for_test: bool,
     approve_redirect: &(impl Fn(&Url) -> Result<()> + Sync),
 ) -> Result<Value> {
-    fetch_with_redirect_policy_in_workspace(url, allow_private_for_test, approve_redirect, None).await
+    fetch_with_redirect_policy_in_workspace(url, allow_private_for_test, approve_redirect, None)
+        .await
 }
 
 async fn fetch(url: &str, allow_private_for_test: bool) -> Result<Value> {
