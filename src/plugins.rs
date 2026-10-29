@@ -20,6 +20,8 @@ struct Manifest {
     skills: Value,
     #[serde(default)]
     commands: Value,
+    #[serde(default, alias = "userConfig")]
+    user_config: Value,
 }
 
 fn checked_component(root: &Path, path: &Path) -> Result<PathBuf> {
@@ -43,6 +45,7 @@ fn read_manifest(root: &Path, fallback: &str) -> Result<Manifest> {
             name: fallback.to_owned(), version: None,
             hooks: Value::Null, mcp_servers: Value::Null,
             skills: Value::Null, commands: Value::Null,
+            user_config: Value::Null,
         });
     };
     let path = checked_component(root, &path)?;
@@ -544,6 +547,46 @@ fn plugin_data_directory(plugin_root: &Path) -> Result<String> {
     Ok(data.to_string_lossy().replace('\\', "/"))
 }
 
+/// Plugin option values in user settings are non-sensitive; the original
+/// stores secrets separately. Never place a sensitive value in skill prose,
+/// even when a user mistakenly put it in the public settings file.
+fn substitute_plugin_user_config(prompt: &str, manifest: &Manifest, plugin_root: &Path) -> Result<String> {
+    let Some(schema) = manifest.user_config.as_object() else {
+        if manifest.user_config.is_null() { return Ok(prompt.to_owned()); }
+        bail!("Plugin userConfig schema must be an object")
+    };
+    if !prompt.contains("${user_config.") {
+        return Ok(prompt.to_owned());
+    }
+    let workspace = plugin_root.parent().and_then(Path::parent).and_then(Path::parent)
+        .context("Plugin root is outside the local workspace plugin tree")?;
+    let options = crate::permission_settings::SettingsPaths::for_workspace(workspace)?
+        .plugin_public_options(&manifest.name)?;
+    let reference = regex::Regex::new(r"\$\{user_config\.([^}]+)\}")?;
+    Ok(reference.replace_all(prompt, |captures: &regex::Captures<'_>| {
+        let key = &captures[1];
+        if schema.get(key).and_then(|value| value.get("sensitive"))
+            .and_then(Value::as_bool) == Some(true) {
+            return format!("[sensitive option '{key}' not available in skill content]");
+        }
+        match options.get(key) {
+            Some(Value::String(value)) => value.clone(),
+            Some(Value::Null) | None => captures[0].to_owned(),
+            Some(value) => value.to_string(),
+        }
+    }).into_owned())
+}
+
+fn command_with_user_config(
+    prompt: Option<String>, manifest: &Manifest, plugin_root: &Path,
+    session_id: Option<&str>,
+) -> Result<Option<String>> {
+    if session_id.is_none() {
+        return Ok(prompt);
+    }
+    prompt.map(|text| substitute_plugin_user_config(&text, manifest, plugin_root)).transpose()
+}
+
 /// Expand the plugin root after argument substitution, as the original
 /// getPromptForCommand does. Never treat the expanded text as a shell command.
 fn plugin_command_body(content: &str, args: &str, root: &Path, session_id: Option<&str>) -> Result<Option<String>> {
@@ -616,6 +659,9 @@ pub fn command_prompt_with_session(
         };
         let dir = path.parent().context("Plugin skill has no parent directory")?
             .to_string_lossy().replace('\\', "/");
+        let prompt = command_with_user_config(
+            Some(prompt), &manifest, &plugin_root, session_id,
+        )?.context("Plugin skill command disappeared")?;
         return Ok(Some(format!("Base directory for this skill: {dir}\n\n{prompt}")
             .replace("${CLAUDE_SKILL_DIR}", &dir)));
     }
@@ -636,7 +682,7 @@ pub fn command_prompt_with_session(
             if prompt.is_none() && session_id.is_some() {
                 bail!("Plugin command is not user invocable")
             }
-            return Ok(prompt);
+            return command_with_user_config(prompt, &manifest, &plugin_root, session_id);
         }
         return Ok(None);
     }
@@ -709,7 +755,7 @@ pub fn command_prompt_with_session(
             if prompt.is_none() && session_id.is_some() {
                 bail!("Plugin command is not user invocable")
             }
-            return Ok(prompt);
+            return command_with_user_config(prompt, &manifest, &plugin_root, session_id);
         }
     }
     Ok(None)
