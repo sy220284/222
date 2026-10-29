@@ -58,6 +58,7 @@ mod search;
 mod semantic_inputs;
 mod session;
 mod session_control;
+mod stats;
 mod shell_quote;
 mod shell_runtime;
 mod skill_arguments;
@@ -164,6 +165,8 @@ enum Commands {
     Init,
     /// Inspect local installation, settings, Git and MCP availability offline
     Doctor,
+    /// Report actual local session and model usage statistics
+    Stats,
     /// Parse a provider-neutral deep link without opening a terminal
     ParseDeepLink { uri: String },
     /// Encode an atlas-cli://open link for a reviewable prompt/workspace
@@ -250,6 +253,11 @@ async fn main() -> Result<()> {
     if let Commands::Init = &cli.command {
         let path = Config::init()?;
         println!("Created {}", path.display());
+        return Ok(());
+    }
+    if let Commands::Stats = &cli.command {
+        let root = canonical_workspace(&cli.workspace)?;
+        println!("{}", stats::collect(&root)?.render());
         return Ok(());
     }
     if let Commands::Doctor = &cli.command {
@@ -643,6 +651,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 );
                 println!("/tag NAME                add/replace a searchable session tag; repeat to remove");
                 println!("/branch [name]           fork the conversation and resume independently");
+                println!("/stats                   report real local session usage and costs");
                 println!("/history [query]         search saved prompt history");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
@@ -708,7 +717,11 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             "/status" => {
                 println!("{}", agent.status_report()?);
                 continue;
+            }\n            "/stats" => {
+                println!("{}", stats::collect(agent.workspace_root())?.render());
+                continue;
             }
+
             "/tag" => {
                 println!(
                     "Usage: /tag <tag-name> — add a searchable session tag; repeat to remove."
