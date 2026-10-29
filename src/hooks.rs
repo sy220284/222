@@ -126,9 +126,78 @@ pub struct HookOutcome {
     pub non_blocking_errors: Vec<String>,
 }
 
+/// Source hook matchers use exact tool names for simple strings, not
+/// substring regexes. A missing event query bypasses matcher filtering.
+enum HookMatcher {
+    Any,
+    Exact(Vec<String>),
+    Pattern(Regex),
+    Invalid,
+}
+
+fn canonical_hook_tool(name: &str) -> &str {
+    match name {
+        "Read" => "read_file",
+        "Write" => "write_file",
+        "Edit" => "edit_file",
+        other => crate::tool_names::canonical_name(other),
+    }
+}
+
+fn source_hook_tool(name: &str) -> Option<&'static str> {
+    match canonical_hook_tool(name) {
+        "read_file" => Some("Read"),
+        "write_file" => Some("Write"),
+        "edit_file" => Some("Edit"),
+        "run_command" => Some("Bash"),
+        "glob_files" => Some("Glob"),
+        "grep_files" => Some("Grep"),
+        "web_fetch" => Some("WebFetch"),
+        "web_search" => Some("WebSearch"),
+        "task_output" => Some("TaskOutput"),
+        "task_stop" => Some("TaskStop"),
+        "notebook_edit" => Some("NotebookEdit"),
+        _ => None,
+    }
+}
+
+impl HookMatcher {
+    fn compile(value: Option<&str>) -> Self {
+        let Some(value) = value.filter(|v| !v.is_empty() && *v != "*") else {
+            return Self::Any;
+        };
+        if value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'|') {
+            return Self::Exact(value.split('|').map(str::to_owned).collect());
+        }
+        match Regex::new(value) {
+            Ok(pattern) => Self::Pattern(pattern),
+            Err(_) => Self::Invalid,
+        }
+    }
+
+    fn matches(&self, query: Option<&str>) -> bool {
+        // hooks.ts::getMatchingHooks does not filter matchers at all when
+        // the event has no query (Stop, TaskCreated, TaskCompleted, etc.).
+        let Some(query) = query.filter(|query| !query.is_empty()) else {
+            return true;
+        };
+        match self {
+            Self::Any => true,
+            Self::Invalid => false,
+            Self::Exact(names) => names.iter().any(|name| {
+                name == query || canonical_hook_tool(name) == canonical_hook_tool(query)
+            }),
+            Self::Pattern(pattern) => {
+                pattern.is_match(query)
+                    || source_hook_tool(query).is_some_and(|name| pattern.is_match(name))
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct HookRunner {
-    rules: Vec<(HookRule, Option<Regex>)>,
+    rules: Vec<(HookRule, HookMatcher)>,
     workspace: Option<PathBuf>,
 }
 
@@ -142,7 +211,7 @@ impl HookRunner {
             if !(1..=600).contains(&rule.timeout_seconds) {
                 bail!("Hook timeout must be between 1 and 600 seconds");
             }
-            let matcher = rule.matcher.as_deref().map(Regex::new).transpose()?;
+            let matcher = HookMatcher::compile(rule.matcher.as_deref());
             compiled.push((rule.clone(), matcher));
         }
         Ok(Self {
@@ -179,18 +248,44 @@ impl HookRunner {
         let mut pending = Vec::new();
         let shutdown_cap = (event.name() == "SessionEnd").then(session_end_timeout);
         let workspace = self.workspace.as_deref();
+        let event_name = event.name();
+        // The source chooses the matcher input from the event's own field.
+        // Passing a synthetic tool name for compact or subagent hooks must
+        // never add a tool_name field to their stdin JSON.
+        let match_query = match event_name {
+            "PreToolUse" | "PostToolUse" | "PostToolUseFailure"
+            | "PermissionRequest" | "PermissionDenied" => tool_name
+                .or_else(|| input.get("tool_name").and_then(Value::as_str)),
+            "SessionStart" => input.get("source").and_then(Value::as_str),
+            "SessionEnd" => input.get("reason").and_then(Value::as_str),
+            "Setup" | "PreCompact" | "PostCompact" => {
+                input.get("trigger").and_then(Value::as_str)
+            }
+            "Notification" => input.get("notification_type").and_then(Value::as_str),
+            "StopFailure" => input.get("error").and_then(Value::as_str),
+            "SubagentStart" | "SubagentStop" => {
+                input.get("agent_type").and_then(Value::as_str)
+            }
+            "Elicitation" | "ElicitationResult" => {
+                input.get("mcp_server_name").and_then(Value::as_str)
+            }
+            "ConfigChange" => input.get("source").and_then(Value::as_str),
+            "InstructionsLoaded" => input.get("load_reason").and_then(Value::as_str),
+            "FileChanged" => input.get("file_path").and_then(Value::as_str)
+                .and_then(|path| Path::new(path).file_name())
+                .and_then(|name| name.to_str()),
+            _ => None,
+        };
         for (rule, matcher) in &self.rules {
-            if rule.event.name() != event.name() {
+            if rule.event.name() != event_name || !matcher.matches(match_query) {
                 continue;
             }
-            if let Some(pattern) = matcher {
-                if !pattern.is_match(tool_name.unwrap_or("")) {
-                    continue;
+            let mut data = json!({"hook_event_name": event_name});
+            if matches!(event_name, "PreToolUse" | "PostToolUse" | "PostToolUseFailure"
+                | "PermissionRequest" | "PermissionDenied") {
+                if let Some(name) = tool_name {
+                    data["tool_name"] = json!(name);
                 }
-            }
-            let mut data = json!({"hook_event_name": event.name()});
-            if let Some(name) = tool_name {
-                data["tool_name"] = json!(name);
             }
             if let Some(fields) = input.as_object() {
                 for (key, value) in fields {
