@@ -1168,3 +1168,10 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - Rust 实际执行链：`src/conversation_context.rs::project_instructions` → `add_file_inner/include_paths` → `src/agent.rs::system_prompt`。新增项目与个人指令文件内部的 `@./path`、相对/绝对/用户目录引用解析、文本文件扩展名白名单、递归去重与深度限制、代码围栏/行内代码/HTML 注释过滤；工作区外项目引用不注入，用户级引用限制在配置目录。源码提交 `b7dd2cf0`、`1b670581`、`ae1f934b`、`2403ea31`（复查原版 `processMemoryFile` 实际为父文件先入队，已纠正注入顺序）、`d76ce876`（按原版剔除注入内容中的 HTML 注释，代码块与行内代码保留原文），迁移矩阵提交 `6ea01a78`。
 - 保守按 **1 条用户可感知业务功能链** 计入本次源码补齐（不把解析、过滤、递归拆分刷数）。本轮未形成经逐项原版/Rust 证实的 100 个独立业务问题清单及全部实施方案，100 项硬目标尚差 99 项；**完整等价验收新增 0**。遵循本任务要求未运行 Cargo/CI/测试，仅做源代码及远端提交静态审阅。
 - 明确未闭环：完整 Markdown 词法（复杂嵌套代码/HTML）、外部引用用户审批及批准状态、跨 Git 工作树去重、按访问文件动态加载 `paths` 条件规则、SDK 附加目录及记忆排除设置；原版与 Rust 完整行为仍需后续验证。Issue #3 冻结 362 项继续开放。
+
+### 2026-10-29：Hook 历史工具名与团队队长会话重命名（源码已提交、待验收）
+
+- **历史 Hook 匹配**：对照原版完整 ZIP `source/src/utils/hooks.ts::matchesPattern` 与 `source/src/utils/permissions/permissionRuleParser.ts::normalizeLegacyToolName/getLegacyToolNames`，修复 Rust `src/hooks.rs::canonical_hook_tool/HookMatcher::matches`。原版的 `Task`、`KillShell`、`AgentOutputTool`、`BashOutputTool` 旧名称及对应正则现在可映射到 Agent、TaskStop、TaskOutput 的真实 Hook 调度入口；避免升级后旧 Hook 无声失效。代码提交 `e2529c2c7a0df9a514bdd0b1457ef73e995c81e0`。
+- **队长重命名与身份恢复**：对照原版 `source/src/commands/rename/rename.ts::call` 与 `source/src/utils/teammate.ts::isTeammate`，发现 Rust `src/agent.rs::run_team_tools(TeamCreate)` 把 `session.agent_name` 写成 `team-lead`，而 `src/session_control.rs::rename` 把任何同时含 team_name/agent_name 的会话都误当队友拒绝。修复后队长可以手动或通过模型自动命名；保存自定义标题时保留 `team-lead` 的路由身份，历史会话列表展示新标题，重新加载仍能进入协调者分支。普通会话与队友的原有限制不变。代码提交 `c082318e8ce57bd0316278886556093f5e5e0318`、`cc7b5933f896e5d5967712e8b02e048d535b1afe`。
+- 本次按独立用户行为保守计 **2 项已提交、待行为验收**。只做原版/Rust 源码、可达入口、远端文件及提交静态复核；未运行 Cargo、测试或 CI。完整 100 项预先缺口清单与 100 项代码补齐尚未完成，不以这些提交宣告本轮达标。Issue #3 固定 362 项继续开放，0 项升级完整等价。
+- **剩余差异**：Hook 仍缺原版动态注册/取消、按插件与技能来源隔离去重、HTTP/SDK 回调与异步调度；队长重命名尚缺远程通用会话标题同步、原版完整 UI 更新及取消传播，跨进程/行为测试未做。下一续接优先原版 `hooks.ts` 的动态注册与权限请求 Hook，复核并行 HEAD 去重后再接线。
