@@ -1,0 +1,26 @@
+name: 本地 Rust 迁移源代码同步
+on:
+  push:
+    branches: [feat/full-rust-parity]
+    paths:
+      - '.github/workflows/local-port-sync.yml'
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: 打包当前工作分支代码
+        run: |
+          git archive --format=tar.gz HEAD -o /tmp/222-current.tar.gz
+          git rev-parse HEAD >/tmp/source-sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: current-rust-port-snapshot
+          path: |
+            /tmp/222-current.tar.gz
+            /tmp/source-sha.txt
+          retention-days: 1
