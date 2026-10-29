@@ -718,6 +718,80 @@ impl McpManager {
         Ok(json!({"added":added,"removed":removed,"errors":errors}))
     }
 
+    /// Refresh user/project/plugin MCP servers while preserving SDK-owned
+    /// dynamic transports and all unchanged healthy connections. A plugin
+    /// removal also revokes its tool aliases and resource subscriptions.
+    pub async fn reconcile_fixed(&mut self, desired: Vec<McpServerConfig>) -> Result<Value> {
+        let mut requested = HashMap::new();
+        for config in desired {
+            if self.dynamic_names.contains(&config.id) {
+                bail!("Fixed MCP server conflicts with an SDK server: {}", config.id);
+            }
+            if requested.insert(config.id.clone(), config).is_some() {
+                bail!("Duplicate fixed MCP server id");
+            }
+        }
+
+        let mut removed = Vec::new();
+        let mut added = Vec::new();
+        let mut errors = serde_json::Map::new();
+        let previous = self.configs.iter()
+            .filter(|config| !self.dynamic_names.contains(&config.id))
+            .map(|config| config.id.clone()).collect::<Vec<_>>();
+        for name in previous {
+            let index = self.configs.iter().position(|config| config.id == name)
+                .context("Fixed MCP configuration disappeared during reload")?;
+            let unchanged = requested.get(&name).is_some_and(|new_config|
+                serde_json::to_value(new_config).ok()
+                    == serde_json::to_value(&self.configs[index]).ok());
+            if unchanged {
+                continue;
+            }
+            let was_disabled = self.disabled.contains(&name);
+            self.toggle_named(&name, false).await?;
+            self.configs.remove(index);
+            self.server_statuses.remove(index);
+            self.status_clients.remove(index);
+            self.resource_subscriptions.retain(|(server, _)| server != &name);
+            if !was_disabled {
+                self.disabled.remove(&name);
+            }
+            if !requested.contains_key(&name) {
+                removed.push(name);
+            }
+        }
+
+        let mut names = requested.keys().cloned().collect::<Vec<_>>();
+        names.sort();
+        for name in names {
+            if self.configs.iter().any(|config| config.id == name) {
+                continue;
+            }
+            let config = requested.remove(&name)
+                .context("Fixed MCP config disappeared during reload")?;
+            let disabled = self.disabled.contains(&name);
+            self.server_statuses.push(json!({
+                "name":name,"status":if disabled { "disabled" } else { "pending" },
+                "config":Self::public_config(&config)
+            }));
+            self.status_clients.push(None);
+            self.configs.push(config.clone());
+            if !disabled {
+                let index = self.configs.len() - 1;
+                if let Err(error) = self.reconnect_server(index).await {
+                    let message = Self::redact_connection_error(&config, format!("{error:#}"));
+                    self.server_statuses[index] = json!({
+                        "name":name,"status":"failed",
+                        "config":Self::public_config(&config),"error":message
+                    });
+                    errors.insert(name.clone(), Value::String(message));
+                }
+            }
+            added.push(name);
+        }
+        Ok(json!({"added":added,"removed":removed,"errors":errors}))
+    }
+
     /// Enable or disable one configured MCP server without touching healthy
     /// peers. Disabling drops its transport (stdio children use kill_on_drop),
     /// tool routes and resource subscriptions before returning to the SDK.
