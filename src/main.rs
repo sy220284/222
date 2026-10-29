@@ -2460,6 +2460,17 @@ async fn sdk_nested_control(
                     "available_output_styles":["default"],"models":models,
                     "account":{},"pid":std::process::id()}))
             }
+            "mcp_toggle" => {
+                let server = request.get("serverName")
+                    .and_then(Value::as_str)
+                    .filter(|name| !name.is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("mcp_toggle requires serverName"))?;
+                let enabled = request.get("enabled")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| anyhow::anyhow!("mcp_toggle requires boolean enabled"))?;
+                agent.toggle_named_mcp(server, enabled).await?;
+                Ok(json!({}))
+            }
             "mcp_reconnect" => {
                 let server = request
                     .get("serverName")

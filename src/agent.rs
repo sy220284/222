@@ -32,6 +32,44 @@ use std::{
 
 const DEFAULT_SYSTEM: &str = crate::prompt_runtime::BASE_SYSTEM;
 
+/// Persisted independently of the provider and plugin configuration so a
+/// plugin-sourced server can be toggled without rewriting its manifest.
+fn disabled_mcp_path() -> Result<PathBuf> {
+    Ok(crate::config::Config::path()?.with_file_name("mcp-disabled.json"))
+}
+fn load_disabled_mcp_servers() -> Result<std::collections::HashSet<String>> {
+    let path = disabled_mcp_path()?;
+    if !path.exists() {
+        return Ok(std::collections::HashSet::new());
+    }
+    let data = fs::read_to_string(&path)
+        .with_context(|| format!("Read MCP toggle settings {}", path.display()))?;
+    serde_json::from_str(crate::json_read::strip_bom(&data))
+        .with_context(|| format!("Parse MCP toggle settings {}", path.display()))
+}
+fn save_disabled_mcp_servers(disabled: &std::collections::HashSet<String>) -> Result<()> {
+    let path = disabled_mcp_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let temp = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+    let outcome = (|| -> Result<()> {
+        use std::io::Write as _;
+        let mut file = fs::OpenOptions::new()
+            .write(true).create_new(true).open(&temp)?;
+        let mut names = disabled.iter().cloned().collect::<Vec<_>>();
+        names.sort();
+        file.write_all(&serde_json::to_vec_pretty(&names)?)?;
+        file.sync_all()?;
+        fs::rename(&temp, &path)?;
+        Ok(())
+    })();
+    if outcome.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    outcome
+}
+
 /// Finish a teammate only after its task ownership has been released and
 /// the leader has received the durable completion notification. A failure
 /// leaves the member active so team cleanup cannot silently erase its state.
@@ -220,7 +258,10 @@ impl Agent {
         self.mcp_configs = servers.to_vec();
         self.last_context_usage = None;
         if !servers.is_empty() {
-            self.mcp = Some(McpManager::connect_with_root(servers, &self.root).await?);
+            let disabled = load_disabled_mcp_servers()?;
+            self.mcp = Some(McpManager::connect_with_root_filtered(
+                servers, &self.root, &disabled,
+            ).await?);
         }
         Ok(())
     }
@@ -1848,6 +1889,26 @@ impl Agent {
             .as_mut()
             .map_or_else(|| Ok(Vec::new()), |mcp| mcp.statuses())
     }
+    /// Persist the user's MCP toggle before changing the live transport.
+    /// A failed enable remains enabled in settings and visible as a failed
+    /// connection, so a later reconnect can recover without reconfiguration.
+    pub async fn toggle_named_mcp(
+        &mut self, name: &str, enabled: bool,
+    ) -> Result<serde_json::Value> {
+        let manager = self.mcp.as_ref().context("No MCP servers configured")?;
+        if !self.mcp_configs.iter().any(|server| server.id == name) {
+            bail!("MCP server {name:?} not found");
+        }
+        let _ = manager;
+        let mut disabled = load_disabled_mcp_servers()?;
+        if enabled { disabled.remove(name); } else { disabled.insert(name.to_owned()); }
+        save_disabled_mcp_servers(&disabled)?;
+        let result = self.mcp.as_mut().context("No MCP servers configured")?
+            .toggle_named(name, enabled).await;
+        self.last_context_usage = None;
+        result
+    }
+
     pub async fn reconnect_named_mcp(&mut self, name: &str) -> Result<serde_json::Value> {
         let manager = self.mcp.as_mut().context("No MCP servers configured")?;
         let status = manager.reconnect_named(name).await?;

@@ -374,6 +374,9 @@ pub struct McpManager {
     resource_subscriptions: std::collections::HashSet<(String, String)>,
     configs: Vec<McpServerConfig>,
     root: PathBuf,
+    /// Explicit user-disabled servers remain configured but cannot reconnect
+    /// or expose cached tools until the user enables them again.
+    disabled: std::collections::HashSet<String>,
 }
 
 impl McpManager {
@@ -382,6 +385,13 @@ impl McpManager {
         Self::connect_with_root(servers, &root).await
     }
     pub async fn connect_with_root(servers: &[McpServerConfig], root: &Path) -> Result<Self> {
+        Self::connect_with_root_filtered(servers, root, &std::collections::HashSet::new()).await
+    }
+    pub async fn connect_with_root_filtered(
+        servers: &[McpServerConfig],
+        root: &Path,
+        disabled: &std::collections::HashSet<String>,
+    ) -> Result<Self> {
         let root = root
             .canonicalize()
             .context("MCP workspace does not exist")?;
@@ -397,8 +407,15 @@ impl McpManager {
             resource_subscriptions: std::collections::HashSet::new(),
             configs: servers.to_vec(),
             root: root.clone(),
+            disabled: disabled.clone(),
         };
         for server in servers {
+            if out.disabled.contains(&server.id) {
+                out.server_statuses.push(json!({"name":server.id,
+                    "status":"disabled","config":Self::public_config(server)}));
+                out.status_clients.push(None);
+                continue;
+            }
             // Failed servers are isolated; one broken MCP process must not
             // prevent the healthy tools from operating.
             let mut client = match TransportClient::connect(server, &root).await {
@@ -554,6 +571,9 @@ impl McpManager {
             .get(position)
             .context("MCP reconnect config not found")?
             .clone();
+        if self.disabled.contains(&config.id) {
+            bail!("MCP server {} is disabled", config.id);
+        }
         let mut fresh = Self::connect_with_root(&[config.clone()], &self.root).await?;
         if fresh.server_statuses[0]["status"] != "connected" {
             bail!("MCP {} reconnect failed", config.id)
@@ -616,6 +636,54 @@ impl McpManager {
     }
 
     /// Reconnect one exact server without disrupting healthy peers.
+    /// Enable or disable one configured MCP server without touching healthy
+    /// peers. Disabling drops its transport (stdio children use kill_on_drop),
+    /// tool routes and resource subscriptions before returning to the SDK.
+    pub async fn toggle_named(&mut self, name: &str, enabled: bool) -> Result<Value> {
+        let position = self.configs.iter().position(|server| server.id == name)
+            .with_context(|| format!("MCP server {name:?} not found"))?;
+        if enabled {
+            if self.disabled.remove(name) {
+                if let Err(error) = self.reconnect_server(position).await {
+                    let diagnostic = Self::redact_connection_error(
+                        &self.configs[position], format!("{error:#}"));
+                    self.server_statuses[position] = json!({
+                        "name":name,"status":"failed",
+                        "config":Self::public_config(&self.configs[position]),
+                        "error":diagnostic
+                    });
+                    return Err(error);
+                }
+            }
+        } else if self.disabled.insert(name.to_owned()) {
+            if let Some(old_index) = self.status_clients[position].take() {
+                let old_aliases = self.routes.iter()
+                    .filter_map(|(alias, (index, _))|
+                        (*index == old_index).then_some(alias.clone()))
+                    .collect::<std::collections::HashSet<_>>();
+                self.routes.retain(|_, (index, _)| *index != old_index);
+                self.tools.retain(|tool| !old_aliases.contains(
+                    tool.pointer("/function/name")
+                        .and_then(Value::as_str).unwrap_or("")));
+                // Removing this slot drops the transport and terminates its
+                // stdio child. Adjust all other client indices atomically.
+                self.clients.remove(old_index);
+                for index in self.status_clients.iter_mut().flatten() {
+                    if *index > old_index { *index -= 1; }
+                }
+                for (index, _) in self.routes.values_mut() {
+                    if *index > old_index { *index -= 1; }
+                }
+            }
+            self.resource_subscriptions.retain(|(server, _)| server != name);
+            self.server_statuses[position] = json!({
+                "name":name,"status":"disabled",
+                "config":Self::public_config(&self.configs[position])
+            });
+        }
+        Ok(self.server_statuses[position].clone())
+    }
+
     pub async fn reconnect_named(&mut self, name: &str) -> Result<Value> {
         let position = self
             .configs
@@ -635,7 +703,9 @@ impl McpManager {
                     self.server_statuses[index]["error"] = json!(error);
                 }
             }
-            if self.server_statuses[index]["status"] == "failed" {
+            if self.server_statuses[index]["status"] == "failed"
+                && !self.disabled.contains(&self.configs[index].id)
+            {
                 if let Err(error) = self.reconnect_server(index).await {
                     failures.push(format!("MCP {}: {error:#}", self.configs[index].id));
                 }
@@ -969,6 +1039,9 @@ impl McpManager {
             bail!("MCP server not uniquely configured: {server}")
         }
         let position = positions[0];
+        if self.disabled.contains(server) {
+            bail!("MCP server {server} is disabled");
+        }
         // Resources, prompts and subscriptions must recover the same way as
         // tools/call after a 401/expired session. A new request is safe to
         // issue; never replay the previously rejected request automatically.
@@ -996,6 +1069,12 @@ impl McpManager {
                 .as_str()
                 .unwrap_or("")
                 .to_owned();
+            // Disabled servers remain absent from the live catalog and must
+            // never be restarted by a read-only listing request.
+            if self.disabled.contains(&name) {
+                servers.push(json!({"server":name,"ok":false,"error":"disabled"}));
+                continue;
+            }
             // A previously expired MCP auth/session can recover while other
             // servers remain healthy. Refresh only this catalog server and
             // keep its failure isolated if reconnect still fails.
