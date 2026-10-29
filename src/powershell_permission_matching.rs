@@ -82,10 +82,18 @@ fn same_canonical(rule:&str,actual:&str,allow:bool)->Result<bool>{
     let (input_raw,input_rest)=split_command(actual);
     let input_name=canonical_name(strip_module_prefix(input_raw));
     let input=make_command(&input_name,input_rest);
-    let (rule_raw,rule_rest)=split_command(rule);
+    let prefix=extract_prefix(rule);
+    let canonical_rule=prefix.unwrap_or(rule);
+    let (rule_raw,rule_rest)=split_command(canonical_rule);
     let rule_name=canonical_name(if allow{rule_raw}else{strip_module_prefix(rule_raw)});
     if rule_name!=input_name{return Ok(false);}
     let rule_norm=make_command(&input_name,rule_rest);
+    if prefix.is_some(){
+        // The original prefix match accepts both bare cmdlet and cmdlet + args.
+        let base=rule_norm.to_lowercase();
+        let value=input.to_lowercase();
+        return Ok(value==base||value.starts_with(&format!("{base} ")));
+    }
     match_one(&rule_norm,&input)
 }
 fn matches_rule(rule:&str,actual:&str,allow:bool)->Result<bool>{
@@ -97,8 +105,8 @@ fn matches_rule(rule:&str,actual:&str,allow:bool)->Result<bool>{
     if match_one(rule,&normalized)?{return Ok(true);}
     // Then the rule itself is canonicalised; deny/ask may strip its module
     // qualifier but allow may NOT (a cross-module fail-open).
-    if let Some(prefix)=extract_prefix(rule){
-        return same_canonical(prefix,actual,allow);
+    if extract_prefix(rule).is_some(){
+        return same_canonical(rule,actual,allow);
     }
     if has_wildcards(rule){
         return same_canonical(rule,actual,allow);
