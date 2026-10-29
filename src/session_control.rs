@@ -127,9 +127,20 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             }
         };
         let fallback = preview(&session.messages);
-        // getLogDisplayTitle in 2.1.88 prefers teammate name, explicit
-        // title, summary and first prompt, in that order. A session with
-        // no visible text still has a stable, recognizable ID fallback.
+        // log.ts:getLogDisplayTitle skips autonomous <tick> prompts and
+        // command-only XML. Strip before choosing a fallback, rather than
+        // displaying raw markup or an empty session title.
+        let autonomous = fallback.starts_with("<tick>");
+        let visible_prompt = crate::portable_ui_runtime::strip_display_tags_allow_empty(&fallback);
+        let fallback_title = if autonomous {
+            "Autonomous session".to_owned()
+        } else if visible_prompt.is_empty() {
+            id.to_string().chars().take(8).collect()
+        } else {
+            visible_prompt
+        };
+        // getLogDisplayTitle prioritizes teammate name, explicit title,
+        // summary and a visible first prompt in that order.
         let title = session
             .agent_name
             .as_deref()
@@ -137,13 +148,7 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             .or_else(|| session.custom_title.as_deref().filter(|value| !value.trim().is_empty()))
             .or_else(|| session.summary.as_deref().filter(|value| !value.trim().is_empty()))
             .map(str::to_owned)
-            .unwrap_or_else(|| {
-                if fallback.is_empty() {
-                    id.to_string().chars().take(8).collect()
-                } else {
-                    fallback
-                }
-            });
+            .unwrap_or(fallback_title);
         let modified_ms = meta
             .modified()
             .ok()
