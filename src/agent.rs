@@ -1537,12 +1537,12 @@ impl Agent {
 
     pub fn context_usage(&self) -> Result<serde_json::Value> {
         let (snapshot, from_last_request) = self.context_usage_snapshot()?;
-        Ok(snapshot.to_json(self.last_model_usage, from_last_request))
+        Ok(snapshot.to_json(self.last_model_usage, from_last_request, self.auto_compact_failures < 3))
     }
 
     pub fn context_usage_text(&self) -> Result<String> {
         let (snapshot, from_last_request) = self.context_usage_snapshot()?;
-        Ok(snapshot.render(self.last_model_usage, from_last_request))
+        Ok(snapshot.render(self.last_model_usage, from_last_request, self.auto_compact_failures < 3))
     }
 
     pub fn copy_response(&self, selection: &str) -> Result<String> {
