@@ -1,5 +1,13 @@
 # Issue #3：冻结 362 项源码级等价验收登记表
 
+### 2026-10-29：PowerShell 原版工具名贯通 Agent／权限／前后台进程（仍未验收）
+
+原版对照：`src/tools/PowerShellTool/PowerShellTool.tsx`（工具名 `PowerShell`、`command`、毫秒 `timeout`、`run_in_background`），`src/tools/PowerShellTool/toolName.ts`，`PowerShellTool/powershellPermissions.ts`。此前 Rust 只把默认 shell 设为 PowerShell 时执行通用 `run_command`，但原版 `PowerShell` 工具名没有进入模型工具列表，也没有接入执行器，存在真实调用链缺口。
+
+现已在 PowerShell 会话中发布原版 `PowerShell` 模型工具定义，保留通用 `run_command`；`ToolExecutor` 将显式 PowerShell 工具独立路由到 PowerShell 可执行程序和对应权限规则、Shell 生命周期事件及毫秒超时；后台任务增加逐次 shell 参数，不再依靠修改共享默认 shell 选择，避免并发 Bash/PowerShell 混跑。新增执行入口（无 PowerShell 安装时明确报错，绝不回退 Bash）、权限拒绝、后台进程覆盖默认值隔离测试。
+
+修改：`src/agent.rs`、`src/tools.rs`、`src/background.rs`；提交 `708f445`、`6c12ec0`、`342b5b3`、`9018b6d`、`06bdbce`、`a4637c8`、`ad8b571`。**不勾选任何冻结项**：PowerShell 完整 AST、权限 UI、沙箱、取消／重启时序、进程组与图像输出等原版行为仍缺。
+
 
 ### 2026-10-29：PowerShell 复合命令权限主链补证（未验收）
 
