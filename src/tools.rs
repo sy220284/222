@@ -281,6 +281,13 @@ impl ToolExecutor {
                     )
                     .await
             }
+            "task_output_delta" => {
+                let manager = self.background.as_ref()
+                    .context("Background tasks unavailable")?;
+                manager.output_delta(required(&args,"task_id")?,
+                    args.get("from_offset").and_then(Value::as_u64).unwrap_or(0),
+                    args.get("max_bytes").and_then(Value::as_u64).unwrap_or(8 * 1024 * 1024))
+            }
             "task_stop" | "KillShell" => {
                 self.require_approval("task_stop", &args)?;
                 let manager = self

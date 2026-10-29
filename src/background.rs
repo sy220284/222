@@ -21,6 +21,8 @@ use uuid::Uuid;
 // Original diskOutput.ts allows up to 5 GiB of task output per stream.
 // Keep the cap in bytes (u64), not characters, to preserve large outputs.
 const LOG_CAP: u64 = 5 * 1024 * 1024 * 1024;
+const DEFAULT_DELTA_READ_BYTES: u64 = 8 * 1024 * 1024;
+const OUTPUT_CAPPED_NOTICE: &str = "\n[output truncated: exceeded 5GB disk cap]\n";
 const DISPLAY_CAP: usize = 640_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -274,6 +276,31 @@ impl BackgroundTasks {
         .to_string())
     }
 
+    /// Read only newly appended stdout bytes, using the original task
+    /// framework's offset/delta contract. A stopped task's file remains
+    /// readable across agent restarts. Never trust persisted path metadata.
+    pub fn output_delta(&self, id: &str, from_offset: u64, max_bytes: u64) -> Result<String> {
+        let id = Uuid::parse_str(id).context("Invalid task ID")?.to_string();
+        let path = self.directory.join(format!("{id}.stdout"));
+        let max_bytes = if max_bytes == 0 {
+            DEFAULT_DELTA_READ_BYTES
+        } else {
+            max_bytes.min(DEFAULT_DELTA_READ_BYTES)
+        };
+        let delta = read_output_range(&path, from_offset, max_bytes)?;
+        let (content, bytes_read, total) = match delta {
+            Some((content, bytes_read, total)) => (content, bytes_read, total),
+            None => (String::new(), 0, from_offset),
+        };
+        Ok(json!({
+            "task_id":id,
+            "content":content,
+            "newOffset":from_offset.saturating_add(bytes_read),
+            "bytesRead":bytes_read,
+            "bytesTotal":total,
+        }).to_string())
+    }
+
     pub fn list(&self) -> Result<String> {
         let live = self.entries.lock().unwrap().clone();
         let mut records = Vec::new();
@@ -370,6 +397,31 @@ impl BackgroundTasks {
     }
 }
 
+fn read_output_range(path: &Path, offset: u64, max_bytes: u64) -> Result<Option<(String, u64, u64)>> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let mut file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let meta = file.metadata()?;
+    if !meta.is_file() { bail!("Task output is not a regular file") }
+    let total = meta.len();
+    if offset >= total { return Ok(Some((String::new(), 0, total))) }
+    use std::io::{Read, Seek, SeekFrom};
+    file.seek(SeekFrom::Start(offset))?;
+    let mut bytes = Vec::with_capacity((total - offset).min(max_bytes) as usize);
+    file.take((total - offset).min(max_bytes)).read_to_end(&mut bytes)?;
+    let count = bytes.len() as u64;
+    Ok(Some((String::from_utf8_lossy(&bytes).into_owned(), count, total)))
+}
+
 fn tail(path: &str) -> Result<String> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
@@ -406,7 +458,11 @@ fn create_output_file(path: &Path) -> Result<tokio::fs::File> {
     Ok(tokio::fs::File::from_std(file))
 }
 
-async fn spool<R: AsyncRead + Unpin>(mut stream: R, mut file: tokio::fs::File) -> Result<bool> {
+async fn spool<R: AsyncRead + Unpin>(stream: R, file: tokio::fs::File) -> Result<bool> {
+    spool_with_limit(stream, file, LOG_CAP).await
+}
+
+async fn spool_with_limit<R: AsyncRead + Unpin>(mut stream: R, mut file: tokio::fs::File, limit: u64) -> Result<bool> {
     let mut buffer = [0u8; 8192];
     let mut size = 0u64;
     let mut truncated = false;
@@ -415,13 +471,16 @@ async fn spool<R: AsyncRead + Unpin>(mut stream: R, mut file: tokio::fs::File) -
         if n == 0 {
             break;
         }
-        let writable = n.min(LOG_CAP.saturating_sub(size).min(n as u64) as usize);
+        let writable = n.min(limit.saturating_sub(size).min(n as u64) as usize);
         if writable > 0 {
             file.write_all(&buffer[..writable]).await?;
             size += writable as u64;
         }
-        if writable < n {
+        if writable < n && !truncated {
             truncated = true;
+            // Keep consuming the pipe so the child does not deadlock, but
+            // append the original disk-cap diagnostic exactly once.
+            file.write_all(OUTPUT_CAPPED_NOTICE.as_bytes()).await?;
         }
     }
     file.flush().await?;
@@ -439,6 +498,12 @@ pub fn definitions() -> Vec<Value> {
                 "task_id":{"type":"string"},"block":{"type":"boolean"},
                 "timeout":{"type":"integer","minimum":0,"maximum":600000}
             },"required":["task_id"]}}}),
+        json!({"type":"function","function":{"name":"task_output_delta",
+            "description":"Read appended stdout by byte offset; max 8MiB per read; never follows a symlink.",
+            "parameters":{"type":"object","properties":{
+                "task_id":{"type":"string"},"from_offset":{"type":"integer","minimum":0},
+                "max_bytes":{"type":"integer","minimum":1,"maximum":8388608}
+            },"required":["task_id"]}}}),
         json!({"type":"function","function":{"name":"task_stop",
         "description":"Stop a running background shell task by ID. Requires approval.",
         "parameters":{"type":"object","properties":{
@@ -451,6 +516,51 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn disk_cap_emits_single_original_notice_but_drains_remaining_output() {
+        use tokio::io::AsyncWriteExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cap.stdout");
+        let file = create_output_file(&path).unwrap();
+        let (mut tx, rx) = tokio::io::duplex(32);
+        let sending = tokio::spawn(async move {
+            tx.write_all(b"0123456789abcdefghijklmnopqrstuvwxyz").await.unwrap();
+            tx.shutdown().await.unwrap();
+        });
+        assert!(spool_with_limit(rx, file, 10).await.unwrap());
+        sending.await.unwrap();
+        assert_eq!(fs::read_to_string(path).unwrap(),
+            "0123456789\n[output truncated: exceeded 5GB disk cap]\n");
+    }
+
+    #[test]
+    fn delta_reads_incrementally_with_utf8_byte_offsets_and_no_symlink_follow() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let tasks = BackgroundTasks::new(&root).unwrap();
+        let id = Uuid::new_v4().to_string();
+        let path = tasks.directory.join(format!("{id}.stdout"));
+        fs::write(&path, "héllo中文".as_bytes()).unwrap();
+        let first: Value = serde_json::from_str(&tasks.output_delta(&id, 0, 2).unwrap()).unwrap();
+        assert_eq!(first["bytesRead"], 2);
+        assert_eq!(first["newOffset"], 2);
+        let second: Value = serde_json::from_str(&tasks.output_delta(&id, 2, 800).unwrap()).unwrap();
+        assert_eq!(second["content"], "éllo中文");
+        assert_eq!(second["newOffset"], "héllo中文".len());
+        let idle: Value = serde_json::from_str(&tasks.output_delta(&id, 999, 40).unwrap()).unwrap();
+        assert_eq!(idle["newOffset"], 999);
+        assert_eq!(idle["bytesRead"], 0);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let protected = dir.path().join("protected");
+            fs::write(&protected, "secret").unwrap();
+            let _ = fs::remove_file(&path);
+            symlink(&protected, &path).unwrap();
+            assert!(tasks.output_delta(&id, 0, 10).is_err());
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn task_output_never_follows_symlink_for_read_or_creation() {
