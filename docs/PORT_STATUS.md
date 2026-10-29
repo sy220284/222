@@ -1,5 +1,11 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：/clear 后输入历史会话归属修复
+
+在此前的 SessionEnd→新 UUID→SessionStart 实现基础上，补齐 `src/main.rs` 聊天循环的输入历史重新绑定：原 `PromptHistory` 长期保留清空前的会话 ID，导致清空后输入仍记到旧会话。现以新会话 UUID 重建 `PromptHistory`，后续输入独立归属新会话，并向用户明确显示可恢复的新 ID。真实 CLI 子进程测试输入 `/clear`、`/session`、`/quit`，验证原/新历史各自 UUID 和两个会话文件持续存在。此项仍需原版缓存和异步任务全语义补齐，不升级源文件已验收数。
+
+
+
 ## 2026-10-29：/clear 会话持久化与 Hook 生命周期源级修复
 
 对照原始 2.1.88 `src/commands/clear/clear.ts`、`conversation.ts`、`caches.ts`：Rust 原先清空并覆盖同一 UUID 的旧会话，破坏恢复入口。现由 `src/agent.rs`、`src/main.rs` 改为 SessionEnd Hook → 保存旧会话 → 新 UUID/新任务图/空消息并保留权限模式 → SessionStart Hook；聊天与 SDK 清除入口共享。保留后台 Shell 管理器，不覆盖旧历史；原源码原厂遥测不保留。单测覆盖旧记录可恢复、新记录为空、模式延续、任务图隔离、两个生命周期 Hook 顺序。缓存全量清理、MCP 连接热重置、前台/后台队员差异及原版 UI 仍待补齐，不计源路径完整验收。

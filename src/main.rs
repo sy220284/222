@@ -812,7 +812,11 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             }
             "/clear" => {
                 agent.clear_history().await?;
-                println!("Conversation cleared.");
+                // /clear starts a new UUID. Subsequent history entries must be
+                // attributed to that new session rather than the old one.
+                prompt_history =
+                    prompt_history::PromptHistory::new(agent.workspace_root(), &agent.session_id())?;
+                println!("Conversation cleared. Session: {}", agent.session_id());
                 continue;
             }
             "/compact" => {

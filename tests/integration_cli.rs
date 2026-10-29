@@ -3,7 +3,7 @@ use std::{
     fs,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    process::Command,
+    process::{Command, Stdio},
     thread,
     time::Duration,
 };
@@ -5941,4 +5941,65 @@ fn doctor_reads_real_git_remote_but_never_displays_embedded_credentials() {
     );
     assert!(!out.contains("DOCTOR_SECRET"));
     assert!(!out.contains("internal-user"));
+}
+
+
+#[test]
+fn chat_clear_rebinds_prompt_history_to_new_session_and_preserves_old() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    let initialized = binary()
+        .arg("init")
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert!(initialized.status.success());
+
+    let mut child = binary()
+        .arg("--workspace")
+        .arg(root.path())
+        .arg("chat")
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"/clear\n/session\n/quit\n")
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let history = fs::read_to_string(root.path().join("history.jsonl")).unwrap();
+    let entries = history
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(entries[0]["display"], "/clear");
+    assert_eq!(entries[1]["display"], "/session");
+    let old_id = entries[0]["sessionId"].as_str().unwrap();
+    let new_id = entries[1]["sessionId"].as_str().unwrap();
+    assert_ne!(old_id, new_id);
+    assert_eq!(entries[2]["sessionId"], new_id);
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains(&format!("Conversation cleared. Session: {new_id}")));
+    let before = root
+        .path()
+        .join(".atlas/sessions")
+        .join(format!("{old_id}.json"));
+    let after = root
+        .path()
+        .join(".atlas/sessions")
+        .join(format!("{new_id}.json"));
+    assert!(before.is_file());
+    assert!(after.is_file());
 }
