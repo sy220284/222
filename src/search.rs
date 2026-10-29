@@ -130,46 +130,105 @@ fn files_filtered<F: Fn(&Path) -> Result<bool>>(
 }
 /// GrepTool uses ripgrep with gitignore enabled. Delegate nested/global
 /// ignore precedence to Git rather than reimplementing it incompletely.
-fn git_ignored_paths(base: &Path, paths: &[PathBuf]) -> std::collections::HashSet<PathBuf> {
-    use std::process::{Command, Stdio};
-    let mut ignored = std::collections::HashSet::new();
-    let repo = Command::new("git")
-        .arg("-C")
-        .arg(base)
-        .args(["rev-parse", "--is-inside-work-tree"])
+/// Execute Git ignore probes under the same deadline as the parent Grep/Glob
+/// search. The original ripgrep.ts terminates blocked search subprocesses;
+/// an unbounded git check-ignore must not keep a timed-out search alive.
+fn git_output_before_deadline(
+    command: &mut std::process::Command,
+    deadline: Instant,
+) -> Result<std::process::Output> {
+    use std::io::Read as _;
+    use std::process::Stdio;
+    command
         .stdin(Stdio::null())
-        .output();
-    if !repo.is_ok_and(|output| output.status.success() && output.stdout.starts_with(b"true")) {
-        return ignored;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut child = command.spawn().context("Start Git ignore check")?;
+    let mut stdout = child.stdout.take().context("Git stdout pipe unavailable")?;
+    // Drain the pipe concurrently. Waiting for the child before reading can
+    // deadlock when a large repository fills the operating system pipe buffer.
+    let reader = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut bytes = Vec::new();
+        stdout.read_to_end(&mut bytes)?;
+        Ok(bytes)
+    });
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let output = reader.join()
+                    .map_err(|_| anyhow::anyhow!("Git output reader panicked"))??;
+                return Ok(std::process::Output {
+                    status,
+                    stdout: output,
+                    stderr: Vec::new(),
+                });
+            }
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = reader.join();
+                bail!("Git ignore check timed out; search results would be incomplete");
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = reader.join();
+                return Err(error).context("Wait for Git ignore check");
+            }
+        }
+    }
+}
+
+/// Honor Git's nested ignore rules without silently returning unfiltered
+/// results when the ignore subprocess fails or exceeds the search deadline.
+fn git_ignored_paths(
+    base: &Path,
+    paths: &[PathBuf],
+    deadline: Instant,
+) -> Result<std::collections::HashSet<PathBuf>> {
+    use std::process::Command;
+    let mut ignored = std::collections::HashSet::new();
+    if paths.is_empty() {
+        return Ok(ignored);
+    }
+    check_search_deadline(Some(deadline))?;
+    let mut probe = Command::new("git");
+    probe.arg("-C").arg(base).args(["rev-parse", "--is-inside-work-tree"]);
+    let repo = git_output_before_deadline(&mut probe, deadline)?;
+    if !repo.status.success() || !repo.stdout.starts_with(b"true") {
+        return Ok(ignored);
     }
     for chunk in paths.chunks(128) {
+        check_search_deadline(Some(deadline))?;
         let mut cmd = Command::new("git");
-        cmd.arg("-C")
-            .arg(base)
-            .args(["check-ignore", "-z", "--"])
-            .stdin(Stdio::null());
+        cmd.arg("-C").arg(base).args(["check-ignore", "-z", "--"]);
+        let mut supplied = false;
         for path in chunk {
             if let Ok(relative) = path.strip_prefix(base) {
                 cmd.arg(relative);
+                supplied = true;
             }
         }
-        let Ok(output) = cmd.output() else {
-            continue;
-        };
-        if !output.status.success() {
+        if !supplied {
             continue;
         }
-        for name in output
-            .stdout
-            .split(|byte| *byte == 0)
-            .filter(|name| !name.is_empty())
-        {
-            if let Ok(name) = std::str::from_utf8(name) {
-                ignored.insert(base.join(name));
-            }
+        let output = git_output_before_deadline(&mut cmd, deadline)?;
+        // Git check-ignore returns 1 for zero matches; other failures must be
+        // surfaced, otherwise ignored private paths may appear in the result.
+        match output.status.code() {
+            Some(0) | Some(1) => {}
+            other => bail!("Git ignore check failed with exit status {other:?}"),
+        }
+        for name in output.stdout.split(|byte| *byte == 0).filter(|name| !name.is_empty()) {
+            let relative = std::str::from_utf8(name)
+                .context("Git ignore result contains invalid UTF-8")?;
+            ignored.insert(base.join(relative));
         }
     }
-    ignored
+    Ok(ignored)
 }
 
 /// ripgrep.ts::ripGrep defaults to 20 seconds (60 on WSL) and reports
@@ -390,7 +449,7 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
         .collect::<Vec<_>>();
     check_search_deadline(Some(deadline))?;
     if !skip_gitignore {
-        let ignored = git_ignored_paths(base, &matches);
+        let ignored = git_ignored_paths(base, &matches, deadline)?;
         check_search_deadline(Some(deadline))?;
         matches.retain(|path| !ignored.contains(path));
     }
@@ -525,7 +584,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
     let deadline = search_deadline()?;
     let mut candidates = files_filtered(base, true, allow_file, Some(deadline))?;
     check_search_deadline(Some(deadline))?;
-    let ignored = git_ignored_paths(base, &candidates);
+    let ignored = git_ignored_paths(base, &candidates, deadline)?;
     check_search_deadline(Some(deadline))?;
     candidates.retain(|path| !ignored.contains(path));
     sort_newest(&mut candidates);
