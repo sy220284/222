@@ -95,6 +95,10 @@ struct Cli {
     #[arg(long, global = true, default_value = ".")]
     workspace: PathBuf,
 
+    /// Additional user-authorized directories, applicable to run/chat/SDK
+    #[arg(long = "add-dir", global = true)]
+    additional_directory: Vec<PathBuf>,
+
     /// Read-only, interactive approval, or unrestricted tool execution
     #[arg(long, global = true, value_enum, default_value = "ask")]
     approval: ApprovalArg,
@@ -170,6 +174,14 @@ async fn main() -> Result<()> {
         profile, root, cli.approval.into(), interactive, cli.max_steps, session
     )?;
     agent.attach_configured_directories(&config.additional_directories)?;
+    for directory in &cli.additional_directory {
+        let raw=directory.to_string_lossy();
+        match agent.validate_workspace_directory(raw.as_ref())? {
+            workspace_dirs::Validation::Success(path) => agent.add_workspace_directory(path),
+            workspace_dirs::Validation::AlreadyAccessible{..} => {},
+            _ => bail!("Invalid --add-dir directory: {}",directory.display()),
+        }
+    }
     agent.set_enabled_plugins(config.enabled_plugins.clone());
     agent.set_model_prices(&config.model_prices);
     agent.set_permission_rules(&config.permission_rules)?;
@@ -278,7 +290,14 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             _ => {}
         }
         if input == "/add-dir" || input.starts_with("/add-dir ") {
+            let mut entered=String::new();
             let mut raw = input.trim_start_matches("/add-dir").trim();
+            if raw.is_empty() {
+                print!("Directory path: ");
+                io::stdout().flush()?;
+                io::stdin().read_line(&mut entered)?;
+                raw=entered.trim();
+            }
             let remember = raw.ends_with(" --remember");
             if remember { raw = raw.trim_end_matches(" --remember").trim_end(); }
             match agent.validate_workspace_directory(raw)? {
@@ -287,13 +306,14 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 workspace_dirs::Validation::NotADirectory(p) => eprintln!("{} is not a directory. Try {}",p.display(),p.parent().unwrap_or(&p).display()),
                 workspace_dirs::Validation::AlreadyAccessible { path, existing_root } => println!("{} is already accessible via {}",path.display(),existing_root.display()),
                 workspace_dirs::Validation::Success(path) => {
-                    print!("Allow {}{}? [y/N] ",path.display(),if remember {" and save to local settings"} else {" for this session"});
+                    print!("Allow {}? [y] this session / [r] remember / [N] cancel: ",path.display());
                     io::stdout().flush()?;
                     let mut response=String::new();
                     io::stdin().read_line(&mut response)?;
-                    if matches!(response.trim().to_ascii_lowercase().as_str(),"y"|"yes") {
+                    let decision=response.trim().to_ascii_lowercase();
+                    if matches!(decision.as_str(),"y"|"yes"|"r"|"remember") {
                         agent.add_workspace_directory(path.clone());
-                        if remember {
+                        if remember || matches!(decision.as_str(),"r"|"remember") {
                             if !config.additional_directories.iter().any(|d| d == path.to_string_lossy().as_ref()) { config.additional_directories.push(path.to_string_lossy().to_string()); }
                             match config.save() {
                                 Ok(()) => println!("Added {} and saved to local settings",path.display()),
