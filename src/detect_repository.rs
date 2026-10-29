@@ -117,8 +117,12 @@ pub fn detect_current_repository_with_host(root: &Path) -> Option<ParsedReposito
     let value = from_command.or_else(|| {
         let git_directory = root.join(".git");
         crate::git_config_parser::parse_git_config_value(
-            &git_directory, "remote", Some("origin"), "url"
-        ).and_then(|remote| parse_git_remote(&remote))
+            &git_directory,
+            "remote",
+            Some("origin"),
+            "url",
+        )
+        .and_then(|remote| parse_git_remote(&remote))
     });
     repository_cache()
         .lock()
@@ -194,13 +198,18 @@ mod tests {
         std::fs::create_dir(dir.path().join(".git")).unwrap();
         std::fs::write(
             dir.path().join(".git/config"),
-            "[remote \"origin\"]\n URL = git@github.com:team/repo.git\n"
-        ).unwrap();
+            "[remote \"origin\"]\n URL = git@github.com:team/repo.git\n",
+        )
+        .unwrap();
         assert_eq!(
             crate::git_config_parser::parse_git_config_value(
-                &dir.path().join(".git"), "remote", Some("origin"), "url"
-            ).and_then(|raw| parse_git_remote(&raw))
-                .map(|remote| format!("{}/{}", remote.owner, remote.name)),
+                &dir.path().join(".git"),
+                "remote",
+                Some("origin"),
+                "url"
+            )
+            .and_then(|raw| parse_git_remote(&raw))
+            .map(|remote| format!("{}/{}", remote.owner, remote.name)),
             Some("team/repo".into())
         );
     }

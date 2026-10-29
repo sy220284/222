@@ -18,9 +18,9 @@ mod env_validation;
 mod event_signal;
 mod files_context;
 mod gemini_sse;
-mod git_ignore;
-mod git_config_parser;
 mod generated_ports;
+mod git_config_parser;
+mod git_ignore;
 mod history;
 mod hooks;
 mod in_memory_mailbox;
@@ -249,11 +249,19 @@ enum Commands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
-        Commands::GitConfig { section, key, subsection, git_dir } => {
+        Commands::GitConfig {
+            section,
+            key,
+            subsection,
+            git_dir,
+        } => {
             let root = canonical_workspace(&cli.workspace)?;
             let directory = git_dir.clone().unwrap_or_else(|| root.join(".git"));
             let result = git_config_parser::parse_git_config_value(
-                &directory, section, subsection.as_deref(), key
+                &directory,
+                section,
+                subsection.as_deref(),
+                key,
             );
             match result {
                 Some(value) => println!("{value}"),
@@ -261,11 +269,21 @@ async fn main() -> Result<()> {
             }
             return Ok(());
         }
-        Commands::GitIgnore { pattern, add_global } => {
+        Commands::GitIgnore {
+            pattern,
+            add_global,
+        } => {
             let root = canonical_workspace(&cli.workspace)?;
             if *add_global {
                 let changed = git_ignore::add_file_glob_rule_to_gitignore(pattern, &root)?;
-                println!("{}", if changed { "Global ignore rule added" } else { "No change" });
+                println!(
+                    "{}",
+                    if changed {
+                        "Global ignore rule added"
+                    } else {
+                        "No change"
+                    }
+                );
             } else {
                 println!("{}", git_ignore::is_path_gitignored(pattern, &root));
             }

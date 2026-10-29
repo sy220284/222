@@ -1,5 +1,5 @@
 //! Source-compatible Git config reader. Section/key lookups ignore case;
- //! a quoted subsection is case-sensitive.
+//! a quoted subsection is case-sensitive.
 use std::{fs, path::Path};
 
 /// Return the first matching key in repeated config sections.
@@ -173,7 +173,10 @@ url = too-late
             Some("/tmp/hooks")
         );
         assert_eq!(parse_config_string(config, "remote", None, "url"), None);
-        assert_eq!(parse_config_string(config, "remote", Some("ORIGIN"), "url"), None);
+        assert_eq!(
+            parse_config_string(config, "remote", Some("ORIGIN"), "url"),
+            None
+        );
     }
 
     #[test]

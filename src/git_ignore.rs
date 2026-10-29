@@ -1,6 +1,6 @@
 //! Native Git ignore behavior. Git itself resolves local, nested, global
 //! and info/exclude rule precedence; no incomplete hand-written matcher.
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use fs2::FileExt;
 use std::{
     fs::{self, OpenOptions},
@@ -42,8 +42,9 @@ fn is_git_repo(cwd: &Path) -> bool {
         .current_dir(cwd)
         .stdin(Stdio::null())
         .output();
-    result.is_ok_and(|result| result.status.success()
-        && String::from_utf8_lossy(&result.stdout).trim() == "true")
+    result.is_ok_and(|result| {
+        result.status.success() && String::from_utf8_lossy(&result.stdout).trim() == "true"
+    })
 }
 
 fn add_file_glob_rule_to_gitignore_at(
@@ -67,7 +68,11 @@ fn add_file_glob_rule_to_gitignore_at(
         return Ok(false);
     }
     let entry = format!("**/{filename}");
-    fs::create_dir_all(destination.parent().context("Invalid global gitignore path")?)?;
+    fs::create_dir_all(
+        destination
+            .parent()
+            .context("Invalid global gitignore path")?,
+    )?;
     let mut options = OpenOptions::new();
     options.create(true).read(true).write(true);
     #[cfg(unix)]
