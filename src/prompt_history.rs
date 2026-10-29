@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     time::SystemTime,
 };
@@ -116,9 +116,6 @@ impl PromptHistory {
             if content.kind == "image" {
                 continue;
             }
-            if content.kind != "text" {
-                anyhow::bail!("Unsupported paste type")
-            }
             let (inline, hash) = if content.content.encode_utf16().count() <= MAX_INLINE_PASTE {
                 (Some(content.content), None)
             } else {
@@ -190,21 +187,69 @@ impl PromptHistory {
         self.last_added = None;
         self.skipped.clear();
     }
-    fn all_newest(&self) -> Result<Vec<LogEntry>> {
-        let mut entries = self.pending.iter().rev().cloned().collect::<Vec<_>>();
-        let data = match fs::read_to_string(self.history_path()) {
-            Ok(data) => data,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(entries),
-            Err(e) => return Err(e.into()),
+    /// Scan the global JSONL history newest-first without loading the entire
+    /// file. The original history.ts uses readLinesReverse and stops after
+    /// the first 100 current-project entries (or 100 distinct search results).
+    fn newest_project_entries(&self, deduplicate: bool) -> Result<Vec<LogEntry>> {
+        let mut entries = Vec::new();
+        let mut seen = HashSet::new();
+        let mut include = |entry: LogEntry| {
+            if entry.project != self.project {
+                return true;
+            }
+            if entry.session_id.as_deref() == Some(self.session_id.as_str())
+                && self.skipped.contains(&entry.timestamp)
+            {
+                return true;
+            }
+            if deduplicate && !seen.insert(entry.display.clone()) {
+                return true;
+            }
+            entries.push(entry);
+            entries.len() < MAX_ITEMS
         };
-        for line in data.lines().rev() {
-            if let Ok(entry) = serde_json::from_str::<LogEntry>(line) {
-                if entry.session_id.as_deref() == Some(self.session_id.as_str())
-                    && self.skipped.contains(&entry.timestamp)
-                {
-                    continue;
+        for entry in self.pending.iter().rev() {
+            if !include(entry.clone()) {
+                return Ok(entries);
+            }
+        }
+        let mut file = match File::open(self.history_path()) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(entries);
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let mut position = file.metadata()?.len();
+        let mut reversed_line = Vec::new();
+        while position > 0 {
+            let chunk_size = position.min(64 * 1024) as usize;
+            position -= chunk_size as u64;
+            file.seek(SeekFrom::Start(position))?;
+            let mut chunk = vec![0; chunk_size];
+            file.read_exact(&mut chunk)?;
+            for byte in chunk.into_iter().rev() {
+                if byte == b'\n' {
+                    if reversed_line.is_empty() {
+                        continue;
+                    }
+                    reversed_line.reverse();
+                    let keep_scanning = serde_json::from_slice::<LogEntry>(&reversed_line)
+                        .map(|entry| include(entry))
+                        .unwrap_or(true);
+                    reversed_line.clear();
+                    if !keep_scanning {
+                        return Ok(entries);
+                    }
+                } else {
+                    reversed_line.push(byte);
                 }
-                entries.push(entry);
+            }
+        }
+        if !reversed_line.is_empty() {
+            reversed_line.reverse();
+            if let Ok(entry) = serde_json::from_slice::<LogEntry>(&reversed_line) {
+                include(entry);
             }
         }
         Ok(entries)
@@ -244,45 +289,41 @@ impl PromptHistory {
     pub fn get_history(&self) -> Result<Vec<HistoryEntry>> {
         let mut current = Vec::new();
         let mut others = Vec::new();
-        for entry in self.all_newest()? {
-            if entry.project != self.project {
-                continue;
-            }
+        for entry in self.newest_project_entries(false)? {
             if entry.session_id.as_deref() == Some(self.session_id.as_str()) {
-                current.push(entry)
+                current.push(entry);
             } else {
-                others.push(entry)
-            }
-            if current.len() + others.len() >= MAX_ITEMS {
-                break;
+                others.push(entry);
             }
         }
         current.extend(others);
         Ok(current.iter().map(|entry| self.resolve(entry)).collect())
     }
     pub fn get_timestamped_history(&self) -> Result<Vec<TimestampedEntry>> {
-        let mut seen = HashSet::new();
-        let mut result = Vec::new();
-        for entry in self.all_newest()? {
-            if entry.project != self.project || !seen.insert(entry.display.clone()) {
-                continue;
-            }
-            result.push(TimestampedEntry {
+        Ok(self.newest_project_entries(true)?
+            .into_iter()
+            .map(|entry| TimestampedEntry {
                 display: entry.display,
                 timestamp: entry.timestamp,
-            });
-            if result.len() >= MAX_ITEMS {
-                break;
-            }
-        }
-        Ok(result)
+            })
+            .collect())
     }
     fn store_paste(&self, hash: &str, content: &str) -> Result<()> {
         fs::create_dir_all(self.paste_dir())?;
-        let mut file = private_file(&self.paste_dir().join(format!("{hash}.txt")), false)?;
-        file.write_all(content.as_bytes())?;
-        file.sync_all()?;
-        Ok(())
+        let path = self.paste_dir().join(format!("{hash}.txt"));
+        // Readers in other sessions must never observe a half-written paste.
+        let temp = self.paste_dir().join(format!(".{hash}-{}.tmp", uuid::Uuid::new_v4()));
+        let outcome = (|| -> Result<()> {
+            let mut file = private_file(&temp, false)?;
+            file.write_all(content.as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&temp, &path)?;
+            Ok(())
+        })();
+        if outcome.is_err() {
+            let _ = fs::remove_file(&temp);
+        }
+        outcome
     }
     fn retrieve_paste(&self, hash: &str) -> Option<String> {
         if hash.len() != 16 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
