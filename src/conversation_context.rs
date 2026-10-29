@@ -141,7 +141,7 @@ fn git_status_at_start(root: &Path) -> Option<String> {
 }
 
 /// Load user and project instructions in the outer-to-inner order of the
-/// original context.ts and claudemd.ts, using vendor-neutral AGENTS.md and
+/// original project-context and instruction-discovery modules, using AGENTS.md and
 /// .atlas paths. File-conditional rules never enter the global system prompt.
 pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
     use anyhow::{bail, Context};
