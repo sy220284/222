@@ -88,6 +88,9 @@ pub struct HookRule {
     pub matcher: Option<String>,
     /// User-configured local command. Never downloaded or installed automatically.
     pub command: String,
+    /// The source selects a shell per hook; legacy hooks default to Bash.
+    #[serde(default)]
+    pub shell: Option<crate::shell_runtime::ShellKind>,
     #[serde(default = "default_timeout")]
     pub timeout_seconds: u64,
 }
@@ -302,15 +305,18 @@ impl HookRunner {
         // launching them. Preserve first-registration order while retaining
         // the last matching definition for an identical command.
         let mut unique_rules: Vec<&HookRule> = Vec::new();
-        let mut positions = std::collections::HashMap::<&str, usize>::new();
+        let mut positions = std::collections::HashMap::<(&str, &str), usize>::new();
         for (rule, matcher) in &self.rules {
             if rule.event.name() != event_name || !matcher.matches(match_query) {
                 continue;
             }
-            if let Some(&position) = positions.get(rule.command.as_str()) {
+            // hooks.ts::getMatchingHooks deduplicates commands by both
+            // command text and shell; explicit bash equals the legacy default.
+            let key = (rule.command.as_str(), rule.shell.unwrap_or_default().label());
+            if let Some(&position) = positions.get(&key) {
                 unique_rules[position] = rule;
             } else {
-                positions.insert(rule.command.as_str(), unique_rules.len());
+                positions.insert(key, unique_rules.len());
                 unique_rules.push(rule);
             }
         }
@@ -640,27 +646,34 @@ async fn run_command(
     payload: &Value,
     workspace: Option<&Path>,
 ) -> Result<HookOutcome> {
-    #[cfg(windows)]
-    let mut proc = {
-        // hooks.ts::execCommandHook uses Git Bash for default hooks on
-        // Windows. cmd.exe changes quoting, pipelines and POSIX script
-        // behavior, so use the same Bash execution path as the tool runtime.
-        let trimmed = rule.command.trim();
-        let shell_script = trimmed.ends_with(".sh")
-            || trimmed.contains(".sh ")
-            || trimmed.contains(".sh\"");
-        let command = if shell_script && !trimmed.starts_with("bash ") {
-            format!("bash {}", rule.command)
-        } else {
-            rule.command.clone()
-        };
-        crate::shell_runtime::ShellKind::Bash.build_command(&command)?
-    };
-    #[cfg(not(windows))]
-    let mut proc = {
-        let mut cmd = Command::new("sh");
-        cmd.arg("-c").arg(&rule.command);
-        cmd
+    let mut proc = match rule.shell.unwrap_or_default() {
+        crate::shell_runtime::ShellKind::Powershell => {
+            // A per-hook PowerShell script runs with its own native argv,
+            // independent of the Agent's default shell.
+            crate::shell_runtime::ShellKind::Powershell.build_command(&rule.command)?
+        }
+        crate::shell_runtime::ShellKind::Bash => {
+            #[cfg(windows)]
+            {
+                // The source uses Git Bash on Windows, including .sh scripts.
+                let trimmed = rule.command.trim();
+                let shell_script = trimmed.ends_with(".sh")
+                    || trimmed.contains(".sh ")
+                    || trimmed.contains(".sh\"");
+                let command = if shell_script && !trimmed.starts_with("bash ") {
+                    format!("bash {}", rule.command)
+                } else {
+                    rule.command.clone()
+                };
+                crate::shell_runtime::ShellKind::Bash.build_command(&command)?
+            }
+            #[cfg(not(windows))]
+            {
+                let mut cmd = Command::new("sh");
+                cmd.arg("-c").arg(&rule.command);
+                cmd
+            }
+        }
     };
     proc.stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -918,13 +931,13 @@ mod tests {
                 event: HookEvent::SubagentStart,
                 matcher: Some("^explore$".into()),
                 command: "cat | grep -q '\"agent_id\":\"worker-1\"'".into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
             HookRule {
                 event: HookEvent::SubagentStart,
                 matcher: Some("^plan$".into()),
                 command: "echo 'wrong hook' >&2; exit 2".into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
         ])
         .unwrap();
@@ -954,7 +967,7 @@ mod tests {
             event: HookEvent::SubagentStop,
             matcher: Some("^general$".into()),
             command: "echo 'review not complete' >&2; exit 2".into(),
-            timeout_seconds: 3,
+            shell: None, timeout_seconds: 3,
         }])
         .unwrap();
         let result = hook
@@ -979,11 +992,11 @@ mod tests {
             HookRule{event:HookEvent::PostToolUse,
                 matcher:Some("^mcp__mock__secret$".into()),
                 command:r#"printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedMCPToolOutput":{"content":[{"type":"text","text":"REDACTED_MCP_OUTPUT"}]}}}'"#.into(),
-                timeout_seconds:3},
+                shell: None, timeout_seconds:3},
             HookRule{event:HookEvent::PostToolUse,
                 matcher:Some("^mcp__mock__secret$".into()),
                 command:"cat | grep -q REDACTED_MCP_OUTPUT".into(),
-                timeout_seconds:3},
+                shell: None, timeout_seconds:3},
         ]).unwrap();
         let result = runner
             .run(
@@ -1010,7 +1023,7 @@ mod tests {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: format!("printf '%s' '{}'", json_output),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             }])
             .unwrap();
             let outcome = runner
@@ -1033,7 +1046,7 @@ mod tests {
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"decision\":\"approve\"}'".into(),
-            timeout_seconds: 3,
+            shell: None, timeout_seconds: 3,
         }])
         .unwrap();
         let outcome = approved
@@ -1050,7 +1063,7 @@ mod tests {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: format!("printf '%s' '{}'", json_output),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             }])
             .unwrap();
             let outcome = runner
@@ -1072,9 +1085,9 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let runner=HookRunner::new(&[
             HookRule {event:HookEvent::PreToolUse,matcher:None,
-                command:r#"printf '{"decision":"approve","continue":"no"}'; exit 2"#.into(),timeout_seconds:3},
+                command:r#"printf '{"decision":"approve","continue":"no"}'; exit 2"#.into(),shell: None, timeout_seconds:3},
             HookRule {event:HookEvent::PreToolUse,matcher:None,
-                command:r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"touch hook_schema_ok"}}}'"#.into(),timeout_seconds:3},
+                command:r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"touch hook_schema_ok"}}}'"#.into(),shell: None, timeout_seconds:3},
         ]).unwrap();
         let mut call = ToolCall {
             id: "schema".into(),
@@ -1102,7 +1115,7 @@ mod tests {
             event: HookEvent::PreToolUse,
             matcher: None,
             command: r#"printf '{"continue":false,"stopReason":"stop requested"}'"#.into(),
-            timeout_seconds: 3,
+            shell: None, timeout_seconds: 3,
         }])
         .unwrap();
         let result = runner
@@ -1143,7 +1156,7 @@ mod tests {
             event: HookEvent::PreToolUse,
             matcher: Some("[".into()),
             command: "true".into(),
-            timeout_seconds: 20,
+            shell: None, timeout_seconds: 20,
         }])
         .unwrap();
         assert!(matches!(&invalid.rules[0].1, HookMatcher::Invalid));
@@ -1152,7 +1165,7 @@ mod tests {
             event: HookEvent::Stop,
             matcher: None,
             command: "true".into(),
-            timeout_seconds: 0,
+            shell: None, timeout_seconds: 0,
         }])
         .unwrap();
         assert_eq!(zero.rules[0].0.timeout_seconds, 600);
@@ -1160,7 +1173,7 @@ mod tests {
             event: HookEvent::Stop,
             matcher: None,
             command: "true".into(),
-            timeout_seconds: 3_600,
+            shell: None, timeout_seconds: 3_600,
         }])
         .unwrap();
         assert_eq!(extended.rules[0].0.timeout_seconds, 3_600);
@@ -1172,7 +1185,7 @@ mod tests {
             event: HookEvent::PreToolUse,
             matcher: Some("^run_command$".into()),
             command: "printf '{\"decision\":\"block\",\"reason\":\"policy\"}'".into(),
-            timeout_seconds: 5,
+            shell: None, timeout_seconds: 5,
         }])
         .unwrap();
         let call = ToolCall {
@@ -1197,7 +1210,7 @@ mod tests {
             matcher: None,
             command: "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"updatedInput\":{\"path\":\"safe.txt\"}}}'"
                 .into(),
-            timeout_seconds: 5,
+            shell: None, timeout_seconds: 5,
         }])
         .unwrap();
         let result = updater.before_tool(&call).await.unwrap();
@@ -1210,7 +1223,7 @@ mod tests {
             event: HookEvent::Stop,
             matcher: None,
             command: "echo 'Need tests' >&2; exit 2".into(),
-            timeout_seconds: 5,
+            shell: None, timeout_seconds: 5,
         }])
         .unwrap();
         let result = hooks.run(HookEvent::Stop, None, json!({})).await.unwrap();
@@ -1229,13 +1242,13 @@ mod tests {
                 event: HookEvent::PreToolUse,
                 matcher: Some("^run_command$".into()),
                 command: "echo 'advisory hook failed' >&2; exit 1".into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
             HookRule {
                 event: HookEvent::PreToolUse,
                 matcher: Some("^run_command$".into()),
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"touch after_warning"}}}'"#.into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
         ])
         .unwrap();
@@ -1268,13 +1281,13 @@ mod tests {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"rm sensitive"}}}'"#.into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
             HookRule {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"cat | grep -q 'echo safe' && { echo 'original input observed' >&2; exit 2; } || { echo 'unexpected rewritten input' >&2; exit 2; }"#.into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
         ]).unwrap();
         let call = ToolCall {
@@ -1310,13 +1323,13 @@ mod tests {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: command(&first, &second),
-                timeout_seconds: 5,
+                shell: None, timeout_seconds: 5,
             },
             HookRule {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: command(&second, &first),
-                timeout_seconds: 5,
+                shell: None, timeout_seconds: 5,
             },
         ])
         .unwrap();
@@ -1336,19 +1349,19 @@ mod tests {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'"#.into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
             HookRule {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask"}}'"#.into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
             HookRule {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}'"#.into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
         ])
         .unwrap();
@@ -1367,7 +1380,7 @@ mod tests {
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"decision\":\"approve\"}'; exit 2".into(),
-            timeout_seconds: 3,
+            shell: None, timeout_seconds: 3,
         }])
         .unwrap();
         let outcome = approved
@@ -1382,13 +1395,13 @@ mod tests {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: "printf '{not-json'; exit 1".into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
             HookRule {
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: "printf '{\"decision\":\"approve\"}'".into(),
-                timeout_seconds: 3,
+                shell: None, timeout_seconds: 3,
             },
         ])
         .unwrap();
@@ -1405,7 +1418,7 @@ mod tests {
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{not-json'; echo 'blocked syntax' >&2; exit 2".into(),
-            timeout_seconds: 3,
+            shell: None, timeout_seconds: 3,
         }])
         .unwrap();
         assert_eq!(
@@ -1422,7 +1435,7 @@ mod tests {
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "echo 'explicit denial' >&2; exit 2".into(),
-            timeout_seconds: 3,
+            shell: None, timeout_seconds: 3,
         }])
         .unwrap();
         assert_eq!(
