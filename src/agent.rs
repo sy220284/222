@@ -1955,7 +1955,7 @@ impl Agent {
             .with_context(|| format!("Unknown MCP prompt {}:{}", call.server, call.name))?;
         let args = crate::mcp_prompt::named_arguments(prompt, &call.args)?;
         let result = mcp.get_prompt(&call.server, &call.name, &args).await?;
-        crate::mcp_prompt::render_content(&call.server, &call.name, &result).map(Some)
+        crate::mcp_prompt::render_content_in_workspace(&call.server, &call.name, &result, &self.root).map(Some)
     }
 
     pub fn background_tasks(&self) -> Result<String> {
