@@ -1,3 +1,11 @@
+## 2026-10-29：插件命令用户可调用边界与运行时变量（源码已提交、待验收）
+
+- **原版逐函数依据**：完整用户 ZIP 的 `source/src/utils/plugins/loadPluginCommands.ts:288–313,326–376`：`user-invocable` 由 frontmatter 决定用户能否直接调用；命令执行时展开 `${CLAUDE_PLUGIN_ROOT}` 和 `${CLAUDE_SESSION_ID}`；`source/src/utils/plugins/pluginOptionsStorage.ts::substitutePluginVariables` 负责插件根路径替换。
+- **Rust 真实调用链**：交互 CLI `src/main.rs::chat` 解析 `/plugin:command` → `plugins::command_prompt_with_session` → `src/plugins.rs::plugin_command_body` → frontmatter 用户可调用检查、参数展开、插件规范化根路径与当前 Agent 会话 ID 展开 → `Agent::ask`。不可由用户调用的命令被显式拒绝，不会回退成普通模型提问；`/commands` 的发现仍过滤隐藏命令。
+- **本轮实际 Rust 提交**：`2bd844132dc791f7e01ef32918d616368a1d209f`、`86909a567d1f08d32b1af725805c791a4182986a`、`b1e64546dd35eeadf620f0ee22433a884f18a947`、`e0e67d017bea4fb33118c203b8039f359e26c026`、`5a565f304ce5416710c956aefa9c4a9369b6c889`。保守计 **3 项独立用户可感知功能**：①隐藏插件命令禁止用户调用；②插件根目录变量在实际命令提示中展开；③当前会话 ID 在交互调用时展开。多个修正提交不重复计数。
+- **静态核查与限制**：已核对源文件、Rust 插件解析与交互 Agent 入口，未运行 Cargo、单元/集成/端到端测试及 CI；均为**已提交、待验收**，Issue #3 冻结 362 项不勾选。仍缺插件数据目录变量、敏感用户配置占位符、Shell 内嵌执行及其权限、插件命令模型/effort 元数据、SDK/无头命令调用、动态刷新与取消传播。
+- **本轮目标状态**：100 项先行逐项确认的缺口清单尚未形成；实际代码补齐 **3/100，余 97**。流程 A/B 与本轮 100 项硬目标未完成，不能把静态源码审阅当成行为等价验收。
+
 ## 2026-10-29：SDK 会话标题生成、独立保存及历史显示（已提交、待验收）
 
 - **原版核对**：`source/src/cli/print.ts:3783–3814` 的 `generate_session_title` 控制请求；`source/src/utils/sessionTitle.ts:56–129` 的句式标题 JSON 生成及空描述/失败返回；`source/src/utils/sessionStorage.ts:2657–2673` 的 `ai-title` 与显式重命名隔离。
