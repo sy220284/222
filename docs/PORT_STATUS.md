@@ -1,5 +1,17 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：多模型结构化文本贯通 Agent、命名及三类搜索（源码已提交、待验收）
+
+原版依据：`source/src/utils/messages.ts::getAssistantMessageText`、`source/src/utils/sessionTitle.ts`、`source/src/utils/agenticSessionSearch.ts`、`source/src/utils/transcriptSearch.ts`。新增 `src/protocol.rs::Message::visible_text` 统一提取 SDK `text` 块并在缺少结构化文本时使用扁平内容，落实以下五个独立用户业务入口：
+
+1. Agent 普通对话：`src/agent.rs::ask_with_blocks` 从多模型结构化响应提取所有可见文本，终端返回与 Stop Hook 反馈不再变成空字符串（提交 `4634048f`）。
+2. 会话自动命名：`src/agent.rs::rename_session_or_generate` 接受结构化 JSON 文本；`src/session_control.rs::conversation_text_for_name` 保留多模态用户／助手的完整文本顺序（`4634048f`、`db741998`）。
+3. 语义会话搜索：`src/semantic_session_search.rs::search` 读取结构化模型排序结果，候选摘要不重复拼接扁平和多模态文本（`4e325679`）。
+4. 本地会话搜索：`src/session_control.rs::preview/searchable_transcript` 优先使用多模态可见文本，后续文本块可参与标题与本地关键词检索（`db741998`、`4af38b3e`）。
+5. 对话全文搜索：`src/transcript_search.rs::stored_message_search_text` 避免扁平／结构化文本与工具调用重复索引，恢复结构化工具结果中的可见文本（`36cda3f5`、`5f90fce7`）。
+
+本次累计 **11/100 项真实 Rust 源码补齐并提交、待验收**（前述记忆与压缩 6 项 + 本节 5 项）；尚差 89 项。未运行 Cargo、测试或 CI，未核销 Issue #3 冻结 362 项，未预先完成全部 100 个独立缺口的逐项审计，后续仍需处理并发／取消、MCP/权限与更多完整业务链。
+
 ## 2026-10-29：记忆召回与多模态压缩主链（源码已提交、待验收）
 
 对照完整原版 `source/src/memdir/memoryScan.ts`、`findRelevantMemories.ts`、`source/src/utils/attachments.ts::collectSurfacedMemories/readMemoriesForSurfacing/filterDuplicateMemoryAttachments`、`source/src/utils/frontmatterParser.ts`、`source/src/services/compact/compact.ts::stripImagesFromMessages` 与 `source/src/utils/messages.ts::getAssistantMessageText`，完成以下六条独立用户行为补齐：
