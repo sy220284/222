@@ -6453,3 +6453,84 @@ fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
         json!(["nested"])
     );
 }
+
+#[test]
+fn sdk_bridge_inbound_media_type_fallback_reaches_real_model_for_direct_and_queued_messages() {
+    use std::process::Stdio;
+    let dir = tempfile::tempdir().unwrap();
+    let server = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = server.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for _ in 0..2 {
+            let (mut conn, _) = server.accept().unwrap();
+            let request = read_request(&mut conn);
+            let response = json!({"choices":[{"message":{"role":"assistant",
+                "content":"image compatible"},"finish_reason":"stop"}]})
+            .to_string();
+            write!(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(), response).unwrap();
+            conn.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = dir.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"vision",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut sdk = binary()
+        .args(["--workspace", dir.path().to_str().unwrap(), "sdk"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut stdin = sdk.stdin.take().unwrap();
+        let direct = json!({"type":"user","uuid":"direct-camel","message":{"content":[
+            {"type":"text","text":"camelCase jpeg picture"},
+            {"type":"image","source":{"type":"base64","data":"/9j/AA==",
+                "mediaType":"image/jpeg"}}
+        ]}});
+        let queued = json!({"type":"control","action":"queue_enqueue", "command":{
+            "value":[{"type":"text","text":"sniffed WebP picture"},
+                {"type":"image","source":{"type":"base64","data":"UklGRgAAAABXRUJQ"}}],
+            "mode":"prompt","priority":"next"}});
+        for event in [
+            direct,
+            queued,
+            json!({"type":"control","action":"queue_drain","request_id":"drain","max_priority":"next"}),
+        ] {
+            writeln!(stdin, "{event}").unwrap();
+        }
+    }
+    let result = sdk.wait_with_output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let wire = String::from_utf8(result.stdout).unwrap();
+    assert!(wire.contains("image compatible"), "{wire}");
+    let messages = received.join().unwrap();
+    assert_eq!(messages.len(), 2);
+    assert!(
+        messages[0].contains("data:image/jpeg;base64,/9j/AA=="),
+        "{}",
+        messages[0]
+    );
+    assert!(
+        messages[1].contains("data:image/webp;base64,UklGRgAAAABXRUJQ"),
+        "{}",
+        messages[1]
+    );
+    assert!(!wire.contains("Unsupported user content"), "{wire}");
+}

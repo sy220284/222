@@ -1999,9 +1999,11 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
         let kind = event.get("type").and_then(Value::as_str).unwrap_or("user");
         match kind {
             "user" => {
+                // Keep bridge user content and UUID on the validated SDK path.
+                let bridge_user = multimodal::extract_inbound_user_fields(&event);
                 let prompt_value = event
                     .get("content")
-                    .or_else(|| event.pointer("/message/content"));
+                    .or_else(|| bridge_user.as_ref().map(|(content, _)| content));
                 let Some(prompt_value) = prompt_value else {
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;

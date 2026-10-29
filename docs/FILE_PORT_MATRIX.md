@@ -45,7 +45,7 @@
 | `src/bridge/envLessBridgeConfig.ts` | 166 | 7250 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/flushGate.ts` | 72 | 1981 | 改造：自建远程连接协议 | `src/bridge_core.rs / src/main.rs` | 部分实现：本地 SDK 控制入口可达；初始历史回放中的出站消息有序排队、传输替换保留、永久关闭清除与隔离测试已通过；远程 HTTP/WebSocket 实际发送仍未贯通 |
 | `src/bridge/inboundAttachments.ts` | 176 | 6267 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/inboundMessages.ts` | 81 | 2727 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
+| `src/bridge/inboundMessages.ts` | 81 | 2727 | 改造：自建远程连接协议 | `src/multimodal.rs / src/main.rs` | 部分实现：用户消息/UUID 提取、camelCase mediaType 兼容、缺失媒体类型 PNG/JPEG/GIF/WebP 魔数识别已通过 SDK 直接及排队模型 HTTP 测试；远端传输、附件及恢复链仍待迁移 |
 | `src/bridge/initReplBridge.ts` | 570 | 23849 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/jwtUtils.ts` | 257 | 9444 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/pollConfig.ts` | 111 | 4562 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
