@@ -959,6 +959,42 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
+    async fn matching_command_hooks_run_concurrently_with_original_input() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("first-ready");
+        let second = root.path().join("second-ready");
+        let command = |own: &std::path::Path, peer: &std::path::Path| {
+            format!(
+                "touch '{}'; i=0; while [ \"$i\" -lt 100 ]; do test -e '{}' && exit 0; i=$((i+1)); sleep 0.02; done; echo hooks ran sequentially >&2; exit 2",
+                own.display(),
+                peer.display()
+            )
+        };
+        let runner = HookRunner::new(&[
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: command(&first, &second),
+                timeout_seconds: 5,
+            },
+            HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: command(&second, &first),
+                timeout_seconds: 5,
+            },
+        ])
+        .unwrap();
+        let result = runner
+            .run(HookEvent::PreToolUse, Some("run_command"), json!({}))
+            .await
+            .unwrap();
+        assert!(result.blocking_reason.is_none(), "{result:?}");
+        assert!(first.exists() && second.exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
     async fn hook_permission_decisions_keep_deny_over_ask_over_allow() {
         let runner = HookRunner::new(&[
             HookRule {
