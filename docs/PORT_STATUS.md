@@ -1,3 +1,12 @@
+## 2026-10-29：插件原版标准清单、无清单安装、Hooks/MCP 真实加载与本地安装安全（源码已提交、待验收）
+
+- **原版源码**：完整用户 ZIP `source/src/utils/plugins/pluginLoader.ts::loadPluginManifest`（1147–1213 行）、`createPluginFromPath`（1310–1386、1613–1759 行）、`installFromLocal`（856–868 行），以及 `pluginInstallationHelpers.ts::installResolvedPlugin`。
+- **Rust 真实入口**：`/plugin install` / `/plugin validate` / `/plugin manage` → `src/plugin_manager.rs::manifest_name/install_local/installed` → `src/plugins.rs::validate_local/read_manifest/PluginSet::load`；Agent 的插件初始化继续通过 `PluginSet::load` 将 Hook 与 MCP 服务接入会话。
+- **实际补齐**：①读取标准 `.claude-plugin/plugin.json`，兼容已有根目录 `plugin.json`，允许仅有 commands/agents/skills 的无清单插件以目录名安装、验证、启用与列举；②按原版读取 `hooks/hooks.json`、清单内追加 Hook 文件和内联命令 Hook，保留事件、匹配器、超时、插件根目录与重复文件去重，越界文件拒绝；③原版 `mcpServers` 名称映射转换成真实 `McpServerConfig` 并继续进入 Agent 的 MCP 初始化；④本地插件复制时排除源仓库顶层 `.git`，避免把仓库历史、远端地址与本地 Git Hooks 放入安装目录。
+- **提交 SHA**：`d8d673a11cec0430919b837bc45003d46500f06f`、`c554ea70633e99d3f2456df64722dd18ca8ec685`、`6c17c1c5784846f613afe82021d44697ff92640a`、`84f2a6e2996e19feba30b56995951585e007481a`。
+- **保守计数**：4 条独立用户可感知插件业务链获得真实代码补齐，全部**已提交、待验收**；本轮完整 100 条前置缺口清单尚未建立，当前 **4/100，剩余 96**。没有运行 Cargo、测试或 CI；没有勾选 Issue #3 的任何冻结项。
+- **未实现差异**：原版插件命令/代理/技能自定义路径、内联命令、HTTP/异步/提示词 Hook、完整 MCP 配置文件引用及 SDK 传输、插件设置、市场多范围安装、插件生命周期与并发回滚、所有 UI/SDK 交互仍待补齐；无清单插件的命令和代理还需要逐入口核对实际可达性。
+
 ## 2026-10-29：SDK 动态 MCP 服务配置更新进入真实执行链（源码已提交、待验收）
 
 - **原版完整源码**：`source/src/cli/print.ts::applyMcpServerChanges` 与 `mcp_set_servers` 控制分支；`source/src/cli/print.ts::handleMcpSetServers/reconcileMcpServers`；`source/src/services/mcp/config.ts::filterMcpServersByPolicy`。原版支持按 SDK 期望配置增删、更换进程/HTTP 服务，清除旧工具路由并保留无变化服务，按策略拒绝非法注入，逐服务返回错误。
