@@ -10,9 +10,9 @@ mod command_manifest;
 mod compat_helpers;
 mod config;
 mod control_message_compat;
-mod diagnostics;
 mod cost;
 mod deep_link;
+mod diagnostics;
 mod env_validation;
 mod event_signal;
 mod gemini_sse;
@@ -260,7 +260,10 @@ async fn main() -> Result<()> {
                 diagnostics::render(&diagnostics::inspect(&root, Some(&config)))
             ),
             Err(error) => {
-                println!("{}", diagnostics::render(&diagnostics::inspect(&root, None)));
+                println!(
+                    "{}",
+                    diagnostics::render(&diagnostics::inspect(&root, None))
+                );
                 println!("[WARN] Configuration: {error:#}");
             }
         }
@@ -299,16 +302,23 @@ async fn main() -> Result<()> {
                 .or_else(|| source_semantics_types::inspect(source, name, &args))
                 .or_else(|| generated_ports::inspect(source, name, &args))
                 .or_else(|| {
-                    if source != "src/utils/transcriptSearch.ts" { return None; }
+                    if source != "src/utils/transcriptSearch.ts" {
+                        return None;
+                    }
                     let value = args.first().unwrap_or(&Value::Null);
                     match name {
-                        "renderableSearchText" => Some(json!(transcript_search::renderable_search_text(value))),
-                        "toolUseSearchText" => Some(json!(transcript_search::tool_use_search_text(value))),
-                        "toolResultSearchText" => Some(json!(transcript_search::tool_result_search_text(value))),
+                        "renderableSearchText" => {
+                            Some(json!(transcript_search::renderable_search_text(value)))
+                        }
+                        "toolUseSearchText" => {
+                            Some(json!(transcript_search::tool_use_search_text(value)))
+                        }
+                        "toolResultSearchText" => {
+                            Some(json!(transcript_search::tool_result_search_text(value)))
+                        }
                         _ => None,
                     }
-                })
-            {
+                }) {
                 Some(value) => {
                     if name == "view" {
                         if let Ok(tree) =
@@ -353,7 +363,11 @@ async fn main() -> Result<()> {
                 }
             }
             if source == "src/utils/transcriptSearch.ts" {
-                for name in ["renderableSearchText", "toolUseSearchText", "toolResultSearchText"] {
+                for name in [
+                    "renderableSearchText",
+                    "toolUseSearchText",
+                    "toolResultSearchText",
+                ] {
                     exports.push(name);
                 }
             }
@@ -619,7 +633,9 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!(
                     "/status                  show live session, model, permissions and MCP status"
                 );
-                println!("/doctor                  run local installation and configuration diagnostics");
+                println!(
+                    "/doctor                  run local installation and configuration diagnostics"
+                );
                 println!("/history [query]         search saved prompt history");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
