@@ -6655,16 +6655,35 @@ fn local_marketplace_cli_add_install_list_and_remove_are_durable() {
             .env("ATLAS_CONFIG", &config)
             .output()
             .unwrap();
-        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
         serde_json::from_slice::<Value>(&result.stdout).unwrap()
     };
     assert_eq!(
         invoke(&["marketplace", "add", source.path().to_str().unwrap()])["name"],
         "team-repo"
     );
-    assert_eq!(invoke(&["marketplace", "list"])["marketplaces"][0]["name"], "team-repo");
-    assert_eq!(invoke(&["install", "reviewer@team-repo"])["installed"], "reviewer");
-    assert!(project.path().join(".atlas/plugins/reviewer/plugin.json").is_file());
-    assert_eq!(invoke(&["marketplace", "remove", "team-repo"])["removed"], "team-repo");
-    assert!(project.path().join(".atlas/plugins/reviewer/plugin.json").is_file());
+    assert_eq!(
+        invoke(&["marketplace", "list"])["marketplaces"][0]["name"],
+        "team-repo"
+    );
+    assert_eq!(
+        invoke(&["install", "reviewer@team-repo"])["installed"],
+        "reviewer"
+    );
+    assert!(project
+        .path()
+        .join(".atlas/plugins/reviewer/plugin.json")
+        .is_file());
+    assert_eq!(
+        invoke(&["marketplace", "remove", "team-repo"])["removed"],
+        "team-repo"
+    );
+    assert!(project
+        .path()
+        .join(".atlas/plugins/reviewer/plugin.json")
+        .is_file());
 }

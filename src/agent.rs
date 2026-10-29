@@ -996,13 +996,14 @@ impl Agent {
                                             }),
                                         ));
                                     }
-                                    feedback
-                                        .extend(outcome.blocking_reasons.into_iter().map(|reason| {
-                                        format!(
-                                            "TaskCompleted hook feedback for task {}:\n{reason}",
-                                            task.id
-                                        )
-                                    }));
+                                    feedback.extend(outcome.blocking_reasons.into_iter().map(
+                                        |reason| {
+                                            format!(
+                                                "TaskCompleted hook feedback for task {}:\n{reason}",
+                                                task.id
+                                            )
+                                        },
+                                    ));
                                 }
                                 let idle = child
                                     .hooks

@@ -125,9 +125,9 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             marketplace,
             plugin,
         } => {
-            let path = marketplace
-                .as_deref()
-                .context("Local plugin install requires a directory path or registered marketplace")?;
+            let path = marketplace.as_deref().context(
+                "Local plugin install requires a directory path or registered marketplace",
+            )?;
             let local = if let Some(plugin_name) = plugin {
                 crate::marketplace_registry::resolve_local_plugin(&root, path, plugin_name)?
             } else if let Some(uri) = path.strip_prefix("file://") {
