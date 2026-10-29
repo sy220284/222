@@ -275,10 +275,18 @@ pub fn policy_for(rules:&[Rule],tool:&str,args:&Value)->Result<Option<Behavior>>
                     // requested path and the resolved symlink target. Read
                     // patterns are filesystem globs, not shell command rules.
                     let glob=globset::Glob::new(pattern)?.compile_matcher();
+                    // filesystem.ts strips /** before ignore() matching, so
+                    // a directory rule also matches the directory itself.
+                    let directory=pattern.strip_suffix("/**");
+                    let matches=|path:&str|{
+                        let normalized=path.replace('\\',"/");
+                        glob.is_match(&normalized)
+                            || directory.is_some_and(|root|normalized==root)
+                    };
                     args.get("paths").and_then(Value::as_array)
                         .into_iter().flatten().filter_map(Value::as_str)
-                        .any(|path|glob.is_match(path.replace('\\',"/")))
-                        || argument.is_some_and(|path|glob.is_match(path.replace('\\',"/")))
+                        .any(&matches)
+                        || argument.is_some_and(matches)
                 }else if name=="WebFetch"{
                     // WebFetchTool.ts constructs domain:<URL.hostname> and
                     // looks up that exact content key (not a prefix/wildcard).
@@ -325,6 +333,9 @@ mod tests{
         })).unwrap(),Some(Behavior::Deny));
         assert_eq!(policy_for(&rules,"read_file",&json!({
             "path":"secrets/nested/key.txt","paths":["secrets/nested/key.txt"]
+        })).unwrap(),Some(Behavior::Ask));
+        assert_eq!(policy_for(&rules,"read_file",&json!({
+            "path":"secrets","paths":["secrets"]
         })).unwrap(),Some(Behavior::Ask));
         assert_eq!(policy_for(&rules,"read_file",&json!({
             "path":"public/hello.txt","paths":["public/hello.txt"]
