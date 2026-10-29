@@ -1,6 +1,10 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
 ## 2026-10-29：会话压缩 Token 差额与远程 MCP 失效凭据续接（源码已提交、待验收）
+- **MCP 失效连接同轮按需重连**：新工具调用通过 `src/mcp.rs::call` 对失败的服务器按需重建连接，调用动态凭据助手，保留其他服务器及工具路由，不重放失败调用。提交 `b30acce3`。
+- **MCP 权限范围提升提示**：`src/mcp_http.rs::post` 识别 `WWW-Authenticate: ... insufficient_scope`，要求新的交互授权，避免误刷新无法增加权限范围的旧凭据。提交 `5f4b69c0`；完整用户 OAuth 授权仍未实现。
+- **压缩重试误判修复**：仅把实际 API 错误标记为上下文超限的成功传输结果用于自动重试，正常摘要文字中提及此词不再错误地触发历史删减。提交 `df73725b`。
+- **自动压缩涵盖本轮输入与小上下文模型**：将待提交的多模态用户消息一同计入压缩阈值；较小的配置窗口预留四分之一空间，对无效窗口配置直接给出错误提示。提交 `cb78fc9d`、`8f83feb8`。
 
 本轮直接读取完整 claude-code-2.1.88-main(1).zip；对照 source/src/services/compact/compact.ts::truncateHeadForPTLRetry、source/src/services/compact/grouping.ts::groupMessagesByApiRound、source/src/services/api/errors.ts::parsePromptTooLongTokenCounts、source/src/services/tokenEstimation.ts::roughTokenCountEstimationForMessages、source/src/services/compact/autoCompact.ts::shouldAutoCompact、source/src/services/mcp/client.ts 中 401/重新连接处理和 source/src/services/mcp/headersHelper.ts。当前源代码提交均只标记“源码已补齐并提交，待验证”，不得勾选 Issue #3 冻结 362 项。
 
