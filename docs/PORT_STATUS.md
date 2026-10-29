@@ -1,3 +1,13 @@
+## 2026-10-29：MCP 工具调用超时、完整输出与分页发现（源码已提交，待验收）
+
+对照完整原版源码 `source/src/services/mcp/client.ts:211–228,1743–1757,3067–3099,2662–2799` 和 `source/src/utils/mcpValidation.ts:14–46,151–208`，核查 Rust 真正入口 `src/mcp.rs::McpManager::connect_with_root/refresh_changed_tools/call`，已提交 `c802ab7c014ff60ff0d9bb3c8012c5cf10f9f41f`：
+
+1. **长时间运行的 MCP 工具**：此前所有 RPC 共用 30 秒超时，合法的长任务被提前中止。现在仅 `tools/call` 按原版使用默认 100,000,000 毫秒及 `MCP_TOOL_TIMEOUT` 环境变量；发现、读取等控制调用保留短超时。
+2. **MCP 工具完整长输出**：此前结果无条件截断到 16,000 字符且无提示。现在普通结果保留完整文本，超过默认 25,000 token 对应的近似字符预算时将完整非图片结果持久化到工作区 `.atlas/tool-results/`，返回可用 Read/Shell 读取的真实文件路径；防止符号链接越界并检查写入错误。图片长结果明确提示截断。此为保守字符估算，尚未对齐原版精确模型 token 计算、图片压缩及结构化多模态输出。
+3. **大量 MCP 工具分页发现**：首次连接和工具清单动态刷新都移除 20 页的额外硬拒绝，继续使用服务端 `nextCursor` 和重复游标检测，保留现有工具冲突检查。
+
+本轮按**三个独立用户可感知功能**计数；同一功能的多个调用位置不重复计数。以上为源码已提交、待行为验收，本任务未运行 Cargo、测试或 CI，完整等价验收新增 0。剩余：MCP 取消与进度事件、资源更新排队、会话重连、长结果精确 token 判断与图片压缩、远程多模态/SDK 全链；Issue #3 固定 362 项全部继续开放。
+
 ## 2026-10-29：项目指令排除、来源控制与外部引用授权（源码已提交，待验收）
 
 原版依据：用户完整 2.1.88 源码 `source/src/utils/claudemd.ts::isClaudeMdExcluded/resolveExcludePatterns/processMemoryFile/getMemoryFiles`（547–684、790–925 行），以及 `source/src/context.ts::getUserContext`。实际 Rust 入口：`Agent::system_prompt` → `conversation_context::project_instructions_with_dirs` → 指令/规则/@include 读取 → 模型系统提示词。
