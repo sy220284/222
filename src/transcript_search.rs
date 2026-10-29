@@ -222,9 +222,16 @@ pub fn stored_message_search_text(message: &Message) -> String {
     let mut parts = Vec::new();
     match message.role.as_str() {
         "user" | "assistant" => {
-            if let Some(content) = &message.content {
-                if !matches!(content.as_str(), INTERRUPT | INTERRUPT_TOOL) {
-                    parts.push(content.to_owned());
+            // SDK messages may store the same text both flattened and as
+            // native text blocks. Index it once, preserving the block order.
+            let has_structured_text = message.content_blocks.as_ref().is_some_and(|blocks| {
+                blocks.iter().any(|block| block.get("type").and_then(Value::as_str) == Some("text"))
+            });
+            if !has_structured_text {
+                if let Some(content) = &message.content {
+                    if !matches!(content.as_str(), INTERRUPT | INTERRUPT_TOOL) {
+                        parts.push(content.to_owned());
+                    }
                 }
             }
             if let Some(blocks) = &message.content_blocks {
@@ -246,13 +253,47 @@ pub fn stored_message_search_text(message: &Message) -> String {
             }
             if let Some(calls) = &message.tool_calls {
                 for call in calls {
-                    if let Ok(input) = serde_json::from_str::<Value>(&call.function.arguments) {
-                        parts.push(tool_use_search_text(&input));
+                    let already_in_blocks = message.content_blocks.as_ref().is_some_and(|blocks| {
+                        blocks.iter().any(|block| {
+                            block.get("type").and_then(Value::as_str) == Some("tool_use")
+                                && block.get("id").and_then(Value::as_str) == Some(call.id.as_str())
+                        })
+                    });
+                    if !already_in_blocks {
+                        if let Ok(input) = serde_json::from_str::<Value>(&call.function.arguments) {
+                            parts.push(tool_use_search_text(&input));
+                        }
                     }
                 }
             }
         }
         "tool" => {
+            let mut structured_result = false;
+            if let Some(blocks) = message.content_blocks.as_ref() {
+                for block in blocks {
+                    if block.get("type").and_then(Value::as_str) != Some("tool_result") {
+                        continue;
+                    }
+                    structured_result = true;
+                    if let Some(content) = block.get("content") {
+                        if let Some(text) = content.as_str() {
+                            parts.push(text.to_owned());
+                        } else if let Some(items) = content.as_array() {
+                            for item in items {
+                                if item.get("type").and_then(Value::as_str) == Some("text") {
+                                    if let Some(text) = item.get("text").and_then(Value::as_str) {
+                                        parts.push(text.to_owned());
+                                    }
+                                }
+                            }
+                        } else {
+                            let text = tool_result_search_text(content);
+                            if !text.is_empty() { parts.push(text); }
+                        }
+                    }
+                }
+            }
+            if !structured_result {
             if let Some(content) = &message.content {
                 if let Ok(native) = serde_json::from_str::<Value>(content) {
                     let text = tool_result_search_text(&native);
@@ -262,6 +303,7 @@ pub fn stored_message_search_text(message: &Message) -> String {
                 } else {
                     parts.push(content.to_owned());
                 }
+            }
             }
         }
         _ => {}
