@@ -138,7 +138,9 @@ enum HookMatcher {
 }
 
 fn canonical_hook_tool(name: &str) -> &str {
-    match name {
+    // The source normalizes legacy Task/KillShell/Output names before matching.
+    // The Rust executor also uses internal names for some of these tools.
+    match crate::permission_rules::normalize_legacy_tool(name) {
         "Read" => "read_file",
         "Write" => "write_file",
         "Edit" => "edit_file",
@@ -193,8 +195,15 @@ impl HookMatcher {
                 name.as_str() == query || canonical_hook_tool(name) == canonical_hook_tool(query)
             }),
             Self::Pattern(pattern) => {
+                let source_name = source_hook_tool(query).unwrap_or(query);
                 pattern.is_match(query)
-                    || source_hook_tool(query).is_some_and(|name| pattern.is_match(name))
+                    || pattern.is_match(source_name)
+                    // hooks.ts::matchesPattern also tests legacy aliases for
+                    // canonical tools. Keep old user-configured hook regexes
+                    // effective after the Rust tool-name migration.
+                    || crate::permission_rules::legacy_names(source_name)
+                        .iter()
+                        .any(|name| pattern.is_match(name))
             }
         }
     }
