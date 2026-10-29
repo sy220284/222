@@ -2498,3 +2498,78 @@ fn sdk_multimodal_direct_and_queued_messages_reach_model_and_survive_session_res
     assert!(saved.contains("AQID"));
     assert!(saved.contains("Describe queued picture"));
 }
+
+#[test]
+fn command_line_extra_directory_reaches_real_model_file_tool() {
+    let root=tempfile::tempdir().unwrap();
+    let external=tempfile::tempdir().unwrap();
+    let target=external.path().join("outside.txt");
+    fs::write(&target,"External workspace content verified").unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for step in 0..2{
+            let (mut stream,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut stream));
+            let message=if step==0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"extra-read","type":"function","function":{
+                        "name":"read_file","arguments":json!({"path":target}).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"External directory read completed",
+                    "tool_calls":[]},"finish_reason":"stop"}]})
+            };
+            let body=message.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"test-model",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let result=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--add-dir",external.path().to_str().unwrap(),
+        "run","Read the externally authorized file"]).env("ATLAS_CONFIG",&config)
+        .output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(result.status.success(),"{}",String::from_utf8_lossy(&result.stderr));
+    assert!(String::from_utf8_lossy(&result.stdout).contains("External directory read completed"));
+    assert!(requests[1].contains("External workspace content verified"),
+        "Second model request did not receive the actual external file: {}",requests[1]);
+}
+
+#[test]
+fn chat_add_dir_without_argument_prompts_for_path_and_remember_choice() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let external=tempfile::tempdir().unwrap();
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"local","providers":[{
+        "id":"local","kind":"openai-compatible",
+        "base_url":"http://127.0.0.1:9/v1","model":"offline"
+    }]}).to_string()).unwrap();
+    let mut child=binary().args(["--workspace",root.path().to_str().unwrap(),"chat"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=child.stdin.take().unwrap();
+        writeln!(input,"/add-dir").unwrap();
+        writeln!(input,"{}",external.path().display()).unwrap();
+        writeln!(input,"r").unwrap();
+        writeln!(input,"/exit").unwrap();
+    }
+    let result=child.wait_with_output().unwrap();
+    assert!(result.status.success(),"{}",String::from_utf8_lossy(&result.stderr));
+    let shown=String::from_utf8(result.stdout).unwrap();
+    assert!(shown.contains("Directory path:"),"{shown}");
+    assert!(shown.contains("saved to local settings"),"{shown}");
+    let saved:Value=serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+    assert_eq!(saved["additional_directories"][0],external.path().canonicalize().unwrap().to_str().unwrap());
+}
