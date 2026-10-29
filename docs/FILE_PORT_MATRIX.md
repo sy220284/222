@@ -1351,7 +1351,7 @@
 | `src/utils/agentContext.ts` | 179 | 6660 | 重写：保持通用行为 | `src/generated_ports/p_9029c5407283f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/agentId.ts` | 100 | 2805 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/agentSwarmsEnabled.ts` | 45 | 1417 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/agenticSessionSearch.ts` | 308 | 10067 | 重写：保持通用行为 | `src/session_control.rs` | 部分实现：会话搜索接入真实 CLI、标签精确/部分优先、标题/UUID/摘要与首尾各 50 条消息文本检索、图文文本块和 2000 字符截断，新增文件系统及回归测试；原版小模型语义排序、分支字段、轻量日志补全和中断机制仍未实现 |
+| `src/utils/agenticSessionSearch.ts` | 308 | 10067 | 重写：保持通用行为 | `src/session_control.rs / src/semantic_session_search.rs / src/agent.rs / src/main.rs` | 部分实现：保留标签、标题、摘要和首尾对话离线预筛；新增最多100会话候选、首尾50条/2000字符截断、用户配置多模型语义排序、严格结果索引过滤、Agent用量持久化、独立CLI与交互入口、模拟模型及磁盘会话测试；原版分支字段、LiteLog完整还原、模型取消与跨端UI仍未等价 |
 | `src/utils/analyzeContext.ts` | 1383 | 42931 | 重写：保持通用行为 | `src/generated_ports/p_a127d290c8efb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/ansiToPng.ts` | 335 | 214955 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ansiToSvg.ts` | 273 | 8212 | 重写：保持通用行为 | `src/generated_ports/p_a9e775f18b3e2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
