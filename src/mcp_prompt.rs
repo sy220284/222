@@ -65,8 +65,7 @@ pub fn named_arguments(prompt: &Value, args: &str) -> Result<Map<String, Value>>
 /// The original MCP client persists audio and non-image resource blobs and
 /// returns a text block with the resulting file path. A random filename avoids
 /// trusting a server-controlled URI or name as a filesystem path.
-fn persist_mcp_blob(data: &str, mime: Option<&str>, workspace: &Path) -> Result<String> {
-    let bytes = STANDARD.decode(data).context("MCP binary resource has invalid base64")?;
+fn persist_mcp_blob(bytes: &[u8], mime: Option<&str>, workspace: &Path) -> Result<String> {
     let root = workspace.canonicalize().context("Cannot resolve MCP workspace")?;
     let config_directory = root.join(".atlas");
     fs::create_dir_all(&config_directory).context("Cannot create MCP workspace directory")?;
@@ -104,8 +103,11 @@ fn persist_mcp_blob(data: &str, mime: Option<&str>, workspace: &Path) -> Result<
     };
     let path = directory.join(format!("mcp-blob-{}.{}", Uuid::new_v4(), extension));
     let mut file = OpenOptions::new().write(true).create_new(true).open(&path)?;
-    file.write_all(&bytes)?;
-    file.sync_all()?;
+    if let Err(error) = file.write_all(bytes).and_then(|_| file.sync_all()) {
+        drop(file);
+        let _ = fs::remove_file(&path);
+        return Err(error).context("Cannot persist MCP binary resource");
+    }
     Ok(format!("Binary content ({}, {} bytes) saved to {}",
         if mime.is_empty() { "unknown type" } else { &mime },
         bytes.len(), path.display()))
@@ -117,11 +119,17 @@ fn binary_result_text(
     prefix: &str,
     workspace: &Path,
 ) -> String {
-    match persist_mcp_blob(data, mime, workspace) {
-        Ok(message) => format!("{prefix}{message}"),
+    match STANDARD.decode(data) {
+        Ok(bytes) => match persist_mcp_blob(&bytes, mime, workspace) {
+            Ok(message) => format!("{prefix}{message}"),
+            Err(error) => format!(
+                "{prefix}Binary content ({}, {} bytes) could not be saved to disk: {error:#}",
+                mime.unwrap_or("unknown type"), bytes.len()
+            ),
+        },
         Err(error) => format!(
-            "{prefix}Binary content ({}, encoded length {} bytes) could not be saved to disk: {error:#}",
-            mime.unwrap_or("unknown type"), data.len()
+            "{prefix}Binary content ({}) could not be decoded: {error}",
+            mime.unwrap_or("unknown type")
         ),
     }
 }
