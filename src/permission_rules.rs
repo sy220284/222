@@ -228,6 +228,22 @@ fn shell_policy(rules:&[Rule],command:&str)->Result<Option<Behavior>>{
     }else{Ok(None)}
 }
 
+/// The original permissions.ts::toolMatchesRule permits a permission on
+/// "mcp__server" or "mcp__server__*" to target every tool of that server.
+/// A rule with parenthesized contents is never a whole-tool rule.
+fn mcp_server_rule_matches(rule:&str,tool:&str)->bool{
+    fn parts(name:&str)->Option<(&str,Option<&str>)>{
+        let body=name.strip_prefix("mcp__")?;
+        let mut split=body.splitn(2,"__");
+        let server=split.next().filter(|v|!v.is_empty())?;
+        Some((server,split.next()))
+    }
+    let (rule_server,rule_tool)=match parts(rule){Some(x)=>x,None=>return false};
+    let (actual_server,actual_tool)=match parts(tool){Some(x)=>x,None=>return false};
+    actual_tool.is_some() && actual_server==rule_server
+        && matches!(rule_tool,None|Some("*"))
+}
+
 pub fn policy_for(rules:&[Rule],tool:&str,args:&Value)->Result<Option<Behavior>>{
     let name=canonical_tool(tool);
     if name=="Bash" {
@@ -238,7 +254,11 @@ pub fn policy_for(rules:&[Rule],tool:&str,args:&Value)->Result<Option<Behavior>>
     let mut allow=false;
     let mut ask=false;
     for rule in rules{
-        if canonical_tool(&rule.value.tool_name)!=name{continue}
+        if canonical_tool(&rule.value.tool_name)!=name &&
+            (rule.value.rule_content.is_some() ||
+                !mcp_server_rule_matches(&rule.value.tool_name,name)){
+            continue
+        }
         let matched=match rule.value.rule_content.as_deref(){
             None=>true,
             Some(pattern)=>{
@@ -266,6 +286,46 @@ pub fn policy_for(rules:&[Rule],tool:&str,args:&Value)->Result<Option<Behavior>>
 mod tests{
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn mcp_server_permissions_match_original_server_and_wildcard_scope(){
+        let rules=compile_rules(&[
+            RuleSetting{behavior:"allow".into(),rule:"mcp__github".into()},
+            RuleSetting{behavior:"deny".into(),rule:"mcp__secrets__*".into()},
+            RuleSetting{behavior:"ask".into(),rule:"mcp__github__delete".into()},
+        ]).unwrap();
+        assert_eq!(policy_for(&rules,"mcp__github__read",&json!({})).unwrap(),
+            Some(Behavior::Allow));
+        assert_eq!(policy_for(&rules,"mcp__github__delete",&json!({})).unwrap(),
+            Some(Behavior::Ask));
+        assert_eq!(policy_for(&rules,"mcp__secrets__read",&json!({})).unwrap(),
+            Some(Behavior::Deny));
+        assert_eq!(policy_for(&rules,"mcp__other__read",&json!({})).unwrap(),None);
+        assert_eq!(policy_for(&rules,"mcp__githubish__read",&json!({})).unwrap(),None);
+        assert_eq!(policy_for(&rules,"Read",&json!({})).unwrap(),None);
+        assert!(!mcp_server_rule_matches("mcp__github__all","mcp__github__other"));
+        assert!(!mcp_server_rule_matches("mcp__github__","mcp__github__other"));
+    }
+    #[test]
+    fn mcp_server_rule_preserves_deny_over_allow_without_matching_builtin_tools(){
+        let rules=compile_rules(&[
+            RuleSetting{behavior:"allow".into(),rule:"mcp__local__*".into()},
+            RuleSetting{behavior:"deny".into(),rule:"mcp__local".into()},
+            RuleSetting{behavior:"deny".into(),rule:"Write".into()},
+        ]).unwrap();
+        assert_eq!(policy_for(&rules,"mcp__local__Write",&json!({"path":"file"})).unwrap(),
+            Some(Behavior::Deny));
+        assert_eq!(policy_for(&rules,"Write",&json!({"path":"file"})).unwrap(),
+            Some(Behavior::Deny));
+        let builtins=compile_rules(&[RuleSetting{
+            behavior:"deny".into(),rule:"Write".into()
+        }]).unwrap();
+        assert_eq!(policy_for(&builtins,"mcp__local__Write",&json!({})).unwrap(),None);
+        let with_content=compile_rules(&[RuleSetting{
+            behavior:"allow".into(),rule:"mcp__local(repo:*)".into()
+        }]).unwrap();
+        assert_eq!(policy_for(&with_content,"mcp__local__Write",&json!({})).unwrap(),None);
+    }
     #[test]
     fn parsing_and_escaping_reference_cases(){
         for (text,name,content) in [

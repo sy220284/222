@@ -358,3 +358,9 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 2026-10-29：SDK 队列操作持久化与故障边界
 
 沿原始 `src/utils/messageQueueManager.ts` 的 `logOperation` 与 `src/utils/sessionStorage.ts::recordQueueOperation` 调用链，新增 `src/queue_journal.rs`，在真实 SDK 会话对入队、按优先级出队、批量出队、过滤移除、按身份移除和恢复编辑输入写入 JSONL 操作记录。记录包含原版 operation、时间戳、sessionId 及可选纯文本内容；跨进程写入使用文件锁、同步落盘，阻止会话日志路径通过符号链接逃逸。真实 SDK 子进程测试核查操作顺序、内容与会话关联，故障注入测试验证符号链接拒绝且不写入外部路径。原版完整 sessionStorage（5106 行）、React 队列订阅与远程桥接仍未等价，相关原路径不提升为已验收。
+
+### 2026-10-29：MCP 服务器级权限规则回归闭环（Issue #3）
+
+对照原版 2.1.88 的 `src/utils/permissions/permissions.ts` 233–269 行 `toolMatchesRule`：`mcp__server` 与 `mcp__server__*` 都可匹配该服务的全部真实工具，同时精确工具规则应覆盖更泛规则，`deny` 优先于 `ask` 优先于 `allow`，与同名内置 Write、Read 不发生误授权或误拦截。此前 Rust `permission_rules::policy_for` 只对工具全名逐字匹配，导致服务器级配置无法授权或屏蔽 MCP 工具。
+
+新增受限的 `mcp_server_rule_matches`，只识别标准 `mcp__server` 和 `mcp__server__*`，且只匹配名称包含完整 server 与工具部分的 MCP 实际工具，不处理父括号含内容的规则，防止不符合原版的误命中；与已有 `ToolExecutor::approve_external` 挂钩，测试覆盖 server allow、对单个危险工具 ask、其他 server deny、跨服务隔离、内置工具同名冲突及具体 deny 不能被广域 allow 绕过。完整分类器/权限来源/沙箱模式/UI 审批仍缺，因此两条源文件严格保持“部分实现”。

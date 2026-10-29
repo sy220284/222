@@ -619,6 +619,32 @@ mod tests {
     }
 
 
+    #[test]
+    fn mcp_server_level_rules_reach_real_external_approval_boundary(){
+        let root=tempfile::tempdir().unwrap();
+        let rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{behavior:"allow".into(),rule:"mcp__github".into()},
+            permission_rules::RuleSetting{behavior:"ask".into(),rule:"mcp__github__delete".into()},
+            permission_rules::RuleSetting{behavior:"deny".into(),rule:"mcp__secret__*".into()},
+            permission_rules::RuleSetting{behavior:"deny".into(),rule:"Write".into()},
+        ]).unwrap();
+        let tool=executor(root.path(),Approval::Ask).with_permission_rules(rules);
+        let call=|name:&str|ToolCall{
+            id:"call".into(),kind:"function".into(),
+            function:FunctionCall{name:name.into(),arguments:"{}".into()},
+        };
+        assert!(tool.approve_external(&call("mcp__github__read")).is_ok());
+        assert!(tool.approve_external(&call("mcp__github__delete"))
+            .unwrap_err().to_string().contains("needs approval"));
+        assert!(tool.approve_external(&call("mcp__secret__read"))
+            .unwrap_err().to_string().contains("explicit permission rule"));
+        assert!(tool.approve_external(&call("mcp__githubish__read")).is_err());
+        // A builtin Write denial cannot accidentally block a namespaced MCP
+        // tool called Write, and it must not authorize that MCP tool either.
+        assert!(tool.approve_external(&call("mcp__github__Write")).is_ok());
+        assert!(tool.approve_external(&call("Write")).is_err());
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn shell_command_respects_output_limit() {
