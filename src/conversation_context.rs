@@ -526,11 +526,12 @@ pub fn project_instructions_with_dirs(
         scope: &Path,
         include_scope: &Path,
         is_rule: bool,
+        allow_external: bool,
         excludes: &globset::GlobSet,
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
     ) -> anyhow::Result<()> {
-        add_file_inner(path, scope, include_scope, is_rule, excludes, seen, output, 0)
+        add_file_inner(path, scope, include_scope, is_rule, allow_external, excludes, seen, output, 0)
     }
 
     fn add_file_inner(
@@ -538,6 +539,7 @@ pub fn project_instructions_with_dirs(
         scope: &Path,
         include_scope: &Path,
         is_rule: bool,
+        allow_external: bool,
         excludes: &globset::GlobSet,
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
@@ -561,7 +563,7 @@ pub fn project_instructions_with_dirs(
         if excluded_file(&canonical, excludes) {
             return Ok(());
         }
-        if !canonical.starts_with(scope) {
+        if !canonical.starts_with(scope) && !(allow_external && depth > 0) {
             bail!(
                 "Instruction file points outside its approved directory: {}",
                 path.display()
@@ -608,12 +610,13 @@ pub fn project_instructions_with_dirs(
                         })
                     }
                 };
-                if resolved.starts_with(include_scope) {
+                if resolved.starts_with(include_scope) || allow_external {
                     add_file_inner(
                         &resolved,
                         scope,
                         include_scope,
                         false,
+                        allow_external,
                         excludes,
                         seen,
                         output,
@@ -631,6 +634,7 @@ pub fn project_instructions_with_dirs(
         include_scope: &Path,
         depth: usize,
         visited: &mut HashSet<PathBuf>,
+        allow_external: bool,
         excludes: &globset::GlobSet,
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
@@ -669,6 +673,7 @@ pub fn project_instructions_with_dirs(
                     include_scope,
                     depth + 1,
                     visited,
+                    allow_external,
                     excludes,
                     seen,
                     output,
@@ -676,7 +681,7 @@ pub fn project_instructions_with_dirs(
             } else if metadata.is_file()
                 && entry.extension().and_then(|extension| extension.to_str()) == Some("md")
             {
-                add_file(&entry, scope, include_scope, true, excludes, seen, output)?;
+                add_file(&entry, scope, include_scope, true, allow_external, excludes, seen, output)?;
             }
         }
         Ok(())
@@ -707,6 +712,7 @@ pub fn project_instructions_with_dirs(
                     &home,
                     &home,
                     false,
+                    true,
                     &excludes,
                     &mut seen,
                     &mut output,
@@ -717,6 +723,7 @@ pub fn project_instructions_with_dirs(
                     &home,
                     0,
                     &mut visited,
+                    true,
                     &excludes,
                     &mut seen,
                     &mut output,
@@ -748,6 +755,7 @@ pub fn project_instructions_with_dirs(
                     directory,
                     &root,
                     false,
+                    config.approved_external_instruction_includes,
                     &excludes,
                     &mut seen,
                     &mut output,
@@ -759,6 +767,7 @@ pub fn project_instructions_with_dirs(
                 &root,
                 0,
                 &mut visited,
+                config.approved_external_instruction_includes,
                 &excludes,
                 &mut seen,
                 &mut output,
@@ -771,6 +780,7 @@ pub fn project_instructions_with_dirs(
                     directory,
                     &root,
                     false,
+                    config.approved_external_instruction_includes,
                     &excludes,
                     &mut seen,
                     &mut output,
@@ -799,6 +809,7 @@ pub fn project_instructions_with_dirs(
                     &directory,
                     &directory,
                     false,
+                    config.approved_external_instruction_includes,
                     &excludes,
                     &mut seen,
                     &mut output,
@@ -810,6 +821,7 @@ pub fn project_instructions_with_dirs(
                 &directory,
                 0,
                 &mut visited,
+                config.approved_external_instruction_includes,
                 &excludes,
                 &mut seen,
                 &mut output,
