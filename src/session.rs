@@ -21,6 +21,12 @@ pub struct Session {
     pub tasks: Vec<Task>,
     #[serde(default)]
     pub todos: Vec<crate::task::TodoItem>,
+    /// Paths surfaced to the model during relevant-memory recall.
+    #[serde(default)]
+    pub surfaced_memories: Vec<String>,
+    /// Cumulative UTF-16 units of memory attachments in this session.
+    #[serde(default)]
+    pub surfaced_memory_units: usize,
     #[serde(default)]
     pub usage: TokenUsage,
     #[serde(default)]
@@ -54,6 +60,8 @@ impl Session {
             summary: None,
             tasks: Vec::new(),
             todos: Vec::new(),
+            surfaced_memories: Vec::new(),
+            surfaced_memory_units: 0,
             usage: TokenUsage::default(),
             cost: CostLedger::default(),
             team_name: None,
@@ -129,6 +137,8 @@ impl Session {
         self.summary = None;
         self.messages.clear();
         self.tasks.clear();
+        self.surfaced_memories.clear();
+        self.surfaced_memory_units = 0;
         self.todos.clear();
     }
 }
