@@ -172,7 +172,11 @@ fn merge_server_specs(
             if relative.ends_with(".mcpb") {
                 bail!("MCPB plugin bundles require an installed bundle handler")
             }
-            let file = checked_component(root, &root.join(relative))?;
+            let requested = root.join(relative);
+            if !requested.exists() && !requested.is_symlink() {
+                return Ok(());
+            }
+            let file = checked_component(root, &requested)?;
             if !visiting.insert(file.clone()) {
                 bail!("Plugin MCP configuration contains a file reference cycle")
             }
@@ -215,8 +219,9 @@ fn manifest_servers(root: &Path, value: &Value) -> Result<Vec<McpServerConfig>> 
     let mut servers = Vec::new();
     for (name, config) in entries {
         let mut config = config;
-        let object = config.as_object_mut()
-            .with_context(|| format!("Plugin MCP server {name} must be an object"))?;
+        let Some(object) = config.as_object_mut() else {
+            continue;
+        };
         object.insert("id".into(), Value::String(name.clone()));
         // A malformed server entry must not disable healthy servers in the
         // same plugin. The original loader validates entries independently.
@@ -256,6 +261,7 @@ fn resolve_plugin_mcp_server(
     } else {
         data.to_string_lossy().into_owned()
     };
+    let server_id = server.id.clone();
     let expand = |raw: &str| -> Result<String> {
         let result = crate::compat_helpers::expand_env_vars_with(raw, |key| {
             match key {
@@ -266,7 +272,7 @@ fn resolve_plugin_mcp_server(
         });
         if !result.missing_vars.is_empty() {
             bail!("Plugin MCP {} is missing environment variables: {}",
-                server.id, result.missing_vars.join(", "));
+                server_id, result.missing_vars.join(", "));
         }
         Ok(result.expanded)
     };
