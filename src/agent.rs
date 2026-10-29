@@ -210,6 +210,15 @@ impl Agent {
                 json!({"session_id":self.session.id,"workspace":self.root}),
             )
             .await?;
+        for warning in &result.non_blocking_errors {
+            eprintln!("SessionStart hook warning: {warning}");
+            self.emit(json!({
+                "type":"hook_warning",
+                "hook_event_name":"SessionStart",
+                "message":warning,
+                "session_id":self.session.id,
+            }));
+        }
         if let Some(reason) = result.blocking_reason {
             bail!("SessionStart blocked: {reason}")
         }
@@ -219,13 +228,25 @@ impl Agent {
 
     pub async fn finish(&self) -> Result<()> {
         self.background.stop_all().await;
-        self.hooks
+        let outcome = self.hooks
             .run(
                 HookEvent::SessionEnd,
                 None,
                 json!({"session_id":self.session.id,"workspace":self.root}),
             )
             .await?;
+        for warning in &outcome.non_blocking_errors {
+            eprintln!("SessionEnd hook warning: {warning}");
+            self.emit(json!({
+                "type":"hook_warning",
+                "hook_event_name":"SessionEnd",
+                "message":warning,
+                "session_id":self.session.id,
+            }));
+        }
+        if let Some(reason) = outcome.blocking_reason {
+            eprintln!("SessionEnd hook blocked: {reason}");
+        }
         Ok(())
     }
 
