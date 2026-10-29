@@ -37,6 +37,9 @@ pub struct McpServerConfig {
     pub env: std::collections::HashMap<String, String>,
     #[serde(default)]
     pub headers: std::collections::HashMap<String, String>,
+    /// Shell command producing a JSON object of per-connection HTTP headers.
+    #[serde(default, rename = "headersHelper", alias = "headers_helper")]
+    pub headers_helper: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,8 +229,11 @@ impl Config {
                     if s.command.trim().is_empty() {
                         bail!("MCP stdio server command cannot be empty")
                     }
-                    if s.url.is_some() || !s.headers.is_empty() {
-                        bail!("MCP stdio server cannot define HTTP url/headers");
+                    if s.url.is_some()
+                        || !s.headers.is_empty()
+                        || s.headers_helper.as_deref().is_some_and(|v| !v.trim().is_empty())
+                    {
+                        bail!("MCP stdio server cannot define HTTP url/headers/helper");
                     }
                 }
                 "http" => {
@@ -235,7 +241,15 @@ impl Config {
                         bail!("MCP HTTP server cannot define stdio command, args or env");
                     }
                     let url = s.url.as_deref().context("MCP HTTP server requires url")?;
-                    let parsed = reqwest::Url::parse(url)?;
+                    let expanded = crate::compat_helpers::expand_env_vars_in_string(url);
+                    if !expanded.missing_vars.is_empty() {
+                        bail!(
+                            "MCP {} missing URL environment variables: {}",
+                            s.id,
+                            expanded.missing_vars.join(", ")
+                        );
+                    }
+                    let parsed = reqwest::Url::parse(&expanded.expanded)?;
                     if !matches!(parsed.scheme(), "http" | "https")
                         || !parsed.username().is_empty()
                         || parsed.password().is_some()
@@ -335,6 +349,7 @@ mod tests {
             env: std::collections::HashMap::new(),
             url: Some("http://127.0.0.1:9876/mcp".into()),
             headers: std::collections::HashMap::new(),
+            headers_helper: None,
         });
         assert!(config.validate().is_ok());
         config.mcp_servers[0].command = "echo".into();
