@@ -1596,7 +1596,7 @@ impl Agent {
             // Source main.tsx prepends an agent's initialPrompt to the first
             // user turn, preserving the caller's task as trailing context.
             let mut continuation = match initial_prompt {
-                Some(initial) if !initial.is_empty() => format!("{initial}\\n\\n{prompt}"),
+                Some(initial) if !initial.is_empty() => format!("{initial}\n\n{prompt}"),
                 _ => prompt.to_owned(),
             };
             let mut stop_hook_active = false;
