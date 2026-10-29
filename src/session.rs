@@ -19,6 +19,9 @@ pub struct Session {
     pub summary: Option<String>,
     #[serde(default)]
     pub tasks: Vec<Task>,
+    /// Highest task ID ever allocated, including deleted tasks.
+    #[serde(default)]
+    pub task_id_high_water: u64,
     #[serde(default)]
     pub usage: TokenUsage,
     #[serde(default)]
@@ -51,6 +54,7 @@ impl Session {
             messages: Vec::new(),
             summary: None,
             tasks: Vec::new(),
+            task_id_high_water: 0,
             usage: TokenUsage::default(),
             cost: CostLedger::default(),
             team_name: None,
