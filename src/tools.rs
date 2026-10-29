@@ -1051,31 +1051,43 @@ impl ToolExecutor {
         let path = self.checked_path(required(args, "path")?)?;
         let content = required(args, "content")?;
         let existed = path.exists();
-        let before = if existed {
-            tokio::fs::read_to_string(&path).await.ok()
-        } else {
-            None
-        };
+        let create_only = args
+            .get("create_only")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         if content.len() as u64 > MAX_FILE_BYTES {
             bail!("Content too large")
         }
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
+        if existed && create_only {
+            bail!("File already exists; create_only forbids overwriting it");
         }
-        if args
-            .get("create_only")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
-            use tokio::io::AsyncWriteExt;
-            let mut file = tokio::fs::OpenOptions::new()
+        let before = if existed {
+            let original = fs::read_to_string(&path)?;
+            let prior = self.file_reads.lock().unwrap().get(&path).cloned()
+                .context("File has not been read yet. Read it first before writing to it.")?;
+            if !prior.full {
+                bail!("File was only partially read. Read the complete file before writing");
+            }
+            if original != prior.content {
+                bail!("File has been modified since read. Read it again before writing");
+            }
+            Some(original)
+        } else {
+            None
+        };
+        // Keep the final content check and write adjacent. The original
+        // FileWriteTool likewise avoids an async suspension in this interval.
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        if create_only {
+            let mut file = fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(&path)
-                .await?;
-            file.write_all(content.as_bytes()).await?;
+                .open(&path)?;
+            file.write_all(content.as_bytes())?;
         } else {
-            tokio::fs::write(&path, content).await?;
+            fs::write(&path, content)?;
         }
         if !existed || before.is_some() {
             self.metrics.record_change(before.as_deref(), content);
