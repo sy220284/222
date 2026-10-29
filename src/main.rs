@@ -14,6 +14,7 @@ mod portable_source_utils;
 mod portable_ui_runtime;
 mod portable_async_runtime;
 mod portable_platform;
+mod command_manifest;
 mod skill_arguments;
 mod semantic_inputs;
 mod xml_escape;
@@ -265,6 +266,15 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
         if io::stdin().read_line(&mut line)? == 0 { break; }
         let input = line.trim();
         if input.is_empty() { continue; }
+        // Canonical alias resolution uses original command index descriptors.
+        let normalized = input.strip_prefix('/').and_then(|tail|{
+            let name=tail.split_once(' ').map(|(x,_)|x).unwrap_or(tail);
+            let command=command_manifest::lookup(name)?;
+            if command.name==name{return None}
+            let rest=&tail[name.len()..];
+            Some(format!("/{}{}",command.name,rest))
+        });
+        let input=normalized.as_deref().unwrap_or(input);
         if input == "/history" || input.starts_with("/history ") {
             let query = input.strip_prefix("/history").unwrap_or("").trim().to_lowercase();
             for item in prompt_history.get_timestamped_history()?.into_iter()
@@ -295,9 +305,19 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("/env [NAME=VALUE | -u NAME] configure environment for child commands");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
+                println!("/commands                list migrated command registration metadata");
                 println!("/mcp-prompts             list available MCP prompt commands");
                 println!("/server:prompt (MCP) ARGS  execute an MCP prompt");
                 println!("/exit                    quit");
+                continue;
+            }
+            "/commands" => {
+                println!("Command registrations (handlers may still be pending Rust migration):");
+                for entry in command_manifest::visible(){
+                    let alias=if entry.aliases.is_empty(){String::new()}
+                        else{format!(" ({})",entry.aliases.join(", "))};
+                    println!("/{}{}  {}",entry.name,alias,entry.description);
+                }
                 continue;
             }
             "/dirs" => { for dir in agent.working_directories() { println!("{}",dir.display()); } continue; }

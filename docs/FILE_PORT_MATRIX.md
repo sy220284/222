@@ -89,76 +89,76 @@
 | `src/commands/add-dir/validation.ts` | 111 | 3207 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/advisor.ts` | 110 | 3182 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/agents/agents.tsx` | 12 | 2500 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/agents/index.ts` | 11 | 232 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/ant-trace/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/autofix-pr/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/backfill-sessions/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/agents/index.ts` | 11 | 232 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/ant-trace/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/autofix-pr/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/backfill-sessions/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/branch/branch.ts` | 297 | 9580 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/branch/index.ts` | 15 | 445 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/break-cache/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/branch/index.ts` | 15 | 445 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/break-cache/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/bridge/bridge.tsx` | 509 | 46907 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/bridge/index.ts` | 27 | 604 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/bridge/index.ts` | 27 | 604 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/bridge-kick.ts` | 201 | 6703 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/brief.ts` | 131 | 5173 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/btw/btw.tsx` | 243 | 30250 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/btw/index.ts` | 14 | 314 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/bughunter/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/btw/index.ts` | 14 | 314 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/bughunter/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/chrome/chrome.tsx` | 285 | 31974 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/chrome/index.ts` | 14 | 381 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/chrome/index.ts` | 14 | 381 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/clear/caches.ts` | 145 | 6370 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/clear/clear.ts` | 8 | 254 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/clear/conversation.ts` | 252 | 9325 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/clear/index.ts` | 20 | 603 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/clear/index.ts` | 20 | 603 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/color/color.ts` | 94 | 2712 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/color/index.ts` | 17 | 417 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/color/index.ts` | 17 | 417 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/commit-push-pr.ts` | 159 | 6309 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/commit.ts` | 93 | 3492 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/compact/compact.ts` | 288 | 10079 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/compact/index.ts` | 16 | 530 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/compact/index.ts` | 16 | 530 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/config/config.tsx` | 7 | 1408 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/config/index.ts` | 12 | 247 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/config/index.ts` | 12 | 247 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/context/context-noninteractive.ts` | 326 | 10781 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/context/context.tsx` | 64 | 9099 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/context/index.ts` | 25 | 695 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/context/index.ts` | 25 | 695 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/copy/copy.tsx` | 371 | 42252 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/copy/index.ts` | 16 | 393 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/copy/index.ts` | 16 | 393 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/cost/cost.ts` | 25 | 909 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/cost/index.ts` | 24 | 668 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/cost/index.ts` | 24 | 668 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/createMovedToPluginCommand.ts` | 66 | 1789 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/ctx_viz/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/debug-tool-call/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/ctx_viz/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/debug-tool-call/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/desktop/desktop.tsx` | 9 | 1645 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/desktop/index.ts` | 27 | 601 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/desktop/index.ts` | 27 | 601 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/diff/diff.tsx` | 9 | 1461 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/diff/index.ts` | 9 | 221 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/diff/index.ts` | 9 | 221 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/doctor/doctor.tsx` | 7 | 1309 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/doctor/index.ts` | 13 | 381 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/doctor/index.ts` | 13 | 381 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/effort/effort.tsx` | 183 | 22128 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/effort/index.ts` | 14 | 428 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/env/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/effort/index.ts` | 14 | 428 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/env/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/exit/exit.tsx` | 33 | 5272 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/exit/index.ts` | 13 | 250 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/exit/index.ts` | 13 | 250 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/export/export.tsx` | 91 | 15104 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/export/index.ts` | 12 | 303 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/extra-usage/extra-usage-core.ts` | 119 | 4000 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/extra-usage/extra-usage-noninteractive.ts` | 17 | 466 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/extra-usage/extra-usage.tsx` | 17 | 3134 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/extra-usage/index.ts` | 32 | 1101 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/extra-usage/index.ts` | 32 | 1101 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/fast/fast.tsx` | 269 | 33931 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/fast/index.ts` | 27 | 693 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/fast/index.ts` | 27 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/feedback/feedback.tsx` | 25 | 5095 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/feedback/index.ts` | 27 | 931 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/feedback/index.ts` | 27 | 931 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/files/files.ts` | 20 | 688 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/files/index.ts` | 13 | 316 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/good-claude/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/files/index.ts` | 13 | 316 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/good-claude/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：原版禁用注册节点 Rust 化，保持不可调用并等待统一验收 |
 | `src/commands/heapdump/heapdump.ts` | 18 | 398 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/heapdump/index.ts` | 13 | 288 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/heapdump/index.ts` | 13 | 288 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/help/help.tsx` | 11 | 1432 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/help/index.ts` | 11 | 229 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/help/index.ts` | 11 | 229 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/hooks/hooks.tsx` | 13 | 2679 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/hooks/index.ts` | 12 | 260 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/hooks/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/ide/ide.tsx` | 646 | 77066 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/ide/index.ts` | 12 | 258 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/ide/index.ts` | 12 | 258 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/init-verifiers.ts` | 263 | 10315 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/init.ts` | 257 | 20961 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/insights.ts` | 3201 | 115949 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -173,40 +173,40 @@
 | `src/commands/install-github-app/OAuthFlowStep.tsx` | 276 | 39935 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/SuccessStep.tsx` | 96 | 10170 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/WarningsStep.tsx` | 73 | 9132 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/index.ts` | 14 | 471 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/install-github-app/index.ts` | 14 | 471 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/install-github-app/install-github-app.tsx` | 587 | 87155 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/setupGitHubActions.ts` | 326 | 10168 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-slack-app/index.ts` | 13 | 333 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/install-slack-app/index.ts` | 13 | 333 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/install-slack-app/install-slack-app.ts` | 31 | 877 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install.tsx` | 300 | 39068 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/issue/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/keybindings/index.ts` | 14 | 448 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/keybindings/index.ts` | 14 | 448 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/keybindings/keybindings.ts` | 54 | 1645 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/login/index.ts` | 15 | 489 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/login/login.tsx` | 104 | 16109 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/logout/index.ts` | 11 | 341 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/logout/logout.tsx` | 82 | 10732 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/mcp/addCommand.ts` | 281 | 9848 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/mcp/index.ts` | 13 | 280 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/mcp/index.ts` | 13 | 280 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/mcp/mcp.tsx` | 85 | 12126 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/mcp/xaaIdpCommand.ts` | 267 | 10290 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/memory/index.ts` | 11 | 220 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/memory/index.ts` | 11 | 220 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/memory/memory.tsx` | 90 | 12608 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/mobile/index.ts` | 12 | 282 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/mobile/index.ts` | 12 | 282 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/mobile/mobile.tsx` | 274 | 21797 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/mock-limits/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/model/index.ts` | 17 | 559 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/mock-limits/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/model/index.ts` | 17 | 559 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/model/model.tsx` | 297 | 37569 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/oauth-refresh/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/onboarding/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/output-style/index.ts` | 12 | 291 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/oauth-refresh/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/onboarding/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/output-style/index.ts` | 12 | 291 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/output-style/output-style.tsx` | 7 | 1343 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/passes/index.ts` | 23 | 632 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/passes/index.ts` | 23 | 632 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/passes/passes.tsx` | 24 | 3783 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/perf-issue/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/permissions/index.ts` | 12 | 296 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/perf-issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/permissions/index.ts` | 12 | 296 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/permissions/permissions.tsx` | 10 | 2223 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plan/index.ts` | 12 | 286 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plan/index.ts` | 12 | 286 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/plan/plan.tsx` | 122 | 13904 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/plugin/AddMarketplace.tsx` | 162 | 21821 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/plugin/BrowseMarketplace.tsx` | 802 | 119562 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -220,29 +220,29 @@
 | `src/commands/plugin/PluginTrustWarning.tsx` | 32 | 3919 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/plugin/UnifiedInstalledCell.tsx` | 565 | 44441 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/plugin/ValidatePlugin.tsx` | 98 | 12369 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/index.tsx` | 11 | 1337 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plugin/index.tsx` | 11 | 1337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/plugin/parseArgs.ts` | 104 | 2818 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/plugin/plugin.tsx` | 7 | 1590 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/plugin/pluginDetailsHelpers.tsx` | 117 | 12424 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/plugin/usePagination.ts` | 172 | 4990 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/pr_comments/index.ts` | 51 | 1848 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/privacy-settings/index.ts` | 15 | 399 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/pr_comments/index.ts` | 51 | 1848 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/privacy-settings/index.ts` | 15 | 399 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/privacy-settings/privacy-settings.tsx` | 58 | 10043 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/rate-limit-options/index.ts` | 20 | 511 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/rate-limit-options/index.ts` | 20 | 511 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/rate-limit-options/rate-limit-options.tsx` | 210 | 23749 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/release-notes/index.ts` | 12 | 268 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/release-notes/index.ts` | 12 | 268 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/release-notes/release-notes.ts` | 51 | 1524 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/reload-plugins/index.ts` | 19 | 653 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/reload-plugins/index.ts` | 19 | 653 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/reload-plugins/reload-plugins.ts` | 62 | 2598 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/remote-env/index.ts` | 16 | 577 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/remote-env/index.ts` | 16 | 577 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/remote-env/remote-env.tsx` | 7 | 1454 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/remote-setup/api.ts` | 183 | 5519 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/remote-setup/index.ts` | 21 | 693 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/remote-setup/index.ts` | 21 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/remote-setup/remote-setup.tsx` | 187 | 21786 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/rename/generateSessionName.ts` | 68 | 2297 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：通过当前选定模型生成 JSON kebab-case 名称、验证输入并持久保存、不污染历史会话且计入模型用量；原厂专用模型与超时/中断策略按通用化要求调整 |
 | `src/commands/rename/index.ts` | 13 | 281 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/rename/rename.ts` | 88 | 2759 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
-| `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/resume/index.ts` | 13 | 303 | 重写：保持通用行为 | `src/main.rs / src/session.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
 | `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -250,46 +250,46 @@
 | `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/review.ts` | 58 | 2188 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/rewind/rewind.ts` | 14 | 376 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/sandbox-toggle/index.ts` | 51 | 1520 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/sandbox-toggle/index.ts` | 51 | 1520 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/sandbox-toggle/sandbox-toggle.tsx` | 83 | 13157 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/security-review.ts` | 244 | 12531 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/session/index.ts` | 17 | 418 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/session/index.ts` | 17 | 418 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/session/session.tsx` | 140 | 13009 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/share/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/skills/index.ts` | 11 | 226 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/share/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/skills/index.ts` | 11 | 226 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/skills/skills.tsx` | 8 | 1888 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/stats/index.ts` | 11 | 252 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/stats/index.ts` | 11 | 252 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/stats/stats.tsx` | 7 | 1141 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/status/index.ts` | 13 | 322 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/status/index.ts` | 13 | 322 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/status/status.tsx` | 8 | 1855 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/statusline.tsx` | 24 | 3568 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/stickers/index.ts` | 12 | 268 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/stickers/index.ts` | 12 | 268 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/stickers/stickers.ts` | 17 | 476 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/summary/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/tag/index.ts` | 13 | 321 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/summary/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/tag/index.ts` | 13 | 321 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/tag/tag.tsx` | 215 | 20999 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/tasks/index.ts` | 12 | 256 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/tasks/index.ts` | 12 | 256 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/tasks/tasks.tsx` | 8 | 1901 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/teleport/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/terminalSetup/index.ts` | 24 | 725 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/teleport/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/terminalSetup/index.ts` | 24 | 725 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/terminalSetup/terminalSetup.tsx` | 531 | 77528 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/theme/index.ts` | 11 | 217 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/theme/index.ts` | 11 | 217 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/theme/theme.tsx` | 57 | 5180 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/thinkback/index.ts` | 14 | 442 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/thinkback/index.ts` | 14 | 442 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/thinkback/thinkback.tsx` | 554 | 61993 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/thinkback-play/index.ts` | 18 | 608 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/thinkback-play/index.ts` | 18 | 608 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/thinkback-play/thinkback-play.ts` | 44 | 1430 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/ultraplan.tsx` | 471 | 66629 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/upgrade/index.ts` | 17 | 523 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/upgrade/index.ts` | 17 | 523 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/usage/index.ts` | 10 | 233 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/usage/index.ts` | 10 | 233 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/usage/usage.tsx` | 7 | 1403 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/vim/index.ts` | 12 | 273 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/vim/index.ts` | 12 | 273 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/vim/vim.ts` | 39 | 1139 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/voice/index.ts` | 21 | 482 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/voice/index.ts` | 21 | 482 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/voice/voice.ts` | 151 | 5264 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/components/AgentProgressLine.tsx` | 136 | 14238 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/App.tsx` | 56 | 5204 | 重写：终端 UI／交互 | 待定 | 未迁移 |
