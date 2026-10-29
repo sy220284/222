@@ -1,5 +1,13 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：队友状态树与单行渲染真实接线（部分实现）
+
+- `src/components/Spinner/TeammateSpinnerTree.tsx` 对应 `src/generated_ports/p_024038719ca35.rs`：现已将真实任务筛选、排序、选中状态、终端列宽和消息预览传给 `p_09647f4245ece.rs::render_source_view`，替代原先无子节点的静态 `TeammateSpinnerLine`。
+- `src/generated_ports/registry_03.rs` 把两个组件的 `view` 出口接通 Rust 渲染器，更新 `catalog` 并增加注册表到组合视图的数据与空值回归测试。核心提交 `a1b42bfcd311b27aa9c293f6794b6b7f44dba5dc`。
+- 源码调试视图与嵌套数据传递已接通；真实终端的刷新、键盘选择与完整交互仍待验收。两条路径继续保留部分实现，不计入已验收。
+
+
+
 
 ## 2026-10-29：原版指令发现链路补齐（源码已提交、待行为验收）
 
