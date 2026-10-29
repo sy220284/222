@@ -4,8 +4,8 @@ mod array_utils;
 mod ask_user_question;
 mod background;
 mod bash_permission_suggestions;
-mod browser_launcher;
 mod bridge_core;
+mod browser_launcher;
 mod cleanup_registry;
 mod collections;
 mod command_lifecycle;
@@ -2070,7 +2070,10 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 }
             }
             "control_request" if event.get("request").is_some() => {
-                print_json!(sdk_nested_control(agent, config, &event, &mut queue, &mut bridge_session).await);
+                print_json!(
+                    sdk_nested_control(agent, config, &event, &mut queue, &mut bridge_session)
+                        .await
+                );
             }
             "control" | "control_request" => {
                 macro_rules! send_control {
