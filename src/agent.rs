@@ -2997,11 +2997,14 @@ mod tests {
             false,
             5,
             Session::fresh(),
-        ).unwrap();
-        agent.set_permission_rules(&[permission_rules::RuleSetting {
-            behavior: "deny".into(),
-            rule: "Agent(Explore)".into(),
-        }]).unwrap();
+        )
+        .unwrap();
+        agent
+            .set_permission_rules(&[permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "Agent(Explore)".into(),
+            }])
+            .unwrap();
         let executor = ToolExecutor::new(root.path().to_path_buf(), Approval::Full, false)
             .with_permission_rules(agent.permission_rules.clone());
         let call = |agent_type: &str| ToolCall {
@@ -3013,7 +3016,10 @@ mod tests {
                     .to_string(),
             },
         };
-        let blocked = agent.run_subagent(&call("Explore"), &executor).await.unwrap_err();
+        let blocked = agent
+            .run_subagent(&call("Explore"), &executor)
+            .await
+            .unwrap_err();
         assert!(blocked.to_string().contains("denied"), "{blocked:#}");
         assert!(executor.approve_delegation(&call("Explorer")).is_ok());
         assert!(!root.path().join(".atlas/worktrees").exists());
