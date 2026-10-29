@@ -1,5 +1,13 @@
 # Issue #3：冻结 362 项源码级等价验收登记表
 
+## 2026-10-29：Agent 子代理类型精确拒绝规则进入真实委派入口（冻结 #17，继续开放）
+
+- **原版源码**：`src/utils/permissions/permissions.ts:304–343` 的 `getDenyRuleForAgent` / `filterDeniedAgents` 将 `Agent(agentType)` 与真实代理类型进行**精确**字符串匹配，不使用 Bash 前缀/通配规则。
+- **Rust 差异**：`src/permission_rules.rs::policy_for` 的 Agent 工具内容规则没有输入参数映射，导致 `Agent(Explore)` 不能拒绝 `spawn_agent(subagent_type=Explore)`，即使 `approve_delegation` 在子任务启动前检查规则也不会命中；模型发布的 `spawn_agent` schema 也未声明可选类型参数。
+- **修复**：为 `spawn_agent` 增加 `subagent_type` 可选模型参数，权限引擎按真实 `subagent_type` / `agent_type`（缺省 `general`）精确匹配 `Agent(type)`，不误拒绝其他类型或团队任务；保留原有整工具 Agent deny/ask/allow 和父子权限继承。修改 `src/permission_rules.rs`、`src/agent.rs`。
+- **验证**：`permission_rules::tests::agent_type_rules_are_exact_and_do_not_match_unrelated_team_calls` 对照类型、默认值、团队隔离；`agent::tests::agent_type_specific_deny_blocks_real_subagent_before_model_request` 使用实际 Agent→ToolExecutor→run_subagent 路径确认拒绝发生在子模型请求和工作树创建之前。GitHub Actions [40855591607](https://github.com/sy220284/222/actions/runs/40855591607) 的编译成功，日志显示上述两项均 `ok`，单元测试 **403 通过、0 失败**；并发更新导致该轮完整 CI 取消。按 CI rustfmt 输出修正代码格式提交 `f022055`、`ac5ed5f`。
+- **剩余**：动态代理类型目录、完整 Agent/团队类型语义、用户交互权限提示、异步取消/恢复、跨代理并发、工具可见性过滤和最终全链等价。冻结 362 条不勾选，本轮作为**第三个不同用户可感知功能的有效补强**，完整验收仍 0。
+
 ## 2026-10-29：笔记本单元格编辑的共享权限规则接入（冻结文件系统权限链，继续开放）
 
 - **原版源码**：`src/tools/NotebookEditTool/NotebookEditTool.ts:122–130` 的 `getPath`、`checkPermissions` 调用 `filesystem.ts::checkWritePermissionForTool`，使用与普通编辑相同的 `Edit(path)` 权限规则；`filesystem.ts:919–933,955–1024` 提供实际路径匹配。
