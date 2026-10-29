@@ -180,7 +180,13 @@ impl TaskGraph {
     }
     fn all(&self) -> Result<Vec<Item>> {
         let mut tasks = Vec::new();
-        for ent in fs::read_dir(&self.directory)? {
+        // The source listTasks treats an unavailable task directory as an
+        // empty list, including when team cleanup races with a list request.
+        let entries = match fs::read_dir(&self.directory) {
+            Ok(entries) => entries,
+            Err(_) => return Ok(tasks),
+        };
+        for ent in entries {
             let ent = match ent {
                 Ok(entry) => entry,
                 Err(_) => continue,
