@@ -95,6 +95,9 @@ pub struct HookOutcome {
     pub blocking_reason: Option<String>,
     pub additional_context: Vec<String>,
     pub updated_input: Option<Value>,
+    /// PreToolUse hook decision. An explicit `ask` requires user approval
+    /// even when the CLI normally grants full tool access.
+    pub permission_decision: Option<String>,
     /// Replacement for an MCP tool's model-visible output from PostToolUse.
     pub updated_mcp_tool_output: Option<Value>,
     pub prevent_continuation: bool,
@@ -165,6 +168,12 @@ impl HookRunner {
                 .extend(response.additional_context);
             if let Some(updated) = response.updated_input {
                 outcome.updated_input = Some(updated);
+            }
+            if let Some(decision) = response.permission_decision {
+                // An ask from any hook cannot be overridden by a later allow.
+                if decision == "ask" || outcome.permission_decision.is_none() {
+                    outcome.permission_decision = Some(decision);
+                }
             }
             if let Some(updated) = response.updated_mcp_tool_output {
                 if event.name() == "PostToolUse" {
@@ -315,6 +324,9 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
         .and_then(Value::as_str)
     {
         result.additional_context.push(context.into());
+    }
+    if payload["hook_event_name"] == "PreToolUse" {
+        result.permission_decision = permission_decision.map(str::to_owned);
     }
     if let Some(input) = hook_output.and_then(|v| v.get("updatedInput")) {
         if !input.is_object() {

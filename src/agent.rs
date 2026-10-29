@@ -1738,11 +1738,44 @@ impl Agent {
                 if let Some(updated) = pre.as_ref().and_then(|hook| hook.updated_input.as_ref()) {
                     call.function.arguments = serde_json::to_string(updated)?;
                 }
+                // A hook's explicit ask is a forced permission prompt. It
+                // cannot be bypassed by --approval full or an allow rule.
+                let hook_ask_rejection = if pre
+                    .as_ref()
+                    .and_then(|hook| hook.permission_decision.as_deref())
+                    == Some("ask")
+                {
+                    if !self.interactive {
+                        Some("PreToolUse hook requires interactive approval".to_owned())
+                    } else {
+                        use std::io::Write;
+                        let answer = (|| -> std::io::Result<bool> {
+                            eprintln!("PreToolUse hook requests approval for {}", call.function.name);
+                            eprint!("Allow once? [y/N] ");
+                            std::io::stderr().flush()?;
+                            let mut response = String::new();
+                            std::io::stdin().read_line(&mut response)?;
+                            Ok(matches!(
+                                response.trim().to_ascii_lowercase().as_str(),
+                                "y" | "yes"
+                            ))
+                        })();
+                        match answer {
+                            Ok(true) => None,
+                            Ok(false) => Some("User rejected PreToolUse hook approval".to_owned()),
+                            Err(error) => Some(format!("PreToolUse approval failed: {error}")),
+                        }
+                    }
+                } else {
+                    None
+                };
                 // A rejected or malformed invocation never executed a tool.
                 // PostToolUse/Failure hooks belong to actual executions only.
                 let pre_blocked = pre.as_ref().and_then(|hook| hook.blocking_reason.clone());
-                let skipped_tool =
-                    invalid_input.is_some() || pre_hook_failure.is_some() || pre_blocked.is_some();
+                let skipped_tool = invalid_input.is_some()
+                    || pre_hook_failure.is_some()
+                    || pre_blocked.is_some()
+                    || hook_ask_rejection.is_some();
                 let tool_started = Instant::now();
                 let result = if let Some(reason) = invalid_input {
                     format!("ERROR: {reason}")
@@ -1750,6 +1783,8 @@ impl Agent {
                     format!("ERROR: PreToolUse hook failed: {reason}")
                 } else if let Some(reason) = pre_blocked {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
+                } else if let Some(reason) = hook_ask_rejection {
+                    format!("ERROR: {reason}")
                 } else if matches!(
                     call.function.name.as_str(),
                     "TeamCreate" | "TeamDelete" | "SendMessage" | "TeamInbox"

@@ -241,3 +241,55 @@ done
         requests[1]
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn pre_tool_hook_ask_cannot_be_bypassed_by_full_approval() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for index in 0..2 {
+            let (mut conn, _) = listener.accept().unwrap();
+            requests.push(read_request(&mut conn));
+            let response = if index == 0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"must-ask","type":"function","function":{
+                        "name":"write_file",
+                        "arguments":json!({"path":"forbidden.txt","content":"must not write"}).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"The hook request was not approved"},"finish_reason":"stop"}]})
+            };
+            let body = response.to_string();
+            write!(conn, "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}", body.len(), body).unwrap();
+            conn.flush().unwrap();
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(&config, json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{address}/v1")
+    }],"hooks":[{
+        "event":"PreToolUse","matcher":"^write_file$",
+        "command":"printf '{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"PreToolUse\\\",\\\"permissionDecision\\\":\\\"ask\\\"}}'"
+    }]}).to_string()).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
+        .args([
+            "--workspace", root.path().to_str().unwrap(),
+            "--approval", "full", "run", "Test forced hook approval"
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    let requests = server.join().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(!root.path().join("forbidden.txt").exists());
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1].contains("PreToolUse hook requires interactive approval"),
+        "{}", requests[1]);
+    assert!(requests[1].contains("must-ask"), "{}", requests[1]);
+}
