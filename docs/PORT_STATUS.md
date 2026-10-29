@@ -424,7 +424,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 
 ## 2026-10-29：多模型请求瞬态失败恢复（原版 withRetry 主链继续补齐）
 
-对照用户原始 2.1.88 ZIP 中 `src/services/api/withRetry.ts` 的 `shouldRetry`、`getRetryAfter`、`getRetryDelay` 及 `src/query.ts` 的模型重试/回退路径，Rust `src/provider.rs` 新增 HTTP 请求开始阶段的有限重试，接入 OpenAI-compatible/Gemini 的普通请求与 `src/sse.rs`、`src/gemini_sse.rs` 的流式连接建立阶段。仅重放相同 JSON 请求体；不会在模型回复之前执行工具或向会话写入虚假回复。支持暂时性 408/409/429/500/502/503/504/529、连接失败和超时；明确 `x-should-retry: false` 不重试，整数秒 `Retry-After` 有 30 秒上限，最多四次请求。流式响应一旦开始就不自动重放，避免重复输出和工具调用。
+对照用户原始 2.1.88 ZIP 中 `src/services/api/withRetry.ts` 的 `shouldRetry`、`getRetryAfter`、`getRetryDelay` 及 `src/query.ts` 的模型重试/回退路径，Rust `src/provider.rs` 新增 HTTP 请求开始阶段的有限重试，接入 OpenAI-compatible/Gemini 的普通请求与 `src/sse.rs`、`src/gemini_sse.rs` 的流式连接建立阶段。仅重放相同 JSON 请求体；不会在模型回复之前执行工具或向会话写入虚假回复。支持暂时性 408/409/429/500/502/503/504/529、连接失败和超时；明确 `x-should-retry: false` 不重试，整数秒 `Retry-After` 有 30 秒上限，最多四次请求。流式响应一旦开始就不自动重放，避免重复输出和工具调用。进一步对照 `src/query.ts` 的流完成状态：OpenAI-compatible SSE 在连接关闭时既没有 `[DONE]` 也没有 `finish_reason`，现在明确报错，不会把看似完整、但尚未被模型确认的工具调用执行。真实 CLI + 模拟 SSE 截断测试使用 `write_file` 生成合法工具参数但不发送结束标记，验证进程失败、工作区文件未创建、会话历史未记录未确认的工具调用。
 
 新增真实 CLI→HTTP→工具→会话持久化测试：503→429→正常工具调用→正常模型回复，验证请求体相同、工具输出恰好回填一次；另外测试 503 显式禁止重试、400 参数错误，以及 OpenAI/Gemini SSE 首帧前的重试与增量去重。最终是否通过以对应 HEAD 的 GitHub Actions 为准。
 
