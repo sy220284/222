@@ -11,8 +11,8 @@ const MAX_TRACKED_FILES: usize = 100;
 
 fn tracked_target(name: &str, args: &str) -> Option<String> {
     let path_field = match name {
-        "read_file" | "FileRead" | "Read" | "write_file" | "FileWrite" | "Write"
-        | "edit_file" | "FileEdit" | "Edit" => "path",
+        "read_file" | "FileRead" | "Read" | "write_file" | "FileWrite" | "Write" | "edit_file"
+        | "FileEdit" | "Edit" => "path",
         "notebook_edit" | "NotebookEdit" => "notebook_path",
         _ => return None,
     };
