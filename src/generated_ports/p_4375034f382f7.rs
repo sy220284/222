@@ -1,6 +1,5 @@
 //! Rust exports derived from original: src/components/PromptInput/Notifications.tsx
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub fn FOOTER_TEMPORARY_STATUS_TIMEOUT() -> Value {
     serde_json::from_str(r#"5000"#).expect("Valid source constant")

@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 
 pub fn isPersistableScope(args: &[Value]) -> Value {
     super::runtime::strict_unequal(
-        &args.get(0).cloned().unwrap_or(Value::Null),
+        &args.first().cloned().unwrap_or(Value::Null),
         &Value::String("flag".into()),
     )
 }

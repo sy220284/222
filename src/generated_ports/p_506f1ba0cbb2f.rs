@@ -66,8 +66,6 @@ pub enum CursorDirection {
     back,
 }
 
-use serde_json::json;
-
 pub fn defaultStyle(args: &[Value]) -> Value {
     {
         let mut map = serde_json::Map::new();
