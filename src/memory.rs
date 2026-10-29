@@ -83,14 +83,22 @@ fn memory_yaml_scalar(raw: &str) -> Option<String> {
         return serde_json::from_str::<String>(value).ok();
     }
     if value.starts_with('\'') {
-        return value.strip_suffix('\'')
+        return value
+            .strip_suffix('\'')
             .and_then(|v| v.strip_prefix('\''))
             .map(|v| v.replace("''", "'"));
     }
     // A # begins an unquoted YAML comment only after whitespace.
-    let plain = value.split_once(" #").map(|(text, _)| text).unwrap_or(value);
+    let plain = value
+        .split_once(" #")
+        .map(|(text, _)| text)
+        .unwrap_or(value);
     let plain = plain.trim_end();
-    if plain.is_empty() { None } else { Some(plain.to_owned()) }
+    if plain.is_empty() {
+        None
+    } else {
+        Some(plain.to_owned())
+    }
 }
 
 fn parse_header(text: &str) -> (Option<String>, Option<String>) {
@@ -100,11 +108,15 @@ fn parse_header(text: &str) -> (Option<String>, Option<String>) {
     }
     // parseFrontmatter requires a complete closing delimiter. Incomplete
     // headers must not leak Markdown body text into the selector manifest.
-    let Some(end) = lines.iter().enumerate().skip(1)
+    let Some(end) = lines
+        .iter()
+        .enumerate()
+        .skip(1)
         .find(|(_, line)| line.trim_end() == "---")
-        .map(|(index, _)| index) else {
-            return (None, None);
-        };
+        .map(|(index, _)| index)
+    else {
+        return (None, None);
+    };
     let mut description = None;
     let mut memory_type = None;
     let mut index = 1;
@@ -114,9 +126,13 @@ fn parse_header(text: &str) -> (Option<String>, Option<String>) {
         if line.starts_with(' ') || line.starts_with('\t') || line.trim_start().starts_with('#') {
             continue;
         }
-        let Some((key, raw)) = line.split_once(':') else { continue };
+        let Some((key, raw)) = line.split_once(':') else {
+            continue;
+        };
         let key = key.trim();
-        if !matches!(key, "description" | "type") { continue }
+        if !matches!(key, "description" | "type") {
+            continue;
+        }
         let raw = raw.trim();
         let value = if raw.starts_with('|') || raw.starts_with('>') {
             let folded = raw.starts_with('>');
@@ -129,24 +145,39 @@ fn parse_header(text: &str) -> (Option<String>, Option<String>) {
                 block.push(next);
                 index += 1;
             }
-            let indent = block.iter().filter(|line| !line.trim().is_empty())
+            let indent = block
+                .iter()
+                .filter(|line| !line.trim().is_empty())
                 .map(|line| line.len() - line.trim_start_matches([' ', '\t']).len())
-                .min().unwrap_or(0);
-            let values = block.iter().map(|line| {
-                let cut = indent.min(line.len());
-                line[cut..].trim_end()
-            }).collect::<Vec<_>>();
-            let joined = if folded { values.join(" ") } else { values.join("\n") };
+                .min()
+                .unwrap_or(0);
+            let values = block
+                .iter()
+                .map(|line| {
+                    let cut = indent.min(line.len());
+                    line[cut..].trim_end()
+                })
+                .collect::<Vec<_>>();
+            let joined = if folded {
+                values.join(" ")
+            } else {
+                values.join("\n")
+            };
             let joined = joined.trim_end();
-            if joined.is_empty() { None } else { Some(joined.to_owned()) }
+            if joined.is_empty() {
+                None
+            } else {
+                Some(joined.to_owned())
+            }
         } else {
             memory_yaml_scalar(raw)
         };
         match key {
             "description" => description = value.filter(|v| !v.is_empty()),
             "type" => {
-                memory_type = value.filter(|v| matches!(v.as_str(),
-                    "user" | "feedback" | "project" | "reference"));
+                memory_type = value.filter(|v| {
+                    matches!(v.as_str(), "user" | "feedback" | "project" | "reference")
+                });
             }
             _ => {}
         }
@@ -170,8 +201,11 @@ fn read_topic_preview(path: &Path) -> Result<(String, usize)> {
     };
     let content = std::str::from_utf8(&capped[..valid_end])?;
     let truncated_by_lines = content.lines().count() > MAX_PER_TOPIC_LINES;
-    let mut preview = content.lines().take(MAX_PER_TOPIC_LINES)
-        .collect::<Vec<_>>().join("\n");
+    let mut preview = content
+        .lines()
+        .take(MAX_PER_TOPIC_LINES)
+        .collect::<Vec<_>>()
+        .join("\n");
     if truncated_by_bytes || truncated_by_lines {
         let reason = if truncated_by_bytes {
             format!("{MAX_PER_TOPIC_BYTES} byte limit")
@@ -297,8 +331,10 @@ pub async fn context_with_recent_tools_excluding(
     session_units: usize,
 ) -> Result<MemoryContext> {
     let (index, files) = scan(root)?;
-    let excluded: std::collections::HashSet<&str> = already_surfaced.iter().map(String::as_str).collect();
-    let files = files.into_iter()
+    let excluded: std::collections::HashSet<&str> =
+        already_surfaced.iter().map(String::as_str).collect();
+    let files = files
+        .into_iter()
         .filter(|file| !excluded.contains(file.filename.as_str()))
         .collect::<Vec<_>>();
     let mut text = String::new();
@@ -308,7 +344,12 @@ pub async fn context_with_recent_tools_excluding(
         text.push('\n');
     }
     if files.is_empty() || session_units >= MAX_SESSION_MEMORY_UNITS {
-        return Ok(MemoryContext { text, usage: None, surfaced: Vec::new(), surfaced_units: 0 });
+        return Ok(MemoryContext {
+            text,
+            usage: None,
+            surfaced: Vec::new(),
+            surfaced_units: 0,
+        });
     }
     let manifest = files
         .iter()
@@ -361,7 +402,12 @@ pub async fn context_with_recent_tools_excluding(
         Ok(response) => response,
         Err(error) => {
             eprintln!("Local memory selection skipped: {error:#}");
-            return Ok(MemoryContext { text, usage: None, surfaced: Vec::new(), surfaced_units: 0 });
+            return Ok(MemoryContext {
+                text,
+                usage: None,
+                surfaced: Vec::new(),
+                surfaced_units: 0,
+            });
         }
     };
     if response
@@ -419,7 +465,10 @@ pub async fn context_with_recent_tools_excluding(
         let (contents, units) = match read_topic_preview(&file.path) {
             Ok(result) => result,
             Err(error) => {
-                eprintln!("Memory file {} could not be read: {error:#}", file.path.display());
+                eprintln!(
+                    "Memory file {} could not be read: {error:#}",
+                    file.path.display()
+                );
                 continue;
             }
         };
@@ -439,8 +488,7 @@ pub async fn context_with_recent_tools_excluding(
         let freshness = memory_age::freshness_note(age_ms);
         text.push_str(&format!(
             "\nRelevant local memory ({name}):\n{}{}\n",
-            freshness,
-            contents
+            freshness, contents
         ));
         surfaced.push(file.filename.clone());
         surfaced_units = surfaced_units.saturating_add(units);
