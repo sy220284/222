@@ -125,22 +125,64 @@ fn manifest_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
     Ok(hooks)
 }
 
-fn manifest_servers(value: &Value) -> Result<Vec<McpServerConfig>> {
+/// mcpPluginIntegration.ts loads .mcp.json first, then merges the manifest's
+/// mcpServers (inline map, file path or ordered array) with later entries
+/// overriding earlier entries for the same server name.
+fn mcp_file(root: &Path, relative: &str) -> Result<Value> {
+    let path = checked_component(root, &root.join(relative))?;
+    let document: Value = serde_json::from_slice(&fs::read(&path)?)
+        .with_context(|| format!("Invalid plugin MCP file {}", path.display()))?;
+    Ok(document.get("mcpServers").cloned().unwrap_or(document))
+}
+
+fn merge_server_specs(
+    root: &Path,
+    value: &Value,
+    servers: &mut std::collections::BTreeMap<String, Value>,
+) -> Result<()> {
     match value {
-        Value::Null => Ok(Vec::new()),
-        Value::Array(_) => Ok(serde_json::from_value(value.clone())?),
-        Value::Object(entries) => {
-            let mut servers = Vec::new();
-            for (name, config) in entries {
-                let mut config = config.clone();
-                let object = config.as_object_mut().context("Plugin MCP server must be an object")?;
-                object.insert("id".into(), Value::String(name.clone()));
-                servers.push(serde_json::from_value(config)?);
+        Value::Null => {}
+        Value::String(relative) => {
+            if relative.ends_with(".mcpb") {
+                bail!("MCPB plugin bundles require an installed bundle handler")
             }
-            Ok(servers)
+            merge_server_specs(root, &mcp_file(root, relative)?, servers)?;
         }
-        _ => bail!("Plugin MCP servers must be a map or array"),
+        Value::Array(specs) => {
+            for spec in specs {
+                if let Some(id) = spec.get("id").and_then(Value::as_str) {
+                    servers.insert(id.to_owned(), spec.clone());
+                } else {
+                    merge_server_specs(root, spec, servers)?;
+                }
+            }
+        }
+        Value::Object(entries) => {
+            for (name, config) in entries {
+                servers.insert(name.clone(), config.clone());
+            }
+        }
+        _ => bail!("Plugin MCP servers must be a map, path or array"),
     }
+    Ok(())
+}
+
+fn manifest_servers(root: &Path, value: &Value) -> Result<Vec<McpServerConfig>> {
+    let mut entries = std::collections::BTreeMap::new();
+    let standard = root.join(".mcp.json");
+    if standard.exists() {
+        merge_server_specs(root, &mcp_file(root, ".mcp.json")?, &mut entries)?;
+    }
+    merge_server_specs(root, value, &mut entries)?;
+    let mut servers = Vec::new();
+    for (name, config) in entries {
+        let mut config = config;
+        let object = config.as_object_mut()
+            .with_context(|| format!("Plugin MCP server {name} must be an object"))?;
+        object.insert("id".into(), Value::String(name));
+        servers.push(serde_json::from_value(config)?);
+    }
+    Ok(servers)
 }
 
 /// Validate an unpacked plugin before installing it. The original loader
@@ -157,7 +199,7 @@ pub fn validate_local(location: &Path) -> Result<String> {
     }
     let manifest = read_manifest(&location, fallback)?;
     let _ = manifest_hooks(&location, &manifest.hooks)?;
-    let _ = manifest_servers(&manifest.mcp_servers)?;
+    let _ = manifest_servers(&location, &manifest.mcp_servers)?;
     Ok(manifest.name)
 }
 
