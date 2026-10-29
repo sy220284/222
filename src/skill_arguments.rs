@@ -148,6 +148,80 @@ pub fn frontmatter_boolean(content: &str, key: &str) -> Option<bool> {
     if closed { found } else { None }
 }
 
+/// Return a top-level string field from a closed YAML frontmatter header.
+/// The SDK command catalog reads description and argument-hint from the same
+/// source file as the interactive slash command. Nested metadata must not
+/// override these user-visible fields.
+pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
+    let mut lines = content.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return None;
+    }
+    let mut result = None;
+    let mut closed = false;
+    while let Some(line) = lines.next() {
+        if line.trim() == "---" {
+            closed = true;
+            break;
+        }
+        if line.starts_with(' ') || line.starts_with('\t') {
+            continue;
+        }
+        let Some(raw) = line.strip_prefix(key).and_then(|tail| tail.strip_prefix(':')) else {
+            continue;
+        };
+        let raw = raw.trim();
+        if raw == "|" || raw == "|-" || raw == ">" || raw == ">-" {
+            let mut block = Vec::new();
+            while let Some(next) = lines.next() {
+                if next.trim() == "---" {
+                    closed = true;
+                    break;
+                }
+                if !next.trim().is_empty()
+                    && !next.starts_with(' ') && !next.starts_with('\t') {
+                    break;
+                }
+                block.push(next.trim());
+            }
+            result = Some(if raw.starts_with('>') {
+                block.join(" ").trim().to_owned()
+            } else {
+                block.join("\n").trim().to_owned()
+            });
+            if closed {
+                break;
+            }
+            // A block scalar ends at the next top-level key. The scalar has
+            // already been captured, so do not interpret following metadata.
+            break;
+        }
+        let value = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
+            serde_json::from_str::<String>(raw).unwrap_or_else(|_| raw[1..raw.len()-1].to_owned())
+        } else if raw.starts_with('\'') && raw.ends_with('\'') && raw.len() >= 2 {
+            raw[1..raw.len()-1].replace("''", "'")
+        } else {
+            raw.split(" #").next().unwrap_or("").trim().to_owned()
+        };
+        result = Some(value);
+    }
+    if closed { result } else { None }
+}
+
+/// SDK metadata comes from the real command/skill Markdown, with the same
+/// explicit frontmatter precedence as the original command loaders.
+pub fn command_metadata(content: &str, fallback: &str) -> (String, String) {
+    let description = frontmatter_text(content, "description")
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| markdown_body(content).lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty() && !line.starts_with("<!--"))
+            .map(|line| line.trim_start_matches('#').trim().to_owned()))
+        .unwrap_or_else(|| fallback.to_owned());
+    let hint = frontmatter_text(content, "argument-hint").unwrap_or_default();
+    (description, hint)
+}
+
 /// Reads optional arguments frontmatter declaration from SKILL.md.
 /// Supports whitespace-separated string, inline arrays, YAML multiline arrays.
 pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
