@@ -1,3 +1,11 @@
+## 2026-10-29：无工具 MCP 服务与资源/提示词完整目录（源码已提交，待验收）
+
+原版依据：`source/src/services/mcp/client.ts::fetchToolsForClient`（1743–1757 行）在服务未声明 `capabilities.tools` 时返回空工具列表，仍保留连接；`fetchResourcesForClient`（2000–2027 行）和 `fetchCommandsForClient`（2033–2046 行）分别按资源/提示词能力读取。Rust `src/mcp.rs::McpManager::connect_with_root` 以前无条件请求 `tools/list`，使仅提供资源或提示词的合法服务被误判连接失败。提交 `ded394f83f661c8c9b6ec61da1ce2745655cfc2b` 让此类服务正常连接，并继续使用现有目录和读取入口。
+
+另在 `McpManager::catalog` 补齐资源/提示词能力判断：不支持该能力的服务器返回空目录，避免把整个服务误判故障；移除 20 页、1,000 条目录的额外硬限制，继续遵守服务端游标及重复游标检测，支持大量 MCP 资源和提示词。提交 `d33aa9b8124dab4d8cca1a4182cb854e45a74d2a`。
+
+本段按**两个独立用户可感知功能**计数：资源/提示词专用 MCP 服务连接、完整资源/提示词目录读取。源码已提交、待行为验收；未运行 Cargo、测试或 CI，完整等价验收新增 0。仍缺动态资源/提示词列表变化后的主动刷新、断线重连时的目录缓存失效、跨厂商多模态等价；Issue #3 冻结 362 条不勾选。
+
 ## 2026-10-29：MCP 资源更新通知不再静默丢失（源码已提交，待验收）
 
 原版依据：`source/src/services/mcp/useManageMCPConnections.ts:705–730` 的资源列表变化通知回调会逐次处理事件，不设置 1,024 条静默丢弃门槛。Rust 原有 `src/mcp.rs::Client::request`、`src/mcp_http.rs::HttpClient::post/poll_notifications` 在资源通知积压达到 1,024 条后直接丢弃后续事件，SDK 无法获知全部更新。现移除 stdio、HTTP 请求附带 SSE、HTTP 独立 GET 三处静默上限，保留 `McpManager::drain_resource_updates` 的原有消费入口。源码提交 `1ea7832626d95e7bd641277cd418b6e45f492e4c`、`82c1eb66c4e9d3dd260f8eded24c65e5e823e960`。
