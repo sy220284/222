@@ -46,10 +46,19 @@ fn sessions_cli_searches_persisted_summaries_and_multimodal_conversation_text() 
         .unwrap();
     }
     let output = binary()
-        .args(["--workspace", root.path().to_str().unwrap(), "sessions", "deployment"])
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "sessions",
+            "deployment",
+        ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(text.contains(&summary_id.to_string()));
     assert!(text.contains(&transcript_id.to_string()));
