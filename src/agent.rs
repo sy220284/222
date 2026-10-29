@@ -326,6 +326,7 @@ impl Agent {
         let plugin_set = crate::plugins::PluginSet::load(
             &self.root, &config.enabled_plugins,
         )?;
+        let plugin_load_errors = plugin_set.errors.len();
         let mut hook_rules = config.hooks.clone();
         hook_rules.extend(plugin_set.hooks);
         let new_hooks = HookRunner::new(&hook_rules)?
@@ -359,7 +360,7 @@ impl Agent {
         self.hook_rules = hook_rules;
         self.enabled_plugins = config.enabled_plugins.clone();
         self.last_context_usage = None;
-        Ok(changes)
+        Ok(json!({"mcp_changes":changes,"plugin_error_count":plugin_load_errors}))
     }
 
     /// An SDK client can restore a previously observed file read after its
