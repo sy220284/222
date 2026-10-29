@@ -6405,13 +6405,22 @@ fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
         }
         for (id, action, payload) in [
             ("nested-1", "bridge_flush_start", json!({})),
-            ("nested-2", "bridge_flush_enqueue", json!({"messages":["nested"]})),
+            (
+                "nested-2",
+                "bridge_flush_enqueue",
+                json!({"messages":["nested"]}),
+            ),
             ("nested-3", "bridge_flush_end", json!({})),
         ] {
             let mut request = payload;
             request["subtype"] = json!(action);
-            writeln!(writer, "{}", json!({"type":"control_request", "request_id":id,
-                "request":request})).unwrap();
+            writeln!(
+                writer,
+                "{}",
+                json!({"type":"control_request", "request_id":id,
+                "request":request})
+            )
+            .unwrap();
         }
     }
     let output = child.wait_with_output().unwrap();
@@ -6435,6 +6444,12 @@ fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
     assert_eq!(response("8")["result"]["compat_id"], "session_123");
     assert_eq!(response("9")["result"]["reclaim_older_than_ms"], 5000);
     assert_eq!(response("10")["ok"], false);
-    let nested = values.iter().find(|value| value["response"]["request_id"] == "nested-3").unwrap();
-    assert_eq!(nested["response"]["response"]["messages"], json!(["nested"]));
+    let nested = values
+        .iter()
+        .find(|value| value["response"]["request_id"] == "nested-3")
+        .unwrap();
+    assert_eq!(
+        nested["response"]["response"]["messages"],
+        json!(["nested"])
+    );
 }
