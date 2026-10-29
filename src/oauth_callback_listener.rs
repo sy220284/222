@@ -164,6 +164,12 @@ impl AuthCodeListener {
     }
 
     async fn redirect_pending(&mut self, target: &str) -> Result<()> {
+        // auth-code-listener.ts returns immediately when there is no
+        // pending browser response. An already-completed or aborted flow
+        // must not fail just because a redirect URL is no longer needed.
+        if self.pending_response.is_none() {
+            return Ok(());
+        }
         let url = reqwest::Url::parse(target)?;
         if !matches!(url.scheme(), "http" | "https") || !url.username().is_empty() {
             bail!("OAuth completion redirect requires a valid HTTP(S) URL");
