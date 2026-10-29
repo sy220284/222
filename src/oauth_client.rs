@@ -483,12 +483,20 @@ mod tests {
         assert!(!is_oauth_token_expired(None));
         assert!(is_oauth_token_expired(Some(0)));
         assert!(OAuthProvider::new(
-            "http://example.org/authorize", "https://example.org/token", "x",
-            vec!["profile".into()], "https://example.org/manual"
-        ).is_err());
+            "http://example.org/authorize",
+            "https://example.org/token",
+            "x",
+            vec!["profile".into()],
+            "https://example.org/manual"
+        )
+        .is_err());
         assert!(OAuthProvider::new(
-            "https://user:secret@example.org/authorize", "https://example.org/token", "x",
-            vec!["profile".into()], "https://example.org/manual"
-        ).is_err());
+            "https://user:secret@example.org/authorize",
+            "https://example.org/token",
+            "x",
+            vec!["profile".into()],
+            "https://example.org/manual"
+        )
+        .is_err());
     }
 }
