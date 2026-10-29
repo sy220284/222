@@ -1475,6 +1475,11 @@ impl Agent {
         Ok(snapshot.render(self.last_model_usage, from_last_request))
     }
 
+    pub fn copy_response(&self, selection: &str) -> Result<String> {
+        let (age, code) = crate::copy_response::parse_selection(selection)?;
+        crate::copy_response::copy(&self.session.messages, age, code)
+    }
+
     pub fn files_in_context(&self) -> String {
         crate::files_context::render(&self.session.messages, &self.root)
     }
