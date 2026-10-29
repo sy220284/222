@@ -1,3 +1,9 @@
+## 2026-10-29：技能仅用户调用标志进入真实模型权限边界（已提交、待验收）
+
+- **原版**：`source/src/skills/loadSkillsDir.ts:216–258` 解析 `disable-model-invocation`；`source/src/tools/SkillTool/SkillTool.ts:405–423` 在模型调用前明确拒绝该技能。
+- **Rust**：`src/skill_arguments.rs::frontmatter_boolean` 统一解析顶层前置布尔字段；`src/tools.rs::ToolExecutor::list_skills` 排除禁止模型调用的本地/插件技能，`ToolExecutor::read_skill` 在读取实际内容后再次拒绝，避免模型绕过列表直接指定名称；用户侧插件斜杠技能仍按 `user-invocable` 单独控制。原版两个开关分别生效。
+- **提交**：`3913fa608d9a4d0a9423343acd6cd4c0c7ba24d4`、`299599fdcf7cca8d62bb3fe5105fd438d55de29d`、`cb2e0ace11fd695768085b935922bd40be937808`。保守新增 **1 项独立用户业务权限功能**，本轮累计 **10/100，剩余 90**。未运行 Cargo、测试或 CI，已提交、待验收；Issue #3 冻结 362 项继续开放，先行 100 项完整问题清单仍未建立。
+
 ## 2026-10-29：插件技能斜杠调用与命令目录接线（已提交、待验收）
 
 - **原版依据**：`source/src/utils/plugins/loadPluginCommands.ts:169–211,685–820` 把插件技能目录中的 `SKILL.md` 转成用户可调用命令，使用技能相对命名空间和 `user-invocable`；`source/src/skills/loadSkillsDir.ts:344–373` 提供技能目录和会话变量。
