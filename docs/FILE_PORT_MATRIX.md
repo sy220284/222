@@ -1691,7 +1691,7 @@
 | `src/utils/plugins/pluginFlagging.ts` | 209 | 5621 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginIdentifier.ts` | 124 | 3928 | 重写：保持通用行为 | `src/generated_ports/p_d5db58adb3fd2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/pluginInstallationHelpers.ts` | 596 | 20629 | 重写：保持通用行为 | `src/plugin_manager.rs` | 部分实现：本地插件安装时校验预期 ID、安装即启用、配置失败回滚；市场依赖闭包与原版多范围安装仍未迁移；本地插件安装、列举和卸载新增存储根路径符号链接/越界防护，避免安装写出工作区（2dd6c0b、14b097f），源码待验收 |
-| `src/utils/plugins/pluginLoader.ts` | 3303 | 110261 | 重写：保持通用行为 | `src/plugins.rs` | 部分实现：本地启用插件、MCP、Hooks、技能加载；市场与扩展生态未等价 |
+| `src/utils/plugins/pluginLoader.ts` | 3303 | 110261 | 重写：保持通用行为 | `src/plugins.rs` | 部分实现：本地启用插件、MCP、Hooks、技能加载；市场与扩展生态未等价；插件技能目录发现与读取统一限制在插件根目录，拒绝跨插件符号链接（e45e418、5b52f8e），待验收 |
 | `src/utils/plugins/pluginOptionsStorage.ts` | 401 | 15302 | 重写：保持通用行为 | `src/generated_ports/p_3b4c92a0203d8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/pluginPolicy.ts` | 21 | 827 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/plugins/pluginStartupCheck.ts` | 342 | 11096 | 重写：保持通用行为 | `src/generated_ports/p_6060310ec2cbf.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
