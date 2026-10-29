@@ -558,6 +558,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             "/help" => {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
+                println!("/status                  show live session, model, permissions and MCP status");
                 println!("/history [query]         search saved prompt history");
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
                 println!("/sessions [query]        search saved conversation titles");
@@ -616,6 +617,10 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             }
             "/session" => {
                 println!("{}", agent.session_id());
+                continue;
+            }
+            "/status" => {
+                println!("{}", agent.status_report()?);
                 continue;
             }
             "/sessions" => {
