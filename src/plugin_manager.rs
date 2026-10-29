@@ -309,6 +309,24 @@ fn reverse_dependents(root: &Path, config: &Config, target: &str) -> (Vec<String
 }
 
 
+/// Undo only directories created by the current install attempt. Never
+/// follow redirected plugin storage; report a rollback failure explicitly.
+fn rollback_new_installations(root: &Path, names: &[String]) -> Result<()> {
+    if names.is_empty() { return Ok(()); }
+    let home = checked_installed_root(root, false)?;
+    for name in names.iter().rev() {
+        let target = home.join(name);
+        let metadata = fs::symlink_metadata(&target)
+            .with_context(|| format!("Cannot inspect installed plugin '{name}' during rollback"))?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            bail!("Cannot safely roll back plugin '{name}'");
+        }
+        fs::remove_dir_all(&target)
+            .with_context(|| format!("Cannot roll back installed plugin '{name}'"))?;
+    }
+    Ok(())
+}
+
 /** Resolve the same dependency-first installation order as the source
  * dependencyResolver.ts::resolveDependencyClosure. Every source and managed
  * policy is checked before the first plugin is installed. */
@@ -556,10 +574,8 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                     ) {
                         // Restore the original installation set if any
                         // dependency or the root fails to materialize.
-                        if let Ok(home) = checked_installed_root(&root, false) {
-                            for created in &newly_installed {
-                                let _ = fs::remove_dir_all(home.join(created));
-                            }
+                        if let Err(cleanup) = rollback_new_installations(&root, &newly_installed) {
+                            bail!("Plugin installation failed: {error:#}; rollback also failed: {cleanup:#}");
                         }
                         return Err(error);
                     }
@@ -573,10 +589,8 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 }
             }
             if let Err(error) = config.save() {
-                if let Ok(home) = checked_installed_root(&root, false) {
-                    for created in &newly_installed {
-                        let _ = fs::remove_dir_all(home.join(created));
-                    }
+                if let Err(cleanup) = rollback_new_installations(&root, &newly_installed) {
+                    bail!("Cannot save plugin settings: {error:#}; rollback also failed: {cleanup:#}");
                 }
                 return Err(error);
             }
