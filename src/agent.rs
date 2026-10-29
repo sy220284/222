@@ -1692,7 +1692,10 @@ impl Agent {
                 eprintln!("{text}");
             }
             for mut call in calls {
-                let label = if matches!(call.function.name.as_str(), "run_command" | "Bash" | "PowerShell") {
+                let label = if matches!(
+                    call.function.name.as_str(),
+                    "run_command" | "Bash" | "PowerShell"
+                ) {
                     serde_json::from_str::<serde_json::Value>(&call.function.arguments)
                         .ok()
                         .and_then(|args| {
