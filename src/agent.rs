@@ -301,6 +301,18 @@ impl Agent {
         })
     }
 
+    fn tool_hook_input(&self) -> serde_json::Value {
+        let mut input = self.base_hook_input();
+        input["permission_mode"] = json!(self.permission_mode.label());
+        if let Some(agent_type) = self.prompt_role.as_deref() {
+            input["agent_type"] = json!(agent_type);
+        }
+        if self.child_depth > 0 {
+            input["agent_id"] = json!(self.session.id);
+        }
+        input
+    }
+
     fn task_hook_input(&self, id: &str, subject: &str, description: &str) -> serde_json::Value {
         let mut input = self.base_hook_input();
         input["task_id"] = json!(id);
@@ -2804,7 +2816,7 @@ impl Agent {
                 };
                 let mut pre_hook_failure = None;
                 let pre = if invalid_input.is_none() {
-                    match self.hooks.before_tool(&call).await {
+                    match self.hooks.before_tool_with_context(&call, self.tool_hook_input()).await {
                         Ok(outcome) => Some(outcome),
                         Err(error) => {
                             // An unhealthy user hook must not consume a sibling
@@ -2962,7 +2974,7 @@ impl Agent {
                 let (post, mut result): (crate::hooks::HookOutcome, String) = if skipped_tool {
                     (Default::default(), result)
                 } else {
-                    match self.hooks.after_tool(&call,&result).await {
+                    match self.hooks.after_tool_with_context(&call, &result, self.tool_hook_input()).await {
                         Ok(outcome)=>(outcome,result),
                         Err(error)=>(
                             Default::default(),
