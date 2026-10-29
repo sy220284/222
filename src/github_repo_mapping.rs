@@ -90,13 +90,18 @@ pub fn resolve_cwd(
         });
     }
     if let Some(repo) = repo {
-        for path in filter_existing_paths(&get_known_paths_for_repo(config, repo)) {
-            if validate_repo_at_path(&path, repo) {
-                return Ok(ResolvedDeepLinkCwd {
-                    cwd: path,
-                    resolved_repo: Some(repo.to_owned()),
-                });
-            }
+        // protocolHandler.ts calls getKnownPathsForRepo + filterExistingPaths:
+        // a previously recorded, existing clone wins even when its remote
+        // was later renamed or removed. validateRepoAtPath is a separate
+        // exported utility, not a prerequisite for resolving deep links.
+        if let Some(path) = filter_existing_paths(&get_known_paths_for_repo(config, repo))
+            .into_iter()
+            .next()
+        {
+            return Ok(ResolvedDeepLinkCwd {
+                cwd: path,
+                resolved_repo: Some(repo.to_owned()),
+            });
         }
     }
     Ok(ResolvedDeepLinkCwd {
@@ -137,6 +142,18 @@ mod tests {
         assert_eq!(found.cwd, known[0]);
         assert_eq!(found.resolved_repo.as_deref(), Some("Acme/Tools"));
         assert!(!validate_repo_at_path(project, "another/repo"));
+        // The source deep-link handler does not revalidate a tracked
+        // checkout's remote. A user may still open it after remote removal.
+        assert!(Command::new("git")
+            .args(["remote", "remove", "origin"])
+            .current_dir(project)
+            .status()
+            .unwrap()
+            .success());
+        assert!(!validate_repo_at_path(project, "Acme/Tools"));
+        let reopened = resolve_cwd(&config, None, Some("Acme/Tools")).unwrap();
+        assert_eq!(reopened.cwd, project.canonicalize().unwrap());
+        assert_eq!(reopened.resolved_repo.as_deref(), Some("Acme/Tools"));
         assert!(remove_path_from_repo(&mut config, "Acme/Tools", project));
         assert!(get_known_paths_for_repo(&config, "acme/tools").is_empty());
         let missing = resolve_cwd(&config, None, Some("Acme/Tools")).unwrap();
