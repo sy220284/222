@@ -112,6 +112,12 @@ fn copy_local_tree(source: &Path, stage: &Path) -> Result<()> {
 }
 
 pub fn install_local(root: &Path, location: &Path) -> Result<String> {
+    install_local_with_origin(root, location, None)
+}
+
+fn install_local_with_origin(
+    root: &Path, location: &Path, marketplace_id: Option<&str>,
+) -> Result<String> {
     let source = location
         .canonicalize()
         .with_context(|| format!("Cannot access plugin source {}", location.display()))?;
@@ -128,6 +134,13 @@ pub fn install_local(root: &Path, location: &Path) -> Result<String> {
     let stage = home.join(format!(".install-{}", Uuid::new_v4()));
     let result = (|| -> Result<()> {
         copy_local_tree(&source, &stage)?;
+        let origin = stage.join(".atlas-plugin-origin.json");
+        if origin.exists() {
+            bail!("Plugin source contains reserved installation metadata");
+        }
+        if let Some(plugin_id) = marketplace_id {
+            fs::write(&origin, serde_json::to_vec(&json!({"pluginId":plugin_id}))?)?;
+        }
         fs::rename(&stage, &target)?;
         PluginSet::load(root, std::slice::from_ref(&name))?;
         Ok(())
@@ -191,15 +204,20 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             marketplace,
             plugin,
         } => {
+            let mut marketplace_id = None;
             let local = if let Some(plugin_name) = plugin {
                 if let Some(marketplace) = marketplace.as_deref() {
+                    marketplace_id = Some(format!("{plugin_name}@{marketplace}"));
                     crate::marketplace_registry::resolve_local_plugin(
                         &root, marketplace, plugin_name,
                     )?
                 } else {
-                    crate::marketplace_registry::resolve_local_plugin_by_name(
-                        &root, plugin_name,
-                    )?.1
+                    let (marketplace, path) =
+                        crate::marketplace_registry::resolve_local_plugin_by_name(
+                            &root, plugin_name,
+                        )?;
+                    marketplace_id = Some(format!("{plugin_name}@{marketplace}"));
+                    path
                 }
             } else {
                 let path = marketplace.as_deref().context(
@@ -224,7 +242,18 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                     bail!("Requested plugin ID does not match the local manifest");
                 }
             }
-            let installed_name = install_local(&root, &local)?;
+            let policy = crate::permission_settings::SettingsPaths::for_workspace(&root)?;
+            let actual_name = manifest_name(&local.canonicalize()?)?;
+            if policy.plugin_blocked_by_policy(&actual_name)?
+                || marketplace_id.as_deref().is_some_and(|id| {
+                    policy.plugin_blocked_by_policy(id).unwrap_or(true)
+                })
+            {
+                bail!("Plugin '{actual_name}' is disabled by managed policy");
+            }
+            let installed_name = install_local_with_origin(
+                &root, &local, marketplace_id.as_deref(),
+            )?;
             // The original plugin install enables the resolved plugin in the
             // active settings scope. Installing without enabling leaves its
             // commands and skills invisible to the next agent session.
@@ -245,6 +274,10 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             let name = plugin.as_ref().context("Plugin name is required")?;
             if !valid_name(name) {
                 bail!("Invalid plugin name");
+            }
+            let policy = crate::permission_settings::SettingsPaths::for_workspace(&root)?;
+            if policy.plugin_blocked_by_policy(name)? {
+                bail!("Plugin '{name}' is disabled by managed policy");
             }
             PluginSet::load(&root, std::slice::from_ref(name))?;
             if config.enabled_plugins.contains(name) {
