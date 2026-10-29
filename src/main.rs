@@ -26,6 +26,7 @@ mod detect_repository;
 mod diagnostics;
 mod diff_view;
 mod env_runtime;
+mod exec_file;
 mod env_validation;
 mod event_signal;
 mod files_context;

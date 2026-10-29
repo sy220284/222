@@ -1024,3 +1024,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - `src/keybindings.rs` 的真实用户配置入口与 `src/session.rs` 的会话恢复入口复用统一 JSON 解析，新增带 BOM 的磁盘配置回归测试。
 - 新模块专项测试在首次编写后 5 项通过；修改后的源码运行了 Rust 格式检查。最新全部测试与 GitHub CI 需要按新 HEAD 完成核验。
 - 待补充源码差异：原版 jsonc-parser 的更复杂编辑布局、终端 setup 调用、其它配置与插件入口、不同文件编码等，保留部分实现状态。
+
+
+### 非抛出子进程公共执行链（2026-10-29）
+
+- 对照原版 `src/utils/execFileNoThrow.ts` 新增 `src/exec_file.rs`，处理 argv 执行、工作目录、环境、stdin/EOF、双流读取、非零退出码、保留/隐藏失败输出、超时取消及输出限制；所有结果为非抛出结构化值。
+- `src/mcp_http.rs` 的远程 MCP 动态 HTTP 凭据 helper 和 `src/portable_configuration.rs` 的 gh 认证检测采用共享执行器，保留原有环境隔离及权限入口。
+- 新增 9 项专项测试已本地通过。当前版本另有 Stop Hook 集成测试调整（已由并行提交完成）；本次保留该变更。
+- 未完差异：Windows cmd/.bat 规则、显式 shell 选项、全部同步/异步原版调用方接线及跨平台故障恢复验证，继续登记为部分实现。

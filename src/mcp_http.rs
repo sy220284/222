@@ -53,18 +53,22 @@ async fn load_dynamic_headers(
     command
         .current_dir(root)
         .env("ATLAS_MCP_SERVER_NAME", &config.id)
-        .env("ATLAS_MCP_SERVER_URL", url.as_str())
-        .kill_on_drop(true);
-    crate::subprocess_env::apply(&mut command);
-    let output = tokio::time::timeout(Duration::from_secs(10), command.output())
-        .await
-        .ok()?
-        .ok()?;
-    if !output.status.success() || output.stdout.is_empty() {
+        .env("ATLAS_MCP_SERVER_URL", url.as_str());
+    let output = crate::exec_file::execute(
+        command,
+        crate::exec_file::Options {
+            timeout: Duration::from_secs(10),
+            max_buffer: 1_000_000,
+            preserve_output_on_error: false,
+            ..Default::default()
+        },
+    )
+    .await;
+    if !output.success() || output.stdout.is_empty() {
         return None;
     }
     // Parsing into a string map rejects arrays, nulls, and non-string values.
-    serde_json::from_slice(&output.stdout).ok()
+    serde_json::from_str(&output.stdout).ok()
 }
 
 impl HttpClient {

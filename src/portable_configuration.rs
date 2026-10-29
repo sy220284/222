@@ -156,13 +156,20 @@ pub async fn gh_auth_status() -> GitHubAuthStatus {
         return GitHubAuthStatus::NotInstalled;
     };
     let mut cmd = tokio::process::Command::new(exe);
-    cmd.args(["auth", "token"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
-    crate::subprocess_env::apply(&mut cmd);
-    match tokio::time::timeout(std::time::Duration::from_secs(6), cmd.status()).await {
-        Ok(Ok(status)) if status.success() => GitHubAuthStatus::Authenticated,
-        _ => GitHubAuthStatus::NotAuthenticated,
+    cmd.args(["auth", "token"]);
+    let output = crate::exec_file::execute(
+        cmd,
+        crate::exec_file::Options {
+            timeout: std::time::Duration::from_secs(6),
+            preserve_output_on_error: false,
+            ..Default::default()
+        },
+    )
+    .await;
+    if output.success() {
+        GitHubAuthStatus::Authenticated
+    } else {
+        GitHubAuthStatus::NotAuthenticated
     }
 }
 // src/utils/immediateCommand.ts
