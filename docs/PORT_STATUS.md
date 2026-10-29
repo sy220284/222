@@ -1,5 +1,18 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：记忆召回与多模态压缩主链（源码已提交、待验收）
+
+对照完整原版 `source/src/memdir/memoryScan.ts`、`findRelevantMemories.ts`、`source/src/utils/attachments.ts::collectSurfacedMemories/readMemoriesForSurfacing/filterDuplicateMemoryAttachments`、`source/src/utils/frontmatterParser.ts`、`source/src/services/compact/compact.ts::stripImagesFromMessages` 与 `source/src/utils/messages.ts::getAssistantMessageText`，完成以下六条独立用户行为补齐：
+
+1. **记忆跨轮去重**：`src/memory.rs` 在选择模型请求前剔除已呈现主题；`src/session.rs` 持久保存已呈现路径和额度；`src/agent.rs` 在实际注入后保存，恢复会话继续去重，压缩历史后清零。
+2. **已读文件去重**：Agent 将 `files_context::paths` 重建的成功文件工具记录并入排除集，避免已通过文件工具打开的记忆再次占用五个召回名额。
+3. **记忆读取和总量预算**：主题文件按原版最多 200 行／4096 字节流式受限读取，超限保留前文并显示截断说明；单会话 60 Ki UTF-16 单元预算，超额停止额外选择但保留索引；拒绝指向外部的 MEMORY.md 符号链接。
+4. **记忆 YAML 描述解析**：解析 frontmatter 完整分隔符、引号转义、注释和多行 `|`/`>` 描述，识别原版四种记忆类型；复杂 YAML 语法仍待完整解析器对照。
+5. **多模态压缩媒体净化**：`src/agent.rs::compact_history` 在送入模型前替换用户消息和嵌套工具结果中的图片／文档二进制块为文本标记，原始持久历史保持不变。
+6. **多模态压缩摘要恢复**：压缩模型返回结构化 `text` 块时按原版拼接为摘要，避免仅支持扁平 `content` 的错误。
+
+实际代码提交：`30d2b018`、`e3443884`、`e044232e`、`ad75f8ea`、`5fe1c444`、`4a7bb1d4`、`ac120f46`、`2f93e430`；并行任务一度覆盖 Agent 接线，已从同期最新源码恢复并保留其他改动。只计 **6/100 项源码补齐、待验收**，未运行 Cargo/测试/CI；冻结 Issue #3 的 362 项仍全部未验收。后续需核对内存附件与原版消息级生命周期、复杂 YAML、完整多模态压缩重试、取消及预算边界。未完成其余 94 项，且未预先完成 100 项逐业务缺口核实，不以候选路径充数。
+
 ## 2026-10-29：自定义智能体中文与表情长度校验（源码已提交、待验收）
 
 对照原版 `source/src/components/agents/validateAgent.ts` 的 JavaScript `.length` 语义，修复 Rust `src/agent_definition.rs::validate` 直接使用 UTF-8 字节数导致中文、表情等多字节字符说明/系统提示词过早满足最小长度或触发过长警告的问题。现在按 UTF-16 单元分别执行描述 10/5000 与系统提示词 20/10000 的原版阈值判断。提交 `ed961085`。另对照 `source/src/tools/AgentTool/agentToolUtils.ts::resolveAgentTools`、`source/src/utils/permissions/permissionRuleParser.ts`，将 `Bash(git *)`、`Read(path)`、`Agent(Explore)` 等权限格式的工具规格先解析为基础工具名，匹配 Rust 厂商中立工具别名；保留 Agent 子代理类型规则的原版有效性，避免错误拒绝自定义智能体。提交 `012ebf7a`。真实 CLI 智能体定义校验入口保持接线；源码已提交待行为验收，未运行 Cargo/测试/CI。
