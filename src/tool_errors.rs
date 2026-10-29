@@ -81,12 +81,12 @@ pub fn format_validation_error(tool_name: &str, issues: &[Value], original: &str
         let path = validation_path(issue.get("path").unwrap_or(&Value::Null));
         match code {
             "invalid_type" if message.contains("received undefined") => {
-                parts.push(format!("The required parameter '{path}' is missing"));
+                parts.push(format!("The required parameter `{path}` is missing"));
             }
             "unrecognized_keys" => {
                 if let Some(keys) = issue.get("keys").and_then(Value::as_array) {
                     for key in keys.iter().filter_map(Value::as_str) {
-                        parts.push(format!("An unexpected parameter '{key}' was provided"));
+                        parts.push(format!("An unexpected parameter `{key}` was provided"));
                     }
                 }
             }
@@ -101,7 +101,7 @@ pub fn format_validation_error(tool_name: &str, issues: &[Value], original: &str
                     .filter(|s| !s.is_empty())
                     .unwrap_or("unknown");
                 parts.push(format!(
-                    "The parameter '{path}' type is expected as '{expected}' but provided as '{received}'"
+                    "The parameter `{path}` type is expected as `{expected}` but provided as `{received}`"
                 ));
             }
             _ => {}
@@ -154,6 +154,8 @@ mod tests {
         assert!(output.contains("bad"));
         assert!(output.contains("count"));
         assert!(output.contains("3 issues"));
+        assert!(output.contains("The required parameter `todos[0].activeForm` is missing"));
+        assert!(output.contains("An unexpected parameter `bad` was provided"));
         assert_eq!(format_validation_error("X", &[], "original"), "original");
     }
 }
