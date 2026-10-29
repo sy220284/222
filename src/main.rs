@@ -290,11 +290,8 @@ async fn main() -> Result<()> {
             callback_path,
             port,
         } => {
-            let mut listener = oauth_callback_listener::AuthCodeListener::start(
-                callback_path,
-                *port,
-            )
-            .await?;
+            let mut listener =
+                oauth_callback_listener::AuthCodeListener::start(callback_path, *port).await?;
             println!(
                 "OAuth callback listening on http://127.0.0.1:{}{}",
                 listener.port(),
