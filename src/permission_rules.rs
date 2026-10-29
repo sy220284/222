@@ -97,6 +97,25 @@ pub fn match_wildcard(pattern:&str,command:&str,case_insensitive:bool)->Result<b
         .case_insensitive(case_insensitive).dot_matches_new_line(true).build()?;
     Ok(compiled.is_match(command))
 }
+
+pub fn suggestion_for_exact_command(tool_name:&str, command:&str)->Value{
+    serde_json::json!([{
+        "type":"addRules",
+        "rules":[{"toolName":tool_name,"ruleContent":command}],
+        "behavior":"allow",
+        "destination":"localSettings"
+    }])
+}
+
+pub fn suggestion_for_prefix(tool_name:&str, prefix:&str)->Value{
+    serde_json::json!([{
+        "type":"addRules",
+        "rules":[{"toolName":tool_name,"ruleContent":format!("{prefix}:*")}],
+        "behavior":"allow",
+        "destination":"localSettings"
+    }])
+}
+
 pub fn matches_content(rule:&str,command:&str)->Result<bool>{
     if let Some(prefix)=extract_prefix(rule){
         return Ok(command==prefix ||
@@ -319,6 +338,46 @@ pub fn policy_for(rules:&[Rule],tool:&str,args:&Value)->Result<Option<Behavior>>
 mod tests{
     use super::*;
     use serde_json::json;
+
+
+    #[test]
+    fn original_shell_rule_permission_suggestions_are_exact(){
+        // Ref: src/utils/permissions/shellRuleMatching.ts:189-228.
+        assert_eq!(suggestion_for_exact_command("Bash","git status"),json!([{
+            "type":"addRules",
+            "rules":[{"toolName":"Bash","ruleContent":"git status"}],
+            "behavior":"allow",
+            "destination":"localSettings"
+        }]));
+        assert_eq!(suggestion_for_prefix("Bash","npm"),json!([{
+            "type":"addRules",
+            "rules":[{"toolName":"Bash","ruleContent":"npm:*"}],
+            "behavior":"allow",
+            "destination":"localSettings"
+        }]));
+        assert_eq!(suggestion_for_prefix("PowerShell","Get-ChildItem"),json!([{
+            "type":"addRules",
+            "rules":[{"toolName":"PowerShell","ruleContent":"Get-ChildItem:*"}],
+            "behavior":"allow",
+            "destination":"localSettings"
+        }]));
+        assert_eq!(suggestion_for_exact_command("Bash","echo 'a:b(*)'")[0]["rules"][0]["ruleContent"],
+            "echo 'a:b(*)'");
+    }
+
+    #[test]
+    fn original_wildcard_single_trailing_optional_args(){
+        assert!(match_wildcard("git *","git",false).unwrap());
+        assert!(match_wildcard("git *","git status",false).unwrap());
+        assert!(!match_wildcard("git *","gitx",false).unwrap());
+        assert!(!match_wildcard("npm * run *","npm run",false).unwrap());
+        assert!(match_wildcard("npm * run *","npm ci run test",false).unwrap());
+        assert!(match_wildcard("GIT *","git status",true).unwrap());
+        assert!(!match_wildcard("GIT *","git status",false).unwrap());
+        assert!(match_wildcard("a*b","a\nb",false).unwrap());
+        assert_eq!(extract_prefix("npm:*"),Some("npm"));
+        assert!(!has_wildcards("npm:*"));
+    }
 
     #[test]
     fn read_rules_apply_to_requested_and_resolved_paths_with_glob_semantics(){
