@@ -492,7 +492,11 @@ mod tests {
             &json!({"permissions":{"deny":["Bash(touch forbidden)"]}}),
         );
         let loaded = paths.load(&[]).unwrap();
-        assert_eq!(loaded.len(), 2, "invalid source must not leak partial rules");
+        assert_eq!(
+            loaded.len(),
+            2,
+            "invalid source must not leak partial rules"
+        );
         let executor = ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Ask, false)
             .with_permission_rules(compile_rules(&loaded).unwrap());
         let call = |command: &str| ToolCall {
