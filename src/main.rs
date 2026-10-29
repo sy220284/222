@@ -2210,8 +2210,16 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             "keep_alive" => {}
             "control_request" if event.get("request").is_some() => {
                 print_json!(
-                    sdk_nested_control(agent, config, &event, &mut queue, &mut bridge_session, &mut sdk_initialized, &mut sdk_end_requested)
-                        .await
+                    sdk_nested_control(
+                        agent,
+                        config,
+                        &event,
+                        &mut queue,
+                        &mut bridge_session,
+                        &mut sdk_initialized,
+                        &mut sdk_end_requested
+                    )
+                    .await
                 );
                 if sdk_end_requested {
                     break;
@@ -2451,7 +2459,9 @@ async fn sdk_nested_control(
                     "account":{},"pid":std::process::id()}))
             }
             "mcp_reconnect" => {
-                let server = request.get("serverName").and_then(Value::as_str)
+                let server = request
+                    .get("serverName")
+                    .and_then(Value::as_str)
                     .filter(|name| !name.is_empty())
                     .ok_or_else(|| anyhow::anyhow!("mcp_reconnect requires serverName"))?;
                 agent.reconnect_named_mcp(server).await?;
