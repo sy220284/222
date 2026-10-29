@@ -136,6 +136,16 @@ fn finish_team_member(
     Ok(())
 }
 
+/// SDK-supplied agent definitions are scoped to this live SDK stream.
+/// Unsupported execution controls are rejected during initialization rather
+/// than being silently advertised as if they were enforced.
+#[derive(Clone, Debug)]
+struct SdkAgentDefinition {
+    description: String,
+    prompt: String,
+    model: Option<String>,
+}
+
 pub struct Agent {
     profile: ProviderProfile,
     provider: Box<dyn ModelProvider>,
@@ -193,6 +203,7 @@ pub struct Agent {
     sdk_append_system_prompt: Option<String>,
     /// None restores provider defaults, zero disables thinking where supported.
     sdk_thinking_budget: Option<u32>,
+    sdk_agent_definitions: std::collections::BTreeMap<String, SdkAgentDefinition>,
 }
 
 /// Match the source getTaskListId priority, with a provider-neutral explicit
@@ -314,6 +325,7 @@ impl Agent {
             sdk_system_prompt: None,
             sdk_append_system_prompt: None,
             sdk_thinking_budget: None,
+            sdk_agent_definitions: std::collections::BTreeMap::new(),
         })
     }
 
@@ -420,6 +432,49 @@ impl Agent {
         self.last_context_usage = None;
         self.last_side_question_request = None;
         Ok(json!({"mcp_changes":changes,"plugin_error_count":plugin_load_errors}))
+    }
+
+    /// Source tools/AgentTool/loadAgentsDir.ts::parseAgentsFromJson and
+    /// cli/print.ts::handleInitializeRequest: SDK definitions are transient,
+    /// appear in the public catalog, and change actual delegated model turns.
+    /// Reject fields whose behavior is not yet supported (especially tool
+    /// restrictions) so a caller cannot accidentally receive broader access.
+    pub fn set_sdk_agent_definitions(&mut self, input: &serde_json::Value) -> Result<()> {
+        let definitions = input.as_object().context("initialize agents must be an object")?;
+        let mut parsed = std::collections::BTreeMap::new();
+        for (name, value) in definitions {
+            if let Some(error) = crate::agent_definition::validate_agent_type(name) {
+                bail!("Invalid SDK agent {name}: {error}");
+            }
+            let definition = value.as_object()
+                .with_context(|| format!("SDK agent {name} must be an object"))?;
+            for field in definition.keys() {
+                if !matches!(field.as_str(), "description" | "prompt" | "model") {
+                    bail!("SDK agent {name} field {field} is not yet supported");
+                }
+            }
+            let description = definition.get("description")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .with_context(|| format!("SDK agent {name} requires description"))?;
+            let prompt = definition.get("prompt")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .with_context(|| format!("SDK agent {name} requires prompt"))?;
+            let model = match definition.get("model") {
+                None => None,
+                Some(serde_json::Value::String(value)) if value == "inherit" => None,
+                Some(serde_json::Value::String(value)) if !value.trim().is_empty() => Some(value.clone()),
+                Some(_) => bail!("SDK agent {name} model must be a nonempty string"),
+            };
+            parsed.insert(name.clone(), SdkAgentDefinition {
+                description: description.to_owned(),
+                prompt: prompt.to_owned(),
+                model,
+            });
+        }
+        self.sdk_agent_definitions = parsed;
+        Ok(())
     }
 
     /// An SDK client can restore a previously observed file read after its
@@ -1400,8 +1455,16 @@ impl Agent {
             .as_ref()
             .map(|w| w.path.clone())
             .unwrap_or_else(|| self.root.clone());
+        let agent_type = args
+            .get("subagent_type")
+            .or_else(|| args.get("agent_type"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("general")
+            .to_owned();
+        let sdk_definition = self.sdk_agent_definitions.get(&agent_type).cloned();
         let mut child_profile = self.profile.clone();
-        if let Some(model) = args.get("model").and_then(|v| v.as_str()) {
+        if let Some(model) = args.get("model").and_then(|v| v.as_str())
+            .or_else(|| sdk_definition.as_ref().and_then(|definition| definition.model.as_deref())) {
             if model.trim().is_empty() {
                 bail!("Subagent model cannot be empty");
             }
@@ -1430,13 +1493,10 @@ impl Agent {
         child.model_prices = self.model_prices.clone();
         child.permission_mode = self.permission_mode;
         let child_id = child.session_id();
-        let agent_type = args
-            .get("subagent_type")
-            .or_else(|| args.get("agent_type"))
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("general")
-            .to_owned();
         child.prompt_role = Some(agent_type.clone());
+        if let Some(definition) = sdk_definition {
+            child.set_sdk_system_prompts(Some(&definition.prompt), None);
+        }
         let result = async {
             let inherited_mcp = self.mcp.as_ref().map_or_else(
                 || self.mcp_configs.clone(), McpManager::configured_servers);
@@ -2148,6 +2208,13 @@ impl Agent {
                 }
                 found.insert(name, agent);
             }
+        }
+        for (name, definition) in &self.sdk_agent_definitions {
+            let mut descriptor = json!({"name":name,"description":definition.description});
+            if let Some(model) = &definition.model {
+                descriptor["model"] = json!(model);
+            }
+            found.insert(name.clone(), descriptor);
         }
         Ok(found.into_values().collect())
     }
