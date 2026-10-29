@@ -1,3 +1,10 @@
+## 2026-10-29：Glob 绝对路径通配符跨授权目录搜索（源码已提交、待验收）
+
+- **原版源码**：`source/src/utils/glob.ts:12–84::extractGlobBaseDirectory/glob`。原版绝对通配符从首个特殊字符前的静态目录开始遍历，支持不显式传入 `path` 的绝对文件名/路径模式。
+- **Rust 真实入口**：Agent `glob_files(pattern="/authorized/other/**/*.rs")` → `ToolExecutor::dispatch` → `search::absolute_glob_base` 取得真实静态根 → `checked_path` 核对主工作区或显式授权附加目录 → `require_read_rules` 审批实际搜索根 → `glob_files_filtered` 逐目录/文件执行 Read deny 排除 → 返回文件列表。避免原实现将所有绝对模式强行限定在默认 `path` 下而误拒绝已授权目录。
+- **代码提交**：`814bb0d32978eb6b3eb0ce6cd8008e752246838c`、`33dc985b8dbb029f4d4f39f52b2c565da44cc356`。保守新增 **1 条独立用户可感知功能**；本次累计 **3/100，剩余 97**。未运行 Cargo、测试或 CI；已提交、待行为验收，完整等价验收 0，Issue #3 冻结 362 项继续开放。
+- **剩余差异**：Windows 驱动器/UNC 特殊模式、通配符内非规范路径、插件缓存排除、动态结果上限、取消与超时、Glob UI 展示仍待源码与行为验收；100 条前置完整缺口清单尚未建立。
+
 ## 2026-10-29：Glob/Grep 搜索逐文件读取权限与错误传播（源码已提交、待验收）
 
 - **原版完整源码**：`source/src/tools/GrepTool/GrepTool.ts:411–435` 在 ripgrep 搜索前加入 `getFileReadIgnorePatterns` 生成的排除规则；`source/src/utils/glob.ts:86–117` 对文件名搜索应用相同 Read 排除；`source/src/utils/permissions/filesystem.ts:800–851` 汇总并按搜索目录转换 Read deny 规则；`source/src/utils/ripgrep.ts:382–388` 对 EACCES/EPERM 关键读取错误显式失败。
