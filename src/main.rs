@@ -10,6 +10,7 @@ mod command_manifest;
 mod compat_helpers;
 mod config;
 mod control_message_compat;
+mod diagnostics;
 mod cost;
 mod deep_link;
 mod env_validation;
@@ -161,6 +162,8 @@ impl From<ApprovalArg> for Approval {
 enum Commands {
     /// Create a user-owned JSON config file with example providers
     Init,
+    /// Inspect local installation, settings, Git and MCP availability offline
+    Doctor,
     /// Parse a provider-neutral deep link without opening a terminal
     ParseDeepLink { uri: String },
     /// Encode an atlas-cli://open link for a reviewable prompt/workspace
@@ -247,6 +250,20 @@ async fn main() -> Result<()> {
     if let Commands::Init = &cli.command {
         let path = Config::init()?;
         println!("Created {}", path.display());
+        return Ok(());
+    }
+    if let Commands::Doctor = &cli.command {
+        let root = canonical_workspace(&cli.workspace)?;
+        match Config::load() {
+            Ok(config) => println!(
+                "{}",
+                diagnostics::render(&diagnostics::inspect(&root, Some(&config)))
+            ),
+            Err(error) => {
+                println!("{}", diagnostics::render(&diagnostics::inspect(&root, None)));
+                println!("[WARN] Configuration: {error:#}");
+            }
+        }
         return Ok(());
     }
     if let Commands::RenderAnsiSvg { text, options } = &cli.command {
@@ -587,6 +604,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!(
                     "/status                  show live session, model, permissions and MCP status"
                 );
+                println!("/doctor                  run local installation and configuration diagnostics");
                 println!("/history [query]         search saved prompt history");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
@@ -651,6 +669,21 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             }
             "/status" => {
                 println!("{}", agent.status_report()?);
+                continue;
+            }
+            "/doctor" => {
+                println!(
+                    "{}",
+                    diagnostics::render(&diagnostics::inspect(
+                        agent.workspace_root(),
+                        Some(config)
+                    ))
+                );
+                for status in agent.mcp_statuses()? {
+                    let name = status["name"].as_str().unwrap_or("unnamed");
+                    let state = status["status"].as_str().unwrap_or("unknown");
+                    println!("Live MCP: {name}: {state}");
+                }
                 continue;
             }
             "/sessions" => {
