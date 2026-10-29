@@ -1053,7 +1053,6 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir(root.path().join("sub")).unwrap();
         fs::write(root.path().join(".ignore"), "*.tmp\n!allowed.tmp\n").unwrap();
-        fs::write(root.path().join(".rgignore"), "!special.tmp\n").unwrap();
         fs::write(root.path().join("one.tmp"), "needle").unwrap();
         fs::write(root.path().join("allowed.tmp"), "needle").unwrap();
         fs::write(root.path().join("special.tmp"), "needle").unwrap();
@@ -1062,7 +1061,7 @@ mod tests {
         fs::write(root.path().join("sub/visible.rs"), "needle").unwrap();
         fs::create_dir(root.path().join("blocked")).unwrap();
         fs::write(root.path().join("blocked/keep.rs"), "needle").unwrap();
-        fs::write(root.path().join(".rgignore"), "!special.tmp\\nblocked/\\n!blocked/keep.rs\\n").unwrap();
+        fs::write(root.path().join(".rgignore"), "!special.tmp\nblocked/\n!blocked/keep.rs\n").unwrap();
         let result: Value = serde_json::from_str(
             &grep_files(root.path(), root.path(),
                 &json!({"pattern":"needle","output_mode":"files_with_matches"})).unwrap()
