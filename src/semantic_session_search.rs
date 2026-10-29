@@ -21,7 +21,11 @@ fn excerpt(messages: &[Message]) -> String {
     let selected: Vec<_> = if messages.len() <= 100 {
         messages.iter().collect()
     } else {
-        messages.iter().take(50).chain(messages.iter().skip(messages.len() - 50)).collect()
+        messages
+            .iter()
+            .take(50)
+            .chain(messages.iter().skip(messages.len() - 50))
+            .collect()
     };
     let text = selected
         .into_iter()
@@ -56,28 +60,39 @@ fn excerpt(messages: &[Message]) -> String {
 }
 
 fn prompt(query: &str, candidates: &[(SessionItem, Option<Session>)]) -> String {
-    let descriptions = candidates.iter().enumerate().map(|(index, (item, loaded))| {
-        let mut fields = vec![format!("{index}: {}", item.title)];
-        if let Some(tag) = item.tag.as_deref() {
-            fields.push(format!("[tag: {tag}]"));
-        }
-        if let Some(session) = loaded {
-            if let Some(summary) = session.summary.as_deref() {
-                fields.push(format!("- Summary: {}", summary.chars().take(2_000).collect::<String>()));
+    let descriptions = candidates
+        .iter()
+        .enumerate()
+        .map(|(index, (item, loaded))| {
+            let mut fields = vec![format!("{index}: {}", item.title)];
+            if let Some(tag) = item.tag.as_deref() {
+                fields.push(format!("[tag: {tag}]"));
             }
-            if let Some(first) = session.messages.iter().find(|m| m.role == "user") {
-                let text = excerpt(std::slice::from_ref(first));
+            if let Some(session) = loaded {
+                if let Some(summary) = session.summary.as_deref() {
+                    fields.push(format!(
+                        "- Summary: {}",
+                        summary.chars().take(2_000).collect::<String>()
+                    ));
+                }
+                if let Some(first) = session.messages.iter().find(|m| m.role == "user") {
+                    let text = excerpt(std::slice::from_ref(first));
+                    if !text.is_empty() {
+                        fields.push(format!(
+                            "- First message: {}",
+                            text.chars().take(300).collect::<String>()
+                        ));
+                    }
+                }
+                let text = excerpt(&session.messages);
                 if !text.is_empty() {
-                    fields.push(format!("- First message: {}", text.chars().take(300).collect::<String>()));
+                    fields.push(format!("- Transcript: {text}"));
                 }
             }
-            let text = excerpt(&session.messages);
-            if !text.is_empty() {
-                fields.push(format!("- Transcript: {text}"));
-            }
-        }
-        fields.join(" ")
-    }).collect::<Vec<_>>().join("\n");
+            fields.join(" ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     format!("Sessions:\n{descriptions}\n\nSearch query: \"{query}\"\n\nFind relevant sessions.")
 }
 
@@ -95,7 +110,8 @@ fn parse_indices(text: &str, limit: usize) -> Vec<usize> {
         return Vec::new();
     };
     let mut seen = HashSet::new();
-    indices.iter()
+    indices
+        .iter()
         .filter_map(Value::as_u64)
         .filter_map(|index| usize::try_from(index).ok())
         .filter(|index| *index < limit && seen.insert(*index))
@@ -119,21 +135,31 @@ pub async fn search(
     }
     let matching = session_control::search(root, query)?;
     let matching_ids: HashSet<_> = matching.iter().map(|item| item.id).collect();
-    let candidates = matching.into_iter()
-        .chain(recent.into_iter().filter(|item| !matching_ids.contains(&item.id)))
+    let candidates = matching
+        .into_iter()
+        .chain(
+            recent
+                .into_iter()
+                .filter(|item| !matching_ids.contains(&item.id)),
+        )
         .take(MAX_SESSIONS)
         .map(|item| {
             let loaded = Session::load(root, &item.id.to_string()).ok();
             (item, loaded)
         })
         .collect::<Vec<_>>();
-    let result = provider.complete(&ModelRequest {
-        model: model.to_owned(),
-        system: SYSTEM.into(),
-        messages: vec![Message::text("user", prompt(query, &candidates))],
-        tools: Vec::new(),
-    }).await?;
-    let ranked = result.message.content.as_deref()
+    let result = provider
+        .complete(&ModelRequest {
+            model: model.to_owned(),
+            system: SYSTEM.into(),
+            messages: vec![Message::text("user", prompt(query, &candidates))],
+            tools: Vec::new(),
+        })
+        .await?;
+    let ranked = result
+        .message
+        .content
+        .as_deref()
         .map(|text| parse_indices(text, candidates.len()))
         .unwrap_or_default()
         .into_iter()
@@ -145,9 +171,9 @@ pub async fn search(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::ModelResponse;
     use anyhow::Result;
     use async_trait::async_trait;
-    use crate::protocol::ModelResponse;
     use std::sync::Mutex;
 
     struct Ranker {
@@ -157,7 +183,10 @@ mod tests {
     #[async_trait]
     impl ModelProvider for Ranker {
         async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
-            self.calls.lock().unwrap().push(request.messages[0].content.clone().unwrap_or_default());
+            self.calls
+                .lock()
+                .unwrap()
+                .push(request.messages[0].content.clone().unwrap_or_default());
             Ok(ModelResponse {
                 message: Message::text("assistant", &self.answer),
                 finish_reason: Some("stop".into()),
@@ -172,12 +201,17 @@ mod tests {
     }
     #[test]
     fn invalid_and_duplicate_indices_are_ignored() {
-        assert_eq!(parse_indices("Here: {\"relevant_indices\":[2,2,0,-1,90,\"1\"]}", 3), vec![2, 0]);
+        assert_eq!(
+            parse_indices("Here: {\"relevant_indices\":[2,2,0,-1,90,\"1\"]}", 3),
+            vec![2, 0]
+        );
         assert!(parse_indices("nonsense", 3).is_empty());
     }
     #[test]
     fn transcript_is_first_and_last_50_and_at_most_2000_chars() {
-        let messages: Vec<_> = (0..110).map(|i| Message::text("user", format!("entry-{i}"))).collect();
+        let messages: Vec<_> = (0..110)
+            .map(|i| Message::text("user", format!("entry-{i}")))
+            .collect();
         let result = excerpt(&messages);
         assert!(result.contains("entry-0"));
         assert!(result.contains("entry-109"));
@@ -193,7 +227,9 @@ mod tests {
         relevant.custom_title = Some("Release notes".into());
         relevant.tag = Some("release".into());
         relevant.summary = Some("Compiled changelog".into());
-        relevant.messages.push(Message::text("user", "Publish notes"));
+        relevant
+            .messages
+            .push(Message::text("user", "Publish notes"));
         relevant.save(root.path()).unwrap();
         let mut other = Session::fresh();
         other.custom_title = Some("Review auth".into());
@@ -203,8 +239,13 @@ mod tests {
             answer: "{\"relevant_indices\":[1,0,1,500]}".into(),
             calls: Mutex::new(Vec::new()),
         };
-        let (ranked, usage) = search(root.path(), "release", &ranker, "local").await.unwrap();
-        assert_eq!(ranked.iter().map(|item| item.id).collect::<Vec<_>>(), vec![other.id, relevant.id]);
+        let (ranked, usage) = search(root.path(), "release", &ranker, "local")
+            .await
+            .unwrap();
+        assert_eq!(
+            ranked.iter().map(|item| item.id).collect::<Vec<_>>(),
+            vec![other.id, relevant.id]
+        );
         assert_eq!(usage.unwrap().total_tokens, 5);
         let prompt = ranker.calls.lock().unwrap()[0].clone();
         assert!(prompt.contains("[tag: release]"));
@@ -214,7 +255,10 @@ mod tests {
     #[tokio::test]
     async fn blank_query_never_invokes_model() {
         let root = tempfile::tempdir().unwrap();
-        let ranker = Ranker { answer: String::new(), calls: Mutex::new(Vec::new()) };
+        let ranker = Ranker {
+            answer: String::new(),
+            calls: Mutex::new(Vec::new()),
+        };
         let (results, usage) = search(root.path(), " ", &ranker, "local").await.unwrap();
         assert!(results.is_empty());
         assert!(usage.is_none());
