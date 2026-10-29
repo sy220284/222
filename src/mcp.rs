@@ -605,6 +605,34 @@ impl McpManager {
         else{self.resource_subscriptions.remove(&key);}
         Ok(json!({"subscribed":subscribe}))
     }
+    /// Explicit SDK long poll for MCP Streamable HTTP independent GET events.
+    /// A shared deadline avoids multiplying the requested wait by the
+    /// number of configured servers. Stdio events are drained normally.
+    pub async fn poll_resource_updates(&mut self,max_wait:Duration)->Value{
+        let start=std::time::Instant::now();
+        let mut errors=Vec::new();
+        for position in 0..self.status_clients.len(){
+            let Some(client_index)=self.status_clients[position] else{continue};
+            let remaining=max_wait.saturating_sub(start.elapsed());
+            if remaining.is_zero(){break}
+            let outcome=match &mut self.clients[client_index]{
+                TransportClient::Http(client)=>Some(client.poll_notifications(remaining).await),
+                TransportClient::Stdio(_)=>None,
+            };
+            if let Some(Err(error))=outcome{
+                let name=self.server_statuses[position]["name"].as_str()
+                    .unwrap_or("unknown").to_owned();
+                if format!("{error:#}").contains("session expired"){
+                    self.server_statuses[position]["status"]=json!("failed");
+                    self.server_statuses[position]["error"]=json!("MCP session expired");
+                }
+                errors.push(json!({"server":name,"error":format!("{error:#}")}));
+            }
+        }
+        let mut result=self.drain_resource_updates();
+        result["errors"]=json!(errors);
+        result
+    }
     pub fn drain_resource_updates(&mut self)->Value{
         let mut updates=Vec::new();
         for (status,which) in self.server_statuses.iter()

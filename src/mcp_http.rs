@@ -17,6 +17,7 @@ pub struct HttpClient {
     pub tools_changed:bool,
     pub resource_updates:Vec<Value>,
     root:PathBuf,
+    last_event_id:Option<HeaderValue>,
 }
 impl HttpClient{
     pub async fn connect(config:&McpServerConfig)->Result<Self>{
@@ -34,7 +35,7 @@ impl HttpClient{
         for (key,value) in &config.headers{
             let key=HeaderName::from_str(key).context("Invalid MCP header name")?;
             if matches!(key.as_str(),"accept"|"content-type"|"mcp-session-id"|
-                "mcp-protocol-version"|"host"){
+                "mcp-protocol-version"|"host"|"last-event-id"){
                 bail!("MCP reserved header cannot be overridden: {key}");
             }
             let expanded=compat_helpers::expand_env_vars_in_string(value);
@@ -49,7 +50,7 @@ impl HttpClient{
             .redirect(reqwest::redirect::Policy::none()).build()?;
         let mut http=Self{name:config.id.clone(),client,url,headers,
             session:None,id:1,server_info:None,capabilities:None,
-            tools_changed:false,resource_updates:Vec::new(),root:root.to_path_buf()};
+            tools_changed:false,resource_updates:Vec::new(),root:root.to_path_buf(),last_event_id:None};
         let initial=http.request("initialize",json!({
             "protocolVersion":"2025-03-26","capabilities":{"roots":{},"elicitation":{}},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
@@ -152,6 +153,95 @@ impl HttpClient{
         }
         bail!("MCP HTTP response has unsupported content type")
     }
+    /// Pull independent server-to-client events on a Streamable HTTP GET.
+    /// This explicit, bounded long poll lets SDK callers receive notifications
+    /// that are not attached to a tools/call response. Event IDs are retained
+    /// for resumption; server-initiated requests receive a JSON-RPC POST reply.
+    pub async fn poll_notifications(&mut self,max_wait:Duration)->Result<usize>{
+        if max_wait.is_zero(){return Ok(0)}
+        let mut headers=self.request_headers();
+        headers.insert(ACCEPT,HeaderValue::from_static("text/event-stream"));
+        headers.remove(CONTENT_TYPE);
+        if let Some(id)=&self.last_event_id{
+            headers.insert(HeaderName::from_static("last-event-id"),id.clone());
+        }
+        let deadline=tokio::time::Instant::now()+max_wait;
+        let mut response=tokio::time::timeout(max_wait,
+            self.client.get(self.url.clone()).headers(headers).send())
+            .await.context("MCP GET notification request timed out")??
+            ;
+        if response.status()==reqwest::StatusCode::METHOD_NOT_ALLOWED {
+            return Ok(0) // optional per MCP Streamable HTTP
+        }
+        if response.status()==reqwest::StatusCode::NOT_FOUND && self.session.is_some(){
+            bail!("MCP session expired; reconnect required")
+        }
+        if !response.status().is_success(){
+            bail!("MCP GET notification request failed: {}",response.status());
+        }
+        if !response.headers().get(CONTENT_TYPE).and_then(|v|v.to_str().ok())
+            .unwrap_or("").starts_with("text/event-stream"){
+            bail!("MCP GET notifications require text/event-stream")
+        }
+        let mut pending=Vec::new();
+        let mut total=0usize;
+        let mut count=0usize;
+        loop{
+            let remaining=deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero(){break}
+            let next=match tokio::time::timeout(remaining,response.chunk()).await{
+                Ok(value)=>value?,
+                Err(_)=>break,
+            };
+            let Some(chunk)=next else{break};
+            total+=chunk.len();
+            if total>2*1024*1024{bail!("MCP notification stream exceeds 2 MB")}
+            pending.extend_from_slice(&chunk);
+            while let Some((end,separator_len))=sse_event_boundary(&pending){
+                let frame=std::str::from_utf8(&pending[..end])
+                    .context("Invalid MCP notification SSE UTF-8")?;
+                let mut event_id=None;
+                for line in frame.lines(){
+                    if let Some(raw)=line.trim_end_matches('\r').strip_prefix("id:"){
+                        let raw=raw.trim_start();
+                        if raw.len()>512 || raw.contains('\0'){
+                            bail!("Invalid MCP SSE event ID")
+                        }
+                        event_id=Some(HeaderValue::from_str(raw)
+                            .context("Invalid MCP SSE event ID header")?);
+                    }
+                }
+                for event in parse_sse(frame)?{
+                    if let Some(reply)=crate::mcp::server_request_reply_for_root(
+                        &event,&self.root)?{
+                        self.reply_to_server(&reply).await?;
+                    }else {
+                        match event.get("method").and_then(Value::as_str){
+                            Some("notifications/tools/list_changed")=>{
+                                self.tools_changed=true;
+                                count+=1;
+                            },
+                            Some("notifications/resources/updated"|
+                                "notifications/resources/list_changed")=>{
+                                if self.resource_updates.len()<1024{
+                                    self.resource_updates.push(event);
+                                    count+=1;
+                                }
+                            },
+                            _=>{},
+                        }
+                    }
+                }
+                if let Some(id)=event_id{self.last_event_id=Some(id);}
+                pending.drain(..end+separator_len);
+            }
+            // Finish once a complete event has been observed instead of
+            // blocking until the server drops its long-lived GET stream.
+            if count>0{break}
+        }
+        Ok(count)
+    }
+
     pub async fn notify(&mut self,method:&str,params:Value)->Result<()>{
         self.post(&json!({"jsonrpc":"2.0","method":method,"params":params}),false).await?;
         Ok(())
@@ -205,6 +295,85 @@ mod tests{
         McpServerConfig{id:"remote".into(),command:String::new(),args:Vec::new(),
             env:HashMap::new(),transport:Some("http".into()),url:Some(url),
             headers:HashMap::new()}
+    }
+    #[tokio::test]
+    async fn independent_get_notifications_preserve_session_and_resume_event_id(){
+        use tokio::{net::{TcpListener,TcpStream},io::{AsyncReadExt,AsyncWriteExt},time::timeout};
+        async fn request(socket:&mut TcpStream)->String{
+            let mut bytes=Vec::new();let mut buf=[0u8;4096];
+            loop{
+                let n=socket.read(&mut buf).await.unwrap();
+                if n==0{break}
+                bytes.extend_from_slice(&buf[..n]);
+                if let Some(i)=bytes.windows(4).position(|x|x==b"\r\n\r\n"){
+                    let header=String::from_utf8_lossy(&bytes[..i]);
+                    let len=header.lines().find_map(|l|{
+                        let (k,v)=l.split_once(':')?;
+                        k.eq_ignore_ascii_case("content-length")
+                            .then(||v.trim().parse::<usize>().ok()).flatten()
+                    }).unwrap_or(0);
+                    if bytes.len()>=i+4+len{break}
+                }
+            }
+            String::from_utf8_lossy(&bytes).into_owned()
+        }
+        let listener=TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let server=tokio::spawn(async move{
+            let mut requests=Vec::new();
+            for step in 0..4{
+                let (mut socket,_)=listener.accept().await.unwrap();
+                let req=request(&mut socket).await;
+                requests.push(req.clone());
+                let (mime,body)=match step{
+                    0=>("application/json",
+                        json!({"jsonrpc":"2.0","id":1,"result":{
+                            "serverInfo":{"name":"push","version":"1"},
+                            "capabilities":{"tools":{},"resources":{"subscribe":true}}}})
+                            .to_string()),
+                    1=>("application/json",String::new()),
+                    2=>("text/event-stream",format!(
+                        "id: cursor-1\r\nevent: message\r\ndata: {}\r\n\r\n",
+                        json!({"jsonrpc":"2.0",
+                            "method":"notifications/resources/updated",
+                            "params":{"uri":"file:///first","revision":4}})
+                    )),
+                    _=>("text/event-stream",format!(
+                        "id: cursor-2\r\nevent: message\r\ndata: {}\r\n\r\n",
+                        json!({"jsonrpc":"2.0",
+                            "method":"notifications/tools/list_changed"})
+                    )),
+                };
+                let status=if step==1{"202 Accepted"}else{"200 OK"};
+                let header=format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: {mime}\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n",
+                    body.len(),if step==0{"Mcp-Session-Id: session-push\r\n"}else{""}
+                );
+                socket.write_all(header.as_bytes()).await.unwrap();
+                if !body.is_empty(){
+                    let split=body.len()/2;
+                    socket.write_all(&body.as_bytes()[..split]).await.unwrap();
+                    socket.write_all(&body.as_bytes()[split..]).await.unwrap();
+                }
+                socket.shutdown().await.unwrap();
+            }
+            requests
+        });
+        let mut client=timeout(Duration::from_secs(4),
+            HttpClient::connect(&config(format!("http://{address}/mcp"))))
+            .await.unwrap().unwrap();
+        assert_eq!(timeout(Duration::from_secs(4),
+            client.poll_notifications(Duration::from_secs(3))).await.unwrap().unwrap(),1);
+        assert_eq!(client.resource_updates.len(),1);
+        assert_eq!(client.resource_updates[0]["params"]["revision"],4);
+        assert_eq!(timeout(Duration::from_secs(4),
+            client.poll_notifications(Duration::from_secs(3))).await.unwrap().unwrap(),1);
+        assert!(client.tools_changed);
+        let seen=server.await.unwrap();
+        assert!(seen[2].starts_with("GET /mcp HTTP/1.1"));
+        assert!(seen[2].to_ascii_lowercase().contains("mcp-session-id: session-push"));
+        assert!(seen[2].to_ascii_lowercase().contains("accept: text/event-stream"));
+        assert!(seen[3].to_ascii_lowercase().contains("last-event-id: cursor-1"));
     }
     #[tokio::test]
     async fn http_server_requests_complete_before_sse_stream_closes(){

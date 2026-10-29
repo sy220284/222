@@ -3025,3 +3025,70 @@ fn subprocess_secret_scrub_blocks_model_provider_credential_from_shell_tool() {
     assert!(requests[1].contains("credential-not-present"),"{}",requests[1]);
     assert!(!requests[1].contains("SENSITIVE_TEST_VALUE"));
 }
+
+
+#[test]
+fn sdk_polls_independent_http_mcp_get_resource_notifications_end_to_end(){
+    use std::process::Stdio;
+    let dir=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move ||{
+        let mut requests=Vec::new();
+        for step in 0..4{
+            let (mut socket,_)=listener.accept().unwrap();
+            let input=read_request(&mut socket);
+            requests.push(input);
+            let (kind,body)=match step{
+                0=>("application/json",json!({"jsonrpc":"2.0","id":1,
+                    "result":{"serverInfo":{"name":"push","version":"1"},
+                        "capabilities":{"tools":{},"resources":{"subscribe":true}}}})
+                    .to_string()),
+                1=>("application/json",String::new()),
+                2=>("application/json",json!({"jsonrpc":"2.0","id":2,
+                    "result":{"tools":[]}}).to_string()),
+                _=>("text/event-stream",format!(
+                    "id: new-state\r\nevent: message\r\ndata: {}\r\n\r\n",
+                    json!({"jsonrpc":"2.0",
+                        "method":"notifications/resources/updated",
+                        "params":{"uri":"file:///sdk-push","revision":7}})
+                )),
+            };
+            let status=if step==1{"202 Accepted"}else{"200 OK"};
+            write!(socket,"HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n{body}",
+                body.len(),if step==0{"Mcp-Session-Id: sdk-session\r\n"}else{""})
+                .unwrap();
+            socket.flush().unwrap();
+        }
+        requests
+    });
+    let config=dir.path().join("config.json");
+    fs::write(&config,json!({
+        "default_provider":"offline",
+        "providers":[{"id":"offline","kind":"openai-compatible",
+            "model":"offline","base_url":"http://127.0.0.1:9/v1"}],
+        "mcp_servers":[{"id":"push","type":"http",
+            "url":format!("http://{address}/mcp")}]
+    }).to_string()).unwrap();
+    let mut child=binary().args(["--workspace",dir.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=child.stdin.take().unwrap();
+        writeln!(input,"{}",json!({"type":"control_request","request_id":"poll",
+            "request":{"subtype":"mcp_poll_resource_updates","max_wait_ms":3000}})).unwrap();
+    }
+    let output=child.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",
+        String::from_utf8_lossy(&output.stderr));
+    let events=String::from_utf8(output.stdout).unwrap();
+    let response=events.lines().filter_map(|l|serde_json::from_str::<Value>(l).ok())
+        .find(|event|event["response"]["request_id"]=="poll").unwrap();
+    assert_eq!(response["response"]["subtype"],"success","{response}");
+    assert_eq!(response["response"]["response"]["updates"][0]["server"],"push");
+    assert_eq!(response["response"]["response"]["updates"][0]["params"]["revision"],7);
+    assert_eq!(response["response"]["response"]["errors"],json!([]));
+    let requests=server.join().unwrap();
+    assert!(requests[3].starts_with("GET /mcp HTTP/1.1"));
+    assert!(requests[3].to_ascii_lowercase().contains("mcp-session-id: sdk-session"));
+}

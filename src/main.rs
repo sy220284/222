@@ -559,7 +559,7 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                 if matches!(action,"mcp_resources"|"mcp_prompts"|
                     "mcp_resource_templates"|"mcp_read_resource"|"mcp_get_prompt"|
                     "mcp_resource_subscribe"|"mcp_resource_unsubscribe"|
-                    "mcp_resource_updates") {
+                    "mcp_resource_updates"|"mcp_poll_resource_updates") {
                     let result=mcp_control_request(agent,action,&event).await;
                     match result{
                         Ok(value)=>send_control!(json!({"type":"control_response",
@@ -681,7 +681,7 @@ async fn sdk_nested_control(agent:&mut Agent,config:&Config,event:&Value,
             "mcp_resources"|"mcp_prompts"|"mcp_resource_templates"|
             "mcp_read_resource"|"mcp_get_prompt"|
             "mcp_resource_subscribe"|"mcp_resource_unsubscribe"|
-            "mcp_resource_updates"=>{
+            "mcp_resource_updates"|"mcp_poll_resource_updates"=>{
                 mcp_control_request(agent,subtype,&Value::Object(request.clone())).await
             },
             "cancel_async_message"=>{
@@ -738,6 +738,16 @@ async fn mcp_control_request(agent:&mut Agent,action:&str,request:&Value)
         "mcp_prompts"=>agent.mcp_catalog("prompts").await,
         "mcp_resource_templates"=>agent.mcp_catalog("resource_templates").await,
         "mcp_resource_updates"=>Ok(agent.mcp_resource_updates()),
+        "mcp_poll_resource_updates"=>{
+            let max_wait_ms=match request.get("max_wait_ms"){
+                None=>1000,
+                Some(value)=>value.as_u64().filter(|ms|*ms<=30_000)
+                    .ok_or_else(||anyhow::anyhow!(
+                        "MCP max_wait_ms must be an integer from 0 to 30000"))?,
+            };
+            Ok(agent.mcp_poll_resource_updates(
+                std::time::Duration::from_millis(max_wait_ms)).await)
+        },
         "mcp_resource_subscribe"|"mcp_resource_unsubscribe"=>{
             let server=request.get("server").and_then(Value::as_str)
                 .ok_or_else(||anyhow::anyhow!("MCP subscription requires server"))?;

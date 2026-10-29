@@ -868,6 +868,13 @@ impl Agent {
         self.mcp.as_mut().map_or_else(||json!({"updates":[]}),
             |mcp|mcp.drain_resource_updates())
     }
+    pub async fn mcp_poll_resource_updates(&mut self,max_wait:std::time::Duration)
+        ->serde_json::Value{
+        match self.mcp.as_mut(){
+            Some(mcp)=>mcp.poll_resource_updates(max_wait).await,
+            None=>json!({"updates":[],"errors":[]})
+        }
+    }
     pub async fn mcp_read_resource(&mut self,server:&str,uri:&str)
         ->Result<serde_json::Value>{
         self.mcp.as_mut().context("No MCP servers configured")?

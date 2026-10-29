@@ -344,3 +344,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 2026-10-29：通用子进程环境隔离
 
 新建 `src/subprocess_env.rs`，选择启用 `ATLAS_SUBPROCESS_ENV_SCRUB=1|true|yes|on` 时，Shell 前后台、Git、Hook、LSP、MCP stdio 真实启动入口统一过滤模型 API/云凭据、GHA OIDC、缓存运行令牌、OTLP 凭据头和其 `INPUT_*` 镜像；保留按原版约定工作流所需的 `GH_TOKEN` 与 `GITHUB_TOKEN`，且过滤发生在自定义环境变量注入之后。补充真实子进程、CLI→模型→Shell 回填集成测试；原始上游代理和动态远程环境仍未完全覆盖，因此仅登记部分实现。
+
+### 2026-10-29：Issue #3 MCP 独立 HTTP GET 资源事件收取和 SDK 状态通道
+
+原版 Streamable HTTP 传输可通过与 tools/call POST 分离的 GET SSE 通道获取资源通知。Rust 之前只解析 POST 的 SSE，故没有模型请求时的服务器资源更新会丢失。本轮给 `HttpClient` 新增**受限显式轮询** GET SSE：复用协议/Session-ID/认证头、以服务器事件 `id:` 生成下次请求 `Last-Event-ID`、增量/分块完整 SSE 帧读取、收到完整资源通知或工具目录变化即可返回而非等待远端关闭连接；保持响应 2 MiB 限制和最大等待时间，支持不提供 GET 的服务器返回 405。隔离不同 MCP 服务的轮询错误、会话 404 标记等待重连，开放 SDK `mcp_poll_resource_updates` 平铺和嵌套控制，`max_wait_ms` 0–30000（默认 1000）。新增真实本地 TCP HTTP 连续 GET + 事件 ID 续传、真实 CLI SDK→MCP HTTP GET→结构化更新回执测试。独立后台常驻监听、旧 SSE/WS、网络自动重连和完整 MCP UI 仍不等价，四条 MCP 原路径继续部分实现。
