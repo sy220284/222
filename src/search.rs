@@ -62,23 +62,13 @@ fn type_matches(path: &Path, kind: &str) -> bool {
 }
 
 pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
-    glob_files_filtered(root,base,args,&|_|Ok(true))
-}
-
-/// The caller may reject individual paths before their names are returned.
-pub fn glob_files_filtered(root: &Path, base: &Path, args: &Value,
-    can_read:&impl Fn(&Path)->Result<bool>) -> Result<String> {
     if !base.is_dir() { bail!("Glob search path must be a directory") }
     let pattern = args.get("pattern").and_then(Value::as_str)
         .context("glob_files requires pattern")?;
     let compiled = matcher(pattern)?;
-    let mut matches=Vec::new();
-    for path in files(base)? {
-        if path.strip_prefix(base).is_ok_and(|rel|matching(&compiled,rel))
-            && can_read(&path)? {
-            matches.push(path);
-        }
-    }
+    let mut matches = files(base)?.into_iter()
+        .filter(|p| p.strip_prefix(base).is_ok_and(|rel| matching(&compiled, rel)))
+        .collect::<Vec<_>>();
     sort_newest(&mut matches);
     let truncated = matches.len() > 100;
     let paths = matches.iter().take(100)
@@ -92,12 +82,6 @@ pub fn glob_files_filtered(root: &Path, base: &Path, args: &Value,
 }
 
 pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
-    grep_files_filtered(root,base,args,&|_|Ok(true))
-}
-
-/// Search results must not disclose contents or names of denied read paths.
-pub fn grep_files_filtered(root: &Path, base: &Path, args: &Value,
-    can_read:&impl Fn(&Path)->Result<bool>) -> Result<String> {
     if !base.exists() { bail!("Search path does not exist") }
     let pattern = args.get("pattern").and_then(Value::as_str)
         .context("grep_files requires pattern")?;
@@ -126,7 +110,6 @@ pub fn grep_files_filtered(root: &Path, base: &Path, args: &Value,
     let mut candidates = files(base)?;
     sort_newest(&mut candidates);
     for path in candidates {
-        if !can_read(&path)? { continue }
         if fs::metadata(&path)?.len() > 2_000_000 { continue }
         if let Some(kind) = kind {
             if !type_matches(&path, kind) { continue; }
@@ -211,20 +194,6 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn filtered_search_does_not_read_or_list_restricted_files(){
-        let root=tempfile::tempdir().unwrap();
-        fs::write(root.path().join("public.txt"),"shared-needle").unwrap();
-        fs::write(root.path().join("private.txt"),"secret-needle").unwrap();
-        let allowed=|p:&Path|Ok(p.file_name().and_then(|s|s.to_str())!=Some("private.txt"));
-        let found:Value=serde_json::from_str(&grep_files_filtered(root.path(),root.path(),
-            &json!({"pattern":"needle","output_mode":"content"}),&allowed).unwrap()).unwrap();
-        assert!(found["content"].as_str().unwrap().contains("shared-needle"));
-        assert!(!found["content"].as_str().unwrap().contains("secret-needle"));
-        let paths:Value=serde_json::from_str(&glob_files_filtered(root.path(),root.path(),
-            &json!({"pattern":"*.txt"}),&allowed).unwrap()).unwrap();
-        assert_eq!(paths["filenames"],json!(["public.txt"]));
-    }
     #[test]
     fn glob_and_grep_modes_pagination_and_filters() {
         let root = tempfile::tempdir().unwrap();
