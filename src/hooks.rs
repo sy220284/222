@@ -299,17 +299,35 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
     // hookEventName is missing or mismatched. A response for another
     // lifecycle event must not rewrite this tool's inputs or permissions.
     if let Some(output) = hook_output.filter(|item| !item.is_null()) {
-        let expected = payload.get("hook_event_name").and_then(Value::as_str)
+        let expected = payload
+            .get("hook_event_name")
+            .and_then(Value::as_str)
             .context("Hook input missing hook_event_name")?;
         let actual = output.get("hookEventName").and_then(Value::as_str);
         if actual != Some(expected) {
-            bail!("Hook returned incorrect event name: expected '{expected}', got '{}'",
-                actual.unwrap_or("<missing>"));
+            bail!(
+                "Hook returned incorrect event name: expected '{expected}', got '{}'",
+                actual.unwrap_or("<missing>")
+            );
         }
     }
-    let permission_decision = hook_output
+    let explicit_decision = hook_output
         .and_then(|x| x.get("permissionDecision"))
         .and_then(Value::as_str);
+    // The source parser rejects unknown decision variants. Silently ignoring
+    // one could turn a malformed denial into an approval under --approval full.
+    if let Some(value) = explicit_decision {
+        if !matches!(value, "allow" | "deny" | "ask") {
+            bail!("Unknown hook permissionDecision type: {value}");
+        }
+    }
+    let legacy_decision = match decision {
+        Some("approve") => Some("allow"),
+        Some("block") => Some("deny"),
+        Some(other) => bail!("Unknown hook decision type: {other}"),
+        None => None,
+    };
+    let permission_decision = explicit_decision.or(legacy_decision);
     if decision == Some("block") || permission_decision == Some("deny") {
         result.blocking_reason = Some(
             hook_output
@@ -485,6 +503,43 @@ mod tests {
                 .unwrap_err();
             assert!(
                 error.to_string().contains("incorrect event name"),
+                "{error:#}"
+            );
+        }
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn legacy_approve_and_invalid_permission_variants_match_source_contract() {
+        let approved = HookRunner::new(&[HookRule {
+            event: HookEvent::PreToolUse,
+            matcher: None,
+            command: "printf '{\"decision\":\"approve\"}'".into(),
+            timeout_seconds: 3,
+        }])
+        .unwrap();
+        let outcome = approved
+            .run(HookEvent::PreToolUse, None, json!({}))
+            .await
+            .unwrap();
+        assert_eq!(outcome.permission_decision.as_deref(), Some("allow"));
+
+        for json_output in [
+            r#"{"decision":"unrestricted"}"#,
+            r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"unrestricted"}}"#,
+        ] {
+            let runner = HookRunner::new(&[HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: format!("printf '%s' '{}'", json_output),
+                timeout_seconds: 3,
+            }])
+            .unwrap();
+            let error = runner
+                .run(HookEvent::PreToolUse, None, json!({}))
+                .await
+                .unwrap_err();
+            assert!(
+                error.to_string().contains("Unknown hook"),
                 "{error:#}"
             );
         }
