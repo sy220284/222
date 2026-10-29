@@ -294,8 +294,47 @@ impl ToolExecutor {
     /// Existing symlinks that lead outside the workspace are rejected.
     fn checked_path(&self,raw:&str)->Result<PathBuf>{crate::workspace_dirs::checked_path(raw,&self.root,&self.extra_roots)}
 
+    /// File reads remain available in read-only/plan mode, but explicit Read
+    /// deny and ask rules must be checked before opening the file. The source
+    /// filesystem permission engine checks both the requested path and the
+    /// symlink-resolved target; matching only the alias leaks denied content.
+    fn require_read_rules(&self,requested:&str,path:&Path)->Result<()> {
+        let resolved=path.canonicalize().unwrap_or_else(|_|path.to_path_buf());
+        let mut paths=vec![requested.to_owned(),path.to_string_lossy().into_owned(),
+            resolved.to_string_lossy().into_owned()];
+        for candidate in [path,&resolved]{
+            for root in std::iter::once(&self.root).chain(self.extra_roots.iter()){
+                if let Ok(relative)=candidate.strip_prefix(root){
+                    paths.push(relative.to_string_lossy().into_owned());
+                }
+            }
+        }
+        let args=json!({"path":requested,"paths":paths});
+        match permission_rules::policy_for(&self.permission_rules,"read_file",&args)?{
+            Some(permission_rules::Behavior::Deny)=>
+                bail!("Read denied by explicit permission rule: {requested}"),
+            Some(permission_rules::Behavior::Ask)=>{
+                if !self.interactive{
+                    bail!("Read needs approval; noninteractive mode denied: {requested}");
+                }
+                eprintln!("Proposed read: {requested}");
+                eprint!("Allow once? [y/N] ");
+                io::stderr().flush()?;
+                let mut answer=String::new();
+                io::stdin().read_line(&mut answer)?;
+                if !matches!(answer.trim().to_ascii_lowercase().as_str(),"y"|"yes"){
+                    bail!("User rejected read: {requested}");
+                }
+                Ok(())
+            },
+            _=>Ok(()),
+        }
+    }
+
     fn read_file(&self, args: &Value) -> Result<String> {
-        let path = self.checked_path(required(args, "path")?)?;
+        let requested=required(args, "path")?;
+        let path = self.checked_path(requested)?;
+        self.require_read_rules(requested,&path)?;
         let metadata = fs::metadata(&path)?;
         if metadata.len() > MAX_FILE_BYTES {
             bail!("File too large (limit {MAX_FILE_BYTES} bytes)");
@@ -626,6 +665,41 @@ mod tests {
     }
 
 
+    #[tokio::test]
+    async fn read_permission_rules_block_file_content_before_open_in_every_mode(){
+        let root=tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("secrets")).unwrap();
+        fs::write(root.path().join(".env"),"PRIVATE_TOKEN=do-not-leak").unwrap();
+        fs::write(root.path().join("secrets/key.txt"),"sensitive-key").unwrap();
+        fs::write(root.path().join("public.txt"),"safe-content").unwrap();
+        let rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{behavior:"deny".into(),rule:"Read(**/.env)".into()},
+            permission_rules::RuleSetting{behavior:"ask".into(),rule:"Read(secrets/**)".into()},
+        ]).unwrap();
+        let call=|path:&str|ToolCall{
+            id:"read".into(),kind:"function".into(),
+            function:FunctionCall{name:"read_file".into(),
+                arguments:json!({"path":path}).to_string()},
+        };
+        for approval in [Approval::ReadOnly,Approval::Full]{
+            let tool=executor(root.path(),approval).with_permission_rules(rules.clone());
+            let denied=tool.execute(&call(".env")).await;
+            assert!(denied.starts_with("ERROR:") && denied.contains("explicit permission rule"));
+            assert!(!denied.contains("do-not-leak"));
+            let asked=tool.execute(&call("secrets/key.txt")).await;
+            assert!(asked.starts_with("ERROR:") && asked.contains("needs approval"));
+            assert!(!asked.contains("sensitive-key"));
+            let allowed=tool.execute(&call("public.txt")).await;
+            assert!(allowed.contains("safe-content"),"{allowed}");
+        }
+        #[cfg(unix)]{
+            std::os::unix::fs::symlink(root.path().join(".env"),root.path().join("alias")).unwrap();
+            let tool=executor(root.path(),Approval::Full).with_permission_rules(rules);
+            let result=tool.execute(&call("alias")).await;
+            assert!(result.contains("explicit permission rule"),"{result}");
+            assert!(!result.contains("do-not-leak"));
+        }
+    }
     #[test]
     fn webfetch_domain_deny_is_enforced_before_network_even_in_full_mode(){
         let root=tempfile::tempdir().unwrap();
