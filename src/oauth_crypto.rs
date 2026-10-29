@@ -5,7 +5,8 @@ use sha2::{Digest, Sha256};
 
 fn secure_token() -> anyhow::Result<String> {
     let mut bytes = [0u8; 32];
-    getrandom::getrandom(&mut bytes)?;
+    getrandom::getrandom(&mut bytes)
+        .map_err(|error| anyhow::anyhow!("System entropy unavailable: {error}"))?;
     Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 
