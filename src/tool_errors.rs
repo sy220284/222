@@ -15,7 +15,10 @@ pub fn format_error_text(message: &str) -> String {
     }
     let head: String = message.chars().take(5_000).collect();
     let tail: String = message.chars().skip(len - 5_000).collect();
-    format!("{head}\n\n... [{} characters truncated] ...\n\n{tail}", len - 10_000)
+    format!(
+        "{head}\n\n... [{} characters truncated] ...\n\n{tail}",
+        len - 10_000
+    )
 }
 
 pub fn shell_error_parts(
@@ -94,9 +97,7 @@ pub fn format_validation_error(tool_name: &str, issues: &[Value], original: &str
                     .unwrap_or("unknown");
                 let received = message
                     .split_once("received ")
-                    .and_then(|(_, text)| {
-                        text.split(|c: char| !c.is_ascii_alphanumeric()).next()
-                    })
+                    .and_then(|(_, text)| text.split(|c: char| !c.is_ascii_alphanumeric()).next())
                     .filter(|s| !s.is_empty())
                     .unwrap_or("unknown");
                 parts.push(format!(
@@ -110,7 +111,10 @@ pub fn format_validation_error(tool_name: &str, issues: &[Value], original: &str
         return original.to_owned();
     }
     let quantity = if parts.len() == 1 { "issue" } else { "issues" };
-    format!("{tool_name} failed due to the following {quantity}:\n{}", parts.join("\n"))
+    format!(
+        "{tool_name} failed due to the following {quantity}:\n{}",
+        parts.join("\n")
+    )
 }
 
 #[cfg(test)]
