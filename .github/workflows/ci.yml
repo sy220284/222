@@ -21,6 +21,10 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+      - name: 核对全量迁移台账与新增验收证据
+        run: |
+          python3 scripts/port_workbench.py check --repo .
+          python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
       - name: 使用固定 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
         with:
