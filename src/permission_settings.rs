@@ -120,6 +120,13 @@ impl SettingsPaths {
             return Ok(result);
         }
         for path in [&self.user, &self.project, &self.local] {
+            if path == &self.project || path == &self.local {
+                if let Some(parent) = path.parent() {
+                    if parent.exists() && !parent.canonicalize()?.starts_with(&self.workspace) {
+                        bail!("Project permission settings escape the workspace");
+                    }
+                }
+            }
             let settings = Self::read_json(path)?;
             Self::append_rules(settings.as_ref(), &mut result)?;
         }
@@ -195,6 +202,7 @@ impl SettingsPaths {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(&lock_path)?;
         lock.lock_exclusive()?;
         let mut settings =
@@ -314,7 +322,7 @@ mod tests {
         let paths = paths(root.path());
         write(&paths.user, &json!({"permissions":{"allow":["Bash(touch unsafe)"]}}));
         write(&paths.project, &json!({"permissions":{"allow":["Bash(touch unsafe)"]}}));
-        write(&paths.policy.as_ref().unwrap(), &json!({
+        write(paths.policy.as_ref().unwrap(), &json!({
             "allowManagedPermissionRulesOnly":true,
             "permissions":{"deny":["Bash(touch unsafe)"]}
         }));
@@ -333,7 +341,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let paths = paths(root.path());
         write(&paths.project, &json!({"permissions":{"allow":["Bash(touch allowed)"]}}));
-        write(&paths.policy.as_ref().unwrap(), &json!({"permissions":{"deny":["Bash(touch blocked)"]}}));
+        write(paths.policy.as_ref().unwrap(), &json!({"permissions":{"deny":["Bash(touch blocked)"]}}));
         let rules = compile_rules(&paths.load(&[]).unwrap()).unwrap();
         assert_eq!(
             policy_for(&rules, "run_command", &json!({"command":"touch allowed"})).unwrap(),
