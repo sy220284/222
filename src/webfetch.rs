@@ -66,7 +66,9 @@ async fn verify_public(url: &Url) -> Result<Vec<std::net::SocketAddr>> {
 }
 
 fn permitted_redirect(from: &Url, to: &Url) -> bool {
-    let strip_www = |host: &str| host.strip_prefix("www.").unwrap_or(host);
+    fn strip_www(host: &str) -> &str {
+        host.strip_prefix("www.").unwrap_or(host)
+    }
     from.scheme() == to.scheme()
         && from.port_or_known_default() == to.port_or_known_default()
         && to.username().is_empty()
