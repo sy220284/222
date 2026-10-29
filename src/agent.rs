@@ -92,6 +92,7 @@ pub struct Agent {
     prompt_role: Option<String>,
     team_root: Option<PathBuf>,
     shutdown_requested: bool,
+    auto_compact_failures: u8,
     permission_rules: Vec<permission_rules::Rule>,
     permission_mode: permission_mode::Mode,
     transient_mailbox: in_memory_mailbox::Mailbox,
@@ -182,6 +183,7 @@ impl Agent {
             prompt_role: None,
             team_root: restored_root,
             shutdown_requested: false,
+            auto_compact_failures: 0,
             transient_mailbox: in_memory_mailbox::Mailbox::new(),
             permission_rules: Vec::new(),
             permission_mode: mode,
@@ -1821,6 +1823,7 @@ impl Agent {
         candidate.surfaced_memory_units = 0;
         candidate.save(&self.root)?;
         self.session = candidate;
+        self.auto_compact_failures = 0;
         runtime_contracts::suppress_compact_warning();
         Ok(())
     }
@@ -1851,6 +1854,7 @@ impl Agent {
         // Prepare the new durable session before swapping the active state.
         next.save(&self.root)?;
         self.session = next;
+        self.auto_compact_failures = 0;
         self.graph = graph;
         self.session_context.clear();
         self.transient_mailbox = in_memory_mailbox::Mailbox::new();
@@ -1906,8 +1910,21 @@ impl Agent {
                         .unwrap_or(0)
             })
             .sum();
-        if history_chars > 100_000 {
-            self.compact_history().await?;
+        // Match autoCompact.ts: auto-compaction is best-effort, with a
+        // per-session circuit breaker after three consecutive failures.
+        // A failed summarizer must not discard the user's new prompt.
+        if history_chars > 100_000 && self.auto_compact_failures < 3 {
+            match self.compact_history().await {
+                Ok(()) => self.auto_compact_failures = 0,
+                Err(error) => {
+                    self.auto_compact_failures =
+                        self.auto_compact_failures.saturating_add(1);
+                    eprintln!(
+                        "Automatic compaction failed ({}/3): {error:#}",
+                        self.auto_compact_failures
+                    );
+                }
+            }
         }
         let pre_prompt = self
             .hooks
@@ -2715,6 +2732,7 @@ mod tests {
             prompt_role: None,
             team_root: None,
             shutdown_requested: false,
+            auto_compact_failures: 0,
             transient_mailbox: in_memory_mailbox::Mailbox::new(),
             permission_rules: Vec::new(),
             permission_mode: permission_mode::Mode::DontAsk,
