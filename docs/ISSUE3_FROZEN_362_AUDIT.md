@@ -1,5 +1,14 @@
 # Issue #3：冻结 362 项源码级等价验收登记表
 
+## 2026-10-29：权限设置结构损坏不再阻断其他来源（冻结 #19，仍部分实现）
+
+- **原版证据**：`src/utils/settings/settings.ts::parseSettingsFile`（约 210–244 行）先执行 `SettingsSchema().safeParse(data)`，校验失败时该来源返回 `settings:null`；`src/utils/permissions/permissionsLoader.ts::loadAllPermissionRulesFromDisk` 遍历其他启用来源继续加载。原始源码包：`claude-code-2.1.88-main(1).zip`。
+- **Rust 差异**：`src/permission_settings.rs::append_rules` 原先遇到 `permissions` 非对象或 `allow/deny/ask` 非数组即 `Err`，导致整个 Agent 启动失败；且若先读取有效数组再遇到损坏数组，存在将无效来源部分规则写入输出的风险。
+- **实际修复**：在追加规则前完整检查该来源的权限字段结构，损坏则跳过该来源，继续加载其他来源，避免部分规则泄漏；保留编辑入口对损坏配置的严格拒绝，不覆盖原始文件。
+- **真实验证**：`permission_settings::tests::invalid_permission_schema_skips_only_that_source_and_keeps_shell_working` 使用真实磁盘三来源设置、Shell 工具、允许和拒绝命令的文件副作用，核对损坏来源既不授权也不影响健康来源。CI 以本次最终 HEAD 的实际结果为准。
+- **未闭环**：完整设置 schema、动态来源开关、托管策略、热重载、交互与取消/重启时序仍待逐项验收；冻结 #19 保持开放。本轮另计 **1 个真实用户可感知功能有效完善**，不是文件级最终等价。
+
+
 ## 2026-10-29：历史会话权限模式损坏恢复（冻结 #12/#9，仍未完整验收）
 
 - **原版依据**：`src/utils/permissions/PermissionMode.ts::permissionModeFromString` 对不在 `PERMISSION_MODES` 中的存储字符串返回 `default`；`getNextPermissionMode.ts` 的模式循环依赖有效模式值。原始包：`claude-code-2.1.88-main(1).zip`。

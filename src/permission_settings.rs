@@ -112,14 +112,25 @@ impl SettingsPaths {
         let Some(permissions) = settings.and_then(|value| value.get("permissions")) else {
             return Ok(());
         };
-        let permissions = permissions
-            .as_object()
-            .context("Permission settings permissions must be an object")?;
+        // settings.ts::parseSettingsFile returns no settings for a source
+        // whose permissions shape fails schema validation. Do not abort
+        // startup or discard valid rules from other settings sources.
+        let Some(permissions) = permissions.as_object() else {
+            eprintln!("Ignoring invalid permissions object in settings source");
+            return Ok(());
+        };
+        for behavior in ["allow", "deny", "ask"] {
+            if permissions
+                .get(behavior)
+                .is_some_and(|values| !values.is_array())
+            {
+                eprintln!("Ignoring settings source with non-array permission {behavior}");
+                return Ok(());
+            }
+        }
         for behavior in ["allow", "deny", "ask"] {
             if let Some(values) = permissions.get(behavior) {
-                let values = values
-                    .as_array()
-                    .with_context(|| format!("Permission {behavior} must be an array"))?;
+                let values = values.as_array().expect("permission array validated");
                 for value in values {
                     let Some(raw) = value.as_str() else {
                         eprintln!("Skipping non-string permission {behavior} entry");
@@ -454,6 +465,53 @@ mod tests {
             )
             .is_err());
         assert_eq!(fs::read_to_string(&paths.project).unwrap(), "{invalid json");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn invalid_permission_schema_skips_only_that_source_and_keeps_shell_working() {
+        // settings.ts::parseSettingsFile rejects an invalid settings schema
+        // without terminating other sources' permission loading.
+        use crate::{
+            protocol::{FunctionCall, ToolCall},
+            tools::{Approval, ToolExecutor},
+        };
+        let root = tempfile::tempdir().unwrap();
+        let paths = paths(root.path());
+        write(
+            &paths.user,
+            &json!({"permissions":{"allow":"Bash(touch should_not_run)",
+                "deny":["Bash(touch ignored_user_deny)"]}}),
+        );
+        write(
+            &paths.project,
+            &json!({"permissions":{"allow":["Bash(touch permitted)"]}}),
+        );
+        write(
+            &paths.local,
+            &json!({"permissions":{"deny":["Bash(touch forbidden)"]}}),
+        );
+        let loaded = paths.load(&[]).unwrap();
+        assert_eq!(loaded.len(), 2, "invalid source must not leak partial rules");
+        let executor = ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Ask, false)
+            .with_permission_rules(compile_rules(&loaded).unwrap());
+        let call = |command: &str| ToolCall {
+            id: "invalid-permissions-schema".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":command}).to_string(),
+            },
+        };
+        let allowed = executor.execute(&call("touch permitted")).await;
+        assert!(allowed.contains("Exit: exit status: 0"), "{allowed}");
+        assert!(root.path().join("permitted").exists());
+        let denied = executor.execute(&call("touch forbidden")).await;
+        assert!(denied.starts_with("ERROR:"), "{denied}");
+        assert!(!root.path().join("forbidden").exists());
+        let invalid = executor.execute(&call("touch should_not_run")).await;
+        assert!(invalid.starts_with("ERROR:"), "{invalid}");
+        assert!(!root.path().join("should_not_run").exists());
     }
 
     #[cfg(unix)]
