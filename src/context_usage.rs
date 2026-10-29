@@ -3,7 +3,7 @@
 //! provider tokenizers may differ from the UTF-16 rough estimation fallback.
 use crate::protocol::{Message, ModelRequest, TokenUsage};
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone)]
 pub struct Snapshot {
@@ -111,6 +111,26 @@ impl Snapshot {
     }
 
     fn count_messages(&mut self, messages: &[Message]) {
+        let mut tool_names: HashMap<&str, &str> = HashMap::new();
+        for message in messages {
+            if let Some(calls) = &message.tool_calls {
+                for call in calls {
+                    tool_names.insert(&call.id, &call.function.name);
+                }
+            }
+            if let Some(blocks) = &message.content_blocks {
+                for block in blocks {
+                    if block.get("type").and_then(Value::as_str) == Some("tool_use") {
+                        if let (Some(id), Some(name)) = (
+                            block.get("id").and_then(Value::as_str),
+                            block.get("name").and_then(Value::as_str),
+                        ) {
+                            tool_names.insert(id, name);
+                        }
+                    }
+                }
+            }
+        }
         for message in messages {
             let (mut content, attachments) = message_content_tokens(message);
             self.attachment_tokens += attachments;
@@ -128,7 +148,8 @@ impl Snapshot {
                             let (tokens, _) = block_tokens(block);
                             content = content.saturating_sub(tokens);
                             self.tool_result_tokens += tokens;
-                            let name = block.get("tool_use_id").and_then(Value::as_str).unwrap_or("tool");
+                            let id = block.get("tool_use_id").and_then(Value::as_str).unwrap_or("tool");
+                            let name = tool_names.get(id).copied().unwrap_or(id);
                             self.tool_calls.entry(name.to_owned()).or_default().1 += tokens;
                         }
                         _ => {}
@@ -149,7 +170,8 @@ impl Snapshot {
                 }
             }
             if message.role == "tool" {
-                let name = message.tool_call_id.as_deref().unwrap_or("tool");
+                let id = message.tool_call_id.as_deref().unwrap_or("tool");
+                let name = tool_names.get(id).copied().unwrap_or(id);
                 self.tool_calls.entry(name.to_owned()).or_default().1 += content;
             }
         }
