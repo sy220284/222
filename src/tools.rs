@@ -274,7 +274,7 @@ impl ToolExecutor {
                     .context("Background tasks unavailable")?;
                 manager.list()
             }
-            "task_output" => {
+            "task_output" | "TaskOutput" | "AgentOutputTool" | "BashOutputTool" => {
                 let manager = self
                     .background
                     .as_ref()
