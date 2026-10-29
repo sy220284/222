@@ -651,7 +651,7 @@ done"#;
         let config=McpServerConfig{id:"requests".into(),command:"sh".into(),
             args:vec!["-c".into(),script.into()],env:HashMap::new(),
             transport:None,url:None,headers:HashMap::new()};
-        let manager=tokio::time::timeout(Duration::from_secs(4),
+        let mut manager=tokio::time::timeout(Duration::from_secs(4),
             McpManager::connect(&[config])).await.unwrap().unwrap();
         assert!(manager.handles("mcp__requests__ready"));
         assert_eq!(manager.statuses().unwrap()[0]["status"],"connected");
