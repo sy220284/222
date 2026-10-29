@@ -1021,25 +1021,34 @@ impl ToolExecutor {
     ) -> Result<String> {
         let command = required(args, "command")?;
         let env = std::env::vars().collect::<HashMap<String, String>>();
-        let secs = args
-            .get("timeout_seconds")
-            .and_then(Value::as_u64)
-            .or_else(|| {
-                if kind == crate::shell_runtime::ShellKind::Powershell {
-                    args.get("timeout")
-                        .and_then(Value::as_u64)
-                        .map(|ms| ms.div_ceil(1000))
-                } else {
-                    None
-                }
-            })
-            // timeout_seconds is a portable alias; the original PowerShell
-            // tool's timeout field is in milliseconds.
-            .unwrap_or_else(|| crate::portable_source_utils::default_bash_timeout_ms(&env) / 1000)
-            .clamp(
-                1,
-                crate::portable_source_utils::max_bash_timeout_ms(&env) / 1000,
-            );
+        // 2.1.88 BashTool and PowerShellTool accept timeout in milliseconds.
+        // The provider-neutral timeout_seconds field retains its seconds unit.
+        // Keeping the deadline in milliseconds avoids silently rounding a
+        // short original Bash timeout up to a whole second.
+        let default_ms = crate::portable_source_utils::default_bash_timeout_ms(&env);
+        let requested_ms = if let Some(value) = args.get("timeout_seconds") {
+            value
+                .as_u64()
+                .context("timeout_seconds must be a nonnegative integer")?
+                .saturating_mul(1000)
+                .max(1000)
+        } else if let Some(value) = args.get("timeout") {
+            let milliseconds = value.as_f64().context("timeout must be a number")?;
+            if !milliseconds.is_finite() || milliseconds < 0.0 {
+                bail!("timeout must be a nonnegative number of milliseconds");
+            }
+            if milliseconds == 0.0 {
+                default_ms
+            } else {
+                milliseconds.max(1.0).trunc() as u64
+            }
+        } else {
+            default_ms
+        };
+        let timeout_ms = requested_ms.clamp(
+            1,
+            crate::portable_source_utils::max_bash_timeout_ms(&env),
+        );
         let mut proc = kind.build_command(command)?;
         proc.envs(&self.session_env);
         crate::subprocess_env::apply(&mut proc);
@@ -1057,7 +1066,7 @@ impl ToolExecutor {
         let process_id = child.id();
         let stdout = child.stdout.take().context("No command stdout")?;
         let stderr = child.stderr.take().context("No command stderr")?;
-        let operation = timeout(Duration::from_secs(secs), async {
+        let operation = timeout(Duration::from_millis(timeout_ms), async {
             let (out, err) = tokio::try_join!(
                 capped_read(
                     stdout,
@@ -1087,7 +1096,7 @@ impl ToolExecutor {
                     let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                 }
                 let _ = child.kill().await;
-                bail!("Command timed out after {secs} seconds");
+                bail!("Command timed out after {timeout_ms} milliseconds");
             }
         };
         let interpretation = if kind == crate::shell_runtime::ShellKind::Bash {
@@ -1243,6 +1252,7 @@ pub fn definitions() -> Vec<Value> {
             "description":"Execute a shell command from the workspace under enforced permission rules. Commands can affect the entire host. Avoid unauthorized destructive operations or secrets exposure, and inspect exit status and output before claiming success.",
             "parameters":{"type":"object","properties":{
                 "command":{"type":"string"},"timeout_seconds":{"type":"integer"},
+                "timeout":{"type":"number","minimum":0,"description":"Original Bash timeout in milliseconds"},
                 "run_in_background":{"type":"boolean"},"description":{"type":"string"}
             },"required":["command"]}}}),
     ];

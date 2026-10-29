@@ -87,6 +87,16 @@ pub fn normalize_tool_fields(tool: &str, args: &mut Value) -> Result<()> {
     let Some(map) = args.as_object_mut() else {
         return Ok(());
     };
+    // BashTool.timeout is semanticNumber(z.number()), including fractional
+    // millisecond values; do not apply integer-field validation here.
+    if tool == "run_command" {
+        if let Some(value) = map.get_mut("timeout") {
+            *value = number(value.take());
+            if !value.is_number() {
+                bail!("run_command.timeout must be a number");
+            }
+        }
+    }
     for &key in bool_fields {
         if let Some(value) = map.get_mut(key) {
             *value = boolean(value.take());
