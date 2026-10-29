@@ -29,17 +29,7 @@ use std::{
     time::Instant,
 };
 
-const DEFAULT_SYSTEM: &str = r#"You are Atlas, a terminal-based software engineering assistant.
-You can inspect, search and modify files and execute commands using the provided tools.
-Work step by step. Use actual tool results as evidence; never claim a command ran unless it did.
-Before editing, inspect relevant files. Keep edits minimal and verify them when possible.
-The filesystem tools are scoped to the active workspace. Shell commands require user authorization
-and may affect the wider machine. Do not assume authorization.
-If a tool fails, analyze its error and make a concrete correction or explain the blocker.
-Use task tools to track multi-step work; mark tasks completed only when verified.
-Project skills can be discovered with list_skills and loaded with read_skill when relevant.
-Never reveal secrets from configuration, environment variables, or private files.
-When finished, report the verified result and any remaining limitations accurately."#;
+const DEFAULT_SYSTEM: &str = crate::prompt_runtime::BASE_SYSTEM;
 
 /// Finish a teammate only after its task ownership has been released and
 /// the leader has received the durable completion notification. A failure
@@ -98,6 +88,8 @@ pub struct Agent {
     graph: task_graph::TaskGraph,
     team_name: Option<String>,
     agent_name: Option<String>,
+    /// Extra per-delegate system policy, separate from its user task.
+    prompt_role: Option<String>,
     team_root: Option<PathBuf>,
     shutdown_requested: bool,
     permission_rules: Vec<permission_rules::Rule>,
@@ -187,6 +179,7 @@ impl Agent {
             graph,
             team_name: restored_team,
             agent_name: restored_member,
+            prompt_role: None,
             team_root: restored_root,
             shutdown_requested: false,
             transient_mailbox: in_memory_mailbox::Mailbox::new(),
@@ -752,6 +745,7 @@ impl Agent {
                     child.session.agent_name = child.agent_name.clone();
                     child.session.save(&child.root)?;
                     child.child_depth = 1;
+                    child.prompt_role = Some("worker".to_owned());
                     child.enabled_plugins = plugins;
                     child.additional_dirs = additional_dirs;
                     child.set_default_shell(shell_kind);
@@ -974,6 +968,7 @@ impl Agent {
             .and_then(serde_json::Value::as_str)
             .unwrap_or("general")
             .to_owned();
+        child.prompt_role = Some(agent_type.clone());
         let result = async {
             child.attach_mcp(&self.mcp_configs).await?;
             child.attach_lsp(&self.lsp_configs).await?;
@@ -1629,12 +1624,7 @@ impl Agent {
             bail!("PreCompact blocked: {reason}")
         }
         let previous = self.session.summary.as_deref().unwrap_or("");
-        let prompt = format!(
-            "Summarize this coding conversation for accurate future continuation. \
-             Preserve user requirements, verified actions, modified paths, pending tasks, \
-             critical command results, errors and next steps. Be concise and factual. \
-             Do not invent completed work. Earlier summary:\n{previous}"
-        );
+        let prompt = crate::prompt_runtime::compact_prompt(previous);
         let api_started = Instant::now();
         let response_result = self
             .provider
@@ -1820,6 +1810,15 @@ impl Agent {
         self.session.messages.push(user_message);
         self.session.save(&self.root)?;
         let mut system = system_prompt(&self.root)?;
+        if self.child_depth > 0 {
+            let role = self.prompt_role.as_deref().unwrap_or("general");
+            system.push_str(crate::prompt_runtime::role_instructions(
+                role,
+                self.team_name.is_some(),
+            ));
+        } else if self.team_name.is_some() && self.agent_name.as_deref() == Some("team-lead") {
+            system.push_str(crate::prompt_runtime::COORDINATOR);
+        }
         self.conversation_context.append_to(&mut system);
         if let Some(summary) = &self.session.summary {
             system.push_str("\nVerified session continuity summary:\n");
@@ -2357,6 +2356,13 @@ fn system_prompt(root: &Path) -> Result<String> {
             .with_context(|| format!("Project instructions must be UTF-8: {}", path.display()))?;
         prompt.push_str(&format!("\nProject instructions from {name}:\n{content}\n"));
     }
+    if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
+        if let Some(instructions) = crate::prompt_runtime::output_style_label(&style) {
+            prompt.push_str("\nOutput style: ");
+            prompt.push_str(instructions);
+            prompt.push('\n');
+        }
+    }
     Ok(prompt)
 }
 
@@ -2567,6 +2573,7 @@ mod tests {
             graph: task_graph::TaskGraph::new(dir.path(), "test").unwrap(),
             team_name: None,
             agent_name: None,
+            prompt_role: None,
             team_root: None,
             shutdown_requested: false,
             transient_mailbox: in_memory_mailbox::Mailbox::new(),

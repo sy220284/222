@@ -72,6 +72,7 @@ mod powershell_permission_matching;
 mod project_init;
 mod project_onboarding;
 mod prompt_history;
+mod prompt_runtime;
 mod protocol;
 mod provider;
 mod query_guard;
