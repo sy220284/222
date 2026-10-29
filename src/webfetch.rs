@@ -25,10 +25,11 @@ fn acceptable_ip(ip: IpAddr) -> bool {
                 || (a == 192 && b == 0 && c == 0))
         }
         IpAddr::V6(v) => {
+            let first = v.segments()[0];
             !(v.is_loopback()
                 || v.is_unspecified()
-                || v.is_unique_local()
-                || v.is_unicast_link_local()
+                || (first & 0xfe00) == 0xfc00
+                || (first & 0xffc0) == 0xfe80
                 || v.to_ipv4_mapped()
                     .is_some_and(|ip| !acceptable_ip(IpAddr::V4(ip))))
         }
@@ -221,10 +222,15 @@ mod tests {
             "169.254.1.2",
             "100.64.1.1",
             "::1",
+            "fc00::1",
+            "fd12:3456::1",
+            "fe80::1",
+            "febf::1",
         ] {
             assert!(!acceptable_ip(host.parse().unwrap()), "{host}");
         }
         assert!(acceptable_ip("8.8.8.8".parse().unwrap()));
+        assert!(acceptable_ip("2001:4860:4860::8888".parse().unwrap()));
     }
     #[test]
     fn html_sanitization_removes_scripts() {
