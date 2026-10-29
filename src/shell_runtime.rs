@@ -17,6 +17,53 @@ pub enum ShellKind {
     Powershell,
 }
 
+/// Source: BashTool/commandSemantics.ts::interpretCommandResult.
+/// Exit code 1 is an informational result for search, comparison and test
+/// commands, while other tools continue to treat it as a failure.
+pub fn interpret_bash_exit(command: &str, exit_code: i32) -> (bool, Option<&'static str>) {
+    use crate::shell_quote::ParseEntry;
+    let mut base = String::new();
+    if let Ok(entries) = crate::shell_quote::parse(command) {
+        let mut expecting_command = true;
+        for entry in entries {
+            match entry {
+                ParseEntry::Operator(op)
+                    if matches!(op.as_str(), "|" | "||" | "&&" | ";" | "&") =>
+                {
+                    expecting_command = true;
+                }
+                ParseEntry::Word(word) if expecting_command => {
+                    base = word;
+                    expecting_command = false;
+                }
+                _ => {}
+            }
+        }
+    }
+    if base.is_empty() {
+        base = command.split_whitespace().next().unwrap_or("").to_owned();
+    }
+    match base.as_str() {
+        "grep" | "rg" => (
+            exit_code >= 2 || exit_code < 0,
+            (exit_code == 1).then_some("No matches found"),
+        ),
+        "find" => (
+            exit_code >= 2 || exit_code < 0,
+            (exit_code == 1).then_some("Some directories were inaccessible"),
+        ),
+        "diff" => (
+            exit_code >= 2 || exit_code < 0,
+            (exit_code == 1).then_some("Files differ"),
+        ),
+        "test" | "[" => (
+            exit_code >= 2 || exit_code < 0,
+            (exit_code == 1).then_some("Condition is false"),
+        ),
+        _ => (exit_code != 0, None),
+    }
+}
+
 impl ShellKind {
     pub fn label(self) -> &'static str {
         match self {
