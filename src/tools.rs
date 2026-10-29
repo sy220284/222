@@ -268,6 +268,7 @@ pub struct ToolExecutor {
     session_id: Option<String>,
     approval: Approval,
     interactive: bool,
+    file_checkpointing_enabled: bool,
     reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
     file_reads: Arc<Mutex<FileReadCache>>,
     enabled_plugins: Vec<String>,
@@ -288,6 +289,7 @@ impl ToolExecutor {
             session_id: None,
             approval,
             interactive,
+            file_checkpointing_enabled: true,
             reads: Arc::new(Mutex::new(HashMap::new())),
             file_reads: Arc::new(Mutex::new(FileReadCache::default())),
             enabled_plugins: Vec::new(),
@@ -309,6 +311,10 @@ impl ToolExecutor {
     }
     pub fn with_environment(mut self, env: std::collections::BTreeMap<String, String>) -> Self {
         self.session_env = env;
+        self
+    }
+    pub fn with_file_checkpointing(mut self, enabled: bool) -> Self {
+        self.file_checkpointing_enabled = enabled;
         self
     }
     pub fn with_session_id(mut self, session_id: String) -> Self {
@@ -478,10 +484,15 @@ impl ToolExecutor {
             "notebook_edit" => {
                 self.require_approval("notebook_edit", &args)?;
                 let path = self.checked_path(required(&args, "notebook_path")?)?;
-                let previous = history::snapshot(&path)?;
-                let previous_mode = history::snapshot_mode(&path)?;
+                let track = history::enabled(self.interactive, self.file_checkpointing_enabled);
+                let previous = if track { history::snapshot(&path)? } else { None };
+                let previous_mode = if track { history::snapshot_mode(&path)? } else { None };
                 let result = self.notebook_edit(&args)?;
-                let checkpoint = history::record(&self.root, self.session_id.as_deref(), &path, previous, previous_mode)?;
+                let checkpoint = if track {
+                    history::record(&self.root, self.session_id.as_deref(), &path, previous, previous_mode)?
+                } else {
+                    None
+                };
                 Ok(format!(
                     "{result}{}",
                     checkpoint
@@ -552,10 +563,15 @@ impl ToolExecutor {
             "write_file" => {
                 self.require_approval("write_file", &args)?;
                 let path = self.checked_path(required(&args, "path")?)?;
-                let before = history::snapshot(&path)?;
-                let before_mode = history::snapshot_mode(&path)?;
+                let track = history::enabled(self.interactive, self.file_checkpointing_enabled);
+                let before = if track { history::snapshot(&path)? } else { None };
+                let before_mode = if track { history::snapshot_mode(&path)? } else { None };
                 let result = self.write_file(&args).await?;
-                let checkpoint = history::record(&self.root, self.session_id.as_deref(), &path, before, before_mode)?;
+                let checkpoint = if track {
+                    history::record(&self.root, self.session_id.as_deref(), &path, before, before_mode)?
+                } else {
+                    None
+                };
                 Ok(format!(
                     "{result}{}",
                     checkpoint
@@ -566,10 +582,15 @@ impl ToolExecutor {
             "edit_file" => {
                 self.require_approval("edit_file", &args)?;
                 let path = self.checked_path(required(&args, "path")?)?;
-                let before = history::snapshot(&path)?;
-                let before_mode = history::snapshot_mode(&path)?;
+                let track = history::enabled(self.interactive, self.file_checkpointing_enabled);
+                let before = if track { history::snapshot(&path)? } else { None };
+                let before_mode = if track { history::snapshot_mode(&path)? } else { None };
                 let result = self.edit_file(&args).await?;
-                let checkpoint = history::record(&self.root, self.session_id.as_deref(), &path, before, before_mode)?;
+                let checkpoint = if track {
+                    history::record(&self.root, self.session_id.as_deref(), &path, before, before_mode)?
+                } else {
+                    None
+                };
                 Ok(format!(
                     "{result}{}",
                     checkpoint
@@ -577,8 +598,16 @@ impl ToolExecutor {
                         .unwrap_or_default()
                 ))
             }
-            "file_history" => history::list(&self.root, self.session_id.as_deref()),
+            "file_history" => {
+                if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
+                    bail!("File checkpointing is disabled")
+                }
+                history::list(&self.root, self.session_id.as_deref())
+            },
             "file_revert" => {
+                if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
+                    bail!("File checkpointing is disabled")
+                }
                 self.require_approval("file_revert", &args)?;
                 let record = history::load(&self.root, self.session_id.as_deref(), required(&args, "id")?)?;
                 let path = self.checked_path(&record.path)?;
