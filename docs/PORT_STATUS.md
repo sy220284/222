@@ -2,7 +2,7 @@
 
 ## 2026-10-29：自定义智能体中文与表情长度校验（源码已提交、待验收）
 
-对照原版 `source/src/components/agents/validateAgent.ts` 的 JavaScript `.length` 语义，修复 Rust `src/agent_definition.rs::validate` 直接使用 UTF-8 字节数导致中文、表情等多字节字符说明/系统提示词过早满足最小长度或触发过长警告的问题。现在按 UTF-16 单元分别执行描述 10/5000 与系统提示词 20/10000 的原版阈值判断。提交 `ed961085`，真实 CLI 智能体定义校验入口保持接线；源码已提交待行为验收，未运行 Cargo/测试/CI。
+对照原版 `source/src/components/agents/validateAgent.ts` 的 JavaScript `.length` 语义，修复 Rust `src/agent_definition.rs::validate` 直接使用 UTF-8 字节数导致中文、表情等多字节字符说明/系统提示词过早满足最小长度或触发过长警告的问题。现在按 UTF-16 单元分别执行描述 10/5000 与系统提示词 20/10000 的原版阈值判断。提交 `ed961085`。另对照 `source/src/tools/AgentTool/agentToolUtils.ts::resolveAgentTools`、`source/src/utils/permissions/permissionRuleParser.ts`，将 `Bash(git *)`、`Read(path)`、`Agent(Explore)` 等权限格式的工具规格先解析为基础工具名，匹配 Rust 厂商中立工具别名；保留 Agent 子代理类型规则的原版有效性，避免错误拒绝自定义智能体。提交 `012ebf7a`。真实 CLI 智能体定义校验入口保持接线；源码已提交待行为验收，未运行 Cargo/测试/CI。
 
 ## 2026-10-29：任务列表异常记录恢复与编号一致性（源码已提交、待验收）
 
