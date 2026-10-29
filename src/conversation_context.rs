@@ -168,6 +168,14 @@ fn nested_worktree_main_checkout(root: &Path) -> Option<(std::path::PathBuf, std
 /// original project-context and instruction-discovery modules, using AGENTS.md and
 /// .atlas paths. File-conditional rules never enter the global system prompt.
 pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
+    project_instructions_with_dirs(root, &[])
+}
+
+/// Load instructions from explicitly authorized directories when enabled.
+pub fn project_instructions_with_dirs(
+    root: &Path,
+    additional_dirs: &[std::path::PathBuf],
+) -> anyhow::Result<String> {
     use anyhow::{bail, Context};
     use std::{collections::HashSet, fs, path::PathBuf};
 
@@ -700,6 +708,41 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
                 directory,
                 &root,
                 false,
+                &mut seen,
+                &mut output,
+            )?;
+        }
+    }
+    // The original getMemoryFiles loads entrypoints at added roots only.
+    if std::env::var("ATLAS_ADDITIONAL_DIRECTORIES_INSTRUCTIONS")
+        .ok()
+        .is_some_and(|value| {
+            matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+        })
+    {
+        for additional in additional_dirs {
+            let directory = additional.canonicalize().with_context(|| {
+                format!("Resolve authorized instruction directory: {}", additional.display())
+            })?;
+            if !directory.is_dir() {
+                bail!("Authorized instruction directory is not a directory: {}", directory.display());
+            }
+            for relative in ["AGENTS.md", ".atlas/AGENTS.md", ".atlas/instructions.md"] {
+                add_file(
+                    &directory.join(relative),
+                    &directory,
+                    &directory,
+                    false,
+                    &mut seen,
+                    &mut output,
+                )?;
+            }
+            add_rules(
+                &directory.join(".atlas/rules"),
+                &directory,
+                &directory,
+                0,
+                &mut visited,
                 &mut seen,
                 &mut output,
             )?;
