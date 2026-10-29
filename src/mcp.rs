@@ -638,6 +638,10 @@ impl McpManager {
         Ok(())
     }
 
+    pub fn configured(&self, name: &str) -> bool {
+        self.configs.iter().any(|config| config.id == name)
+    }
+
     /// Reconcile SDK-owned process servers without restarting healthy fixed
     /// or unchanged dynamic connections. Changed transports are torn down
     /// before replacement so stale tool aliases and subscriptions cannot leak.
