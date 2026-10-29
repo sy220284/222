@@ -506,4 +506,4 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - 新增模块单元测试和 `tests/integration_cli.rs` 的 CLI→真实 HTTP 模型→工具→下一模型请求→会话文件两条端到端测试；专门检验模型伪造回答不渗透到工具结果。
 - 代码 HEAD `1a677171e54da1277128c9f5a5a5d793a299ebb8` 的 GitHub Actions [40838300287](https://github.com/sy220284/222/actions/runs/40838300287)：格式/Clippy、编译/全部测试、依赖检查均成功。之后仅更新迁移台账，最终 HEAD 的 CI 另行判定。
 
-**严格剩余差异**：`ToolSearch` 尚未实现原版 deferred JSONSchema 动态增量注入及 `tool_reference` 跨供应商协议；`AskUserQuestion` 尚未实现 React/Ink 预览与 SDK 外部审批回执，annotations 未覆盖。两条源路径仍记“部分实现”，没有任何新增跨模块全行为等价验收，不改变 1,855 条未完成等价验收的保守统计。继续保留 Draft PR #2，不合并。
+**严格剩余差异**：`ToolSearch` 已补 MCP 延迟模式加载及检索后的下轮动态注入，仍缺原版 `tool_reference` 原生结果块、多供应商传输和部分动态通知语义；`AskUserQuestion` 尚未实现 React/Ink 预览与 SDK 外部审批回执，annotations 未覆盖。两条源路径仍记“部分实现”，没有任何新增跨模块全行为等价验收，不改变 1,855 条未完成等价验收的保守统计。继续保留 Draft PR #2，不合并。
