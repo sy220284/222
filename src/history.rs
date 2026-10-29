@@ -53,28 +53,122 @@ pub struct Record {
 fn fingerprint(content: &[u8]) -> String {
     format!("{:x}", Sha256::digest(content))
 }
+/// Keep checkpoint backups under the user's private configuration directory,
+/// as in fileHistory.ts::resolveBackupPath. Workspace-local backups can be
+/// accidentally indexed or committed alongside project source files.
+fn private_history_dir(path: &Path) -> Result<PathBuf> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            bail!("File history directory is redirected or invalid: {}", path.display())
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            fs::create_dir(path).with_context(|| format!("Create {}", path.display()))?;
+        }
+        Err(error) => return Err(error.into()),
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+    }
+    path.canonicalize().context("File history directory unavailable")
+}
+
+/// Move existing workspace-local checkpoints into private storage without
+/// dropping any backup. The staged copy is published only after all files
+/// have been copied and synced; the old directory survives failed migration.
+fn migrate_workspace_history(source: &Path, target: &Path, direct_files_only: bool) -> Result<()> {
+    let source_metadata = match fs::symlink_metadata(source) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    if source_metadata.file_type().is_symlink() || !source_metadata.is_dir() {
+        bail!("Previous file history directory is redirected or invalid")
+    }
+    let mut files = Vec::new();
+    for item in fs::read_dir(source)? {
+        let item = item?;
+        let metadata = fs::symlink_metadata(item.path())?;
+        if direct_files_only && metadata.is_dir() && !metadata.file_type().is_symlink() {
+            continue;
+        }
+        if !metadata.is_file() || metadata.file_type().is_symlink() {
+            bail!("Previous file history contains a redirected or invalid entry: {}", item.path().display())
+        }
+        files.push(item);
+    }
+    if files.is_empty() { return Ok(()); }
+    if target.exists() && fs::read_dir(target)?.next().is_some() {
+        bail!("Both private and workspace-local history contain checkpoints; refusing to overwrite either")
+    }
+    let parent = target.parent().context("History destination has no parent")?;
+    let staged = parent.join(format!(".migrate-{}", Uuid::new_v4()));
+    private_history_dir(&staged)?;
+    let outcome = (|| -> Result<()> {
+        for item in &files {
+            let from = item.path();
+            let to = staged.join(item.file_name());
+            let mut input = fs::File::open(&from)?;
+            let mut output = fs::OpenOptions::new().write(true).create_new(true).open(&to)?;
+            std::io::copy(&mut input, &mut output)?;
+            output.sync_all()?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&to, fs::Permissions::from_mode(0o600))?;
+            }
+        }
+        if target.exists() { fs::remove_dir(target)?; }
+        fs::rename(&staged, target)?;
+        Ok(())
+    })();
+    if let Err(error) = outcome {
+        if let Err(cleanup) = fs::remove_dir_all(&staged) {
+            bail!("History migration failed: {error:#}; staged cleanup failed: {cleanup:#}")
+        }
+        return Err(error);
+    }
+    for item in &files {
+        fs::remove_file(item.path()).with_context(|| {
+            format!("Private history is saved but the old checkpoint could not be removed: {}", item.path().display())
+        })?;
+    }
+    if !direct_files_only { fs::remove_dir(source)?; }
+    Ok(())
+}
 fn storage(root: &Path, session_id: Option<&str>) -> Result<PathBuf> {
     let root = root.canonicalize().context("History workspace unavailable")?;
-    let base = root.join(".atlas/history");
-    fs::create_dir_all(&base)?;
-    let base = base.canonicalize()?;
-    if !base.starts_with(&root) {
-        bail!("History directory escapes workspace")
+    let config_path = crate::config::Config::path()?;
+    let config_parent = config_path.parent()
+        .context("History config path has no parent")?;
+    fs::create_dir_all(config_parent)?;
+    let config_parent = config_parent.canonicalize()?;
+    let base = private_history_dir(&config_parent.join("file-history"))?;
+    let session = match session_id {
+        Some(id) => Uuid::parse_str(id)
+            .context("History session id must be a UUID")?.to_string(),
+        None => format!("workspace-{:x}", Sha256::digest(root.to_string_lossy().as_bytes())),
+    };
+    let folder = base.join(&session);
+    let legacy_base = root.join(".atlas/history");
+    let legacy = if session_id.is_some() {
+        legacy_base.join(&session)
+    } else {
+        legacy_base.clone()
+    };
+    // An existing .atlas symlink must not be used as a migration source.
+    if legacy_base.exists() {
+        let real = legacy_base.canonicalize()?;
+        if !real.starts_with(&root) {
+            bail!("Previous history storage escapes workspace")
+        }
     }
-    // Original fileHistory.ts::resolveBackupPath isolates backup data by session.
-    let Some(session_id) = session_id else { return Ok(base) };
-    let session = Uuid::parse_str(session_id).context("History session id must be a UUID")?;
-    let folder = base.join(session.to_string());
-    fs::create_dir_all(&folder)?;
-    if folder.symlink_metadata()?.file_type().is_symlink() {
-        bail!("History session directory must not be a symbolic link")
-    }
-    let folder = folder.canonicalize()?;
-    if !folder.starts_with(&base) {
-        bail!("History session directory escapes workspace")
-    }
-    Ok(folder)
+    migrate_workspace_history(&legacy, &folder, session_id.is_none())?;
+    private_history_dir(&folder)
 }
+
 pub fn snapshot(path: &Path) -> Result<Option<Vec<u8>>> {
     match fs::read(path) {
         Ok(contents) => Ok(Some(contents)),
