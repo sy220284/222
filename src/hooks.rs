@@ -446,6 +446,21 @@ fn plain_hook_context(payload: &Value, output: &[u8]) -> Vec<String> {
     }
 }
 
+// Original ShellCommand uses tree-kill for timeout and cancellation. A
+// process-group guard prevents abandoned hook grandchildren from retaining
+// pipes or continuing side effects after the parent future is cancelled.
+#[cfg(unix)]
+struct HookProcessGroupGuard(Option<u32>);
+
+#[cfg(unix)]
+impl Drop for HookProcessGroupGuard {
+    fn drop(&mut self) {
+        if let Some(pid) = self.0.filter(|pid| *pid <= i32::MAX as u32) {
+            let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+        }
+    }
+}
+
 async fn run_command(
     rule: &HookRule,
     payload: &Value,
@@ -474,9 +489,15 @@ async fn run_command(
         proc.current_dir(root);
         proc.env("ATLAS_PROJECT_DIR", root);
     }
+    // Each hook owns a fresh process group, so cancellation never kills
+    // unrelated terminal processes or other concurrent hooks.
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(proc.as_std_mut(), 0);
     let mut child = proc
         .spawn()
         .with_context(|| format!("Starting hook '{}'", rule.command))?;
+    #[cfg(unix)]
+    let mut group_guard = HookProcessGroupGuard(child.id());
     let mut stdin = child.stdin.take().context("Hook stdin unavailable")?;
     let mut stdout = child.stdout.take().context("Hook stdout unavailable")?;
     let mut stderr = child.stderr.take().context("Hook stderr unavailable")?;
@@ -512,6 +533,12 @@ async fn run_command(
     let (status, out, err) = timeout(Duration::from_secs(rule.timeout_seconds), operation)
         .await
         .context("Hook timed out")??;
+    #[cfg(unix)]
+    {
+        // The process and its output pipes exited normally. Do not terminate
+        // any independent work that a successful hook intentionally started.
+        group_guard.0 = None;
+    }
     let stderr_text = String::from_utf8_lossy(&err).trim().to_string();
     // Original hooks.ts:2499-2533, 2543-2613, 2647-2695 parses JSON
     // before interpreting the exit status. Valid JSON decisions apply even
