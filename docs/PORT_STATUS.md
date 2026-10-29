@@ -1,3 +1,9 @@
+## 2026-10-29：本地插件安装存储边界修复（源码已提交、待验收）
+
+原版依据：`source/src/utils/plugins/pluginInstallationHelpers.ts:79–106` 的安装路径越界检查。Rust `src/plugin_manager.rs::install_local/installed/execute(Uninstall)` 原先可能在插件加载校验前跟随 `.atlas` 或 `.atlas/plugins` 符号链接写出工作区。新增 `checked_installed_root`，安装、卸载、列举前拒绝重定向存储根并检查规范化路径；插件列表保持只读，不额外创建目录。代码 `2dd6c0b0a7ba279b125610926f6b5118b02133bd`、`14b097fe988661ac442bb390028e51c26ca32563`。
+
+本项计 **1 条用户可感知业务链：插件安装与卸载的存储边界保护**；本轮累计 **8/100**。未运行 Cargo、测试或 CI，源码已提交、待行为验收，新增完整等价验收 0。插件市场、全量验证、版本与多范围安装仍缺，Issue #3 冻结 362 项继续开放。
+
 ## 2026-10-29：Shell 毫秒超时、任务停止与输出的真实执行门禁（源码已提交、待验收）
 
 - 原版源码：`source/src/tools/BashTool/BashTool.tsx:227–247,857–882` 的毫秒 timeout 与 semanticNumber；`TaskStopTool/TaskStopTool.ts:43–105` 的状态预校验；`TaskOutputTool/TaskOutputTool.tsx` 的严格参数与 semanticBoolean。
