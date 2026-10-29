@@ -369,11 +369,15 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         } else {
             Some(content.as_str())
         };
-        // Mark the parent before expansion to break circular references.
-        // Included instructions are placed before the referring file so the
-        // referring file retains the last-word precedence in the model prompt.
+        // Source processMemoryFile inserts the parent before its included
+        // children; marking it first also breaks recursive include cycles.
         seen.insert(canonical.clone());
         if let Some(body) = body.filter(|body| !body.trim().is_empty()) {
+            output.push_str(&format!(
+                "\nProject instructions from {}:\n{}\n",
+                path.display(),
+                body.trim()
+            ));
             for include in include_paths(body, &canonical) {
                 let resolved = match include.canonicalize() {
                     Ok(resolved) => resolved,
@@ -388,11 +392,6 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
                     add_file_inner(&resolved, scope, include_scope, false, seen, output, depth + 1)?;
                 }
             }
-            output.push_str(&format!(
-                "\nProject instructions from {}:\n{}\n",
-                path.display(),
-                body.trim()
-            ));
         }
         Ok(())
     }
