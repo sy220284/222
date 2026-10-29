@@ -294,16 +294,18 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
     fn add_file(
         path: &Path,
         scope: &Path,
+        include_scope: &Path,
         is_rule: bool,
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
     ) -> anyhow::Result<()> {
-        add_file_inner(path, scope, is_rule, seen, output, 0)
+        add_file_inner(path, scope, include_scope, is_rule, seen, output, 0)
     }
 
     fn add_file_inner(
         path: &Path,
         scope: &Path,
+        include_scope: &Path,
         is_rule: bool,
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
@@ -366,8 +368,8 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
                         })
                     }
                 };
-                if resolved.starts_with(scope) {
-                    add_file_inner(&resolved, scope, false, seen, output, depth + 1)?;
+                if resolved.starts_with(include_scope) {
+                    add_file_inner(&resolved, scope, include_scope, false, seen, output, depth + 1)?;
                 }
             }
             output.push_str(&format!(
@@ -382,6 +384,7 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
     fn add_rules(
         directory: &Path,
         scope: &Path,
+        include_scope: &Path,
         depth: usize,
         visited: &mut HashSet<PathBuf>,
         seen: &mut HashSet<PathBuf>,
@@ -415,11 +418,11 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         for entry in entries {
             let metadata = fs::metadata(&entry)?;
             if metadata.is_dir() {
-                add_rules(&entry, scope, depth + 1, visited, seen, output)?;
+                add_rules(&entry, scope, include_scope, depth + 1, visited, seen, output)?;
             } else if metadata.is_file()
                 && entry.extension().and_then(|extension| extension.to_str()) == Some("md")
             {
-                add_file(&entry, scope, true, seen, output)?;
+                add_file(&entry, scope, include_scope, true, seen, output)?;
             }
         }
         Ok(())
@@ -441,12 +444,14 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
                 add_file(
                     &home.join("AGENTS.md"),
                     &home,
+                    &home,
                     false,
                     &mut seen,
                     &mut output,
                 )?;
                 add_rules(
                     &home.join("rules"),
+                    &home,
                     &home,
                     0,
                     &mut visited,
@@ -470,6 +475,7 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
             add_file(
                 &directory.join(relative),
                 directory,
+                &root,
                 false,
                 &mut seen,
                 &mut output,
@@ -478,6 +484,7 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         add_rules(
             &directory.join(".atlas/rules"),
             directory,
+            &root,
             0,
             &mut visited,
             &mut seen,
@@ -487,6 +494,7 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
             add_file(
                 &directory.join(relative),
                 directory,
+                &root,
                 false,
                 &mut seen,
                 &mut output,
