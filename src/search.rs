@@ -373,7 +373,10 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
         no_ignore.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
     );
-    let mut matches = files_filtered(base, false, allow_file, None)?
+    // utils/glob.ts delegates discovery to ripGrep and inherits its timeout.
+    // A timed-out traversal must be an error, never a shortened successful list.
+    let deadline = search_deadline()?;
+    let mut matches = files_filtered(base, false, allow_file, Some(deadline))?
         .into_iter()
         .filter(|p| {
             p.strip_prefix(base).is_ok_and(|rel| {
@@ -385,18 +388,22 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
             })
         })
         .collect::<Vec<_>>();
+    check_search_deadline(Some(deadline))?;
     if !skip_gitignore {
         let ignored = git_ignored_paths(base, &matches);
+        check_search_deadline(Some(deadline))?;
         matches.retain(|path| !ignored.contains(path));
     }
     let mut visible = Vec::with_capacity(matches.len());
     for path in matches {
+        check_search_deadline(Some(deadline))?;
         if allow_file(&path)? {
             visible.push(path);
         }
     }
     let mut matches = visible;
     sort_oldest(&mut matches);
+    check_search_deadline(Some(deadline))?;
     let truncated = matches.len() > 100;
     let paths = matches
         .iter()
