@@ -56,6 +56,7 @@ fn checked_installed_root(root: &Path, create: bool) -> Result<PathBuf> {
 
 pub fn installed(root: &Path, config: &Config) -> Result<Value> {
     let dir = checked_installed_root(root, false)?;
+    let (active, runtime_errors) = crate::plugins::active_plugin_names(root, &config.enabled_plugins);
     let mut names = Vec::new();
     if dir.exists() {
         for entry in fs::read_dir(dir)? {
@@ -73,9 +74,16 @@ pub fn installed(root: &Path, config: &Config) -> Result<Value> {
             let has_manifest = location.join(".claude-plugin/plugin.json").is_file()
                 || location.join("plugin.json").is_file();
             if has_manifest || has_components {
+                let enabled = config.enabled_plugins.contains(&name);
+                let prefix = format!("Plugin '{name}' ");
+                let warnings = runtime_errors.iter()
+                    .filter(|message| message.starts_with(&prefix))
+                    .cloned().collect::<Vec<_>>();
                 names.push(json!({
                     "name":name,
-                    "enabled":config.enabled_plugins.contains(&name),
+                    "enabled":enabled,
+                    "active":active.contains(&name),
+                    "warnings":warnings,
                 }));
             }
         }
