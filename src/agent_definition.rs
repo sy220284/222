@@ -97,9 +97,28 @@ pub fn validate(
             .warnings
             .push("No tools selected - agent will have very limited capabilities".into()),
         Some(tools) => {
+            // AgentTool/agentToolUtils.ts resolves permission-style specs
+            // such as Bash(git *) by their base tool name. Rust providers
+            // expose vendor-neutral names (run_command/read_file), so compare
+            // canonical tool names while preserving the original rule text.
             let unknown: Vec<_> = tools
                 .iter()
-                .filter(|name| name.as_str() != "*" && !known_tools.contains(*name))
+                .filter(|spec| {
+                    if spec.as_str() == "*" {
+                        return false;
+                    }
+                    let parsed = crate::permission_rules::parse_rule(spec);
+                    let canonical = crate::permission_rules::canonical_tool(&parsed.tool_name);
+                    // The original resolver permits Agent(agent-type) in
+                    // subagent definitions even when Agent is filtered out
+                    // of the subagent's executable tool pool.
+                    if canonical == "Agent" {
+                        return false;
+                    }
+                    !known_tools.iter().any(|available| {
+                        crate::permission_rules::canonical_tool(available) == canonical
+                    })
+                })
                 .cloned()
                 .collect();
             if !unknown.is_empty() {
