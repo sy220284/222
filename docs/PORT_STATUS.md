@@ -1,3 +1,11 @@
+## 2026-10-29：插件与技能命令 YAML 元数据读取补齐（源码已提交、待验收）
+
+- **原版源码**：完整原始 ZIP 的 `source/src/utils/frontmatterParser.ts::parseFrontmatter` 使用 YAML 解析整个闭合的 frontmatter；`source/src/utils/plugins/loadPluginCommands.ts::createPluginCommand` 从解析结果读取多行 `description`、`argument-hint` 与 `arguments`；`source/src/utils/argumentSubstitution.ts::parseArgumentNames/substituteArguments` 将命名参数应用到用户实际执行的技能和插件命令。
+- **原 Rust 差异**：`src/skill_arguments.rs::frontmatter_text` 在 `description: |` 或 `description: >` 后遇到下一条顶层元数据会丢弃整个描述，导致交互 `/commands`、`/skills` 和 SDK 命令目录错误展示；`frontmatter_argument_names` 人为限制 120 行、未严格区分闭合 YAML 和缩进列表，长技能的命名参数可能无法展开。
+- **实际 Rust 代码**：`frontmatter_text` 先识别完整闭合的 YAML 区段，再按缩进读取多行块，支持折叠、保留及裁剪换行，保留后续顶层字段；`frontmatter_argument_names` 删除 120 行限制，解析顶层 `arguments` 的缩进列表及带引号的行内列表，拒绝未闭合元数据。可达入口为 `src/main.rs::sdk_visible_commands/chat` → `src/plugins.rs::command_descriptors/command_prompt_with_session`、`src/agent.rs::invoke_user_skill` → `src/skill_arguments.rs`，同一解析器也供本地技能命令调用。
+- **代码提交**：`ade8b78a071af1a42c5e4d1b2116693447537868`、`0af3680557e43b71e0acdafea8ed77376452edf5`、`34709b373a0e85977ba2d23a6ecffc561f3868f3`、`ffc78a7f71d6f1c89e9c2b46854db05200a86758`。保守计 **2 项不同用户可感知业务行为**：①多行命令说明正确展示；②长技能和 YAML 数组命名参数正确代入实际命令。多个修复提交不重复计数。
+- **剩余差异**：完整 YAML 锚点、复杂转义/标签、完整元数据校验、命令内嵌 Shell 及权限、模型/effort 选择、异步取消仍未等价；本轮没有先行完成 100 项逐项双侧验证清单，**2/100，剩余 98 项**，数量目标未达标。未运行 Cargo、Actions、单元/集成/端到端测试，均为**已提交、待验收**；Issue #3 冻结 362 项继续保持开放，0 项新增最终等价验收。
+
 ## 2026-10-29：SDK 插件热重载真实运行链（源码已提交、待验收）
 
 - **原版完整源码依据**：用户资料库 `claude-code-2.1.88-main(1).zip` 的 `source/src/cli/print.ts:3065–3132`，SDK `reload_plugins` 会重新载入启用插件、Agent 与命令，协调插件 MCP 连接，并返回插件、命令、Agent、MCP 状态及错误数量；插件解析与加载还涉及 `source/src/utils/plugins/pluginLoader.ts`、`loadPluginAgents.ts`。
