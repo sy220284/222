@@ -35,10 +35,10 @@ mod plugins;
 mod portable_async_runtime;
 mod portable_configuration;
 mod portable_ink_core;
+mod portable_missing_utilities;
 mod portable_platform;
 mod portable_settings_runtime;
 mod portable_source_utils;
-mod portable_missing_utilities;
 mod portable_ui_runtime;
 mod powershell_permission_matching;
 mod prompt_history;
@@ -207,16 +207,18 @@ async fn main() -> Result<()> {
             };
             match generated_ports::inspect(source, name, &args) {
                 Some(value) => {
-                    if name=="view" {
-                        if let Ok(tree)=serde_json::from_value::<generated_ports::ui::VNode>(value.clone()){
-                            let missing=tree.unresolved_node_count();
-                            if missing>0 {
+                    if name == "view" {
+                        if let Ok(tree) =
+                            serde_json::from_value::<generated_ports::ui::VNode>(value.clone())
+                        {
+                            let missing = tree.unresolved_node_count();
+                            if missing > 0 {
                                 eprintln!("WARNING: {missing} unresolved JSX bindings; this view is a partial AST projection, not a runnable UI component");
                             }
                         }
                     }
                     println!("{}", serde_json::to_string_pretty(&value)?)
-                },
+                }
                 None => bail!("Source export unavailable: {source}::{name}"),
             }
         } else {
@@ -394,15 +396,15 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
         }
         // Record submissions before model execution, including failed requests.
         prompt_history.add(input, std::collections::BTreeMap::new())?;
-        if let Some(direct)=portable_missing_utilities::parse_direct_member_message(input){
-            let result=agent.send_direct_user_message(&direct.recipient,&direct.message)?;
-            println!("{}",serde_json::to_string(&result)?);
+        if let Some(direct) = portable_missing_utilities::parse_direct_member_message(input) {
+            let result = agent.send_direct_user_message(&direct.recipient, &direct.message)?;
+            println!("{}", serde_json::to_string(&result)?);
             continue;
         }
-        if let Some(name)=input.strip_prefix("/shell-spec ") {
-            match portable_missing_utilities::get_builtin_command_spec(name.trim()){
-                Some(spec)=>println!("{}",serde_json::to_string_pretty(&spec)?),
-                None=>eprintln!("No registered shell command spec: {}",name.trim()),
+        if let Some(name) = input.strip_prefix("/shell-spec ") {
+            match portable_missing_utilities::get_builtin_command_spec(name.trim()) {
+                Some(spec) => println!("{}", serde_json::to_string_pretty(&spec)?),
+                None => eprintln!("No registered shell command spec: {}", name.trim()),
             }
             continue;
         }
@@ -437,8 +439,8 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 continue;
             }
             "/shell-spec" => {
-                for spec in portable_missing_utilities::builtin_command_specs(){
-                    println!("{} — {}",spec.name,spec.description);
+                for spec in portable_missing_utilities::builtin_command_specs() {
+                    println!("{} — {}", spec.name, spec.description);
                 }
                 continue;
             }

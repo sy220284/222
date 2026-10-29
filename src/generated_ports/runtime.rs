@@ -65,11 +65,16 @@ pub fn to_number(v: &Value) -> Value {
         Value::Null => json!(0),
         Value::Bool(b) => json!(if *b { 1 } else { 0 }),
         Value::String(s) => {
-            let s=s.trim();
-            if s.is_empty(){json!(0)}
-            else{s.parse::<f64>().ok().filter(|x|x.is_finite())
-                .map_or(Value::Null,|x|json!(x))}
-        },
+            let s = s.trim();
+            if s.is_empty() {
+                json!(0)
+            } else {
+                s.parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite())
+                    .map_or(Value::Null, |x| json!(x))
+            }
+        }
         Value::Array(_) => to_number(&json!(to_string(v))),
         _ => Value::Null,
     }
@@ -81,7 +86,7 @@ pub fn add(a: &Value, b: &Value) -> Value {
     if a.is_string() || b.is_string() {
         json!(format!("{}{}", to_string(a), to_string(b)))
     } else {
-        numeric2(a,b,|a,b|a+b)
+        numeric2(a, b, |a, b| a + b)
     }
 }
 pub fn subtract(a: &Value, b: &Value) -> Value {
@@ -276,10 +281,10 @@ mod tests {
             json!("bc")
         );
         assert_eq!(property(&json!([1, 2]), "length"), json!(2));
-        assert_eq!(property(&json!({"length":7}),"length"),json!(7));
-        assert_eq!(to_number(&json!("")),json!(0));
-        assert_eq!(to_number(&json!(["7"])),json!(7.0));
-        assert_eq!(add(&json!(null),&json!(4)),json!(4.0));
-        assert_eq!(negate(&json!("2")),json!(-2.0));
+        assert_eq!(property(&json!({"length":7}), "length"), json!(7));
+        assert_eq!(to_number(&json!("")), json!(0));
+        assert_eq!(to_number(&json!(["7"])), json!(7.0));
+        assert_eq!(add(&json!(null), &json!(4)), json!(4.0));
+        assert_eq!(negate(&json!("2")), json!(-2.0));
     }
 }
