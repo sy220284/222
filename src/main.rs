@@ -469,7 +469,11 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 agent.set_permission_rules(&active)?;
                 Ok(format!(
                     "Permission {}: {}",
-                    if changed { "updated" } else { "unchanged or policy-locked" },
+                    if changed {
+                        "updated"
+                    } else {
+                        "unchanged or policy-locked"
+                    },
                     raw_rule
                 ))
             })();
