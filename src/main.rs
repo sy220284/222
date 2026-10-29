@@ -972,8 +972,9 @@ async fn main() -> Result<()> {
     if github_repo_mapping::update_repo_path_mapping(&mut config, &root)? {
         config.save()?;
     }
-    let active_permission_rules =
-        permission_settings::SettingsPaths::for_workspace(&root)?.load(&config.permission_rules)?;
+    let permission_paths = permission_settings::SettingsPaths::for_workspace(&root)?;
+    let active_permission_rules = permission_paths.load(&config.permission_rules)?;
+    let configured_default_mode = permission_paths.default_mode()?;
     let plugins = PluginSet::load(&root, &config.enabled_plugins)?;
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. } | Commands::ProjectInit);
@@ -984,6 +985,7 @@ async fn main() -> Result<()> {
         Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
         _ => Session::fresh(),
     };
+    let has_restored_mode = session.permission_mode.is_some();
     let mut agent = Agent::new(
         profile,
         root,
@@ -992,6 +994,21 @@ async fn main() -> Result<()> {
         cli.max_steps,
         session,
     )?;
+    // CLI authorization ceilings outrank settings. A fresh Ask session may
+    // adopt a configured ordinary mode; resume keeps its persisted mode.
+    if !has_restored_mode && matches!(cli.approval, ApprovalArg::Ask) {
+        if let Some(mode) = configured_default_mode {
+            if matches!(
+                mode,
+                permission_mode::Mode::Default
+                    | permission_mode::Mode::AcceptEdits
+                    | permission_mode::Mode::Plan
+                    | permission_mode::Mode::DontAsk
+            ) {
+                agent.set_sdk_permission_mode(mode.label())?;
+            }
+        }
+    }
     agent.attach_configured_directories(&config.additional_directories)?;
     for directory in &cli.additional_directory {
         let raw = directory.to_string_lossy();

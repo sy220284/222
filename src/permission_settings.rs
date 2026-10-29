@@ -219,6 +219,38 @@ impl SettingsPaths {
         Ok((merged != Value::Object(Map::new())).then_some(merged))
     }
 
+    /// Source permissionSetup.ts::getPermissionModeFromSettings: the effective
+    /// defaultMode follows settings source precedence, with managed policy last.
+    /// A managed-only policy suppresses user/project/local defaults as well.
+    pub fn default_mode(&self) -> Result<Option<crate::permission_mode::Mode>> {
+        let policy = self.load_policy()?;
+        let mut mode = None;
+        if !Self::managed_only(policy.as_ref()) {
+            for path in [&self.user, &self.project, &self.local] {
+                if let Some(settings) = Self::read_json_for_execution(path)? {
+                    if let Some(label) = settings
+                        .pointer("/permissions/defaultMode")
+                        .and_then(Value::as_str)
+                    {
+                        if let Some(parsed) = crate::permission_mode::Mode::parse(label) {
+                            mode = Some(parsed);
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(label) = policy
+            .as_ref()
+            .and_then(|settings| settings.pointer("/permissions/defaultMode"))
+            .and_then(Value::as_str)
+        {
+            if let Some(parsed) = crate::permission_mode::Mode::parse(label) {
+                mode = Some(parsed);
+            }
+        }
+        Ok(mode)
+    }
+
     fn managed_only(policy: Option<&Value>) -> bool {
         policy
             .and_then(|value| value.get("allowManagedPermissionRulesOnly"))

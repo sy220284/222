@@ -608,3 +608,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 托管权限来源在 /status 中显示（源码已提交，待验证）
 
 原版 `source/src/utils/settings/settings.ts:124–150` 的 `getManagedFileSettingsPresence` 将基础托管文件和策略分片分别检测，供状态界面显示 `file`、`drop-ins` 或 `file + drop-ins`。Rust `SettingsPaths::managed_file_presence` 现检查有效基础文件及符合命名条件的策略分片；`Agent::status_report` 的真实聊天 `/status` 输出显示来源类别，不展示敏感策略内容。**未运行测试/CI，待后续验证**；终端原版完整状态面板、其他管理来源及 UI 尚未等价。
+
+### 新会话采用设置中的默认权限模式（源码已提交，待验证）
+
+原版 `source/src/utils/permissions/permissionSetup.ts:721–799` 在 CLI 指定模式之后读取 `settings.permissions.defaultMode`，并按设置来源及组织策略限制选择启动模式。Rust `SettingsPaths::default_mode` 现按用户→项目→本地→托管策略顺序提取有效模式，托管-only 时不采用低优先级来源；`src/main.rs` 的真实 Agent 新会话入口在 `--approval ask` 上限内应用 `default/acceptEdits/plan/dontAsk`，已有会话恢复优先保留原持久化模式。原版 `auto` 需要分类器、`bypassPermissions` 不可绕过 CLI 授权上限。**源码已提交、未执行测试/CI**；完整原版模式切换、远程限制及 UI 仍待验证，冻结 Issue #3 不勾选。
