@@ -2,7 +2,7 @@
 
 ## 范围和计数
 
-本记录只计入 **9 个互不重复、可由用户直接调用的业务能力**。同一能力在 CLI、SDK 的不同入口和同一能力的内部辅助函数不重复计数。当前距离本任务单轮 100 项目标仍差 **91 项**，本轮不得标记达标，也不得把下述功能称为完整源码等价。
+本记录只计入 **10 个互不重复、可由用户直接调用的业务能力**。同一能力在 CLI、SDK 的不同入口和同一能力的内部辅助函数不重复计数。当前距离本任务单轮 100 项目标仍差 **90 项**，本轮不得标记达标，也不得把下述功能称为完整源码等价。
 
 原始依据为用户资料库原始 `claude-code-2.1.88-main(1).zip` 中的 `source/src/`，没有使用提示词摘录包；Rust 修改仅在 `feat/full-rust-parity`、Draft PR #2。没有运行 cargo、Actions 或行为测试；以下全部为 **已提交、待验收**。Issue #3 固定 362 项保持开放，`src/generated_ports` 不计数。
 
@@ -17,9 +17,10 @@
 | 7 | 列出项目与用户自定义 Agent（/agents） | `src/commands/agents/index.ts`、`src/commands/agents/agents.tsx` | `main.rs` → `Agent::list_agents` → `agent_definition::existing_agent_types`；项目目录越界校验 | `28fd3ed`、`43e3fff` | 原版创建、编辑、删除、工具和模型选择 UI |
 | 8 | 查看 MCP 服务连接状态（/mcp status） | `src/commands/mcp/mcp.tsx`、`src/services/mcp/MCPConnectionManager.tsx` | `main.rs` → `Agent::mcp_statuses` → `McpManager::statuses` | `74d1e64` | 原版交互启用/禁用、逐服务配置编辑 |
 | 9 | 对失败的 MCP 服务执行重新连接（/mcp reconnect） | `src/commands/mcp/mcp.tsx`、`src/services/mcp/client.ts` | `main.rs` → `Agent::reconnect_failed_mcp` → `McpManager::reconnect_failed`，重新获取状态并使上下文快照失效 | `3438d50`、`74d1e64` | 指定服务重连、交互授权与完整传输恢复 UI |
+| 10 | 查看当前会话的 Hook 事件、匹配器与超时（/hooks） | `src/commands/hooks/hooks.tsx`、`src/utils/hooks.ts` | `main.rs` → `Agent::hooks_report`；仅显示事件与配置，不输出可能含凭据的命令文本 | `5ff5764`、`02cd139` | 原版交互添加、编辑、删除、测试与完整 Hook 类型配置 UI |
 
 ## 本轮静态复核与续接点
 
-对最新分支读取 `main.rs`、`agent.rs`、`context_usage.rs`、`copy_response.rs`、`diff_view.rs`、`permission_settings.rs`、`tools.rs`、`mcp.rs`，核对 29 项入口、方法、模块引用与安全接线，**29/29 静态检查通过**；这不构成编译或行为验收。同期其他任务在相同分支持续提交，本轮逐文件按最新 blob SHA 更新，未覆盖并行修改。
+对最新分支读取 `main.rs`、`agent.rs`、`context_usage.rs`、`copy_response.rs`、`diff_view.rs`、`permission_settings.rs`、`tools.rs`、`mcp.rs`，核对 29 项入口、方法、模块引用与安全接线，**29/29 静态检查通过**（此检查早于 /hooks 新接线；后续仍需再次静态核对）；这不构成编译或行为验收。同期其他任务在相同分支持续提交，本轮逐文件按最新 blob SHA 更新，未覆盖并行修改。
 
 **后续必须先补齐 100 项真实问题清单并逐项源码确认**，优先围绕 SDK `interrupt` / `rewind_files` / `seed_read_state` / `reload_plugins` / `mcp_toggle`，以及 CLI `/hooks` / `/memory` / `/rewind` / `/config` / `/sandbox` 等尚未完成的真实调用链逐一查缺。这里只列下一轮待核查候选，**不把候选或原版命令名计为本轮已完成**。
