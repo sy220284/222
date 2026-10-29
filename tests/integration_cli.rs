@@ -5591,3 +5591,69 @@ fn stats_cli_and_chat_count_model_reported_usage_and_work_offline() {
     assert!(String::from_utf8_lossy(&offline.stdout)
         .contains("Model-reported tokens: input 5, output 7, total 12"));
 }
+
+
+#[test]
+fn project_init_uses_real_repo_landmarks_and_interactive_model_questions() {
+    let root=tempfile::tempdir().unwrap();
+    fs::write(root.path().join("Cargo.toml"),"[package]\nname = \"evidence\"\n").unwrap();
+    fs::write(root.path().join("README.md"),"DO_NOT_COPY_UNREAD_SECRET").unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut reqs=Vec::new();
+        for index in 0..2 {
+            let (mut stream,_) = listener.accept().unwrap();
+            reqs.push(read_request(&mut stream));
+            let body=if index==0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"user-choice-1","type":"function","function":{
+                        "name":"AskUserQuestion",
+                        "arguments":json!({"questions":[{
+                            "question":"Which instruction documents?",
+                            "header":"Instructions",
+                            "options":[{"label":"Project AGENTS.md","description":"Shared"},
+                                       {"label":"Personal AGENTS.local.md","description":"Private"}],
+                            "multiSelect":false
+                        }],"answers":{"Which instruction documents?":"Personal AGENTS.local.md"}}).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Confirmed the user's document selection."},
+                    "finish_reason":"stop"}]})
+            }.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            stream.flush().unwrap();
+        }
+        reqs
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"test",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut child=binary()
+        .args(["--workspace",root.path().to_str().unwrap(),"project-init"])
+        .env("ATLAS_CONFIG",&config)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped()).spawn().unwrap();
+    child.stdin.take().unwrap().write_all(b"1\n").unwrap();
+    let output=child.wait_with_output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(requests[0].contains("Cargo.toml"));
+    assert!(requests[0].contains("README.md"));
+    assert!(requests[0].contains("AGENTS.md"));
+    assert!(requests[0].contains("AskUserQuestion"));
+    assert!(!requests[0].contains("DO_NOT_COPY_UNREAD_SECRET"));
+    assert!(requests[0].contains("AskUserQuestion"));
+    let second: Value=serde_json::from_str(requests[1].split_once("\r\n\r\n").unwrap().1).unwrap();
+    let returned=second["messages"].as_array().unwrap().iter()
+        .find(|msg|msg["role"]=="tool").unwrap()["content"].as_str().unwrap();
+    assert!(returned.contains("Project AGENTS.md"),"{returned}");
+    assert!(!returned.contains("Personal AGENTS.local.md\"}"),"{returned}");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Confirmed"));
+    assert!(!root.path().join("AGENTS.md").exists(),
+        "a model mock without a write call must not create project instructions");
+}
