@@ -424,7 +424,7 @@ fn valid_name(value: &str) -> bool {
 }
 /// Preserve marketplace identity for managed policy checks even after a
 /// plugin has been installed. Only the installer may create the origin file.
-fn plugin_blocked_by_policy(root: &Path, name: &str) -> Result<bool> {
+pub(crate) fn plugin_blocked_by_policy(root: &Path, name: &str) -> Result<bool> {
     let settings = crate::permission_settings::SettingsPaths::for_workspace(root)?;
     if settings.plugin_blocked_by_policy(name)? {
         return Ok(true);
