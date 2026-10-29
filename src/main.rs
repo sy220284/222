@@ -1268,14 +1268,12 @@ async fn chat(
             };
             agent.set_sdk_permission_mode(mode.label())?;
             if remember {
-                let paths = permission_settings::SettingsPaths::for_workspace(
-                    agent.workspace_root(),
-                )?;
+                let paths =
+                    permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?;
                 match paths.set_default_mode(permission_settings::EditableSource::Local, mode) {
-                    Ok(true) => println!(
-                        "Permission mode: {} (saved as local default)",
-                        mode.label()
-                    ),
+                    Ok(true) => {
+                        println!("Permission mode: {} (saved as local default)", mode.label())
+                    }
                     Ok(false) => eprintln!(
                         "Permission mode: {} (managed policy blocks saving)",
                         mode.label()
@@ -1317,9 +1315,9 @@ async fn chat(
             match paths.remove_directory(permission_settings::EditableSource::Local, &resolved) {
                 Ok(true) => println!("Removed {} from local settings", resolved.display()),
                 Ok(false) => println!("No removable local setting for {}", resolved.display()),
-                Err(error) => eprintln!(
-                    "Revoked for this session; local settings update failed: {error:#}"
-                ),
+                Err(error) => {
+                    eprintln!("Revoked for this session; local settings update failed: {error:#}")
+                }
             }
             continue;
         }
