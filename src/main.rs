@@ -50,6 +50,7 @@ mod marketplace_registry;
 mod marketplace_source;
 mod mcp;
 mod mcp_http;
+mod mcp_policy;
 mod mcp_prompt;
 mod memory;
 mod memory_age;
