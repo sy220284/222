@@ -68,6 +68,7 @@ mod search;
 mod semantic_inputs;
 mod session;
 mod session_control;
+mod semantic_session_search;
 mod shell_quote;
 mod shell_runtime;
 mod skill_arguments;
@@ -261,6 +262,8 @@ enum Commands {
     },
     /// List saved conversations in the current workspace
     Sessions { query: Option<String> },
+    /// Find relevant conversation sessions using the configured model
+    SemanticSessions { query: String },
     /// Search visible content of a saved conversation, without a model
     TranscriptSearch { session_id: String, query: String },
     /// Give an existing conversation a persisted custom title
@@ -648,6 +651,22 @@ async fn main() -> Result<()> {
         }
         return Ok(());
     }
+    if let Commands::SemanticSessions { query } = &cli.command {
+        let root = canonical_workspace(&cli.workspace)?;
+        let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
+        let provider = provider::create(&profile)?;
+        let (matches, _) = semantic_session_search::search(
+            &root,
+            query,
+            provider.as_ref(),
+            &profile.model,
+        )
+        .await?;
+        for item in matches {
+            println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
+        }
+        return Ok(());
+    }
     if cli.max_steps == 0 {
         bail!("--max-steps must be at least 1")
     }
@@ -863,6 +882,8 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
                 println!("/sessions [query]        search saved conversation titles");
+                println!("/sessions --semantic QUERY use model-ranked session search");
+                println!("Offline/one-shot: atlas-agent semantic-sessions QUERY");
                 println!("/resume TERM             find session, show restart command");
                 println!("/rename [NAME]           rename conversation or generate a name using active model");
                 println!("/export [filename]       save full conversation to a local text file");
@@ -1024,6 +1045,17 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 continue;
             }
             _ => {}
+        }
+        if let Some(query) = input.strip_prefix("/sessions --semantic ") {
+            match agent.semantic_search_sessions(query.trim()).await {
+                Ok(matches) => {
+                    for item in matches {
+                        println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
+                    }
+                }
+                Err(error) => eprintln!("Semantic session search failed: {error:#}"),
+            }
+            continue;
         }
         if input.starts_with("/sessions ") {
             for item in agent.search_sessions(input.trim_start_matches("/sessions").trim())? {
