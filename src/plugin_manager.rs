@@ -139,6 +139,37 @@ pub fn install_local(root: &Path, location: &Path) -> Result<String> {
     Ok(name)
 }
 
+/// Match the source uninstall UI: persistent plugin data must be disclosed
+/// before the last installation is removed. Symlinks are never followed.
+fn persistent_plugin_data_size(root: &Path, name: &str) -> Result<Option<u64>> {
+    let base = root.join(".atlas/plugin-data");
+    let metadata = match fs::symlink_metadata(&base) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        bail!("Plugin data storage is redirected or invalid");
+    }
+    let data = base.join(name);
+    let metadata = match fs::symlink_metadata(&data) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        bail!("Plugin data directory is redirected or invalid");
+    }
+    let mut bytes = 0u64;
+    for entry in WalkDir::new(data).follow_links(false) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            bytes = bytes.saturating_add(entry.metadata()?.len());
+        }
+    }
+    Ok((bytes > 0).then_some(bytes))
+}
+
 pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
     let root = root.canonicalize()?;
     let mut config = Config::load()?;
@@ -147,7 +178,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
         PluginCommand::Help => Ok(json!({
             "commands":[
                 "install /absolute/path/to/plugin",
-                "uninstall <plugin>",
+                "uninstall <plugin> [--delete-data|--keep-data]",
                 "enable <plugin>",
                 "disable <plugin>",
                 "validate <path>",
@@ -230,7 +261,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             }
             Ok(json!({"disabled":name}))
         }
-        PluginCommand::Uninstall { plugin } => {
+        PluginCommand::Uninstall { plugin, delete_data } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
             if !valid_name(name) {
                 bail!("Invalid plugin name");
@@ -239,6 +270,16 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             let installed = home.join(name);
             if !installed.is_dir() || installed.is_symlink() {
                 bail!("Plugin is not installed");
+            }
+            if delete_data.is_none() {
+                if let Some(size) = persistent_plugin_data_size(&root, name)? {
+                    return Ok(json!({
+                        "confirmationRequired":true,
+                        "plugin":name,
+                        "dataBytes":size,
+                        "choices":["--delete-data","--keep-data"]
+                    }));
+                }
             }
             let removed = home.join(format!(".uninstall-{}", Uuid::new_v4()));
             fs::rename(&installed, &removed)?;
@@ -258,6 +299,9 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             }
             let data_root = root.join(".atlas/plugin-data");
             let cleanup = (|| -> Result<()> {
+                if *delete_data == Some(false) {
+                    return Ok(());
+                }
                 let metadata = match fs::symlink_metadata(&data_root) {
                     Ok(metadata) => metadata,
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -294,10 +338,11 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                     warnings.push(format!("Could not remove stored plugin options: {error}"));
                 }
             }
+            let preserved = *delete_data == Some(false);
             if warnings.is_empty() {
-                Ok(json!({"uninstalled":name}))
+                Ok(json!({"uninstalled":name,"dataPreserved":preserved}))
             } else {
-                Ok(json!({"uninstalled":name,"warnings":warnings}))
+                Ok(json!({"uninstalled":name,"dataPreserved":preserved,"warnings":warnings}))
             }
         }
         PluginCommand::Validate { path } => {
