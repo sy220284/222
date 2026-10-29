@@ -8,6 +8,7 @@ use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::{
     fs,
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
     time::SystemTime,
 };
@@ -98,7 +99,8 @@ fn scan(root: &Path) -> Result<(String, Vec<Header>)> {
         return Ok((String::new(), Vec::new()));
     }
     let real = dir.canonicalize()?;
-    if !real.starts_with(root) {
+    let workspace = root.canonicalize()?;
+    if !real.starts_with(&workspace) {
         bail!("Memory path leaves workspace")
     }
     let index_path = real.join("MEMORY.md");
@@ -111,29 +113,46 @@ fn scan(root: &Path) -> Result<(String, Vec<Header>)> {
         String::new()
     };
     let mut result = Vec::new();
-    for item in WalkDir::new(&real).follow_links(false).max_depth(5) {
-        let item = item?;
+    // The original memoryScan.ts scans recursively and settles each file
+    // independently. A broken or unreadable topic must not hide healthy ones.
+    for item in WalkDir::new(&real).follow_links(false) {
+        let item = match item {
+            Ok(item) => item,
+            Err(_) => continue,
+        };
         if !item.file_type().is_file()
             || item.path().extension().and_then(|e| e.to_str()) != Some("md")
             || item.file_name() == "MEMORY.md"
         {
             continue;
         }
-        let path = item.path().canonicalize()?;
-        if !path.starts_with(&real) {
-            continue;
-        }
-        let meta = fs::metadata(&path)?;
-        if meta.len() > 100_000 {
-            continue;
-        }
-        let content = match fs::read_to_string(&path) {
-            Ok(v) => v,
+        let path = match item.path().canonicalize() {
+            Ok(path) if path.starts_with(&real) => path,
+            _ => continue,
+        };
+        let meta = match fs::metadata(&path) {
+            Ok(meta) => meta,
             Err(_) => continue,
         };
-        let header = content.lines().take(30).collect::<Vec<_>>().join("\n");
+        // Only the first 30 lines are needed for frontmatter. Avoid
+        // excluding valid long topic files or reading their entire body.
+        let file = match fs::File::open(&path) {
+            Ok(file) => file,
+            Err(_) => continue,
+        };
+        let header = match BufReader::new(file)
+            .lines()
+            .take(30)
+            .collect::<std::io::Result<Vec<_>>>()
+        {
+            Ok(lines) => lines.join("\n"),
+            Err(_) => continue,
+        };
         let (description, memory_type) = parse_header(&header);
-        let filename = path.strip_prefix(&real)?.to_string_lossy().to_string();
+        let filename = match path.strip_prefix(&real) {
+            Ok(name) => name.to_string_lossy().replace('\\', "/"),
+            Err(_) => continue,
+        };
         result.push(Header {
             path,
             filename,
@@ -173,16 +192,21 @@ pub async fn context(
         .iter()
         .map(|m| {
             let description = m.description.as_deref().unwrap_or("(no description)");
-            format!(
-                "- [{}] {}: {}",
-                m.memory_type.as_deref().unwrap_or("other"),
-                m.filename,
-                description
-            )
+            let timestamp = chrono::DateTime::<chrono::Utc>::from(m.modified)
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            let kind = m.memory_type
+                .as_ref()
+                .map(|kind| format!("[{kind}] "))
+                .unwrap_or_default();
+            if m.description.is_some() {
+                format!("- {kind}{} ({timestamp}): {description}", m.filename)
+            } else {
+                format!("- {kind}{} ({timestamp})", m.filename)
+            }
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let response = provider
+    let selection = provider
         .complete(&ModelRequest {
             model: profile.model.clone(),
             system: "Select up to five filenames of memories clearly relevant to the query. \
@@ -195,14 +219,27 @@ pub async fn context(
             )],
             tools: vec![],
         })
-        .await?;
+        .await;
+    // Original selectRelevantMemories is best-effort: a failed side query
+    // returns no selections. Preserve MEMORY.md for the main agent even
+    // when the provider is unavailable.
+    let response = match selection {
+        Ok(response) => response,
+        Err(error) => {
+            eprintln!("Local memory selection skipped: {error:#}");
+            return Ok(MemoryContext { text, usage: None });
+        }
+    };
     if response
         .message
         .tool_calls
         .as_ref()
         .is_some_and(|calls| !calls.is_empty())
     {
-        bail!("Memory selector attempted to invoke tools")
+        return Ok(MemoryContext {
+            text,
+            usage: response.usage,
+        });
     }
     let selected = response.message.content.as_deref().unwrap_or("");
     let parsed: Value = match serde_json::from_str(selected) {
@@ -232,7 +269,12 @@ pub async fn context(
         if seen.len() > 5 {
             break;
         }
-        let contents = fs::read_to_string(&file.path)?;
+        // The topic may disappear or become unreadable after scanning.
+        // Skip that selection and keep the other recalled memories.
+        let contents = match fs::read_to_string(&file.path) {
+            Ok(contents) => contents,
+            Err(_) => continue,
+        };
         let age_ms = match file.modified.duration_since(SystemTime::UNIX_EPOCH) {
             Ok(t) => t.as_secs_f64() * 1000.0,
             Err(t) => -(t.duration().as_secs_f64() * 1000.0),
