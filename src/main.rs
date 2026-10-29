@@ -2129,6 +2129,22 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
         "usage_schema":runtime_contracts::empty_usage()}));
+    // The original print.ts prepends a SessionStart initialUserMessage to
+    // the SDK input queue, even when stdin never supplies a user event.
+    // Execute it as the first user turn before consuming external input.
+    if agent.has_initial_user_message() {
+        sdk_initialized = true;
+        match agent.ask("").await {
+            Ok(answer) => print_json!(json!({
+                "type":"result","session_id":agent.session_id(),
+                "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
+            })),
+            Err(error) => print_json!(json!({
+                "type":"error","session_id":agent.session_id(),
+                "message":format!("{error:#}")
+            })),
+        }
+    }
     let stdin = io::stdin();
     for input in stdin.lock().lines() {
         let line = input?;
