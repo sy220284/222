@@ -231,6 +231,32 @@ pub fn resolve_local_plugin(project: &Path, marketplace: &str, plugin: &str) -> 
     Ok(canonical)
 }
 
+/// Read dependencies declared by the registered marketplace entry. The
+/// original installer resolves its dependency closure from marketplace.json,
+/// which can declare dependencies absent from the installed plugin.json.
+pub fn local_plugin_dependencies(project: &Path, marketplace: &str, plugin: &str) -> Result<Vec<String>> {
+    let _guard = exclusive_lock(project)?;
+    let registry = load(project)?;
+    let record = registry.get(marketplace)
+        .with_context(|| format!("Marketplace '{marketplace}' is not registered"))?;
+    let (actual, manifest) = inspect_local(&record.source)?;
+    if actual != marketplace { bail!("Marketplace '{marketplace}' changed its name on disk"); }
+    let document: Value = serde_json::from_slice(&fs::read(manifest)?)?;
+    let entry = document["plugins"].as_array()
+        .context("Marketplace plugins must be an array")?
+        .iter().find(|entry| entry["name"].as_str() == Some(plugin))
+        .with_context(|| format!("Plugin '{plugin}' not found in marketplace '{marketplace}'"))?;
+    match entry.get("dependencies") {
+        None | Some(Value::Null) => Ok(Vec::new()),
+        Some(Value::Array(items)) => items.iter().map(|item| {
+            let dependency = item.as_str().context("Marketplace dependency must be a string")?;
+            if dependency.is_empty() { bail!("Marketplace dependency is empty"); }
+            Ok(dependency.to_owned())
+        }).collect(),
+        _ => bail!("Marketplace plugin dependencies must be an array"),
+    }
+}
+
 /// Find an unqualified plugin in the registered local marketplaces. The
 /// original installer searches configured marketplaces in registration order
 /// when the user supplies a bare plugin name. A malformed marketplace is
