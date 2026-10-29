@@ -160,7 +160,7 @@
 | `src/commands/ide/ide.tsx` | 646 | 77066 | 重写：保持通用行为 | `src/generated_ports/p_d57f9f8b75cd8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/ide/index.ts` | 12 | 258 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/init-verifiers.ts` | 263 | 10315 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/init.ts` | 257 | 20961 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/init.ts` | 257 | 20961 | 重写：保持通用行为 | `src/project_init.rs / src/main.rs / src/agent.rs / tests/integration_cli.rs` | 部分实现：已实现模型中立的 AGENTS.md 初始化主流程，project-init 与交互 /init 连接真实模型及用户问答；实际文件扫描、两组用户偏好、方案预览、写入审批及完成复查通过模型+工具执行；未等价原版特定 React 预览、实验开关与外部身份/Onboarding 状态 |
 | `src/commands/insights.ts` | 3201 | 115949 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/ApiKeyStep.tsx` | 231 | 23518 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/CheckExistingSecretStep.tsx` | 190 | 18135 | 重写：保持通用行为 | 待定 | 未迁移 |
