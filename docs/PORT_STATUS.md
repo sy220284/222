@@ -1341,3 +1341,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **原版依据**：`source/src/utils/hooks.ts:813–815,881–885` 规定项目根目录在进入 worktree 后不变化；`928–938` 区分临时执行目录与原始工作目录。
 - **Rust 调用链**：`Agent::new` 保存 `project_root`；`run_subagent` 和团队成员创建把父代理的稳定项目根目录传给子代理；`attach_hooks` → `HookRunner::with_project_root` → `run_command`，Hook 实际工作目录仍是隔离 worktree，`ATLAS_PROJECT_DIR` 则指向原始项目根目录。避免脚本把 worktree 误当项目根目录，或工作树清理后无法找到项目文件。
 - **提交**：`88325593a15f1d0f50982af1599300d31dede60f`、`a1a28bb20f70228ec6dc9b9d40e1f3d581c51e7d`。这是与 Hook `if` 条件、工作树删除后清理恢复不同的**第三项独立用户可感知业务功能补齐**。仅完成静态接线复查，未运行 Cargo/测试/CI；源码已提交、待验收。尚缺跨工作树重启恢复、全部插件/技能 Hook 根目录与环境变量、异步生命周期等。Issue #3 冻结 362 项保持开放，新增完整验收 0 项。
+
+
+### 2026-10-29：插件 Hook 来源隔离与根目录替换（源码已提交，待验收）
+
+- **原版证据**：`source/src/utils/hooks.ts:813–855,887–908` 在命令启动前检查插件目录并替换根目录变量；`1445–1455,1688–1715,1735–1756` 按插件来源和 Hook 命令去重，两个插件使用相同模板也必须分别执行。
+- **Rust 可达链**：`PluginSet::load` → `HookRule.plugin_root`（仅加载器内部赋值，不接受用户 JSON 冒充来源）→ `Agent::attach_hooks` → `HookRunner::run` 的按来源去重 → `run_command`。每个插件使用自身已校验的目录替换 Hook 命令中的插件根目录变量，并向脚本提供 `ATLAS_PLUGIN_ROOT`；插件运行期间被移除时给出可见非阻断错误，避免误用退出码 2 阻断用户操作。普通设置 Hook 无插件上下文，保留旧行为。
+- **提交**：`2b1697fbb797ea10538e7efc3bf6ff6a9ffb9d30`、`4ef570c3aa046122c89a10347bbe2ca364e632d3`、`0206d5f136aeb906d6e5cabcaa1e848f7c290047`。按**第 4 项独立用户业务功能**记录，已提交、待行为验收。未运行 Cargo/测试/CI，完整等价新增 0。
+- **剩余差异**：插件自定义选项、独立持久数据目录、技能来源、动态 Hook 注册与注销、HTTP/prompt/agent/async Hook、跨平台引号与命令注入边界、完整取消/权限/重启路径仍待对照。Issue #3 固定 362 条保持开放；本轮 100 项问题清单和 100 项代码补齐均尚未完成。
