@@ -1114,6 +1114,31 @@ impl Agent {
     pub fn workspace_root(&self) -> &std::path::Path {
         &self.root
     }
+    pub fn session_tag(&self) -> Option<&str> {
+        self.session.tag.as_deref()
+    }
+
+    /// Persist a searchable session tag. Changing/removing a tag is an
+    /// atomic session-file update; the caller owns the removal confirmation.
+    pub fn set_session_tag(&mut self, tag: Option<&str>) -> Result<String> {
+        let normalized = tag
+            .map(crate::unicode_sanitization::partially_sanitize_unicode)
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        let next = (!normalized.is_empty()).then_some(normalized.clone());
+        let previous = std::mem::replace(&mut self.session.tag, next);
+        if let Err(error) = self.session.save(&self.root) {
+            self.session.tag = previous;
+            return Err(error).context("Unable to save session tag");
+        }
+        Ok(if normalized.is_empty() {
+            "Removed session tag".to_owned()
+        } else {
+            format!("Tagged session with #{normalized}")
+        })
+    }
+
     pub fn rename_session(&mut self, title: &str) -> Result<String> {
         crate::session_control::rename(&mut self.session, &self.root, title)
     }
@@ -1213,6 +1238,9 @@ impl Agent {
             "Session name: {}",
             self.session.custom_title.as_deref().unwrap_or("(unnamed)")
         )?;
+        if let Some(tag) = self.session.tag.as_deref() {
+            writeln!(report, "Session tag: #{tag}")?;
+        }
         writeln!(report, "Session ID: {}", self.session.id)?;
         writeln!(report, "cwd: {}", self.root.display())?;
         writeln!(
