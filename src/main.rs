@@ -2940,7 +2940,7 @@ async fn sdk_nested_control(
                 } else {
                     config.select(Some(&agent.profile().id), Some(model))?
                 };
-                agent.switch_model(profile)?;
+                agent.sdk_switch_model(profile, model)?;
                 Ok(json!({"model":agent.profile().model,"provider":agent.profile().id}))
             }
             "set_permission_mode" => {
