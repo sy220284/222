@@ -3167,7 +3167,19 @@ impl Agent {
                     match serde_json::from_str::<serde_json::Value>(&call.function.arguments) {
                         Err(error) => Some(format!("Invalid tool arguments JSON: {error}")),
                         Ok(value @ serde_json::Value::Object(_)) => {
-                            if task_graph::handles(&call.function.name) {
+                            if matches!(call.function.name.as_str(), "Read" | "Edit" | "Write") {
+                                let mut normalized = value.clone();
+                                crate::semantic_inputs::normalize_source_file_tool(
+                                    &call.function.name, &mut normalized,
+                                )
+                                .and_then(|_| crate::semantic_inputs::normalize_tool_fields(
+                                    crate::tool_names::canonical_name(&call.function.name),
+                                    &mut normalized,
+                                ))
+                                .err()
+                                .map(|error| format!(
+                                    "Invalid {} arguments: {error:#}", call.function.name))
+                            } else if task_graph::handles(&call.function.name) {
                                 task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
                                     .err()
                                     .map(|error| format!("Invalid {} arguments: {error:#}", call.function.name))
