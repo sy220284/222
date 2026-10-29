@@ -17,6 +17,14 @@ pub struct SessionItem {
     pub messages: usize,
     pub modified_ms: u128,
 }
+impl SessionItem {
+    pub fn display_title(&self) -> String {
+        match self.tag.as_deref() {
+            Some(tag) if !tag.is_empty() => format!("{} #{tag}", self.title),
+            _ => self.title.clone(),
+        }
+    }
+}
 fn preview(messages: &[Message]) -> String {
     messages
         .iter()
