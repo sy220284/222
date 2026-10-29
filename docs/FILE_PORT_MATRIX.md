@@ -221,7 +221,7 @@
 | `src/commands/plugin/UnifiedInstalledCell.tsx` | 565 | 44441 | 重写：保持通用行为 | `src/generated_ports/p_48aef09fe12b8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/ValidatePlugin.tsx` | 98 | 12369 | 重写：保持通用行为 | `src/generated_ports/p_458eb28ef635b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/index.tsx` | 11 | 1337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/plugin/parseArgs.ts` | 104 | 2818 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plugin/parseArgs.ts` | 104 | 2818 | 重写：保持通用行为 | `src/plugin_commands.rs / src/plugin_manager.rs / src/main.rs` | 部分实现：原版菜单、别名、安装参数、市场动作与完整解析分支已实现；管理命令落地本地插件安装/删除/启停，远程市场和 UI 待补 |
 | `src/commands/plugin/plugin.tsx` | 7 | 1590 | 重写：保持通用行为 | `src/generated_ports/p_75e7e879bf2e0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/pluginDetailsHelpers.tsx` | 117 | 12424 | 重写：保持通用行为 | `src/generated_ports/p_6c7ca7c1ed900.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/usePagination.ts` | 172 | 4990 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1068,10 +1068,10 @@
 | `src/services/mockRateLimits.ts` | 883 | 29698 | 重写：保持通用行为 | `src/generated_ports/p_0f036bc7045d6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/services/notifier.ts` | 157 | 4256 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/oauth/auth-code-listener.ts` | 212 | 6650 | 重写：保持通用行为 | `src/oauth_callback_listener.rs / src/main.rs` | 部分实现：原版 localhost 动态端口监听、GET 回调地址匹配、授权码与 state 检查、404/400 及延后 302 响应已真实 Rust 实现并接入 oauth-listen CLI，覆盖真实 TCP/HTTP 回归；原版自定义成功回调及完整 OAuth token 客户端仍待对接；补齐异常 HTTP 请求头 400/408/431 后继续等待合法授权、浏览器 onReady 未完成时并发接收回调且回调后启动任务不被取消，真实 TCP/HTTP 测试通过（CI 40852563169）；完整自定义成功处理器、Token 客户端及取消生命周期尚未验收 |
-| `src/services/oauth/client.ts` | 567 | 18254 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/oauth/client.ts` | 567 | 18254 | 重写：保持通用行为 | `src/oauth_client.rs / src/oauth_profile.rs` | 部分实现：授权 URL 参数、可配置权限、授权码真实 HTTP 交换、刷新令牌/轮换保留、到期缓冲、角色及 API key 端点均实现；原版专属订阅资料同步和全部账号缓存规则待补 |
 | `src/services/oauth/crypto.ts` | 24 | 566 | 重写：保持通用行为 | `src/oauth_crypto.rs / src/main.rs` | 部分实现：32 字节系统级安全随机数、无填充 Base64URL、SHA-256 PKCE challenge 和独立 state 已有原生 Rust、RFC 7636 向量及真实 CLI 测试；OAuth 授权回调尚未接入 |
 | `src/services/oauth/getOauthProfile.ts` | 54 | 1611 | 重写：保持通用行为 | `src/oauth_profile.rs / src/main.rs` | 部分实现：API key/account_uuid 请求及 OAuth Bearer 资料查询真实 HTTP、10 秒超时、非 2xx/无效响应处理与可配置多提供商端点已在 Rust 落地；真实本地 HTTP 服务测试已覆盖，OAuth 主客户端持久化调用方待接 |
-| `src/services/oauth/index.ts` | 199 | 6554 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/oauth/index.ts` | 199 | 6554 | 重写：保持通用行为 | `src/oauth_service.rs / src/main.rs` | 部分实现：自动 localhost 回调和手动输入两条授权链、PKCE 状态、授权后凭据 0600 原子保存、真实 CLI 入口和出错浏览器回调已实现；原版浏览器自动弹出及 SDK 权限同步仍待补 |
 | `src/services/plugins/PluginInstallationManager.ts` | 185 | 6017 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/plugins/pluginCliCommands.ts` | 345 | 10894 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/plugins/pluginOperations.ts` | 1089 | 35619 | 重写：保持通用行为 | `src/generated_ports/p_d37d4b8c26098.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -1467,9 +1467,9 @@
 | `src/utils/debugFilter.ts` | 158 | 5069 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/deepLink/banner.ts` | 124 | 4694 | 重写：保持通用行为 | `src/deep_link_banner.rs / src/main.rs / src/git_filesystem.rs` | 部分实现：原版外部深链来源、工作目录展示、长预填提示与本地克隆 FETCH_HEAD 新旧状态告警已原生 Rust 实现并接入 CLI；原版无头启动进程及全平台终端唤起仍未完成 |
 | `src/utils/deepLink/parseDeepLink.ts` | 171 | 5715 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/deepLink/protocolHandler.ts` | 137 | 4943 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/deepLink/registerProtocol.ts` | 349 | 11858 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/deepLink/terminalLauncher.ts` | 558 | 17786 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/deepLink/protocolHandler.ts` | 137 | 4943 | 重写：保持通用行为 | `src/deep_link_protocol.rs / src/terminal_launcher.rs / src/main.rs` | 部分实现：真实 URI 解析、显式 cwd 与本地仓库映射优先级、FETCH_HEAD 时间、当前二进制终端启动和可审阅提示输入已接入；macOS AppleEvent 原版桥接仍未完成 |
+| `src/utils/deepLink/registerProtocol.ts` | 349 | 11858 | 重写：保持通用行为 | `src/deep_link_register.rs / src/main.rs` | 部分实现：Linux xdg-mime 与 desktop 文件、Windows 用户注册表、macOS AppleScript URL Handler 应用包和登记状态校验、显式 register-protocol 入口已实现；原版自动注册及限频行为未补 |
+| `src/utils/deepLink/terminalLauncher.ts` | 558 | 17786 | 重写：保持通用行为 | `src/terminal_launcher.rs / src/main.rs` | 部分实现：Linux 常用终端、macOS AppleScript/原生 argv、Windows Terminal/PowerShell/cmd 分支和独立 argv/工作目录/脱离父进程已实现，平台完整等价待补 |
 | `src/utils/deepLink/terminalPreference.ts` | 55 | 1897 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/utils/desktopDeepLink.ts` | 237 | 7130 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/detectRepository.ts` | 179 | 6063 | 重写：保持通用行为 | `src/detect_repository.rs / src/diagnostics.rs` | 部分实现：Git SSH/HTTPS/企业版地址解析、仓库缓存和真实本地 Git 探测已在 Doctor 入口使用；原版全部环境调用方尚未完成等价验收 |
@@ -1528,7 +1528,7 @@
 | `src/utils/gitDiff.ts` | 533 | 16039 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/gitSettings.ts` | 19 | 838 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/github/ghAuthStatus.ts` | 30 | 942 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/githubRepoPathMapping.ts` | 163 | 5131 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/githubRepoPathMapping.ts` | 163 | 5131 | 重写：保持通用行为 | `src/github_repo_mapping.rs / src/config.rs / src/main.rs` | 部分实现：真实 Git 根目录记录、大小写归一、MRU 提升、本地有效克隆过滤、移除和深链回退已实现；与原版全部启动环境调用链未完整对照 |
 | `src/utils/glob.ts` | 131 | 4518 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/gracefulShutdown.ts` | 530 | 20088 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/groupToolUses.ts` | 183 | 5537 | 重写：保持通用行为 | 待定 | 未迁移 |
