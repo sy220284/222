@@ -436,3 +436,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 2026-10-29：补全终端事件和宽度已有 Rust 主链
 
 直接扩展已有 `src/portable_ink_core.rs` 单状态来源，不引入重复终端引擎；新实现 `terminal-event.ts` 事件阶段、可取消性和 propagation，`keyboard-event.ts` 的控制键/可打印字符/修饰键，补 `stringWidth.ts` 的 emoji、组合码点基础显示宽度。保留已有事件与布局模块，暂记上述 3 条源码路径部分实现，后续 TUI Unicode 全面验收统一处理。
+
+## Issue #3 冻结 362 项统一验收进度（PR #2）
+
+根据 Issue #3 冻结路径与最新逐文件矩阵逐项交叉核对：362/362 原路径存在、362 项仍属部分实现、0 项具备足以关闭冻结任务的整体等价验收证据。详见 [ISSUE3_FROZEN_362_AUDIT.md](ISSUE3_FROZEN_362_AUDIT.md)。`src/permission_rules.rs` 已按 2.1.88 原版 `shellRuleMatching.ts` 189–228 行补齐权限建议对象及相应回归，完整权限执行链仍在开放状态。仓库不存在 PR #3，所有代码均只进入 Draft PR #2。
