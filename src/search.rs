@@ -243,6 +243,17 @@ fn type_matches(path: &Path, kind: &str) -> bool {
 }
 
 pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
+    glob_files_filtered(root, base, args, &|_| Ok(true))
+}
+
+/// Apply the same per-file Read permission policy used by direct file tools.
+/// A permitted search directory can contain explicitly denied descendants.
+pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
+    root: &Path,
+    base: &Path,
+    args: &Value,
+    allow_file: &F,
+) -> Result<String> {
     validate_tool_input("glob_files", args)?;
     if !base.is_dir() {
         bail!("Glob search path must be a directory")
@@ -295,6 +306,13 @@ pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         let ignored = git_ignored_paths(base, &matches);
         matches.retain(|path| !ignored.contains(path));
     }
+    let mut visible = Vec::with_capacity(matches.len());
+    for path in matches {
+        if allow_file(&path)? {
+            visible.push(path);
+        }
+    }
+    let mut matches = visible;
     sort_oldest(&mut matches);
     let truncated = matches.len() > 100;
     let paths = matches
@@ -343,6 +361,17 @@ fn matching_lines(content: &str, regex: &regex::Regex, multiline: bool) -> Vec<b
 }
 
 pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
+    grep_files_filtered(root, base, args, &|_| Ok(true))
+}
+
+/// Filter every candidate against the caller's Read rules before opening it.
+/// This also prevents file-name and count modes from exposing denied paths.
+pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
+    root: &Path,
+    base: &Path,
+    args: &Value,
+    allow_file: &F,
+) -> Result<String> {
     validate_tool_input("grep_files", args)?;
     if !base.exists() {
         bail!("Search path does not exist")
@@ -422,6 +451,9 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         if (!include_globs.is_empty() && !include_globs.iter().any(|m| matching(m, rel)))
             || exclude_globs.iter().any(|m| matching(m, rel))
         {
+            continue;
+        }
+        if !allow_file(&path)? {
             continue;
         }
         // ripgrep searches valid text around malformed UTF-8 bytes. Rejecting
