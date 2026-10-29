@@ -2895,6 +2895,22 @@ async fn sdk_nested_control(
                 let removed = queue.dequeue_all_matching(|item| item.uuid.as_deref() == Some(uuid));
                 Ok(json!({"cancelled":!removed.is_empty()}))
             }
+            "set_max_thinking_tokens" => {
+                // print.ts:2945-2956: null restores provider defaults,
+                // zero disables thinking, and a positive integer is a budget.
+                let budget = match request.get("max_thinking_tokens") {
+                    Some(Value::Null) => None,
+                    Some(Value::Number(number)) => {
+                        let value = number.as_u64().filter(|value| *value <= u32::MAX as u64)
+                            .ok_or_else(|| anyhow::anyhow!(
+                                "max_thinking_tokens must be a nonnegative integer within u32"))?;
+                        Some(value as u32)
+                    }
+                    _ => bail!("set_max_thinking_tokens requires max_thinking_tokens or null"),
+                };
+                agent.set_sdk_thinking_budget(budget)?;
+                Ok(json!({}))
+            }
             "set_model" => {
                 // print.ts:2933-2944: omitted model also restores the default.
                 let model = match request.get("model") {
