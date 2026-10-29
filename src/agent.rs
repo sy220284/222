@@ -2707,23 +2707,34 @@ impl Agent {
                 if self.absorb_team_messages()? {
                     continue;
                 }
-                if !stop_hook_active {
-                    let hook = self
-                        .hooks
-                        .run(
-                            HookEvent::Stop,
-                            None,
-                            json!({"session_id":self.session.id,"last_assistant_message":text,
-                            "stop_hook_active":false}),
-                        )
-                        .await?;
-                    if let Some(reason) = hook.blocking_reason {
-                        stop_hook_active = true;
-                        self.session.messages.push(Message::text("user",
-                            format!("Stop hook blocked finishing: {reason}. Continue work and verify results.")));
-                        self.session.save(&self.root)?;
-                        continue;
-                    }
+                // The original query loop runs Stop hooks again after a
+                // blocking response, with stop_hook_active=true. Skipping the
+                // second invocation silently bypassed a persistent blocker.
+                let hook = self
+                    .hooks
+                    .run(
+                        HookEvent::Stop,
+                        None,
+                        {
+                            let mut input = self.base_hook_input();
+                            input["last_assistant_message"] = json!(text);
+                            input["stop_hook_active"] = json!(stop_hook_active);
+                            input
+                        },
+                    )
+                    .await?;
+                if !hook.blocking_reasons.is_empty() {
+                    stop_hook_active = true;
+                    let feedback = hook.blocking_reasons.iter()
+                        .map(|reason| format!("Stop hook blocked finishing: {reason}"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    self.session.messages.push(Message::text(
+                        "user",
+                        format!("{feedback}\nContinue work and verify results."),
+                    ));
+                    self.session.save(&self.root)?;
+                    continue;
                 }
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
