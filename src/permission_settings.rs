@@ -142,7 +142,9 @@ impl SettingsPaths {
             .is_some_and(|entries| {
                 entries.flatten().any(|entry| {
                     let name = entry.file_name();
-                    let Some(name) = name.to_str() else { return false };
+                    let Some(name) = name.to_str() else {
+                        return false;
+                    };
                     !name.starts_with('.')
                         && name.ends_with(".json")
                         && entry
@@ -168,10 +170,12 @@ impl SettingsPaths {
         let dropin_dir = Self::dropin_directory(base);
         let entries = match fs::read_dir(&dropin_dir) {
             Ok(entries) => entries,
-            Err(error) if matches!(
-                error.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
-            ) => {
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                ) =>
+            {
                 return Ok((merged != Value::Object(Map::new())).then_some(merged));
             }
             Err(error) => {
@@ -283,7 +287,7 @@ impl SettingsPaths {
     /// pass through the same workspace validation before becoming accessible.
     pub fn additional_directories(&self) -> Result<Vec<String>> {
         let policy = self.load_policy()?;
-        let mut directories = Vec::new();
+        let mut directories: Vec<String> = Vec::new();
         let mut append = |settings: &Value| {
             if let Some(entries) = settings
                 .pointer("/permissions/additionalDirectories")
@@ -523,7 +527,10 @@ impl SettingsPaths {
                 .or_insert_with(|| Value::Array(Vec::new()))
                 .as_array_mut()
                 .context("additionalDirectories must be an array")?;
-            if entries.iter().any(|entry| entry.as_str() == Some(value.as_str())) {
+            if entries
+                .iter()
+                .any(|entry| entry.as_str() == Some(value.as_str()))
+            {
                 return Ok(false);
             }
             entries.push(Value::String(value));
