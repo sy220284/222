@@ -2557,6 +2557,22 @@ async fn sdk_nested_control(
             | "mcp_poll_resource_updates" => {
                 mcp_control_request(agent, subtype, &Value::Object(request.clone())).await
             }
+            "seed_read_state" => {
+                let path = request
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("seed_read_state requires path"))?;
+                let mtime = request
+                    .get("mtime")
+                    .and_then(Value::as_f64)
+                    .filter(|value| value.is_finite() && *value >= 0.0
+                        && *value < u64::MAX as f64)
+                    .ok_or_else(|| anyhow::anyhow!(
+                        "seed_read_state requires a nonnegative finite mtime"))?;
+                agent.seed_read_state(path, mtime.floor() as u64)?;
+                Ok(json!({}))
+            }
             "cancel_async_message" => {
                 let uuid = request
                     .get("message_uuid")
