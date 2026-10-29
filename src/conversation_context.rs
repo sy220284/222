@@ -114,10 +114,21 @@ fn git_status_at_start(root: &Path) -> Option<String> {
     let status = git(root, &["status", "--short"]).unwrap_or_default();
     let log = git(root, &["log", "--oneline", "-n", "5"]).unwrap_or_default();
     let user_name = git(root, &["config", "user.name"]).unwrap_or_default();
-    let shortened = if status.chars().count() > MAX_STATUS_CHARS {
+    // Original context.ts uses JavaScript string.length and substring:
+    // UTF-16 code units, including astral Unicode in Git filenames.
+    let utf16_len = status.encode_utf16().count();
+    let shortened = if utf16_len > MAX_STATUS_CHARS {
+        let mut used = 0;
+        let mut prefix = String::new();
+        for ch in status.chars() {
+            if used + ch.len_utf16() > MAX_STATUS_CHARS {
+                break;
+            }
+            prefix.push(ch);
+            used += ch.len_utf16();
+        }
         format!(
-            "{}\n... (truncated because it exceeds 2k characters. Run git status for more information)",
-            status.chars().take(MAX_STATUS_CHARS).collect::<String>()
+            "{prefix}\n... (truncated because it exceeds 2k characters. Run git status for more information)"
         )
     } else {
         status
