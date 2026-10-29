@@ -33,6 +33,8 @@ pub struct Session {
     pub custom_title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forked_from: Option<Uuid>,
 }
 
 impl Session {
@@ -49,6 +51,7 @@ impl Session {
             permission_mode: None,
             custom_title: None,
             tag: None,
+            forked_from: None,
         }
     }
 
