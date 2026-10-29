@@ -1210,6 +1210,11 @@ impl Agent {
         let original_id = self.session.id;
         let mut child = self.session.clone();
         child.id = uuid::Uuid::new_v4();
+        // The source TodoWrite state is keyed by session ID, and V2 tasks
+        // use a session-specific task-list directory. A fork copies the
+        // conversation transcript but starts with an independent checklist.
+        child.todos.clear();
+        child.tasks.clear();
         child.forked_from = Some(original_id);
         child.fork_baseline_usage = Some(self.session.usage);
         child.fork_baseline_cost = Some(self.session.cost.clone());
