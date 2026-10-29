@@ -5875,8 +5875,7 @@ fn files_command_tracks_real_model_writes_and_restores_them_after_restart() {
         .unwrap()
         .unwrap()
         .path();
-    let session: Value =
-        serde_json::from_str(&fs::read_to_string(session_file).unwrap()).unwrap();
+    let session: Value = serde_json::from_str(&fs::read_to_string(session_file).unwrap()).unwrap();
     let mut resumed = binary()
         .args([
             "--workspace",
@@ -5903,7 +5902,5 @@ fn files_command_tracks_real_model_writes_and_restores_them_after_restart() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("Files in context:\ncreated.rs")
-    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Files in context:\ncreated.rs"));
 }
