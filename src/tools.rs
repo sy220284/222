@@ -188,9 +188,17 @@ impl ToolExecutor {
             "web_fetch" => {
                 self.require_approval("web_fetch", &args)?;
                 webfetch::execute_with_redirect_policy(&args, &|target| {
-                    // A cross-host redirect can hit a domain denied by a
-                    // content rule even when the initial host was allowed.
-                    self.require_approval("web_fetch", &json!({"url":target.as_str()}))
+                    // Check explicit denies now; a new tool invocation handles
+                    // the redirected origin's interactive approval separately.
+                    let policy = permission_rules::policy_for(
+                        &self.permission_rules,
+                        "web_fetch",
+                        &json!({"url":target.as_str()}),
+                    )?;
+                    if policy == Some(permission_rules::Behavior::Deny) {
+                        bail!("redirect destination explicitly denied");
+                    }
+                    Ok(())
                 })
                 .await
             }
