@@ -481,7 +481,7 @@ impl ToolExecutor {
                 let previous = history::snapshot(&path)?;
                 let previous_mode = history::snapshot_mode(&path)?;
                 let result = self.notebook_edit(&args)?;
-                let checkpoint = history::record(&self.root, &path, previous, previous_mode)?;
+                let checkpoint = history::record(&self.root, self.session_id.as_deref(), &path, previous, previous_mode)?;
                 Ok(format!(
                     "{result}{}",
                     checkpoint
@@ -555,7 +555,7 @@ impl ToolExecutor {
                 let before = history::snapshot(&path)?;
                 let before_mode = history::snapshot_mode(&path)?;
                 let result = self.write_file(&args).await?;
-                let checkpoint = history::record(&self.root, &path, before, before_mode)?;
+                let checkpoint = history::record(&self.root, self.session_id.as_deref(), &path, before, before_mode)?;
                 Ok(format!(
                     "{result}{}",
                     checkpoint
@@ -569,7 +569,7 @@ impl ToolExecutor {
                 let before = history::snapshot(&path)?;
                 let before_mode = history::snapshot_mode(&path)?;
                 let result = self.edit_file(&args).await?;
-                let checkpoint = history::record(&self.root, &path, before, before_mode)?;
+                let checkpoint = history::record(&self.root, self.session_id.as_deref(), &path, before, before_mode)?;
                 Ok(format!(
                     "{result}{}",
                     checkpoint
@@ -577,10 +577,10 @@ impl ToolExecutor {
                         .unwrap_or_default()
                 ))
             }
-            "file_history" => history::list(&self.root),
+            "file_history" => history::list(&self.root, self.session_id.as_deref()),
             "file_revert" => {
                 self.require_approval("file_revert", &args)?;
-                let record = history::load(&self.root, required(&args, "id")?)?;
+                let record = history::load(&self.root, self.session_id.as_deref(), required(&args, "id")?)?;
                 let path = self.checked_path(&record.path)?;
                 history::restore(&record, &path)
             }
