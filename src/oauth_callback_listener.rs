@@ -56,16 +56,32 @@ impl AuthCodeListener {
     ) -> Result<String>
     where
         F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<()>>,
+        Fut: Future<Output = Result<()>> + Send + 'static,
     {
-        on_ready().await?;
+        // The source installs its HTTP handler before invoking onReady and
+        // does not wait for onReady to finish. A browser launcher may itself
+        // remain pending until the callback arrives, so accepting only after
+        // awaiting it deadlocks authorization.
+        let mut readiness = tokio::spawn(on_ready());
+        let mut readiness_pending = true;
         loop {
-            let (mut stream, address) = self
-                .server
-                .as_ref()
-                .context("OAuth callback listener is closed")?
-                .accept()
-                .await?;
+            let (mut stream, address) = if readiness_pending {
+                tokio::select! {
+                    result = &mut readiness => {
+                        readiness_pending = false;
+                        result.context("OAuth readiness task failed")??;
+                        continue;
+                    }
+                    accepted = self.server.as_ref()
+                        .context("OAuth callback listener is closed")?.accept() => accepted?,
+                }
+            } else {
+                self.server
+                    .as_ref()
+                    .context("OAuth callback listener is closed")?
+                    .accept()
+                    .await?
+            };
             if !matches!(address.ip(), IpAddr::V4(ip) if ip.is_loopback()) {
                 send_response(&mut stream, 403, "Forbidden", None).await?;
                 continue;
@@ -278,6 +294,40 @@ mod tests {
 
         let valid = request(port, "/callback?code=real-code&state=expected").await;
         assert!(valid.starts_with("HTTP/1.1 302"), "{valid}");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn browser_callback_is_accepted_while_on_ready_is_still_pending() {
+        let mut listener = AuthCodeListener::start("/callback", None).await.unwrap();
+        let port = listener.port();
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(async move {
+            let code = listener
+                .wait_for_authorization("expected", move || async move {
+                    ready_rx.await.context("Browser readiness signal dropped")?;
+                    Ok(())
+                })
+                .await
+                .unwrap();
+            assert_eq!(code, "async-code");
+            listener
+                .handle_success_redirect("https://example.test/complete")
+                .await
+                .unwrap();
+            listener.close().await.unwrap();
+        });
+
+        let response = timeout(
+            Duration::from_secs(3),
+            request(port, "/callback?code=async-code&state=expected"),
+        )
+        .await
+        .expect("OAuth callback must not wait for browser launcher completion");
+        assert!(response.starts_with("HTTP/1.1 302"), "{response}");
+        ready_tx
+            .send(())
+            .expect("onReady must continue independently after the callback");
         server.await.unwrap();
     }
 
