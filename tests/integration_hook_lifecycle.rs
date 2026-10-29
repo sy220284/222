@@ -125,3 +125,61 @@ fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
     assert_eq!(failed["is_interrupt"], false);
     assert!(failed.get("tool_response").is_none());
 }
+
+
+#[cfg(unix)]
+#[test]
+fn mcp_post_tool_hook_replaces_model_visible_output_end_to_end(){
+    let root=tempfile::tempdir().unwrap();
+    let script=root.path().join("mock-mcp.sh");
+    fs::write(&script,r#"#!/bin/sh
+while IFS= read -r line; do
+    case "$line" in
+        *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}},"serverInfo":{"name":"mock","version":"1"}}}' ;;
+        *'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"secret","description":"Return a secret","inputSchema":{"type":"object","properties":{}}}]}}' ;;
+        *'"method":"tools/call"'*) echo '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"SENSITIVE_MCP_OUTPUT"}]}}' ;;
+    esac
+done
+"#).unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for index in 0..2{
+            let (mut conn,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut conn));
+            let response=if index==0{
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"mcp-secret","type":"function","function":{
+                        "name":"mcp__mock__secret","arguments":"{}"}}]},
+                    "finish_reason":"tool_calls"}]})
+            }else{
+                json!({"choices":[{"message":{"role":"assistant","content":"MCP hook result received"},
+                    "finish_reason":"stop"}]})
+            };
+            let body=response.to_string();
+            write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
+            conn.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{address}/v1")
+    }],"mcp_servers":[{"id":"mock","command":"sh",
+        "args":[script.to_str().unwrap()]}],
+    "hooks":[{"event":"PostToolUse","matcher":"^mcp__mock__secret$",
+        "command":"printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"updatedMCPToolOutput\":{\"content\":[{\"type\":\"text\",\"text\":\"REDACTED_MCP_OUTPUT\"}]}}}'"}]
+    }).to_string()).unwrap();
+    let output=Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
+        .args(["--workspace",root.path().to_str().unwrap(),
+            "--approval","full","run","Call MCP secret"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("MCP hook result received"));
+    assert_eq!(requests.len(),2);
+    assert!(requests[1].contains("REDACTED_MCP_OUTPUT"),"{}",requests[1]);
+    assert!(!requests[1].contains("SENSITIVE_MCP_OUTPUT"),"{}",requests[1]);
+}

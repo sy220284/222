@@ -1195,6 +1195,14 @@ impl Agent {
                             format!("ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: {result}")
                         )
                     }};
+                if self.mcp.as_ref().is_some_and(|m|m.handles(&call.function.name)){
+                    if let Some(replacement)=post.updated_mcp_tool_output {
+                        result=match replacement {
+                            serde_json::Value::String(text)=>text,
+                            other=>other.to_string(),
+                        };
+                    }
+                }
                 if let Some(reason) = post.blocking_reason {
                     result.push_str(&format!("\nPostToolUse hook blocked continuation: {reason}"));
                 }

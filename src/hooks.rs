@@ -93,6 +93,8 @@ pub struct HookOutcome {
     pub blocking_reason: Option<String>,
     pub additional_context: Vec<String>,
     pub updated_input: Option<Value>,
+    /// Replacement for an MCP tool's model-visible output from PostToolUse.
+    pub updated_mcp_tool_output: Option<Value>,
     pub prevent_continuation: bool,
 }
 
@@ -119,6 +121,7 @@ impl HookRunner {
 
     pub async fn run(&self, event: HookEvent, tool_name: Option<&str>, input: Value) -> Result<HookOutcome> {
         let mut outcome = HookOutcome::default();
+        let mut effective_input=input;
         for (rule, matcher) in &self.rules {
             if rule.event.name() != event.name() { continue; }
             if let Some(pattern) = matcher {
@@ -127,14 +130,14 @@ impl HookRunner {
             // Original hook stdin fields are top-level, not nested in input.
             let mut data = json!({"hook_event_name": event.name()});
             if let Some(name) = tool_name { data["tool_name"] = json!(name); }
-            if let Some(fields) = input.as_object() {
+            if let Some(fields) = effective_input.as_object() {
                 for (key, value) in fields {
                     if key != "hook_event_name" && key != "tool_name" {
                         data[key] = value.clone();
                     }
                 }
             } else {
-                data["input"] = input.clone();
+                data["input"] = effective_input.clone();
             }
             let response = run_command(rule, &data).await?;
             if response.blocking_reason.is_some() {
@@ -143,6 +146,14 @@ impl HookRunner {
             outcome.additional_context.extend(response.additional_context);
             if let Some(updated) = response.updated_input {
                 outcome.updated_input = Some(updated);
+            }
+            if let Some(updated) = response.updated_mcp_tool_output {
+                if event.name()=="PostToolUse" {
+                    // The next hook observes the effective output, not the
+                    // pre-redaction payload from an earlier PostToolUse hook.
+                    effective_input["tool_response"]=updated.clone();
+                    outcome.updated_mcp_tool_output=Some(updated);
+                }
             }
             if response.prevent_continuation {
                 outcome.prevent_continuation = true;
@@ -265,6 +276,10 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
         if !input.is_object() { bail!("updatedInput must be a JSON object") }
         result.updated_input = Some(input.clone());
     }
+    if payload["hook_event_name"]=="PostToolUse" {
+        result.updated_mcp_tool_output=hook_output
+            .and_then(|v|v.get("updatedMCPToolOutput")).cloned();
+    }
     Ok(result)
 }
 
@@ -315,6 +330,26 @@ mod tests {
                 "last_assistant_message":"File was edited"})).await.unwrap();
         assert_eq!(result.blocking_reason.as_deref(),Some("review not complete"));
     }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn post_tool_mcp_output_is_replaced_before_next_hook(){
+        let runner=HookRunner::new(&[
+            HookRule{event:HookEvent::PostToolUse,
+                matcher:Some("^mcp__mock__secret$".into()),
+                command:r#"printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedMCPToolOutput":{"content":[{"type":"text","text":"REDACTED_MCP_OUTPUT"}]}}}'"#.into(),
+                timeout_seconds:3},
+            HookRule{event:HookEvent::PostToolUse,
+                matcher:Some("^mcp__mock__secret$".into()),
+                command:"cat | grep -q REDACTED_MCP_OUTPUT".into(),
+                timeout_seconds:3},
+        ]).unwrap();
+        let result=runner.run(HookEvent::PostToolUse,Some("mcp__mock__secret"),
+            json!({"tool_response":"SENSITIVE_MCP_OUTPUT"})).await.unwrap();
+        assert_eq!(result.updated_mcp_tool_output,
+            Some(json!({"content":[{"type":"text","text":"REDACTED_MCP_OUTPUT"}]})));
+    }
+
     #[test]
     fn validates_hook_configuration() {
         assert!(HookRunner::new(&[HookRule {
