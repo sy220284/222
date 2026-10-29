@@ -316,19 +316,36 @@ impl ToolExecutor {
                 manager.list()
             }
             "task_output" => {
+                // TaskOutputTool.tsx declares a strict input object, a
+                // semanticBoolean block flag and a z.number() timeout in
+                // [0, 600000]. Reject malformed values before waiting.
+                let fields = args.as_object().context("Invalid task output arguments")?;
+                if let Some(key) = fields.keys().find(|key| {
+                    !matches!(key.as_str(), "task_id" | "block" | "timeout")
+                }) {
+                    bail!("Unrecognized task output parameter {key}");
+                }
+                let block = match args.get("block") {
+                    None => true,
+                    Some(Value::Bool(value)) => *value,
+                    _ => bail!("task_output.block must be a boolean"),
+                };
+                let timeout_ms = match args.get("timeout") {
+                    None => 30_000,
+                    Some(Value::Number(value)) => {
+                        let number = value.as_f64().context("Invalid task output timeout")?;
+                        if !(0.0..=600_000.0).contains(&number) {
+                            bail!("task_output.timeout must be between 0 and 600000 ms");
+                        }
+                        number as u64
+                    }
+                    _ => bail!("task_output.timeout must be a number"),
+                };
                 let manager = self
                     .background
                     .as_ref()
                     .context("Background tasks unavailable")?;
-                manager
-                    .output(
-                        required(&args, "task_id")?,
-                        args.get("block").and_then(Value::as_bool).unwrap_or(true),
-                        args.get("timeout")
-                            .and_then(Value::as_u64)
-                            .unwrap_or(30_000),
-                    )
-                    .await
+                manager.output(required(&args, "task_id")?, block, timeout_ms).await
             }
             "task_output_delta" => {
                 let manager = self
