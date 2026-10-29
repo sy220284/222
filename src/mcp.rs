@@ -1013,11 +1013,18 @@ impl McpManager {
                     self.server_statuses[index]["error"].as_str().unwrap_or("not connected")}));
                 continue;
             };
+            let capability = if kind == "prompts" { "prompts" } else { "resources" };
+            if self.clients[client_index].capabilities()
+                .and_then(|caps| caps.get(capability)).is_none()
+            {
+                servers.push(json!({"server":name,"ok":true,"items":[]}));
+                continue;
+            }
             let mut cursor: Option<String> = None;
             let mut seen = std::collections::HashSet::new();
             let mut entries = Vec::new();
             let listing: Result<()> = async {
-                for _ in 0..20 {
+                loop {
                     let params = cursor.as_ref().map_or(json!({}), |v| json!({"cursor":v}));
                     let page = timeout(
                         RPC_TIMEOUT,
@@ -1029,9 +1036,6 @@ impl McpManager {
                         .get(key)
                         .and_then(Value::as_array)
                         .with_context(|| format!("MCP {method} missing array {key}"))?;
-                    if entries.len() + items.len() > 1000 {
-                        bail!("MCP catalog too large")
-                    }
                     for item in items {
                         if !item.is_object() {
                             bail!("MCP catalog entry must be object")
@@ -1052,7 +1056,6 @@ impl McpManager {
                         _ => {}
                     }
                 }
-                bail!("MCP catalog exceeded page limit")
             }
             .await;
             match listing {
