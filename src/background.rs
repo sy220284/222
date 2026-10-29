@@ -123,16 +123,51 @@ impl BackgroundTasks {
     }
 
     fn save(directory: &Path, record: &TaskRecord) -> Result<()> {
+        use std::io::Write;
         let path = directory.join(format!("{}.json", record.id));
         let temp = directory.join(format!("{}.tmp", record.id));
-        fs::write(&temp, serde_json::to_vec_pretty(record)?)?;
-        fs::rename(temp, path)?;
+        // Never follow an attacker-created temporary-file symlink while
+        // persisting task state. The metadata rename is atomic.
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW);
+        }
+        let mut file = options.open(&temp)?;
+        let write_result = (|| -> Result<()> {
+            file.write_all(&serde_json::to_vec_pretty(record)?)?;
+            file.sync_all()?;
+            Ok(())
+        })();
+        drop(file);
+        if let Err(error) = write_result {
+            let _ = fs::remove_file(&temp);
+            return Err(error);
+        }
+        fs::rename(&temp, &path)?;
         Ok(())
     }
 
     fn load(&self, id: &str) -> Result<TaskRecord> {
+        use std::io::Read;
         let path = self.metadata_path(id)?;
-        let mut record: TaskRecord = serde_json::from_slice(&fs::read(path)?)?;
+        let mut options = fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW);
+        }
+        let mut file = options.open(path)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() || metadata.len() > 1024 * 1024 {
+            bail!("Background task metadata must be a regular file under 1 MiB")
+        }
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        file.read_to_end(&mut bytes)?;
+        let mut record: TaskRecord = serde_json::from_slice(&bytes)?;
         if record.id != id {
             bail!("Task metadata ID mismatch");
         }
