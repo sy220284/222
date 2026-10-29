@@ -40,10 +40,32 @@ fn normalize_path(path: &Path) -> PathBuf {
     normalized
 }
 
+fn add_successful_file(recent: &mut Vec<(String, String)>, root: &Path, path: String) {
+    let absolute = if Path::new(&path).is_absolute() {
+        PathBuf::from(path)
+    } else {
+        root.join(path)
+    };
+    // Preserve the original file identity even if the user removed it
+    // after a successful read, or the session is being resumed later.
+    let canonical = absolute
+        .canonicalize()
+        .unwrap_or_else(|_| normalize_path(&absolute));
+    let display = canonical
+        .strip_prefix(root)
+        .unwrap_or(&canonical)
+        .to_string_lossy()
+        .replace('\\', "/");
+    let identity = canonical.to_string_lossy().to_string();
+    recent.retain(|(key, _)| key != &identity);
+    recent.insert(0, (identity, display));
+    recent.truncate(MAX_TRACKED_FILES);
+}
+
 pub fn paths(messages: &[Message], root: &Path) -> Vec<String> {
-    let mut pending: HashMap<&str, String> = HashMap::new();
-    // Original FileStateCache keys are most-recently-used first, with a
-    // default 100-entry bound. Successful edits and writes also populate it.
+    let mut pending: HashMap<String, String> = HashMap::new();
+    // FileStateCache in 2.1.88 tracks successful reads and edits, most
+    // recently accessed first. Reconstruct it from the saved transcript.
     let mut recent: Vec<(String, String)> = Vec::new();
     let canonical_root = root.canonicalize().unwrap_or_else(|_| normalize_path(root));
 
@@ -54,47 +76,73 @@ pub fn paths(messages: &[Message], root: &Path) -> Vec<String> {
                     if let Some(path) =
                         tracked_target(&call.function.name, &call.function.arguments)
                     {
-                        pending.insert(&call.id, path);
+                        pending.insert(call.id.clone(), path);
                     }
                 }
             }
-        } else if message.role == "tool" {
-            if let Some(call_id) = message.tool_call_id.as_deref() {
-                if let Some(path) = pending.remove(call_id) {
-                    // Failed tool calls never populate the original cache.
-                    if message
-                        .content
-                        .as_deref()
-                        .is_none_or(|content| content.starts_with("ERROR:"))
+            // SDK/Anthropic transcripts encode tool_use inside content
+            // blocks instead of the OpenAI tool_calls field.
+            if let Some(blocks) = message.content_blocks.as_ref() {
+                for block in blocks {
+                    if block.get("type").and_then(serde_json::Value::as_str)
+                        != Some("tool_use")
                     {
                         continue;
                     }
-                    let absolute = if Path::new(&path).is_absolute() {
-                        PathBuf::from(path)
-                    } else {
-                        canonical_root.join(path)
+                    let (Some(id), Some(name), Some(input)) = (
+                        block.get("id").and_then(serde_json::Value::as_str),
+                        block.get("name").and_then(serde_json::Value::as_str),
+                        block.get("input"),
+                    ) else {
+                        continue;
                     };
-                    // A file may have been deleted after a successful read,
-                    // especially when replaying a persisted session.
-                    let canonical = absolute
-                        .canonicalize()
-                        .unwrap_or_else(|_| normalize_path(&absolute));
-                    let display = canonical
-                        .strip_prefix(&canonical_root)
-                        .unwrap_or(&canonical)
-                        .to_string_lossy()
-                        .replace('\\', "/");
-                    let identity = canonical.to_string_lossy().to_string();
-                    recent.retain(|(key, _)| key != &identity);
-                    recent.insert(0, (identity, display));
-                    recent.truncate(MAX_TRACKED_FILES);
+                    if let Some(path) = tracked_target(name, &input.to_string()) {
+                        pending.insert(id.to_owned(), path);
+                    }
+                }
+            }
+        }
+
+        if message.role == "tool" {
+            if let Some(id) = message.tool_call_id.as_deref() {
+                if let Some(path) = pending.remove(id) {
+                    let failed = message.content.as_deref().is_none_or(|content| {
+                        let trimmed = content.trim_start();
+                        trimmed.starts_with("ERROR:") || trimmed.starts_with("Error:")
+                    });
+                    if !failed {
+                        add_successful_file(&mut recent, &canonical_root, path);
+                    }
+                }
+            }
+        }
+        // In the original SDK wire format, tool_result is a user content
+        // block; a successful result can be text, image, or structured data.
+        if let Some(blocks) = message.content_blocks.as_ref() {
+            for block in blocks {
+                if block.get("type").and_then(serde_json::Value::as_str)
+                    != Some("tool_result")
+                {
+                    continue;
+                }
+                let Some(id) = block
+                    .get("tool_use_id")
+                    .and_then(serde_json::Value::as_str)
+                else {
+                    continue;
+                };
+                if let Some(path) = pending.remove(id) {
+                    if block.get("is_error").and_then(serde_json::Value::as_bool)
+                        != Some(true)
+                    {
+                        add_successful_file(&mut recent, &canonical_root, path);
+                    }
                 }
             }
         }
     }
     recent.into_iter().map(|(_, display)| display).collect()
 }
-
 pub fn render(messages: &[Message], root: &Path) -> String {
     let files = paths(messages, root);
     if files.is_empty() {
