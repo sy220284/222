@@ -388,7 +388,13 @@ async fn fetch_with_redirect_policy_in_workspace(
     if let Some(value) = cache_key.as_deref().and_then(cached_page) {
         return Ok(value);
     }
+    if url.encode_utf16().count() > 2_000 {
+        bail!("WebFetch URL exceeds the original 2,000-character limit");
+    }
     let mut current = Url::parse(url)?;
+    if !current.host_str().is_some_and(|host| host.contains('.')) {
+        bail!("WebFetch requires a publicly resolvable host");
+    }
     // The original getURLMarkdownContent upgrades plain HTTP before its
     // initial request. The private-address override exists only for local
     // transport tests, where a TLS listener is not available.
@@ -447,6 +453,12 @@ async fn fetch_with_redirect_policy_in_workspace(
             continue;
         }
         let code = response.status();
+        if code.as_u16() == 403
+            && response.headers().get("x-proxy-error")
+                .and_then(|header| header.to_str().ok()) == Some("blocked-by-allowlist")
+        {
+            bail!("WebFetch egress policy blocked access to {}", current.host_str().unwrap_or(""));
+        }
         if !code.is_success() {
             bail!("HTTP {code} at {current}")
         }
@@ -495,7 +507,8 @@ async fn fetch_with_redirect_policy_in_workspace(
         }
         let mut output = json!({
             "url":current.as_str(),"code":code.as_u16(),"bytes":bytes.len(),
-            "content":content,"contentType":kind
+            "content":content,"contentType":kind,
+            "codeText":code.canonical_reason().unwrap_or("")
         });
         if let Some(path) = persisted {
             output["persistedPath"] = json!(path.to_string_lossy().to_string());
