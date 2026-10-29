@@ -3890,9 +3890,12 @@ fn chat_additional_directory_requires_confirmation_and_persists_only_when_reques
         approved.display()
     ));
     assert!(accepted.contains("saved to local settings"), "{accepted}");
-    let saved: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+    // permissionSetup.ts stores workspace-specific grants in the local
+    // settings file, not in the provider credentials/config document.
+    let settings = root.path().join(".atlas/settings.local.json");
+    let saved: Value = serde_json::from_slice(&fs::read(settings).unwrap()).unwrap();
     assert_eq!(
-        saved["additional_directories"][0],
+        saved["permissions"]["additionalDirectories"][0],
         approved.to_str().unwrap()
     );
     let resumed = run("/dirs\n/exit\n".to_string());
@@ -4090,9 +4093,10 @@ fn chat_add_dir_without_argument_prompts_for_path_and_remember_choice() {
     let shown = String::from_utf8(result.stdout).unwrap();
     assert!(shown.contains("Directory path:"), "{shown}");
     assert!(shown.contains("saved to local settings"), "{shown}");
-    let saved: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+    let settings = root.path().join(".atlas/settings.local.json");
+    let saved: Value = serde_json::from_slice(&fs::read(settings).unwrap()).unwrap();
     assert_eq!(
-        saved["additional_directories"][0],
+        saved["permissions"]["additionalDirectories"][0],
         external.path().canonicalize().unwrap().to_str().unwrap()
     );
 }
@@ -5434,7 +5438,9 @@ fn chat_tag_toggles_with_confirmation_and_is_searchable_after_resume() {
     assert!(stdout.contains("Removed session tag"), "{stdout}");
     assert!(stdout.contains("Tagged session with #feature"), "{stdout}");
     assert!(stdout.contains("Session tag: #feature"), "{stdout}");
-    assert!(stdout.contains("Untitled conversation #bugfix"), "{stdout}");
+    // 2.1.88 getLogDisplayTitle uses the first eight UUID characters when
+    // an empty session has no title, not an invented Untitled label.
+    assert!(stdout.contains(" #bugfix  (0 messages)"), "{stdout}");
     let stored = fs::read_dir(root.path().join(".atlas/sessions"))
         .unwrap()
         .next()
@@ -5731,15 +5737,14 @@ fn project_init_uses_real_repo_landmarks_and_interactive_model_questions() {
         .unwrap()["content"]
         .as_str()
         .unwrap();
-    let selected: Value = serde_json::from_str(returned).unwrap();
-    assert_eq!(
-        selected["answers"]["Which instruction documents?"],
-        "Project AGENTS.md"
+    // The source AskUserQuestion result is the human-readable tool message
+    // produced from the actual terminal answer; no model-forged JSON answers.
+    assert!(returned.contains("User has answered your questions:"), "{returned}");
+    assert!(
+        returned.contains("\"Which instruction documents?\"=\"Project AGENTS.md\""),
+        "{returned}"
     );
-    assert_eq!(
-        selected["questions"][0]["question"],
-        "Which instruction documents?"
-    );
+    assert!(!returned.contains("Personal AGENTS.local.md"), "{returned}");
     assert!(String::from_utf8_lossy(&output.stdout).contains("Confirmed"));
     assert!(
         !root.path().join("AGENTS.md").exists(),
