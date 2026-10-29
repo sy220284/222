@@ -41,6 +41,9 @@ pub struct Session {
     pub custom_title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    /// Git branch captured when this conversation starts; never rewritten by later checkouts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_branch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forked_from: Option<Uuid>,
     /// Usage already charged to the parent, excluded from fork stats.
@@ -69,6 +72,7 @@ impl Session {
             permission_mode: None,
             custom_title: None,
             tag: None,
+            git_branch: None,
             forked_from: None,
             fork_baseline_usage: None,
             fork_baseline_cost: None,
