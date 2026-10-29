@@ -653,7 +653,12 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
             grep_glob_explicitly_includes(&glob_patterns, relative)
         })
     });
-    sort_newest(&mut candidates);
+    // GrepTool.ts::call sorts by mtime only in files_with_matches mode.
+    // Content and count modes preserve ripgrep's discovery order so offset
+    // pagination does not unexpectedly reshuffle results by file age.
+    if mode == "files_with_matches" {
+        sort_newest(&mut candidates);
+    }
     for path in candidates {
         check_search_deadline(Some(deadline))?;
         // Source GrepTool.ts applies --max-columns=500 to output lines,
