@@ -1263,7 +1263,7 @@ impl ToolExecutor {
             bail!("File has been modified since read. Read it again before editing");
         }
         let actual_old = actual_edit_text(&content, old).unwrap_or_else(|| old.to_owned());
-        let hits = content.matches(&actual_old).count();
+        let hits = content.matches(actual_old.as_str()).count();
         let normalized_new = normalize_edit_replacement(&path, new);
         let replacement = preserve_curly_quotes(old, &actual_old, &normalized_new);
         let replace_all = args
@@ -1274,9 +1274,9 @@ impl ToolExecutor {
             bail!("Expected exactly one match; found {hits}")
         }
         let updated = if replace_all {
-            content.replace(&actual_old, &replacement)
+            content.replace(actual_old.as_str(), replacement.as_str())
         } else {
-            content.replacen(&actual_old, &replacement, 1)
+            content.replacen(actual_old.as_str(), replacement.as_str(), 1)
         };
         if updated.len() as u64 > MAX_FILE_BYTES {
             bail!("Updated file too large")
