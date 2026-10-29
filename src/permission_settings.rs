@@ -29,7 +29,9 @@ pub struct SettingsPaths {
 
 impl SettingsPaths {
     pub fn for_workspace(workspace: &Path) -> Result<Self> {
-        let workspace = workspace.canonicalize().context("Resolve permission workspace")?;
+        let workspace = workspace
+            .canonicalize()
+            .context("Resolve permission workspace")?;
         let user_root = dirs::config_dir()
             .context("Cannot locate user settings directory")?
             .join("atlas-agent");
@@ -59,7 +61,10 @@ impl SettingsPaths {
             Err(error) => return Err(error).with_context(|| format!("Inspect {}", path.display())),
         };
         if metadata.file_type().is_symlink() || !metadata.is_file() {
-            bail!("Permission settings path must be a regular file: {}", path.display());
+            bail!(
+                "Permission settings path must be a regular file: {}",
+                path.display()
+            );
         }
         let content = fs::read_to_string(path)
             .with_context(|| format!("Read permission settings {}", path.display()))?;
@@ -69,7 +74,10 @@ impl SettingsPaths {
         let value: Value = serde_json::from_str(crate::json_read::strip_bom(&content))
             .with_context(|| format!("Parse permission settings {}", path.display()))?;
         if !value.is_object() {
-            bail!("Permission settings must be a JSON object: {}", path.display());
+            bail!(
+                "Permission settings must be a JSON object: {}",
+                path.display()
+            );
         }
         Ok(Some(value))
     }
@@ -136,7 +144,9 @@ impl SettingsPaths {
     }
 
     fn validate_edit_path(&self, path: &Path) -> Result<()> {
-        let parent = path.parent().context("Permission settings have no parent")?;
+        let parent = path
+            .parent()
+            .context("Permission settings have no parent")?;
         fs::create_dir_all(parent)?;
         if path == self.project || path == self.local {
             let canonical = parent.canonicalize()?;
@@ -153,7 +163,9 @@ impl SettingsPaths {
     }
 
     fn write_atomic(path: &Path, data: &Value) -> Result<()> {
-        let parent = path.parent().context("Permission settings have no parent")?;
+        let parent = path
+            .parent()
+            .context("Permission settings have no parent")?;
         let temporary = parent.join(format!(".permissions-{}.tmp", uuid::Uuid::new_v4()));
         let result = (|| -> Result<()> {
             let mut file = OpenOptions::new()
@@ -193,8 +205,7 @@ impl SettingsPaths {
             "{}.lock",
             path.extension().and_then(|s| s.to_str()).unwrap_or("json")
         ));
-        if fs::symlink_metadata(&lock_path)
-            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+        if fs::symlink_metadata(&lock_path).is_ok_and(|metadata| metadata.file_type().is_symlink())
         {
             bail!("Refusing symlinked permission settings lock");
         }
@@ -205,8 +216,7 @@ impl SettingsPaths {
             .truncate(false)
             .open(&lock_path)?;
         lock.lock_exclusive()?;
-        let mut settings =
-            Self::read_json(path)?.unwrap_or_else(|| Value::Object(Map::new()));
+        let mut settings = Self::read_json(path)?.unwrap_or_else(|| Value::Object(Map::new()));
         let object = settings
             .as_object_mut()
             .context("Permission settings must be an object")?;
@@ -320,19 +330,36 @@ mod tests {
     fn policy_only_disables_all_nonmanaged_rules_and_edits() {
         let root = tempfile::tempdir().unwrap();
         let paths = paths(root.path());
-        write(&paths.user, &json!({"permissions":{"allow":["Bash(touch unsafe)"]}}));
-        write(&paths.project, &json!({"permissions":{"allow":["Bash(touch unsafe)"]}}));
-        write(paths.policy.as_ref().unwrap(), &json!({
-            "allowManagedPermissionRulesOnly":true,
-            "permissions":{"deny":["Bash(touch unsafe)"]}
-        }));
-        let loaded = paths.load(&[RuleSetting {
-            behavior: "allow".into(),
-            rule: "Bash(touch unsafe)".into(),
-        }]).unwrap();
+        write(
+            &paths.user,
+            &json!({"permissions":{"allow":["Bash(touch unsafe)"]}}),
+        );
+        write(
+            &paths.project,
+            &json!({"permissions":{"allow":["Bash(touch unsafe)"]}}),
+        );
+        write(
+            paths.policy.as_ref().unwrap(),
+            &json!({
+                "allowManagedPermissionRulesOnly":true,
+                "permissions":{"deny":["Bash(touch unsafe)"]}
+            }),
+        );
+        let loaded = paths
+            .load(&[RuleSetting {
+                behavior: "allow".into(),
+                rule: "Bash(touch unsafe)".into(),
+            }])
+            .unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].behavior, "deny");
-        assert!(!paths.add(EditableSource::Local, Behavior::Allow, &[parse_rule("Bash(touch unsafe)")]).unwrap());
+        assert!(!paths
+            .add(
+                EditableSource::Local,
+                Behavior::Allow,
+                &[parse_rule("Bash(touch unsafe)")]
+            )
+            .unwrap());
         assert!(!paths.local.exists());
     }
 
@@ -340,8 +367,14 @@ mod tests {
     fn source_rules_reach_real_shell_permission_gate() {
         let root = tempfile::tempdir().unwrap();
         let paths = paths(root.path());
-        write(&paths.project, &json!({"permissions":{"allow":["Bash(touch allowed)"]}}));
-        write(paths.policy.as_ref().unwrap(), &json!({"permissions":{"deny":["Bash(touch blocked)"]}}));
+        write(
+            &paths.project,
+            &json!({"permissions":{"allow":["Bash(touch allowed)"]}}),
+        );
+        write(
+            paths.policy.as_ref().unwrap(),
+            &json!({"permissions":{"deny":["Bash(touch blocked)"]}}),
+        );
         let rules = compile_rules(&paths.load(&[]).unwrap()).unwrap();
         assert_eq!(
             policy_for(&rules, "run_command", &json!({"command":"touch allowed"})).unwrap(),
@@ -357,16 +390,23 @@ mod tests {
     fn append_delete_preserves_unknown_fields_and_normalizes_legacy_names() {
         let root = tempfile::tempdir().unwrap();
         let paths = paths(root.path());
-        write(&paths.local, &json!({
-            "hooks":{"invalid-but-preserved":true},
-            "permissions":{"allow":["KillShell(123)"],"custom":["keep"]}
-        }));
+        write(
+            &paths.local,
+            &json!({
+                "hooks":{"invalid-but-preserved":true},
+                "permissions":{"allow":["KillShell(123)"],"custom":["keep"]}
+            }),
+        );
         let rule = parse_rule("TaskStop(123)");
-        assert!(paths.add(EditableSource::Local, Behavior::Allow, &[rule.clone()]).unwrap());
+        assert!(paths
+            .add(EditableSource::Local, Behavior::Allow, &[rule.clone()])
+            .unwrap());
         let before = SettingsPaths::read_json(&paths.local).unwrap().unwrap();
         assert_eq!(before["permissions"]["allow"], json!(["KillShell(123)"]));
         assert_eq!(before["hooks"]["invalid-but-preserved"], true);
-        assert!(paths.delete(EditableSource::Local, Behavior::Allow, &rule).unwrap());
+        assert!(paths
+            .delete(EditableSource::Local, Behavior::Allow, &rule)
+            .unwrap());
         let after = SettingsPaths::read_json(&paths.local).unwrap().unwrap();
         assert_eq!(after["permissions"]["allow"], json!([]));
         assert_eq!(after["permissions"]["custom"], json!(["keep"]));
@@ -378,7 +418,13 @@ mod tests {
         let paths = paths(root.path());
         fs::create_dir_all(paths.local.parent().unwrap()).unwrap();
         fs::write(&paths.local, "{bad json").unwrap();
-        assert!(paths.add(EditableSource::Local, Behavior::Allow, &[parse_rule("Bash(ls)")]).is_err());
+        assert!(paths
+            .add(
+                EditableSource::Local,
+                Behavior::Allow,
+                &[parse_rule("Bash(ls)")]
+            )
+            .is_err());
         assert_eq!(fs::read_to_string(&paths.local).unwrap(), "{bad json");
     }
 
@@ -386,13 +432,17 @@ mod tests {
     fn concurrent_writers_preserve_every_distinct_rule() {
         let root = tempfile::tempdir().unwrap();
         let paths = Arc::new(paths(root.path()));
-        let handles: Vec<_> = (0..16).map(|id| {
-            let paths = Arc::clone(&paths);
-            std::thread::spawn(move || {
-                let rule = parse_rule(&format!("Bash(touch file{id})"));
-                paths.add(EditableSource::Local, Behavior::Allow, &[rule]).unwrap();
+        let handles: Vec<_> = (0..16)
+            .map(|id| {
+                let paths = Arc::clone(&paths);
+                std::thread::spawn(move || {
+                    let rule = parse_rule(&format!("Bash(touch file{id})"));
+                    paths
+                        .add(EditableSource::Local, Behavior::Allow, &[rule])
+                        .unwrap();
+                })
             })
-        }).collect();
+            .collect();
         for handle in handles {
             handle.join().unwrap();
         }
@@ -417,12 +467,8 @@ mod tests {
             &json!({"permissions":{"deny":["Bash(touch blocked)"]}}),
         );
         let rules = compile_rules(&paths.load(&[]).unwrap()).unwrap();
-        let executor = ToolExecutor::new(
-            root.path().canonicalize().unwrap(),
-            Approval::Ask,
-            false,
-        )
-        .with_permission_rules(rules);
+        let executor = ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Ask, false)
+            .with_permission_rules(rules);
         let make_call = |command: &str| ToolCall {
             id: "permission-source-test".into(),
             kind: "function".into(),
@@ -447,7 +493,13 @@ mod tests {
         let outside = tempfile::tempdir().unwrap();
         let paths = paths(root.path());
         symlink(outside.path(), root.path().join(".atlas")).unwrap();
-        assert!(paths.add(EditableSource::Project, Behavior::Allow, &[parse_rule("Bash(touch escaped)")]).is_err());
+        assert!(paths
+            .add(
+                EditableSource::Project,
+                Behavior::Allow,
+                &[parse_rule("Bash(touch escaped)")]
+            )
+            .is_err());
         assert!(!outside.path().join("settings.json").exists());
     }
 }
