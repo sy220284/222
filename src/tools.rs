@@ -760,7 +760,7 @@ impl ToolExecutor {
         Ok(matches.join("\n"))
     }
 
-    fn list_skills(&self) -> Result<String> {
+    pub fn list_skills(&self) -> Result<String> {
         let root = self.root.join(".atlas").join("skills");
         let mut skills = Vec::new();
         if root.is_dir() {
