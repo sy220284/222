@@ -825,7 +825,13 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
         if input == "/branch" || input.starts_with("/branch ") {
             let name = input.strip_prefix("/branch").unwrap_or("").trim();
             match agent.branch_session((!name.is_empty()).then_some(name)) {
-                Ok(message) => println!("{message}"),
+                Ok(message) => {
+                    prompt_history = prompt_history::PromptHistory::new(
+                        agent.workspace_root(),
+                        &agent.session_id(),
+                    )?;
+                    println!("{message}");
+                }
                 Err(error) => eprintln!("Cannot branch: {error:#}"),
             }
             continue;

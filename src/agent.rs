@@ -1114,9 +1114,9 @@ impl Agent {
     pub fn workspace_root(&self) -> &std::path::Path {
         &self.root
     }
-    /// Fork the live conversation without switching away from the parent.
-    /// Carries over messages, tool-result history and context metadata.
-    pub fn branch_session(&self, title: Option<&str>) -> Result<String> {
+    /// Fork the live conversation and switch the active run to the new session.
+    /// The original session remains unchanged and resumable.
+    pub fn branch_session(&mut self, title: Option<&str>) -> Result<String> {
         let first = self.session.messages.iter().find(|m| {
             m.role == "user" && m.content.as_deref().is_some_and(|s| !s.trim().is_empty())
         });
@@ -1154,17 +1154,28 @@ impl Agent {
             }
             index += 1;
         };
+        let original_id = self.session.id;
         let mut child = self.session.clone();
         child.id = uuid::Uuid::new_v4();
-        child.forked_from = Some(self.session.id);
+        child.forked_from = Some(original_id);
         child.custom_title = Some(name.clone());
         child.tag = None;
+        // A personal task graph belongs to its session, not to the parent.
+        // Team graphs retain the shared team identity across the fork.
+        let graph = if child.team_name.is_none() {
+            Some(task_graph::TaskGraph::new(&self.root, &child.id.to_string())?)
+        } else {
+            None
+        };
         child.save(&self.root)?;
+        let branch_id = child.id;
+        self.session = child;
+        if let Some(graph) = graph {
+            self.graph = graph;
+        }
         Ok(format!(
-            "Branched conversation: {name}\nSession: {}\nResume: atlas-agent --workspace {} chat --resume {}",
-            child.id,
-            self.root.display(),
-            child.id
+            "Branched conversation: {name}. You are now in the branch.\nSession: {branch_id}\nTo resume original: atlas-agent --workspace {} chat --resume {original_id}",
+            self.root.display()
         ))
     }
 

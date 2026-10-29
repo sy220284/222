@@ -5394,16 +5394,23 @@ fn chat_branch_preserves_original_conversation_and_uses_collision_free_titles() 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let request = read_request(&mut stream);
-        let body = json!({"choices":[{"message":{"role":"assistant",
-            "content":"Original completion"},"finish_reason":"stop"}]})
-        .to_string();
-        write!(stream,
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()).unwrap();
-        stream.flush().unwrap();
-        request
+        let mut requests = Vec::new();
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_request(&mut stream);
+            let body = json!({"choices":[{"message":{"role":"assistant",
+                "content":"Original completion"},"finish_reason":"stop"}]})
+            .to_string();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            stream.flush().unwrap();
+            requests.push(request);
+        }
+        requests
     });
     let config = root.path().join("config.json");
     fs::write(
@@ -5424,16 +5431,18 @@ fn chat_branch_preserves_original_conversation_and_uses_collision_free_titles() 
         .spawn()
         .unwrap();
     child.stdin.take().unwrap().write_all(
-        b"/branch\nResearch branch candidate\n/branch\n/branch\n/branch custom\n/sessions Branch\n/exit\n"
+        b"/branch\nResearch branch candidate\n/branch\n/branch\n/branch custom\nOnly in the active branch\n/sessions Branch\n/exit\n"
     ).unwrap();
     let output = child.wait_with_output().unwrap();
-    let first_request = server.join().unwrap();
+    let requests = server.join().unwrap();
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(first_request.contains("Research branch candidate"));
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].contains("Research branch candidate"));
+    assert!(requests[1].contains("Only in the active branch"));
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(String::from_utf8_lossy(&output.stderr).contains("No conversation to branch"));
     assert!(
@@ -5455,16 +5464,28 @@ fn chat_branch_preserves_original_conversation_and_uses_collision_free_titles() 
         .iter()
         .find(|s| s["forked_from"].is_null())
         .unwrap();
-    let forks = sessions
+    let first = sessions
         .iter()
-        .filter(|s| !s["forked_from"].is_null())
-        .collect::<Vec<_>>();
-    assert_eq!(forks.len(), 3);
-    for session in forks {
-        assert_eq!(session["forked_from"], original["id"]);
-        assert_eq!(session["messages"], original["messages"]);
+        .find(|s| s["custom_title"] == "Research branch candidate (Branch)")
+        .unwrap();
+    let second = sessions
+        .iter()
+        .find(|s| s["custom_title"] == "Research branch candidate (Branch 2)")
+        .unwrap();
+    let third = sessions
+        .iter()
+        .find(|s| s["custom_title"] == "custom (Branch)")
+        .unwrap();
+    assert_eq!(first["forked_from"], original["id"]);
+    assert_eq!(second["forked_from"], first["id"]);
+    assert_eq!(third["forked_from"], second["id"]);
+    for session in [first, second, third] {
         assert!(session["tag"].is_null());
         assert_ne!(session["id"], original["id"]);
     }
+    assert_eq!(first["messages"], original["messages"]);
+    assert_eq!(second["messages"], original["messages"]);
     assert_eq!(original["messages"].as_array().unwrap().len(), 2);
+    assert_eq!(third["messages"].as_array().unwrap().len(), 4);
+    assert_eq!(third["messages"][2]["content"], "Only in the active branch");
 }

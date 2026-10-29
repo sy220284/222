@@ -507,3 +507,10 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - 代码 HEAD `1a677171e54da1277128c9f5a5a5d793a299ebb8` 的 GitHub Actions [40838300287](https://github.com/sy220284/222/actions/runs/40838300287)：格式/Clippy、编译/全部测试、依赖检查均成功。之后仅更新迁移台账，最终 HEAD 的 CI 另行判定。
 
 **严格剩余差异**：`ToolSearch` 已补 MCP 延迟模式加载及检索后的下轮动态注入，仍缺原版 `tool_reference` 原生结果块、多供应商传输和部分动态通知语义；`AskUserQuestion` 尚未实现 React/Ink 预览与 SDK 外部审批回执，annotations 未覆盖。两条源路径仍记“部分实现”，没有任何新增跨模块全行为等价验收，不改变 1,855 条未完成等价验收的保守统计。继续保留 Draft PR #2，不合并。
+
+### /branch 会话分叉：原版调用链核对（2026-10-29）
+
+- 原始依据：2.1.88 `src/commands/branch/branch.ts` 中 `createFork`、`getUniqueForkName`、`call`；`src/commands/branch/index.ts` 注册入口。原版调用 `context.resume(sessionId, forkLog, 'fork')` **切换当前会话到分叉**，并保留原会话供恢复。
+- Rust 入口：`src/main.rs` 的 `/branch` → `src/agent.rs::Agent::branch_session` → `src/session.rs::Session::save`。修正原先仅保存分叉而继续写入父会话的语义偏差：分叉保存成功后切换活动会话、重绑定个人任务图及 CLI 提示历史，保持父会话不变。新会话后续消息独立保存。
+- 回归：`tests/integration_cli.rs::chat_branch_preserves_original_conversation_and_uses_collision_free_titles` 使用真实 CLI 子进程和模拟模型 HTTP，检查连续分叉的父子链、标题冲突处理、分叉后消息只写入活动子会话。代码提交后仍须核实最新 HEAD 的格式、Clippy、完整测试及 CI。
+- 尚未等价：原版 JSONL transcript 的逐消息 `forkedFrom.messageUuid`、`parentUuid`、sidechain/progress 过滤、content-replacement 重映射、`context.resume` 的完整 UI/SDK 生命周期及相关日志元数据；Rust 当前以会话 JSON 保存，不能宣称该原路径已完全验收。
