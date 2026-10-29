@@ -796,6 +796,110 @@ pub fn list_commands(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
     Ok(names.into_iter().collect())
 }
 
+
+/// SDK initialize advertises the actual metadata of user-invocable plugin
+/// commands and skills. Read the same manifest paths used by execution;
+/// never synthesize descriptions for files the user cannot invoke.
+pub fn command_descriptors(root: &Path, enabled: &[String]) -> Result<Vec<Value>> {
+    let mut descriptors = Vec::new();
+    for name in list_commands(root, enabled)? {
+        let (plugin, suffix) = name.split_once(':')
+            .context("Invalid plugin command name")?;
+        let location = directory(root, plugin)?;
+        let manifest = read_manifest(&location, plugin)?;
+        let source = if let Some((_, path)) = skill_files(&location, &manifest)?
+            .into_iter().find(|(candidate, _)| candidate == suffix) {
+            Some(fs::read_to_string(path)?)
+        } else if let Some(spec) = manifest.commands.as_object()
+            .and_then(|entries| entries.get(suffix)) {
+            if let Some(content) = spec.get("content").and_then(Value::as_str) {
+                Some(content.to_owned())
+            } else if let Some(relative) = spec.get("source").and_then(Value::as_str) {
+                Some(fs::read_to_string(checked_component(
+                    &location, &location.join(relative),
+                )?)?)
+            } else {
+                bail!("Plugin command requires source or content")
+            }
+        } else {
+            let paths = match &manifest.commands {
+                Value::Null => vec!["commands".to_owned()],
+                Value::String(path) => vec![path.clone()],
+                Value::Array(paths) => paths.iter()
+                    .map(|value| value.as_str().map(str::to_owned)
+                        .context("Plugin command path must be a string"))
+                    .collect::<Result<Vec<_>>>()?,
+                Value::Object(_) => Vec::new(),
+                _ => bail!("Plugin commands must be a path, array or metadata map"),
+            };
+            let mut matched = None;
+            for relative in paths {
+                let candidate = location.join(relative);
+                if !candidate.exists() && manifest.commands.is_null() {
+                    continue;
+                }
+                let candidate = checked_component(&location, &candidate)?;
+                let files = if candidate.is_file() {
+                    vec![candidate.clone()]
+                } else {
+                    walkdir::WalkDir::new(&candidate).follow_links(false)
+                        .into_iter().map(|entry| entry.map_err(anyhow::Error::from))
+                        .collect::<Result<Vec<_>>>()?
+                        .into_iter().filter(|entry| entry.file_type().is_file())
+                        .map(|entry| entry.into_path()).collect::<Vec<_>>()
+                };
+                for path in files {
+                    if !path.extension().and_then(|ext| ext.to_str())
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("md")) {
+                        continue;
+                    }
+                    let relative_path = path.strip_prefix(&candidate).unwrap_or(path.as_path());
+                    let skill = path.file_name().and_then(|value| value.to_str())
+                        .is_some_and(|value| value.eq_ignore_ascii_case("SKILL.md"));
+                    if !skill && path.parent()
+                        .is_some_and(|parent| parent.join("SKILL.md").is_file()) {
+                        continue;
+                    }
+                    let mut parts = Vec::new();
+                    if let Some(parent) = relative_path.parent() {
+                        for component in parent.components() {
+                            let part = component.as_os_str().to_str()
+                                .context("Invalid plugin command namespace")?;
+                            if !part.is_empty() { parts.push(part.to_owned()); }
+                        }
+                    }
+                    if !skill {
+                        parts.push(path.file_stem().and_then(|stem| stem.to_str())
+                            .context("Invalid plugin command name")?.to_owned());
+                    } else if parts.is_empty() {
+                        parts.push(path.parent().and_then(Path::file_name)
+                            .and_then(|part| part.to_str())
+                            .context("Invalid skill command directory")?.to_owned());
+                    }
+                    if parts.join(":") == suffix {
+                        matched = Some(fs::read_to_string(checked_component(
+                            &location, &path,
+                        )?)?);
+                        break;
+                    }
+                }
+                if matched.is_some() { break; }
+            }
+            matched
+        };
+        let content = source.with_context(|| format!(
+            "Plugin command {name} was advertised but its source disappeared"
+        ))?;
+        let (description, hint) = crate::skill_arguments::command_metadata(
+            &content, "Installed plugin command or skill",
+        );
+        descriptors.push(serde_json::json!({
+            "name":name,"description":description,"argumentHint":hint
+        }));
+    }
+    Ok(descriptors)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
