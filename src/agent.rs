@@ -127,7 +127,7 @@ impl Agent {
             session.git_branch = ConversationContext::branch_at_start(&root);
         }
         let provider = provider::create(&profile)?;
-        let background = Arc::new(BackgroundTasks::new(&root)?);
+        let background = Arc::new(BackgroundTasks::for_session(&root, session.id)?);
         let list_id = task_list_id(session.id, session.team_name.as_deref());
         let graph = task_graph::TaskGraph::new(&root, &list_id)?;
         let restored_team = session.team_name.clone();
