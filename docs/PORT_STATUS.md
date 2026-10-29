@@ -9,7 +9,7 @@
 
 ## 2026-10-29：会话搜索源码对照补全（保持部分实现）
 
-对照 2.1.88 `src/utils/agenticSessionSearch.ts` 的 `logContainsQuery`、`extractMessageText`、`extractTranscript` 与会话排序规则，修复 Rust `src/session_control.rs` 只能按标题、标签、UUID 查找，无法通过摘要和真实对话内容找到历史会话的问题。现有 `sessions QUERY` 和恢复选择器复用搜索入口：标签精确匹配优先于部分标签、标题及摘要；读取首尾各 50 条消息，提取用户/助手文本及多模态文本块，跳过工具结果，限制搜索文本长度 2000 字符。增加真实持久化会话、标签优先级、摘要、多模态文本、工具输出隔离、短会话去重及长会话边界回归。
+对照 2.1.88 `src/utils/agenticSessionSearch.ts` 的 `logContainsQuery`、`extractMessageText`、`extractTranscript` 与会话排序规则，修复 Rust `src/session_control.rs` 只能按标题、标签、UUID 查找，无法通过摘要和真实对话内容找到历史会话的问题。现有 `sessions QUERY` 和恢复选择器复用搜索入口：标签精确匹配优先于部分标签、标题及摘要；读取首尾各 50 条消息，提取用户/助手文本及多模态文本块，跳过工具结果，按原版 UTF-16 单元限制搜索文本为前 2000 单元，截断时追加省略号（保留 Rust 合法 Unicode 边界）。增加真实持久化会话、标签优先级、摘要、多模态文本、工具输出隔离、短会话去重及长会话边界回归。
 
 仍缺原版小模型语义关联搜索、Git 分支字段、轻量会话异步全文补载及中断/错误回退；该源路径由未迁移转为**部分实现**，不计为完整等价验收。Rust 代码提交 `616395c`、`56d660a`；最终 CI 以当前 HEAD 实际结果为准。
 
