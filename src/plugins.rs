@@ -85,6 +85,9 @@ pub fn list_skills(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
         if !dir.is_dir() {
             continue;
         }
+        if !dir.canonicalize()?.starts_with(&plugin_root) {
+            bail!("Plugin skills directory leaves plugin root")
+        }
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let skill = entry.file_name().to_string_lossy().to_string();
