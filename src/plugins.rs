@@ -486,18 +486,26 @@ pub fn list_skills(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
     names.sort();
     Ok(names)
 }
-pub fn read_skill(root: &Path, enabled: &[String], identifier: &str) -> Result<String> {
+/// Resolve the same manifest-configured and nested skill file used by
+/// discovery. The tool executor must check permissions against this real
+/// canonical path, not assume every skill lives under skills/<name>/SKILL.md.
+pub fn resolve_skill_path(root: &Path, enabled: &[String], identifier: &str) -> Result<PathBuf> {
     let (name, skill) = identifier
         .split_once(':')
         .context("Use plugin:skill as plugin skill name")?;
-    if !skill.split(':').all(valid_name) || !enabled.iter().any(|n| n == name) {
+    if !valid_name(name) || !skill.split(':').all(valid_name)
+        || !enabled.iter().any(|n| n == name) {
         bail!("Plugin skill not enabled")
     }
     let plugin_root = directory(root, name)?;
     let manifest = read_manifest(&plugin_root, name)?;
-    let path = skill_files(&plugin_root, &manifest)?
+    skill_files(&plugin_root, &manifest)?
         .into_iter().find(|(candidate, _)| candidate == skill)
-        .map(|(_, path)| path).context("Plugin skill not found")?;
+        .map(|(_, path)| path).context("Plugin skill not found")
+}
+
+pub fn read_skill(root: &Path, enabled: &[String], identifier: &str) -> Result<String> {
+    let path = resolve_skill_path(root, enabled, identifier)?;
     if fs::metadata(&path)?.len() > 64_000 {
         bail!("Plugin skill too large")
     }
