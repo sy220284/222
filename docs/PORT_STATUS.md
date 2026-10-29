@@ -279,3 +279,13 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：原始 MCP Prompt 命令至真实模型请求的调用链（统一 Issue #3）
 
 对照原始 `src/services/mcp/client.ts` 第 2033–2096 行 `fetchCommandsForClient`：新增 `src/mcp_prompt.rs`，只识别显式 `/server:prompt (MCP) 参数` 标记；按原版 `args.split(' ')` 的位置顺序绑定 `arguments` 名称。`Agent::ask` 在 UserPromptSubmit Hook 和会话持久化前，从 MCP `prompts/list` 验证显式请求的来源/名称，再调用 `prompts/get`，将文本消息（按 role 顺序）作为普通用户上下文交给现有多模型 Agent。禁止将服务端 Prompt 升格为系统指令；图片/音频/嵌入资源等目前 ModelRequest 不支持的内容显式拒绝而非静默丢弃。SDK 和终端均通过此 Agent 主链使用，增加 `/mcp-prompts` 与 SDK `mcp_prompt_commands` 的列表、描述与 argNames。新增真实 stdio MCP 子进程+HTTP 模型模拟服务+SDK 输入的端到端集成测试，断言参数、模型请求内容和命令可见性；另有空格、非法名称、非文本拒绝单测。仍需多模态消息、完整 Prompt 命令生命周期、远程认证/重连等完整等价；**没有升级任何源文件验收状态**。
+
+
+### 2026-10-29：Shell 复合命令权限边界与 MCP 工具后置 Hook 结果回写（统一 Issue #3）
+
+直接从用户 2.1.88 原始 ZIP 复核 `src/tools/BashTool/bashPermissions.ts`、`src/utils/permissions/shellRuleMatching.ts`、`src/utils/bash/commands.ts`、`src/services/tools/toolHooks.ts` 和 `src/utils/hooks.ts`，并对照现有 Rust Agent→ToolExecutor→Shell/MCP→Hook→模型历史的上下游调用链。
+
+- `src/permission_rules.rs`：修复单条 `Bash(printf *)` 等前缀/通配规则直接覆盖 `printf ok && touch forbidden` 的授权缺口。现在逐段识别 Shell 控制操作符，`deny`、`ask` 在任一子命令上优先；普通 `allow` 必须覆盖所有可分析子命令，无法可靠分析的命令替换、重定向、后台执行和解释器 `-c` 不自动获得宽泛授权。明确精确匹配整条命令的用户规则仍可生效。测试 `compound_shell_permissions_cannot_hide_unapproved_commands` 与 `compound_permission_decisions_reach_real_shell_and_filesystem` 覆盖拒绝后没有产生磁盘副作用、允许后实际 Shell 运行、子命令 deny/ask 和命令替换。
+- `src/hooks.rs`、`src/agent.rs`：支持原版 `PostToolUse.hookSpecificOutput.updatedMCPToolOutput`，连续 Hook 的下游收到前一 Hook 修改后的工具输出；Agent 仅对真正 MCP 工具将替换结果写入模型下一轮上下文，普通本地工具不能借此改写输出。新增 `post_tool_mcp_output_is_replaced_before_next_hook` 和 CLI→模拟模型 HTTP→真实 stdio MCP 子进程→Hook 子进程→下一轮模型请求端到端回归 `mcp_post_tool_hook_replaces_model_visible_output_end_to_end`，确保敏感原始工具输出不会绕过替换直接进入下一轮模型请求。
+
+以上属于**既有部分实现主链的补齐**，不能因为新增测试通过就把 362 冻结路径勾选为完成。原版 Bash AST、重定向安全、完整 Shell 语义、全部 Hook 类型/权限决策/取消/并行时序和 MCP 多传输仍未闭环。1,906 条路径分类及 Issue #3 冻结范围保持不变；本次不虚增已验收或未迁移闭环数。

@@ -1099,7 +1099,7 @@
 | `src/services/toolUseSummary/toolUseSummaryGenerator.ts` | 113 | 3376 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/tools/toolExecution.ts` | 1746 | 60309 | 重写：工具调用与 Hook 生命周期 | `src/agent.rs / src/hooks.rs / src/tools.rs` | 部分实现：非法输入与 PreToolUse 阻止/失败逐工具回填，跳过实际执行的工具不触发 PostToolUseFailure；已执行工具的 PostToolUse/Failure 获得原版顶层结构化有效输入，失败事件使用 error/is_interrupt 字段；并行调度、取消与完整原版事件时序仍待对照 |
-| `src/services/tools/toolHooks.ts` | 651 | 22333 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移 |
+| `src/services/tools/toolHooks.ts` | 651 | 22333 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` | 部分实现：PostToolUse 的 MCP 输出替换和连续 Hook 可见性已接入 Agent；完整 Hook 事件/阻断/回调时序仍缺 |
 | `src/services/tools/toolOrchestration.ts` | 189 | 5501 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/vcr.ts` | 407 | 12166 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/voice.ts` | 526 | 17116 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1169,7 +1169,7 @@
 | `src/tools/BashTool/BashToolResultMessage.tsx` | 191 | 19215 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/UI.tsx` | 185 | 25213 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/bashCommandHelpers.ts` | 266 | 8589 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/BashTool/bashPermissions.ts` | 2622 | 98756 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/BashTool/bashPermissions.ts` | 2622 | 98756 | 重写：工具行为、参数和权限 | `src/tools.rs / src/permission_rules.rs` | 部分实现：复合命令逐段授权、显式 deny/ask 优先级与真实 Shell/文件系统回归已补；完整 AST、沙箱、重定向和命令语义仍缺 |
 | `src/tools/BashTool/bashSecurity.ts` | 2593 | 102561 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/commandSemantics.ts` | 141 | 3658 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/commentLabel.ts` | 14 | 637 | 重写：工具行为、参数和权限 | `src/compat_helpers.rs` | 已验收：首行注释、shebang 和空白规则纯函数语义对照；证据 compat_helpers::tests::source_bash_comment_cases |
@@ -1555,7 +1555,7 @@
 | `src/utils/hooks/sessionHooks.ts` | 448 | 12132 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` |部分实现，复杂子类型仍未迁移；SubagentStart/Stop、TeammateIdle Rust 实际代理链与测试已补，未覆盖其余全部子类型 |
 | `src/utils/hooks/skillImprovement.ts` | 268 | 8362 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移 |
 | `src/utils/hooks/ssrfGuard.ts` | 295 | 8732 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移 |
-| `src/utils/hooks.ts` | 5023 | 159458 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` |部分实现，复杂子类型仍未迁移；SubagentStart/Stop、TeammateIdle Rust 实际代理链与测试已补，未覆盖其余全部子类型 |
+| `src/utils/hooks.ts` | 5023 | 159458 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` |部分实现，复杂子类型仍未迁移；SubagentStart/Stop、TeammateIdle Rust 实际代理链与测试已补，PostToolUse MCP 结果覆盖已进入真实模型调用链，未覆盖其余全部子类型 |
 | `src/utils/horizontalScroll.ts` | 138 | 4302 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/http.ts` | 137 | 4928 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/hyperlink.ts` | 40 | 1465 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1654,7 +1654,7 @@
 | `src/utils/permissions/permissions.ts` | 1487 | 52190 | 重写：权限判定 | `src/permission_rules.rs / src/tools.rs / src/agent.rs` | 部分实现：用户明确配置规则的 deny/ask/allow、主子 Agent 继承、只读保护和 Shell 真实测试；原版分类器、模式切换及全部权限来源仍未等价 |
 | `src/utils/permissions/permissionsLoader.ts` | 297 | 8743 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/permissions/shadowedRuleDetection.ts` | 235 | 8050 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
-| `src/utils/permissions/shellRuleMatching.ts` | 229 | 6409 | 重写：权限判定 | `src/permission_rules.rs` | 部分实现：精确、legacy :* 前缀、通配符及转义星号规则；源版复合命令/具体 Shell 适配与大小写行为尚待对照 |
+| `src/utils/permissions/shellRuleMatching.ts` | 229 | 6409 | 重写：权限判定 | `src/permission_rules.rs` | 部分实现：精确、legacy :* 前缀、通配符及转义星号规则；已对照原版 BashTool 的复合命令授权边界并加入逐段匹配与异常回归；完整 Shell AST、具体适配与大小写行为尚未等价 |
 | `src/utils/permissions/yoloClassifier.ts` | 1496 | 52160 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/planModeV2.ts` | 96 | 3051 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plans.ts` | 398 | 12390 | 重写：保持通用行为 | 待定 | 未迁移 |
