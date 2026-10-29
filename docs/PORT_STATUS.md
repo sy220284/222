@@ -271,3 +271,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：MCP 资源订阅与推送事件回环（统一 Issue #3）
 
 对照原始 `services/mcp/client.ts` 中的 `capabilities.resources.subscribe` 及 JSON-RPC 资源订阅通用协议：在实际 stdio 与 HTTP MCP 客户端记录 server capabilities，允许明确 SDK 请求资源订阅/取消，并拒绝不支持订阅的服务。订阅按 server/URI 去重，实际发送 `resources/subscribe`/`resources/unsubscribe`；等待 RPC 回复时穿插到达的 `notifications/resources/updated` 和 `notifications/resources/list_changed` 会保留为结构化事件，附来源服务名并支持 SDK 一次性取走，避免消息丢失或重复消费；HTTP SSE 同样收集在响应中收到的事件。新增 SDK 进程+本地 MCP stdio 服务端到端测试，覆盖响应前通知、重复订阅、取消、取走后队列清空；尚待独立 HTTP GET/SSE 长连、重连恢复订阅、持久化和 UI，仍为部分实现。
+
+### 2026-10-29：MCP 单服务断线恢复和工具请求安全重试（Issue #3）
+
+原版 `services/mcp/client.ts` 对 SSE/进程断开后清除失效连接和工具缓存，下一次操作应重新建立连接；且原样重放已发送的 `tools/call` 可能产生重复副作用。Rust `McpManager` 保存每个配置，新增逐服务 `reconnect_failed`：运行时检测子进程退出、HTTP MCP Session 404，将该服务标记失效；下一模型轮次独立重建会话、完成工具重新发现、校验 alias 冲突并恢复显式订阅。所有 I/O 与校验通过后再一次性替换目标客户端、路由/工具定义和 SDK 状态；其他健康服务不受影响。执行过但未收到结果的 `tools/call` 不自动重放，防止未知远端副作用重复发生。新增真实 stdio 进程首轮退出后重新启动并识别新工具 schema 的集成测试；原版完整退避、并发重连去重、HTTP GET 长连订阅与 OAuth 等仍待实现，源路径保持部分实现。

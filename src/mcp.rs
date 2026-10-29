@@ -170,6 +170,7 @@ pub struct McpManager {
     server_statuses: Vec<Value>,
     status_clients: Vec<Option<usize>>,
     resource_subscriptions: std::collections::HashSet<(String,String)>,
+    configs: Vec<McpServerConfig>,
 }
 
 impl McpManager {
@@ -177,7 +178,8 @@ impl McpManager {
         if servers.len()>16 {bail!("Too many MCP servers")}
         let mut out=Self{clients:Vec::new(),tools:Vec::new(),
             routes:HashMap::new(),server_statuses:Vec::new(),status_clients:Vec::new(),
-            resource_subscriptions:std::collections::HashSet::new()};
+            resource_subscriptions:std::collections::HashSet::new(),
+            configs:servers.to_vec()};
         for server in servers{
             // Failed servers are isolated; one broken MCP process must not
             // prevent the healthy tools from operating.
@@ -273,11 +275,74 @@ impl McpManager {
         self.status_clients.push(None);
     }
 
+    /// Reconnect a failed *individual* server. Never replace healthy peers,
+    /// and never blindly replay a tools/call whose server-side effect is unknown.
+    async fn reconnect_server(&mut self,position:usize)->Result<()>{
+        let config=self.configs.get(position)
+            .context("MCP reconnect config not found")?.clone();
+        let mut fresh=Self::connect(&[config.clone()]).await?;
+        if fresh.server_statuses[0]["status"]!="connected"{
+            bail!("MCP {} reconnect failed",config.id)
+        }
+        let mut new_client=fresh.clients.pop().context("MCP reconnect returned no client")?;
+        // Restore only subscriptions explicitly installed by the caller.
+        for (_,uri) in self.resource_subscriptions.iter()
+            .filter(|(server,_)|server==&config.id){
+            timeout(RPC_TIMEOUT,new_client.request("resources/subscribe",
+                json!({"uri":uri}))).await.context("MCP resubscribe timed out")??;
+        }
+        let old_client=self.status_clients[position];
+        let old_aliases=self.routes.iter().filter_map(|(alias,(owner,_))|
+            (Some(*owner)==old_client).then_some(alias.clone()))
+            .collect::<std::collections::HashSet<_>>();
+        for alias in fresh.routes.keys(){
+            if self.routes.contains_key(alias)&&!old_aliases.contains(alias){
+                bail!("MCP reconnect would overwrite another server tool: {alias}")
+            }
+        }
+        // All network interactions and validation succeeded. Publish the new
+        // connection and its tool definitions in a single local transition.
+        let assigned=if let Some(old)=old_client {
+            self.clients[old]=new_client;
+            old
+        }else{
+            let next=self.clients.len();self.clients.push(new_client);next
+        };
+        self.tools.retain(|tool|!old_aliases.contains(
+            tool.pointer("/function/name").and_then(Value::as_str).unwrap_or("")));
+        for alias in &old_aliases{self.routes.remove(alias);}
+        self.tools.extend(fresh.tools);
+        for (alias,(_,real)) in fresh.routes{
+            self.routes.insert(alias,(assigned,real));
+        }
+        self.status_clients[position]=Some(assigned);
+        self.server_statuses[position]=fresh.server_statuses.remove(0);
+        Ok(())
+    }
+
+    pub async fn reconnect_failed(&mut self)->Vec<String>{
+        let mut failures=Vec::new();
+        for index in 0..self.server_statuses.len(){
+            if let Some(client)=self.status_clients[index]{
+                if let Ok(Some(error))=self.clients[client].failed_process(){
+                    self.server_statuses[index]["status"]=json!("failed");
+                    self.server_statuses[index]["error"]=json!(error);
+                }
+            }
+            if self.server_statuses[index]["status"]=="failed"{
+                if let Err(error)=self.reconnect_server(index).await{
+                    failures.push(format!("MCP {}: {error:#}",self.configs[index].id));
+                }
+            }
+        }
+        failures
+    }
+
     /// Refresh MCP tools only after the server sends the standard
     /// tools/list_changed notification. Discovery is transactional; failed
     /// refresh keeps the last working tool routes and is retried later.
     pub async fn refresh_changed_tools(&mut self)->Result<()>{
-        let mut failures=Vec::new();
+        let mut failures=self.reconnect_failed().await;
         for client_index in 0..self.clients.len(){
             if !self.clients[client_index].take_tools_changed(){continue}
             let status_index=self.status_clients.iter().position(|v|
@@ -380,9 +445,23 @@ impl McpManager {
             .context("Unknown MCP tool")?.clone();
         let args:Value=serde_json::from_str(&call.function.arguments)?;
         if !args.is_object(){bail!("MCP tool arguments must be an object")}
-        let response = timeout(RPC_TIMEOUT, self.clients[index].request("tools/call",
+        let response=timeout(RPC_TIMEOUT,self.clients[index].request("tools/call",
             json!({"name":real_name,"arguments":args})))
-            .await.context("MCP tool call timed out")??;
+            .await.context("MCP tool call timed out")?;
+        let response=match response{
+            Ok(response)=>response,
+            Err(error)=>{
+                if format!("{error:#}").contains("session expired"){
+                    if let Some(status_index)=self.status_clients.iter().position(|v|
+                        *v==Some(index)){
+                        self.server_statuses[status_index]["status"]=json!("failed");
+                        self.server_statuses[status_index]["error"]=
+                            json!("MCP session expired; reconnect on next request");
+                    }
+                }
+                return Err(error)
+            }
+        };
         // Keep non-text blocks and structured data intact: silently dropping
         // image/resource content corrupts the tool response seen by the model.
         let parts=response.get("content").and_then(Value::as_array);
@@ -654,6 +733,38 @@ done"#;
             function:FunctionCall{name:"mcp__same_name__a_b".into(),
                 arguments:"{}".into()}};
         assert_eq!(mgr.execute(&call).await,"first server");
+    }
+    #[tokio::test]
+    async fn dead_stdio_process_reconnects_with_new_tool_schema_before_next_model_turn(){
+        let dir=tempfile::tempdir().unwrap();
+        let marker=dir.path().join("first-process-finished");
+        let script=format!(r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*)
+    echo '{{"jsonrpc":"2.0","id":1,"result":{{"serverInfo":{{"name":"restarted"}}}}}}' ;;
+  *'"method":"tools/list"'*)
+    if [ -e '{marker}' ]; then
+      echo '{{"jsonrpc":"2.0","id":2,"result":{{"tools":[{{"name":"after","inputSchema":{{"type":"object"}}}}]}}}}'
+    else
+      echo '{{"jsonrpc":"2.0","id":2,"result":{{"tools":[{{"name":"before","inputSchema":{{"type":"object"}}}}]}}}}'
+      touch '{marker}'
+      exit 0
+    fi ;;
+esac
+done"#,marker=marker.display());
+        let config=McpServerConfig{id:"restart".into(),command:"sh".into(),
+            args:vec!["-c".into(),script],env:HashMap::new(),
+            transport:None,url:None,headers:HashMap::new()};
+        let mut mgr=McpManager::connect(&[config]).await.unwrap();
+        assert!(mgr.definitions().to_string().contains("mcp__restart__before"));
+        tokio::time::sleep(std::time::Duration::from_millis(35)).await;
+        mgr.refresh_changed_tools().await.unwrap();
+        let definitions=mgr.definitions();
+        assert_eq!(definitions.len(),1);
+        assert!(definitions.to_string().contains("mcp__restart__after"),"{definitions:?}");
+        assert!(!mgr.handles("mcp__restart__before"));
+        assert!(mgr.handles("mcp__restart__after"));
+        assert_eq!(mgr.statuses().unwrap()[0]["status"],"connected");
     }
     #[tokio::test]
     async fn failed_stdio_server_cannot_break_healthy_server_and_indexing(){
