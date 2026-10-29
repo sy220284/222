@@ -358,9 +358,7 @@ impl TaskGraph {
         Ok(self
             .all()?
             .into_iter()
-            .filter(|task| {
-                task.status == "in_progress" && task.owner.as_deref() == Some(owner)
-            })
+            .filter(|task| task.status == "in_progress" && task.owner.as_deref() == Some(owner))
             .collect())
     }
 
