@@ -1,3 +1,9 @@
+## 2026-10-29：MCP 多服务器连接不再整批拒绝（源码已提交，待验收）
+
+原版 `source/src/services/mcp/client.ts::fetchToolsForClient`、`source/src/services/mcp/config.ts` 与 `MCPConnectionManager.tsx` 对 MCP 服务器连接/发现没有全局 16 个服务的硬上限。Rust `src/mcp.rs::McpManager::connect_with_root` 原先在用户配置第 17 个服务器时立即报错，导致包括前 16 个正常服务器在内的所有工具不可用。现删除此额外数量闸门，继续使用原有逐服务启动失败隔离、名称冲突检查及各自工具发现逻辑，避免因数量超过 16 而整批失败。
+
+按**一个独立用户可感知功能：多个 MCP 服务同时可用**计数。源码已提交、待行为验收，未运行 Cargo、测试或 CI。仍缺高并发连接资源调度、取消、重连及全部异常路径等价；Issue #3 冻结 362 条不勾选。
+
 ## 2026-10-29：工具搜索大量结果与项目引导识别已有指令（源码已提交，待验收）
 
 1. **ToolSearch 大量工具结果**：原版 `source/src/tools/ToolSearchTool/ToolSearchTool.ts:21–34,297–301,328–329` 的 `max_results` 是可选数字，关键词搜索直接按请求数量截取，没有 100 的固定上限。Rust `src/tool_search.rs::definition/execute` 原先拒绝 `max_results > 100`，模型在拥有大量 MCP 工具时无法一次获取所需候选。现去掉人为 100 上限，仍拒绝零、负数、非整数；以可用整数范围限制内存索引，保留原版关键词排名与选择逻辑。

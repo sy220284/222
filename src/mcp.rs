@@ -323,9 +323,6 @@ impl McpManager {
         Self::connect_with_root(servers, &root).await
     }
     pub async fn connect_with_root(servers: &[McpServerConfig], root: &Path) -> Result<Self> {
-        if servers.len() > 16 {
-            bail!("Too many MCP servers")
-        }
         let root = root
             .canonicalize()
             .context("MCP workspace does not exist")?;
