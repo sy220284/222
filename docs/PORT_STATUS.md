@@ -1,3 +1,11 @@
+## 2026-10-29：插件 MCP 配置兼容与独立加载补强（源码已提交、待验收）
+
+- 原版对照：`source/src/utils/plugins/mcpPluginIntegration.ts::loadMcpServersFromFile/loadPluginMcpServers/resolvePluginMcpEnvironment/extractMcpServersFromPlugins`（默认 `.mcp.json` 可选、逐服务 schema 验证、插件根/数据目录变量、环境变量展开及独立失败）；`source/src/utils/plugins/pluginOptionsStorage.ts::substitutePluginVariables`、`source/src/services/mcp/envExpansion.ts::expandEnvVarsInString`。
+- Rust 真实入口：`/plugin install` / `/plugin enable` → `src/plugin_manager.rs::install_local/execute` → `src/plugins.rs::manifest_servers/PluginSet::load/resolve_plugin_mcp_server` → `src/agent.rs::attach_mcp` → `src/mcp.rs` / `src/mcp_http.rs`。
+- ① 插件 MCP stdio 命令、参数、环境及 HTTP URL/Headers 现在解析插件专属 ROOT/DATA 占位符与普通环境变量；stdio 子进程获得独立插件目录与数据目录环境变量。② 一条无效 MCP 服务 JSON 不再阻断同一插件的其他有效服务。③ 清单引用的可选 MCP JSON 文件缺失或 JSON 损坏时跳过该文件，其余来源继续合并；已有文件仍需通过插件根目录边界检查。
+- 本轮代码提交：`27f43a8827be58f4155475f1788662759024d4bd`、`b4f50406e6cb4d1dc0543350e5923dd965db4a68`、`128bf3fa05b3b079e087d1a5670178376236c428`。**按不同用户可感知业务行为保守登记 3 项源码补强，全部待行为验收；完整等价验收新增 0。** 依用户要求未运行 Cargo、测试或 CI，Issue #3 冻结 362 项保持开放。
+- 尚存差异：`user_config` 持久化及敏感值读取、MCPB 安装、服务能力 schema 完整验证、服务加载失败在交互 UI 的逐项错误展示、跨插件/市场作用域、数据目录卸载策略、异步重连及取消等。100 项完整前置缺口清单尚未建立，当前本轮仅可确认上述 3 项实际源码修改，**3/100，剩余 97 项**。
+
 ## 2026-10-29：插件原版标准清单、无清单安装、Hooks/MCP 真实加载与本地安装安全（源码已提交、待验收）
 
 - **原版源码**：完整用户 ZIP `source/src/utils/plugins/pluginLoader.ts::loadPluginManifest`（1147–1213 行）、`createPluginFromPath`（1310–1386、1613–1759 行）、`installFromLocal`（856–868 行），以及 `pluginInstallationHelpers.ts::installResolvedPlugin`。
