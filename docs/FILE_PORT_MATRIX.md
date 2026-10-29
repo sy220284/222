@@ -181,7 +181,7 @@
 | `src/commands/install.tsx` | 300 | 39068 | 重写：保持通用行为 | `src/generated_ports/p_3289389e68d82.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/keybindings/index.ts` | 14 | 448 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/keybindings/keybindings.ts` | 54 | 1645 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/keybindings/keybindings.ts` | 54 | 1645 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：CLI keybindings 子命令和聊天 /keybindings 实际创建、校验、查询与编辑器入口已落地 Rust；终端配置编辑体验待验收 |
 | `src/commands/login/index.ts` | 15 | 489 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/login/login.tsx` | 104 | 16109 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/logout/index.ts` | 11 | 341 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
@@ -921,15 +921,15 @@
 | `src/ink/wrapAnsi.ts` | 21 | 383 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/keybindings/KeybindingContext.tsx` | 243 | 26000 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/KeybindingProviderSetup.tsx` | 308 | 41452 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/defaultBindings.ts` | 341 | 11635 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/loadUserBindings.ts` | 473 | 14551 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/match.ts` | 121 | 3797 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/parser.ts` | 204 | 4972 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/keybindings/defaultBindings.ts` | 341 | 11635 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：默认快捷键配置、跨平台差异及核心上下文已迁入原生 Rust；原版全功能开关与各 UI 动作仍未连接 |
+| `src/keybindings/loadUserBindings.ts` | 473 | 14551 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：用户 JSON 快捷键热读取、默认与自定义优先级、错误降级和本地路径已迁入 Rust；原版文件监听通知机制仍缺 |
+| `src/keybindings/match.ts` | 121 | 3797 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：Ink 等价终端键名归一化、修饰键和 Escape 特例已迁入 Rust；原生 UI 输入派发仍待连接 |
+| `src/keybindings/parser.ts` | 204 | 4972 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：组合键解析、修饰键别名、平台显示以及 bindings 映射已迁入 Rust；复杂终端输入仍需交叉验收 |
 | `src/keybindings/reservedShortcuts.ts` | 128 | 3610 | 重写：保持通用行为 | `src/generated_ports/p_d338e19c29574.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/keybindings/resolver.ts` | 245 | 7087 | 重写：保持通用行为 | `src/generated_ports/p_c7d9aa37cc1b1.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/keybindings/schema.ts` | 237 | 6269 | 重写：保持通用行为 | `src/generated_ports/p_212ef30d7fd2c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/keybindings/shortcutFormat.ts` | 64 | 2575 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/template.ts` | 53 | 1721 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/keybindings/shortcutFormat.ts` | 64 | 2575 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：可用动作的用户定义快捷键显示已迁入 Rust；缺失快捷键后的原版遥测按用户要求删除 |
+| `src/keybindings/template.ts` | 53 | 1721 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：用户配置模板及保留快捷键过滤、原子排他创建已迁入 Rust；文本编辑器差异待覆盖 |
 | `src/keybindings/useKeybinding.ts` | 197 | 6862 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/useShortcutDisplay.ts` | 60 | 2510 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/validate.ts` | 499 | 13667 | 重写：保持通用行为 | `src/generated_ports/p_f8e473fd2917d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |

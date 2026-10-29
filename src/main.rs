@@ -33,6 +33,7 @@ mod hooks;
 mod in_memory_mailbox;
 mod ink_constants;
 mod json_read;
+mod keybindings;
 mod lsp;
 mod mcp;
 mod mcp_http;
@@ -243,6 +244,17 @@ enum Commands {
     Doctor,
     /// Set up project instructions, skills and hooks through guided model tools
     ProjectInit,
+    /// Edit or validate user keyboard shortcuts (without model access)
+    Keybindings {
+        #[arg(long)]
+        check: bool,
+        #[arg(long)]
+        action: Option<String>,
+        #[arg(long, default_value = "Chat")]
+        context: String,
+        #[arg(long)]
+        no_edit: bool,
+    },
     /// Report actual local session and model usage statistics
     Stats,
     /// Read a value from an existing Git configuration without invoking Git
@@ -748,6 +760,26 @@ async fn main() -> Result<()> {
         _ => {}
     }
 
+    if let Commands::Keybindings { check, action, context, no_edit } = &cli.command {
+        let path = keybindings::keybindings_path(&keybindings::config_home()?);
+        if let Some(action) = action {
+            println!("{}",keybindings::inspect(action,context)?);
+        } else if *check {
+            let loaded=keybindings::load_from(&path);
+            println!("{} bindings; {} warnings",loaded.bindings.len(),loaded.warnings.len());
+            for warning in loaded.warnings { println!("{}: {}",warning.severity,warning.message); }
+        } else {
+            let created=keybindings::create_template(&path)?;
+            println!("{} {}",if created {"Created"} else {"Existing"},path.display());
+            if !*no_edit {
+                if let Some(editor) = std::env::var_os("VISUAL").or_else(||std::env::var_os("EDITOR")) {
+                    let status=std::process::Command::new(editor).arg(&path).status()?;
+                    if !status.success() { bail!("Editor exited with {status}"); }
+                }
+            }
+        }
+        return Ok(());
+    }
     if let Commands::Init = &cli.command {
         let path = Config::init()?;
         println!("Created {}", path.display());
@@ -1176,6 +1208,25 @@ async fn chat(
             Some(format!("/{}{}", command.name, rest))
         });
         let input = normalized.as_deref().unwrap_or(input);
+        if input == "/keybindings" || input.starts_with("/keybindings ") {
+            let arg=input.strip_prefix("/keybindings").unwrap_or("").trim();
+            let path=keybindings::keybindings_path(&keybindings::config_home()?);
+            if arg == "check" {
+                let loaded=keybindings::load_from(&path);
+                println!("{} bindings; {} warnings",loaded.bindings.len(),loaded.warnings.len());
+                for w in loaded.warnings { println!("{}: {}",w.severity,w.message); }
+            } else if arg.is_empty() {
+                let created=keybindings::create_template(&path)?;
+                println!("{} {}",if created {"Created"} else {"Existing"},path.display());
+                if let Some(editor)=std::env::var_os("VISUAL").or_else(||std::env::var_os("EDITOR")) {
+                    let status=std::process::Command::new(editor).arg(&path).status()?;
+                    if !status.success() { eprintln!("Editor exited with {status}"); }
+                }
+            } else {
+                println!("{}",keybindings::inspect(arg,"Chat")?);
+            }
+            continue;
+        }
         if let Some(command) = input.strip_prefix("/permission ") {
             let outcome = (|| -> Result<String> {
                 let mut parts = command.splitn(4, ' ');

@@ -146,8 +146,8 @@
 **目标：1906 个原始文件的功能逐项重写、等价验证。**
 
 - 明确归入环境/行为遥测删除项：22 个原始文件路径（仅是第一轮整文件分类；其他混合文件也需排除隐式上报）。
-- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：1039 个原始文件路径。
-- 当前台账仍标注“未迁移”的文件路径：816 个（与部分实现项互斥，按当前状态字段分类）。
+- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：1047 个原始文件路径。
+- 当前台账仍标注“未迁移”的文件路径：808 个（与部分实现项互斥，按当前状态字段分类）。
 - **达到原始文件纯函数行为/边界等价且有验证证据的路径：29 个（包括独立纯函数、状态模块与固定常量文件；完整调用链仍需逐项验证）；其上下游业务逻辑仍需完整验证。** 其他当前已实现的功能仅在特定测试场景验证，不能把“部分实现”升级为“完成”。
 - 非排除项的原始文件级等价验收仍未闭环：1855 个。
 
@@ -676,3 +676,8 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 跨平台自动发现管理员托管权限策略（源码已提交，待验证）
 
 原版 `source/src/utils/settings/managedPath.ts` 在 Linux/macOS/Windows 使用系统级托管目录，而不是要求每个用户单独配置环境变量。Rust `SettingsPaths::for_workspace` 现按平台自动寻找中立路径 `/etc/atlas-agent/managed-settings.json`、`/Library/Application Support/AtlasAgent/managed-settings.json` 或 `C:\\Program Files\\AtlasAgent\\managed-settings.json`，仍允许 `ATLAS_POLICY_SETTINGS` 显式覆盖；既有 `load_policy` 同时加载同目录的 `managed-settings.d`。无托管文件时不改变用户设置。**仅源码提交，未运行测试/CI**；完整系统 MDM、远程策略与用户级注册表优先级仍待实现。
+
+
+## 2026-10-29：本地源码对照的快捷键运行时重写（完整 UI 链待验收）
+
+对照原版 2.1.88 的 `keybindings/parser.ts`、`match.ts`、`resolver.ts`、`defaultBindings.ts`、`loadUserBindings.ts`、`template.ts`、`shortcutFormat.ts` 及 `commands/keybindings/keybindings.ts`，新增 `src/keybindings.rs` 原生组合键与别名解析、终端修饰键和 Escape 特例、上下文匹配、用户覆盖、`null` 解除绑定、键位配置、保留快捷键检查和安全创建模板。独立 `keybindings` 子命令与聊天 `/keybindings` 已接线，配置不依赖厂商账户且不会上传遥测。真实本地 Rust 4 项针对性测试和编译通过。原版 Ink UI 键事件消费、组合键超时和主动文件监听仍未接入；涉及源路径只登记部分实现、未升级完整验收。此条不代表剩余 816 项全部完成。
