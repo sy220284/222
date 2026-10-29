@@ -94,15 +94,13 @@ pub fn role_instructions(role: &str, is_teammate: bool) -> &'static str {
     }
 }
 
-
 /// Enforce the built-in exploration/planning/verification tool boundary in
 /// addition to describing it in the system prompt. Unknown tools are denied.
 pub fn tool_allowed_for_role(role: &str, name: &str) -> bool {
     let normalized = role.to_ascii_lowercase().replace('-', "").replace('_', "");
     let is_explore_or_plan = matches!(
         normalized.as_str(),
-        "explore" | "exploration" | "exploreagent"
-            | "plan" | "planner" | "planagent"
+        "explore" | "exploration" | "exploreagent" | "plan" | "planner" | "planagent"
     );
     let is_verification = matches!(
         normalized.as_str(),
@@ -114,10 +112,24 @@ pub fn tool_allowed_for_role(role: &str, name: &str) -> bool {
     let canonical = crate::tool_names::canonical_name(name);
     let read_tool = matches!(
         canonical,
-        "read_file" | "list_files" | "search_text" | "git_status" | "git_diff"
-            | "git_log" | "list_skills" | "read_skill" | "web_search" | "web_fetch"
-            | "glob_files" | "grep_files" | "Read" | "LSP" | "ToolSearch"
-            | "TaskGet" | "TaskList" | "task_output"
+        "read_file"
+            | "list_files"
+            | "search_text"
+            | "git_status"
+            | "git_diff"
+            | "git_log"
+            | "list_skills"
+            | "read_skill"
+            | "web_search"
+            | "web_fetch"
+            | "glob_files"
+            | "grep_files"
+            | "Read"
+            | "LSP"
+            | "ToolSearch"
+            | "TaskGet"
+            | "TaskList"
+            | "task_output"
     );
     if read_tool {
         return true;
@@ -218,7 +230,6 @@ mod tests {
             .unwrap()
             .is_none());
     }
-
 
     #[test]
     fn read_only_roles_never_receive_write_tools() {
