@@ -21,6 +21,36 @@ fn allowed(entry: &DirEntry, exclude_vcs: bool) -> bool {
         Some(".git" | ".hg" | ".svn" | ".jj" | ".bzr" | ".sl")
     )
 }
+/// The source orphanedPluginFilter.ts excludes a cached plugin version when
+/// cache/<marketplace>/<plugin>/<version>/.orphaned_at exists. Both Glob and
+/// Grep must hide those stale versions while keeping active versions visible.
+/// Recognize the version-scoped marker only inside the plugin cache, so an
+/// unrelated project file named .orphaned_at cannot hide user source files.
+fn orphaned_plugin_cache_entry(path: &Path) -> bool {
+    for version in path.ancestors() {
+        let Some(plugin) = version.parent() else { continue };
+        let Some(marketplace) = plugin.parent() else { continue };
+        let Some(cache) = marketplace.parent() else { continue };
+        if cache.file_name().and_then(|name| name.to_str()) != Some("cache") {
+            continue;
+        }
+        let default_plugin_root = cache.parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|name| name.to_str()) == Some("plugins");
+        let overridden_plugin_root = std::env::var_os("ATLAS_PLUGIN_CACHE_DIR")
+            .is_some_and(|root| cache == Path::new(&root).join("cache"));
+        if !(default_plugin_root || overridden_plugin_root) {
+            continue;
+        }
+        if fs::symlink_metadata(version.join(".orphaned_at"))
+            .is_ok_and(|metadata| metadata.file_type().is_file())
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// Original utils/glob.ts::extractGlobBaseDirectory searches an absolute
 /// pattern from its static directory prefix, even when no path argument was
 /// provided. The caller must authorize this directory before traversal.
@@ -114,6 +144,9 @@ fn files_filtered<F: Fn(&Path) -> Result<bool>>(
     deadline: Option<Instant>,
 ) -> Result<Vec<PathBuf>> {
     check_search_deadline(deadline)?;
+    if orphaned_plugin_cache_entry(base) {
+        return Ok(Vec::new());
+    }
     if base.is_file() {
         return Ok(if allow_path(base)? {
             vec![base.to_path_buf()]
@@ -136,6 +169,9 @@ fn files_filtered<F: Fn(&Path) -> Result<bool>>(
             }
             if entry.depth() == 0 {
                 return true;
+            }
+            if orphaned_plugin_cache_entry(entry.path()) {
+                return false;
             }
             match allow_path(entry.path()) {
                 Ok(allowed) => allowed,
