@@ -6,7 +6,7 @@ pub fn capitalize(args: &[Value]) -> Value {
     super::runtime::add(
         &super::runtime::call_method(
             &super::runtime::call_method(
-                &args.get(0).cloned().unwrap_or(Value::Null),
+                &args.first().cloned().unwrap_or(Value::Null),
                 "charAt",
                 &[json!(0)],
             ),
@@ -14,7 +14,7 @@ pub fn capitalize(args: &[Value]) -> Value {
             &[],
         ),
         &super::runtime::call_method(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             "slice",
             &[json!(1)],
         ),
@@ -22,7 +22,7 @@ pub fn capitalize(args: &[Value]) -> Value {
 }
 pub fn plural(args: &[Value]) -> Value {
     if super::runtime::truthy(&super::runtime::strict_equal(
-        &args.get(0).cloned().unwrap_or(Value::Null),
+        &args.first().cloned().unwrap_or(Value::Null),
         &json!(1),
     )) {
         args.get(1).cloned().unwrap_or(Value::Null)

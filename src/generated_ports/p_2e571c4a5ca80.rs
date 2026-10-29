@@ -10,16 +10,14 @@ pub enum FrontmatterShell {
     powershell,
 }
 
-use serde_json::json;
-
 pub fn parseBooleanFrontmatter(args: &[Value]) -> Value {
     super::runtime::or(
         &super::runtime::strict_equal(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             &Value::Bool(true),
         ),
         &super::runtime::strict_equal(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             &Value::String("true".into()),
         ),
     )

@@ -3,5 +3,5 @@
 use serde_json::{json, Value};
 
 pub fn getPluginStorageId(args: &[Value]) -> Value {
-    super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "source")
+    super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "source")
 }

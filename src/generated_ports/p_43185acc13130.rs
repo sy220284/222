@@ -5,11 +5,11 @@ use serde_json::{json, Value};
 pub fn toRGBColor(args: &[Value]) -> Value {
     super::runtime::concat(&[
         Value::String("rgb(".into()),
-        super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "r"),
+        super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "r"),
         Value::String(",".into()),
-        super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "g"),
+        super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "g"),
         Value::String(",".into()),
-        super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "b"),
+        super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "b"),
         Value::String(")".into()),
     ])
 }
