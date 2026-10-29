@@ -247,8 +247,7 @@ impl Client {
             if matches!(
                 method,
                 Some("notifications/resources/updated" | "notifications/resources/list_changed")
-            ) && self.resource_updates.len() < 1024
-            {
+            ) {
                 self.resource_updates.push(message.clone());
             }
         }
