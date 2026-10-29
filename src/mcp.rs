@@ -377,6 +377,8 @@ pub struct McpManager {
     /// Explicit user-disabled servers remain configured but cannot reconnect
     /// or expose cached tools until the user enables them again.
     disabled: std::collections::HashSet<String>,
+    /// SDK-scoped process servers; never remove fixed user/project servers.
+    dynamic_names: std::collections::HashSet<String>,
 }
 
 impl McpManager {
@@ -408,6 +410,7 @@ impl McpManager {
             configs: servers.to_vec(),
             root: root.clone(),
             disabled: disabled.clone(),
+            dynamic_names: std::collections::HashSet::new(),
         };
         for server in servers {
             if out.disabled.contains(&server.id) {
@@ -633,6 +636,78 @@ impl McpManager {
         self.status_clients[position] = Some(assigned);
         self.server_statuses[position] = fresh.server_statuses.remove(0);
         Ok(())
+    }
+
+    /// Reconcile SDK-owned process servers without restarting healthy fixed
+    /// or unchanged dynamic connections. Changed transports are torn down
+    /// before replacement so stale tool aliases and subscriptions cannot leak.
+    pub async fn reconcile_dynamic(&mut self, desired: Vec<McpServerConfig>) -> Result<Value> {
+        let mut requested = HashMap::new();
+        for config in desired {
+            if self.configs.iter().any(|old| old.id == config.id
+                && !self.dynamic_names.contains(&old.id)) {
+                bail!("Dynamic MCP server conflicts with a fixed server: {}", config.id);
+            }
+            if requested.insert(config.id.clone(), config).is_some() {
+                bail!("Duplicate dynamic MCP server id");
+            }
+        }
+        let mut removed = Vec::new();
+        let mut added = Vec::new();
+        let mut errors = serde_json::Map::new();
+        let mut previous = self.dynamic_names.iter().cloned().collect::<Vec<_>>();
+        previous.sort();
+        for name in previous {
+            let index = self.configs.iter().position(|config| config.id == name)
+                .context("Dynamic MCP server configuration disappeared")?;
+            let unchanged = requested.get(&name).is_some_and(|new_config|
+                serde_json::to_value(new_config).ok()
+                    == serde_json::to_value(&self.configs[index]).ok());
+            if unchanged {
+                continue;
+            }
+            let previously_disabled = self.disabled.contains(&name);
+            self.toggle_named(&name, false).await?;
+            self.configs.remove(index);
+            self.server_statuses.remove(index);
+            self.status_clients.remove(index);
+            self.resource_subscriptions.retain(|(server, _)| server != &name);
+            self.dynamic_names.remove(&name);
+            if !previously_disabled {
+                self.disabled.remove(&name);
+            }
+            if !requested.contains_key(&name) {
+                removed.push(name);
+            }
+        }
+        let mut names = requested.keys().cloned().collect::<Vec<_>>();
+        names.sort();
+        for name in names {
+            if self.dynamic_names.contains(&name) {
+                continue;
+            }
+            let config = requested.remove(&name)
+                .context("Dynamic MCP config disappeared during reconciliation")?;
+            let disabled = self.disabled.contains(&name);
+            let status = if disabled { "disabled" } else { "pending" };
+            self.server_statuses.push(json!({"name":name,"status":status,
+                "config":Self::public_config(&config)}));
+            self.status_clients.push(None);
+            self.configs.push(config.clone());
+            self.dynamic_names.insert(name.clone());
+            if !disabled {
+                let index = self.configs.len() - 1;
+                if let Err(error) = self.reconnect_server(index).await {
+                    let message = Self::redact_connection_error(&config, format!("{error:#}"));
+                    self.server_statuses[index] = json!({"name":name,
+                        "status":"failed","config":Self::public_config(&config),
+                        "error":message});
+                    errors.insert(name.clone(), Value::String(message));
+                }
+            }
+            added.push(name);
+        }
+        Ok(json!({"added":added,"removed":removed,"errors":errors}))
     }
 
     /// Enable or disable one configured MCP server without touching healthy
