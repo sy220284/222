@@ -54,8 +54,16 @@ fn executable_path(program: &str) -> Option<PathBuf> {
     if input.is_absolute() || input.components().count() > 1 {
         return is_executable(input).then(|| input.to_path_buf());
     }
-    let path = std::env::var_os("PATH")?;
-    let dirs = std::env::split_paths(&path).collect::<Vec<_>>();
+    // Windows where.exe also searches the current directory, even if PATH
+    // is absent. POSIX which searches PATH only.
+    let mut dirs = Vec::new();
+    #[cfg(windows)]
+    if let Ok(cwd) = std::env::current_dir() {
+        dirs.push(cwd);
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&path));
+    }
     for dir in &dirs {
         let candidate = dir.join(program);
         if is_executable(&candidate) {
