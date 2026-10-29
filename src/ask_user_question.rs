@@ -188,8 +188,11 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
                 option["label"].as_str().expect("validated"),
                 option["description"].as_str().expect("validated")
             )?;
-            if let Some(preview) = option.get("preview").and_then(Value::as_str) {
-                writeln!(writer, "     {}", preview)?;
+            // QuestionView.tsx only activates the preview UI for single select.
+            if !multiple {
+                if let Some(preview) = option.get("preview").and_then(Value::as_str) {
+                    writeln!(writer, "     {}", preview)?;
+                }
             }
         }
         writeln!(writer, "  0) Other (enter a custom answer)")?;
@@ -258,11 +261,16 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
         // user-authored notes as per-question annotations. Never trust the
         // model-supplied input.annotations: collect both from the actual
         // terminal interaction instead.
-        let previews = selected_indices
-            .iter()
-            .filter_map(|index| opts[index - 1].get("preview").and_then(Value::as_str))
-            .filter(|preview| !preview.is_empty())
-            .collect::<Vec<_>>();
+        // Multi-select UI does not render option previews or collect their notes.
+        let previews = if multiple {
+            Vec::new()
+        } else {
+            selected_indices
+                .iter()
+                .filter_map(|index| opts[index - 1].get("preview").and_then(Value::as_str))
+                .filter(|preview| !preview.is_empty())
+                .collect::<Vec<_>>()
+        };
         if !previews.is_empty() || custom_note.is_some() {
             let mut annotation = Map::new();
             if !previews.is_empty() {
