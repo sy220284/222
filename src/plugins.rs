@@ -516,24 +516,7 @@ pub fn read_skill(root: &Path, enabled: &[String], identifier: &str) -> Result<S
 /// available to the model but excludes them from direct slash invocation.
 /// A frontmatter key only applies at the top level of a closed YAML header.
 fn user_invocable_command(content: &str) -> bool {
-    let mut lines = content.lines();
-    if lines.next().map(str::trim) != Some("---") {
-        return true;
-    }
-    let mut declared = None;
-    let mut closed = false;
-    for line in lines {
-        if line.trim() == "---" {
-            closed = true;
-            break;
-        }
-        if let Some(value) = line.strip_prefix("user-invocable:") {
-            let value = value.trim().split(" #").next().unwrap_or("").trim();
-            let value = value.trim_matches(|c| c == '\'' || c == '"');
-            declared = Some(value == "true");
-        }
-    }
-    if closed { declared.unwrap_or(true) } else { true }
+    crate::skill_arguments::frontmatter_boolean(content, "user-invocable").unwrap_or(true)
 }
 
 /// Provider-neutral, per-plugin persistent data storage. The source lazily
