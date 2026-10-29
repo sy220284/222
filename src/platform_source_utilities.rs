@@ -170,7 +170,10 @@ mod tests {
         assert!(!is_pdf_extension("pdfx"));
         assert!(is_pdf_supported("gpt-6"));
         assert!(!is_pdf_supported(""));
-        assert!(!pdf_supported_with_deny_list("local-pdf", "local-pdf,other"));
+        assert!(!pdf_supported_with_deny_list(
+            "local-pdf",
+            "local-pdf,other"
+        ));
         assert!(pdf_supported_with_deny_list("other-model", "local-pdf"));
         assert!(!pdf_supported_with_deny_list("CUSTOM", "custom"));
     }
