@@ -75,9 +75,11 @@ fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
         {"event":"PostToolUseFailure","matcher":"^read_file$",
             "command":format!("printf unexpected > '{}'", blocked_post.display())},
         {"event":"PostToolUseFailure","matcher":"^edit_file$",
-            "command":format!("cat > '{}'", post_failure.display())},
+            "command":format!("cat > '{}'", post_failure.display()),
+            "timeout_seconds":3},
         {"event":"PostToolUse","matcher":"^write_file$",
-            "command":format!("cat > '{}'", post_success.display())}
+            "command":format!("cat > '{}'", post_success.display()),
+            "timeout_seconds":3}
     ]}).to_string()).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
         .args(["--workspace", root.path().to_str().unwrap(),
@@ -92,6 +94,8 @@ fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
         assert!(followup.contains(id), "missing {id}: {followup}");
     }
     assert!(followup.contains("PreToolUse hook blocked"), "{followup}");
+    assert!(!followup.contains("PostToolUse hook failed"), "{followup}");
+    assert!(!followup.contains("Hook timed out"), "{followup}");
     assert!(!followup.contains("DO_NOT_EXPOSE_PREHOOK"), "{followup}");
     assert!(!blocked_post.exists(), "a skipped tool ran PostToolUseFailure");
     assert!(!root.path().join("original.txt").exists());

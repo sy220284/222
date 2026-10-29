@@ -196,3 +196,5 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 沿已有 Agent 多工具主链，修复 `src/agent.rs` 中工具被 PreToolUse 拦截、Hook 启动失败或模型参数非法时，仍错误执行 PostToolUseFailure 的问题：这些工具没有实际执行，不得产生“执行后”事件。真实执行失败的工具仍触发 PostToolUseFailure，已执行成功的工具仍触发 PostToolUse。修复 `src/hooks.rs::after_tool` 把工具输入以 JSON 字符串发送给 Hook 的问题，现传递结构化对象，包含 PreToolUse 修改后的实际参数，保持工具调用 ID 不变。
 
 新增 `tests/integration_hook_lifecycle.rs`，使用独立 CLI、模拟模型 HTTP、真实本地 Hook 子进程和文件系统同时验证：阻止读取不触发事后 Hook、不泄露敏感内容；修改后的参数实际写文件且 PostToolUse 收到对象；真实工具失败触发 PostToolUseFailure；同轮合法兄弟工具继续，全部结果进入下一轮模型请求。此项将原 `src/services/tools/toolExecution.ts` 从未迁移改为部分实现，**没有新增任何已验收路径**。分类：22 排除、363 部分实现、1492 未迁移、29 已验收，仍有 1855 条非排除原路径未完成等价验收。原版完整并行工具执行、Hook 竞态、中断、工具调用取消仍待核验。
+
+同一调用链的 CI 复核发现新增真实子进程测试虽然通过，但运行耗时恰好约 60 秒：两个使用 `cat` 读取标准输入的 Hook 各等到默认 30 秒超时，暴露了 `run_command` 中写入端 `ChildStdin` 未及时释放的问题。已将 stdin 所有权移入写入 Future 并在写入后显式关闭；集成测试将 Hook 超时缩短至 3 秒，并断言工具结果中绝不包含事后 Hook 超时/失败。后续以新 HEAD 的 CI 实测耗时和测试结果确认修复。

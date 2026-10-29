@@ -159,7 +159,10 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
     let input = serde_json::to_vec(payload)?;
     if input.len() > 256_000 { bail!("Hook input exceeds 256 KB") }
     let operation = async {
-        let input_future = async {
+        let input_future = async move {
+            // Move the pipe into the writer future so it is dropped as soon
+            // as writing finishes. A child such as 'cat' waits for EOF;
+            // shutdown() alone does not reliably close ChildStdin here.
             // A hook may finish without reading stdin. Closed pipe is not
             // a hook failure; the exit code and response decide the result.
             if let Err(error) = stdin.write_all(&input).await {
@@ -168,6 +171,7 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
                 }
             }
             let _ = stdin.shutdown().await;
+            drop(stdin);
             Ok::<_, anyhow::Error>(())
         };
         let output_future = read_limited(&mut stdout, 64_000);
