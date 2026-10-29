@@ -385,8 +385,27 @@ pub fn launch_in_terminal(executable: &Path, action: &TerminalLaunch) -> Result<
     let selected = detect_terminal().context("No supported terminal emulator installed")?;
     let plan = build_terminal_plan(&selected, executable, action)?;
     let mut command = Command::new(&plan.executable);
+    // cmd.exe parses /k as a shell command, not an MSVCRT argv string.
+    // Rust's normal Windows argument quoting would double-escape the
+    // already cmd-quoted command; pass that one argument verbatim.
+    #[cfg(target_os = "windows")]
+    {
+        if selected.name == "Command Prompt" {
+            use std::os::windows::process::CommandExt;
+            let mut args = plan.args.into_iter();
+            if let Some(switch) = args.next() {
+                command.arg(switch);
+            }
+            for raw in args {
+                command.raw_arg(raw);
+            }
+        } else {
+            command.args(plan.args);
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    command.args(plan.args);
     command
-        .args(plan.args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
