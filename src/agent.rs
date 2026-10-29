@@ -1178,6 +1178,9 @@ impl Agent {
     pub fn search_sessions(&self, query: &str) -> Result<Vec<crate::session_control::SessionItem>> {
         crate::session_control::search(&self.root, query)
     }
+    pub fn search_transcript(&self, query: &str) -> Vec<crate::transcript_search::SearchHit> {
+        crate::transcript_search::TranscriptIndex::from_stored(&self.session.messages).find(query)
+    }
     pub fn usage(&self) -> crate::protocol::TokenUsage {
         self.session.usage
     }
