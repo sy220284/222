@@ -1186,11 +1186,10 @@ impl ToolExecutor {
             }
         }
         for name in plugins::list_skills(&self.root, &self.enabled_plugins)? {
-            let (plugin, skill) = name
-                .split_once(':')
-                .context("Invalid plugin skill identity")?;
-            let raw = format!(".atlas/plugins/{plugin}/skills/{skill}/SKILL.md");
-            let path = self.checked_path(&raw)?;
+            let resolved = plugins::resolve_skill_path(
+                &self.root, &self.enabled_plugins, &name,
+            )?;
+            let path = self.checked_path(&resolved.to_string_lossy())?;
             if self.search_read_allowed(&path)? {
                 skills.push(name);
             }
@@ -1201,18 +1200,21 @@ impl ToolExecutor {
 
     fn read_skill(&self, args: &Value) -> Result<String> {
         let name = required(args, "name")?;
-        let (content, skill_dir) = if let Some((plugin, skill)) = name.split_once(':') {
-            let raw = format!(".atlas/plugins/{plugin}/skills/{skill}/SKILL.md");
+        let (content, skill_dir) = if name.contains(':') {
+            let resolved = plugins::resolve_skill_path(
+                &self.root, &self.enabled_plugins, name,
+            )?;
+            let raw = resolved.to_string_lossy().into_owned();
             let path = self.checked_path(&raw)?;
             self.require_read_rules(&raw, &path)?;
+            if fs::metadata(&path)?.len() > 64_000 {
+                bail!("Plugin skill too large")
+            }
             let dir = path
                 .parent()
                 .context("Skill has no parent directory")?
                 .to_path_buf();
-            (
-                plugins::read_skill(&self.root, &self.enabled_plugins, name)?,
-                dir,
-            )
+            (fs::read_to_string(path)?, dir)
         } else {
             if !valid_skill_name(name) {
                 bail!("Invalid skill name")
@@ -1251,13 +1253,20 @@ impl ToolExecutor {
                 .unwrap_or(true),
             &names,
         );
-        // Provider-neutral equivalent of the original skill directory macro.
-        let rendered = rendered.replace("${SKILL_DIR}", &dir);
-        // Source loadSkillsDir.ts replaces the active session identifier
-        // after positional argument expansion. Keep the token neutral to
-        // the configured model provider.
+        // Keep original plugin/skill macros usable with the neutral runtime.
+        // Resolve the exact plugin root already validated by skill discovery.
+        let rendered = rendered.replace("${SKILL_DIR}", &dir)
+            .replace("${CLAUDE_SKILL_DIR}", &dir);
+        let rendered = if let Some((plugin, _)) = name.split_once(':') {
+            let root = self.root.join(".atlas/plugins").join(plugin).canonicalize()?;
+            let root = root.to_string_lossy().replace('\\', "/");
+            rendered.replace("${CLAUDE_PLUGIN_ROOT}", &root)
+        } else {
+            rendered
+        };
         Ok(match self.session_id.as_deref() {
-            Some(id) => rendered.replace("${SESSION_ID}", id),
+            Some(id) => rendered.replace("${SESSION_ID}", id)
+                .replace("${CLAUDE_SESSION_ID}", id),
             None => rendered,
         })
     }
@@ -2321,6 +2330,23 @@ mod tests {
             .read_skill(&json!({"name":"demo:build"}))
             .unwrap()
             .contains("Build instructions"));
+    }
+
+    #[test]
+    fn manifest_skill_paths_and_nested_names_reach_the_real_tool() {
+        let root = tempfile::tempdir().unwrap();
+        let plugin = root.path().join(".atlas/plugins/demo");
+        let skill = plugin.join("extra/group/review");
+        fs::create_dir_all(&skill).unwrap();
+        fs::write(plugin.join("plugin.json"), r#"{"name":"demo","skills":"extra"}"#).unwrap();
+        fs::write(skill.join("SKILL.md"),
+            "Review ${CLAUDE_SKILL_DIR} from ${CLAUDE_PLUGIN_ROOT}").unwrap();
+        let tool = executor(root.path(), Approval::ReadOnly).with_plugins(vec!["demo".into()]);
+        assert_eq!(tool.list_skills().unwrap(), "demo:group:review");
+        let rendered = tool.read_skill(&json!({"name":"demo:group:review"})).unwrap();
+        assert!(rendered.contains("extra/group/review"), "{rendered}");
+        assert!(rendered.contains(".atlas/plugins/demo"), "{rendered}");
+        assert!(!rendered.contains("${CLAUDE_SKILL_DIR}"));
     }
 
     #[test]
