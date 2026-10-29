@@ -178,11 +178,10 @@ pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
                     closed = true;
                     break;
                 }
-                if !next.trim().is_empty()
-                    && !next.starts_with(' ') && !next.starts_with('\t') {
-                    break;
+                if next.trim().is_empty()
+                    || next.starts_with(' ') || next.starts_with('\t') {
+                    block.push(next.trim());
                 }
-                block.push(next.trim());
             }
             result = Some(if raw.starts_with('>') {
                 block.join(" ").trim().to_owned()
@@ -192,8 +191,6 @@ pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
             if closed {
                 break;
             }
-            // A block scalar ends at the next top-level key. The scalar has
-            // already been captured, so do not interpret following metadata.
             break;
         }
         let value = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
