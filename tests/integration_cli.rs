@@ -5790,3 +5790,120 @@ fn files_command_shows_actual_successful_model_reads_and_survives_resume() {
     );
     assert!(String::from_utf8_lossy(&resumed.stdout).contains("Files in context:\nexample.rs"));
 }
+
+#[test]
+fn files_command_tracks_real_model_writes_and_restores_them_after_restart() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for turn in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            requests.push(read_request(&mut stream));
+            let response = if turn == 0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"write-one","type":"function","function":{
+                        "name":"write_file","arguments":json!({
+                            "path":"created.rs","content":"pub fn created() {}\n"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant","content":"Created."},
+                    "finish_reason":"stop"}]})
+            };
+            let body = response.to_string();
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"local","providers":[{
+            "id":"local","kind":"openai-compatible","model":"test",
+            "base_url":format!("http://{address}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut process = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "chat",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    process
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"/files\nCreate the requested source file\n/files\n/exit\n")
+        .unwrap();
+    let output = process.wait_with_output().unwrap();
+    let requests = server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        fs::read_to_string(root.path().join("created.rs")).unwrap(),
+        "pub fn created() {}\n"
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("No files in context"), "{text}");
+    assert!(text.contains("Files in context:\ncreated.rs"), "{text}");
+
+    let session_file = fs::read_dir(root.path().join(".atlas/sessions"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let session: Value =
+        serde_json::from_str(&fs::read_to_string(session_file).unwrap()).unwrap();
+    let mut resumed = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "chat",
+            "--resume",
+            session["id"].as_str().unwrap(),
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    resumed
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"/files\n/exit\n")
+        .unwrap();
+    let output = resumed.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Files in context:\ncreated.rs")
+    );
+}
