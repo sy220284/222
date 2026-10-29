@@ -31,6 +31,7 @@ mod ndjson;
 mod notebook;
 mod permission_mode;
 mod permission_rules;
+mod permission_settings;
 mod plugins;
 mod portable_async_runtime;
 mod portable_configuration;
@@ -339,6 +340,8 @@ async fn main() -> Result<()> {
         bail!("--max-steps must be at least 1")
     }
     let root = canonical_workspace(&cli.workspace)?;
+    let active_permission_rules =
+        permission_settings::SettingsPaths::for_workspace(&root)?.load(&config.permission_rules)?;
     let plugins = PluginSet::load(&root, &config.enabled_plugins)?;
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. });
@@ -367,7 +370,7 @@ async fn main() -> Result<()> {
     agent.set_default_shell(shell_runtime::from_config(config.default_shell.as_deref())?);
     agent.set_enabled_plugins(config.enabled_plugins.clone());
     agent.set_model_prices(&config.model_prices);
-    agent.set_permission_rules(&config.permission_rules)?;
+    agent.set_permission_rules(&active_permission_rules)?;
     agent.set_search_backend(config.search_backend.clone());
     let mut mcp_profiles = config.mcp_servers.clone();
     mcp_profiles.extend(plugins.mcp_servers);
