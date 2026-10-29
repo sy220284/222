@@ -40,8 +40,11 @@ fn storage(root: &Path) -> PathBuf {
 fn exclusive_lock(root: &Path) -> Result<File> {
     let home = root.join(".atlas");
     fs::create_dir_all(&home)?;
+    // The lock file is persistent synchronization state; never truncate it
+    // when a second process opens it to acquire the same advisory lock.
     let lock = File::options()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(home.join("marketplaces.lock"))?;
