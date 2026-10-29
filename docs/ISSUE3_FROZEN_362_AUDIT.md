@@ -6,7 +6,7 @@
 - **原版逐行依据**：`permissions.ts:473–516` 的 `hasPermissionsToUseTool` 对 `allow` 直接返回，只有 `ask` 在 `dontAsk` 模式被转换为 `deny`；`permissions.ts:1183–1206,1262–1305` 中显式规则及模式判定的先后顺序。
 - **Rust 真实调用链**：`Agent::ask` → `ToolExecutor::execute` → `require_approval` → `permission_rules::policy_for` → `write_file` 实际文件系统。原先 `src/tools.rs` 在读取显式 allow 结果后立即按 `DontAsk` 拒绝，造成用户已允许的写入也无法执行。
 - **本次修复**：保留显式 deny、只读授权上限、plan 拒绝的原行为；先处理显式 allow，再将 `dontAsk` 下其余需要询问的操作拒绝，且即使 CLI 全量授权也不能绕过 `dontAsk` 的拒绝。未修改原版特定厂商账号/遥测行为。
-- **真实回归**：`tools::tests::dont_ask_respects_explicit_allow_but_denies_implicit_and_ask` 使用临时工作区和实际 `ToolExecutor::execute` 验证 Ask/Full 授权下显式 allow 写入落盘，未授权与显式 ask 均拒绝且不产生文件，显式 deny 优先。提交 `43e97810807ffcef2136550b0f453dfda6538f56`。**GitHub CI 结果以该提交对应实际工作流为准，尚未取得成功结果前不标记通过**。
+- **真实回归**：`tools::tests::dont_ask_respects_explicit_allow_but_denies_implicit_and_ask` 使用临时工作区和实际 `ToolExecutor::execute` 验证 Ask/Full 授权下显式 allow 写入落盘，未授权与显式 ask 均拒绝且不产生文件，显式 deny 优先。提交 `43e97810807ffcef2136550b0f453dfda6538f56`。**已在最终代码 HEAD `d1717f125d899b1505faee078e071f1987fb9b13` 的 GitHub Actions [40839709911](https://github.com/sy220284/222/actions/runs/40839709911) 验证：格式、Clippy、依赖安全、全目标编译与 394 项测试全部通过，0 失败**。
 - **未完成**：完整 `permissions.ts` 1,486 行的 Hook、动态规则来源、询问回调、取消/重启、交互与全部工具分支尚未逐函数验收；冻结 #12/#16/#17 均继续开放。冻结总数 362 不变，已完整验收 0。
 
 
