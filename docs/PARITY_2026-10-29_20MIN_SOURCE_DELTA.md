@@ -8,7 +8,7 @@
 
 | # | 用户可感知业务能力 | 原版路径与入口 | 本轮 Rust 可达调用链 | 关键提交 | 尚未等价 |
 |---:|---|---|---|---|---|
-| 1 | 查看当前上下文占用和分类（CLI /context、SDK get_context_usage 共计一项） | `src/commands/context/context-noninteractive.ts::collectContextData`、`src/utils/analyzeContext.ts`、`src/cli/print.ts` | `main.rs` CLI/SDK → `Agent::context_usage` → `context_usage::Snapshot`；模型请求真实工具清单、消息块分类、最近 API 用量 | `5190675`、`24e5e86`、`e6e818a`、`2ea19eb`、`8e5b9a5`、`8224986` | 厂商精确 tokenizer、上下文折叠、动态压缩缓冲区、完整网格和技能/记忆细分；未知窗口明确为 unknown |
+| 1 | 查看当前上下文占用和分类（CLI /context、SDK get_context_usage 共计一项） | `src/commands/context/context-noninteractive.ts::collectContextData`、`src/utils/analyzeContext.ts`、`src/cli/print.ts` | `main.rs` CLI/SDK → `Agent::context_usage` → `context_usage::Snapshot`；模型请求真实工具清单、消息块分类、最近 API 用量 | `5190675`、`24e5e86`、`e6e818a`、`2ea19eb`、`8e5b9a5`、`8224986` | 厂商精确 tokenizer、上下文折叠、动态压缩缓冲区和技能/记忆细分；未知窗口明确为 unknown |
 | 2 | 复制最近助手回复或指定代码块（/copy） | `src/commands/copy/copy.tsx::collectRecentAssistantTexts`、`copyOrWriteToFile` | `main.rs` → `Agent::copy_response` → `copy_response::copy`；20 条倒序、代码围栏、OSC52、独立私有临时文件 | `bf98b6b`、`eb935c6`、`8e5c2da`、`93925af`、`296abf5` | 原版 JSX 选择器、全部 Markdown lexer 情形、终端实际剪贴板回执 |
 | 3 | SDK 获取设置来源与合并结果（get_settings） | `src/cli/print.ts` 的 `get_settings`、`src/utils/settings/settings.ts::getSettingsWithSources` | `main.rs::sdk_nested_control` → `SettingsPaths::settings_snapshot`；用户/项目/本地/托管策略优先级 | `72d1a2c`、`5125ea3` | flagSettings 动态层、全设置 schema、环境覆盖的 effort |
 | 4 | 按来源查看已生效权限规则（/permissions） | `src/commands/permissions/permissions.tsx`、`src/components/permissions/rules/PermissionRuleList.tsx` | `main.rs` → `SettingsPaths::render_permission_rules`；按来源显示 deny/ask/allow、默认模式、目录，不泄露无关设置 | `b472a8c`、`5125ea3` | 原版交互增删界面、拒绝重试交互；现有 /permission add/delete 仍是独立旧入口 |
@@ -21,6 +21,6 @@
 
 ## 本轮静态复核与续接点
 
-对最新分支读取 `main.rs`、`agent.rs`、`context_usage.rs`、`copy_response.rs`、`diff_view.rs`、`permission_settings.rs`、`tools.rs`、`mcp.rs`，核对 29 项入口、方法、模块引用与安全接线，**29/29 静态检查通过**（此检查早于 /hooks 新接线；后续仍需再次静态核对）；这不构成编译或行为验收。同期其他任务在相同分支持续提交，本轮逐文件按最新 blob SHA 更新，未覆盖并行修改。
+对最新分支读取 `main.rs`、`agent.rs`、`context_usage.rs`、`copy_response.rs`、`diff_view.rs`、`permission_settings.rs`、`tools.rs`、`mcp.rs`，复核最新分支 30 项入口、方法、模块引用、权限与安全接线，**30/30 静态检查通过**；没有执行编译、格式检查、CI 或行为测试。；这不构成编译或行为验收。同期其他任务在相同分支持续提交，本轮逐文件按最新 blob SHA 更新，未覆盖并行修改。
 
 **后续必须先补齐 100 项真实问题清单并逐项源码确认**，优先围绕 SDK `interrupt` / `rewind_files` / `seed_read_state` / `reload_plugins` / `mcp_toggle`，以及 CLI `/hooks` / `/memory` / `/rewind` / `/config` / `/sandbox` 等尚未完成的真实调用链逐一查缺。这里只列下一轮待核查候选，**不把候选或原版命令名计为本轮已完成**。
