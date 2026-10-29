@@ -1776,6 +1776,21 @@ pub fn definitions() -> Vec<Value> {
     tools
 }
 
+/// Only advertise checkpoint tools when the original file-history gate allows
+/// the active interactive or SDK session to use them.
+pub fn definitions_with_checkpointing(enabled: bool) -> Vec<Value> {
+    let mut tools = definitions();
+    if !enabled {
+        tools.retain(|tool| {
+            !matches!(
+                tool.pointer("/function/name").and_then(Value::as_str),
+                Some("file_history" | "file_revert")
+            )
+        });
+    }
+    tools
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
