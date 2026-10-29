@@ -118,9 +118,61 @@ pub fn output_style_label(style: &str) -> Option<&'static str> {
     }
 }
 
+
+/// Load an explicitly configured project agent's Markdown body. Built-in roles
+/// use role_instructions when no project definition exists.
+pub fn custom_role_instructions(
+    root: &std::path::Path,
+    role: &str,
+) -> anyhow::Result<Option<String>> {
+    use anyhow::{bail, Context};
+    if crate::agent_definition::validate_agent_type(role).is_some() {
+        return Ok(None);
+    }
+    let path = root.join(".atlas").join("agents").join(format!("{role}.md"));
+    if !path.exists() {
+        return Ok(None);
+    }
+    let real_root = root.canonicalize().context("Cannot resolve workspace")?;
+    let real_path = path.canonicalize().context("Cannot resolve agent definition")?;
+    if !real_path.starts_with(&real_root) {
+        bail!("Agent definition escapes workspace");
+    }
+    let raw = std::fs::read_to_string(&real_path).context("Read agent definition")?;
+    if raw.len() > 50_000 {
+        bail!("Agent definition exceeds 50 KB");
+    }
+    let body = if let Some(frontmatter) = raw.strip_prefix("---\n") {
+        frontmatter
+            .split_once("\n---\n")
+            .map(|(_, body)| body)
+            .context("Agent definition has unclosed frontmatter")?
+    } else {
+        raw.as_str()
+    };
+    if body.trim().is_empty() {
+        bail!("Agent definition has no system instructions");
+    }
+    Ok(Some(body.trim().to_owned()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    #[test]
+    fn custom_role_loads_only_from_workspace_with_valid_frontmatter() {
+        let workspace = tempfile::tempdir().unwrap();
+        let agents = workspace.path().join(".atlas/agents");
+        std::fs::create_dir_all(&agents).unwrap();
+        std::fs::write(agents.join("reviewer.md"),
+            "---\nname: reviewer\ndescription: Review changes\n---\n\nReview the entire call chain.\n").unwrap();
+        let loaded = custom_role_instructions(workspace.path(), "reviewer").unwrap();
+        assert_eq!(loaded.as_deref(), Some("Review the entire call chain."));
+        assert!(custom_role_instructions(workspace.path(), "../private").unwrap().is_none());
+        assert!(custom_role_instructions(workspace.path(), "missing").unwrap().is_none());
+    }
 
     #[test]
     fn built_in_roles_have_distinct_instructions() {
