@@ -231,6 +231,42 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
     Ok(result)
 }
 
+/// Mirror the original tool-result message, preserving the order in which
+/// questions were asked and carrying user-selected previews and notes back
+/// into the model's next turn. This is produced only from terminal answers.
+pub fn format_result_for_model(result: &Value) -> String {
+    let answers = result.get("answers").and_then(Value::as_object);
+    let annotations = result.get("annotations").and_then(Value::as_object);
+    let mut parts = Vec::new();
+    if let Some(questions) = result.get("questions").and_then(Value::as_array) {
+        for question in questions {
+            let Some(text) = question.get("question").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(answer) = answers
+                .and_then(|answers| answers.get(text))
+                .and_then(Value::as_str)
+            else {
+                continue;
+            };
+            let mut part = format!("\"{text}\"=\"{answer}\"");
+            if let Some(annotation) = annotations.and_then(|values| values.get(text)) {
+                if let Some(preview) = annotation.get("preview").and_then(Value::as_str) {
+                    part.push_str(&format!(" selected preview:\n{preview}"));
+                }
+                if let Some(notes) = annotation.get("notes").and_then(Value::as_str) {
+                    part.push_str(&format!(" user notes: {notes}"));
+                }
+            }
+            parts.push(part);
+        }
+    }
+    format!(
+        "User has answered your questions: {}. You can now continue with the user's answers in mind.",
+        parts.join(", ")
+    )
+}
+
 pub fn ask_from_terminal(input: &Value) -> Result<Value> {
     let stdin = io::stdin();
     let mut reader = stdin.lock();
