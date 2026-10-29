@@ -156,6 +156,23 @@ pub fn record(
     outcome?;
     Ok(Some(id))
 }
+/// FileHistoryTrackEdit logs a failed backup without converting an already
+/// successful edit into a failed tool call. Surface the failure as a warning
+/// so the user does not retry a write that has already reached disk.
+pub fn record_notice(
+    root: &Path,
+    session_id: Option<&str>,
+    path: &Path,
+    previous: Option<Vec<u8>>,
+    previous_mode: Option<u32>,
+) -> String {
+    match record(root, session_id, path, previous, previous_mode) {
+        Ok(Some(id)) => format!("\nCheckpoint: {id}"),
+        Ok(None) => String::new(),
+        Err(error) => format!("\nWarning: file edit succeeded but checkpoint could not be saved: {error:#}"),
+    }
+}
+
 pub fn load(root: &Path, session_id: Option<&str>, id: &str) -> Result<Record> {
     let id = Uuid::parse_str(id).context("History id must be a UUID")?;
     let folder = storage(root, session_id)?;
