@@ -321,8 +321,33 @@ fn resolve_plugin_mcp_server(
                 }
                 let value = options.get(key)
                     .with_context(|| format!("Missing required plugin user configuration: {key}"))?;
+                // mcpbHandler.ts::validateUserConfig: reject wrong types before
+                // launching a process with an unusable command or header.
+                let kind = field.get("type").and_then(Value::as_str);
+                let multiple = field.get("multiple").and_then(Value::as_bool) == Some(true);
+                let valid = match kind {
+                    Some("string") if multiple => value.is_string()
+                        || value.as_array().is_some_and(|items| items.iter().all(Value::is_string)),
+                    Some("string" | "file" | "directory") => value.is_string(),
+                    Some("number") => value.is_number(),
+                    Some("boolean") => value.is_boolean(),
+                    _ => true,
+                };
+                if !valid {
+                    bail!("Invalid plugin user configuration type for '{key}'")
+                }
+                if let Some(number) = value.as_f64() {
+                    if field.get("min").and_then(Value::as_f64).is_some_and(|min| number < min)
+                        || field.get("max").and_then(Value::as_f64).is_some_and(|max| number > max) {
+                        bail!("Plugin user configuration '{key}' is outside its allowed range")
+                    }
+                }
                 match value {
                     Value::String(value) => substituted.push_str(value),
+                    Value::Array(items) => substituted.push_str(&items.iter()
+                        .map(|item| item.as_str().map(str::to_owned)
+                            .unwrap_or_else(|| item.to_string()))
+                        .collect::<Vec<_>>().join(",")),
                     other => substituted.push_str(&other.to_string()),
                 }
             } else {
