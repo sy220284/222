@@ -11,7 +11,7 @@
 
 ## 2026-10-29：Hook 标准输入、工作区、超时和模型可见输出（源码已提交，待验收）
 
-本次对照完整用户原始 ZIP 的 `source/src/utils/hooks.ts`（166–181、877–879、986–1027、1616–1645、2499–2695、2743–2880 行）、`source/src/utils/ShellCommand.ts`（337–346 行），并检查 Rust 的 `Agent::attach_hooks/ask/finish` 与 `HookRunner::run/run_command` 真实可达链，补齐下列 7 条相互独立的用户业务行为：
+本次对照完整用户原始 ZIP 的 `source/src/utils/hooks.ts`（166–181、877–879、986–1027、2499–2695、2743–2880 行）、`source/src/utils/ShellCommand.ts`（337–346 行），并检查 Rust 的 `Agent::attach_hooks/ask/finish` 与 `HookRunner::run/run_command` 真实可达链，补齐下列 7 条相互独立的用户业务行为：
 
 1. **逐行读取 Hook 输入**：在 JSON 标准输入后写入换行，用户脚本 `read -r line` 能正常解析完整事件，不再因无换行在 EOF 时跳过分支（`457dabb`）。
 2. **Hook 在正确的项目目录运行**：Agent、子代理与工作树通过 `with_workspace` 将实际工作区传入 Hook 进程，设置当前目录及中立环境变量 `ATLAS_PROJECT_DIR`，修复相对路径读取错误（`e867516`、`c598420`）。
