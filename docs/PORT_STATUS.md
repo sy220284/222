@@ -1,5 +1,20 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：WebFetch 与 macOS 深链终端源码补齐（本任务本轮 7/100，待验收）
+
+原始 ZIP 源码依据：source/src/tools/WebFetchTool/utils.ts（50–95、262–329、347–482）、source/src/tools/WebFetchTool/WebFetchTool.ts（214–295）、source/src/utils/mcpOutputStorage.ts（61–135、148–174）、source/src/utils/deepLink/terminalLauncher.ts（26–120）。Rust 可达链：src/tools.rs → src/webfetch.rs；src/main.rs → src/terminal_launcher.rs → src/config.rs。
+
+1. WebFetch 二进制附件：抓取后将 PDF、Office、图片等原始字节按 MIME 扩展名保存在工作区 .atlas/tool-results，结果包含可读取的路径及大小；附件写入失败仍保留抓取文本。提交 74dd607d、c3902378、5223732。
+2. WebFetch 内容缓存：按原始 URL 与工作区隔离缓存成功响应，15 分钟 TTL、50 MiB LRU，已删除的二进制附件会使缓存失效。提交 74dd607d、c3902378。
+3. HTML 转 Markdown：保留标题、链接、列表、强调、代码块、图片描述、引用及常见实体；原先会直接丢弃标签语义。提交 849fd92e。仍缺 Turndown 完整 DOM/复杂表格/全部嵌套结构。
+4. 跨域跳转继续请求：重定向消息保留原始 prompt 和目标 URL，给出再次授权调用参数，补齐请求耗时回执。提交 de9a9dc1。
+5. WebFetch HTTP 行为：60 秒超时、10 次重定向、301/302/307/308 白名单及 Markdown 优先内容协商。提交 112d8e1c。
+6. macOS 深链终端发现：持久偏好、TERM_PROGRAM、Spotlight、Applications 顺序选择，保留原有 Terminal.app 失败回退。提交 44f3c38d、3219e15f、5df20c62。
+7. 用户终端偏好设置：真实 CLI terminal-preference 命令支持查看、保存和 auto 恢复，供浏览器无环境启动使用。提交 fc19dd1c。
+
+严格状态：7 项独立用户业务行为已有新 Rust 代码并推送，均为“已提交、待验收”；没有运行 Cargo、测试或 CI。本次未建立完整且逐项核实的 100 项独立业务缺口清单，未达到 100 项硬目标，差 93 项。WebFetch 仍缺二次模型摘要、完整取消状态机、会话级附件目录及完整 DOM 等价；macOS 终端缺完整交互偏好 UI 和跨平台行为证据。Issue #3 冻结 362 项仍开放、未勾选；动态矩阵不升级为已验收。
+
+
 ## 2026-10-29：WebFetch 大页面与深链终端发现（本任务本轮 2/100，已提交待验收）
 
 - **网页抓取（1 项）**：原版 `source/src/tools/WebFetchTool/utils.ts:112,128,275–279,375–379,492–496` 对普通 HTTP 初始请求先升级 HTTPS，响应上限 10 MiB，模型处理前按 100,000 个 UTF-16 单元截断并附提示。Rust `src/webfetch.rs::fetch_with_redirect_policy` 已补入真实网络执行链：生产请求升级 HTTPS（本地测试专用 override 保持 HTTP）、10 MiB 限制及内容截断提示。提交 `82c280778deb0069057c2f9276451359ee1de79b`。**仍缺**原版 HTML→Markdown、缓存/TTL、二进制附件落盘、模型摘要与完整取消时序；本轮未运行测试或 CI，未验收。
