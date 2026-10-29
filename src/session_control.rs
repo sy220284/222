@@ -396,6 +396,59 @@ fn filename(session: &Session, requested: Option<&str>) -> PathBuf {
         PathBuf::from(format!("{timestamp}-{label}.txt"))
     }
 }
+// The 2.1.88 exportRenderer renders normalized multimodal message blocks
+// before stripping terminal styling. Preserve all visible text blocks in a
+// plaintext export, without dumping binary image/audio payloads.
+fn render_export_block(block: &serde_json::Value) -> Option<String> {
+    if let Some(text) = block.as_str() {
+        return Some(text.to_owned());
+    }
+    let kind = block.get("type").and_then(serde_json::Value::as_str);
+    match kind {
+        Some("text" | "input_text" | "output_text") => block
+            .get("text")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        Some("tool_use") => {
+            let id = block.get("id").and_then(serde_json::Value::as_str).unwrap_or("");
+            let name = block
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("tool");
+            let arguments = block
+                .get("input")
+                .map(serde_json::Value::to_string)
+                .unwrap_or_else(|| "{}".to_owned());
+            Some(format!("Tool call [{id}] {name}:\n{arguments}"))
+        }
+        Some("tool_result") => {
+            let id = block
+                .get("tool_use_id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let content = block.get("content")?;
+            let output = match content {
+                serde_json::Value::String(text) => text.to_owned(),
+                serde_json::Value::Array(blocks) => blocks
+                    .iter()
+                    .filter_map(render_export_block)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                other => render_export_block(other).unwrap_or_default(),
+            };
+            Some(format!("Tool result [{id}]:\n{output}"))
+        }
+        Some("image" | "image_url") => Some("[Image]".to_owned()),
+        Some("document") => Some("[Document]".to_owned()),
+        Some("audio" | "input_audio" | "output_audio") => Some("[Audio]".to_owned()),
+        Some("video") => Some("[Video]".to_owned()),
+        Some("thinking" | "redacted_thinking") => None,
+        _ => block
+            .get("text")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+    }
+}
 pub fn render(session: &Session) -> String {
     let mut lines = Vec::new();
     for message in &session.messages {
@@ -410,15 +463,34 @@ pub fn render(session: &Session) -> String {
             Some(id) => format!("{role} [{id}]:"),
             None => format!("{role}:"),
         });
-        if let Some(content) = &message.content {
+        // Content blocks are the lossless representation of SDK multimodal
+        // messages. The flattened content field may omit later text blocks.
+        if let Some(blocks) = message.content_blocks.as_ref().filter(|b| !b.is_empty()) {
+            for block in blocks {
+                if let Some(text) = render_export_block(block) {
+                    lines.push(text);
+                }
+            }
+        } else if let Some(content) = &message.content {
             lines.push(content.clone());
         }
         if let Some(calls) = &message.tool_calls {
             for call in calls {
-                lines.push(format!(
-                    "Tool call [{}] {}:\n{}",
-                    call.id, call.function.name, call.function.arguments
-                ));
+                // A tool_use content block already occupies its original
+                // position in the transcript; do not export it twice.
+                let already_rendered = message.content_blocks.as_ref().is_some_and(|blocks| {
+                    blocks.iter().any(|block| {
+                        block.get("type").and_then(serde_json::Value::as_str) == Some("tool_use")
+                            && block.get("id").and_then(serde_json::Value::as_str)
+                                == Some(call.id.as_str())
+                    })
+                });
+                if !already_rendered {
+                    lines.push(format!(
+                        "Tool call [{}] {}:\n{}",
+                        call.id, call.function.name, call.function.arguments
+                    ));
+                }
             }
         }
         lines.push(String::new());
