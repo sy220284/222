@@ -99,7 +99,9 @@ pub fn parse_plugin_args(args: Option<&str>) -> PluginCommand {
                     };
                     PluginCommand::Marketplace {
                         action: Some(action.into()),
-                        target: Some(parts.iter().skip(2).copied().collect::<Vec<_>>().join(" ")),
+                        target: (action != "list").then(|| {
+                            parts.iter().skip(2).copied().collect::<Vec<_>>().join(" ")
+                        }),
                     }
                 }
                 _ => PluginCommand::Marketplace {
@@ -165,7 +167,7 @@ mod tests {
             parse_plugin_args(Some("marketplace list")),
             PluginCommand::Marketplace {
                 action: Some("list".into()),
-                target: Some("".into()),
+                target: None,
             }
         );
         assert_eq!(
