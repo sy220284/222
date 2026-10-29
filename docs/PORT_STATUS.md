@@ -1,5 +1,14 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：/compact 自定义指令对齐原版并接入 CLI、SDK（源码已提交、待验收）
+
+完整原版依据：`source/src/commands/compact/compact.ts::call` 第 40–53、96–108 行保留 /compact 参数作为自定义摘要指令；`source/src/services/compact/compact.ts::compactConversation/mergeHookInstructions` 保证用户指令在前，PreCompact Hook 附加指令在后。
+
+- `src/agent.rs::compact_history_custom` 接收并保留自定义摘要要求，写入真实模型总结提示词，PreCompact Hook 获取同一用户指令；自动压缩仍不添加用户指令。提交 `3272f2c3`。
+- `src/main.rs` 普通终端的 `/compact [instructions]` 和 SDK `control.action=compact` 的 `instructions`/`customInstructions` 参数通过同一 Agent 入口执行，裸 `/compact` 既有行为保留。提交 `31bc02ae`。
+- 当前独立业务能力计数为 1 条：用户按需指定会话压缩保留范围。仍缺完整取消状态传播、压缩摘要界面交互和多模型行为验收，冻结 Issue #3 的 362 项不勾选；本轮未运行 Cargo、测试或 CI。
+
+
 ## 2026-10-29：MCP 资源请求过期重连与错误凭据脱敏（源码已提交、待验收）
 
 原版依据：`source/src/services/mcp/client.ts` 中 401/过期会话触发连接缓存清理并由 `ensureConnectedClient` 获取新连接、更新 resources/prompts 缓存；`source/src/services/mcp/headersHelper.ts` 中动态请求头重新获取。Rust 已有工具调用恢复，本轮扩展到此前遗漏的资源及提示词真实用户入口，并保证未成功确认的请求不会自动重放。
