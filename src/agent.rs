@@ -1750,7 +1750,10 @@ impl Agent {
                     } else {
                         use std::io::Write;
                         let answer = (|| -> std::io::Result<bool> {
-                            eprintln!("PreToolUse hook requests approval for {}", call.function.name);
+                            eprintln!(
+                                "PreToolUse hook requests approval for {}",
+                                call.function.name
+                            );
                             eprint!("Allow once? [y/N] ");
                             std::io::stderr().flush()?;
                             let mut response = String::new();

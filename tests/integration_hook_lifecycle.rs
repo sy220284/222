@@ -279,17 +279,28 @@ fn pre_tool_hook_ask_cannot_be_bypassed_by_full_approval() {
     }]}).to_string()).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
         .args([
-            "--workspace", root.path().to_str().unwrap(),
-            "--approval", "full", "run", "Test forced hook approval"
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "run",
+            "Test forced hook approval",
         ])
         .env("ATLAS_CONFIG", &config)
         .output()
         .unwrap();
     let requests = server.join().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(!root.path().join("forbidden.txt").exists());
     assert_eq!(requests.len(), 2);
-    assert!(requests[1].contains("PreToolUse hook requires interactive approval"),
-        "{}", requests[1]);
+    assert!(
+        requests[1].contains("PreToolUse hook requires interactive approval"),
+        "{}",
+        requests[1]
+    );
     assert!(requests[1].contains("must-ask"), "{}", requests[1]);
 }
