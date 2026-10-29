@@ -7,7 +7,7 @@
 
 - Rust 实际代码：src/conversation_context.rs 新增 project_instructions，按用户→父目录→当前目录顺序发现厂商中立的 AGENTS.md、.atlas/AGENTS.md、.atlas/instructions.md、AGENTS.local.md、.atlas/instructions.local.md、.atlas/rules/*.md 和个人配置目录规则；规则递归、规范路径去重、文件数/大小边界、符号链接作用域检查、ATLAS_DISABLE_PROJECT_INSTRUCTIONS 显式关闭。
 - 原版 frontmatter 的 paths 条件规则只允许在命中文件后加载；当前没有目标文件时，Rust 不把这些规则误当作全局指令。原版还包含外部 @include 审批、工作树去重、按访问文件动态条件规则、managed/user/SDK 来源过滤等，本次均未宣称等价。
-- 实际 Agent 接线：src/agent.rs::system_prompt 在模型请求前追加该函数输出；保留现有输出风格处理。代码提交 42b729ca、549f12b2；台账提交 052034cf。
+- 实际 Agent 接线：src/agent.rs::system_prompt 在模型请求前追加该函数输出；保留现有输出风格处理。补正配置目录读取错误传播，避免用户规则静默缺失；Git 状态快照的 2,000 字符限制改为原版 JavaScript UTF-16 计数，修复中文和表情文件名的截断偏差。代码提交 42b729ca、549f12b2、5db0100c、24e27e1c；台账提交 052034cf。
 - 本轮保守计数：**1 个用户可感知业务功能链（项目指令继承与规则发现）源码已提交待验收**，完整等价验收 0；本轮目标 100 项尚差 99。按用户要求未运行 cargo、测试或 CI，只静态复查远端源代码及调用入口。Issue #3 冻结 362 条继续全部开放，PR #2 保持 Draft。
 
 
