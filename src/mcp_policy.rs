@@ -9,8 +9,10 @@ pub fn allows(settings: &Value, server: &McpServerConfig) -> Result<bool> {
         .context("MCP policy snapshot missing effective settings")?;
     if let Some(denied) = effective.get("deniedMcpServers").filter(|v| !v.is_null()) {
         let entries = denied.as_array().context("deniedMcpServers must be an array")?;
-        if entries.iter().any(|entry| matches_entry(entry, server).unwrap_or(true)) {
-            return Ok(false);
+        for entry in entries {
+            if matches_entry(entry, server)? {
+                return Ok(false);
+            }
         }
     }
     let managed_only = effective.get("allowManagedMcpServersOnly")
