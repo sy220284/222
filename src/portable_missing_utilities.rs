@@ -397,18 +397,42 @@ mod tests {
         assert_eq!(highlight_view("hello", "ll").text_content(), "hello");
         // JavaScript indexes UTF-16 code units, not UTF-8 byte offsets.
         let spans = highlight_match("😀Hello😀", "hello");
-        assert_eq!(spans, vec![
-            MatchSpan { text: "😀".into(), inverse: false },
-            MatchSpan { text: "Hello".into(), inverse: true },
-            MatchSpan { text: "😀".into(), inverse: false },
-        ]);
+        assert_eq!(
+            spans,
+            vec![
+                MatchSpan {
+                    text: "😀".into(),
+                    inverse: false
+                },
+                MatchSpan {
+                    text: "Hello".into(),
+                    inverse: true
+                },
+                MatchSpan {
+                    text: "😀".into(),
+                    inverse: false
+                },
+            ]
+        );
         // A lowercase expansion changes the original JavaScript slice index.
         let spans = highlight_match("İabc", "a");
-        assert_eq!(spans, vec![
-            MatchSpan { text: "İa".into(), inverse: false },
-            MatchSpan { text: "b".into(), inverse: true },
-            MatchSpan { text: "c".into(), inverse: false },
-        ]);
+        assert_eq!(
+            spans,
+            vec![
+                MatchSpan {
+                    text: "İa".into(),
+                    inverse: false
+                },
+                MatchSpan {
+                    text: "b".into(),
+                    inverse: true
+                },
+                MatchSpan {
+                    text: "c".into(),
+                    inverse: false
+                },
+            ]
+        );
     }
     #[test]
     fn history_terminal_and_cli() {
