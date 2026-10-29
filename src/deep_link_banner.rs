@@ -86,9 +86,10 @@ pub fn build_deep_link_banner_at(info: &DeepLinkBannerInfo, now: SystemTime) -> 
             .last_fetch
             .map(|time| relative_time_ago(time, now))
             .unwrap_or_else(|| "never".into());
-        let stale = info
-            .last_fetch
-            .is_none_or(|then| now.duration_since(then).is_ok_and(|age| age > STALE_FETCH_WARN));
+        let stale = info.last_fetch.is_none_or(|then| {
+            now.duration_since(then)
+                .is_ok_and(|age| age > STALE_FETCH_WARN)
+        });
         lines.push(format!(
             "Resolved {repo} from local clones · last fetched {age}{}",
             if stale {
@@ -145,7 +146,7 @@ mod tests {
         let banner = build_deep_link_banner_at(&info, now);
         assert!(banner.contains("external deep link in /workspace/repo"));
         assert!(banner.contains("Resolved team/repo"));
-        assert!(banner.contains("8d ago"));
+        assert!(banner.contains("1w ago"));
         assert!(banner.contains("AGENTS.md may be stale"));
         assert!(banner.contains("1.0k chars"));
         assert!(banner.contains("scroll to review the entire prompt"));
@@ -171,7 +172,11 @@ mod tests {
         fs::create_dir(&worktree).unwrap();
         let private = git.join("worktrees/a");
         fs::write(private.join("commondir"), "../..\n").unwrap();
-        fs::write(worktree.join(".git"), format!("gitdir: {}\n", private.display())).unwrap();
+        fs::write(
+            worktree.join(".git"),
+            format!("gitdir: {}\n", private.display()),
+        )
+        .unwrap();
         assert_eq!(read_last_fetch_time(&worktree), None);
         fs::write(git.join("FETCH_HEAD"), "fetched").unwrap();
         let common = read_last_fetch_time(&worktree).unwrap();
