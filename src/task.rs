@@ -161,22 +161,36 @@ fn dispatch(session: &mut Session, call: &ToolCall) -> Result<String> {
                 .get("id")
                 .and_then(Value::as_u64)
                 .context("Missing task id")?;
+            // The source TaskUpdate schema validates every supplied field
+            // before updateTask mutates the stored record. Validate the full
+            // request first so a bad status cannot leave a changed title.
+            let title = args
+                .get("title")
+                .map(|value| value.as_str().context("Invalid task title"))
+                .transpose()?;
+            if title.is_some_and(|value| value.trim().is_empty() || value.len() > 500) {
+                bail!("Invalid task title")
+            }
+            let status: Option<TaskStatus> = args
+                .get("status")
+                .map(|value| serde_json::from_value(value.clone()).context("Invalid task status"))
+                .transpose()?;
+            let notes = args
+                .get("notes")
+                .map(|value| value.as_str().context("Invalid task notes"))
+                .transpose()?;
             let task = session
                 .tasks
                 .iter_mut()
                 .find(|t| t.id == id)
                 .with_context(|| format!("No task with id {id}"))?;
-            if let Some(title) = args.get("title").and_then(Value::as_str) {
-                if title.trim().is_empty() || title.len() > 500 {
-                    bail!("Invalid task title")
-                }
+            if let Some(title) = title {
                 task.title = title.to_owned();
             }
-            if let Some(status) = args.get("status") {
-                task.status =
-                    serde_json::from_value(status.clone()).context("Invalid task status")?;
+            if let Some(status) = status {
+                task.status = status;
             }
-            if let Some(notes) = args.get("notes").and_then(Value::as_str) {
+            if let Some(notes) = notes {
                 task.notes = Some(notes.to_owned());
             }
             Ok(format!("Updated task {}", task.id))
