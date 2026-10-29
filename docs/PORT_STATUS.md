@@ -878,3 +878,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 对照 `src/utils/tasks.ts::createTask`、`deleteTask`、`resetTaskList`：原版创建任务只在持有任务列表锁时写入任务文件并返回 ID，高水位记录在删除或重置时更新。Rust `TaskGraph::create` 先前写入任务成功后额外写 `.highwatermark`，若第二次写入失败会向模型错误报告创建失败，导致重试出现重复任务。现移除创建后的多余计数写入，仍由现存文件名和删除/重置高水位共同分配唯一编号；同步修正源码测试的预期（未执行）。提交 `9c3c87dc0e535c6dc5f684f5dd59d2b618aba1e9`。源码已提交，待行为验收。
 
 同轮继续完善已登记的任务文件读取隔离：单条目录项异常和任务目录被并行清理时保持其他可见任务或空列表回退，提交 `f087c0283e1c91274ac6792a76c353470bbad55e`、`56b865d0293cb0355e4d84381e569a5a499e7ea9`；Windows Doctor 命令探测补齐 where.exe 当前目录优先级，提交 `4effb30fae4d2f4fdcdec0714c980a009466fdc7`。以上为原有两条业务链深化，未重复计数。
+
+## 2026-10-29：远程桥消息回放公共执行层（保持部分实现）
+对照 `src/bridge/flushGate.ts`、`src/bridge/sessionIdCompat.ts`、`src/bridge/pollConfigDefaults.ts`，新增 `src/bridge_core.rs`，接入真实 SDK NDJSON 控制入口。历史回放中的出站新消息 FIFO 排队、传输替换保留队列、永久关闭清空、会话隔离、ID 双向转换及轮询默认值均实现。本地 SDK 子进程实测 1/1 通过，Rust 单元测试 5/5 通过。完整 HTTP/WebSocket 实际传输、身份刷新、轮询调度和服务端协议仍待迁移，三条原路径只登记部分实现。
+

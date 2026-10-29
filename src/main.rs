@@ -5,6 +5,7 @@ mod ask_user_question;
 mod background;
 mod bash_permission_suggestions;
 mod browser_launcher;
+mod bridge_core;
 mod cleanup_registry;
 mod collections;
 mod command_lifecycle;
@@ -1976,6 +1977,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut queue = message_queue::Queue::default();
     queue.enable_journal(agent.workspace_root(), &agent.session_id())?;
     let mut query_guard = query_guard::QueryGuard::default();
+    let mut bridge_session = bridge_core::BridgeSession::new(agent.session_id());
     print_json!(json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
@@ -2081,6 +2083,16 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     }};
                 }
                 let action = event.get("action").and_then(Value::as_str).unwrap_or("");
+                if action.starts_with("bridge_") {
+                    let outcome = bridge_session.dispatch(action, &event);
+                    match outcome {
+                        Ok(result) => send_control!(json!({"type":"control_response",
+                            "action":action,"ok":true,"result":result})),
+                        Err(error) => send_control!(json!({"type":"control_response",
+                            "action":action,"ok":false,"error":format!("{error:#")})),
+                    }
+                    continue;
+                }
                 if action.starts_with("queue_") {
                     let outcome =
                         sdk_queue::control(action, &event, &mut queue, &mut query_guard, agent)

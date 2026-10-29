@@ -43,18 +43,18 @@
 | `src/bridge/createSession.ts` | 385 | 12157 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/debugUtils.ts` | 142 | 4240 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/envLessBridgeConfig.ts` | 166 | 7250 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/flushGate.ts` | 72 | 1981 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
+| `src/bridge/flushGate.ts` | 72 | 1981 | 改造：自建远程连接协议 | `src/bridge_core.rs / src/main.rs` | 部分实现：本地 SDK 控制入口可达；初始历史回放中的出站消息有序排队、传输替换保留、永久关闭清除与隔离测试已通过；远程 HTTP/WebSocket 实际发送仍未贯通 |
 | `src/bridge/inboundAttachments.ts` | 176 | 6267 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/inboundMessages.ts` | 81 | 2727 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/initReplBridge.ts` | 570 | 23849 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/jwtUtils.ts` | 257 | 9444 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/pollConfig.ts` | 111 | 4562 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/pollConfigDefaults.ts` | 83 | 4018 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
+| `src/bridge/pollConfigDefaults.ts` | 83 | 4018 | 改造：自建远程连接协议 | `src/bridge_core.rs / src/main.rs` | 部分实现：本地 SDK 控制入口可达；原版轮询/心跳默认数值与多会话默认值已验证；远端真实轮询调度与状态恢复仍未贯通 |
 | `src/bridge/remoteBridgeCore.ts` | 1009 | 39434 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/replBridge.ts` | 2407 | 100537 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/replBridgeHandle.ts` | 37 | 1473 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/replBridgeTransport.ts` | 371 | 15523 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/sessionIdCompat.ts` | 58 | 2536 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
+| `src/bridge/sessionIdCompat.ts` | 58 | 2536 | 改造：自建远程连接协议 | `src/bridge_core.rs / src/main.rs` | 部分实现：本地 SDK 控制入口可达；会话标识双向转换与可选兼容门禁已测试；远程服务完整身份调用链仍未贯通 |
 | `src/bridge/sessionRunner.ts` | 551 | 18020 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/trustedDevice.ts` | 211 | 7764 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/types.ts` | 263 | 10161 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |

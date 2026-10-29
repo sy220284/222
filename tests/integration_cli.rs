@@ -6356,3 +6356,73 @@ fn interactive_project_onboarding_is_persistent_and_disappears_after_init_file()
     assert!(chat().contains("Project setup:"));
     assert!(!chat().contains("Project setup:"));
 }
+
+#[test]
+fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
+    use std::process::Stdio;
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"local","providers":[{
+            "id":"local","kind":"openai-compatible","model":"test",
+            "base_url":"http://127.0.0.1:9/v1"
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "sdk"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut writer = child.stdin.take().unwrap();
+        for (id, action, request) in [
+            ("1", "bridge_flush_start", json!({})),
+            (
+                "2",
+                "bridge_flush_enqueue",
+                json!({"messages":[{"seq":1},{"seq":2}]}),
+            ),
+            ("3", "bridge_flush_deactivate", json!({})),
+            ("4", "bridge_flush_start", json!({})),
+            ("5", "bridge_flush_enqueue", json!({"messages":[{"seq":3}]})),
+            ("6", "bridge_flush_end", json!({})),
+            ("7", "bridge_flush_end", json!({})),
+            ("8", "bridge_session_ids", json!({"id":"cse_123"})),
+            ("9", "bridge_poll_defaults", json!({})),
+            ("10", "bridge_flush_start", json!({"session_id":"forged"})),
+        ] {
+            let mut envelope = request;
+            envelope["type"] = json!("control");
+            envelope["action"] = json!(action);
+            envelope["request_id"] = json!(id);
+            writeln!(writer, "{envelope}").unwrap();
+        }
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let values = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|s| serde_json::from_str::<Value>(s).unwrap())
+        .collect::<Vec<_>>();
+    let response = |id: &str| values.iter().find(|x| x["request_id"] == id).unwrap();
+    assert_eq!(response("3")["result"]["pending_count"], 2);
+    assert_eq!(
+        response("6")["result"]["messages"],
+        json!([{"seq":1},{"seq":2},{"seq":3}])
+    );
+    assert_eq!(response("7")["result"]["messages"], json!([]));
+    assert_eq!(response("8")["result"]["compat_id"], "session_123");
+    assert_eq!(response("9")["result"]["reclaim_older_than_ms"], 5000);
+    assert_eq!(response("10")["ok"], false);
+}
