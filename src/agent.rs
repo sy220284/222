@@ -150,6 +150,7 @@ struct SdkAgentDefinition {
     isolation: Option<String>,
     initial_prompt: Option<String>,
     permission_mode: Option<permission_mode::Mode>,
+    skills: Vec<String>,
 }
 
 pub struct Agent {
@@ -459,7 +460,7 @@ impl Agent {
             let definition = value.as_object()
                 .with_context(|| format!("SDK agent {name} must be an object"))?;
             for field in definition.keys() {
-                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt" | "permissionMode") {
+                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt" | "permissionMode" | "skills") {
                     bail!("SDK agent {name} field {field} is not yet supported");
                 }
             }
@@ -558,6 +559,19 @@ impl Agent {
                 }
                 Some(_) => bail!("SDK agent {name} permissionMode must be a string"),
             };
+            let skills = match definition.get("skills") {
+                None => Vec::new(),
+                Some(serde_json::Value::Array(values)) => {
+                    let mut names = Vec::new();
+                    for value in values {
+                        let skill = value.as_str().filter(|value| !value.trim().is_empty())
+                            .with_context(|| format!("SDK agent {name} skills must be nonempty strings"))?;
+                        names.push(skill.to_owned());
+                    }
+                    names
+                }
+                Some(_) => bail!("SDK agent {name} skills must be an array"),
+            };
             parsed.insert(name.clone(), SdkAgentDefinition {
                 description: description.to_owned(),
                 prompt: prompt.to_owned(),
@@ -568,6 +582,7 @@ impl Agent {
                 isolation,
                 initial_prompt,
                 permission_mode,
+                skills,
             });
         }
         self.sdk_agent_definitions = parsed;
@@ -1562,6 +1577,23 @@ impl Agent {
                 bail!("SDK agent permissionMode would exceed the parent permission ceiling");
             }
         }
+        // Resolve declared skills before any worktree/process side effect.
+        // The same tool permission and workspace boundary as an ordinary
+        // Skill invocation applies to agent-frontmatter preloading.
+        let mut skill_prompts = Vec::new();
+        if let Some(definition) = &sdk_definition {
+            if !definition.skills.is_empty() {
+                let loader = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+                    .with_plugins(self.enabled_plugins.clone())
+                    .with_permission_rules(self.permission_rules.clone())
+                    .with_extra_roots(self.additional_dirs.clone())
+                    .with_permission_mode(self.permission_mode);
+                for name in &definition.skills {
+                    let content = loader.preload_agent_skill(name)?;
+                    skill_prompts.push((name.clone(), content));
+                }
+            }
+        }
         let isolation = args
             .get("isolation")
             .and_then(|v| v.as_str())
@@ -1651,6 +1683,10 @@ impl Agent {
             }
             // Source main.tsx prepends an agent's initialPrompt to the first
             // user turn, preserving the caller's task as trailing context.
+            for (name, content) in &skill_prompts {
+                child.session.messages.push(Message::text("user",
+                    format!("Preloaded agent skill {name}:\\n{content}")));
+            }
             let mut continuation = match initial_prompt {
                 Some(initial) if !initial.is_empty() => format!("{initial}\n\n{prompt}"),
                 _ => prompt.to_owned(),
