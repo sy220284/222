@@ -73,6 +73,8 @@ mod team_mailbox;
 mod team_registry;
 mod tool_metrics;
 mod tool_names;
+mod tool_search;
+mod ask_user_question;
 mod tools;
 mod webfetch;
 mod websearch;
