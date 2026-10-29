@@ -303,6 +303,12 @@ impl Agent {
         Ok(())
     }
 
+    /// A headless SessionStart hook may provide the first user turn before
+    /// any SDK input arrives. The SDK consumes it exactly once.
+    pub fn has_initial_user_message(&self) -> bool {
+        self.pending_initial_user_message.is_some()
+    }
+
     pub async fn attach_hooks(&mut self, rules: &[HookRule]) -> Result<()> {
         self.hooks = HookRunner::new(rules)?.with_workspace(self.root.clone());
         self.hook_rules = rules.to_vec();
