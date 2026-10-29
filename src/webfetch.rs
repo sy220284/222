@@ -177,35 +177,181 @@ fn permitted_redirect(from: &Url, to: &Url) -> bool {
             .is_some_and(|(a, b)| strip_www(a) == strip_www(b))
 }
 
+fn html_attribute(tag: &str, name: &str) -> Option<String> {
+    let pattern = format!(
+        r#"(?i)\b{}\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#,
+        regex::escape(name)
+    );
+    let pattern = Regex::new(&pattern).ok()?;
+    let captures = pattern.captures(tag)?;
+    let value = (1..=3).find_map(|i| captures.get(i).map(|m| m.as_str()))?;
+    Some(decode_html_entities(value))
+}
+
+fn safe_html_link(value: &str) -> bool {
+    let lower = value.trim().to_ascii_lowercase();
+    lower.starts_with("https://")
+        || lower.starts_with("http://")
+        || lower.starts_with("mailto:")
+        || lower.starts_with('/')
+        || lower.starts_with('#')
+        || (!lower.contains(':') && !lower.starts_with("//"))
+}
+
+fn decode_html_entities(text: &str) -> String {
+    let entities = Regex::new(r"&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);").unwrap();
+    entities
+        .replace_all(text, |caps: &regex::Captures<'_>| {
+            let entity = &caps[1];
+            let decoded = match entity {
+                "amp" => Some('&'),
+                "lt" => Some('<'),
+                "gt" => Some('>'),
+                "quot" => Some('"'),
+                "apos" | "#39" => Some('\''),
+                "nbsp" => Some(' '),
+                "copy" => Some('©'),
+                "reg" => Some('®'),
+                "mdash" => Some('—'),
+                "ndash" => Some('–'),
+                "hellip" => Some('…'),
+                _ if entity.starts_with("#x") => {
+                    u32::from_str_radix(&entity[2..], 16).ok().and_then(char::from_u32)
+                }
+                _ if entity.starts_with('#') => {
+                    entity[1..].parse::<u32>().ok().and_then(char::from_u32)
+                }
+                _ => None,
+            };
+            decoded.map(|ch| ch.to_string()).unwrap_or_else(|| caps[0].to_owned())
+        })
+        .into_owned()
+}
+
+/// Convert common HTML document structures to Markdown for model consumption.
+/// The original uses Turndown; malformed/nested DOM edge cases remain open.
 fn sanitize_html(body: &str) -> String {
-    let mut text = body.to_owned();
-    for (pattern, replacement) in [
-        (
-            r"(?is)<(script|style|noscript)\b[^>]*>.*?</(script|style|noscript)\s*>",
-            "",
-        ),
-        (r"(?i)</(p|div|h[1-6]|li|ul|ol|pre|tr)\s*>", "\n"),
-        (r"(?i)<br\s*/?>", "\n"),
-        (r"(?is)<[^>]*>", ""),
-    ] {
-        let regex = Regex::new(pattern).unwrap();
-        text = regex.replace_all(&text, replacement).to_string();
+    let invisible = Regex::new(
+        r"(?is)<(script|style|noscript|template)\b[^>]*>.*?</(script|style|noscript|template)\s*>",
+    ).unwrap();
+    let cleaned = invisible.replace_all(body, "");
+    let tokens = Regex::new(r"(?s)<!--.*?-->|<[^>]+>|[^<]+").unwrap();
+    let mut output = String::new();
+    let mut lists: Vec<(bool, usize)> = Vec::new();
+    let mut links: Vec<Option<String>> = Vec::new();
+    let mut preformatted = false;
+    for token in tokens.find_iter(&cleaned) {
+        let token = token.as_str();
+        if token.starts_with("<!--") { continue; }
+        if !token.starts_with('<') {
+            let decoded = decode_html_entities(token);
+            if preformatted {
+                output.push_str(&decoded);
+            } else {
+                let collapsed = decoded.split_whitespace().collect::<Vec<_>>().join(" ");
+                if !collapsed.is_empty() {
+                    if decoded.chars().next().is_some_and(char::is_whitespace)
+                        && !output.chars().last().is_some_and(char::is_whitespace) {
+                        output.push(' ');
+                    }
+                    output.push_str(&collapsed);
+                    if decoded.chars().last().is_some_and(char::is_whitespace) {
+                        output.push(' ');
+                    }
+                }
+            }
+            continue;
+        }
+        let closing = token.starts_with("</");
+        let raw = token.trim_start_matches('<').trim_start_matches('/').trim();
+        let tag = raw.split(|ch: char| ch.is_whitespace() || ch == '/' || ch == '>')
+            .next().unwrap_or("").to_ascii_lowercase();
+        let heading = if tag.len() == 2 && tag.starts_with('h') {
+            tag.as_bytes()[1].checked_sub(b'0').filter(|n| (1..=6).contains(n))
+        } else { None };
+        if let Some(level) = heading {
+            if !closing {
+                output.push_str("\n\n");
+                output.push_str(&"#".repeat(level as usize));
+                output.push(' ');
+            } else {
+                output.push_str("\n\n");
+            }
+            continue;
+        }
+        match (closing, tag.as_str()) {
+            (false, "pre") => {
+                preformatted = true;
+                output.push_str("\n\n");
+                output.push_str(&char::from(96).to_string().repeat(3));
+                output.push('\n');
+            }
+            (true, "pre") => {
+                preformatted = false;
+                output.push('\n');
+                output.push_str(&char::from(96).to_string().repeat(3));
+                output.push_str("\n\n");
+            }
+            (_, "code") if !preformatted => output.push(char::from(96)),
+            (_, "strong" | "b") => output.push_str("**"),
+            (_, "em" | "i") => output.push('*'),
+            (_, "del" | "s" | "strike") => output.push_str("~~"),
+            (false, "ul") => { lists.push((false, 0)); output.push('\n'); }
+            (false, "ol") => { lists.push((true, 0)); output.push('\n'); }
+            (true, "ul" | "ol") => { lists.pop(); output.push('\n'); }
+            (false, "li") => {
+                output.push('\n');
+                output.push_str(&"  ".repeat(lists.len().saturating_sub(1)));
+                if let Some((ordered, count)) = lists.last_mut() {
+                    if *ordered {
+                        *count += 1;
+                        output.push_str(&format!("{}. ", count));
+                    } else { output.push_str("- "); }
+                } else { output.push_str("- "); }
+            }
+            (true, "li") => output.push('\n'),
+            (false, "a") => {
+                let href = html_attribute(token, "href").filter(|url| safe_html_link(url));
+                if href.is_some() { output.push('['); }
+                links.push(href);
+            }
+            (true, "a") => {
+                if let Some(Some(href)) = links.pop() {
+                    output.push_str(&format!("]({href})"));
+                }
+            }
+            (false, "img") => {
+                let src = html_attribute(token, "src").unwrap_or_default();
+                if !src.is_empty() && safe_html_link(&src) {
+                    let alt = html_attribute(token, "alt").unwrap_or_default();
+                    output.push_str(&format!("![{alt}]({src})"));
+                }
+            }
+            (false, "br") => output.push('\n'),
+            (false, "hr") => output.push_str("\n\n---\n\n"),
+            (false, "blockquote") => output.push_str("\n\n> "),
+            (true, "blockquote") => output.push_str("\n\n"),
+            (false, "tr") => output.push('\n'),
+            (true, "td" | "th") => output.push_str(" | "),
+            (_, "p" | "div" | "section" | "article" | "header" | "footer" | "table") => {
+                output.push_str("\n\n");
+            }
+            _ => {}
+        }
     }
-    for (entity, decoded) in [
-        ("&nbsp;", " "),
-        ("&amp;", "&"),
-        ("&lt;", "<"),
-        ("&gt;", ">"),
-        ("&quot;", "\""),
-        ("&#39;", "'"),
-    ] {
-        text = text.replace(entity, decoded);
+    let mut lines = Vec::new();
+    let mut blank = false;
+    for line in output.lines() {
+        let line = line.trim_end();
+        if line.is_empty() {
+            if !blank { lines.push(""); }
+            blank = true;
+        } else {
+            lines.push(line);
+            blank = false;
+        }
     }
-    text.lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n")
+    lines.join("\n").trim().to_owned()
 }
 
 /// applyPromptToMarkdown truncates at 100,000 UTF-16 code units and
@@ -498,6 +644,6 @@ mod tests {
         let result = fetch(&url, true).await.unwrap();
         server.await.unwrap();
         assert_eq!(result["code"], 200);
-        assert_eq!(result["content"], "Web hello");
+        assert_eq!(result["content"], "# Web hello");
     }
 }
