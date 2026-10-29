@@ -22,6 +22,7 @@ mod config;
 mod protocol;
 mod provider;
 mod session;
+mod session_control;
 mod task;
 mod task_graph;
 mod task_events;
@@ -138,6 +139,12 @@ enum Commands {
         #[arg(long)]
         resume: Option<String>,
     },
+    /// List saved conversations in the current workspace
+    Sessions,
+    /// Give an existing conversation a persisted custom title
+    Rename { session_id:String, title:String },
+    /// Export a saved conversation, including tool activity
+    Export { session_id:String, filename:Option<String> },
     /// JSON-lines SDK mode for external programs (no proprietary transport)
     Sdk {
         #[arg(long)]
@@ -163,6 +170,24 @@ async fn main() -> Result<()> {
     }
     if cli.max_steps == 0 { bail!("--max-steps must be at least 1") }
     let root = canonical_workspace(&cli.workspace)?;
+    match &cli.command{
+        Commands::Sessions=>{
+            for item in session_control::list(&root)?{
+                println!("{}  {}  ({} messages)",item.id,item.title,item.messages);
+            }
+            return Ok(())
+        }
+        Commands::Rename{session_id,title}=>{
+            println!("{}",session_control::rename_saved(&root,session_id,title)?);
+            return Ok(())
+        }
+        Commands::Export{session_id,filename}=>{
+            let path=session_control::export_saved(&root,session_id,filename.as_deref())?;
+            println!("Conversation exported to: {}",path.display());
+            return Ok(())
+        }
+        _=>{}
+    }
     let plugins = PluginSet::load(&root,&config.enabled_plugins)?;
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. });
@@ -231,6 +256,10 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             "/help" => {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
+                println!("/sessions                list saved conversations");
+                println!("/rename NAME             rename current conversation");
+                println!("/export [filename]       save full conversation to a local text file");
+                println!("Resume: atlas-agent chat --resume SESSION_ID");
                 println!("/usage                   show provider-reported token totals");
                 println!("/cost                    show model costs and unknown pricing");
                 println!("/tasks                   list background shell tasks");
@@ -247,6 +276,12 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             "/dirs" => { for dir in agent.working_directories() { println!("{}",dir.display()); } continue; }
             "/session" => {
                 println!("{}", agent.session_id());
+                continue;
+            }
+            "/sessions" => {
+                for item in agent.list_sessions()?{
+                    println!("{}  {}  ({} messages)",item.id,item.title,item.messages);
+                }
                 continue;
             }
             "/mode" => {
@@ -288,6 +323,21 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 continue;
             }
             _ => {}
+        }
+        if input == "/rename" || input.starts_with("/rename ") {
+            match agent.rename_session(input.trim_start_matches("/rename").trim()){
+                Ok(result)=>println!("{result}"),
+                Err(err)=>eprintln!("{err:#}"),
+            }
+            continue;
+        }
+        if input == "/export" || input.starts_with("/export ") {
+            let value=input.trim_start_matches("/export").trim();
+            match agent.export_session(if value.is_empty(){None}else{Some(value)}){
+                Ok(path)=>println!("Conversation exported to: {}",path.display()),
+                Err(err)=>eprintln!("Failed to export conversation: {err:#}"),
+            }
+            continue;
         }
         if input == "/add-dir" || input.starts_with("/add-dir ") {
             let mut entered=String::new();

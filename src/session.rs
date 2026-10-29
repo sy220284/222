@@ -22,11 +22,13 @@ pub struct Session {
     pub agent_name: Option<String>,
     #[serde(default,skip_serializing_if="Option::is_none")]
     pub permission_mode: Option<String>,
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    pub custom_title: Option<String>,
 }
 
 impl Session {
     pub fn fresh() -> Self {
-        Self { id: Uuid::new_v4(), messages: Vec::new(), summary: None, tasks: Vec::new(), usage: TokenUsage::default(), cost: CostLedger::default(), team_name: None, agent_name: None, permission_mode: None }
+        Self { id: Uuid::new_v4(), messages: Vec::new(), summary: None, tasks: Vec::new(), usage: TokenUsage::default(), cost: CostLedger::default(), team_name: None, agent_name: None, permission_mode: None, custom_title: None }
     }
 
     fn path(root: &Path, id: Uuid) -> PathBuf {

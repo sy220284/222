@@ -271,3 +271,7 @@ MCP SDK 新增 `mcp_resource_subscribe`、`mcp_resource_unsubscribe`（均需 `s
 ### SDK 图像输入（文本 + 图片）
 
 SDK `type=user` 的 `content` 接受文本或内容块数组；图片块格式为 `{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AQID"}}`。支持 PNG/JPEG/WebP/GIF，不在文本日志输出原始图片数据；OpenAI 兼容模型通过 data URI `image_url` 发送，Gemini 通过 `inlineData` 发送，流式与非流式共用转换。用户消息和会话文件保留图片块；SDK `queue_enqueue` + `queue_drain` 也支持有效图片输入，同一 workload/meta 的图文消息会合并到一次模型调用并分别回放 UUID，不丢失图片块。远程 URL 图片、PDF、音频等尚未实现，输入不支持时明确报错。
+
+### 历史会话
+
+`atlas-agent --workspace DIR sessions` 列出已保存会话，`rename UUID NAME` 将标题持久化，`export UUID [FILENAME]` 导出包含助手、用户、工具调用及结果的 UTF-8 文本。聊天支持 `/sessions`、`/rename NAME`、`/export [FILENAME]`，恢复仍使用 `chat --resume UUID`。原版 React 导出面板、剪贴板与跨项目搜索尚未实现。

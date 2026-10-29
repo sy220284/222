@@ -2744,3 +2744,45 @@ done"#;
     assert!(request.contains("data:image/png;base64,AQID"));
     assert!(!request.contains("/docs:diagram (MCP)"));
 }
+
+#[test]
+fn cli_session_list_rename_export_and_workspace_safety(){
+    let temp=tempfile::tempdir().unwrap();
+    let root=temp.path();
+    let config=root.join("config.json");
+    fs::write(&config,json!({"default_provider":"local","providers":[]}).to_string()).unwrap();
+    let id=uuid::Uuid::new_v4();
+    let dir=root.join(".atlas/sessions");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join(format!("{id}.json")),json!({
+        "id":id,"messages":[
+            {"role":"user","content":"Build a complete Rust assistant"},
+            {"role":"assistant","content":"Proceeding with implementation"}
+        ]
+    }).to_string()).unwrap();
+    let args=["--workspace",root.to_str().unwrap()];
+    let list=binary().args(args).arg("sessions").env("ATLAS_CONFIG",&config)
+        .output().unwrap();
+    assert!(list.status.success(),"{}",String::from_utf8_lossy(&list.stderr));
+    assert!(String::from_utf8_lossy(&list.stdout).contains("Build a complete Rust assistant"));
+    let rename=binary().args(args).args(["rename",&id.to_string(),"Rust parity project"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    assert!(rename.status.success(),"{}",String::from_utf8_lossy(&rename.stderr));
+    let after:Value=serde_json::from_slice(&fs::read(dir.join(format!("{id}.json"))).unwrap()).unwrap();
+    assert_eq!(after["custom_title"],"Rust parity project");
+    let list=binary().args(args).arg("sessions").env("ATLAS_CONFIG",&config)
+        .output().unwrap();
+    assert!(String::from_utf8_lossy(&list.stdout).contains("Rust parity project"));
+    let export=binary().args(args).args(["export",&id.to_string(),"history.md"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    assert!(export.status.success(),"{}",String::from_utf8_lossy(&export.stderr));
+    let body=fs::read_to_string(root.join("history.txt")).unwrap();
+    assert!(body.contains("Build a complete Rust assistant"));
+    assert!(body.contains("Proceeding with implementation"));
+    let external=tempfile::tempdir().unwrap();
+    let bad=binary().args(args).args(["export",&id.to_string(),
+        external.path().join("out.txt").to_str().unwrap()])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    assert!(!bad.status.success());
+    assert!(!external.path().join("out.txt").exists());
+}

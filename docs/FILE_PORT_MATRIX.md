@@ -138,8 +138,8 @@
 | `src/commands/env/index.js` | 2 | 73 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/exit/exit.tsx` | 33 | 5272 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/exit/index.ts` | 13 | 250 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/export/export.tsx` | 91 | 15104 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/export/index.ts` | 12 | 303 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/export/export.tsx` | 91 | 15104 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
+| `src/commands/export/index.ts` | 12 | 303 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/extra-usage/extra-usage-core.ts` | 119 | 4000 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/extra-usage/extra-usage-noninteractive.ts` | 17 | 466 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/extra-usage/extra-usage.tsx` | 17 | 3134 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -240,10 +240,10 @@
 | `src/commands/remote-setup/index.ts` | 21 | 693 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/remote-setup/remote-setup.tsx` | 187 | 21786 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/rename/generateSessionName.ts` | 68 | 2297 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/rename/index.ts` | 13 | 281 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/rename/rename.ts` | 88 | 2759 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/rename/index.ts` | 13 | 281 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
+| `src/commands/rename/rename.ts` | 88 | 2759 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/resume/index.ts` | 13 | 303 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/resume/index.ts` | 13 | 303 | 重写：保持通用行为 | `src/main.rs / src/session.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/review/reviewRemote.ts` | 317 | 11926 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1495,7 +1495,7 @@
 | `src/utils/execFileNoThrow.ts` | 151 | 4329 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/execFileNoThrowPortable.ts` | 90 | 2685 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/execSyncWrapper.ts` | 39 | 1203 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/exportRenderer.tsx` | 98 | 16635 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/exportRenderer.tsx` | 98 | 16635 | 重写：保持通用行为 | `src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/utils/extraUsage.ts` | 24 | 635 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/utils/fastMode.ts` | 533 | 17723 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/file.ts` | 585 | 18256 | 重写：保持通用行为 | 待定 | 未迁移 |

@@ -768,6 +768,15 @@ impl Agent {
     }
 
     pub fn session_id(&self) -> String { self.session.id.to_string() }
+    pub fn rename_session(&mut self,title:&str)->Result<String>{
+        crate::session_control::rename(&mut self.session,&self.root,title)
+    }
+    pub fn export_session(&self,filename:Option<&str>)->Result<std::path::PathBuf>{
+        crate::session_control::export(&self.session,&self.root,filename)
+    }
+    pub fn list_sessions(&self)->Result<Vec<crate::session_control::SessionItem>>{
+        crate::session_control::list(&self.root)
+    }
     pub fn usage(&self) -> crate::protocol::TokenUsage { self.session.usage }
     pub fn cost_ledger(&self) -> &CostLedger { &self.session.cost }
     pub fn cost_summary(&self) -> String { self.session.cost.format_summary() }
