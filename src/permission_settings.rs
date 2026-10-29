@@ -56,7 +56,7 @@ impl SettingsPaths {
         }
     }
 
-    fn read_json(path: &Path) -> Result<Option<Value>> {
+    fn read_json_raw(path: &Path) -> Result<Option<Value>> {
         let metadata = match fs::symlink_metadata(path) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -75,20 +75,34 @@ impl SettingsPaths {
         }
         let value: Value = serde_json::from_str(crate::json_read::strip_bom(&content))
             .with_context(|| format!("Parse permission settings {}", path.display()))?;
-        if !value.is_object() {
+        Ok(Some(value))
+    }
+
+    /// Editing requires a valid object and must never replace a malformed
+    /// settings root. Execution may skip invalid sources separately.
+    fn read_json(path: &Path) -> Result<Option<Value>> {
+        let value = Self::read_json_raw(path)?;
+        if value.as_ref().is_some_and(|value| !value.is_object()) {
             bail!(
                 "Permission settings must be a JSON object: {}",
                 path.display()
             );
         }
-        Ok(Some(value))
+        Ok(value)
     }
 
     /// The source settings loader reports malformed JSON and skips that
     /// source during normal execution. Editing uses strict read_json so a
     /// broken file can never be silently replaced by a permission update.
     fn read_json_for_execution(path: &Path) -> Result<Option<Value>> {
-        match Self::read_json(path) {
+        match Self::read_json_raw(path) {
+            Ok(Some(value)) if !value.is_object() => {
+                eprintln!(
+                    "Ignoring invalid settings root in permission source {}",
+                    path.display()
+                );
+                Ok(None)
+            }
             Ok(settings) => Ok(settings),
             Err(error) if error.downcast_ref::<serde_json::Error>().is_some() => {
                 eprintln!(
@@ -516,6 +530,19 @@ mod tests {
         let invalid = executor.execute(&call("touch should_not_run")).await;
         assert!(invalid.starts_with("ERROR:"), "{invalid}");
         assert!(!root.path().join("should_not_run").exists());
+
+        // Valid JSON with an invalid root type must be skipped during
+        // execution, but never silently replaced by a permission edit.
+        fs::write(&paths.user, "[]").unwrap();
+        assert_eq!(paths.load(&[]).unwrap().len(), 2);
+        assert!(paths
+            .add(
+                EditableSource::User,
+                Behavior::Allow,
+                &[parse_rule("Bash(touch should_not_run)")]
+            )
+            .is_err());
+        assert_eq!(fs::read_to_string(&paths.user).unwrap(), "[]");
     }
 
     #[cfg(unix)]
