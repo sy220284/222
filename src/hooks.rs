@@ -259,6 +259,8 @@ pub struct HookRunner {
     /// Captured before a delegated worktree can be removed. SessionEnd hooks
     /// still need a valid cwd after their temporary workspace disappears.
     original_cwd: Option<PathBuf>,
+    /// Stable project root inherited by delegated worktree sessions.
+    project_root: Option<PathBuf>,
 }
 
 impl HookRunner {
@@ -285,6 +287,7 @@ impl HookRunner {
             rules: compiled,
             workspace: None,
             original_cwd: Some(std::env::current_dir().context("Capturing original hook cwd")?),
+            project_root: None,
         })
     }
 
@@ -292,6 +295,13 @@ impl HookRunner {
     /// including nested worktree/subagent sessions.
     pub fn with_workspace(mut self, workspace: PathBuf) -> Self {
         self.workspace = Some(workspace);
+        self
+    }
+
+    /// The original getProjectRoot remains stable when a subagent changes
+    /// its execution cwd to a temporary worktree.
+    pub fn with_project_root(mut self, project_root: PathBuf) -> Self {
+        self.project_root = Some(project_root);
         self
     }
 
@@ -317,6 +327,7 @@ impl HookRunner {
         let shutdown_cap = (event.name() == "SessionEnd").then(session_end_timeout);
         let workspace = self.workspace.as_deref();
         let original_cwd = self.original_cwd.as_deref();
+        let project_root = self.project_root.as_deref();
         let event_name = event.name();
         // The source chooses the matcher input from the event's own field.
         // Passing a synthetic tool name for compact or subagent hooks must
@@ -393,12 +404,12 @@ impl HookRunner {
             }
             pending.push(async move {
                 let result = if let Some(cap) = shutdown_cap {
-                    match timeout(cap, run_command(rule, &data, workspace, original_cwd)).await {
+                    match timeout(cap, run_command(rule, &data, workspace, original_cwd, project_root)).await {
                         Ok(result) => result,
                         Err(_) => Err(anyhow::anyhow!("SessionEnd hook exceeded shutdown timeout")),
                     }
                 } else {
-                    run_command(rule, &data, workspace, original_cwd).await
+                    run_command(rule, &data, workspace, original_cwd, project_root).await
                 };
                 (rule, result)
             });
@@ -697,6 +708,7 @@ async fn run_command(
     payload: &Value,
     workspace: Option<&Path>,
     original_cwd: Option<&Path>,
+    project_root: Option<&Path>,
 ) -> Result<HookOutcome> {
     let mut proc = match rule.shell.unwrap_or_default() {
         crate::shell_runtime::ShellKind::Powershell => {
@@ -744,21 +756,22 @@ async fn run_command(
                 .context("Hook workspace was removed and original cwd is unavailable")?
         };
         proc.current_dir(safe_cwd);
+        let stable_root = project_root.unwrap_or(root);
         #[cfg(windows)]
         {
             let project_dir = if rule.shell.unwrap_or_default()
                 == crate::shell_runtime::ShellKind::Bash
             {
                 crate::portable_platform::windows_path_to_posix_path(
-                    &root.to_string_lossy(),
+                    &stable_root.to_string_lossy(),
                 )
             } else {
-                root.to_string_lossy().into_owned()
+                stable_root.to_string_lossy().into_owned()
             };
             proc.env("ATLAS_PROJECT_DIR", project_dir);
         }
         #[cfg(not(windows))]
-        proc.env("ATLAS_PROJECT_DIR", root);
+        proc.env("ATLAS_PROJECT_DIR", stable_root);
     }
     // Each hook owns a fresh process group, so cancellation never kills
     // unrelated terminal processes or other concurrent hooks.
