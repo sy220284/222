@@ -294,16 +294,16 @@ pub fn stored_message_search_text(message: &Message) -> String {
                 }
             }
             if !structured_result {
-            if let Some(content) = &message.content {
-                if let Ok(native) = serde_json::from_str::<Value>(content) {
-                    let text = tool_result_search_text(&native);
-                    if !text.is_empty() {
-                        parts.push(text);
+                if let Some(content) = &message.content {
+                    if let Ok(native) = serde_json::from_str::<Value>(content) {
+                        let text = tool_result_search_text(&native);
+                        if !text.is_empty() {
+                            parts.push(text);
+                        }
+                    } else {
+                        parts.push(content.to_owned());
                     }
-                } else {
-                    parts.push(content.to_owned());
                 }
-            }
             }
         }
         _ => {}
