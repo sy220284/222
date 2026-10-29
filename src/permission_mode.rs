@@ -31,6 +31,12 @@ impl Mode {
             _ => return None,
         })
     }
+    /// Original PermissionMode.ts::permissionModeFromString: unrecognized
+    /// persisted labels fall back to default, rather than preventing resume.
+    /// SDK/user requests continue to use strict parse() validation.
+    pub fn from_persisted_string(value: &str) -> Self {
+        Self::parse(value).unwrap_or(Self::Default)
+    }
 }
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Availability {
@@ -118,5 +124,8 @@ mod tests {
             assert_eq!(Mode::parse(mode.label()), Some(mode));
         }
         assert_eq!(Mode::parse("invalid"), None);
+        assert_eq!(Mode::from_persisted_string("invalid"), Mode::Default);
+        assert_eq!(Mode::from_persisted_string(""), Mode::Default);
+        assert_eq!(Mode::from_persisted_string("plan"), Mode::Plan);
     }
 }

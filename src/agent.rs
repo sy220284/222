@@ -130,8 +130,10 @@ impl Agent {
             session.cost.total_lines_removed,
         ));
         let mode = if let Some(saved) = session.permission_mode.as_deref() {
-            let restored = permission_mode::Mode::parse(saved)
-                .with_context(|| format!("Invalid restored permission mode: {saved}"))?;
+            // The original permissionModeFromString defaults unknown saved
+            // values to the least-privileged ordinary mode. Explicit SDK
+            // requests remain strict, and CLI ceilings are checked below.
+            let restored = permission_mode::Mode::from_persisted_string(saved);
             if restored == permission_mode::Mode::BypassPermissions && approval != Approval::Full {
                 bail!("Restored bypass permissions exceeds CLI approval ceiling")
             }
@@ -3144,6 +3146,42 @@ mod tests {
         let restored = Session::load(root.path(), &id).unwrap();
         assert_eq!(restored.permission_mode.as_deref(), Some("default"));
     }
+    #[test]
+    fn resumed_session_with_unknown_permission_label_uses_default_without_escalation() {
+        // 2.1.88 PermissionMode.ts::permissionModeFromString returns default
+        // for an unknown stored string. Verify the actual session disk path.
+        let root = tempfile::tempdir().unwrap();
+        let profile = ProviderProfile {
+            id: "mock".into(),
+            kind: "openai-compatible".into(),
+            base_url: "http://127.0.0.1:1/v1".into(),
+            model: "mock".into(),
+            api_key_env: None,
+            stream: false,
+        };
+        let mut session = Session::fresh();
+        session.permission_mode = Some("unknown-future-mode".into());
+        let id = session.id.to_string();
+        session.save(root.path()).unwrap();
+        let restored = Session::load(root.path(), &id).unwrap();
+        let mut agent = Agent::new(
+            profile,
+            root.path().to_path_buf(),
+            Approval::ReadOnly,
+            false,
+            5,
+            restored,
+        )
+        .unwrap();
+        assert_eq!(agent.current_permission_mode(), "default");
+        assert!(agent.set_sdk_permission_mode("unknown-future-mode").is_err());
+        assert!(agent.set_sdk_permission_mode("bypassPermissions").is_err());
+        assert_eq!(agent.current_permission_mode(), "default");
+        agent.set_sdk_permission_mode("plan").unwrap();
+        let saved = Session::load(root.path(), &id).unwrap();
+        assert_eq!(saved.permission_mode.as_deref(), Some("plan"));
+    }
+
     #[tokio::test]
     async fn resumed_teammate_restores_permission_mode_without_escalation() {
         let root = tempfile::tempdir().unwrap();

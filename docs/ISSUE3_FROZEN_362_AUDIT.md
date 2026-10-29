@@ -1,5 +1,14 @@
 # Issue #3：冻结 362 项源码级等价验收登记表
 
+## 2026-10-29：历史会话权限模式损坏恢复（冻结 #12/#9，仍未完整验收）
+
+- **原版依据**：`src/utils/permissions/PermissionMode.ts::permissionModeFromString` 对不在 `PERMISSION_MODES` 中的存储字符串返回 `default`；`getNextPermissionMode.ts` 的模式循环依赖有效模式值。原始包：`claude-code-2.1.88-main(1).zip`。
+- **实际缺口**：Rust `src/agent.rs::Agent::new` 从 `Session::load` 恢复会话时使用 `Mode::parse`，未知历史模式直接导致恢复失败，用户无法打开旧会话。SDK 主动设置未知模式仍应严格拒绝，不能借回退绕过授权。
+- **本次代码**：`src/permission_mode.rs::Mode::from_persisted_string` 对历史未知值安全回退 `default`；`Agent::new` 使用该路径，继续保留只读/完整授权上限和自动分类器不可用的现有检查。SDK 的 `set_permission_mode` 保持严格验证。无品牌或原厂专属依赖。
+- **验证**：`permission_mode::tests::reversible_external_mode_labels` 覆盖字符串回退；`agent::tests::resumed_session_with_unknown_permission_label_uses_default_without_escalation` 使用真实磁盘会话保存、重启加载、Agent 恢复、SDK 非法模式及越权拒绝、合法模式再次持久化。CI 状态须按本提交的最终 HEAD 核实。
+- **剩余**：原版全部模式转换、动态分类器/自动模式闸门、终端 UI 和团队异步模式传播尚未完整验收；冻结 #9/#12 仍开放，362 项不新增勾选。本轮仅计 **1 个独立用户可感知功能的有效补充**，不以新增函数/测试凑数。
+
+
 ## 2026-10-29：冻结权限链 dontAsk 显式允许规则误拒绝（待完整验收）
 
 - **固定源路径**：`src/utils/permissions/permissions.ts`（冻结 #17）与 `src/utils/permissions/PermissionMode.ts`（冻结 #12），关联 `src/utils/permissions/permissionRuleParser.ts`（冻结 #16）。源包：`claude-code-2.1.88-main(1).zip`。
