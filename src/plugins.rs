@@ -261,20 +261,17 @@ fn resolve_plugin_mcp_server(
     } else {
         data.to_string_lossy().into_owned()
     };
-    let server_id = server.id.clone();
     let expand = |raw: &str| -> Result<String> {
-        let result = crate::compat_helpers::expand_env_vars_with(raw, |key| {
+        // Keep unresolved ambient variables intact: the original plugin
+        // loader records them and the MCP transport reports a per-server
+        // connection failure, without hiding that server from status.
+        Ok(crate::compat_helpers::expand_env_vars_with(raw, |key| {
             match key {
                 "ATLAS_PLUGIN_ROOT" | "CLAUDE_PLUGIN_ROOT" => Some(plugin_root.clone()),
                 "ATLAS_PLUGIN_DATA" | "CLAUDE_PLUGIN_DATA" => Some(plugin_data.clone()),
                 _ => std::env::var(key).ok(),
             }
-        });
-        if !result.missing_vars.is_empty() {
-            bail!("Plugin MCP {} is missing environment variables: {}",
-                server_id, result.missing_vars.join(", "));
-        }
-        Ok(result.expanded)
+        }).expanded)
     };
     match server.transport.as_deref().unwrap_or("stdio") {
         "stdio" => {
