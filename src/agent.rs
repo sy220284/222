@@ -265,6 +265,28 @@ impl Agent {
         Ok(())
     }
 
+    /// Source TaskCreated/TaskCompleted hooks receive task, session and team
+    /// context; optional teammate fields are omitted for standalone sessions.
+    fn task_hook_input(&self, id: &str, subject: &str, description: &str) -> serde_json::Value {
+        let transcript = self.root.join(".atlas").join("sessions")
+            .join(format!("{}.json", self.session.id));
+        let mut input = json!({
+            "session_id": self.session.id,
+            "transcript_path": transcript.to_string_lossy(),
+            "cwd": self.root.to_string_lossy(),
+            "task_id": id,
+            "task_subject": subject,
+            "task_description": description,
+        });
+        if let Some(name) = self.agent_name.as_deref() {
+            input["teammate_name"] = json!(name);
+        }
+        if let Some(team) = self.team_name.as_deref() {
+            input["team_name"] = json!(team);
+        }
+        input
+    }
+
     async fn run_task_graph(&self, call: &ToolCall) -> Result<String> {
         let mut args: serde_json::Value = serde_json::from_str(&call.function.arguments)?;
         match call.function.name.as_str() {
@@ -280,10 +302,11 @@ impl Agent {
                     .run(
                         HookEvent::TaskCreated,
                         None,
-                        json!({
-                            "task_id":id,"task_subject":args["subject"],
-                            "task_description":args["description"]
-                        }),
+                        self.task_hook_input(
+                            id,
+                            args["subject"].as_str().context("Missing task subject")?,
+                            args["description"].as_str().context("Missing task description")?,
+                        ),
                     )
                     .await;
                 match outcome {
@@ -331,10 +354,11 @@ impl Agent {
                                 .run(
                                     HookEvent::TaskCompleted,
                                     None,
-                                    json!({
-                                        "task_id":id,"task_subject":existing.subject,
-                                        "task_description":existing.description,
-                                    }),
+                                    self.task_hook_input(
+                                        id,
+                                        &existing.subject,
+                                        &existing.description,
+                                    ),
                                 )
                                 .await?;
                             if let Some(reason) = outcome.blocking_reason {
