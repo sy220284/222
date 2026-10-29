@@ -7,7 +7,9 @@ use std::{
     time::Duration,
 };
 
-const MAX_BODY: usize = 1_000_000;
+// Source WebFetchTool/utils.ts MAX_HTTP_CONTENT_LENGTH = 10 * 1024 * 1024.
+const MAX_BODY: usize = 10 * 1024 * 1024;
+const MAX_MARKDOWN_UTF16: usize = 100_000;
 
 fn acceptable_ip(ip: IpAddr) -> bool {
     match ip {
@@ -110,12 +112,42 @@ fn sanitize_html(body: &str) -> String {
         .join("\n")
 }
 
+/// applyPromptToMarkdown truncates at 100,000 UTF-16 code units and
+/// advertises truncation rather than silently discarding the tail.
+/// Rust strings cannot contain lone UTF-16 surrogates, so retain the last
+/// complete Unicode scalar at the boundary.
+fn truncate_source_markdown(text: &str) -> String {
+    if text.encode_utf16().count() <= MAX_MARKDOWN_UTF16 {
+        return text.to_owned();
+    }
+    let mut length = 0;
+    let mut out = String::new();
+    for ch in text.chars() {
+        let units = ch.len_utf16();
+        if length + units > MAX_MARKDOWN_UTF16 {
+            break;
+        }
+        out.push(ch);
+        length += units;
+    }
+    out.push_str("\n\n[Content truncated due to length...]");
+    out
+}
+
 async fn fetch_with_redirect_policy(
     url: &str,
     allow_private_for_test: bool,
     approve_redirect: &(impl Fn(&Url) -> Result<()> + Sync),
 ) -> Result<Value> {
     let mut current = Url::parse(url)?;
+    // The original getURLMarkdownContent upgrades plain HTTP before its
+    // initial request. The private-address override exists only for local
+    // transport tests, where a TLS listener is not available.
+    if !allow_private_for_test && current.scheme() == "http" {
+        current
+            .set_scheme("https")
+            .map_err(|_| anyhow::anyhow!("Cannot upgrade WebFetch URL to HTTPS"))?;
+    }
     for _ in 0..5 {
         let mut builder = Client::builder()
             .timeout(Duration::from_secs(25))
@@ -203,7 +235,7 @@ async fn fetch_with_redirect_policy(
         };
         return Ok(json!({
             "url":current.as_str(),"code":code.as_u16(),"bytes":bytes.len(),
-            "content":text.chars().take(40_000).collect::<String>()
+            "content":truncate_source_markdown(&text)
         }));
     }
     bail!("Web redirect limit exceeded")
