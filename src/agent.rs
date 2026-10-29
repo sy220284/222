@@ -130,8 +130,12 @@ impl Agent {
         if session.git_branch.is_none() && session.messages.is_empty() {
             session.git_branch = ConversationContext::branch_at_start(&root);
         }
-        let session_start_source = if root.join(".atlas").join("sessions")
-            .join(format!("{}.json", session.id)).exists() {
+        let session_start_source = if root
+            .join(".atlas")
+            .join("sessions")
+            .join(format!("{}.json", session.id))
+            .exists()
+        {
             "resume"
         } else {
             "startup"
@@ -226,19 +230,15 @@ impl Agent {
         self.hook_rules = rules.to_vec();
         let result = self
             .hooks
-            .run(
-                HookEvent::SessionStart,
-                None,
-                {
-                    let mut input = self.base_hook_input();
-                    input["source"] = json!(self.session_start_source);
-                    input["model"] = json!(self.profile.model);
-                    if let Some(agent_type) = self.prompt_role.as_deref() {
-                        input["agent_type"] = json!(agent_type);
-                    }
-                    input
-                },
-            )
+            .run(HookEvent::SessionStart, None, {
+                let mut input = self.base_hook_input();
+                input["source"] = json!(self.session_start_source);
+                input["model"] = json!(self.profile.model);
+                if let Some(agent_type) = self.prompt_role.as_deref() {
+                    input["agent_type"] = json!(agent_type);
+                }
+                input
+            })
             .await?;
         for warning in &result.non_blocking_errors {
             eprintln!("SessionStart hook warning: {warning}");
@@ -261,15 +261,11 @@ impl Agent {
         self.background.stop_all().await;
         let outcome = self
             .hooks
-            .run(
-                HookEvent::SessionEnd,
-                None,
-                {
-                    let mut input = self.base_hook_input();
-                    input["reason"] = json!("other");
-                    input
-                },
-            )
+            .run(HookEvent::SessionEnd, None, {
+                let mut input = self.base_hook_input();
+                input["reason"] = json!("other");
+                input
+            })
             .await?;
         for warning in &outcome.non_blocking_errors {
             eprintln!("SessionEnd hook warning: {warning}");
@@ -876,16 +872,12 @@ impl Agent {
                     let run = async {
                         let start = child
                             .hooks
-                            .run(
-                                HookEvent::SubagentStart,
-                                Some(&name),
-                                {
-                                    let mut input = child.base_hook_input();
-                                    input["agent_id"] = json!(session_id);
-                                    input["agent_type"] = json!(name);
-                                    input
-                                },
-                            )
+                            .run(HookEvent::SubagentStart, Some(&name), {
+                                let mut input = child.base_hook_input();
+                                input["agent_id"] = json!(session_id);
+                                input["agent_type"] = json!(name);
+                                input
+                            })
                             .await?;
                         if let Some(reason) = start.blocking_reason {
                             bail!("SubagentStart hook blocked: {reason}")
@@ -900,36 +892,28 @@ impl Agent {
                             .join(format!("{session_id}.json"));
                         let stop = child
                             .hooks
-                            .run(
-                                HookEvent::SubagentStop,
-                                Some(&name),
-                                {
-                                    let mut input = child.base_hook_input();
-                                    input["permission_mode"] = json!(child.permission_mode.label());
-                                    input["stop_hook_active"] = json!(false);
-                                    input["agent_id"] = json!(session_id);
-                                    input["agent_type"] = json!(name);
-                                    input["agent_transcript_path"] = json!(transcript);
-                                    if let Ok(answer) = &output {
-                                        input["last_assistant_message"] = json!(answer);
-                                    }
-                                    input
-                                },
-                            )
+                            .run(HookEvent::SubagentStop, Some(&name), {
+                                let mut input = child.base_hook_input();
+                                input["permission_mode"] = json!(child.permission_mode.label());
+                                input["stop_hook_active"] = json!(false);
+                                input["agent_id"] = json!(session_id);
+                                input["agent_type"] = json!(name);
+                                input["agent_transcript_path"] = json!(transcript);
+                                if let Ok(answer) = &output {
+                                    input["last_assistant_message"] = json!(answer);
+                                }
+                                input
+                            })
                             .await;
                         let idle = child
                             .hooks
-                            .run(
-                                HookEvent::TeammateIdle,
-                                None,
-                                {
-                                    let mut input = child.base_hook_input();
-                                    input["permission_mode"] = json!(child.permission_mode.label());
-                                    input["teammate_name"] = json!(name);
-                                    input["team_name"] = json!(child.team_name);
-                                    input
-                                },
-                            )
+                            .run(HookEvent::TeammateIdle, None, {
+                                let mut input = child.base_hook_input();
+                                input["permission_mode"] = json!(child.permission_mode.label());
+                                input["teammate_name"] = json!(name);
+                                input["team_name"] = json!(child.team_name);
+                                input
+                            })
                             .await;
                         let answer = output?;
                         let stop = stop?;
@@ -1107,16 +1091,12 @@ impl Agent {
             child.attach_hooks(&self.hook_rules).await?;
             let start = child
                 .hooks
-                .run(
-                    HookEvent::SubagentStart,
-                    Some(&agent_type),
-                    {
-                        let mut input = self.base_hook_input();
-                        input["agent_id"] = json!(child_id);
-                        input["agent_type"] = json!(agent_type);
-                        input
-                    },
-                )
+                .run(HookEvent::SubagentStart, Some(&agent_type), {
+                    let mut input = self.base_hook_input();
+                    input["agent_id"] = json!(child_id);
+                    input["agent_type"] = json!(agent_type);
+                    input
+                })
                 .await?;
             if let Some(reason) = start.blocking_reason {
                 bail!("SubagentStart hook blocked: {reason}")
@@ -1134,22 +1114,18 @@ impl Agent {
                 .join(format!("{child_id}.json"));
             let stop = child
                 .hooks
-                .run(
-                    HookEvent::SubagentStop,
-                    Some(&agent_type),
-                    {
-                        let mut input = self.base_hook_input();
-                        input["permission_mode"] = json!(self.permission_mode.label());
-                        input["stop_hook_active"] = json!(false);
-                        input["agent_id"] = json!(child_id);
-                        input["agent_type"] = json!(agent_type);
-                        input["agent_transcript_path"] = json!(transcript);
-                        if let Ok(answer) = &response {
-                            input["last_assistant_message"] = json!(answer);
-                        }
-                        input
-                    },
-                )
+                .run(HookEvent::SubagentStop, Some(&agent_type), {
+                    let mut input = self.base_hook_input();
+                    input["permission_mode"] = json!(self.permission_mode.label());
+                    input["stop_hook_active"] = json!(false);
+                    input["agent_id"] = json!(child_id);
+                    input["agent_type"] = json!(agent_type);
+                    input["agent_transcript_path"] = json!(transcript);
+                    if let Ok(answer) = &response {
+                        input["last_assistant_message"] = json!(answer);
+                    }
+                    input
+                })
                 .await;
             if let Ok(outcome) = &stop {
                 if let Some(reason) = &outcome.blocking_reason {
@@ -1585,12 +1561,20 @@ impl Agent {
 
     pub fn context_usage(&self) -> Result<serde_json::Value> {
         let (snapshot, from_last_request) = self.context_usage_snapshot()?;
-        Ok(snapshot.to_json(self.last_model_usage, from_last_request, self.auto_compact_failures < 3))
+        Ok(snapshot.to_json(
+            self.last_model_usage,
+            from_last_request,
+            self.auto_compact_failures < 3,
+        ))
     }
 
     pub fn context_usage_text(&self) -> Result<String> {
         let (snapshot, from_last_request) = self.context_usage_snapshot()?;
-        Ok(snapshot.render(self.last_model_usage, from_last_request, self.auto_compact_failures < 3))
+        Ok(snapshot.render(
+            self.last_model_usage,
+            from_last_request,
+            self.auto_compact_failures < 3,
+        ))
     }
 
     pub fn copy_response(&self, selection: &str) -> Result<String> {
@@ -2107,7 +2091,7 @@ impl Agent {
                 Some(if automatic { "auto" } else { "manual" }),
                 {
                     let mut input = self.base_hook_input();
-                    input["trigger"] = json!(if automatic {"auto"} else {"manual"});
+                    input["trigger"] = json!(if automatic { "auto" } else { "manual" });
                     input["custom_instructions"] = json!(custom_instructions);
                     input
                 },
@@ -2262,7 +2246,7 @@ impl Agent {
                 Some(if automatic { "auto" } else { "manual" }),
                 {
                     let mut input = self.base_hook_input();
-                    input["trigger"] = json!(if automatic {"auto"} else {"manual"});
+                    input["trigger"] = json!(if automatic { "auto" } else { "manual" });
                     input["compact_summary"] = json!(summary);
                     input
                 },
@@ -2298,15 +2282,11 @@ impl Agent {
     /// resume. The source's SessionEnd and SessionStart hooks bracket the reset.
     pub async fn clear_history(&mut self) -> Result<()> {
         self.hooks
-            .run(
-                HookEvent::SessionEnd,
-                None,
-                {
-                    let mut input = self.base_hook_input();
-                    input["reason"] = json!("clear");
-                    input
-                },
-            )
+            .run(HookEvent::SessionEnd, None, {
+                let mut input = self.base_hook_input();
+                input["reason"] = json!("clear");
+                input
+            })
             .await?;
 
         // Keep old conversations intact. In particular, never overwrite the old
@@ -2336,16 +2316,12 @@ impl Agent {
 
         let start = self
             .hooks
-            .run(
-                HookEvent::SessionStart,
-                None,
-                {
-                    let mut input = self.base_hook_input();
-                    input["source"] = json!("clear");
-                    input["model"] = json!(self.profile.model);
-                    input
-                },
-            )
+            .run(HookEvent::SessionStart, None, {
+                let mut input = self.base_hook_input();
+                input["source"] = json!("clear");
+                input["model"] = json!(self.profile.model);
+                input
+            })
             .await?;
         self.session_context = start.additional_context.join("\n");
         Ok(())
@@ -2434,16 +2410,12 @@ impl Agent {
         }
         let pre_prompt = self
             .hooks
-            .run(
-                HookEvent::UserPromptSubmit,
-                None,
-                {
-                    let mut input = self.base_hook_input();
-                    input["prompt"] = json!(prompt);
-                    input["permission_mode"] = json!(self.permission_mode.label());
-                    input
-                },
-            )
+            .run(HookEvent::UserPromptSubmit, None, {
+                let mut input = self.base_hook_input();
+                input["prompt"] = json!(prompt);
+                input["permission_mode"] = json!(self.permission_mode.label());
+                input
+            })
             .await?;
         if let Some(reason) = pre_prompt.blocking_reason {
             bail!("UserPromptSubmit blocked: {reason}")
@@ -2738,17 +2710,13 @@ impl Agent {
                 // second invocation silently bypassed a persistent blocker.
                 let hook = self
                     .hooks
-                    .run(
-                        HookEvent::Stop,
-                        None,
-                        {
-                            let mut input = self.base_hook_input();
-                            input["last_assistant_message"] = json!(text);
-                            input["permission_mode"] = json!(self.permission_mode.label());
-                            input["stop_hook_active"] = json!(stop_hook_active);
-                            input
-                        },
-                    )
+                    .run(HookEvent::Stop, None, {
+                        let mut input = self.base_hook_input();
+                        input["last_assistant_message"] = json!(text);
+                        input["permission_mode"] = json!(self.permission_mode.label());
+                        input["stop_hook_active"] = json!(stop_hook_active);
+                        input
+                    })
                     .await?;
                 // query.ts::handleStopHooks resolves continue:false before
                 // processing blocking feedback. A stop request must not
@@ -2763,7 +2731,9 @@ impl Agent {
                     }));
                 } else if !hook.blocking_reasons.is_empty() {
                     stop_hook_active = true;
-                    let feedback = hook.blocking_reasons.iter()
+                    let feedback = hook
+                        .blocking_reasons
+                        .iter()
                         .map(|reason| format!("Stop hook blocked finishing: {reason}"))
                         .collect::<Vec<_>>()
                         .join("\n");
@@ -2822,7 +2792,11 @@ impl Agent {
                 };
                 let mut pre_hook_failure = None;
                 let pre = if invalid_input.is_none() {
-                    match self.hooks.before_tool_with_context(&call, self.tool_hook_input()).await {
+                    match self
+                        .hooks
+                        .before_tool_with_context(&call, self.tool_hook_input())
+                        .await
+                    {
                         Ok(outcome) => Some(outcome),
                         Err(error) => {
                             // An unhealthy user hook must not consume a sibling

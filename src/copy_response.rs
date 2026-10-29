@@ -3,30 +3,40 @@
 use crate::protocol::Message;
 use anyhow::{bail, Context, Result};
 use base64::Engine;
-use std::{fs, io::{self, IsTerminal, Write}, path::PathBuf};
+use std::{
+    fs,
+    io::{self, IsTerminal, Write},
+    path::PathBuf,
+};
 use uuid::Uuid;
 
 const MAX_LOOKBACK: usize = 20;
 
 pub fn recent_assistant_texts(messages: &[Message]) -> Vec<String> {
-    messages.iter().rev()
+    messages
+        .iter()
+        .rev()
         .filter(|message| message.role == "assistant")
         .map(|message| {
             // Original collectRecentAssistantTexts joins distinct text blocks
             // with two newlines and skips tool-use-only assistant turns.
             if let Some(blocks) = &message.content_blocks {
-                let parts = blocks.iter().filter_map(|block| {
-                    if let Some(text) = block.as_str() {
-                        return Some(text.to_owned());
-                    }
-                    if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
-                        block.get("text")
-                            .and_then(serde_json::Value::as_str)
-                            .map(str::to_owned)
-                    } else {
-                        None
-                    }
-                }).collect::<Vec<_>>();
+                let parts = blocks
+                    .iter()
+                    .filter_map(|block| {
+                        if let Some(text) = block.as_str() {
+                            return Some(text.to_owned());
+                        }
+                        if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
+                            block
+                                .get("text")
+                                .and_then(serde_json::Value::as_str)
+                                .map(str::to_owned)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
                 if !parts.is_empty() {
                     return parts.join("\n\n");
                 }
@@ -49,7 +59,12 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
     // Original copy.tsx strips hidden prompt analysis XML before Markdown
     // lexing. Keep the full response untouched when copying it directly.
     let mut cleaned = markdown.to_owned();
-    for tag in ["commit_analysis", "context", "function_analysis", "pr_analysis"] {
+    for tag in [
+        "commit_analysis",
+        "context",
+        "function_analysis",
+        "pr_analysis",
+    ] {
         let pattern = format!(r"(?s)<{tag}>.*?</{tag}>\n?");
         let matcher = regex::Regex::new(&pattern).expect("fixed XML tag regex");
         cleaned = matcher.replace_all(&cleaned, "").into_owned();
@@ -62,8 +77,10 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
         let marker = trimmed.chars().next().unwrap_or(' ');
         let run = trimmed.chars().take_while(|c| *c == marker).count();
         if let Some((open_marker, open_len, language, lines)) = fence.as_mut() {
-            if marker == *open_marker && run >= *open_len
-                && trimmed[run..].trim().is_empty() && indent <= 3
+            if marker == *open_marker
+                && run >= *open_len
+                && trimmed[run..].trim().is_empty()
+                && indent <= 3
             {
                 blocks.push(CodeBlock {
                     code: lines.join("\n"),
@@ -94,7 +111,10 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
 }
 
 fn extension(language: &str) -> String {
-    let safe = language.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>();
+    let safe = language
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>();
     if safe.is_empty() || safe == "plaintext" {
         "txt".into()
     } else {
@@ -106,11 +126,25 @@ pub fn parse_selection(args: &str) -> Result<(usize, Option<usize>)> {
     let parts = args.split_whitespace().collect::<Vec<_>>();
     let (age, code) = match parts.as_slice() {
         [] => (1, None),
-        ["--code", index] => (1, Some(index.parse::<usize>().context("Invalid code block number")?)),
-        [age] => (age.parse::<usize>().context("Invalid response number")?, None),
+        ["--code", index] => (
+            1,
+            Some(
+                index
+                    .parse::<usize>()
+                    .context("Invalid code block number")?,
+            ),
+        ),
+        [age] => (
+            age.parse::<usize>().context("Invalid response number")?,
+            None,
+        ),
         [age, "--code", index] => (
             age.parse::<usize>().context("Invalid response number")?,
-            Some(index.parse::<usize>().context("Invalid code block number")?),
+            Some(
+                index
+                    .parse::<usize>()
+                    .context("Invalid code block number")?,
+            ),
         ),
         _ => bail!("Usage: /copy [N] [--code K]"),
     };
@@ -125,16 +159,25 @@ pub fn parse_selection(args: &str) -> Result<(usize, Option<usize>)> {
 pub fn copy(messages: &[Message], age: usize, code: Option<usize>) -> Result<String> {
     let texts = recent_assistant_texts(messages);
     if age == 0 || age > texts.len() {
-        bail!("No assistant response #{age}; {} recent responses available", texts.len());
+        bail!(
+            "No assistant response #{age}; {} recent responses available",
+            texts.len()
+        );
     }
     let selected = &texts[age - 1];
     let (text, name) = if let Some(index) = code {
         let blocks = code_blocks(selected);
         if index == 0 || index > blocks.len() {
-            bail!("No code block #{index}; {} code blocks in response #{age}", blocks.len());
+            bail!(
+                "No code block #{index}; {} code blocks in response #{age}",
+                blocks.len()
+            );
         }
         let block = &blocks[index - 1];
-        (block.code.clone(), format!("copy.{}", extension(&block.language)))
+        (
+            block.code.clone(),
+            format!("copy.{}", extension(&block.language)),
+        )
     } else {
         (selected.clone(), "response.md".to_owned())
     };
@@ -160,12 +203,17 @@ pub fn copy(messages: &[Message], age: usize, code: Option<usize>) -> Result<Str
             use std::os::unix::fs::DirBuilderExt;
             let mut builder = fs::DirBuilder::new();
             builder.mode(0o700);
-            builder.create(&directory).context("Create private copy output directory")?;
+            builder
+                .create(&directory)
+                .context("Create private copy output directory")?;
         }
         #[cfg(not(unix))]
         fs::create_dir(&directory).context("Create private copy output directory")?;
         let path = directory.join(name);
-        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
         file.write_all(text.as_bytes())?;
         file.sync_all()?;
         Ok(path)
@@ -180,14 +228,18 @@ pub fn copy(messages: &[Message], age: usize, code: Option<usize>) -> Result<Str
             } else {
                 "No interactive clipboard; file fallback available"
             };
-            Ok(format!("{clipboard}. {char_count} characters, {line_count} lines. Saved: {}",
-                path.display()))
+            Ok(format!(
+                "{clipboard}. {char_count} characters, {line_count} lines. Saved: {}",
+                path.display()
+            ))
         }
         Err(error) if clipboard_sent => Ok(format!(
             "Clipboard sequence sent to terminal (terminal support varies). \
              {char_count} characters, {line_count} lines. \
              File fallback unavailable: {error}"
         )),
-        Err(error) => Err(error).context("Unable to copy: no interactive clipboard or file fallback"),
+        Err(error) => {
+            Err(error).context("Unable to copy: no interactive clipboard or file fallback")
+        }
     }
 }

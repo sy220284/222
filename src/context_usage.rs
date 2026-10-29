@@ -66,7 +66,11 @@ fn block_tokens(block: &Value) -> (u64, u64) {
 }
 
 fn message_content_tokens(message: &Message) -> (u64, u64) {
-    if let Some(blocks) = message.content_blocks.as_ref().filter(|blocks| !blocks.is_empty()) {
+    if let Some(blocks) = message
+        .content_blocks
+        .as_ref()
+        .filter(|blocks| !blocks.is_empty())
+    {
         return blocks.iter().fold((0, 0), |(text, attachment), block| {
             let (t, a) = block_tokens(block);
             (text + t, attachment + a)
@@ -109,7 +113,9 @@ impl Snapshot {
                     "tokens":tokens,"isLoaded":true}));
             } else {
                 result.built_in_tokens += tokens;
-                result.system_tools.push(json!({"name":name,"tokens":tokens}));
+                result
+                    .system_tools
+                    .push(json!({"name":name,"tokens":tokens}));
             }
         }
         result.count_messages(&request.messages);
@@ -166,7 +172,10 @@ impl Snapshot {
                             let (tokens, _) = block_tokens(block);
                             content = content.saturating_sub(tokens);
                             self.tool_result_tokens += tokens;
-                            let id = block.get("tool_use_id").and_then(Value::as_str).unwrap_or("tool");
+                            let id = block
+                                .get("tool_use_id")
+                                .and_then(Value::as_str)
+                                .unwrap_or("tool");
                             let name = tool_names.get(id).copied().unwrap_or(id);
                             self.tool_calls.entry(name.to_owned()).or_default().1 += tokens;
                         }
@@ -183,7 +192,10 @@ impl Snapshot {
                 // SDK messages can carry both normalized tool_use blocks and
                 // OpenAI-compatible tool_calls for the same invocation.
                 // The source analyzeContext.ts counts each tool_use once.
-                let block_call_ids = message.content_blocks.as_ref().into_iter()
+                let block_call_ids = message
+                    .content_blocks
+                    .as_ref()
+                    .into_iter()
                     .flatten()
                     .filter(|block| block.get("type").and_then(Value::as_str) == Some("tool_use"))
                     .filter_map(|block| block.get("id").and_then(Value::as_str))
@@ -219,7 +231,12 @@ impl Snapshot {
             + self.attachment_tokens
     }
 
-    pub fn to_json(&self, usage: Option<TokenUsage>, from_last_request: bool, compact_available: bool) -> Value {
+    pub fn to_json(
+        &self,
+        usage: Option<TokenUsage>,
+        from_last_request: bool,
+        compact_available: bool,
+    ) -> Value {
         let window = std::env::var("ATLAS_CONTEXT_WINDOW_TOKENS")
             .ok()
             .and_then(|raw| raw.parse::<u64>().ok())
@@ -246,29 +263,46 @@ impl Snapshot {
         ).collect::<Vec<_>>();
         let max = window.unwrap_or(0);
         let auto_disabled = ["ATLAS_DISABLE_COMPACT", "ATLAS_DISABLE_AUTO_COMPACT"]
-            .iter().any(|key| std::env::var(key).ok().is_some_and(|value| {
-                matches!(value.trim().to_ascii_lowercase().as_str(),
-                    "1" | "true" | "yes" | "on")
-            }));
+            .iter()
+            .any(|key| {
+                std::env::var(key).ok().is_some_and(|value| {
+                    matches!(
+                        value.trim().to_ascii_lowercase().as_str(),
+                        "1" | "true" | "yes" | "on"
+                    )
+                })
+            });
         let auto_enabled = compact_available && !auto_disabled;
-        let compact_threshold = window.map(|limit| {
-            if limit > 13_000 { limit - 13_000 } else { limit - limit / 4 }
-        }).unwrap_or(25_000);
+        let compact_threshold = window
+            .map(|limit| {
+                if limit > 13_000 {
+                    limit - 13_000
+                } else {
+                    limit - limit / 4
+                }
+            })
+            .unwrap_or(25_000);
         let mut squares = Vec::new();
         if max > 0 {
             let width = if max >= 1_000_000 { 20 } else { 10 };
             let count = width * 10;
             for category in &categories {
                 let name = category["name"].as_str().unwrap_or("");
-                if name == "Free space" { continue; }
+                if name == "Free space" {
+                    continue;
+                }
                 let tokens = category["tokens"].as_u64().unwrap_or(0);
-                if tokens == 0 { continue; }
+                if tokens == 0 {
+                    continue;
+                }
                 let exact = tokens as f64 / max as f64 * count as f64;
                 let squares_for_category = exact.round().max(1.0) as usize;
                 let whole = exact.floor() as usize;
                 let fraction = exact.fract();
                 for index in 0..squares_for_category {
-                    if squares.len() >= count { break; }
+                    if squares.len() >= count {
+                        break;
+                    }
                     let fullness = if index == whole && fraction > 0.0 {
                         fraction
                     } else {
@@ -294,9 +328,14 @@ impl Snapshot {
                 }));
             }
         }
-        let grid_rows = if max == 0 { Vec::<Vec<Value>>::new() } else {
+        let grid_rows = if max == 0 {
+            Vec::<Vec<Value>>::new()
+        } else {
             let width = if max >= 1_000_000 { 20 } else { 10 };
-            squares.chunks(width).map(|chunk| chunk.to_vec()).collect::<Vec<_>>()
+            squares
+                .chunks(width)
+                .map(|chunk| chunk.to_vec())
+                .collect::<Vec<_>>()
         };
         let api_usage = usage.map(|usage| {
             json!({
@@ -336,7 +375,12 @@ impl Snapshot {
         })
     }
 
-    pub fn render(&self, usage: Option<TokenUsage>, from_last_request: bool, compact_available: bool) -> String {
+    pub fn render(
+        &self,
+        usage: Option<TokenUsage>,
+        from_last_request: bool,
+        compact_available: bool,
+    ) -> String {
         let data = self.to_json(usage, from_last_request, compact_available);
         let mut output = format!(
             "## Context Usage\n\nModel: {}\nEstimated tokens: {}\n",

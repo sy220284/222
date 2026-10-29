@@ -454,7 +454,8 @@ impl SettingsPaths {
     pub fn render_permission_rules(&self, mode: &str) -> Result<String> {
         let snapshot = self.settings_snapshot("")?;
         let mut output = format!("Permission mode: {mode}\n");
-        let sources = snapshot["sources"].as_array()
+        let sources = snapshot["sources"]
+            .as_array()
             .context("Settings snapshot has no source array")?;
         if sources.is_empty() {
             output.push_str("No persisted permission rules.\n");
@@ -463,16 +464,22 @@ impl SettingsPaths {
             let name = source["source"].as_str().unwrap_or("unknown");
             output.push_str(&format!("\n{name}:\n"));
             let settings = &source["settings"];
-            if settings.get("allowManagedPermissionRulesOnly").and_then(Value::as_bool)
+            if settings
+                .get("allowManagedPermissionRulesOnly")
+                .and_then(Value::as_bool)
                 == Some(true)
             {
                 output.push_str("  Managed rules only: enabled\n");
             }
-            if let Some(default) = settings.pointer("/permissions/defaultMode").and_then(Value::as_str) {
+            if let Some(default) = settings
+                .pointer("/permissions/defaultMode")
+                .and_then(Value::as_str)
+            {
                 output.push_str(&format!("  Default mode: {default}\n"));
             }
             for behavior in ["deny", "ask", "allow"] {
-                if let Some(rules) = settings.pointer(&format!("/permissions/{behavior}"))
+                if let Some(rules) = settings
+                    .pointer(&format!("/permissions/{behavior}"))
                     .and_then(Value::as_array)
                 {
                     for rule in rules {
@@ -482,7 +489,8 @@ impl SettingsPaths {
                     }
                 }
             }
-            if let Some(paths) = settings.pointer("/permissions/additionalDirectories")
+            if let Some(paths) = settings
+                .pointer("/permissions/additionalDirectories")
                 .and_then(Value::as_array)
             {
                 for path in paths {
@@ -492,7 +500,9 @@ impl SettingsPaths {
                 }
             }
         }
-        output.push_str("\nEdit rules: /permission add|delete user|project|local allow|deny|ask RULE\n");
+        output.push_str(
+            "\nEdit rules: /permission add|delete user|project|local allow|deny|ask RULE\n",
+        );
         Ok(output)
     }
 

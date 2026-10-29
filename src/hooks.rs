@@ -168,7 +168,10 @@ impl HookMatcher {
         let Some(value) = value.filter(|v| !v.is_empty() && *v != "*") else {
             return Self::Any;
         };
-        if value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'|') {
+        if value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'|')
+        {
             return Self::Exact(value.split('|').map(str::to_owned).collect());
         }
         match Regex::new(value) {
@@ -258,25 +261,24 @@ impl HookRunner {
         // Passing a synthetic tool name for compact or subagent hooks must
         // never add a tool_name field to their stdin JSON.
         let match_query = match event_name {
-            "PreToolUse" | "PostToolUse" | "PostToolUseFailure"
-            | "PermissionRequest" | "PermissionDenied" => tool_name
-                .or_else(|| input.get("tool_name").and_then(Value::as_str)),
+            "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "PermissionRequest"
+            | "PermissionDenied" => {
+                tool_name.or_else(|| input.get("tool_name").and_then(Value::as_str))
+            }
             "SessionStart" => input.get("source").and_then(Value::as_str),
             "SessionEnd" => input.get("reason").and_then(Value::as_str),
-            "Setup" | "PreCompact" | "PostCompact" => {
-                input.get("trigger").and_then(Value::as_str)
-            }
+            "Setup" | "PreCompact" | "PostCompact" => input.get("trigger").and_then(Value::as_str),
             "Notification" => input.get("notification_type").and_then(Value::as_str),
             "StopFailure" => input.get("error").and_then(Value::as_str),
-            "SubagentStart" | "SubagentStop" => {
-                input.get("agent_type").and_then(Value::as_str)
-            }
+            "SubagentStart" | "SubagentStop" => input.get("agent_type").and_then(Value::as_str),
             "Elicitation" | "ElicitationResult" => {
                 input.get("mcp_server_name").and_then(Value::as_str)
             }
             "ConfigChange" => input.get("source").and_then(Value::as_str),
             "InstructionsLoaded" => input.get("load_reason").and_then(Value::as_str),
-            "FileChanged" => input.get("file_path").and_then(Value::as_str)
+            "FileChanged" => input
+                .get("file_path")
+                .and_then(Value::as_str)
                 .and_then(|path| Path::new(path).file_name())
                 .and_then(|name| name.to_str()),
             _ => None,
@@ -299,8 +301,14 @@ impl HookRunner {
         }
         for rule in unique_rules {
             let mut data = json!({"hook_event_name": event_name});
-            if matches!(event_name, "PreToolUse" | "PostToolUse" | "PostToolUseFailure"
-                | "PermissionRequest" | "PermissionDenied") {
+            if matches!(
+                event_name,
+                "PreToolUse"
+                    | "PostToolUse"
+                    | "PostToolUseFailure"
+                    | "PermissionRequest"
+                    | "PermissionDenied"
+            ) {
                 if let Some(name) = tool_name {
                     data["tool_name"] = json!(name);
                 }
@@ -827,7 +835,8 @@ async fn run_command(
         // A sync hook's continue:false is not an implicit tool denial.
         // Stop/agent callers decide how to handle prevent_continuation.
     }
-    result.stop_reason = value.get("stopReason")
+    result.stop_reason = value
+        .get("stopReason")
         .and_then(Value::as_str)
         .map(str::to_owned);
     if let Some(context) = hook_output

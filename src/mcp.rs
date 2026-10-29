@@ -949,7 +949,7 @@ impl McpManager {
                     let redacted = self.redact_request_error(client_index, error);
                     servers.push(json!({"server":name,"ok":false,
                         "error":format!("{redacted:#}")}));
-                },
+                }
             }
         }
         Ok(json!({"kind":kind,"servers":servers}))

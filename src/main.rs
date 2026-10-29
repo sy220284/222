@@ -13,18 +13,18 @@ mod command_lifecycle;
 mod command_manifest;
 mod compat_helpers;
 mod config;
+mod context_usage;
 mod control_message_compat;
 mod conversation_context;
 mod copy_response;
-mod context_usage;
 mod cost;
 mod deep_link;
-mod diff_view;
 mod deep_link_banner;
 mod deep_link_protocol;
 mod deep_link_register;
 mod detect_repository;
 mod diagnostics;
+mod diff_view;
 mod env_runtime;
 mod env_validation;
 mod event_signal;
@@ -57,10 +57,10 @@ mod oauth_client;
 mod oauth_crypto;
 mod oauth_profile;
 mod oauth_service;
+mod path_support;
 mod permission_mode;
 mod permission_rules;
 mod permission_settings;
-mod path_support;
 mod plain_text_storage;
 mod platform_source_utilities;
 mod plugin_commands;
@@ -1558,8 +1558,12 @@ async fn chat(
                 println!(
                     "/files                   show files read successfully in this conversation"
                 );
-                println!("/copy [N] [--code K]     copy recent assistant text or a fenced code block");
-                println!("/diff                    view staged, unstaged and untracked Git changes");
+                println!(
+                    "/copy [N] [--code K]     copy recent assistant text or a fenced code block"
+                );
+                println!(
+                    "/diff                    view staged, unstaged and untracked Git changes"
+                );
                 println!("/skills                  list accessible project and plugin skills");
                 println!("/agents                  list project and user custom agent definitions");
                 println!("/hooks                   list active hook events, matchers and timeouts");
@@ -1645,8 +1649,12 @@ async fn chat(
                 continue;
             }
             "/permissions" | "/allowed-tools" => {
-                let paths = permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?;
-                println!("{}", paths.render_permission_rules(agent.current_permission_mode())?);
+                let paths =
+                    permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?;
+                println!(
+                    "{}",
+                    paths.render_permission_rules(agent.current_permission_mode())?
+                );
                 continue;
             }
             "/diff" => {
@@ -2393,9 +2401,10 @@ async fn sdk_nested_control(
             }
             "mcp_status" => Ok(json!({"mcpServers":agent.mcp_statuses()?})),
             "get_context_usage" => agent.context_usage(),
-            "get_settings" => permission_settings::SettingsPaths::for_workspace(
-                agent.workspace_root()
-            )?.settings_snapshot(&agent.profile().model),
+            "get_settings" => {
+                permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?
+                    .settings_snapshot(&agent.profile().model)
+            }
             "mcp_prompt_commands" => agent.list_mcp_prompt_commands().await,
             "mcp_resources"
             | "mcp_prompts"
