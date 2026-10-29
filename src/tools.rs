@@ -22,9 +22,6 @@ const MAX_FILE_BYTES: u64 = 1_048_576;
 const MAX_OUTPUT_CHARS: usize = 16_000;
 
 fn skill_invocable(path: &Path, for_model: bool) -> Result<bool> {
-    if fs::metadata(path)?.len() > 64_000 {
-        return Ok(false);
-    }
     let content = fs::read_to_string(path)?;
     if for_model {
         Ok(!crate::skill_arguments::frontmatter_boolean(
@@ -1247,9 +1244,6 @@ impl ToolExecutor {
             let raw = resolved.to_string_lossy().into_owned();
             let path = self.checked_path(&raw)?;
             self.require_read_rules(&raw, &path)?;
-            if fs::metadata(&path)?.len() > 64_000 {
-                bail!("Plugin skill too large")
-            }
             let dir = path
                 .parent()
                 .context("Skill has no parent directory")?
@@ -1262,9 +1256,6 @@ impl ToolExecutor {
             let raw = format!(".atlas/skills/{name}/SKILL.md");
             let path = self.checked_path(&raw)?;
             self.require_read_rules(&raw, &path)?;
-            if fs::metadata(&path)?.len() > 64_000 {
-                bail!("Skill file too large")
-            }
             let dir = path
                 .parent()
                 .context("Skill has no parent directory")?
