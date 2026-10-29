@@ -141,4 +141,35 @@ mod tests{
         assert!(frame(b"data: {", &mut Accumulator::default(),&tx).is_err());
         assert!(frame(b"data: [DONE]", &mut Accumulator::default(),&tx).is_ok());
     }
+    #[tokio::test]
+    async fn gemini_stream_retries_rate_limit_before_first_delta(){
+        use tokio::io::{AsyncReadExt,AsyncWriteExt};
+        let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let server=tokio::spawn(async move{
+            for attempt in 0..2{
+                let (mut socket,_)=listener.accept().await.unwrap();
+                let mut data=[0u8;4096];
+                socket.read(&mut data).await.unwrap();
+                let (status,body)=if attempt==0{
+                    ("429 Too Many Requests",r#"{"error":"rate limited"}"#.to_string())
+                }else{
+                    ("200 OK",concat!(
+                        "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Recovered\"}]},\"finishReason\":\"STOP\"}]}\n\n"
+                    ).to_string())
+                };
+                socket.write_all(format!(
+                    "HTTP/1.1 {status}\r\nRetry-After: 0\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()).as_bytes()).await.unwrap();
+            }
+        });
+        let (tx,mut rx)=tokio::sync::mpsc::unbounded_channel();
+        let response=complete(&Client::new(),&format!("http://{address}/v1beta"),
+            "test-key","test-model",&json!({"contents":[]}),tx).await.unwrap();
+        server.await.unwrap();
+        assert_eq!(response.message.content.as_deref(),Some("Recovered"));
+        assert_eq!(rx.try_recv().unwrap(),"Recovered");
+        assert!(rx.try_recv().is_err());
+    }
+
 }
