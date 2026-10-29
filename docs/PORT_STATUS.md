@@ -1,3 +1,11 @@
+## 2026-10-29：SDK 模型切换保留原版历史提示及用户回放（源码已提交、待验收）
+
+- **原版完整源码**：`source/src/cli/print.ts:2933–2944` 在 SDK `set_model` 后调用 `injectModelSwitchBreadcrumbs`；`source/src/utils/messages.ts:566–599` 生成本地命令 caveat、`/model` 输入和模型切换结果三条历史消息，并向 SDK 回放结果。
+- **原 Rust 缺口**：`src/main.rs::sdk_nested_control(set_model)` 以前只替换当前提供商配置，下一轮模型不知道用户已经切换模型，恢复会话也没有对应记录，SDK 消费者缺少原版回放消息。
+- **修复**：`src/agent.rs::sdk_switch_model` 先校验并切换模型，再将三条原版结构的本地命令消息写入会话、持久化并发出 SDK `isReplay` 用户事件；保存失败回滚内存历史并尝试恢复旧模型，回滚失败明确报错；`src/main.rs` 的 SDK set_model 调用该真实入口，保留缺省恢复默认模型行为。
+- **代码 SHA**：`6742cbc559c0d1eb2459ce79e1fe134ed7c90f0c`、`0a9c0eaa19a49a0b056f5da52a4684a41613a7cf`。静态复核确认历史写入、保存、回滚和回放可达。
+- **计数**：新增 **1 项**独立用户可感知业务功能（SDK 模型切换的会话连续性与回放），本轮累计 **5/100，剩余 95**。不将既有模型切换或内部三个消息重复计数。未运行 Cargo/测试/CI，源码**已提交、待行为验收**；还缺完整 SDK 并发模型切换、跨进程状态同步、原版所有回放时序。100 项先行清单及方案仍未完成，Issue #3 冻结 362 条不核销，PR #2 保持 Draft。
+
 ## 2026-10-29：SDK SessionStart 首条用户消息等待初始化后执行（源码已提交、待验收）
 
 - **原版依据**：`source/src/cli/print.ts:2914–2917` 在 `initialize` 设置系统提示词、Agent 与 Hooks 后才处理预先入队的消息；`source/src/cli/print.ts:4369–4375` 同时接受 SDK 传入的自定义提示词。
