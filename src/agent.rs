@@ -317,6 +317,51 @@ impl Agent {
         Ok(())
     }
 
+    /// Reload installed plugin hooks, skills, commands and MCP transports in
+    /// the active SDK session. Validate the new configuration before replacing
+    /// live hooks; never replay SessionStart or erase SDK-owned MCP servers.
+    pub async fn reload_plugins(
+        &mut self, config: &crate::config::Config,
+    ) -> Result<serde_json::Value> {
+        let plugin_set = crate::plugins::PluginSet::load(
+            &self.root, &config.enabled_plugins,
+        )?;
+        let mut hook_rules = config.hooks.clone();
+        hook_rules.extend(plugin_set.hooks);
+        let new_hooks = HookRunner::new(&hook_rules)?
+            .with_workspace(self.root.clone())
+            .with_project_root(self.project_root.clone());
+
+        let mut fixed = config.mcp_servers.clone();
+        fixed.extend(plugin_set.mcp_servers);
+        let mut ids = std::collections::HashSet::new();
+        for server in &fixed {
+            if !ids.insert(&server.id) {
+                bail!("Duplicate configured MCP server during plugin reload: {}", server.id);
+            }
+        }
+
+        let changes = match self.mcp.as_mut() {
+            Some(manager) => manager.reconcile_fixed(fixed.clone()).await?,
+            None if !fixed.is_empty() => {
+                let disabled = load_disabled_mcp_servers()?;
+                self.mcp = Some(McpManager::connect_with_root_filtered(
+                    &fixed, &self.root, &disabled,
+                ).await?);
+                json!({"added":fixed.iter().map(|server| &server.id).collect::<Vec<_>>(),
+                    "removed":[],"errors":{}})
+            }
+            None => json!({"added":[],"removed":[],"errors":{}}),
+        };
+
+        self.mcp_configs = fixed;
+        self.hooks = new_hooks;
+        self.hook_rules = hook_rules;
+        self.enabled_plugins = config.enabled_plugins.clone();
+        self.last_context_usage = None;
+        Ok(changes)
+    }
+
     /// An SDK client can restore a previously observed file read after its
     /// transcript entry was removed. The shared cache is consumed by the
     /// next actual Edit tool, including after a model turn boundary.
