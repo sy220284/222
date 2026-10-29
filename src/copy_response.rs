@@ -103,6 +103,14 @@ pub fn copy(messages: &[Message], age: usize, code: Option<usize>) -> Result<Str
     // A new, unpredictable directory prevents following a preexisting
     // symlink in a shared temporary location.
     let directory = std::env::temp_dir().join(format!("atlas-copy-{}", Uuid::new_v4()));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        let mut builder = fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder.create(&directory).context("Create private copy output directory")?;
+    }
+    #[cfg(not(unix))]
     fs::create_dir(&directory).context("Create private copy output directory")?;
     let path: PathBuf = directory.join(name);
     let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
