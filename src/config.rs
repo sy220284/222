@@ -73,6 +73,9 @@ pub struct Config {
     /// Per-source instruction switches: user, project and local (default enabled).
     #[serde(default, rename = "instructionSources", alias = "instruction_sources")]
     pub instruction_sources: std::collections::HashMap<String, bool>,
+    /// Explicit user approval for instruction @includes outside the workspace.
+    #[serde(default, rename = "approvedExternalInstructionIncludes", alias = "approved_external_instruction_includes")]
+    pub approved_external_instruction_includes: bool,
     #[serde(default)]
     pub default_shell: Option<String>,
     /// Preferred terminal for browser deep links, retained across headless launches.
@@ -108,6 +111,7 @@ impl Default for Config {
             additional_directories: Vec::new(),
             instruction_excludes: Vec::new(),
             instruction_sources: std::collections::HashMap::new(),
+            approved_external_instruction_includes: false,
             default_shell: None,
             deep_link_terminal: None,
             providers: vec![
