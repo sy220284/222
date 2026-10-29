@@ -218,7 +218,7 @@ pub fn destructive_command_warning(command: &str) -> Option<&'static str> {
             });
             for found in git_clean.find_iter(command) {
                 let suffix = &command[found.start()..];
-                let end = suffix.find([';', '&', '|', '\n']).unwrap_or(suffix.len());
+                let end = suffix.find(|ch: char| matches!(ch, ';' | '&' | '|' | '\n')).unwrap_or(suffix.len());
                 if !dry_run.is_match(&suffix[..end]) {
                     return Some("Note: may permanently delete untracked files");
                 }
