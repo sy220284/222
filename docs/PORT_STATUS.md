@@ -1282,3 +1282,12 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - 队友无历史时自动重命名的权限提示顺序已与原版对齐，提交 `c2010a41556055d13c45658bda7c66dfd26d0a3f`，属于本轮已计入的队长/队友改名业务链，不另计。
 - 本轮目前保守计 **9 项独立用户业务功能已提交、待验收**；其余 91 项尚未完成。100 项预先缺口清单与覆盖全数的执行方案尚未完成，禁止视为本轮达标；Issue #3 固定 362 条保持原状。未运行 Cargo、CI 或测试。
 - **剩余**：插件/技能 Hook 的来源级隔离与变量替换、异步/HTTP/agent/prompt/callback Hook、Windows 脚本参数细节与完整跨平台行为验证、权限请求及取消传播仍未等价；Windows Git Bash 探测仍有从 Git 可执行路径推导安装位置的差异。
+
+
+## 2026-10-29：SessionStart 初始用户消息进入真实无输入会话（已提交，待验收）
+
+- **原版依据**：`src/utils/hooks.ts:627–635` 解析 `hookSpecificOutput.initialUserMessage`；`src/utils/sessionStart.ts:20–31,129–155` 保留一次性首条用户消息；`src/cli/print.ts:697–705` 在无头模式把它放入用户消息队列。原始 ZIP：`claude-code-2.1.88-main(1).zip`。
+- **原有差异**：`src/hooks.rs::run_command` 忽略该字段，`HookRunner::run` 丢弃汇总值，`Agent::ask_with_blocks` 对空输入一律拒绝；无头自动化即使 SessionStart Hook 提供首条任务也无法开始模型交互。
+- **本次真实 Rust 代码**：`src/hooks.rs` 校验后解析、按原版 Hook 注册顺序汇总最后一条有效初始消息；`src/agent.rs::attach_hooks/clear_history` 将消息保留为单次消费的会话用户输入，`ask_with_blocks` 在空输入时使用该消息，有显式输入时将启动消息置于其前面作为独立用户轮次。交互终端不自动注入该消息；`SessionStart` 其他 Hook 上下文和阻断警告继续保留。
+- **提交证据**：`1311f062d94782fd9300b2aff7e0410df39d948a`、`7485c83fecee206c5b724cb46590d35a32e36156`。只进行源码和可达入口审查，未运行 Cargo、CI 或行为测试，状态为**已提交、待验收**。
+- **未闭环差异**：原版自动启动的 SDK 输入队列时序、`watchPaths` 动态文件监听、插件 Hook 动态注册、异步 Hook 生命周期和全事件取消传播；冻结 Issue #3 的 362 项保持开放。本次只计 **1 项独立用户可感知业务功能**，本轮 100 项先行缺口清单与 100 项补齐目标仍未达成。
