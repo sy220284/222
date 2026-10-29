@@ -28,31 +28,56 @@ impl Finding {
     }
 }
 
+/// Match the source which/Bun.which behavior: a PATH entry must be
+/// executable, not merely an existing file. This matters for Doctor and
+/// stdio MCP startup diagnostics.
+fn is_executable(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
 fn executable_path(program: &str) -> Option<PathBuf> {
     let input = Path::new(program);
     if input.is_absolute() || input.components().count() > 1 {
-        return input.is_file().then(|| input.to_path_buf());
+        return is_executable(input).then(|| input.to_path_buf());
     }
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|dir| dir.join(program))
-        .find(|path| path.is_file())
-        .or_else(|| {
-            #[cfg(windows)]
-            {
-                std::env::split_paths(&path)
-                    .flat_map(|dir| {
-                        ["exe", "cmd", "bat"]
-                            .into_iter()
-                            .map(move |suffix| dir.join(format!("{program}.{suffix}")))
-                    })
-                    .find(|candidate| candidate.is_file())
+    let dirs = std::env::split_paths(&path).collect::<Vec<_>>();
+    for dir in &dirs {
+        let candidate = dir.join(program);
+        if is_executable(&candidate) {
+            return Some(candidate);
+        }
+        #[cfg(windows)]
+        {
+            // where.exe honors PATHEXT, including .COM and user-configured
+            // executable suffixes. Prefer its ordering after the exact name.
+            if input.extension().is_none() {
+                let extensions = std::env::var("PATHEXT")
+                    .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned());
+                for suffix in extensions.split(';').filter(|s| !s.is_empty()) {
+                    let candidate = dir.join(format!("{program}{suffix}"));
+                    if is_executable(&candidate) {
+                        return Some(candidate);
+                    }
+                }
             }
-            #[cfg(not(windows))]
-            {
-                None
-            }
-        })
+        }
+    }
+    None
 }
 
 fn mcp_check(server: &McpServerConfig) -> Finding {
