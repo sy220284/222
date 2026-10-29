@@ -590,12 +590,10 @@ impl ToolExecutor {
                 if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
                     bail!("File checkpointing is disabled")
                 }
-                self.require_approval("file_revert", &args)?;
                 let record = history::load(&self.root, self.session_id.as_deref(), required(&args, "id")?)?;
                 let path = self.checked_path(&record.path)?;
-                // Rewinding a file is a write. A model-approved file_revert
-                // must not bypass explicit Edit(path) deny/ask rules. Reuse
-                // the same requested/resolved-path checks as Write and Edit.
+                // Rewinding a file is a write. Reject a path-level Edit deny
+                // before showing any approval prompt, including symlink targets.
                 let edit_args = json!({
                     "path": record.path,
                     "paths": self.file_rule_paths(&record.path)?
@@ -603,10 +601,11 @@ impl ToolExecutor {
                 let edit_decision = permission_rules::policy_for(
                     &self.permission_rules, "edit_file", &edit_args
                 )?;
-                if matches!(
-                    edit_decision,
-                    Some(permission_rules::Behavior::Deny | permission_rules::Behavior::Ask)
-                ) {
+                if edit_decision == Some(permission_rules::Behavior::Deny) {
+                    bail!("File revert denied by explicit Edit path rule");
+                }
+                self.require_approval("file_revert", &args)?;
+                if edit_decision == Some(permission_rules::Behavior::Ask) {
                     self.require_approval("edit_file", &json!({"path": record.path}))?;
                 }
                 history::restore(&record, &path)
