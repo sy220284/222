@@ -1970,7 +1970,7 @@ impl Agent {
             .hooks
             .run(
                 HookEvent::PostCompact,
-                None,
+                Some(if automatic { "auto" } else { "manual" }),
                 json!({"session_id":self.session.id,"summary":summary,
                     "trigger":if automatic {"auto"} else {"manual"},
                     "compact_summary":summary}),
