@@ -142,6 +142,9 @@ fn install_local_with_origin(
             fs::write(&origin, serde_json::to_vec(&json!({"pluginId":plugin_id}))?)?;
         }
         fs::rename(&stage, &target)?;
+        if crate::plugins::plugin_blocked_by_policy(root, &name)? {
+            bail!("Plugin '{name}' is disabled by managed policy");
+        }
         PluginSet::load(root, std::slice::from_ref(&name))?;
         Ok(())
     })();
@@ -244,12 +247,13 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             }
             let policy = crate::permission_settings::SettingsPaths::for_workspace(&root)?;
             let actual_name = manifest_name(&local.canonicalize()?)?;
-            if policy.plugin_blocked_by_policy(&actual_name)?
-                || marketplace_id.as_deref().is_some_and(|id| {
-                    policy.plugin_blocked_by_policy(id).unwrap_or(true)
-                })
-            {
+            if policy.plugin_blocked_by_policy(&actual_name)? {
                 bail!("Plugin '{actual_name}' is disabled by managed policy");
+            }
+            if let Some(id) = marketplace_id.as_deref() {
+                if policy.plugin_blocked_by_policy(id)? {
+                    bail!("Plugin '{id}' is disabled by managed policy");
+                }
             }
             let installed_name = install_local_with_origin(
                 &root, &local, marketplace_id.as_deref(),
@@ -275,8 +279,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             if !valid_name(name) {
                 bail!("Invalid plugin name");
             }
-            let policy = crate::permission_settings::SettingsPaths::for_workspace(&root)?;
-            if policy.plugin_blocked_by_policy(name)? {
+            if crate::plugins::plugin_blocked_by_policy(&root, name)? {
                 bail!("Plugin '{name}' is disabled by managed policy");
             }
             PluginSet::load(&root, std::slice::from_ref(name))?;
