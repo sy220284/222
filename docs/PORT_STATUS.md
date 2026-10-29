@@ -6,9 +6,11 @@
 
 - **压缩报错按 Token 差额分组删减**：src/agent.rs::compact_token_gap、compact_round_token_estimate、truncate_compact_rounds 保留用户可见的历史轮次边界，能解析 `prompt is too long: X tokens > Y` 并按超限量估算所需删减轮次，无法解析时使用原版 20% 回退，重试前清理前轮标记。提交 7de6e7ca。Rust 现有 Message 无原版流式 assistant ID，仍缺跨流片段完整同 ID 分组、取消传播和模型精确 tokenizer。
 - **多模型自动压缩触发**：src/agent.rs::ask_with_blocks 按结构化内容、工具结果和媒体块估算上下文 Token；可通过 ATLAS_CONTEXT_WINDOW_TOKENS 提供当前模型窗口，保留原版 13k 预留空间；ATLAS_DISABLE_COMPACT/ATLAS_DISABLE_AUTO_COMPACT 允许关闭对应模式，不影响手动模式的独立开关。提交 08271117。未提供窗口时维持原有约 25k Token 触发阈值；模型元数据动态窗口、压缩取消及更多外部事件仍待完善。
+- **同一模型回合内按需重新连接**：src/mcp.rs::call 在真正执行新工具请求前识别已失效的服务器状态，按原版 ensureConnectedClient 的行为重连并恢复动态凭据；不重放已经失败的原工具调用。提交 b30acce3。
+- **远程 MCP 403 需要提升权限**：src/mcp_http.rs::post 识别 WWW-Authenticate 的 insufficient_scope，给出明确重新授权提示，避免把普通权限范围不足误当可通过刷新旧令牌解决。提交 5f4b69c0。完整交互 OAuth 授权及 scope 持久化仍待补齐。
 - **远程 MCP 动态认证失效后重连**：src/mcp_http.rs::post/poll_notifications 在 HTTP 401 返回明确认证过期，src/mcp.rs::call/poll_resource_updates 将对应连接标记 failed，后续 reconnect_failed 使用已有配置重新建立连接、重新执行 headersHelper 获取凭据；不会无确认地重放可能已产生副作用的工具调用。提交 91a461b6、3d23068a、9e890a5f。完整 OAuth PKCE、刷新令牌、403 权限升级和撤销生命周期仍待补齐。
 
-本轮 2 条独立业务链产生代码补强并推送；均未进行 Cargo/测试/CI，最终等价验收 0。其余候选缺口保持未完成，无法将源码路径、静态文件或同一链的内部修复重复计为 100 个不同功能。
+本轮 4 条不同的用户业务能力已获得源码补强并推送；均未进行 Cargo/测试/CI，最终等价验收 0。其余候选缺口保持未完成，无法将源码路径、静态文件或同一链的内部修复重复计为 100 个不同功能。
 
 
 ## 2026-10-29：会话 Git 分支检索、任务更新校验及后台任务参数（源码已提交、待验收）
