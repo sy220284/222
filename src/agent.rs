@@ -1813,10 +1813,24 @@ impl Agent {
     /// Replace previous turns with a model-generated, persistent compact summary.
     /// Do not modify the live transcript until the new session is durable.
     pub async fn compact_history(&mut self) -> Result<()> {
-        self.compact_history_with_trigger(false).await
+        self.compact_history_with_trigger(false, None).await
     }
 
-    async fn compact_history_with_trigger(&mut self, automatic: bool) -> Result<()> {
+    /// /compact instructions must influence the summarization request, not
+    /// become a new chat message. Keep this path shared with SDK controls.
+    pub async fn compact_history_custom(&mut self, instructions: &str) -> Result<()> {
+        let instructions = instructions.trim();
+        self.compact_history_with_trigger(
+            false,
+            if instructions.is_empty() { None } else { Some(instructions) },
+        ).await
+    }
+
+    async fn compact_history_with_trigger(
+        &mut self,
+        automatic: bool,
+        custom_instructions: Option<&str>,
+    ) -> Result<()> {
         if std::env::var("ATLAS_DISABLE_COMPACT")
             .ok()
             .is_some_and(|value| {
@@ -1839,7 +1853,7 @@ impl Agent {
                 Some(if automatic { "auto" } else { "manual" }),
                 json!({"session_id":self.session.id, "message_count":self.session.messages.len(),
                     "trigger":if automatic {"auto"} else {"manual"},
-                    "custom_instructions":null}),
+                    "custom_instructions":custom_instructions}),
             )
             .await?;
         // 2.1.88 executePreCompactHooks reports failed hook commands as
@@ -1852,6 +1866,10 @@ impl Agent {
         }
         let previous = self.session.summary.as_deref().unwrap_or("");
         let mut prompt = crate::prompt_runtime::compact_prompt(previous);
+        if let Some(custom) = custom_instructions {
+            prompt.push_str("\n\n[User's compaction instructions]\n");
+            prompt.push_str(custom);
+        }
         // 2.1.88 executePreCompactHooks merges successful hook stdout as
         // custom compaction instructions, respecting auto/manual matchers.
         if !before.additional_context.is_empty() {
@@ -2130,7 +2148,7 @@ impl Agent {
         // per-session circuit breaker after three consecutive failures.
         // A failed summarizer must not discard the user's new prompt.
         if !auto_disabled && history_tokens >= threshold && self.auto_compact_failures < 3 {
-            match self.compact_history_with_trigger(true).await {
+            match self.compact_history_with_trigger(true, None).await {
                 Ok(()) => self.auto_compact_failures = 0,
                 Err(error) => {
                     self.auto_compact_failures = self.auto_compact_failures.saturating_add(1);
