@@ -507,6 +507,7 @@ impl Agent {
             let mode=self.permission_mode;
             let permissions=self.permission_rules.clone();
             let model_prices=self.model_prices.clone();
+            let additional_dirs=self.additional_dirs.clone();
             let shared_tasks=self.graph.clone();
             let current_team=self.team_name.clone();
             let current_team_root=self.team_root.clone();
@@ -524,6 +525,7 @@ impl Agent {
                     child.session.save(&child.root)?;
                     child.child_depth=1;
                     child.enabled_plugins=plugins;
+                    child.additional_dirs=additional_dirs;
                     child.search_backend=search;
                     child.permission_rules=permissions;
                     child.model_prices=model_prices;
@@ -655,6 +657,7 @@ impl Agent {
         child.team_name = self.team_name.clone();
         child.child_depth = self.child_depth + 1;
         child.enabled_plugins = self.enabled_plugins.clone();
+        child.additional_dirs = self.additional_dirs.clone();
         child.search_backend = self.search_backend.clone();
         child.permission_rules = self.permission_rules.clone();
         child.model_prices = self.model_prices.clone();
