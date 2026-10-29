@@ -14,6 +14,7 @@ mod cost;
 mod deep_link;
 mod diagnostics;
 mod env_validation;
+mod files_context;
 mod event_signal;
 mod gemini_sse;
 mod generated_ports;
@@ -661,6 +662,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("/init                    set up project instructions, optional skills and hooks");
                 println!("/stats                   report real local session usage and costs");
                 println!("/history [query]         search saved prompt history");
+                println!("/files                   show files read successfully in this conversation");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
@@ -726,6 +728,11 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("{}", agent.status_report()?);
                 continue;
             }
+            "/files" => {
+                println!("{}", agent.files_in_context());
+                continue;
+            }
+
             "/stats" => {
                 println!("{}", stats::collect(agent.workspace_root())?.render());
                 continue;
