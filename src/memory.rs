@@ -218,13 +218,22 @@ pub async fn context_with_recent_tools(
         })
         .collect::<Vec<_>>()
         .join("\n");
-    let recent_tool_section = if recent_tools.is_empty() {\n        String::new()\n    } else {\n        format!("\\n\\nRecently used tools: {}", recent_tools.join(", "))\n    };\n    let selection = provider
+    let recent_tool_section = if recent_tools.is_empty() {
+        String::new()
+    } else {
+        format!("\\n\\nRecently used tools: {}", recent_tools.join(", "))
+    };
+    let selection = provider
         .complete(&ModelRequest {
             model: profile.model.clone(),
-            system: "Select up to five filenames of memories clearly relevant to the query. \
-            Return only JSON: {\"selected_memories\":[\"filename.md\"]}. \
-            If none are relevant return an empty array. Never invent filenames. \\\n            Do not select usage reference or API documentation for recently used tools; \\\n            do select their warnings, gotchas and known issues."
-                .into(),
+            system: concat!(
+                "Select up to five filenames of memories clearly relevant to the query. ",
+                "Return only JSON: {\\\"selected_memories\\\":[\\\"filename.md\\\"]}. ",
+                "If none are relevant return an empty array. Never invent filenames. ",
+                "Do not select usage reference or API documentation for recently used tools; ",
+                "do select their warnings, gotchas and known issues."
+            )
+            .into(),
             messages: vec![Message::text(
                 "user",
                 format!("Query:\n{query}\n\nMemory file manifest:\n{manifest}{recent_tool_section}"),
