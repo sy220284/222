@@ -424,7 +424,7 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
     // separators. globset treats a raw backslash as an escape, so normalize
     // the relative pattern before compiling it on Windows.
     let normalized_pattern = if cfg!(windows) {
-        relative_pattern.replace('\\\\', "/")
+        relative_pattern.replace('\\', "/")
     } else {
         relative_pattern.to_owned()
     };
