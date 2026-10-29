@@ -28,7 +28,7 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
     // lexing. Keep the full response untouched when copying it directly.
     let mut cleaned = markdown.to_owned();
     for tag in ["commit_analysis", "context", "function_analysis", "pr_analysis"] {
-        let pattern = format!(r"(?s)<{tag}>.*?</{tag}>\\n?");
+        let pattern = format!(r"(?s)<{tag}>.*?</{tag}>\n?");
         let matcher = regex::Regex::new(&pattern).expect("fixed XML tag regex");
         cleaned = matcher.replace_all(&cleaned, "").into_owned();
     }
