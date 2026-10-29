@@ -518,7 +518,10 @@ impl McpManager {
 
     /// Reconnect one exact server without disrupting healthy peers.
     pub async fn reconnect_named(&mut self, name: &str) -> Result<Value> {
-        let position = self.configs.iter().position(|config| config.id == name)
+        let position = self
+            .configs
+            .iter()
+            .position(|config| config.id == name)
             .with_context(|| format!("MCP server {name:?} not found"))?;
         self.reconnect_server(position).await?;
         Ok(self.server_statuses[position].clone())
