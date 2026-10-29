@@ -5478,7 +5478,7 @@ fn chat_tag_toggles_with_confirmation_and_is_searchable_after_resume() {
     );
     let text = String::from_utf8_lossy(&result.stdout);
     assert!(text.contains("Session tag: #feature"), "{text}");
-    assert!(text.contains("Untitled conversation #feature"), "{text}");
+    assert!(text.contains(&format!("{} #feature", &id[..8])), "{text}");
 }
 
 #[test]
