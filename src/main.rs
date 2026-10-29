@@ -437,6 +437,48 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             Some(format!("/{}{}", command.name, rest))
         });
         let input = normalized.as_deref().unwrap_or(input);
+        if let Some(command) = input.strip_prefix("/permission ") {
+            let outcome = (|| -> Result<String> {
+                let mut parts = command.splitn(4, ' ');
+                let action = parts.next().unwrap_or("");
+                let source = match parts.next().unwrap_or("") {
+                    "user" => permission_settings::EditableSource::User,
+                    "project" => permission_settings::EditableSource::Project,
+                    "local" => permission_settings::EditableSource::Local,
+                    _ => bail!("Source must be user, project, or local"),
+                };
+                let behavior = match parts.next().unwrap_or("") {
+                    "allow" => permission_rules::Behavior::Allow,
+                    "deny" => permission_rules::Behavior::Deny,
+                    "ask" => permission_rules::Behavior::Ask,
+                    _ => bail!("Behavior must be allow, deny, or ask"),
+                };
+                let raw_rule = parts.next().unwrap_or("").trim();
+                if raw_rule.is_empty() {
+                    bail!("Missing permission rule, e.g. Bash(git status)");
+                }
+                let rule = permission_rules::parse_rule(raw_rule);
+                let paths =
+                    permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?;
+                let changed = match action {
+                    "add" => paths.add(source, behavior, &[rule])?,
+                    "delete" => paths.delete(source, behavior, &rule)?,
+                    _ => bail!("Action must be add or delete"),
+                };
+                let active = paths.load(&config.permission_rules)?;
+                agent.set_permission_rules(&active)?;
+                Ok(format!(
+                    "Permission {}: {}",
+                    if changed { "updated" } else { "unchanged or policy-locked" },
+                    raw_rule
+                ))
+            })();
+            match outcome {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Permission update failed: {error:#}"),
+            }
+            continue;
+        }
         if input == "/history" || input.starts_with("/history ") {
             let query = input
                 .strip_prefix("/history")
@@ -473,6 +515,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
                 println!("/history [query]         search saved prompt history");
+                println!("/permission add|delete user|project|local allow|deny|ask RULE");
                 println!("/sessions [query]        search saved conversation titles");
                 println!("/resume TERM             find session, show restart command");
                 println!("/rename [NAME]           rename conversation or generate a name using active model");
