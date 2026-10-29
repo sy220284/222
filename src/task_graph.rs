@@ -102,8 +102,12 @@ impl TaskGraph {
         drop(guard);
         result
     }
+    fn valid_task_id(id: &str) -> bool {
+        !id.is_empty() && id.len() <= 20 && id.bytes().all(|c| c.is_ascii_digit())
+    }
+
     fn path(&self, id: &str) -> Result<PathBuf> {
-        if id.is_empty() || !id.bytes().all(|c| c.is_ascii_digit()) || id.len() > 20 {
+        if !Self::valid_task_id(id) {
             bail!("Invalid task ID")
         }
         let path = self.directory.join(format!("{id}.json"));
@@ -350,6 +354,9 @@ impl TaskGraph {
         })
     }
     pub fn peek(&self, id: &str) -> Result<Option<Item>> {
+        if !Self::valid_task_id(id) {
+            return Ok(None);
+        }
         self.load(id)
     }
     pub fn delete_for_blocking_hook(&self, id: &str) -> Result<bool> {
@@ -358,7 +365,7 @@ impl TaskGraph {
     pub fn get(&self, args: &Value) -> Result<String> {
         Self::strict(args, &["taskId"])?;
         let id = Self::required(args, "taskId")?;
-        match self.load(id)? {
+        match self.peek(id)? {
             None => Ok("Task not found".into()),
             Some(task) => {
                 let mut text = format!(

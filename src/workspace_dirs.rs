@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use std::{
     fs,
     io::ErrorKind,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -19,40 +19,7 @@ pub enum Validation {
 }
 
 fn expand(raw: &str, cwd: &Path) -> Result<PathBuf> {
-    if raw.contains('\0') {
-        bail!("Directory path contains a NUL byte");
-    }
-    let input = raw.trim();
-    let given = if input == "~" || input.starts_with("~/") {
-        let home = dirs::home_dir().context("Home directory unavailable")?;
-        if input == "~" {
-            home
-        } else {
-            home.join(&input[2..])
-        }
-    } else {
-        PathBuf::from(input)
-    };
-    let absolute = if given.is_absolute() {
-        given
-    } else {
-        cwd.join(given)
-    };
-    let mut normalized = PathBuf::new();
-    for part in absolute.components() {
-        match part {
-            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
-                normalized.push(part.as_os_str())
-            }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if !normalized.pop() {
-                    bail!("Directory path escapes filesystem root");
-                }
-            }
-        }
-    }
-    Ok(normalized)
+    crate::path_support::expand_path(raw, cwd)
 }
 
 pub fn validate(raw: &str, cwd: &Path, primary: &Path, extra: &[PathBuf]) -> Result<Validation> {

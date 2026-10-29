@@ -59,6 +59,7 @@ mod oauth_service;
 mod permission_mode;
 mod permission_rules;
 mod permission_settings;
+mod path_support;
 mod plain_text_storage;
 mod platform_source_utilities;
 mod plugin_commands;
