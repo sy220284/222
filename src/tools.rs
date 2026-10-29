@@ -348,7 +348,9 @@ impl ToolExecutor {
         let path = self.checked_path(requested)?;
         let mut ancestor = path.as_path();
         while !ancestor.exists() {
-            ancestor = ancestor.parent().context("File path has no existing ancestor")?;
+            ancestor = ancestor
+                .parent()
+                .context("File path has no existing ancestor")?;
         }
         let resolved = ancestor.canonicalize()?.join(path.strip_prefix(ancestor)?);
         let mut paths = vec![
@@ -1095,7 +1097,8 @@ mod tests {
         fs::create_dir_all(root.path().join("public")).unwrap();
         let initial = json!({"nbformat":4,"nbformat_minor":4,"metadata":{},
             "cells":[{"cell_type":"code","source":"original","metadata":{},
-                "outputs":[],"execution_count":null}]}).to_string();
+                "outputs":[],"execution_count":null}]})
+        .to_string();
         fs::write(root.path().join("secrets/private.ipynb"), &initial).unwrap();
         fs::write(root.path().join("public/work.ipynb"), &initial).unwrap();
         let rules = permission_rules::compile_rules(&[
@@ -1107,14 +1110,16 @@ mod tests {
                 behavior: "allow".into(),
                 rule: "Edit(public/**)".into(),
             },
-        ]).unwrap();
+        ])
+        .unwrap();
         let edit = |path: &str| ToolCall {
             id: "notebook-edit-permission".into(),
             kind: "function".into(),
             function: FunctionCall {
                 name: "notebook_edit".into(),
                 arguments: json!({"notebook_path":path,"cell_id":"cell-0",
-                    "new_source":"updated","edit_mode":"replace"}).to_string(),
+                    "new_source":"updated","edit_mode":"replace"})
+                .to_string(),
             },
         };
         let read = |path: &str| ToolCall {
@@ -1126,17 +1131,27 @@ mod tests {
             },
         };
         let full = executor(root.path(), Approval::Full).with_permission_rules(rules.clone());
-        assert!(!full.execute(&read("secrets/private.ipynb")).await.starts_with("ERROR:"));
+        assert!(!full
+            .execute(&read("secrets/private.ipynb"))
+            .await
+            .starts_with("ERROR:"));
         let denied = full.execute(&edit("secrets/private.ipynb")).await;
         assert!(denied.contains("explicit permission rule"), "{denied}");
-        assert_eq!(fs::read_to_string(root.path().join("secrets/private.ipynb")).unwrap(), initial);
+        assert_eq!(
+            fs::read_to_string(root.path().join("secrets/private.ipynb")).unwrap(),
+            initial
+        );
         let ask = executor(root.path(), Approval::Ask).with_permission_rules(rules);
-        assert!(!ask.execute(&read("public/work.ipynb")).await.starts_with("ERROR:"));
+        assert!(!ask
+            .execute(&read("public/work.ipynb"))
+            .await
+            .starts_with("ERROR:"));
         let allowed = ask.execute(&edit("public/work.ipynb")).await;
         assert!(!allowed.starts_with("ERROR:"), "{allowed}");
         let updated: Value = serde_json::from_str(
-            &fs::read_to_string(root.path().join("public/work.ipynb")).unwrap()
-        ).unwrap();
+            &fs::read_to_string(root.path().join("public/work.ipynb")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(updated["cells"][0]["source"], "updated");
     }
 
@@ -1150,7 +1165,11 @@ mod tests {
         fs::create_dir_all(root.path().join("secrets")).unwrap();
         fs::create_dir_all(root.path().join("public")).unwrap();
         fs::write(root.path().join("secrets/key.txt"), "original").unwrap();
-        symlink(root.path().join("secrets/key.txt"), root.path().join("alias.txt")).unwrap();
+        symlink(
+            root.path().join("secrets/key.txt"),
+            root.path().join("alias.txt"),
+        )
+        .unwrap();
         let rules = permission_rules::compile_rules(&[
             permission_rules::RuleSetting {
                 behavior: "deny".into(),
@@ -1177,14 +1196,20 @@ mod tests {
         let full = executor(root.path(), Approval::Full).with_permission_rules(rules.clone());
         let denied = full.execute(&call("alias.txt", "leaked")).await;
         assert!(denied.contains("explicit permission rule"), "{denied}");
-        assert_eq!(fs::read_to_string(root.path().join("secrets/key.txt")).unwrap(), "original");
+        assert_eq!(
+            fs::read_to_string(root.path().join("secrets/key.txt")).unwrap(),
+            "original"
+        );
         let denied = full.execute(&call("secrets/new.txt", "leaked")).await;
         assert!(denied.contains("explicit permission rule"), "{denied}");
         assert!(!root.path().join("secrets/new.txt").exists());
         let ask = executor(root.path(), Approval::Ask).with_permission_rules(rules);
         let allowed = ask.execute(&call("public/new.txt", "safe")).await;
         assert!(!allowed.starts_with("ERROR:"), "{allowed}");
-        assert_eq!(fs::read_to_string(root.path().join("public/new.txt")).unwrap(), "safe");
+        assert_eq!(
+            fs::read_to_string(root.path().join("public/new.txt")).unwrap(),
+            "safe"
+        );
     }
 
     #[tokio::test]
