@@ -420,3 +420,12 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 2026-10-29：补齐本轮200个原始文件 Rust 代码目标
 
 按照用户“先完成200项文件代码实现，统一后置等价验收”的调整，本轮在已有 66 项代码移植之后，额外补写命令索引79项、终端与展示20项、配置/策略/提示/工具解析35项（合计200项）。其中最终35项包含：本地时间/会话起始日期、ToolResult 媒体限制和批量预算、系统 Prompt Section 缓存、XML 标签定义、凭据展示遮罩、打包/工作目录状态、子进程调用、GitHub CLI 授权检查、推理即时切换、ANSI 颜色、泛型惰性 Schema、通用模型别名、修饰键状态、安装与插件策略、用户配置/MCP 错误合并、内部写入消重、组织托管设置路径及 JSON Schema 输出、Bash/PowerShell 工具分流、独立代理身份、团队通信提示、Todo 类型/验证、工具 Schema 会话缓存、轻量 YAML 解析、Schema 转换缓存、权限判定状态、电脑输入后端校验、Git 可用性、Settings 编辑校验、Nohup/Sleep Shell 解析等。新增 `src/portable_configuration.rs` 与 `src/portable_settings_runtime.rs` 以及测试；不是最终等价验收，尚需实际上游 UI/CLI/SDK 接线、完整异常与平台语义和源码逐文件完整对照。
+
+
+## 2026-10-29：多模型请求瞬态失败恢复（原版 withRetry 主链继续补齐）
+
+对照用户原始 2.1.88 ZIP 中 `src/services/api/withRetry.ts` 的 `shouldRetry`、`getRetryAfter`、`getRetryDelay` 及 `src/query.ts` 的模型重试/回退路径，Rust `src/provider.rs` 新增 HTTP 请求开始阶段的有限重试，接入 OpenAI-compatible/Gemini 的普通请求与 `src/sse.rs`、`src/gemini_sse.rs` 的流式连接建立阶段。仅重放相同 JSON 请求体；不会在模型回复之前执行工具或向会话写入虚假回复。支持暂时性 408/409/429/500/502/503/504/529、连接失败和超时；明确 `x-should-retry: false` 不重试，整数秒 `Retry-After` 有 30 秒上限，最多四次请求。流式响应一旦开始就不自动重放，避免重复输出和工具调用。
+
+新增真实 CLI→HTTP→工具→会话持久化测试：503→429→正常工具调用→正常模型回复，验证请求体相同、工具输出恰好回填一次；另外测试 503 显式禁止重试、400 参数错误，以及 OpenAI/Gemini SSE 首帧前的重试与增量去重。最终是否通过以对应 HEAD 的 GitHub Actions 为准。
+
+**保守状态不变**：`withRetry.ts`、`errors.ts`、`QueryEngine.ts` 和 `query.ts` 均仍为部分实现。尚缺原版中止信号取消等待、按查询来源限制 529、重试期间 SDK 进度事件、完整 HTTP 日期格式 Retry-After、回退模型选择、已开始流的中断处理及可配置重试预算。不得将本次有限重试视为整条源码路径等价。
