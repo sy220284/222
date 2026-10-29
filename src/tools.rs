@@ -1088,6 +1088,56 @@ mod tests {
         assert!(!root.path().join("forbidden.txt").exists());
     }
 
+
+    #[test]
+    fn source_powershell_rule_names_reach_real_executor_before_process_launch(){
+        let root=tempfile::tempdir().unwrap();
+        let rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{
+                behavior:"deny".into(),rule:"PowerShell(Remove-Item:*)".into()
+            },
+            permission_rules::RuleSetting{
+                behavior:"allow".into(),rule:"Bash(rm:*)".into()
+            },
+        ]).unwrap();
+        let exec=executor(root.path(),Approval::Full)
+            .with_shell(crate::shell_runtime::ShellKind::Powershell)
+            .with_permission_rules(rules);
+        let blocked=exec.require_approval("run_command",&json!({
+            "command":"rm secret.txt"
+        })).unwrap_err().to_string();
+        assert!(blocked.contains("explicit permission rule"),"{blocked}");
+        // This assertion does not need pwsh installed: policy runs before spawn.
+    }
+
+    #[test]
+    fn source_powershell_specific_allow_does_not_leak_bash_allow_rules(){
+        let root=tempfile::tempdir().unwrap();
+        let rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{
+                behavior:"allow".into(),rule:"Bash(Get-ChildItem:*)".into()
+            },
+        ]).unwrap();
+        let ps=executor(root.path(),Approval::Ask)
+            .with_shell(crate::shell_runtime::ShellKind::Powershell)
+            .with_permission_rules(rules);
+        let refused=ps.require_approval("run_command",&json!({
+            "command":"Get-ChildItem"
+        })).unwrap_err().to_string();
+        assert!(refused.contains("needs approval"),"{refused}");
+        let allowed_rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{
+                behavior:"allow".into(),rule:"PowerShell(Get-ChildItem:*)".into()
+            },
+        ]).unwrap();
+        let ps=executor(root.path(),Approval::Ask)
+            .with_shell(crate::shell_runtime::ShellKind::Powershell)
+            .with_permission_rules(allowed_rules);
+        assert!(ps.require_approval("run_command",&json!({
+            "command":"ls -Force"
+        })).is_ok());
+    }
+
     #[tokio::test]
     async fn extra_working_directory_is_usable_by_real_file_tools() {
         let root=tempfile::tempdir().unwrap();
