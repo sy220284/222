@@ -802,9 +802,13 @@ impl Agent {
         if mode==permission_mode::Mode::Auto{
             bail!("Automatic permission mode requires an enabled classifier")
         }
+        // Persist the authorization state before making it observable.
+        // A failed write must not elevate the live agent's permissions.
+        let mut next_session=self.session.clone();
+        next_session.permission_mode=Some(mode.label().to_owned());
+        next_session.save(&self.root)?;
+        self.session=next_session;
         self.permission_mode=mode;
-        self.session.permission_mode=Some(mode.label().to_owned());
-        self.session.save(&self.root)?;
         Ok(())
     }
     pub fn current_permission_mode(&self)->&'static str{
