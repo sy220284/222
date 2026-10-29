@@ -13,6 +13,7 @@ mod control_message_compat;
 mod cost;
 mod deep_link;
 mod deep_link_banner;
+mod deep_link_protocol;
 mod detect_repository;
 mod diagnostics;
 mod env_validation;
@@ -91,6 +92,7 @@ mod task_guards;
 mod task_output_format;
 mod team_mailbox;
 mod team_registry;
+mod terminal_launcher;
 mod tool_errors;
 mod tool_metrics;
 mod tool_names;
@@ -267,6 +269,8 @@ enum Commands {
         #[arg(long)]
         prefill_length: Option<usize>,
     },
+    /// Parse an OS-invoked deep link and open the current binary in a terminal
+    HandleUri { uri: String },
     /// Parse a provider-neutral deep link without opening a terminal
     ParseDeepLink { uri: String },
     /// Encode an atlas-cli://open link for a reviewable prompt/workspace
@@ -308,6 +312,14 @@ enum Commands {
     Chat {
         #[arg(long)]
         resume: Option<String>,
+        #[arg(long)]
+        prefill: Option<String>,
+        #[arg(long)]
+        deep_link_origin: bool,
+        #[arg(long)]
+        deep_link_repo: Option<String>,
+        #[arg(long)]
+        deep_link_last_fetch: Option<u64>,
     },
     /// List saved conversations in the current workspace
     Sessions { query: Option<String> },
@@ -583,6 +595,11 @@ async fn main() -> Result<()> {
             println!("{}", deep_link_banner::build_deep_link_banner(&info));
             return Ok(());
         }
+        Commands::HandleUri { uri } => {
+            let config = Config::load()?;
+            deep_link_protocol::handle_deep_link_uri(uri, &config)?;
+            return Ok(());
+        }
         Commands::ParseDeepLink { uri } => {
             let action = deep_link::parse_deep_link(uri)?;
             println!(
@@ -837,7 +854,7 @@ async fn main() -> Result<()> {
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. } | Commands::ProjectInit);
     let session = match &cli.command {
-        Commands::Chat { resume: Some(id) } => session_control::resolve(&root, id)?,
+        Commands::Chat { resume: Some(id), .. } => session_control::resolve(&root, id)?,
         Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
         _ => Session::fresh(),
     };
@@ -897,7 +914,21 @@ async fn main() -> Result<()> {
             let prompt = project_init::prompt(agent.workspace_root())?;
             agent.ask(&prompt).await.map(|answer| println!("{answer}"))
         }
-        Commands::Chat { .. } => chat(&mut agent, &mut config).await,
+        Commands::Chat {
+            prefill,
+            deep_link_origin,
+            deep_link_repo,
+            deep_link_last_fetch,
+            ..
+        } => chat(
+            &mut agent,
+            &mut config,
+            prefill.as_deref(),
+            *deep_link_origin,
+            deep_link_repo.as_deref(),
+            *deep_link_last_fetch,
+        )
+        .await,
         Commands::Sdk { .. } => sdk(&mut agent, &config).await,
         _ => unreachable!(),
     };
@@ -906,18 +937,50 @@ async fn main() -> Result<()> {
     end_result
 }
 
-async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
+async fn chat(
+    agent: &mut Agent,
+    config: &mut Config,
+    prefill: Option<&str>,
+    deep_link_origin: bool,
+    deep_link_repo: Option<&str>,
+    last_fetch_ms: Option<u64>,
+) -> Result<()> {
     let mut prompt_history =
         prompt_history::PromptHistory::new(agent.workspace_root(), &agent.session_id())?;
     println!("Atlas Agent. /help lists commands; /exit quits.");
+    if deep_link_origin {
+        let last_fetch = last_fetch_ms.and_then(|value| {
+            std::time::SystemTime::UNIX_EPOCH
+                .checked_add(std::time::Duration::from_millis(value))
+        });
+        let banner = deep_link_banner::DeepLinkBannerInfo {
+            cwd: agent.workspace_root().to_path_buf(),
+            prefill_length: prefill.map(str::chars).map(Iterator::count),
+            repo: deep_link_repo.map(str::to_owned),
+            last_fetch,
+        };
+        println!("{}", deep_link_banner::build_deep_link_banner(&banner));
+    }
+    let mut initial_prefill = prefill.map(str::to_owned);
     loop {
-        print!("atlas> ");
+        if let Some(ref suggested) = initial_prefill {
+            println!("Proposed prompt: {suggested}");
+            print!("atlas [Enter: use linked prompt; or type replacement]> ");
+        } else {
+            print!("atlas> ");
+        }
         io::stdout().flush()?;
         let mut line = String::new();
         if io::stdin().read_line(&mut line)? == 0 {
             break;
         }
-        let input = line.trim();
+        let entry = if line.trim().is_empty() {
+            initial_prefill.take().unwrap_or_default()
+        } else {
+            initial_prefill = None;
+            line
+        };
+        let input = entry.trim();
         if input.is_empty() {
             continue;
         }
