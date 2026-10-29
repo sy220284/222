@@ -127,13 +127,15 @@ impl TaskGraph {
             return Ok(None);
         }
         let path = self.path(id)?;
+        // Source utils/tasks.ts::getTask catches all individual file read
+        // failures and returns null. A damaged, unreadable or oversized
+        // record must not hide the other tasks in TaskList or block claiming.
         let bytes = match fs::read(path) {
             Ok(v) => v,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(e.into()),
+            Err(_) => return Ok(None),
         };
         if bytes.len() > 1_000_000 {
-            bail!("Task record too large")
+            return Ok(None);
         }
         // Like the reference getTask, corrupt/invalid task records are absent,
         // rather than rendering the entire shared task list unusable.
