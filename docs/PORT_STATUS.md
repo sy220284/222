@@ -3,7 +3,7 @@
 - **原版依据**：完整 2.1.88 源包 `source/src/utils/plugins/dependencyResolver.ts:69–76,109–117::resolveDependencyClosure` 明确根插件即使已经启用也必须重新缓存；`source/src/utils/plugins/pluginInstallationHelpers.ts:348–480::installResolvedPlugin` 在解析完整依赖闭包后重新安装根插件。
 - **原 Rust 缺口**：`src/plugin_manager.rs::dependency_install_plan` 对已安装的根插件直接报错，用户无法通过再次安装更新同名插件；并且已安装时读取旧目录的依赖声明，无法识别新版新增依赖。
 - **真实补齐**：在原 `PluginCommand::Install` 可达链中，对已安装且来源身份一致的根插件先读取新源码及依赖闭包、校验策略，再将新版文件放入独立临时目录；旧版本保留到设置保存成功后才清理。新版本激活失败恢复旧目录；设置保存失败同时回滚新增依赖和根插件，恢复失败明确报告。来源市场身份不同则拒绝覆盖，防止跨市场替换。
-- **代码提交**：`f48bad0dfd99e6717243129f7bda1ffd9ac28b4f`、`98f2b1c0acc9e1d5dc9f8a2ba6ba5f4148b65145`；修改 `src/plugin_manager.rs`，保守计 **1 项独立用户可感知业务功能**。仅远端源码与调用链静态核对，未运行 Cargo、测试或 CI，**已提交、待验收**。
+- **代码提交**：`f48bad0dfd99e6717243129f7bda1ffd9ac28b4f`、`98f2b1c0acc9e1d5dc9f8a2ba6ba5f4148b65145`、`78129a9db8a60e05b8ac37ff9feb02e0171b3c2a`（修复无清单插件重装临时目录名称误拒绝）；修改 `src/plugin_manager.rs`，保守计 **1 项独立用户可感知业务功能**。仅远端源码与调用链静态核对，未运行 Cargo、测试或 CI，**已提交、待验收**。
 - **剩余差异**：原版跨市场插件 ID 存储、并发更新锁、版本约束、远程市场更新、插件重载后的会话一致性、崩溃中断时恢复和完整原子安装仍待补齐；本轮未形成恰好 100 项预先确认缺口清单及完整方案，**1/100，剩余 99**，流程 A/B 与数量目标未达标；Issue #3 冻结 362 条继续开放，新增完整等价验收 0。
 
 ## 2026-10-29：SDK 自定义 Agent 实际委派与工具权限（已提交、待验收）
