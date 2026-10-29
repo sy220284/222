@@ -260,6 +260,15 @@ fn hook_if_matches(condition: &str, event: &str, tool_name: Option<&str>, input:
         behavior: crate::permission_rules::Behavior::Allow,
         value: parsed,
     };
+    if name == "PowerShell" {
+        return matching_arguments
+            .get("command")
+            .and_then(Value::as_str)
+            .is_some_and(|command| matches!(
+                crate::powershell_permission_matching::policy_for(&[condition_rule], command),
+                Ok(Some(crate::permission_rules::Behavior::Allow))
+            ));
+    }
     matches!(
         crate::permission_rules::policy_for(&[condition_rule], name, &matching_arguments),
         Ok(Some(crate::permission_rules::Behavior::Allow))
