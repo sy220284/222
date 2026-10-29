@@ -601,34 +601,59 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(
-            policy_for(&rules, "write_file", &json!({
-                "path":"alias.txt",
-                "paths":["alias.txt", "secrets/key.txt"]
-            })).unwrap(),
+            policy_for(
+                &rules,
+                "write_file",
+                &json!({
+                    "path":"alias.txt",
+                    "paths":["alias.txt", "secrets/key.txt"]
+                })
+            )
+            .unwrap(),
             Some(Behavior::Deny)
         );
         assert_eq!(
-            policy_for(&rules, "write_file", &json!({
-                "path":"public/new.txt", "paths":["public/new.txt"]
-            })).unwrap(),
+            policy_for(
+                &rules,
+                "write_file",
+                &json!({
+                    "path":"public/new.txt", "paths":["public/new.txt"]
+                })
+            )
+            .unwrap(),
             Some(Behavior::Allow)
         );
         assert_eq!(
-            policy_for(&rules, "edit_file", &json!({
-                "path":"secrets", "paths":["secrets"]
-            })).unwrap(),
+            policy_for(
+                &rules,
+                "edit_file",
+                &json!({
+                    "path":"secrets", "paths":["secrets"]
+                })
+            )
+            .unwrap(),
             Some(Behavior::Deny)
         );
         assert_eq!(
-            policy_for(&rules, "read_file", &json!({
-                "path":"secrets/key.txt", "paths":["secrets/key.txt"]
-            })).unwrap(),
+            policy_for(
+                &rules,
+                "read_file",
+                &json!({
+                    "path":"secrets/key.txt", "paths":["secrets/key.txt"]
+                })
+            )
+            .unwrap(),
             None
         );
         assert_eq!(
-            policy_for(&rules, "notebook_edit", &json!({
-                "path":"secrets/private.ipynb", "paths":["secrets/private.ipynb"]
-            })).unwrap(),
+            policy_for(
+                &rules,
+                "notebook_edit",
+                &json!({
+                    "path":"secrets/private.ipynb", "paths":["secrets/private.ipynb"]
+                })
+            )
+            .unwrap(),
             Some(Behavior::Deny)
         );
     }
