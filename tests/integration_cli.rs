@@ -5651,8 +5651,9 @@ fn project_init_uses_real_repo_landmarks_and_interactive_model_questions() {
     let second: Value=serde_json::from_str(requests[1].split_once("\r\n\r\n").unwrap().1).unwrap();
     let returned=second["messages"].as_array().unwrap().iter()
         .find(|msg|msg["role"]=="tool").unwrap()["content"].as_str().unwrap();
-    assert!(returned.contains("Project AGENTS.md"),"{returned}");
-    assert!(!returned.contains("Personal AGENTS.local.md\"}"),"{returned}");
+    let selected: Value = serde_json::from_str(returned).unwrap();
+    assert_eq!(selected["answers"]["Which instruction documents?"], "Project AGENTS.md");
+    assert_eq!(selected["questions"][0]["question"], "Which instruction documents?");
     assert!(String::from_utf8_lossy(&output.stdout).contains("Confirmed"));
     assert!(!root.path().join("AGENTS.md").exists(),
         "a model mock without a write call must not create project instructions");
