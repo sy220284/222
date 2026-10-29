@@ -129,6 +129,174 @@ fn git_status_at_start(root: &Path) -> Option<String> {
     ))
 }
 
+
+/// Load user and project instructions in the outer-to-inner order of the
+/// original context.ts and claudemd.ts, using vendor-neutral AGENTS.md and
+/// .atlas paths. File-conditional rules never enter the global system prompt.
+pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
+    use anyhow::{bail, Context};
+    use std::{collections::HashSet, fs, path::PathBuf};
+
+    const MAX_FILE_BYTES: u64 = 50_000;
+    const MAX_FILES: usize = 200;
+    const MAX_RULE_DEPTH: usize = 8;
+
+    fn enabled() -> bool {
+        !std::env::var("ATLAS_DISABLE_PROJECT_INSTRUCTIONS")
+            .ok()
+            .is_some_and(|value| matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            ))
+    }
+
+    fn rule_body(content: &str) -> Option<&str> {
+        let normalized = content.strip_prefix("---\r\n")
+            .or_else(|| content.strip_prefix("---\n"));
+        let Some(rest) = normalized else { return Some(content) };
+        let mut header_len = 0;
+        let mut conditional = false;
+        let mut ended = false;
+        for line in rest.split_inclusive('\n') {
+            header_len += line.len();
+            let trimmed = line.trim();
+            if trimmed == "---" {
+                ended = true;
+                break;
+            }
+            if trimmed.starts_with("paths:") {
+                conditional = true;
+            }
+        }
+        if !ended {
+            return Some(content);
+        }
+        if conditional { None } else { Some(&rest[header_len..]) }
+    }
+
+    fn add_file(
+        path: &Path,
+        scope: &Path,
+        is_rule: bool,
+        seen: &mut HashSet<PathBuf>,
+        output: &mut String,
+    ) -> anyhow::Result<()> {
+        let metadata = match fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error).with_context(|| format!(
+                "Inspect project instruction: {}", path.display()
+            )),
+        };
+        if !metadata.is_file() {
+            return Ok(());
+        }
+        let canonical = path.canonicalize()?;
+        if !canonical.starts_with(scope) {
+            bail!("Instruction file points outside its approved directory: {}", path.display());
+        }
+        if seen.contains(&canonical) {
+            return Ok(());
+        }
+        if seen.len() >= MAX_FILES {
+            bail!("Too many project instruction files (limit {MAX_FILES})");
+        }
+        if metadata.len() > MAX_FILE_BYTES {
+            bail!("Project instruction file too large: {}", path.display());
+        }
+        let bytes = fs::read(&canonical)
+            .with_context(|| format!("Read project instructions: {}", path.display()))?;
+        if bytes.len() as u64 > MAX_FILE_BYTES {
+            bail!("Project instruction file too large: {}", path.display());
+        }
+        let content = String::from_utf8(bytes)
+            .with_context(|| format!("Project instructions must be UTF-8: {}", path.display()))?;
+        let body = if is_rule { rule_body(&content) } else { Some(content.as_str()) };
+        seen.insert(canonical);
+        if let Some(body) = body.filter(|body| !body.trim().is_empty()) {
+            output.push_str(&format!(
+                "\nProject instructions from {}:\n{}\n",
+                path.display(), body.trim()
+            ));
+        }
+        Ok(())
+    }
+
+    fn add_rules(
+        directory: &Path,
+        scope: &Path,
+        depth: usize,
+        visited: &mut HashSet<PathBuf>,
+        seen: &mut HashSet<PathBuf>,
+        output: &mut String,
+    ) -> anyhow::Result<()> {
+        if depth > MAX_RULE_DEPTH {
+            anyhow::bail!("Project rules directory nesting exceeds {MAX_RULE_DEPTH}");
+        }
+        let metadata = match fs::metadata(directory) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        if !metadata.is_dir() {
+            return Ok(());
+        }
+        let canonical = directory.canonicalize()?;
+        if !canonical.starts_with(scope) {
+            anyhow::bail!("Project rules directory escapes its approved scope: {}", directory.display());
+        }
+        if !visited.insert(canonical) {
+            return Ok(());
+        }
+        let mut entries = fs::read_dir(directory)?
+            .map(|entry| entry.map(|item| item.path()))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        entries.sort();
+        for entry in entries {
+            let metadata = fs::metadata(&entry)?;
+            if metadata.is_dir() {
+                add_rules(&entry, scope, depth + 1, visited, seen, output)?;
+            } else if metadata.is_file()
+                && entry.extension().and_then(|extension| extension.to_str()) == Some("md")
+            {
+                add_file(&entry, scope, true, seen, output)?;
+            }
+        }
+        Ok(())
+    }
+
+    if !enabled() {
+        return Ok(String::new());
+    }
+    let root = root.canonicalize()?;
+    let mut output = String::new();
+    let mut seen = HashSet::new();
+    let mut visited = HashSet::new();
+
+    if let Ok(config) = crate::config::Config::path() {
+        if let Some(home) = config.parent() {
+            let home = home.canonicalize().unwrap_or_else(|_| home.to_path_buf());
+            add_file(&home.join("AGENTS.md"), &home, false, &mut seen, &mut output)?;
+            add_rules(&home.join("rules"), &home, 0, &mut visited, &mut seen, &mut output)?;
+        }
+    }
+
+    let mut scopes = root.ancestors()
+        .filter(|directory| directory.parent().is_some())
+        .collect::<Vec<_>>();
+    scopes.reverse();
+    for directory in scopes {
+        for relative in ["AGENTS.md", ".atlas/AGENTS.md", ".atlas/instructions.md"] {
+            add_file(&directory.join(relative), directory, false, &mut seen, &mut output)?;
+        }
+        add_rules(&directory.join(".atlas/rules"), directory, 0, &mut visited, &mut seen, &mut output)?;
+        for relative in ["AGENTS.local.md", ".atlas/instructions.local.md"] {
+            add_file(&directory.join(relative), directory, false, &mut seen, &mut output)?;
+        }
+    }
+    Ok(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
