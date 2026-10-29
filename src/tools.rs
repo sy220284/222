@@ -485,16 +485,13 @@ impl ToolExecutor {
                 self.require_approval("notebook_edit", &args)?;
                 let path = self.checked_path(required(&args, "notebook_path")?)?;
                 let track = history::enabled(self.interactive, self.file_checkpointing_enabled);
-                let previous = if track { history::snapshot(&path)? } else { None };
-                let previous_mode = if track { history::snapshot_mode(&path)? } else { None };
+                let pending = track.then(|| history::capture_before_edit(&path));
                 let result = self.notebook_edit(&args)?;
-                let checkpoint_notice = if track {
-                    history::record_notice(
-                        &self.root, self.session_id.as_deref(), &path, previous, previous_mode,
+                let checkpoint_notice = pending.map(|pending| {
+                    history::finish_after_edit(
+                        &self.root, self.session_id.as_deref(), &path, pending,
                     )
-                } else {
-                    String::new()
-                };
+                }).unwrap_or_default();
                 Ok(format!("{result}{checkpoint_notice}"))
             }
             "list_files" => self.list_files(&args),
@@ -561,32 +558,26 @@ impl ToolExecutor {
                 self.require_approval("write_file", &args)?;
                 let path = self.checked_path(required(&args, "path")?)?;
                 let track = history::enabled(self.interactive, self.file_checkpointing_enabled);
-                let before = if track { history::snapshot(&path)? } else { None };
-                let before_mode = if track { history::snapshot_mode(&path)? } else { None };
+                let pending = track.then(|| history::capture_before_edit(&path));
                 let result = self.write_file(&args).await?;
-                let checkpoint_notice = if track {
-                    history::record_notice(
-                        &self.root, self.session_id.as_deref(), &path, before, before_mode,
+                let checkpoint_notice = pending.map(|pending| {
+                    history::finish_after_edit(
+                        &self.root, self.session_id.as_deref(), &path, pending,
                     )
-                } else {
-                    String::new()
-                };
+                }).unwrap_or_default();
                 Ok(format!("{result}{checkpoint_notice}"))
             }
             "edit_file" => {
                 self.require_approval("edit_file", &args)?;
                 let path = self.checked_path(required(&args, "path")?)?;
                 let track = history::enabled(self.interactive, self.file_checkpointing_enabled);
-                let before = if track { history::snapshot(&path)? } else { None };
-                let before_mode = if track { history::snapshot_mode(&path)? } else { None };
+                let pending = track.then(|| history::capture_before_edit(&path));
                 let result = self.edit_file(&args).await?;
-                let checkpoint_notice = if track {
-                    history::record_notice(
-                        &self.root, self.session_id.as_deref(), &path, before, before_mode,
+                let checkpoint_notice = pending.map(|pending| {
+                    history::finish_after_edit(
+                        &self.root, self.session_id.as_deref(), &path, pending,
                     )
-                } else {
-                    String::new()
-                };
+                }).unwrap_or_default();
                 Ok(format!("{result}{checkpoint_notice}"))
             }
             "file_history" => {
