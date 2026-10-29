@@ -1432,13 +1432,17 @@ mod tests {
                 arguments: json!({
                     "command":"sleep 30 & echo $! > descendant.pid; wait",
                     "timeout_seconds":1
-                }).to_string(),
+                })
+                .to_string(),
             },
         };
         let result = tool.execute(&call).await;
         assert!(result.contains("Command timed out"), "{result}");
         let pid: i32 = fs::read_to_string(root.path().join("descendant.pid"))
-            .unwrap().trim().parse().unwrap();
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
         for _ in 0..15 {
             let stat = fs::read_to_string(format!("/proc/{pid}/stat"));
             match stat {
@@ -1462,13 +1466,17 @@ mod tests {
                 arguments: json!({
                     "command":"sleep 30 & echo $! > oversize.pid; head -c 300000 /dev/zero",
                     "timeout_seconds":8
-                }).to_string(),
+                })
+                .to_string(),
             },
         };
         let result = tool.execute(&call).await;
         assert!(result.contains("Command output exceeded"), "{result}");
         let pid: i32 = fs::read_to_string(root.path().join("oversize.pid"))
-            .unwrap().trim().parse().unwrap();
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
         for _ in 0..15 {
             let stat = fs::read_to_string(format!("/proc/{pid}/stat"));
             match stat {
