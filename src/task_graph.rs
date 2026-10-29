@@ -180,7 +180,14 @@ impl TaskGraph {
             let Some(name) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            if !name.bytes().all(|c| c.is_ascii_digit()) {
+            // Corrupt or oversized task filenames must not make the entire
+            // task list unreadable. The source getTask treats bad records as
+            // absent, including after an interrupted write or manual edit.
+            if name.is_empty()
+                || name.len() > 20
+                || !name.bytes().all(|c| c.is_ascii_digit())
+                || name.parse::<u64>().is_err()
+            {
                 continue;
             }
             if let Some(item) = self.load(name)? {
@@ -199,8 +206,22 @@ impl TaskGraph {
             .ok()
             .and_then(|s| s.trim().parse::<u64>().ok())
             .unwrap_or(0);
-        for task in self.all()? {
-            high = high.max(task.id.parse().unwrap_or(0));
+        // Preserve the highest allocated ID even when the JSON body is
+        // damaged: the original findHighestTaskIdFromFiles scans filenames,
+        // so a corrupt record must not allow an old task ID to be reused.
+        for entry in fs::read_dir(&self.directory)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let Some(stem) = name.strip_suffix(".json") else {
+                continue;
+            };
+            if stem.is_empty() || !stem.bytes().all(|b| b.is_ascii_digit()) {
+                continue;
+            }
+            if let Ok(id) = stem.parse::<u64>() {
+                high = high.max(id);
+            }
         }
         Ok(high)
     }
@@ -563,11 +584,23 @@ impl TaskGraph {
 
     pub fn reset(&self) -> Result<()> {
         self.locked(|store| {
+            // Reset for a new team removes every task JSON file, including
+            // malformed or legacy records that cannot pass Item validation.
+            // Record the high-water mark before deletion to prevent ID reuse
+            // if an interrupted reset leaves only some files on disk.
             let high = store.highest()?;
-            for item in store.all()? {
-                fs::remove_file(store.path(&item.id)?)?;
-            }
             store.mark(high)?;
+            for entry in fs::read_dir(&store.directory)? {
+                let entry = entry?;
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.ends_with(".json") && !name.starts_with('.') {
+                    let kind = entry.file_type()?;
+                    if kind.is_file() || kind.is_symlink() {
+                        fs::remove_file(entry.path())?;
+                    }
+                }
+            }
             task_events::notify_tasks_updated();
             Ok(())
         })
