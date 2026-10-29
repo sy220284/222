@@ -2500,6 +2500,16 @@ impl Agent {
                 input
             })
             .await?;
+        self.report_hook_warnings(HookEvent::SessionStart, &start);
+        for reason in &start.blocking_reasons {
+            eprintln!("SessionStart clear hook blocked (ignored): {reason}");
+            self.emit(json!({
+                "type":"hook_warning",
+                "hook_event_name":"SessionStart",
+                "message":reason,
+                "session_id":self.session.id,
+            }));
+        }
         self.session_context = start.additional_context.join("\n");
         Ok(())
     }
