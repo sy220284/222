@@ -92,7 +92,8 @@ pub async fn complete(
     let url=format!("{}/models/{}:streamGenerateContent?alt=sse",
         base_url.trim_end_matches('/'),model);
     let response=client.post(url).header("x-goog-api-key",key)
-        .json(body).send().await.context("Gemini stream request failed")?;
+        .json(body);
+    let response=crate::provider::send_model_request(response).await.context("Gemini stream request failed")?;
     let status=response.status();
     if !status.is_success(){
         let body=response.text().await?;
