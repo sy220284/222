@@ -77,15 +77,16 @@ pub fn validate(
             agent.agent_type
         ));
     }
+    let description_units = agent.when_to_use.encode_utf16().count();
     if agent.when_to_use.is_empty() {
         result
             .errors
             .push("Description (description) is required".into());
-    } else if agent.when_to_use.len() < 10 {
+    } else if description_units < 10 {
         result
             .warnings
             .push("Description should be more descriptive (at least 10 characters)".into());
-    } else if agent.when_to_use.len() > 5000 {
+    } else if description_units > 5000 {
         result
             .warnings
             .push("Description is very long (over 5000 characters)".into());
@@ -108,13 +109,14 @@ pub fn validate(
             }
         }
     }
+    let prompt_units = agent.system_prompt.encode_utf16().count();
     if agent.system_prompt.is_empty() {
         result.errors.push("System prompt is required".into());
-    } else if agent.system_prompt.len() < 20 {
+    } else if prompt_units < 20 {
         result
             .errors
             .push("System prompt is too short (minimum 20 characters)".into());
-    } else if agent.system_prompt.len() > 10000 {
+    } else if prompt_units > 10000 {
         result
             .warnings
             .push("System prompt is very long (over 10,000 characters)".into());
