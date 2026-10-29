@@ -92,10 +92,7 @@ fn prompt(query: &str, candidates: &[(SessionItem, Option<Session>)]) -> String 
                 if let Some(first) = session.messages.iter().find(|m| m.role == "user") {
                     let text = excerpt(std::slice::from_ref(first));
                     if !text.is_empty() {
-                        fields.push(format!(
-                            "- First message: {}",
-                            first_message_preview(&text)
-                        ));
+                        fields.push(format!("- First message: {}", first_message_preview(&text)));
                     }
                 }
                 let text = excerpt(&session.messages);
