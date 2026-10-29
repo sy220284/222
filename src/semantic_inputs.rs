@@ -79,7 +79,9 @@ pub fn normalize_tool_fields(tool: &str, args: &mut Value) -> Result<()> {
         "run_command" => &["timeout_seconds"],
         "PowerShell" => &["timeout"],
         "grep_files" => &["-A", "-B", "-C", "context", "head_limit", "offset"],
-        "task_output" => &["timeout"],
+        // TaskOutput.timeout is z.number(), not semanticNumber: quoted
+        // numeric values must be rejected by the tool's own schema.
+        "task_output" => &[],
         _ => &[],
     };
     let Some(map) = args.as_object_mut() else {
