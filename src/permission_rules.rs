@@ -598,17 +598,28 @@ mod tests {
         let rules = compile_rules(&[RuleSetting {
             behavior: "deny".into(),
             rule: "Agent(Explore)".into(),
-        }]).unwrap();
+        }])
+        .unwrap();
         assert_eq!(
-            policy_for(&rules, "spawn_agent", &json!({
-                "prompt":"inspect", "subagent_type":"Explore"
-            })).unwrap(),
+            policy_for(
+                &rules,
+                "spawn_agent",
+                &json!({
+                    "prompt":"inspect", "subagent_type":"Explore"
+                })
+            )
+            .unwrap(),
             Some(Behavior::Deny)
         );
         assert_eq!(
-            policy_for(&rules, "spawn_agent", &json!({
-                "prompt":"inspect", "subagent_type":"Explorer"
-            })).unwrap(),
+            policy_for(
+                &rules,
+                "spawn_agent",
+                &json!({
+                    "prompt":"inspect", "subagent_type":"Explorer"
+                })
+            )
+            .unwrap(),
             None
         );
         assert_eq!(
@@ -616,15 +627,21 @@ mod tests {
             None
         );
         assert_eq!(
-            policy_for(&rules, "spawn_team", &json!({
-                "tasks":[{"name":"Explore","prompt":"inspect"}]
-            })).unwrap(),
+            policy_for(
+                &rules,
+                "spawn_team",
+                &json!({
+                    "tasks":[{"name":"Explore","prompt":"inspect"}]
+                })
+            )
+            .unwrap(),
             None
         );
         let defaults = compile_rules(&[RuleSetting {
             behavior: "deny".into(),
             rule: "Agent(general)".into(),
-        }]).unwrap();
+        }])
+        .unwrap();
         assert_eq!(
             policy_for(&defaults, "spawn_agent", &json!({"prompt":"inspect"})).unwrap(),
             Some(Behavior::Deny)
