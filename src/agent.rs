@@ -205,6 +205,7 @@ impl Agent {
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
         self.mcp_configs = servers.to_vec();
+        self.last_context_usage = None;
         if !servers.is_empty() {
             self.mcp = Some(McpManager::connect_with_root(servers, &self.root).await?);
         }
@@ -235,6 +236,7 @@ impl Agent {
             bail!("SessionStart blocked: {reason}")
         }
         self.session_context = result.additional_context.join("\n");
+        self.last_context_usage = None;
         Ok(())
     }
 
@@ -1158,6 +1160,7 @@ impl Agent {
 
     pub fn set_enabled_plugins(&mut self, names: Vec<String>) {
         self.enabled_plugins = names;
+        self.last_context_usage = None;
     }
 
     pub fn set_structured_output(&mut self, enabled: bool) {
@@ -1268,6 +1271,8 @@ impl Agent {
         child.save(&self.root)?;
         let branch_id = child.id;
         self.session = child;
+        self.last_context_usage = None;
+        self.last_model_usage = None;
         if let Some(graph) = graph {
             self.graph = graph;
         }
@@ -2105,6 +2110,8 @@ impl Agent {
         candidate.surfaced_memory_units = 0;
         candidate.save(&self.root)?;
         self.session = candidate;
+        self.last_context_usage = None;
+        self.last_model_usage = None;
         self.auto_compact_failures = 0;
         runtime_contracts::suppress_compact_warning();
         Ok(())
@@ -2136,6 +2143,8 @@ impl Agent {
         // Prepare the new durable session before swapping the active state.
         next.save(&self.root)?;
         self.session = next;
+        self.last_context_usage = None;
+        self.last_model_usage = None;
         self.auto_compact_failures = 0;
         self.graph = graph;
         self.session_context.clear();
