@@ -1,3 +1,11 @@
+## 2026-10-29：SDK 会话标题生成、独立保存及历史显示（已提交、待验收）
+
+- **原版核对**：`source/src/cli/print.ts:3783–3814` 的 `generate_session_title` 控制请求；`source/src/utils/sessionTitle.ts:56–129` 的句式标题 JSON 生成及空描述/失败返回；`source/src/utils/sessionStorage.ts:2657–2673` 的 `ai-title` 与显式重命名隔离。
+- **Rust 可达业务链**：SDK NDJSON `control_request` → `src/main.rs::sdk_nested_control(generate_session_title)` → `src/agent.rs::generate_session_title` → 当前配置的通用模型 `ModelProvider::complete` → JSON `title` 校验、用量记账 → `src/session.rs::ai_title` 独立持久化（仅 `persist=true`）→ `src/session_control.rs::list` 在无显式用户标题时展示生成标题。空描述返回 `null`，无效模型 JSON 不写标题，存储失败回滚内存状态并返回错误；不向主对话追加伪造用户消息。
+- **代码提交**：`f2b7d484db465505b82ed7875416a8e74021911a`，4 个真实 Rust 运行模块，保守计 **1 项独立用户可感知业务功能**。静态核对入口、模型请求、持久化字段、历史读取及提交文件；未运行 Cargo/CI/行为测试，**已提交、待验收**。
+- **准确剩余差异**：原版该请求异步执行且不阻塞 stdin/interrupt；当前 Rust SDK 仍串行等待模型标题生成。原版取消信号传播、远程端标题回写、完整标题元数据索引、跨进程并发及标题竞态还需补齐。冻结 Issue #3 的 362 项均继续开放。
+- **本轮严格目标**：100 项先行独立业务缺口清单尚未逐项核验；本次实际代码补齐 **1/100，余 99**，未达标，不将台账文字计为业务功能。
+
 ## 2026-10-29：Glob 绝对路径通配符跨授权目录搜索（源码已提交、待验收）
 
 - **原版源码**：`source/src/utils/glob.ts:12–84::extractGlobBaseDirectory/glob`。原版绝对通配符从首个特殊字符前的静态目录开始遍历，支持不显式传入 `path` 的绝对文件名/路径模式。

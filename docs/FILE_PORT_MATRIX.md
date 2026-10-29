@@ -1752,7 +1752,7 @@
 | `src/utils/sessionState.ts` | 151 | 5309 | 重写：保持通用行为 | `src/generated_ports/p_000102e58d700.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/sessionStorage.ts` | 5106 | 180620 | 重写：保持通用行为 | `src/generated_ports/p_d6a11c5239e9b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/sessionStoragePortable.ts` | 794 | 25448 | 重写：保持通用行为 | `src/generated_ports/p_64e1431d70c86.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/sessionTitle.ts` | 130 | 4757 | 重写：保持通用行为 | `src/session_control.rs / src/agent.rs` | 部分实现：extractConversationText 已按原版最近 1000 UTF-16 单元提取用户/助手文本和多模态 text 块并接入 /rename；独立 generateSessionTitle、meta/origin 过滤及取消等仍未实现 |
+| `src/utils/sessionTitle.ts` | 130 | 4757 | 重写：保持通用行为 | `src/session_control.rs / src/agent.rs / src/main.rs / src/session.rs` | 部分实现：extractConversationText 已按原版最近 1000 UTF-16 单元提取用户/助手文本和多模态 text 块并接入 /rename；SDK generate_session_title 已接通通用模型、JSON title、独立 ai_title 持久化和历史显示（f2b7d484），源码已提交待验收；SDK stdin 非阻塞执行、取消、meta/origin 过滤、跨进程标题索引及完整竞态仍未等价 |
 | `src/utils/sessionUrl.ts` | 65 | 1672 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/set.ts` | 54 | 1036 | 重写：Set 差集、交集判定、包含关系与有序并集 | `src/collections.rs` | 部分实现：4 个函数保持 Set 插入顺序和空集语义；JS 对象引用与 SameValueZero 非整数数字语义待跨语言核对 |
 | `src/utils/settings/allErrors.ts` | 33 | 1257 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
