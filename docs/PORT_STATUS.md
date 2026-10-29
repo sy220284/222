@@ -3,7 +3,7 @@
 - **原版源码依据**：完整 ZIP 的 `source/src/utils/plugins/dependencyResolver.ts:161–234::verifyAndDemote`；对每个已启用插件核对依赖，缺失或被停用的依赖导致该插件在本会话停用，重复计算直到所有级联依赖稳定，原用户设置不改写；`dependencyResolver.ts:27–46::qualifyDependency` 将短名称绑定到声明者市场，`@inline` 插件的短名称按名字匹配。
 - **原 Rust 缺口**：`src/plugins.rs::PluginSet::load` 只读取单插件 Hooks/MCP，缺少跨插件依赖判断；`list_skills/resolve_skill_path/command_prompt_with_session/list_commands` 仍直接使用用户启用名单。卸载依赖插件后，其依赖者的 Hook、MCP、技能和命令可能继续执行，违反原版的会话级降级语义。
 - **真实代码补齐**：`Manifest.dependencies` 读取原始清单声明；`active_plugin_names` 读取实际安装来源身份，精确区分同市场、显式跨市场和本地 inline 依赖，按固定点级联停用，保留具体诊断且不覆盖启用配置。真实 Agent 的 `PluginSet::load` 与插件技能、命令发现和执行共用同一有效集合，防止目录显示与实际调用不一致。
-- **提交证据**：代码 `cab6e0fc3c400bfaef5a1dcdfc75aa15737eb008`；原路径矩阵 `10a5bada24f15c0c7d764edf02f2037fb9a16832`。本轮仅可核实 **1 项**不同用户可感知业务功能源码补齐；**1/100，剩余 99**，未达到硬目标。未运行 Cargo、测试或 CI，行为待验收，Issue #3 冻结 362 项不核销。
+- **提交证据**：① 插件实际执行链依赖级联隔离：`cab6e0fc3c400bfaef5a1dcdfc75aa15737eb008`；② 插件管理列表展示 `enabled` 与真实 `active` 的差别，并向用户返回逐插件依赖错误：`13f3af02b19b73e139847f3de4e6ae953733ac5e`、`0e1214bd569306044228b33d1f88f1f1191eda31`；原路径矩阵 `10a5bada24f15c0c7d764edf02f2037fb9a16832`。本轮核实 **2 项**不同用户可感知业务功能源码补齐；**2/100，剩余 98**，未达到硬目标。未运行 Cargo、测试或 CI，行为待验收，Issue #3 冻结 362 项不核销。
 - **剩余差异**：原版安装时 `resolveDependencyClosure` 的自动补装、跨市场依赖允许名单、版本约束、已启用依赖跳过与完整原子安装尚未实现；动态插件重载时的并发状态和 SDK 结构化依赖错误仍需补齐。要求的先行恰好 100 项逐功能双侧核查清单及完整实施方案本轮尚未形成，流程 A/B 未达标。
 
 ## 2026-10-29：SDK 模型切换保留原版历史提示及用户回放（源码已提交、待验收）
