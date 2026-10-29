@@ -2981,6 +2981,13 @@ impl Agent {
                                 task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
                                     .err()
                                     .map(|error| format!("Invalid {} arguments: {error:#}", call.function.name))
+                            } else if matches!(
+                                crate::tool_names::canonical_name(&call.function.name),
+                                "task_stop" | "KillShell"
+                            ) {
+                                executor.validate_task_stop(&value)
+                                    .err()
+                                    .map(|error| format!("Invalid TaskStop arguments: {error:#}"))
                             } else {
                                 None
                             }
