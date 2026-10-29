@@ -882,7 +882,7 @@
 | `src/ink/line-width-cache.ts` | 25 | 734 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/log-update.ts` | 774 | 27210 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/measure-element.ts` | 24 | 419 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
-| `src/ink/measure-text.ts` | 48 | 1138 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/measure-text.ts` | 48 | 1138 | 重写：终端 UI／交互 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：原始单遍文本宽高测算、尾部空行、非正数/无穷宽度、逐行自动折行已实现；上游所有渲染调用链仍需继续接通 |
 | `src/ink/node-cache.ts` | 55 | 1654 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/optimizer.ts` | 94 | 2588 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/output.ts` | 798 | 26183 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -900,14 +900,14 @@
 | `src/ink/stringWidth.ts` | 223 | 7156 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust DOM 事件传播/键盘事件及 Unicode 宽度路径已编写，完整 TUI 与分割符号待验 |
 | `src/ink/styles.ts` | 772 | 20889 | 重写：终端 UI／交互 | `src/generated_ports/p_7f9729523576c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/supports-hyperlinks.ts` | 58 | 1596 | 重写：终端 UI／交互 | `src/generated_ports/p_95ad2edddae92.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/ink/tabstops.ts` | 47 | 1113 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/tabstops.ts` | 47 | 1113 | 重写：终端 UI／交互 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：ANSI CSI/OSC/DCS 等控制序列不计宽度、八列制表符与换行重置已写入 Rust 并接入 ANSI SVG 渲染；上游所有渲染调用链仍需继续接通 |
 | `src/ink/terminal-focus-state.ts` | 48 | 1305 | 重写：终端 UI／交互 | `src/generated_ports/p_22e7f7a29d693.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/terminal-querier.ts` | 213 | 7843 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/terminal.ts` | 249 | 8190 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/termio/ansi.ts` | 76 | 1490 | 重写：终端 UI／交互 | `src/generated_ports/p_1f1e68eb35633.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/termio/csi.ts` | 320 | 8677 | 重写：终端 UI／交互 | `src/generated_ports/p_bc5aed2cde71b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/termio/dec.ts` | 61 | 1935 | 重写：终端 UI／交互 | `src/generated_ports/p_5753cc2fee99d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/ink/termio/esc.ts` | 68 | 1444 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/termio/esc.ts` | 68 | 1444 | 重写：终端 UI／交互 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：ESC 重置、保存/恢复光标、索引移动、换行、字符集选择及未知序列返回已完整实现；上游所有渲染调用链仍需继续接通 |
 | `src/ink/termio/osc.ts` | 494 | 16842 | 重写：终端 UI／交互 | `src/generated_ports/p_95d00ece00cfd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/termio/parser.ts` | 395 | 11546 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/termio/sgr.ts` | 309 | 6400 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -1424,9 +1424,9 @@
 | `src/utils/cliHighlight.ts` | 55 | 2140 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/codeIndexing.ts` | 207 | 6110 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/collapseBackgroundBashNotifications.ts` | 85 | 2750 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/collapseHookSummaries.ts` | 60 | 1714 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/collapseHookSummaries.ts` | 60 | 1714 | 重写：保持通用行为 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：连续同标签 Hook 的计数、内容/错误并集、阻断、输出状态和最大并发耗时已实现；上游所有渲染调用链仍需继续接通 |
 | `src/utils/collapseReadSearch.ts` | 1110 | 37902 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/collapseTeammateShutdowns.ts` | 56 | 1322 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/collapseTeammateShutdowns.ts` | 56 | 1322 | 重写：保持通用行为 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：连续完成的进程内队员关停消息折叠、首消息元信息、边界与非关停保留已实现；上游所有渲染调用链仍需继续接通 |
 | `src/utils/combinedAbortSignal.ts` | 48 | 1714 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/commandLifecycle.ts` | 22 | 440 | 重写：保持通用行为 | `src/command_lifecycle.rs / src/tools.rs` | 已验收：单监听器设置/替换/清除、通知同步顺序；证据 command_lifecycle::tests::single_listener_replace_clear_and_event_order |
 | `src/utils/commitAttribution.ts` | 962 | 29594 | 重写：保持通用行为 | 待定 | 未迁移 |
