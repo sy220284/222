@@ -319,6 +319,9 @@ impl ToolExecutor {
                     Err(err) => format!("ERROR: Could not preserve large WebFetch result: {err:#}"),
                 }
             }
+            // Original Read returns the complete requested text slice, with
+            // its own file-size/token limits rather than generic tool clipping.
+            Ok(output) if call.function.name == "Read" => output,
             Ok(output) => truncate(
                 &output,
                 if shell {
@@ -380,9 +383,10 @@ impl ToolExecutor {
             bail!("Tool arguments must be a JSON object")
         }
         let name = crate::tool_names::canonical_name(&call.function.name);
+        crate::semantic_inputs::normalize_source_file_tool(&call.function.name, &mut args)?;
         crate::semantic_inputs::normalize_tool_fields(name, &mut args)?;
         match name {
-            "read_file" => self.read_file(&args),
+            "read_file" => self.read_file_with_mode(&args, call.function.name == "Read"),
             "notebook_edit" => {
                 self.require_approval("notebook_edit", &args)?;
                 let path = self.checked_path(required(&args, "notebook_path")?)?;
@@ -895,12 +899,17 @@ impl ToolExecutor {
     }
 
     fn read_file(&self, args: &Value) -> Result<String> {
+        self.read_file_with_mode(args, false)
+    }
+
+    fn read_file_with_mode(&self, args: &Value, source_read: bool) -> Result<String> {
         let requested = required(args, "path")?;
         let path = self.checked_path(requested)?;
         self.require_read_rules(requested, &path)?;
         let metadata = fs::metadata(&path)?;
-        if metadata.len() > MAX_FILE_BYTES {
-            bail!("File too large (limit {MAX_FILE_BYTES} bytes)");
+        let max_bytes = if source_read { 256 * 1024 } else { MAX_FILE_BYTES };
+        if metadata.len() > max_bytes {
+            bail!("File too large (limit {max_bytes} bytes)");
         }
         let content =
             fs::read_to_string(&path).with_context(|| format!("Reading {}", path.display()))?;
@@ -913,11 +922,17 @@ impl ToolExecutor {
             .and_then(Value::as_u64)
             .unwrap_or(1)
             .max(1) as usize;
-        let count = args
-            .get("line_count")
-            .and_then(Value::as_u64)
-            .unwrap_or(250)
-            .clamp(1, 500) as usize;
+        let count = if source_read {
+            args.get("line_count")
+                .and_then(Value::as_u64)
+                .map(|n| n.min(usize::MAX as u64) as usize)
+                .unwrap_or(usize::MAX)
+        } else {
+            args.get("line_count")
+                .and_then(Value::as_u64)
+                .unwrap_or(250)
+                .clamp(1, 500) as usize
+        };
         let result = content
             .lines()
             .enumerate()
@@ -932,7 +947,7 @@ impl ToolExecutor {
         self.file_reads.lock().unwrap().insert(path.canonicalize()?, FileReadState {
             full: unchanged && start == 1
                 && content.lines().count() <= count
-                && result.chars().count() <= MAX_OUTPUT_CHARS,
+                && (source_read || result.chars().count() <= MAX_OUTPUT_CHARS),
             content,
             timestamp_ms: before_ms,
         });
