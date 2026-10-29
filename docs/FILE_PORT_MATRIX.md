@@ -73,7 +73,7 @@
 | `src/cli/handlers/plugins.ts` | 879 | 31073 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/util.tsx` | 110 | 14501 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/ndjsonSafeStringify.ts` | 33 | 1408 | 重写：保持通用行为 | `src/ndjson.rs / src/main.rs / src/agent.rs` | 部分实现：JS 特殊行分隔符转义、SDK 输出回环与 JSON 值保持；jsonStringify 的非标准对象语义待核对 |
-| `src/cli/print.ts` | 5595 | 212735 | 重写：Headless 排队消息合并与会话执行 | `src/queued_prompt_batch.rs` / `src/sdk_queue.rs` / `src/main.rs`；SDK seed_read_state 接入共享会话已读缓存（9743d9bc），源码已提交待验收； | 部分实现：同 workload/meta 提示合并调用和去重计费、结构化 task_notification 系统事件、状态/用量解析；新增按 UUID 原始内容逐条回放（含批次合并与直接 SDK 消息），实际进程+HTTP 验证；原版全输出协议、完整消息确认/生命周期回调、远端 IO 和命令主流程仍未等价；SDK 原生取消待处理 UUID，取消后不会发送模型请求 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；队列同 workload/meta 图文合并单次模型调用及各 UUID 回放已验证；多模态 UI/非图片块仍未等价；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/资源等仍待验证；SDK initialize 已按真实插件/本地技能源文件返回描述和 argumentHint（48e34f9、2da7e57、ffd1056），仅源码提交待验收；排队命令处理、输出协议及取消时序仍未等价；SDK 非排队图文消息现在按原版识别末尾文本块斜杠命令，替换实际模型文本块并保留前置图片（64e2a9b），源码待验收；队列执行/取消仍缺 |
+| `src/cli/print.ts` | 5595 | 212735 | 重写：Headless 排队消息合并与会话执行 | `src/queued_prompt_batch.rs` / `src/sdk_queue.rs` / `src/main.rs`；SDK seed_read_state 接入共享会话已读缓存（9743d9bc），源码已提交待验收； | 部分实现：同 workload/meta 提示合并调用和去重计费、结构化 task_notification 系统事件、状态/用量解析；新增按 UUID 原始内容逐条回放（含批次合并与直接 SDK 消息），实际进程+HTTP 验证；原版全输出协议、完整消息确认/生命周期回调、远端 IO 和命令主流程仍未等价；SDK 原生取消待处理 UUID，取消后不会发送模型请求 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；队列同 workload/meta 图文合并单次模型调用及各 UUID 回放已验证；多模态 UI/非图片块仍未等价；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/资源等仍待验证；SDK initialize 已按真实插件/本地技能源文件返回描述和 argumentHint（48e34f9、2da7e57、ffd1056），仅源码提交待验收；排队命令处理、输出协议及取消时序仍未等价；SDK 非排队图文消息现在按原版识别末尾文本块斜杠命令，替换实际模型文本块并保留前置图片（64e2a9b），源码待验收；SDK side_question 独立模型调用已接线（21d3014、e165563），主模型忙碌期间 stdin 控制并发与中断仍缺；队列执行/取消仍缺 |
 | `src/cli/remoteIO.ts` | 256 | 9946 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/structuredIO.ts` | 860 | 28720 | 重写：保持通用行为 | `src/main.rs / src/agent.rs / src/sse.rs` | 部分实现：NDJSON SDK 多轮、事件和实时文本增量；控制请求体系未全等；SDK 本地控制包络初始化/状态/取消回环，其他协议仍未全等 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；多模态 UI/非图片块仍未等价|
 | `src/cli/transports/HybridTransport.ts` | 283 | 10883 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1786,7 +1786,7 @@
 | `src/utils/shell/specPrefix.ts` | 242 | 7905 | 重写：保持通用行为 | `src/generated_ports/p_10d5fd29bc5b5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/shellConfig.ts` | 168 | 4737 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sideQuery.ts` | 223 | 8184 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sideQuestion.ts` | 156 | 6133 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sideQuestion.ts` | 156 | 6133 | 重写：保持通用行为 | `src/side_question.rs / src/agent.rs / src/main.rs` | 部分实现：SDK side_question 异步单轮无工具模型调用，继承主 Agent 最近模型上下文，返回独立控制回执；交互终端 /btw 复用独立问答；源码提交 5b7c58a、174c3ed、21d3014、e165563、a4198c6，待行为验收。原版运行中主 Agent 控制并发、思考/缓存、完整取消、费用和 UI 仍未等价 |
 | `src/utils/signal.ts` | 44 | 1447 | 重写：保持通用行为 | `src/event_signal.rs` | 部分实现：事件订阅/注销/去重、清空与 JS Set 实时增删监听迭代已有测试；完整调用方和异常传播仍待核对 |
 | `src/utils/sinks.ts` | 17 | 608 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/skills/skillChangeDetector.ts` | 312 | 10033 | 重写：保持通用行为 | 待定 | 未迁移 |
