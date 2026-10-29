@@ -6118,3 +6118,58 @@ fn semantic_sessions_http_model_reorders_real_history_without_leaking_via_offlin
     assert!(request.contains("[tag: release]"));
     assert!(request.contains("Fix login issue"));
 }
+
+
+#[test]
+fn chat_semantic_session_search_is_routed_through_model_and_records_usage() {
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join(".atlas/sessions");
+    fs::create_dir_all(&dir).unwrap();
+    let id = "d6f1ba8c-a36b-40d0-8320-1d86f65b5d15";
+    fs::write(dir.join(format!("{id}.json")),json!({
+        "id":id,"custom_title":"Release work","tag":"release",
+        "messages":[{"role":"user","content":"Publish the package"}]
+    }).to_string()).unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move || {
+        let (mut stream,_) = listener.accept().unwrap();
+        let request=read_request(&mut stream);
+        let body=json!({"choices":[{
+            "message":{"role":"assistant","content":"{\"relevant_indices\":[0]}"},
+            "finish_reason":"stop"
+        }],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}).to_string();
+        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+        stream.flush().unwrap();
+        request
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"local",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let mut child=binary().args(["--workspace",root.path().to_str().unwrap(),"chat"])
+        .env("ATLAS_CONFIG",&config)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn().unwrap();
+    child.stdin.take().unwrap()
+        .write_all(b"/sessions --semantic release\n/usage\n/exit\n").unwrap();
+    let output=child.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let text=String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains(id),"{text}");
+    assert!(text.contains("Total: 6 tokens"),"{text}");
+    let request=server.join().unwrap();
+    assert!(request.contains("Publish the package"));
+    let saved=fs::read_dir(dir).unwrap()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            if entry.file_name().to_str()==Some("d6f1ba8c-a36b-40d0-8320-1d86f65b5d15.json") {
+                return None;
+            }
+            fs::read_to_string(entry.path()).ok()
+        }).collect::<Vec<_>>();
+    assert!(saved.iter().any(|item| item.contains("\"total_tokens\": 6") || item.contains("\"total_tokens\":6")), "{saved:?}");
+}
