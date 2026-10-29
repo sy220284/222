@@ -134,7 +134,10 @@ impl HttpClient {
             );
         }
         let client = Client::builder()
-            .timeout(Duration::from_secs(60))
+            // Only bound connection establishment here. Request-specific
+            // deadlines are enforced by the MCP manager; tools/call can
+            // legitimately run far longer than discovery or initialization.
+            .connect_timeout(Duration::from_secs(30))
             .redirect(reqwest::redirect::Policy::none())
             .build()?;
         let mut http = Self {
@@ -152,15 +155,16 @@ impl HttpClient {
             root: root.to_path_buf(),
             last_event_id: None,
         };
-        let initial = http
+        let initial = tokio::time::timeout(Duration::from_secs(30), http
             .request(
                 "initialize",
                 json!({
                     "protocolVersion":"2025-03-26","capabilities":{"roots":{},"elicitation":{}},
                     "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
                 }),
-            )
-            .await?;
+            ))
+            .await
+            .context("MCP HTTP initialization timed out")??;
         http.server_info = initial.get("serverInfo").cloned();
         http.capabilities = initial.get("capabilities").cloned();
         http.instructions = initial
@@ -168,7 +172,9 @@ impl HttpClient {
             .and_then(Value::as_str)
             .filter(|text| !text.trim().is_empty())
             .map(str::to_owned);
-        http.notify("notifications/initialized", json!({})).await?;
+        tokio::time::timeout(Duration::from_secs(30), http.notify("notifications/initialized", json!({})))
+            .await
+            .context("MCP HTTP initialized notification timed out")??;
         Ok(http)
     }
     fn request_headers(&self) -> HeaderMap {
@@ -208,6 +214,7 @@ impl HttpClient {
     }
     async fn post(&mut self, request: &Value, expect_response: bool) -> Result<Option<Value>> {
         let headers = self.request_headers();
+        let is_tool_call = request.get("method").and_then(Value::as_str) == Some("tools/call");
         let mut reply = self
             .client
             .post(self.url.clone())
@@ -273,8 +280,8 @@ impl HttpClient {
                 received = received
                     .checked_add(chunk.len())
                     .context("MCP SSE response length overflow")?;
-                if received > 2 * 1024 * 1024 {
-                    bail!("MCP HTTP response exceeds 2 MB")
+                if !is_tool_call && received > 2 * 1024 * 1024 {
+                    bail!("MCP HTTP control response exceeds 2 MB")
                 }
                 pending.extend_from_slice(&chunk);
                 while let Some((end, separator_len)) = sse_event_boundary(&pending) {
@@ -312,8 +319,8 @@ impl HttpClient {
         }
         if type_header.starts_with("application/json") {
             let bytes = reply.bytes().await?;
-            if bytes.len() > 2 * 1024 * 1024 {
-                bail!("MCP HTTP response exceeds 2 MB")
+            if !is_tool_call && bytes.len() > 2 * 1024 * 1024 {
+                bail!("MCP HTTP control response exceeds 2 MB")
             }
             return Ok(Some(
                 serde_json::from_slice(&bytes).context("Invalid MCP JSON response")?,
