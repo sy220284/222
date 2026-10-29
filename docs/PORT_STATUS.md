@@ -1,8 +1,15 @@
+## 2026-10-29：插件技能斜杠调用与命令目录接线（已提交、待验收）
+
+- **原版依据**：`source/src/utils/plugins/loadPluginCommands.ts:169–211,685–820` 把插件技能目录中的 `SKILL.md` 转成用户可调用命令，使用技能相对命名空间和 `user-invocable`；`source/src/skills/loadSkillsDir.ts:344–373` 提供技能目录和会话变量。
+- **Rust 可达链**：`src/main.rs::chat` 解析 `/插件:组:技能` → `plugins::command_prompt_with_session` → `manifest.skills` → `skill_files` → 真实 `SKILL.md` → frontmatter 可调用校验、参数替换、技能目录前缀及会话变量 → `Agent::ask`；`plugins::list_commands` 同时列举可执行插件技能，并过滤 `user-invocable: false` 的模型专用技能。
+- **真实提交**：`545e01caa794d670ff766ae831709bfe0acc41eb`、`e4043c4b5cf495f71a98cb9a2cefad2335513b57`。新增 **2 项用户可感知功能**：①用户直接运行插件技能斜杠命令；②`/commands` 显示可调用技能且隐藏模型专用技能。原版 SkillTool 更完整的权限和 SDK/无头路径仍缺，已提交、待验收。
+- **本轮累计**：前述插件命令 3 项、插件技能/数据目录 4 项、本节 2 项，共 **9/100，余 91**。先行 100 项独立问题清单仍未完整确认；未运行 Cargo、测试或 CI；Issue #3 冻结 362 项不变。
+
 ## 2026-10-29：插件技能自定义路径真实接线及数据目录（已提交、待验收）
 
 - **原版完整源码**：`source/src/utils/plugins/loadPluginCommands.ts:60–95,288–313,326–376,685–820`、`source/src/skills/loadSkillsDir.ts:344–373`、`source/src/tools/SkillTool/SkillTool.ts:1070–1086`、`source/src/utils/plugins/pluginDirectories.ts::pluginDataDirPath/getPluginDataDir`。原版从清单中的技能目录查找真实文件，支持技能路径、会话 ID、插件根目录及按需创建的持久数据目录变量。
 - **Rust 真实调用链**：`ToolExecutor::list_skills/read_skill` → `plugins::resolve_skill_path` → `manifest.skills` 指定目录/嵌套 `SKILL.md` → `workspace_dirs::checked_path` 和 Read 权限规则 → 实际文件读取及技能本地路径/插件根路径/会话 ID 展开。插件命令 `src/main.rs::chat` → `plugins::command_prompt_with_session` → `plugin_data_directory`，只有真正执行且引用 `${CLAUDE_PLUGIN_DATA}` 时才创建工作区 `.atlas/plugin-data/<插件名>`，防止符号链接逃逸；列举命令时不产生数据目录副作用。
-- **本次新增 Rust 提交**：`7af75f97ead51637caa167d32800d6ab104a7aa2`、`f3e7bdf8f67a4903d052ce468ac3352e36fe7f2a`、`a4c00e2dbc96aa37fd940dbbaf4a3b7032f1fe49`、`7aeb692c8266ca31e1ab0be4b56f6a47bbb08bc4`。新增 **4 项独立业务功能**：①插件自定义/嵌套技能在模型工具目录中实际可见；②模型可从清单真实位置读取该技能并执行权限检查；③技能内容展开原版技能路径/插件根路径/会话变量；④插件命令按需建立可持久保存的插件数据目录。与下方插件命令的 3 项不重复计数，**本轮合计 7/100，余 93**。
+- **本次新增 Rust 提交**：`7af75f97ead51637caa167d32800d6ab104a7aa2`、`f3e7bdf8f67a4903d052ce468ac3352e36fe7f2a`、`a4c00e2dbc96aa37fd940dbbaf4a3b7032f1fe49`、`7aeb692c8266ca31e1ab0be4b56f6a47bbb08bc4`。新增 **4 项独立业务功能**：①插件自定义/嵌套技能在模型工具目录中实际可见；②模型可从清单真实位置读取该技能并执行权限检查；③技能内容展开原版技能路径/插件根路径/会话变量；④插件命令按需建立可持久保存的插件数据目录。与下方插件命令的 3 项不重复计数，**截至该小节累计 7/100；加上上方插件技能斜杠调用 2 项，本轮累计 9/100，余 91**。
 - **差异和限制**：SDK/无头插件命令调用、插件 user-config 敏感值遮蔽、内嵌 Shell/权限、插件热更新与异步取消、完整技能模型/effort 元数据、跨平台权限和交互 UI 尚缺。已静态核对真实源码入口和提交文件，**未运行 Cargo/测试/CI**，均为“已提交、待验收”，Issue #3 冻结 362 项保持开放。先行 100 项经逐项确认的缺口清单仍未完成，流程 A/B 与本轮数量硬目标未达标。
 
 ## 2026-10-29：插件命令用户可调用边界与运行时变量（源码已提交、待验收）
