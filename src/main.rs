@@ -2107,6 +2107,33 @@ async fn chat(
                 continue;
             }
         }
+        // Plugin Markdown commands are real prompt entrypoints. Preserve the
+        // original plugin:namespace:command naming and shell-quoted argument
+        // substitution before invoking the normal Agent execution loop.
+        if let Some(parsed) = slash_command::parse_slash_command(input) {
+            if parsed.command_name.contains(':') && !parsed.is_mcp {
+                match plugins::command_prompt(
+                    agent.workspace_root(),
+                    &config.enabled_plugins,
+                    &parsed.command_name,
+                    &parsed.args,
+                ) {
+                    Ok(Some(prompt)) => {
+                        onboarding.maybe_mark_complete()?;
+                        match agent.ask(&prompt).await {
+                            Ok(answer) => println!("{answer}"),
+                            Err(error) => eprintln!("Plugin command failed: {error:#}"),
+                        }
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        eprintln!("Cannot load plugin command: {error:#}");
+                        continue;
+                    }
+                }
+            }
+        }
         // The original marks completion on prompt submission, not on a
         // successful model response; local project instructions may have
         // been created by the user outside this chat.
