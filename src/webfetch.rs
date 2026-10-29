@@ -3,13 +3,109 @@ use regex::Regex;
 use reqwest::{Client, Url};
 use serde_json::{json, Value};
 use std::{
+    collections::VecDeque,
+    fs::{self, OpenOptions},
+    io::Write,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    time::Duration,
+    path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
+    time::{Duration, Instant},
 };
+use uuid::Uuid;
 
 // Source WebFetchTool/utils.ts MAX_HTTP_CONTENT_LENGTH = 10 * 1024 * 1024.
 const MAX_BODY: usize = 10 * 1024 * 1024;
 const MAX_MARKDOWN_UTF16: usize = 100_000;
+const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+const CACHE_CAP_BYTES: usize = 50 * 1024 * 1024;
+
+struct CachedPage {
+    key: String,
+    value: Value,
+    size: usize,
+    fetched: Instant,
+}
+
+static URL_CACHE: OnceLock<Mutex<VecDeque<CachedPage>>> = OnceLock::new();
+
+fn cache() -> &'static Mutex<VecDeque<CachedPage>> {
+    URL_CACHE.get_or_init(|| Mutex::new(VecDeque::new()))
+}
+
+fn cached_page(key: &str) -> Option<Value> {
+    let mut entries = cache().lock().unwrap();
+    entries.retain(|entry| entry.fetched.elapsed() < CACHE_TTL);
+    let position = entries.iter().position(|entry| entry.key == key)?;
+    let entry = entries.remove(position)?;
+    let value = entry.value.clone();
+    // An evicted session attachment must be fetched and saved again.
+    if value.get("persistedPath").and_then(Value::as_str)
+        .is_some_and(|path| !Path::new(path).is_file()) {
+        return None;
+    }
+    entries.push_back(entry);
+    Some(value)
+}
+
+fn cache_page(key: String, value: Value, size: usize) {
+    if size > CACHE_CAP_BYTES { return; }
+    let mut entries = cache().lock().unwrap();
+    entries.retain(|entry| entry.key != key && entry.fetched.elapsed() < CACHE_TTL);
+    let mut total: usize = entries.iter().map(|entry| entry.size).sum();
+    while total.saturating_add(size) > CACHE_CAP_BYTES {
+        let Some(evicted) = entries.pop_front() else { break; };
+        total = total.saturating_sub(evicted.size);
+    }
+    entries.push_back(CachedPage { key, value, size: size.max(1), fetched: Instant::now() });
+}
+
+fn binary_mime(mime: &str) -> bool {
+    let mime = mime.split(';').next().unwrap_or("").trim();
+    if mime.is_empty() || mime.starts_with("text/") { return false; }
+    if mime == "application/json" || mime.ends_with("+json")
+        || mime == "application/xml" || mime.ends_with("+xml")
+        || mime.starts_with("application/javascript")
+        || mime == "application/x-www-form-urlencoded" { return false; }
+    true
+}
+
+fn binary_extension(mime: &str) -> &'static str {
+    match mime.split(';').next().unwrap_or("").trim() {
+        "application/pdf" => "pdf",
+        "application/zip" => "zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => "pptx",
+        "application/msword" => "doc",
+        "application/vnd.ms-excel" => "xls",
+        "audio/mpeg" => "mp3",
+        "audio/wav" => "wav",
+        "audio/ogg" => "ogg",
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/svg+xml" => "svg",
+        _ => "bin",
+    }
+}
+
+fn persist_binary(bytes: &[u8], mime: &str, root: &Path) -> Result<PathBuf> {
+    // Workspace-local tool results remain inspectable by subsequent Read/Shell
+    // calls without leaking the original provider's account/session directory.
+    let directory = root.join(".atlas").join("tool-results");
+    fs::create_dir_all(&directory)?;
+    let directory = directory.canonicalize()?;
+    let root = root.canonicalize()?;
+    if !directory.starts_with(&root) { bail!("Tool results directory escapes workspace"); }
+    let target = directory.join(format!("webfetch-{}.{}", Uuid::new_v4(), binary_extension(mime)));
+    let mut file = OpenOptions::new().write(true).create_new(true).open(&target)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    Ok(target)
+}
 
 fn acceptable_ip(ip: IpAddr) -> bool {
     match ip {
@@ -134,11 +230,18 @@ fn truncate_source_markdown(text: &str) -> String {
     out
 }
 
-async fn fetch_with_redirect_policy(
+async fn fetch_with_redirect_policy_in_workspace(
     url: &str,
     allow_private_for_test: bool,
     approve_redirect: &(impl Fn(&Url) -> Result<()> + Sync),
+    workspace: Option<&Path>,
 ) -> Result<Value> {
+    // Cache successful results under the requested URL, scoped to workspace
+    // because a binary attachment path is only valid in its own workspace.
+    let cache_key = workspace.map(|root| format!("{}\\0{url}", root.display()));
+    if let Some(value) = cache_key.as_deref().and_then(cached_page) {
+        return Ok(value);
+    }
     let mut current = Url::parse(url)?;
     // The original getURLMarkdownContent upgrades plain HTTP before its
     // initial request. The private-address override exists only for local
@@ -206,14 +309,8 @@ async fn fetch_with_redirect_policy(
             .and_then(|v| v.to_str().ok())
             .unwrap_or("")
             .to_lowercase();
-        if !(kind.is_empty()
-            || kind.contains("text")
-            || kind.contains("json")
-            || kind.contains("xml")
-            || kind.contains("html"))
-        {
-            bail!("web_fetch only accepts textual content")
-        }
+        // The original WebFetch persists binary responses for later inspection
+        // while retaining a lossy textual representation for model analysis.
         if response
             .content_length()
             .is_some_and(|n| n > MAX_BODY as u64)
@@ -233,20 +330,53 @@ async fn fetch_with_redirect_policy(
         } else {
             body.to_string()
         };
-        return Ok(json!({
+        let persisted = if binary_mime(&kind) {
+            workspace.and_then(|root| match persist_binary(&bytes, &kind, root) {
+                Ok(path) => Some(path),
+                Err(err) => {
+                    eprintln!("WebFetch binary attachment could not be saved: {err:#}");
+                    None
+                }
+            })
+        } else { None };
+        let mut content = truncate_source_markdown(&text);
+        if let Some(path) = persisted.as_ref() {
+            content.push_str(&format!(
+                "\\n\\n[Binary content ({}, {} bytes) also saved to {}]",
+                kind, bytes.len(), path.display()
+            ));
+        }
+        let mut output = json!({
             "url":current.as_str(),"code":code.as_u16(),"bytes":bytes.len(),
-            "content":truncate_source_markdown(&text)
-        }));
+            "content":content,"contentType":kind
+        });
+        if let Some(path) = persisted {
+            output["persistedPath"] = json!(path.to_string_lossy().to_string());
+            output["persistedSize"] = json!(bytes.len());
+        }
+        if let Some(key) = cache_key.as_ref() {
+            cache_page(key.clone(), output.clone(), text.len());
+        }
+        return Ok(output);
     }
     bail!("Web redirect limit exceeded")
+}
+
+async fn fetch_with_redirect_policy(
+    url: &str,
+    allow_private_for_test: bool,
+    approve_redirect: &(impl Fn(&Url) -> Result<()> + Sync),
+) -> Result<Value> {
+    fetch_with_redirect_policy_in_workspace(url, allow_private_for_test, approve_redirect, None).await
 }
 
 async fn fetch(url: &str, allow_private_for_test: bool) -> Result<Value> {
     fetch_with_redirect_policy(url, allow_private_for_test, &|_| Ok(())).await
 }
 
-pub async fn execute_with_redirect_policy(
+pub async fn execute_with_redirect_policy_in_workspace(
     args: &Value,
+    workspace: &Path,
     approve_redirect: &(impl Fn(&Url) -> Result<()> + Sync),
 ) -> Result<String> {
     let url = args
@@ -254,9 +384,17 @@ pub async fn execute_with_redirect_policy(
         .and_then(Value::as_str)
         .context("web_fetch requires url")?;
     let prompt = args.get("prompt").and_then(Value::as_str).unwrap_or("");
-    let mut output = fetch_with_redirect_policy(url, false, approve_redirect).await?;
+    let mut output = fetch_with_redirect_policy_in_workspace(url, false, approve_redirect, Some(workspace)).await?;
     output["prompt"] = json!(prompt);
     Ok(output.to_string())
+}
+
+pub async fn execute_with_redirect_policy(
+    args: &Value,
+    approve_redirect: &(impl Fn(&Url) -> Result<()> + Sync),
+) -> Result<String> {
+    let root = std::env::current_dir()?;
+    execute_with_redirect_policy_in_workspace(args, &root, approve_redirect).await
 }
 
 pub async fn execute(args: &Value) -> Result<String> {
