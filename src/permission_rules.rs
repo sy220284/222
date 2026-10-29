@@ -150,8 +150,9 @@ pub fn valid_stored_rule(raw: &str) -> bool {
             return false;
         }
     }
-    if name.starts_with("mcp__") {
-        return opens == 0;
+    if let Some(mcp_name) = name.strip_prefix("mcp__") {
+        let server = mcp_name.split("__").next().unwrap_or("");
+        return !server.is_empty() && opens == 0;
     }
     let Some(content) = value.rule_content.as_deref() else {
         return true;
@@ -915,6 +916,7 @@ mod tests {
             "WebFetch(example.com)",
             "WebSearch(foo*)",
             "mcp__server(*)",
+            "mcp__",
             "read_file(foo)",
         ] {
             assert!(!valid_stored_rule(invalid), "invalid: {invalid}");
