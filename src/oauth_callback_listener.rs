@@ -113,7 +113,15 @@ impl AuthCodeListener {
             let mut words = first_line.split_whitespace();
             let method = words.next().unwrap_or("");
             let target = words.next().unwrap_or("");
-            if method != "GET" || !target.starts_with('/') {
+            // auth-code-listener.ts attaches a Node HTTP request handler
+            // without restricting the method. Providers may redirect with
+            // POST and URL query parameters; method alone is not grounds
+            // for rejecting a callback. Keep the same pathname/state checks.
+            if !matches!(
+                method,
+                "GET" | "POST" | "HEAD" | "PUT" | "PATCH" | "DELETE" | "OPTIONS"
+            ) || !target.starts_with('/')
+            {
                 send_response(&mut stream, 400, "Bad Request", None).await?;
                 continue;
             }
