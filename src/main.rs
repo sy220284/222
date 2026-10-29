@@ -1300,6 +1300,29 @@ async fn run_cli() -> Result<()> {
     end_result
 }
 
+/// Resolve a real user-invocable skill or plugin command. Shared by the
+/// interactive CLI and SDK so the same frontmatter restrictions apply.
+fn expand_user_skill_prompt(
+    agent: &Agent, config: &Config, command: &str, args: &str, is_mcp: bool,
+) -> Result<Option<String>> {
+    if is_mcp {
+        return Ok(None);
+    }
+    if command.contains(':') {
+        return plugins::command_prompt_with_session(
+            agent.workspace_root(), &config.enabled_plugins,
+            command, args, Some(&agent.session_id()),
+        );
+    }
+    if !command.is_empty() && command.len() <= 64
+        && command.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+        && agent.workspace_root().join(".atlas/skills").join(command)
+            .join("SKILL.md").is_file() {
+        return agent.invoke_user_skill(command, args).map(Some);
+    }
+    Ok(None)
+}
+
 async fn chat(
     agent: &mut Agent,
     config: &mut Config,
@@ -2115,55 +2138,25 @@ async fn chat(
                 continue;
             }
         }
-        // Plugin Markdown commands are real prompt entrypoints. Preserve the
-        // original plugin:namespace:command naming and shell-quoted argument
-        // substitution before invoking the normal Agent execution loop.
+        // Both plugin and local skills share the SDK's real command
+        // expansion and user-invocable permission checks.
         if let Some(parsed) = slash_command::parse_slash_command(input) {
-            if parsed.command_name.contains(':') && !parsed.is_mcp {
-                match plugins::command_prompt_with_session(
-                    agent.workspace_root(),
-                    &config.enabled_plugins,
-                    &parsed.command_name,
-                    &parsed.args,
-                    Some(&agent.session_id()),
-                ) {
-                    Ok(Some(prompt)) => {
-                        onboarding.maybe_mark_complete()?;
-                        match agent.ask(&prompt).await {
-                            Ok(answer) => println!("{answer}"),
-                            Err(error) => eprintln!("Plugin command failed: {error:#}"),
-                        }
-                        continue;
+            match expand_user_skill_prompt(
+                agent, config, &parsed.command_name, &parsed.args, parsed.is_mcp,
+            ) {
+                Ok(Some(prompt)) => {
+                    onboarding.maybe_mark_complete()?;
+                    match agent.ask(&prompt).await {
+                        Ok(answer) => println!("{answer}"),
+                        Err(error) => eprintln!("Skill command failed: {error:#}"),
                     }
-                    Ok(None) => {}
-                    Err(error) => {
-                        eprintln!("Cannot load plugin command: {error:#}");
-                        continue;
-                    }
+                    continue;
                 }
-            }
-        }
-        // Project skills are user-invocable slash commands too. Resolve the
-        // actual local SKILL.md before falling back to ordinary model text;
-        // hidden user-invocable:false skills must be rejected explicitly.
-        if let Some(parsed) = slash_command::parse_slash_command(input) {
-            let name = parsed.command_name.as_str();
-            if !parsed.is_mcp && !name.contains(':')
-                && !name.is_empty() && name.len() <= 64
-                && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
-                && agent.workspace_root().join(".atlas/skills").join(name)
-                    .join("SKILL.md").is_file() {
-                match agent.invoke_user_skill(name, &parsed.args) {
-                    Ok(prompt) => {
-                        onboarding.maybe_mark_complete()?;
-                        match agent.ask(&prompt).await {
-                            Ok(answer) => println!("{answer}"),
-                            Err(error) => eprintln!("Skill execution failed: {error:#}"),
-                        }
-                    }
-                    Err(error) => eprintln!("Cannot invoke skill: {error:#}"),
+                Ok(None) => {}
+                Err(error) => {
+                    eprintln!("Cannot invoke skill command: {error:#}");
+                    continue;
                 }
-                continue;
             }
         }
         // The original marks completion on prompt submission, not on a
@@ -2277,7 +2270,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 }
                 // Preserve and validate SDK text/image blocks before routing
                 // to a provider. Never silently flatten away image payloads.
-                let user = match multimodal::parse(prompt_value) {
+                let mut user = match multimodal::parse(prompt_value) {
                     Ok(user) => user,
                     Err(error) => {
                         print_json!(json!({"type":"error",
@@ -2285,6 +2278,26 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         continue;
                     }
                 };
+                // Only plain text, non-queued SDK user messages are eligible
+                // for slash expansion. Internal channels can explicitly skip
+                // it, and mixed image content must remain unchanged.
+                if event.get("skipSlashCommands").and_then(Value::as_bool) != Some(true) {
+                    if let Some(text) = prompt_value.as_str() {
+                        if let Some(parsed) = slash_command::parse_slash_command(text) {
+                            match expand_user_skill_prompt(
+                                agent, config, &parsed.command_name, &parsed.args, parsed.is_mcp,
+                            ) {
+                                Ok(Some(expanded)) => user.preview = expanded,
+                                Ok(None) => {}
+                                Err(error) => {
+                                    print_json!(json!({"type":"error",
+                                        "message":format!("Cannot invoke skill command: {error:#}")}));
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
                 // QueryEngine normally emits this replay during ask().
                 // The Rust SDK entrypoint owns the delivery acknowledgement.
                 if event
