@@ -105,7 +105,8 @@ impl ToolExecutor {
     }
 
     pub async fn execute(&self, call: &ToolCall) -> String {
-        let shell = crate::tool_names::canonical_name(&call.function.name) == "run_command";
+        let shell = crate::tool_names::canonical_name(&call.function.name) == "run_command"
+            || call.function.name == "PowerShell";
         if shell {
             crate::command_lifecycle::notify_command_lifecycle(
                 &call.id,
@@ -226,8 +227,13 @@ impl ToolExecutor {
                 let path = self.checked_path(&record.path)?;
                 history::restore(&record, &path)
             }
-            "run_command" => {
-                self.require_approval("run_command", &args)?;
+            "run_command" | "PowerShell" => {
+                let kind = if call.function.name == "PowerShell" {
+                    crate::shell_runtime::ShellKind::Powershell
+                } else {
+                    self.shell_kind
+                };
+                self.require_approval(&call.function.name, &args)?;
                 if args
                     .get("run_in_background")
                     .and_then(Value::as_bool)
@@ -238,15 +244,16 @@ impl ToolExecutor {
                         .as_ref()
                         .context("Background tasks unavailable")?;
                     manager
-                        .start(
+                        .start_with_shell(
                             required(&args, "command")?,
                             args.get("description")
                                 .and_then(Value::as_str)
                                 .unwrap_or("Shell command"),
+                            kind,
                         )
                         .await
                 } else {
-                    self.run_command(&args).await
+                    self.run_command_with_shell(&args, kind).await
                 }
             }
             "background_list" => {
@@ -333,7 +340,7 @@ impl ToolExecutor {
 
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
         let mut security_approved = false;
-        if crate::tool_names::canonical_name(tool) == "run_command" {
+        if crate::tool_names::canonical_name(tool) == "run_command" || tool == "PowerShell" {
             if let Some(command) = args.get("command").and_then(Value::as_str) {
                 if let Some(reason) = crate::shell_quote::security_review_reason(command) {
                     if !self.interactive {
@@ -354,8 +361,9 @@ impl ToolExecutor {
         }
         // PowerShell is a separate source tool with case-insensitive cmdlet
         // and alias permissions. Never evaluate its commands under Bash rules.
-        let matched = if crate::tool_names::canonical_name(tool) == "run_command"
-            && self.shell_kind == crate::shell_runtime::ShellKind::Powershell
+        let matched = if (crate::tool_names::canonical_name(tool) == "run_command"
+            && self.shell_kind == crate::shell_runtime::ShellKind::Powershell)
+            || tool == "PowerShell"
         {
             crate::powershell_permission_matching::policy_for(
                 &self.permission_rules,
@@ -801,18 +809,33 @@ impl ToolExecutor {
         ))
     }
 
-    async fn run_command(&self, args: &Value) -> Result<String> {
+    async fn run_command_with_shell(
+        &self,
+        args: &Value,
+        kind: crate::shell_runtime::ShellKind,
+    ) -> Result<String> {
         let command = required(args, "command")?;
         let env = std::env::vars().collect::<HashMap<String, String>>();
         let secs = args
             .get("timeout_seconds")
             .and_then(Value::as_u64)
+            .or_else(|| {
+                if kind == crate::shell_runtime::ShellKind::Powershell {
+                    args.get("timeout")
+                        .and_then(Value::as_u64)
+                        .map(|ms| ms.div_ceil(1000))
+                } else {
+                    None
+                }
+            })
+            // timeout_seconds is a portable alias; the original PowerShell
+            // tool's timeout field is in milliseconds.
             .unwrap_or_else(|| crate::portable_source_utils::default_bash_timeout_ms(&env) / 1000)
             .clamp(
                 1,
                 crate::portable_source_utils::max_bash_timeout_ms(&env) / 1000,
             );
-        let mut proc = self.shell_kind.build_command(command)?;
+        let mut proc = kind.build_command(command)?;
         proc.envs(&self.session_env);
         crate::subprocess_env::apply(&mut proc);
         proc.current_dir(&self.root)
