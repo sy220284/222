@@ -2175,6 +2175,24 @@ async fn chat(
                 continue;
             }
         }
+        // /btw runs a one-turn, no-tools fork. It does not append a user
+        // message or model response to the active conversation history.
+        let mut side_parts = input.trim_start().splitn(2, char::is_whitespace);
+        if side_parts.next().is_some_and(|name| name.eq_ignore_ascii_case("/btw")) {
+            let question = side_parts.next().unwrap_or("");
+            let result = agent.side_question_request(question).and_then(|request| {
+                Ok((agent.profile().clone(), request))
+            });
+            match result {
+                Ok((profile, request)) => match side_question::answer(profile, request).await {
+                    Ok(reply) => println!("{}", reply["response"].as_str()
+                        .unwrap_or("No response received")),
+                    Err(error) => eprintln!("Side question failed: {error:#}"),
+                },
+                Err(error) => eprintln!("Side question failed: {error:#}"),
+            }
+            continue;
+        }
         // Both plugin and local skills share the SDK's real command
         // expansion and user-invocable permission checks.
         if let Some(parsed) = slash_command::parse_slash_command(input) {
