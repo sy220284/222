@@ -51,9 +51,14 @@ mod tests {
     #[test]
     fn transcript_model_follows_source_visibility_and_width() {
         let message = json!({"type":"assistant","message":{"model":"gpt-6","content":[{"type":"text","text":"hello"}]}});
-        assert_eq!(render_source_view(&json!({"message":message})), VNode::Empty);
         assert_eq!(
-            render_source_view(&json!({"isTranscriptMode":true,"message":{"type":"assistant","message":{"model":"gpt-6","content":[{"type":"tool_use"}]}}})),
+            render_source_view(&json!({"message":message})),
+            VNode::Empty
+        );
+        assert_eq!(
+            render_source_view(
+                &json!({"isTranscriptMode":true,"message":{"type":"assistant","message":{"model":"gpt-6","content":[{"type":"tool_use"}]}}})
+            ),
             VNode::Empty
         );
         let result = render_source_view(&json!({"isTranscriptMode":true,"message":message}));
