@@ -1,3 +1,9 @@
+## 2026-10-29：插件技能发现与实际读取的路径一致性（源码已提交、待验收）
+
+原版参考 `source/src/utils/plugins/pluginLoader.ts` 与 `walkPluginMarkdown.ts` 的插件技能发现流程。Rust `src/plugins.rs::list_skills` 原先只检查技能真实路径是否仍在整个工作区，允许列出指向另一个插件的符号链接技能，而 `read_skill` 会拒绝读取。现发现阶段验证 `skills` 目录及每个 `SKILL.md` 均在当前插件根目录，和读取入口保持同一授权边界。提交 `e45e4187725d7b2de90f365a96bf924615079487`、`5b52f8eaffc729008b1354e8205944da860ad9d8`。
+
+本项计 **1 条用户可感知业务链：插件技能列表与读取的安全一致性**；本轮累计 **10/100**。未运行 Cargo、测试或 CI；源码已提交、待行为验收，新增完整等价验收 0。插件全量目录、动态启停、技能参数、权限与跨插件引用仍有差异，Issue #3 冻结 362 项继续开放。
+
 ## 2026-10-29：SDK MCP 服务启停与初始化真实能力发现（已提交、待验收）
 
 - 原版依据：完整 2.1.88 `source/src/cli/print.ts:3206–3296` 的 `mcp_toggle` 持久禁用、断开并清理工具/提示词/资源；`source/src/cli/print.ts:4336–4495` 的 `handleInitializeRequest` 返回真实可调用命令与自定义代理目录。
