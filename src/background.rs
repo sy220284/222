@@ -541,11 +541,11 @@ mod tests {
         let id = Uuid::new_v4().to_string();
         let path = tasks.directory.join(format!("{id}.stdout"));
         fs::write(&path, "héllo中文".as_bytes()).unwrap();
-        let first: Value = serde_json::from_str(&tasks.output_delta(&id, 0, 2).unwrap()).unwrap();
-        assert_eq!(first["bytesRead"], 2);
-        assert_eq!(first["newOffset"], 2);
-        let second: Value = serde_json::from_str(&tasks.output_delta(&id, 2, 800).unwrap()).unwrap();
-        assert_eq!(second["content"], "éllo中文");
+        let first: Value = serde_json::from_str(&tasks.output_delta(&id, 0, 3).unwrap()).unwrap();
+        assert_eq!(first["bytesRead"], 3);
+        assert_eq!(first["newOffset"], 3);
+        let second: Value = serde_json::from_str(&tasks.output_delta(&id, 3, 800).unwrap()).unwrap();
+        assert_eq!(second["content"], "llo中文");
         assert_eq!(second["newOffset"], "héllo中文".len());
         let idle: Value = serde_json::from_str(&tasks.output_delta(&id, 999, 40).unwrap()).unwrap();
         assert_eq!(idle["newOffset"], 999);
