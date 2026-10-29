@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::SystemTime,
+    time::{Duration, Instant, SystemTime},
 };
 use walkdir::{DirEntry, WalkDir};
 
@@ -82,7 +82,9 @@ fn files_filtered<F: Fn(&Path) -> Result<bool>>(
     base: &Path,
     exclude_vcs: bool,
     allow_path: &F,
+    deadline: Option<Instant>,
 ) -> Result<Vec<PathBuf>> {
+    check_search_deadline(deadline)?;
     if base.is_file() {
         return Ok(if allow_path(base)? {
             vec![base.to_path_buf()]
@@ -99,6 +101,10 @@ fn files_filtered<F: Fn(&Path) -> Result<bool>>(
             if !allowed(entry, exclude_vcs) || filter_error.is_some() {
                 return false;
             }
+            if let Err(error) = check_search_deadline(deadline) {
+                filter_error = Some(error);
+                return false;
+            }
             if entry.depth() == 0 {
                 return true;
             }
@@ -111,6 +117,7 @@ fn files_filtered<F: Fn(&Path) -> Result<bool>>(
             }
         })
     {
+        check_search_deadline(deadline)?;
         let item = item?;
         if item.file_type().is_file() {
             result.push(item.into_path());
@@ -163,6 +170,32 @@ fn git_ignored_paths(base: &Path, paths: &[PathBuf]) -> std::collections::HashSe
         }
     }
     ignored
+}
+
+/// ripgrep.ts::ripGrep defaults to 20 seconds (60 on WSL) and reports
+/// incomplete searches as errors. Do not return partial matches as success.
+/// The provider-neutral override keeps the same positive-seconds semantics.
+fn search_deadline() -> Result<Instant> {
+    let default_seconds = if std::env::var_os("WSL_DISTRO_NAME").is_some() {
+        60
+    } else {
+        20
+    };
+    let seconds = std::env::var("ATLAS_GLOB_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|seconds| *seconds > 0)
+        .unwrap_or(default_seconds);
+    Instant::now()
+        .checked_add(Duration::from_secs(seconds))
+        .context("Search timeout exceeds supported range")
+}
+
+fn check_search_deadline(deadline: Option<Instant>) -> Result<()> {
+    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        bail!("Ripgrep search timed out before completing; results are incomplete")
+    }
+    Ok(())
 }
 
 fn sort_newest(items: &mut [PathBuf]) {
@@ -340,7 +373,7 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
         no_ignore.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
     );
-    let mut matches = files_filtered(base, false, allow_file)?
+    let mut matches = files_filtered(base, false, allow_file, None)?
         .into_iter()
         .filter(|p| {
             p.strip_prefix(base).is_ok_and(|rel| {
@@ -482,11 +515,15 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
     // GrepTool.ts explicitly passes --hidden. Hidden project files and
     // directories must be searchable; only the six VCS directories above
     // are excluded. GlobTool uses a separate --hidden configuration.
-    let mut candidates = files_filtered(base, true, allow_file)?;
+    let deadline = search_deadline()?;
+    let mut candidates = files_filtered(base, true, allow_file, Some(deadline))?;
+    check_search_deadline(Some(deadline))?;
     let ignored = git_ignored_paths(base, &candidates);
+    check_search_deadline(Some(deadline))?;
     candidates.retain(|path| !ignored.contains(path));
     sort_newest(&mut candidates);
     for path in candidates {
+        check_search_deadline(Some(deadline))?;
         // Source GrepTool.ts applies --max-columns=500 to output lines,
         // not a whole-file size cap. Large log/source files still need
         // to be searched for matches.
@@ -524,6 +561,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         if binary && base.is_dir() {
             continue;
         }
+        check_search_deadline(Some(deadline))?;
         let content = String::from_utf8_lossy(&bytes);
         let filename = relative(root, &path)?.to_string_lossy().to_string();
         if binary && mode == "content" {
@@ -565,6 +603,9 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         }
         let mut selected = vec![false; lines.len()];
         for (index, is_match) in matched.iter().enumerate() {
+            if index % 256 == 0 {
+                check_search_deadline(Some(deadline))?;
+            }
             if *is_match {
                 for at in index.saturating_sub(before)..=index.saturating_add(after).min(lines.len() - 1) {
                     selected[at] = true;
@@ -583,6 +624,9 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
             .collect::<Vec<_>>();
         let mut previous_selected = None;
         for (index, line) in lines.iter().enumerate() {
+            if index % 256 == 0 {
+                check_search_deadline(Some(deadline))?;
+            }
             if !selected[index] {
                 continue;
             }
@@ -614,6 +658,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         }
         emitted_context_file = context_enabled;
     }
+    check_search_deadline(Some(deadline))?;
     let total = matches.len();
     let page = matches
         .into_iter()
