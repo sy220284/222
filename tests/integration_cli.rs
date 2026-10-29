@@ -4484,8 +4484,12 @@ fn chat_auto_names_session_using_selected_provider_without_adding_chat_turn() {
         directory.join(format!("{id}.json")),
         json!({
             "id":id,"messages":[
-                {"role":"user","content":"Fix flaky integration tests"},
-                {"role":"assistant","content":"I checked the Rust test path"}
+                {"role":"user","content":"old context ".repeat(250)},
+                {"role":"tool","content":"PRIVATE_TOOL_OUTPUT"},
+                {"role":"assistant","content_blocks":[
+                    {"type":"text","text":"Fix flaky integration tests"},
+                    {"type":"image","data":"not text"}
+                ]}
             ]
         })
         .to_string(),
@@ -4497,6 +4501,8 @@ fn chat_auto_names_session_using_selected_provider_without_adding_chat_turn() {
         let (mut stream, _) = listener.accept().unwrap();
         let request = read_request(&mut stream);
         assert!(request.contains("Fix flaky integration tests"));
+        assert!(!request.contains("PRIVATE_TOOL_OUTPUT"));
+        assert!(!request.contains("not text"));
         assert!(request.contains("kebab-case name"));
         let body = json!({"choices":[{"message":{
             "role":"assistant","content":r#"{"name":"fix-flaky-tests"}"#
@@ -4549,7 +4555,7 @@ fn chat_auto_names_session_using_selected_provider_without_adding_chat_turn() {
     let session: Value =
         serde_json::from_slice(&fs::read(directory.join(format!("{id}.json"))).unwrap()).unwrap();
     assert_eq!(session["custom_title"], "fix-flaky-tests");
-    assert_eq!(session["messages"].as_array().unwrap().len(), 2);
+    assert_eq!(session["messages"].as_array().unwrap().len(), 3);
     assert!(session["usage"]["total_tokens"].as_u64().unwrap_or(0) >= 7);
 }
 

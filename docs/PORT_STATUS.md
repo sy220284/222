@@ -1,5 +1,12 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：会话自动命名原版近期上下文与多模态文本补全（保持部分实现）
+
+实际阅读 2.1.88 原始 `src/commands/rename/generateSessionName.ts:10–15` 与 `src/utils/sessionTitle.ts:26–58`：原版生成名称时读取用户和助手文本、提取多模态消息中的 text 块，排除工具消息，并只向模型提供对话最后 1000 个 UTF-16 代码单元。此前 Rust `src/agent.rs::rename_session_or_generate` 取前 50 条、截取最前 8000 字符、遗漏多模态文本，导致长会话按过时话题命名，纯多模态文本对话无法自动命名。
+
+现由 `src/session_control.rs::conversation_text_for_name` 统一提取用户/助手纯文本及多模态 text 块、跳过工具输出、保留最近 1000 UTF-16 单元以内的有效 Unicode 文本，并接入真实聊天 `/rename` → 模型请求 → 持久化标题链。单元测试覆盖工具结果隔离、多模态、长对话最近上下文及 Unicode；真实 CLI→模拟 HTTP 模型端到端测试验证最新多模态文本送达、工具内容不泄露、会话消息不额外增加。仍缺原版 `isMeta` / 非人工 `origin` 元数据过滤（当前 Rust Message 无对应字段）、异步取消与原版独立小模型路由/结构化输出协议，继续记为**部分实现**，不提升最终等价验收数。CI 以最新 PR HEAD 的实际结果为准。
+
+
 ## 2026-10-29：会话搜索源码对照补全（保持部分实现）
 
 对照 2.1.88 `src/utils/agenticSessionSearch.ts` 的 `logContainsQuery`、`extractMessageText`、`extractTranscript` 与会话排序规则，修复 Rust `src/session_control.rs` 只能按标题、标签、UUID 查找，无法通过摘要和真实对话内容找到历史会话的问题。现有 `sessions QUERY` 和恢复选择器复用搜索入口：标签精确匹配优先于部分标签、标题及摘要；读取首尾各 50 条消息，提取用户/助手文本及多模态文本块，跳过工具结果，限制搜索文本长度 2000 字符。增加真实持久化会话、标签优先级、摘要、多模态文本、工具输出隔离、短会话去重及长会话边界回归。
