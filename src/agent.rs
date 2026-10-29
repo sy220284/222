@@ -801,17 +801,20 @@ impl Agent {
     pub fn current_permission_mode(&self)->&'static str{
         self.permission_mode.label()
     }
-    pub fn cycle_permission_mode(&mut self)->&'static str{
-        // The command-line approval flag is an upper security bound: a user
-        // who chose read-only cannot escalate via mode cycling. Provider-side
-        // automatic classification is unavailable without explicit opt-in.
-        let next=permission_mode::next(self.permission_mode,
+    pub fn cycle_permission_mode(&mut self)->Result<&'static str>{
+        // Cycle only through modes allowed by the CLI security ceiling.
+        let mut next=permission_mode::next(self.permission_mode,
             permission_mode::Availability{
                 bypass:self.approval==Approval::Full,
                 auto_cached:false,auto_gate_live:false,
             });
-        self.permission_mode=next;
-        next.label()
+        if self.approval==Approval::ReadOnly
+            && next==permission_mode::Mode::AcceptEdits{
+            next=permission_mode::Mode::Plan;
+        }
+        // Reuse the same durable validation path as SDK and team messages.
+        self.set_sdk_permission_mode(next.label())?;
+        Ok(next.label())
     }
     pub fn set_permission_rules(&mut self, rules:&[permission_rules::RuleSetting])->Result<()>{
         self.permission_rules=permission_rules::compile_rules(rules)?;
@@ -1739,6 +1742,21 @@ mod tests {
         assert!(!worker.absorb_team_messages().unwrap());
     }
 
+    #[test]
+    fn cli_mode_cycle_persists_and_respects_read_only_ceiling(){
+        let root=tempfile::tempdir().unwrap();
+        let profile=ProviderProfile{id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),model:"mock".into(),
+            api_key_env:None,stream:false};
+        let mut agent=Agent::new(profile,root.path().to_path_buf(),
+            Approval::ReadOnly,false,5,Session::fresh()).unwrap();
+        let id=agent.session_id();
+        assert_eq!(agent.cycle_permission_mode().unwrap(),"default");
+        assert_eq!(agent.cycle_permission_mode().unwrap(),"plan");
+        assert_eq!(agent.cycle_permission_mode().unwrap(),"default");
+        let restored=Session::load(root.path(),&id).unwrap();
+        assert_eq!(restored.permission_mode.as_deref(),Some("default"));
+    }
     #[tokio::test]
     async fn resumed_teammate_restores_permission_mode_without_escalation(){
         let root=tempfile::tempdir().unwrap();
