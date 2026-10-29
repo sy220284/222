@@ -232,7 +232,10 @@ mod tests {
     async fn rejects_missing_code_and_csrf_state_without_leaking_code() {
         for (request_path, body) in [
             ("/callback?state=expected", "Authorization code not found"),
-            ("/callback?code=secret&state=other", "Invalid state parameter"),
+            (
+                "/callback?code=secret&state=other",
+                "Invalid state parameter",
+            ),
         ] {
             let mut listener = AuthCodeListener::start("/callback", None).await.unwrap();
             let port = listener.port();
@@ -256,9 +259,7 @@ mod tests {
     async fn on_ready_failure_does_not_accept_authorization_requests() {
         let mut listener = AuthCodeListener::start("/callback", None).await.unwrap();
         let result = listener
-            .wait_for_authorization("expected", || async {
-                bail!("Browser launch failed")
-            })
+            .wait_for_authorization("expected", || async { bail!("Browser launch failed") })
             .await;
         assert!(result.is_err());
         assert!(!listener.has_pending_response());
