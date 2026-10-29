@@ -233,6 +233,23 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/IdeAutoConnectDialog.tsx" => match export {
+            "view" => serde_json::to_value(super::p_01742ba7da80d::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            )).ok(),
+            "shouldShowAutoConnectDialog" => {
+                let input = args.first().unwrap_or(&Value::Null);
+                Some(Value::Bool(super::p_01742ba7da80d::should_show_auto_connect_dialog(
+                    input["supportedTerminal"] == true,
+                    &input["config"],
+                )))
+            }
+            "shouldShowDisableAutoConnectDialog" => {
+                let input = args.first().unwrap_or(&Value::Null);
+                Some(Value::Bool(super::p_01742ba7da80d::should_show_disable_auto_connect_dialog(
+                    input["supportedTerminal"] == true,
+                    &input["config"],
+                )))
+            }
             _ => None,
         },
         "src/components/IdeOnboardingDialog.tsx" => match export {
@@ -398,7 +415,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/HighlightedCode.tsx", vec![]),
         ("src/components/HighlightedCode/Fallback.tsx", vec![]),
         ("src/components/HistorySearchDialog.tsx", vec![]),
-        ("src/components/IdeAutoConnectDialog.tsx", vec![]),
+        ("src/components/IdeAutoConnectDialog.tsx", vec!["view", "shouldShowAutoConnectDialog", "shouldShowDisableAutoConnectDialog"]),
         ("src/components/IdeOnboardingDialog.tsx", vec![]),
         ("src/components/IdeStatusIndicator.tsx", vec![]),
         ("src/components/IdleReturnDialog.tsx", vec![]),
