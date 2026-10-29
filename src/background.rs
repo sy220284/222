@@ -471,7 +471,20 @@ fn read_output_range(
 }
 
 fn tail(path: &str) -> Result<String> {
-    tail_with_limit(Path::new(path), DISPLAY_CAP as u64)
+    // diskOutput.ts::getTaskOutput returns an empty transcript when an output
+    // file has already been evicted or was never created. Keep the task's
+    // status readable after a restart instead of failing the whole tool.
+    match tail_with_limit(Path::new(path), DISPLAY_CAP as u64) {
+        Ok(content) => Ok(content),
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            Ok(String::new())
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn tail_with_limit(path: &Path, max_bytes: u64) -> Result<String> {
