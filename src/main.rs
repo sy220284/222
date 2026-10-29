@@ -52,6 +52,7 @@ mod permission_settings;
 mod plugin_commands;
 mod plugin_manager;
 mod plugins;
+mod plain_text_storage;
 mod portable_async_runtime;
 mod portable_configuration;
 mod portable_ink_core;
@@ -73,12 +74,14 @@ mod reactive_store;
 mod runtime_contracts;
 mod sdk_queue;
 mod search;
+mod secure_fallback;
 mod semantic_inputs;
 mod semantic_session_search;
 mod session;
 mod session_control;
 mod shell_quote;
 mod shell_runtime;
+mod sleep_helpers;
 mod skill_arguments;
 mod slash_command;
 mod source_semantics;
@@ -311,6 +314,14 @@ enum Commands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Read, update or delete local credentials using primary/fallback stores
+    Credential {
+        action: String,
+        #[arg(long)]
+        file: Option<PathBuf>,
+        #[arg(long)]
+        fallback_file: Option<PathBuf>,
+    },
     /// Show configured providers and active default without connecting to them
     Models,
     /// Execute a single prompt; pass '-' to read the prompt from stdin
@@ -352,6 +363,60 @@ enum Commands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
+        Commands::Credential {
+            action,
+            file,
+            fallback_file,
+        } => {
+            use secure_fallback::SecureStorage;
+            let selected = match file {
+                Some(path) => path.clone(),
+                None => plain_text_storage::PlainTextStorage::default_location()
+                    .ok_or_else(|| anyhow::anyhow!("Cannot determine credential directory"))?
+                    .path,
+            };
+            let primary: std::sync::Arc<dyn SecureStorage> =
+                std::sync::Arc::new(plain_text_storage::PlainTextStorage::new(selected));
+            let storage: std::sync::Arc<dyn SecureStorage> =
+                if let Some(path) = fallback_file {
+                    std::sync::Arc::new(secure_fallback::FallbackStorage::new(
+                        primary,
+                        std::sync::Arc::new(plain_text_storage::PlainTextStorage::new(
+                            path.clone(),
+                        )),
+                    ))
+                } else {
+                    primary
+                };
+            match action.as_str() {
+                "read" => println!("{}", serde_json::to_string_pretty(&storage.read())?),
+                "write" => {
+                    let mut text = String::new();
+                    io::stdin().read_to_string(&mut text)?;
+                    let value: Value = serde_json::from_str(&text)?;
+                    let result = storage.update(value);
+                    if !result.success {
+                        bail!("Unable to persist credentials");
+                    }
+                    if let Some(warning) = result.warning {
+                        eprintln!("{warning}");
+                    }
+                    println!("Credentials updated");
+                }
+                "delete" => {
+                    if !storage.delete() {
+                        bail!("Unable to delete stored credentials");
+                    }
+                    println!("Credentials deleted");
+                }
+                "status" => println!("{}", serde_json::to_string_pretty(&json!({
+                    "storage":storage.name(),
+                    "available":storage.read().is_some()
+                }))?),
+                _ => bail!("Credential action must be read, write, delete, or status"),
+            }
+            return Ok(());
+        }
         Commands::Plugin { args } => {
             let root = canonical_workspace(&cli.workspace)?;
             let command = plugin_commands::parse_plugin_args(Some(&args.join(" ")));
