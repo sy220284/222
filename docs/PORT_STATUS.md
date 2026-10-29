@@ -320,8 +320,8 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 
 原始源码对照：2.1.88 `src/services/mcp/client.ts` 的 `ListRootsRequestSchema`（返回工作目录 file URI）、`ElicitRequestSchema` 初始化阶段安全取消，以及 MCP SDK 双向 JSON-RPC 调用。原版的交互式 elicitation 回调仍须迁移，不以本次默认取消冒充完整功能。
 
-Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 ID 匹配之前处理，避免双方独立 ID 空间冲突；实现 `roots/list`、`ping`、`elicitation/create` 安全取消、未知方法 `-32601` 回执，初始化时向服务器声明根目录能力。`src/mcp_http.rs` 对 Streamable HTTP SSE 收到的服务端请求使用同会话、同协议头的独立 POST 回执，同时保持原始 SSE 长连接，不必等待 EOF 才取得工具结果；stdio 与 HTTP 复用请求语义。
+Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 ID 匹配之前处理，避免双方独立 ID 空间冲突；实现 `roots/list`、`ping`、`elicitation/create` 安全取消、未知方法 `-32601` 回执，初始化时按原版以空 `roots`/`elicitation` 对象声明能力，避免 Java MCP 服务端不兼容。`src/mcp_http.rs` 对 Streamable HTTP SSE 收到的服务端请求使用同会话、同协议头的独立 POST 回执，同时保持原始 SSE 长连接，不必等待 EOF 才取得工具结果；stdio 与 HTTP 复用请求语义。
 
-验证：真实 stdio Shell 子进程先请求根目录、用户确认与 ping，收到回执才完成工具发现；真实 TCP HTTP 服务在保持 SSE 连接期间依次请求根目录和 ping，检查 session ID、回执及工具目录返回。补充未知方法/通知/字符串请求 ID 边界测试。中途发现一次 Rust 可变借用编译错误及一次测试错误假设 JSON 字段顺序，已分别修复。最终代码 HEAD `fd6268eeb0cff05c5228cc47dad6f94d1189f10f` 的 GitHub Actions [40812658649](https://github.com/sy220284/222/actions/runs/40812658649) 编译及全部 268 项测试通过（212 单元、51 CLI、2 Hooks、1 台账、2 隐私）。
+验证：真实 stdio Shell 子进程先请求根目录、用户确认与 ping，收到回执才完成工具发现；真实 TCP HTTP 服务在保持 SSE 连接期间依次请求根目录和 ping，检查 session ID、回执及工具目录返回。补充未知方法/通知/字符串请求 ID 边界测试。中途发现一次 Rust 可变借用编译错误及一次测试错误假设 JSON 字段顺序，已分别修复。最终代码 HEAD `f6013f0c774e3940abe780dc70f7d433fc15922b` 的 GitHub Actions [40812932222](https://github.com/sy220284/222/actions/runs/40812932222) 编译及全部 268 项测试通过（212 单元、51 CLI、2 Hooks、1 台账、2 隐私）。
 
 未闭环：HTTP 独立 GET 通知流、旧 SSE/其他传输、服务器交互式 elicitation、sampling/用户权限回调、完整异步中断/恢复和终端 UI。以上原路径继续保留“部分实现”；Issue #3 固定 362 项不勾选，迁移分类仍为 1,906 = 22 排除 + 375 部分实现 + 1,480 未迁移 + 29 已验收，非排除尚有 1,855 条未完成最终等价。
