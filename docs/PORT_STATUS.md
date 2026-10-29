@@ -233,3 +233,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：统一 Issue #3，MCP 资源/提示/模板与 SDK 实际控制链
 
 本轮继续对照原始 `services/mcp/client.ts` 的 `fetchResourcesForClient`、`fetchCommandsForClient`、`resources/read`、`prompts/get`。新增 MCP 资源、资源模板、提示目录的逐服务器分页读取，目录项保留全部服务器元数据与服务名且单服务器失败隔离；支持 URI 资源内容（保留图片/二进制 blob 的结构）和命名提示（限定字符串参数），直接连接 Agent 与 SDK 嵌套/平铺控制指令 `mcp_resources`、`mcp_prompts`、`mcp_resource_templates`、`mcp_read_resource`、`mcp_get_prompt`。加 20 页/千项上限、重复游标检测与超时。真实 stdio 服务通过 SDK 进程完成两页资源、模板、提示内容读写和非法参数检查。原版 MCP Prompt 到 slash command 的动态挂载、资源订阅、完整重连/认证与 UI 生命周期仍未实现，保持 4 个源路径部分实现。
+
+### 2026-10-29：原始子代理生命周期 Hook 接入真实 Agent/团队执行路径（统一任务 #3）
+
+对照原始 `utils/hooks.ts` 中 `executeSubagentStartHooks`（agent_id/type、按 agent_type matcher）、`SubagentStop`（最后回复/日志位置）及 `executeTeammateIdleHooks`（队员转为空闲）。Rust `HookEvent` 扩展常见原始 Hook 事件名称；非仅枚举：`run_subagent` 先执行 SubagentStart，阻止时不发起子模型请求；完成后即使模型失败仍尝试 SubagentStop；始终做 SessionEnd 收尾并汇总费用。`run_team` 同样在并发成员启动/结束/空闲之前调用对应生命周期 Hook，并让阻断状态体现在成员结果里而不是虚报成功。新增真实 HTTP 模拟模型驱动的父->子->父请求集成测试、SubagentStart 否决导致子模型不执行测试、事件参数与 matcher 测试。原始 Hook 串并联调度、停止恢复重试、全部事件触发点、HTTP/Agent/Prompt 类型与 UI 状态尚未迁移，不能升级验收。

@@ -24,6 +24,21 @@ pub enum HookEvent {
     PostCompact,
     TaskCreated,
     TaskCompleted,
+    SubagentStart,
+    SubagentStop,
+    TeammateIdle,
+    PermissionRequest,
+    PermissionDenied,
+    Notification,
+    ConfigChange,
+    InstructionsLoaded,
+    FileChanged,
+    Elicitation,
+    ElicitationResult,
+    StopFailure,
+    Setup,
+    WorktreeCreate,
+    WorktreeRemove,
 }
 
 impl HookEvent {
@@ -40,6 +55,21 @@ impl HookEvent {
             Self::PostCompact => "PostCompact",
             Self::TaskCreated => "TaskCreated",
             Self::TaskCompleted => "TaskCompleted",
+            Self::SubagentStart => "SubagentStart",
+            Self::SubagentStop => "SubagentStop",
+            Self::TeammateIdle => "TeammateIdle",
+            Self::PermissionRequest => "PermissionRequest",
+            Self::PermissionDenied => "PermissionDenied",
+            Self::Notification => "Notification",
+            Self::ConfigChange => "ConfigChange",
+            Self::InstructionsLoaded => "InstructionsLoaded",
+            Self::FileChanged => "FileChanged",
+            Self::Elicitation => "Elicitation",
+            Self::ElicitationResult => "ElicitationResult",
+            Self::StopFailure => "StopFailure",
+            Self::Setup => "Setup",
+            Self::WorktreeCreate => "WorktreeCreate",
+            Self::WorktreeRemove => "WorktreeRemove",
         }
     }
 }
@@ -252,6 +282,39 @@ async fn read_limited<R: tokio::io::AsyncRead + Unpin>(reader: &mut R, max: usiz
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn subagent_matcher_receives_type_and_flattened_agent_identity(){
+        let hook=HookRunner::new(&[
+            HookRule{event:HookEvent::SubagentStart,
+                matcher:Some("^explore$".into()),
+                command:"cat | grep -q '\"agent_id\":\"worker-1\"'".into(),
+                timeout_seconds:3},
+            HookRule{event:HookEvent::SubagentStart,
+                matcher:Some("^plan$".into()),
+                command:"echo 'wrong hook' >&2; exit 2".into(),
+                timeout_seconds:3},
+        ]).unwrap();
+        let out=hook.run(HookEvent::SubagentStart,Some("explore"),
+            json!({"agent_id":"worker-1","agent_type":"explore"})).await.unwrap();
+        assert!(out.blocking_reason.is_none());
+        let skipped=hook.run(HookEvent::SubagentStart,Some("general"),
+            json!({"agent_id":"worker-1","agent_type":"general"})).await.unwrap();
+        assert!(skipped.blocking_reason.is_none());
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn subagent_stop_blocking_does_not_mutate_prior_tool_output(){
+        let hook=HookRunner::new(&[HookRule{event:HookEvent::SubagentStop,
+            matcher:Some("^general$".into()),
+            command:"echo 'review not complete' >&2; exit 2".into(),
+            timeout_seconds:3}]).unwrap();
+        let result=hook.run(HookEvent::SubagentStop,Some("general"),
+            json!({"agent_id":"worker-1","agent_type":"general",
+                "last_assistant_message":"File was edited"})).await.unwrap();
+        assert_eq!(result.blocking_reason.as_deref(),Some("review not complete"));
+    }
     #[test]
     fn validates_hook_configuration() {
         assert!(HookRunner::new(&[HookRule {

@@ -422,13 +422,42 @@ impl Agent {
                     child.attach_mcp(&mcps).await?;
                     child.attach_lsp(&lsps).await?;
                     child.attach_hooks(&hooks).await?;
-                    let output=Box::pin(child.ask(&prompt)).await;
+                    let run=async{
+                        let start=child.hooks.run(HookEvent::SubagentStart,Some(&name),
+                            json!({"agent_id":session_id,"agent_type":name})).await?;
+                        if let Some(reason)=start.blocking_reason{
+                            bail!("SubagentStart hook blocked: {reason}")
+                        }
+                        if start.prevent_continuation{bail!("SubagentStart hook stopped continuation")}
+                        let output=Box::pin(child.ask(&prompt)).await;
+                        let transcript=child.root.join(".atlas/sessions")
+                            .join(format!("{session_id}.json"));
+                        let stop=child.hooks.run(HookEvent::SubagentStop,Some(&name),
+                            json!({"agent_id":session_id,"agent_type":name,
+                                "agent_transcript_path":transcript,
+                                "last_assistant_message":output.as_ref().ok()})).await;
+                        let idle=child.hooks.run(HookEvent::TeammateIdle,None,
+                            json!({"teammate_name":name,"team_name":child.team_name,
+                                "agent_id":session_id})).await;
+                        let answer=output?;
+                        let stop=stop?;
+                        if let Some(reason)=stop.blocking_reason{
+                            bail!("SubagentStop hook blocked: {reason}")
+                        }
+                        if stop.prevent_continuation{bail!("SubagentStop hook stopped continuation")}
+                        let idle=idle?;
+                        if let Some(reason)=idle.blocking_reason{
+                            bail!("TeammateIdle hook blocked: {reason}")
+                        }
+                        if idle.prevent_continuation{bail!("TeammateIdle hook stopped continuation")}
+                        Ok::<_,anyhow::Error>(answer)
+                    }.await;
                     let finalized=child.finish().await;
                     // An unsuccessful model run can still have billed API usage
                     // and tool edits: collect accounting before propagating its error.
                     let usage=child.session.usage;
                     let cost=child.session.cost.clone();
-                    let outcome=match (output,finalized) {
+                    let outcome=match (run,finalized) {
                         (Err(error),_)=>Err(error),
                         (Ok(_),Err(error))=>Err(error),
                         (Ok(answer),Ok(()))=>Ok((session_id,answer)),
@@ -521,17 +550,50 @@ impl Agent {
         child.model_prices = self.model_prices.clone();
         child.permission_mode = self.permission_mode;
         let child_id = child.session_id();
+        let agent_type=args.get("subagent_type").or_else(||args.get("agent_type"))
+            .and_then(serde_json::Value::as_str).unwrap_or("general").to_owned();
         let result = async {
             child.attach_mcp(&self.mcp_configs).await?;
             child.attach_lsp(&self.lsp_configs).await?;
             child.attach_hooks(&self.hook_rules).await?;
+            let start=child.hooks.run(HookEvent::SubagentStart,Some(&agent_type),
+                json!({"agent_id":child_id,"agent_type":agent_type})).await?;
+            if let Some(reason)=start.blocking_reason {
+                bail!("SubagentStart hook blocked: {reason}")
+            }
+            if start.prevent_continuation {
+                bail!("SubagentStart hook stopped continuation")
+            }
             // Box the nested agent future to keep the recursive async type finite.
             let response = Box::pin(child.ask(prompt)).await;
-            let finalization = child.finish().await;
-            let answer = response?;
-            finalization?;
+            // The finish hook is invoked even if the provider request failed,
+            // so external cleanup hooks are not silently skipped.
+            let transcript=child.root.join(".atlas/sessions")
+                .join(format!("{child_id}.json"));
+            let stop=child.hooks.run(HookEvent::SubagentStop,Some(&agent_type),
+                json!({"agent_id":child_id,"agent_type":agent_type,
+                    "agent_transcript_path":transcript,
+                    "last_assistant_message":response.as_ref().ok()})).await;
+            if let Ok(outcome)=&stop {
+                if let Some(reason)=&outcome.blocking_reason {
+                    bail!("SubagentStop hook blocked: {reason}")
+                }
+                if outcome.prevent_continuation {
+                    bail!("SubagentStop hook stopped continuation")
+                }
+            }
+            let answer=response?;
+            stop?;
             Ok::<_, anyhow::Error>(answer)
         }.await;
+        // Always finalize even when a SubagentStart hook blocks or the provider
+        // fails. The run outcome and billed usage are preserved.
+        let finished=child.finish().await;
+        let result=match (result,finished){
+            (Err(error),_)=>Err(error),
+            (Ok(_),Err(error))=>Err(error),
+            (Ok(answer),Ok(()))=>Ok(answer)
+        };
         let isolation_result = if let Some(w) = worktree {
             Some(w.finish().await?)
         } else { None };

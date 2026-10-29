@@ -2148,3 +2148,115 @@ done"#;
     assert!(find("prompt").to_string().contains("Analyze deeply"),"{outputs}");
     assert!(!find("invalid").to_string().contains("Analyze deeply"));
 }
+
+
+#[cfg(unix)]
+#[test]
+fn delegated_subagent_real_model_run_triggers_start_and_stop_hooks(){
+    let root=tempfile::tempdir().unwrap();
+    let start_file=root.path().join("start-hook.json");
+    let stop_file=root.path().join("stop-hook.json");
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut seen=Vec::new();
+        for index in 0..3 {
+            let (mut stream,_)=listener.accept().unwrap();
+            seen.push(read_request(&mut stream));
+            let reply=match index{
+                0=>json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"child-1","type":"function","function":{
+                        "name":"spawn_agent","arguments":json!({
+                            "prompt":"Write a brief findings summary",
+                            "subagent_type":"explore"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                1=>json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Child finished investigation"},"finish_reason":"stop"}]}),
+                _=>json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Parent completed delegation"},"finish_reason":"stop"}]})
+            };
+            let body=reply.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            stream.flush().unwrap();
+        }
+        seen
+    });
+    let config=root.path().join("model.json");
+    fs::write(&config,json!({
+        "default_provider":"mock",
+        "providers":[{"id":"mock","kind":"openai-compatible","model":"unit",
+            "base_url":format!("http://{address}/v1")}],
+        "hooks":[
+            {"event":"SubagentStart","matcher":"^explore$",
+                "command":format!("cat > '{}'",start_file.display())},
+            {"event":"SubagentStop","matcher":"^explore$",
+                "command":format!("cat > '{}'",stop_file.display())}
+        ]
+    }).to_string()).unwrap();
+    let run=binary().args([
+        "--workspace",root.path().to_str().unwrap(),
+        "--approval","full","run","Delegate this task"
+    ]).env("ATLAS_CONFIG",&config).output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(run.status.success(),"{}",String::from_utf8_lossy(&run.stderr));
+    assert!(String::from_utf8_lossy(&run.stdout).contains("Parent completed delegation"));
+    assert!(requests[0].contains("Delegate this task"));
+    assert!(requests[1].contains("Write a brief findings summary"));
+    assert!(requests[2].contains("Child finished investigation"));
+    let start:Value=serde_json::from_slice(&fs::read(&start_file).unwrap()).unwrap();
+    let stop:Value=serde_json::from_slice(&fs::read(&stop_file).unwrap()).unwrap();
+    assert_eq!(start["hook_event_name"],"SubagentStart");
+    assert_eq!(stop["hook_event_name"],"SubagentStop");
+    assert_eq!(start["agent_type"],"explore");
+    assert_eq!(stop["agent_type"],"explore");
+    assert_eq!(start["agent_id"],stop["agent_id"]);
+    assert_eq!(stop["last_assistant_message"],"Child finished investigation");
+    assert!(stop["agent_transcript_path"].as_str().unwrap().contains(".atlas/sessions/"));
+}
+
+#[cfg(unix)]
+#[test]
+fn blocking_subagent_start_hook_prevents_child_provider_request(){
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for index in 0..2{
+            let (mut stream,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut stream));
+            let reply=if index==0{
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"blocked-child","type":"function","function":{
+                        "name":"spawn_agent","arguments":"{\"prompt\":\"must not run\"}"
+                    }}]},"finish_reason":"tool_calls"}]})
+            }else{
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Delegation rejected"},"finish_reason":"stop"}]})
+            };
+            let body=reply.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({
+        "default_provider":"mock",
+        "providers":[{"id":"mock","kind":"openai-compatible","model":"unit",
+            "base_url":format!("http://{address}/v1")}],
+        "hooks":[{"event":"SubagentStart","command":"echo 'review denied' >&2; exit 2"}]
+    }).to_string()).unwrap();
+    let output=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","full","run","Delegation test"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert_eq!(requests.len(),2);
+    assert!(!requests[1].contains("must not run"));
+    assert!(requests[1].contains("SubagentStart hook blocked"));
+    assert!(requests[1].contains("review denied"));
+}
