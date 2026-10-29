@@ -350,6 +350,10 @@ impl Agent {
 
     /// print.ts::set_max_thinking_tokens is session-local and applies to
     /// subsequent requests, including after an SDK model switch.
+    pub fn sdk_thinking_budget(&self) -> Option<u32> {
+        self.sdk_thinking_budget
+    }
+
     pub fn set_sdk_thinking_budget(&mut self, budget: Option<u32>) -> Result<()> {
         self.provider.set_thinking_budget(budget)?;
         self.sdk_thinking_budget = budget;
