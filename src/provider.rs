@@ -110,9 +110,7 @@ impl ModelProvider for OpenAiCompatible {
             post = post.bearer_auth(key);
         }
         let response = send_model_request(post).await.context("Model request failed")?;
-        let status = response.status();
-        let value: Value = read_response(response).await?;
-        if !status.is_success() { bail!("Model HTTP {status}: {}", error_summary(&value)); }
+        let value: Value = read_model_response(response).await?;
         let choice = value.get("choices").and_then(Value::as_array)
             .and_then(|a| a.first()).context("Model returned no choices")?;
         let mut message: Message = serde_json::from_value(choice.get("message")
@@ -204,9 +202,7 @@ impl ModelProvider for Gemini {
             .header("x-goog-api-key", &self.key)
             .json(&body);
         let response = send_model_request(response).await.context("Gemini request failed")?;
-        let status = response.status();
-        let value = read_response(response).await?;
-        if !status.is_success() { bail!("Model HTTP {status}: {}", error_summary(&value)); }
+        let value: Value = read_model_response(response).await?;
         let candidate = value.get("candidates").and_then(Value::as_array)
             .and_then(|a| a.first()).context("Model returned no candidates")?;
         let parts = candidate.pointer("/content/parts").and_then(Value::as_array)
@@ -285,6 +281,18 @@ pub(crate) fn parse_gemini_usage(value: &Value) -> Option<TokenUsage> {
         web_search_requests: usage.get("webSearchRequests").and_then(Value::as_u64).unwrap_or(0),
         ..Default::default()
     })
+}
+
+async fn read_model_response(response: reqwest::Response) -> Result<Value> {
+    let status=response.status();
+    if !status.is_success() {
+        let body=response.text().await?;
+        let summary=serde_json::from_str::<Value>(&body)
+            .map(|value|error_summary(&value))
+            .unwrap_or_else(|_|body.chars().take(500).collect());
+        bail!("Model HTTP {status}: {summary}");
+    }
+    read_response(response).await
 }
 
 async fn read_response(response: reqwest::Response) -> Result<Value> {
