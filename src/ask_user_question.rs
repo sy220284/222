@@ -92,6 +92,7 @@ fn read_selection(reader: &mut impl BufRead, writer: &mut impl Write) -> Result<
 pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write) -> Result<Value> {
     let questions = validate(input)?;
     let mut answers = Map::new();
+    let mut annotations = Map::new();
     for q in questions {
         let question = q["question"].as_str().expect("validated");
         let opts = q["options"].as_array().expect("validated");
@@ -115,7 +116,7 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
             }
         }
         writeln!(writer, "  0) Other (enter a custom answer)")?;
-        let answer = loop {
+        let (answer, selected_indices) = loop {
             let raw = read_selection(reader, writer)?;
             let selections: Vec<&str> = raw.split(',').map(str::trim).collect();
             if selections.len() > 1 && !multiple {
@@ -156,17 +157,44 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
                     writeln!(writer, "Answer cannot be empty.")?;
                     continue;
                 }
-                break custom.trim().to_string();
+                break (custom.trim().to_string(), Vec::new());
             }
-            break selected
+            let answer = selected
                 .iter()
                 .map(|n| opts[n - 1]["label"].as_str().expect("validated"))
                 .collect::<Vec<_>>()
                 .join(", ");
+            break (answer, selected);
         };
+        // The original AskUserQuestion result carries the selected preview and
+        // user-authored notes as per-question annotations. Never trust the
+        // model-supplied input.annotations: collect both from the actual
+        // terminal interaction instead.
+        let previews = selected_indices
+            .iter()
+            .filter_map(|index| opts[index - 1].get("preview").and_then(Value::as_str))
+            .filter(|preview| !preview.is_empty())
+            .collect::<Vec<_>>();
+        if !previews.is_empty() {
+            let mut annotation = Map::new();
+            annotation.insert("preview".to_owned(), Value::String(previews.join("\n\n")));
+            write!(writer, "Optional notes for this selection (Enter to skip): ")?;
+            writer.flush()?;
+            let mut note = String::new();
+            // A closed input stream means there are no additional notes;
+            // the user's already-confirmed choice must not be discarded.
+            if reader.read_line(&mut note)? > 0 && !note.trim().is_empty() {
+                annotation.insert("notes".to_owned(), Value::String(note.trim().to_owned()));
+            }
+            annotations.insert(question.to_owned(), Value::Object(annotation));
+        }
         answers.insert(question.to_owned(), Value::String(answer));
     }
-    Ok(json!({"questions":questions,"answers":answers}))
+    let mut result = json!({"questions":questions,"answers":answers});
+    if !annotations.is_empty() {
+        result["annotations"] = Value::Object(annotations);
+    }
+    Ok(result)
 }
 
 pub fn ask_from_terminal(input: &Value) -> Result<Value> {
