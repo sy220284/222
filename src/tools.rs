@@ -208,9 +208,12 @@ fn read_editable_text(path: &Path) -> Result<EditableText> {
     })
 }
 
-fn write_editable_text(path: &Path, content: &str, encoding: TextEncoding, crlf: bool) -> Result<()> {
-    let normalized = content.replace("\r\n", "\n");
-    let text = if crlf { normalized.replace('\n', "\r\n") } else { normalized };
+fn write_editable_text(path: &Path, content: &str, encoding: TextEncoding, crlf: Option<bool>) -> Result<()> {
+    let text = match crlf {
+        Some(true) => content.replace("\r\n", "\n").replace('\n', "\r\n"),
+        Some(false) => content.replace("\r\n", "\n"),
+        None => content.to_owned(), // FileWriteTool honors explicit model newlines.
+    };
     match encoding {
         TextEncoding::Utf8 => fs::write(path, text.as_bytes())?,
         TextEncoding::Utf8Bom => {
@@ -1333,7 +1336,7 @@ impl ToolExecutor {
             } else {
                 TextEncoding::Utf8
             };
-            write_editable_text(&path, content, encoding, false)?;
+            write_editable_text(&path, content, encoding, None)?;
         }
         if !existed || before.is_some() {
             self.metrics.record_change(before.as_deref(), content);
@@ -1398,7 +1401,7 @@ impl ToolExecutor {
         if updated.len() as u64 > MAX_FILE_BYTES {
             bail!("Updated file too large")
         }
-        write_editable_text(&path, &updated, original_text.encoding, original_text.crlf)?;
+        write_editable_text(&path, &updated, original_text.encoding, Some(original_text.crlf))?;
         self.metrics.record_change(Some(content), &updated);
         let metadata = fs::metadata(&path)?;
         self.file_reads.lock().unwrap().insert(key, FileReadState {
