@@ -452,7 +452,13 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
     } else {
         relative_pattern.to_owned()
     };
-    let compiled = matcher(&normalized_pattern)?;
+    // utils/glob.ts passes the user's pattern as a ripgrep --glob argument.
+    // A leading ! is a negative glob: discover all files except its matches.
+    let (exclude_pattern, effective_pattern) = match normalized_pattern.strip_prefix('!') {
+        Some(negative) => (true, negative),
+        None => (false, normalized_pattern.as_str()),
+    };
+    let compiled = matcher(effective_pattern)?;
     let hidden = std::env::var("ATLAS_GLOB_HIDDEN")
         .ok()
         .filter(|value| !value.is_empty())
@@ -476,7 +482,7 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
         .into_iter()
         .filter(|p| {
             p.strip_prefix(base).is_ok_and(|rel| {
-                matching(&compiled, rel)
+                (matching(&compiled, rel) != exclude_pattern)
                     && (include_hidden
                         || !rel
                             .components()
