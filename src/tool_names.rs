@@ -21,6 +21,9 @@ pub const EXIT_PLAN_MODE_V2_TOOL_NAME: &str = EXIT_PLAN_MODE_TOOL_NAME;
 pub fn canonical_name(name: &str) -> &str {
     match name {
         BASH_TOOL_NAME => "run_command",
+        "Read" => "read_file",
+        "Edit" => "edit_file",
+        "Write" => "write_file",
         NOTEBOOK_EDIT_TOOL_NAME => "notebook_edit",
         TASK_OUTPUT_TOOL_NAME | "AgentOutputTool" | "BashOutputTool" => "task_output",
         "TaskStop" => "task_stop",
