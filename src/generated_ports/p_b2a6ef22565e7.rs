@@ -1,6 +1,5 @@
 //! Rust exports derived from original: src/utils/secureStorage/macOsKeychainHelpers.ts
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub fn CREDENTIALS_SERVICE_SUFFIX() -> Value {
     serde_json::from_str(r#""-credentials""#).expect("Valid source constant")

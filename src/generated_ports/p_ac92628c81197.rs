@@ -10,8 +10,6 @@ pub enum PromptVariant {
     stated_intent,
 }
 
-use serde_json::json;
-
 pub fn getPromptVariant(args: &[Value]) -> Value {
     Value::String("user_intent".into())
 }

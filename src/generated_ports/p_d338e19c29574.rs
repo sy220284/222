@@ -1,6 +1,5 @@
 //! Rust exports derived from original: src/keybindings/reservedShortcuts.ts
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub fn NON_REBINDABLE() -> Value {
     serde_json::from_str(r#"[{"key":"ctrl+c","reason":"Cannot be rebound - used for interrupt/exit (hardcoded)","severity":"error"},{"key":"ctrl+d","reason":"Cannot be rebound - used for exit (hardcoded)","severity":"error"},{"key":"ctrl+m","reason":"Cannot be rebound - identical to Enter in terminals (both send CR)","severity":"error"}]"#).expect("Valid source constant")

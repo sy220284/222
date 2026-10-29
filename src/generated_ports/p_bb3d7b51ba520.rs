@@ -12,7 +12,7 @@ pub fn isMarketplaceSourceSupportedByZipCache(args: &[Value]) -> Value {
         ]),
         "includes",
         &[super::runtime::property(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             "source",
         )],
     )

@@ -9,7 +9,7 @@ pub fn keystrokesEqual(args: &[Value]) -> Value {
                 &super::runtime::and(
                     &super::runtime::strict_equal(
                         &super::runtime::property(
-                            &args.get(0).cloned().unwrap_or(Value::Null),
+                            &args.first().cloned().unwrap_or(Value::Null),
                             "key",
                         ),
                         &super::runtime::property(
@@ -19,7 +19,7 @@ pub fn keystrokesEqual(args: &[Value]) -> Value {
                     ),
                     &super::runtime::strict_equal(
                         &super::runtime::property(
-                            &args.get(0).cloned().unwrap_or(Value::Null),
+                            &args.first().cloned().unwrap_or(Value::Null),
                             "ctrl",
                         ),
                         &super::runtime::property(
@@ -30,7 +30,7 @@ pub fn keystrokesEqual(args: &[Value]) -> Value {
                 ),
                 &super::runtime::strict_equal(
                     &super::runtime::property(
-                        &args.get(0).cloned().unwrap_or(Value::Null),
+                        &args.first().cloned().unwrap_or(Value::Null),
                         "shift",
                     ),
                     &super::runtime::property(
@@ -41,8 +41,11 @@ pub fn keystrokesEqual(args: &[Value]) -> Value {
             ),
             &super::runtime::strict_equal(
                 &super::runtime::or(
-                    &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "alt"),
-                    &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "meta"),
+                    &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "alt"),
+                    &super::runtime::property(
+                        &args.first().cloned().unwrap_or(Value::Null),
+                        "meta",
+                    ),
                 ),
                 &super::runtime::or(
                     &super::runtime::property(&args.get(1).cloned().unwrap_or(Value::Null), "alt"),
@@ -51,7 +54,7 @@ pub fn keystrokesEqual(args: &[Value]) -> Value {
             ),
         ),
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "super"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "super"),
             &super::runtime::property(&args.get(1).cloned().unwrap_or(Value::Null), "super"),
         ),
     )
