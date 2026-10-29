@@ -69,7 +69,7 @@ fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
                 let command = hook.get("command").and_then(Value::as_str)
                     .context("Plugin command hook requires command")?;
                 let timeout_seconds = match hook.get("timeout") {
-                    Some(v) => v.as_u64().context("Plugin hook timeout must be a nonnegative integer")?,
+                    Some(v) => v.as_u64().context("Plugin hook timeout must be a nonnegative integer")?.max(1),
                     None => 600,
                 };
                 if hook.get("async").and_then(Value::as_bool) == Some(true) {
