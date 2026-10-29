@@ -955,10 +955,8 @@ impl ToolExecutor {
             }
         };
         let interpretation = if kind == crate::shell_runtime::ShellKind::Bash {
-            let (is_error, note) = crate::shell_runtime::interpret_bash_exit(
-                command,
-                status.code().unwrap_or(-1),
-            );
+            let (is_error, note) =
+                crate::shell_runtime::interpret_bash_exit(command, status.code().unwrap_or(-1));
             match (is_error, note) {
                 (_, Some(note)) => format!("Interpretation: {note}\n"),
                 (true, None) => format!(

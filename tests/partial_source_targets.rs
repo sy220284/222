@@ -21,7 +21,10 @@ fn partial_source_mappings_exist_and_generated_only_cannot_pass_parity() {
             .collect();
         if columns[6].contains("部分实现") || columns[6].contains("部分覆盖") {
             partial += 1;
-            assert!(!targets.is_empty(), "No Rust implementation target: {source}");
+            assert!(
+                !targets.is_empty(),
+                "No Rust implementation target: {source}"
+            );
             for target in &targets {
                 assert!(
                     root.join(target).is_file(),
@@ -30,7 +33,9 @@ fn partial_source_mappings_exist_and_generated_only_cannot_pass_parity() {
             }
         } else if columns[6].starts_with("已验收：") {
             assert!(
-                targets.iter().any(|target| !target.starts_with("src/generated_ports/")),
+                targets
+                    .iter()
+                    .any(|target| !target.starts_with("src/generated_ports/")),
                 "Generated-only structure is not functional parity: {source}"
             );
         }

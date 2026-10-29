@@ -168,7 +168,6 @@ pub fn powershell_exact_suggestions(command: &str) -> Value {
     suggestion_for_exact_command("PowerShell", command)
 }
 
-
 /// Informational warning for the interactive Bash permission dialog.
 /// Mirrors BashTool/destructiveCommandWarning.ts; this never grants or
 /// denies permission, and it does not bypass the existing security review.
@@ -213,12 +212,13 @@ pub fn destructive_command_warning(command: &str) -> Option<&'static str> {
                     .expect("fixed git clean pattern")
             });
             let dry_run = DRY_RUN.get_or_init(|| {
-                regex::Regex::new(r"(^|\s)-[a-zA-Z]*n|--dry-run")
-                    .expect("fixed dry-run pattern")
+                regex::Regex::new(r"(^|\s)-[a-zA-Z]*n|--dry-run").expect("fixed dry-run pattern")
             });
             for found in git_clean.find_iter(command) {
                 let suffix = &command[found.start()..];
-                let end = suffix.find(|ch: char| matches!(ch, ';' | '&' | '|' | '\n')).unwrap_or(suffix.len());
+                let end = suffix
+                    .find(|ch: char| matches!(ch, ';' | '&' | '|' | '\n'))
+                    .unwrap_or(suffix.len());
                 if !dry_run.is_match(&suffix[..end]) {
                     return Some("Note: may permanently delete untracked files");
                 }
