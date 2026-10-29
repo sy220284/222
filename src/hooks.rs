@@ -371,32 +371,51 @@ impl HookRunner {
     }
 
     pub async fn before_tool(&self, call: &ToolCall) -> Result<HookOutcome> {
+        self.before_tool_with_context(call, json!({})).await
+    }
+
+    /// The active Agent supplies the current session, working directory and
+    /// permission mode. This avoids caching stale context across /clear,
+    /// branch, resumed sessions and SDK permission-mode changes.
+    pub async fn before_tool_with_context(
+        &self,
+        call: &ToolCall,
+        mut context: Value,
+    ) -> Result<HookOutcome> {
         let arguments: Value = serde_json::from_str(&call.function.arguments)?;
-        self.run(
-            HookEvent::PreToolUse,
-            Some(&call.function.name),
-            json!({"tool_use_id":call.id, "tool_input":arguments}),
-        )
-        .await
+        context["tool_use_id"] = json!(call.id);
+        context["tool_input"] = arguments;
+        self.run(HookEvent::PreToolUse, Some(&call.function.name), context)
+            .await
     }
 
     pub async fn after_tool(&self, call: &ToolCall, output: &str) -> Result<HookOutcome> {
+        self.after_tool_with_context(call, output, json!({})).await
+    }
+
+    pub async fn after_tool_with_context(
+        &self,
+        call: &ToolCall,
+        output: &str,
+        mut context: Value,
+    ) -> Result<HookOutcome> {
         let event = if output.starts_with("ERROR:") {
             HookEvent::PostToolUseFailure
         } else {
             HookEvent::PostToolUse
         };
-        // The hook protocol carries the effective tool input as a JSON
-        // object, not an escaped JSON string. PreToolUse may rewrite it.
+        // Preserve the effective input after PreToolUse rewrites and attach
+        // the actual tool result or failure, alongside live session context.
         let arguments: Value = serde_json::from_str(&call.function.arguments)?;
-        let mut payload = json!({"tool_use_id":call.id, "tool_input":arguments});
+        context["tool_use_id"] = json!(call.id);
+        context["tool_input"] = arguments;
         if matches!(event, HookEvent::PostToolUseFailure) {
-            payload["error"] = json!(output.strip_prefix("ERROR:").unwrap_or(output).trim());
-            payload["is_interrupt"] = json!(false);
+            context["error"] = json!(output.strip_prefix("ERROR:").unwrap_or(output).trim());
+            context["is_interrupt"] = json!(false);
         } else {
-            payload["tool_response"] = json!(output);
+            context["tool_response"] = json!(output);
         }
-        self.run(event, Some(&call.function.name), payload).await
+        self.run(event, Some(&call.function.name), context).await
     }
 }
 
