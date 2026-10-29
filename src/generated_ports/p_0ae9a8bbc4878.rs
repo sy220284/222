@@ -59,7 +59,9 @@ mod tests {
         let result = render_source_view(&json!({"isTranscriptMode":true,"message":message}));
         assert_eq!(result.text_content(), "gpt-6");
         assert_eq!(result.unresolved_node_count(), 0);
-        let VNode::Element { tag, attrs, .. } = result else { panic!("model box") };
+        let VNode::Element { tag, attrs, .. } = result else {
+            panic!("model box")
+        };
         assert_eq!(tag, "Box");
         assert_eq!(attrs.get("minWidth"), Some(&json!(13)));
     }
