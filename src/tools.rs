@@ -326,9 +326,10 @@ impl ToolExecutor {
                 // semanticBoolean block flag and a z.number() timeout in
                 // [0, 600000]. Reject malformed values before waiting.
                 let fields = args.as_object().context("Invalid task output arguments")?;
-                if let Some(key) = fields.keys().find(|key| {
-                    !matches!(key.as_str(), "task_id" | "block" | "timeout")
-                }) {
+                if let Some(key) = fields
+                    .keys()
+                    .find(|key| !matches!(key.as_str(), "task_id" | "block" | "timeout"))
+                {
                     bail!("Unrecognized task output parameter {key}");
                 }
                 let block = match args.get("block") {
@@ -351,7 +352,9 @@ impl ToolExecutor {
                     .background
                     .as_ref()
                     .context("Background tasks unavailable")?;
-                manager.output(required(&args, "task_id")?, block, timeout_ms).await
+                manager
+                    .output(required(&args, "task_id")?, block, timeout_ms)
+                    .await
             }
             "task_output_delta" => {
                 let manager = self
@@ -793,8 +796,14 @@ impl ToolExecutor {
             let raw = format!(".atlas/plugins/{plugin}/skills/{skill}/SKILL.md");
             let path = self.checked_path(&raw)?;
             self.require_read_rules(&raw, &path)?;
-            let dir = path.parent().context("Skill has no parent directory")?.to_path_buf();
-            (plugins::read_skill(&self.root, &self.enabled_plugins, name)?, dir)
+            let dir = path
+                .parent()
+                .context("Skill has no parent directory")?
+                .to_path_buf();
+            (
+                plugins::read_skill(&self.root, &self.enabled_plugins, name)?,
+                dir,
+            )
         } else {
             if !valid_skill_name(name) {
                 bail!("Invalid skill name")
@@ -805,7 +814,10 @@ impl ToolExecutor {
             if fs::metadata(&path)?.len() > 64_000 {
                 bail!("Skill file too large")
             }
-            let dir = path.parent().context("Skill has no parent directory")?.to_path_buf();
+            let dir = path
+                .parent()
+                .context("Skill has no parent directory")?
+                .to_path_buf();
             (fs::read_to_string(path)?, dir)
         };
         let raw = args.get("arguments");
