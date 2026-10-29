@@ -513,7 +513,7 @@ fn directory(root: &Path, name: &str) -> Result<PathBuf> {
 /// Match dependencyResolver.ts::verifyAndDemote: enabled plugins with missing
 /// dependencies are disabled for this session, without changing user settings.
 /// Iterate to a fixed point so dependents of a disabled plugin are also hidden.
-fn active_plugin_names(root: &Path, enabled: &[String])
+pub(crate) fn active_plugin_names(root: &Path, enabled: &[String])
     -> (std::collections::HashSet<String>, Vec<String>) {
     let mut prepared = std::collections::HashMap::<String, (String, Manifest)>::new();
     let mut errors = Vec::new();
