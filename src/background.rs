@@ -511,23 +511,29 @@ impl BackgroundTasks {
 
     pub async fn stop_all(&self) {
         let tasks: Vec<_> = self.entries.lock().unwrap().values().cloned().collect();
-        for task in tasks {
+        // Send cancellation to every task first. Waiting three seconds per
+        // task serially made session shutdown take minutes with many shells.
+        for task in &tasks {
             if task.record.lock().unwrap().status == "running" {
                 if let Some(sender) = task.stop.lock().unwrap().take() {
                     let _ = sender.send(());
                 }
-                let _ = timeout(Duration::from_secs(3), async {
-                    loop {
-                        let notified = task.completed.notified();
-                        if task.record.lock().unwrap().status != "running" {
-                            break;
-                        }
-                        notified.await;
-                    }
-                })
-                .await;
             }
         }
+        // All child processes can now stop concurrently. Use one shared
+        // shutdown deadline rather than resetting the clock for each task.
+        let _ = timeout(Duration::from_secs(3), async {
+            for task in tasks {
+                loop {
+                    let notified = task.completed.notified();
+                    if task.record.lock().unwrap().status != "running" {
+                        break;
+                    }
+                    notified.await;
+                }
+            }
+        })
+        .await;
     }
 }
 
