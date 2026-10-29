@@ -1641,7 +1641,35 @@ impl Agent {
             .complete(&ModelRequest {
                 model: self.profile.model.clone(),
                 system: prompt,
-                messages: self.session.messages.clone(),
+                messages: {
+                    // Original stripImagesFromMessages avoids sending
+                    // binary image/document payloads into summarization.
+                    let mut history = self.session.messages.clone();
+                    for message in &mut history {
+                        if message.role != "user" { continue; }
+                        if let Some(blocks) = message.content_blocks.as_mut() {
+                            for block in blocks.iter_mut() {
+                                match block.get("type").and_then(serde_json::Value::as_str) {
+                                    Some("image") => *block = json!({"type":"text","text":"[image]"}),
+                                    Some("document") => *block = json!({"type":"text","text":"[document]"}),
+                                    Some("tool_result") => {
+                                        if let Some(content) = block.get_mut("content").and_then(serde_json::Value::as_array_mut) {
+                                            for item in content {
+                                                match item.get("type").and_then(serde_json::Value::as_str) {
+                                                    Some("image") => *item = json!({"type":"text","text":"[image]"}),
+                                                    Some("document") => *item = json!({"type":"text","text":"[document]"}),
+                                                    _ => {}
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    history
+                },
                 tools: Vec::new(),
             })
             .await;
@@ -1662,6 +1690,16 @@ impl Agent {
         let summary = response
             .message
             .content
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                response.message.content_blocks.as_ref().map(|blocks| {
+                    blocks.iter().filter_map(|block| {
+                        if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
+                            block.get("text").and_then(serde_json::Value::as_str)
+                        } else { None }
+                    }).collect::<Vec<_>>().join("\n")
+                })
+            })
             .context("Compaction returned no text")?;
         if summary.trim().is_empty() {
             bail!("Compaction returned empty text")
