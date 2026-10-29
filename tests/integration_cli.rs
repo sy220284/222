@@ -2575,3 +2575,60 @@ fn chat_add_dir_without_argument_prompts_for_path_and_remember_choice() {
     let saved:Value=serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
     assert_eq!(saved["additional_directories"][0],external.path().canonicalize().unwrap().to_str().unwrap());
 }
+
+
+#[test]
+fn sdk_batches_same_workload_text_and_image_as_one_model_turn_without_losing_uuids(){
+    use std::process::Stdio;
+    let dir=tempfile::tempdir().unwrap();
+    let server=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=server.local_addr().unwrap();
+    let received=thread::spawn(move||{
+        let (mut conn,_)=server.accept().unwrap();
+        let request=read_request(&mut conn);
+        let response=json!({"choices":[{"message":{"role":"assistant",
+            "content":"batched vision ok"},"finish_reason":"stop"}]}).to_string();
+        write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response.len(),response).unwrap();
+        conn.flush().unwrap();
+        request
+    });
+    let config=dir.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"vision",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",dir.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut stdin=sdk.stdin.take().unwrap();
+        let image=json!({"type":"image","source":{
+            "type":"base64","media_type":"image/png","data":"AQID"
+        }});
+        for event in [
+            json!({"type":"user","queued":true,"uuid":"img-1","priority":"next",
+                "workload":"review","content":[{"type":"text","text":"first visual"},image]}),
+            json!({"type":"user","queued":true,"uuid":"text-2","priority":"next",
+                "workload":"review","content":"second instruction"}),
+            json!({"type":"control","action":"queue_drain","request_id":"drain",
+                "max_priority":"next","replay_user_messages":true}),
+        ]{writeln!(stdin,"{event}").unwrap();}
+    }
+    let output=sdk.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let wire=String::from_utf8(output.stdout).unwrap();
+    let events=wire.lines().filter_map(|line|serde_json::from_str::<Value>(line).ok())
+        .collect::<Vec<_>>();
+    let replay=events.iter().filter(|v|v["type"]=="user"&&v["isReplay"]==true)
+        .map(|v|v["uuid"].as_str().unwrap().to_owned()).collect::<Vec<_>>();
+    assert_eq!(replay,vec!["img-1","text-2"]);
+    let drain=events.iter().find(|v|v["request_id"]=="drain").unwrap();
+    assert_eq!(drain["ok"],true,"{wire}");
+    assert_eq!(drain["result"]["results"].as_array().unwrap().len(),2);
+    assert_eq!(drain["result"]["length"],0);
+    let http=received.join().unwrap();
+    assert!(http.contains("first visual"));
+    assert!(http.contains("second instruction"));
+    assert!(http.contains("data:image/png;base64,AQID"));
+}
