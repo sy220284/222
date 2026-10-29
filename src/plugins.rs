@@ -211,6 +211,7 @@ pub fn validate_local(location: &Path) -> Result<String> {
     let manifest = read_manifest(&location, fallback)?;
     let _ = manifest_hooks(&location, &manifest.hooks)?;
     let _ = manifest_servers(&location, &manifest.mcp_servers)?;
+    let _ = skill_roots(&location, &manifest)?;
     Ok(manifest.name)
 }
 
