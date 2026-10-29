@@ -70,6 +70,9 @@ pub struct Config {
     /// Glob patterns for project/user/local instruction files omitted from model context.
     #[serde(default, rename = "instructionExcludes", alias = "instruction_excludes")]
     pub instruction_excludes: Vec<String>,
+    /// Per-source instruction switches: user, project and local (default enabled).
+    #[serde(default, rename = "instructionSources", alias = "instruction_sources")]
+    pub instruction_sources: std::collections::HashMap<String, bool>,
     #[serde(default)]
     pub default_shell: Option<String>,
     /// Preferred terminal for browser deep links, retained across headless launches.
@@ -104,6 +107,7 @@ impl Default for Config {
             default_provider: "local".into(),
             additional_directories: Vec::new(),
             instruction_excludes: Vec::new(),
+            instruction_sources: std::collections::HashMap::new(),
             default_shell: None,
             deep_link_terminal: None,
             providers: vec![
