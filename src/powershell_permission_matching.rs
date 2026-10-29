@@ -36,7 +36,7 @@ pub fn destructive_command_warning(command: &str) -> Option<&'static str> {
     });
     for (pattern, warning) in patterns {
         if pattern.is_match(command) {
-            return Some(warning);
+            return Some(*warning);
         }
     }
     // Rust regex intentionally has no lookahead. Preserve the original
