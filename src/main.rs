@@ -2097,6 +2097,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut query_guard = query_guard::QueryGuard::default();
     let mut bridge_session = bridge_core::BridgeSession::new(agent.session_id());
     let mut sdk_initialized = false;
+    let mut sdk_end_requested = false;
     print_json!(json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
@@ -2203,9 +2204,12 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             "control_request" if event.get("request").is_some() => {
                 print_json!(
-                    sdk_nested_control(agent, config, &event, &mut queue, &mut bridge_session, &mut sdk_initialized)
+                    sdk_nested_control(agent, config, &event, &mut queue, &mut bridge_session, &mut sdk_initialized, &mut sdk_end_requested)
                         .await
                 );
+                if sdk_end_requested {
+                    break;
+                }
             }
             "control" | "control_request" => {
                 macro_rules! send_control {
@@ -2374,6 +2378,7 @@ async fn sdk_nested_control(
     queue: &mut message_queue::Queue,
     bridge_session: &mut bridge_core::BridgeSession,
     sdk_initialized: &mut bool,
+    sdk_end_requested: &mut bool,
 ) -> Value {
     let id = event
         .get("request_id")
@@ -2392,6 +2397,10 @@ async fn sdk_nested_control(
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow::anyhow!("control request requires subtype"))?;
         match subtype {
+            "end_session" => {
+                *sdk_end_requested = true;
+                Ok(json!({}))
+            }
             "initialize" => {
                 if *sdk_initialized {
                     bail!("SDK initialization already completed for this stream");
