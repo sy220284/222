@@ -137,12 +137,16 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             } else {
                 PathBuf::from(path)
             };
-            let installed_name = install_local(&root, &local)?;
+            // Validate the requested identity before copying or activating
+            // files. A mismatched --plugin must not leave an installed plugin
+            // behind after reporting failure.
             if let Some(requested) = plugin {
-                if requested != &installed_name {
+                let actual = manifest_name(&local.canonicalize()?)?;
+                if requested != &actual {
                     bail!("Requested plugin ID does not match the local manifest");
                 }
             }
+            let installed_name = install_local(&root, &local)?;
             Ok(json!({"installed":installed_name}))
         }
         PluginCommand::Enable { plugin } => {
