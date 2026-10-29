@@ -13,6 +13,7 @@ pub struct HttpClient {
     session:Option<HeaderValue>,
     id:u64,
     pub server_info:Option<Value>,
+    pub tools_changed:bool,
 }
 impl HttpClient{
     pub async fn connect(config:&McpServerConfig)->Result<Self>{
@@ -40,7 +41,7 @@ impl HttpClient{
         let client=Client::builder().timeout(Duration::from_secs(60))
             .redirect(reqwest::redirect::Policy::none()).build()?;
         let mut http=Self{name:config.id.clone(),client,url,headers,
-            session:None,id:1,server_info:None};
+            session:None,id:1,server_info:None,tools_changed:false};
         let initial=http.request("initialize",json!({
             "protocolVersion":"2025-03-26","capabilities":{},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
@@ -58,7 +59,7 @@ impl HttpClient{
         if let Some(session)=&self.session{
             headers.insert(HeaderName::from_static("mcp-session-id"),session.clone());
         }
-        let reply=self.client.post(self.url.clone()).headers(headers)
+        let mut reply=self.client.post(self.url.clone()).headers(headers)
             .json(request).send().await.with_context(||
                 format!("HTTP MCP {} request failed",self.name))?;
         if reply.status().is_redirection(){bail!("MCP redirect blocked")}
@@ -82,19 +83,40 @@ impl HttpClient{
         }
         let type_header=reply.headers().get(CONTENT_TYPE).and_then(|v|v.to_str().ok())
             .unwrap_or("").to_ascii_lowercase();
-        let bytes=reply.bytes().await?;
-        if bytes.len()>2*1024*1024{bail!("MCP HTTP response exceeds 2 MB")}
-        if type_header.starts_with("application/json"){
-            return Ok(Some(serde_json::from_slice(&bytes)
-                .context("Invalid MCP JSON response")?))
-        }
         if type_header.starts_with("text/event-stream"){
-            let text=std::str::from_utf8(&bytes).context("Invalid MCP SSE UTF-8")?;
+            // Streamable HTTP servers may keep this response open after the
+            // requested result. Never wait for EOF: that deadlocks tools/call
+            // and hides notifications delivered ahead of the result.
             let id=request.get("id").context("MCP request is missing id")?;
-            for event in parse_sse(text)?{
-                if event.get("id")==Some(id){return Ok(Some(event))}
+            let mut pending=Vec::new();
+            let mut received=0usize;
+            while let Some(chunk)=reply.chunk().await?{
+                received=received.checked_add(chunk.len())
+                    .context("MCP SSE response length overflow")?;
+                if received>2*1024*1024{bail!("MCP HTTP response exceeds 2 MB")}
+                pending.extend_from_slice(&chunk);
+                while let Some((end,separator_len))=sse_event_boundary(&pending){
+                    let frame=std::str::from_utf8(&pending[..end])
+                        .context("Invalid MCP SSE UTF-8")?;
+                    for event in parse_sse(frame)?{
+                        if event.get("method").and_then(Value::as_str)
+                            ==Some("notifications/tools/list_changed"){
+                            self.tools_changed=true;
+                        }
+                        if event.get("id")==Some(id){
+                            return Ok(Some(event));
+                        }
+                    }
+                    pending.drain(..end+separator_len);
+                }
             }
             bail!("MCP SSE stream ended without matching RPC response")
+        }
+        if type_header.starts_with("application/json"){
+            let bytes=reply.bytes().await?;
+            if bytes.len()>2*1024*1024{bail!("MCP HTTP response exceeds 2 MB")}
+            return Ok(Some(serde_json::from_slice(&bytes)
+                .context("Invalid MCP JSON response")?))
         }
         bail!("MCP HTTP response has unsupported content type")
     }
@@ -114,6 +136,15 @@ impl HttpClient{
         if let Some(error)=response.get("error"){bail!("MCP server error: {error}")}
         response.get("result").cloned().context("MCP response missing result")
     }
+}
+// Locate complete SSE events without decoding incomplete UTF-8 chunks.
+// CRLF can be split across HTTP chunks, so only complete separators count.
+fn sse_event_boundary(bytes:&[u8])->Option<(usize,usize)>{
+    for index in 0..bytes.len(){
+        if bytes[index..].starts_with(b"\r\n\r\n"){return Some((index,4))}
+        if bytes[index..].starts_with(b"\n\n"){return Some((index,2))}
+    }
+    None
 }
 fn parse_sse(text:&str)->Result<Vec<Value>>{
     let mut results=Vec::new();let mut data=Vec::new();let mut kind=String::new();

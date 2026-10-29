@@ -217,3 +217,9 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 #### MCP 运行时工具目录更新与 RPC ping
 
 对照原始 MCP SDK 客户端工具目录变化通知，新版 Rust stdio 连接在等待工具 RPC 回复时识别 `notifications/tools/list_changed`、对 server-initiated `ping` 回 `{}`，不会误作普通工具结果。`McpManager::refresh_changed_tools` 逐连接重新发现和分页，发生错误时保留原有效工具表并标记稍后重试；只有全部页成功才原子替换该服务的工具定义/路由/状态。Agent 每个模型请求前刷新，下一轮模型获得最新工具 schema。新增连接后工具表变化的真实 stdio mock 回归。SSE/HTTP 长连接通知、子代理多连接刷新以及完整重连策略未实现，不升级源路径验收状态。
+
+### 2026-10-29：统一工单 #3——MCP HTTP 流式响应与工具目录通知
+
+对照原始 2.1.88 `src/services/mcp/client.ts` 的 StreamableHTTPClientTransport、工具目录变更通知及连接关闭/错误恢复调用链，修复 Rust HTTP MCP 把 SSE 响应完整读至 EOF 才返回的问题：长连接不关闭时，已到达的 tools/call 结果此前会被阻塞直到超时。现按 HTTP 分块增量解析完整 SSE 事件，跨 chunk/CRLF 边界保持事件结构；收到目标 JSON-RPC ID 即交付工具结果，不等待服务器断开；先于结果到达的 `notifications/tools/list_changed` 被记入实际 HTTP 客户端状态，并在下一轮模型请求前走已有的分页原子刷新机制，失败保持旧目录待重试。保持 2 MB 响应边界与原有单请求超时。
+
+新增真实本地 TCP HTTP MCP 服务器测试，模拟 chunked SSE、分裂的事件边界、同一流的目录变更通知、工具响应和延迟 1.3 秒才关闭的连接；验证结果先于断连返回、后续 tools/list 重新发现并替换模型工具 schema。该补齐仍归 Issue #3 固定的 MCP 部分实现路径，**不提升任何文件为已验收**。长连接独立 GET 通知、服务器主动请求、HTTP 会话失效自动重连、旧 SSE 传输及完整 MCP 资源/提示协议仍未等价。CI 结果以实际 HEAD 验证为准。

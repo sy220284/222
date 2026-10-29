@@ -115,11 +115,14 @@ impl TransportClient {
     fn take_tools_changed(&mut self)->bool{
         match self{
             Self::Stdio(c)=>std::mem::take(&mut c.tools_changed),
-            Self::Http(_)=>false,
+            Self::Http(c)=>std::mem::take(&mut c.tools_changed),
         }
     }
     fn mark_tools_changed(&mut self){
-        if let Self::Stdio(c)=self{c.tools_changed=true}
+        match self{
+            Self::Stdio(c)=>c.tools_changed=true,
+            Self::Http(c)=>c.tools_changed=true,
+        }
     }
     fn server_info(&self)->Option<Value>{
         match self{
@@ -608,5 +611,69 @@ mod remote_tests {
             .contains("mcp-protocol-version: 2025-03-26"));
         assert!(seen[3].contains("tools/call"));
         assert!(seen[3].contains("remote_echo"));
+    }
+
+    #[tokio::test]
+    async fn http_sse_tool_change_refreshes_before_server_closes_stream(){
+        use std::time::{Duration,Instant};
+        let listener=TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let server=tokio::spawn(async move {
+            for n in 0..5{
+                let (mut conn,_)=listener.accept().await.unwrap();
+                let request=take_http(&mut conn).await;
+                match n{
+                    0=>{
+                        let body=json!({"jsonrpc":"2.0","id":1,"result":{
+                            "protocolVersion":"2025-03-26",
+                            "serverInfo":{"name":"stream"},
+                            "capabilities":{"tools":{"listChanged":true}}
+                        }}).to_string();
+                        conn.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+                    },
+                    1=>conn.write_all(b"HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap(),
+                    2|4=>{
+                        let name=if n==2{"before"}else{"after"};
+                        let body=json!({"jsonrpc":"2.0","id":if n==2{2}else{4},
+                            "result":{"tools":[{"name":name,"inputSchema":{"type":"object"}}]}}).to_string();
+                        conn.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+                    },
+                    3=>{
+                        assert!(request.contains("tools/call"));
+                        conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n").await.unwrap();
+                        for event in [
+                            ": keepalive\r\n\r\n",
+                            "event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/tools/list_changed\"}\r\n\r\n",
+                            "event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"stream ok\"}]}}\r\n\r\n",
+                        ]{
+                            let wire=format!("{:X}\r\n{}\r\n",event.len(),event);
+                            let half=wire.len()/2;
+                            conn.write_all(&wire.as_bytes()[..half]).await.unwrap();
+                            conn.write_all(&wire.as_bytes()[half..]).await.unwrap();
+                        }
+                        // The result must reach the Agent before this stream closes.
+                        tokio::time::sleep(Duration::from_millis(1300)).await;
+                        let _=conn.write_all(b"0\r\n\r\n").await;
+                    },
+                    _=>unreachable!(),
+                }
+            }
+        });
+        let config=McpServerConfig{id:"stream".into(),command:String::new(),
+            args:vec![],env:HashMap::new(),transport:Some("http".into()),
+            url:Some(format!("http://{address}/mcp")),headers:HashMap::new()};
+        let mut manager=McpManager::connect(&[config]).await.unwrap();
+        assert_eq!(manager.statuses().unwrap()[0]["tools"][0]["name"],"before");
+        let call=ToolCall{id:"sse".into(),kind:"function".into(),
+            function:FunctionCall{name:"mcp_stream_0".into(),
+                arguments:"{}".into()}};
+        let started=Instant::now();
+        assert_eq!(manager.execute(&call).await,"stream ok");
+        assert!(started.elapsed()<Duration::from_millis(800),
+            "SSE tool result incorrectly waited for the HTTP stream to close");
+        manager.refresh_changed_tools().await.unwrap();
+        assert_eq!(manager.statuses().unwrap()[0]["tools"][0]["name"],"after");
+        assert_eq!(manager.definitions()[0]["function"]["name"],"mcp_stream_0");
+        server.await.unwrap();
     }
 }
