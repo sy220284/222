@@ -2143,6 +2143,29 @@ async fn chat(
                 }
             }
         }
+        // Project skills are user-invocable slash commands too. Resolve the
+        // actual local SKILL.md before falling back to ordinary model text;
+        // hidden user-invocable:false skills must be rejected explicitly.
+        if let Some(parsed) = slash_command::parse_slash_command(input) {
+            let name = parsed.command_name.as_str();
+            if !parsed.is_mcp && !name.contains(':')
+                && !name.is_empty() && name.len() <= 64
+                && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+                && agent.workspace_root().join(".atlas/skills").join(name)
+                    .join("SKILL.md").is_file() {
+                match agent.invoke_user_skill(name, &parsed.args) {
+                    Ok(prompt) => {
+                        onboarding.maybe_mark_complete()?;
+                        match agent.ask(&prompt).await {
+                            Ok(answer) => println!("{answer}"),
+                            Err(error) => eprintln!("Skill execution failed: {error:#}"),
+                        }
+                    }
+                    Err(error) => eprintln!("Cannot invoke skill: {error:#}"),
+                }
+                continue;
+            }
+        }
         // The original marks completion on prompt submission, not on a
         // successful model response; local project instructions may have
         // been created by the user outside this chat.
