@@ -1727,6 +1727,67 @@ impl Agent {
             .context("Could not generate a name: JSON is missing a name string")?;
         self.rename_session(name)
     }
+    /// SDK generate_session_title mirrors sessionTitle.ts without changing
+    /// the explicit /rename title or appending a synthetic chat message.
+    pub async fn generate_session_title(
+        &mut self,
+        description: &str,
+        persist: bool,
+    ) -> Result<Option<String>> {
+        let description = description.trim();
+        if description.is_empty() {
+            return Ok(None);
+        }
+        let system = concat!(
+            "Generate a concise, sentence-case title (3-7 words) that captures ",
+            "the main topic or goal of this coding session. The title should be ",
+            "clear enough that the user recognizes the session in a list. ",
+            "Use sentence case: capitalize only the first word and proper nouns. ",
+            "Return JSON with a single \"title\" field. ",
+            "Example: {\"title\":\"Fix login button on mobile\"}."
+        );
+        let started = Instant::now();
+        let response = self.provider.complete(&ModelRequest {
+            model: self.profile.model.clone(),
+            system: system.to_owned(),
+            messages: vec![Message::text("user", description)],
+            tools: Vec::new(),
+        }).await;
+        self.session.cost.add_api_duration(started.elapsed());
+        let completion = match response {
+            Ok(completion) => completion,
+            Err(error) => {
+                self.session.save(&self.root)?;
+                eprintln!("Session title generation failed: {error:#}");
+                return Ok(None);
+            }
+        };
+        if let Some(usage) = completion.usage {
+            self.record_usage(usage);
+        }
+        // Account for the model call even when output is invalid or persist=false.
+        self.session.save(&self.root)?;
+        if completion.message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
+            return Ok(None);
+        }
+        let title = serde_json::from_str::<serde_json::Value>(
+            &completion.message.visible_text(),
+        ).ok()
+            .and_then(|value| value.get("title").and_then(|v| v.as_str()).map(str::to_owned))
+            .map(|title| title.trim().to_owned())
+            .filter(|title| !title.is_empty());
+        if persist {
+            if let Some(title) = title.as_ref() {
+                let previous = self.session.ai_title.replace(title.clone());
+                if let Err(error) = self.session.save(&self.root) {
+                    self.session.ai_title = previous;
+                    return Err(error).context("Unable to persist SDK-generated session title");
+                }
+            }
+        }
+        Ok(title)
+    }
+
     pub fn export_session(&self, filename: Option<&str>) -> Result<std::path::PathBuf> {
         crate::session_control::export(&self.session, &self.root, filename)
     }

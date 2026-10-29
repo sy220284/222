@@ -138,6 +138,12 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             })
             .or_else(|| {
                 session
+                    .ai_title
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+            })
+            .or_else(|| {
+                session
                     .summary
                     .as_deref()
                     .filter(|value| !value.trim().is_empty())

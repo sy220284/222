@@ -2600,6 +2600,19 @@ async fn sdk_nested_control(
             | "mcp_poll_resource_updates" => {
                 mcp_control_request(agent, subtype, &Value::Object(request.clone())).await
             }
+            "generate_session_title" => {
+                let description = request.get("description")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow::anyhow!(
+                        "generate_session_title requires description string"))?;
+                let persist = match request.get("persist") {
+                    None => false,
+                    Some(Value::Bool(value)) => *value,
+                    _ => bail!("generate_session_title persist must be a boolean"),
+                };
+                let title = agent.generate_session_title(description, persist).await?;
+                Ok(json!({"title":title}))
+            }
             "seed_read_state" => {
                 let path = request
                     .get("path")

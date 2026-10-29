@@ -39,6 +39,9 @@ pub struct Session {
     pub permission_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_title: Option<String>,
+    /// SDK-generated title, separate from the user's explicit rename.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai_title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
     /// Git branch captured when this conversation starts; never rewritten by later checkouts.
@@ -71,6 +74,7 @@ impl Session {
             agent_name: None,
             permission_mode: None,
             custom_title: None,
+            ai_title: None,
             tag: None,
             git_branch: None,
             forked_from: None,
