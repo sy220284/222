@@ -94,6 +94,30 @@ fn mcp_check(server: &McpServerConfig) -> Finding {
             }
             match reqwest::Url::parse(&expanded.expanded) {
                 Ok(url) if matches!(url.scheme(), "http" | "https") => {
+                    // Keep the doctor verdict consistent with the real HTTP
+                    // transport's preflight checks; never expose URL secrets.
+                    if !url.username().is_empty() || url.password().is_some() {
+                        return Finding::warning(
+                            "MCP",
+                            format!("{}: URL credentials are not permitted", server.id),
+                        );
+                    }
+                    for header in server.headers.keys() {
+                        if matches!(
+                            header.to_ascii_lowercase().as_str(),
+                            "accept"
+                                | "content-type"
+                                | "mcp-session-id"
+                                | "mcp-protocol-version"
+                                | "host"
+                                | "last-event-id"
+                        ) {
+                            return Finding::warning(
+                                "MCP",
+                                format!("{}: reserved HTTP header {}", server.id, header),
+                            );
+                        }
+                    }
                     // Do not print the full URL: queries may contain credentials.
                     Finding::passed(
                         "MCP",
