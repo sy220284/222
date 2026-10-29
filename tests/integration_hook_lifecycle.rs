@@ -264,7 +264,7 @@ fn pre_tool_hook_ask_cannot_be_bypassed_by_full_approval() {
                     "content":"The hook request was not approved"},"finish_reason":"stop"}]})
             };
             let body = response.to_string();
-            write!(conn, "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}", body.len(), body).unwrap();
+            write!(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
             conn.flush().unwrap();
         }
         requests
@@ -275,7 +275,7 @@ fn pre_tool_hook_ask_cannot_be_bypassed_by_full_approval() {
         "base_url":format!("http://{address}/v1")
     }],"hooks":[{
         "event":"PreToolUse","matcher":"^write_file$",
-        "command":"printf '{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"PreToolUse\\\",\\\"permissionDecision\\\":\\\"ask\\\"}}'"
+        "command":"printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\"}}'"
     }]}).to_string()).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
         .args([
