@@ -70,7 +70,24 @@ impl AuthCodeListener {
                 send_response(&mut stream, 403, "Forbidden", None).await?;
                 continue;
             }
-            let request = read_headers(&mut stream).await?;
+            // Node's HTTP server rejects malformed client requests without
+            // cancelling the outstanding authorization promise. Keep the
+            // loopback listener alive for the real browser callback.
+            let request = match read_headers(&mut stream).await {
+                Ok(request) => request,
+                Err(HeaderReadError::TooLarge) => {
+                    let _ = send_response(&mut stream, 431, "Request Header Fields Too Large", None).await;
+                    continue;
+                }
+                Err(HeaderReadError::Timeout) => {
+                    let _ = send_response(&mut stream, 408, "Request Timeout", None).await;
+                    continue;
+                }
+                Err(HeaderReadError::Invalid) => {
+                    let _ = send_response(&mut stream, 400, "Bad Request", None).await;
+                    continue;
+                }
+            };
             let Some(first_line) = request.lines().next() else {
                 send_response(&mut stream, 400, "Bad Request", None).await?;
                 continue;
@@ -82,8 +99,13 @@ impl AuthCodeListener {
                 send_response(&mut stream, 400, "Bad Request", None).await?;
                 continue;
             }
-            let parsed = reqwest::Url::parse(&format!("http://localhost{target}"))
-                .context("Invalid OAuth callback request URI")?;
+            let parsed = match reqwest::Url::parse(&format!("http://localhost{target}")) {
+                Ok(parsed) => parsed,
+                Err(_) => {
+                    let _ = send_response(&mut stream, 400, "Bad Request", None).await;
+                    continue;
+                }
+            };
             if parsed.path() != self.callback_path {
                 send_response(&mut stream, 404, "Not Found", None).await?;
                 continue;
@@ -143,25 +165,37 @@ impl AuthCodeListener {
     }
 }
 
-async fn read_headers(stream: &mut TcpStream) -> Result<String> {
-    let mut data = Vec::with_capacity(1024);
-    timeout(Duration::from_secs(15), async {
-        while data.len() < MAX_REQUEST_HEADERS {
+#[derive(Debug)]
+enum HeaderReadError {
+    Invalid,
+    TooLarge,
+    Timeout,
+}
+
+async fn read_headers(stream: &mut TcpStream) -> std::result::Result<String, HeaderReadError> {
+    let read = async {
+        let mut data = Vec::with_capacity(1024);
+        loop {
             let mut block = [0u8; 1024];
-            let count = stream.read(&mut block).await?;
+            let count = stream
+                .read(&mut block)
+                .await
+                .map_err(|_| HeaderReadError::Invalid)?;
             if count == 0 {
-                bail!("OAuth client disconnected before request headers");
+                return Err(HeaderReadError::Invalid);
             }
             data.extend_from_slice(&block[..count]);
-            if data.windows(4).any(|slice| slice == b"\r\n\r\n") {
-                return Ok(());
+            if data.len() > MAX_REQUEST_HEADERS {
+                return Err(HeaderReadError::TooLarge);
+            }
+            if data.windows(4).any(|slice| slice == b"\\r\\n\\r\\n") {
+                return String::from_utf8(data).map_err(|_| HeaderReadError::Invalid);
             }
         }
-        bail!("OAuth callback request headers exceed maximum size");
-    })
-    .await
-    .context("Timed out receiving OAuth callback")??;
-    String::from_utf8(data).context("Invalid HTTP request encoding")
+    };
+    timeout(Duration::from_secs(15), read)
+        .await
+        .map_err(|_| HeaderReadError::Timeout)?
 }
 
 async fn send_response(
@@ -199,6 +233,50 @@ mod tests {
         let mut response = Vec::new();
         stream.read_to_end(&mut response).await.unwrap();
         String::from_utf8(response).unwrap()
+    }
+
+    async fn raw_request(port: u16, bytes: &[u8]) -> String {
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        stream.write_all(bytes).await.unwrap();
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).await.unwrap();
+        String::from_utf8(response).unwrap()
+    }
+
+    #[tokio::test]
+    async fn malformed_http_and_oversized_headers_do_not_abort_browser_authorization() {
+        let mut listener = AuthCodeListener::start("/callback", None).await.unwrap();
+        let port = listener.port();
+        let server = tokio::spawn(async move {
+            let code = listener
+                .wait_for_authorization("expected", || async { Ok(()) })
+                .await
+                .unwrap();
+            assert_eq!(code, "real-code");
+            listener
+                .handle_success_redirect("https://example.test/complete")
+                .await
+                .unwrap();
+            listener.close().await.unwrap();
+        });
+
+        let malformed = raw_request(
+            port,
+            b"GET /callback HTTP/1.1\\r\\nHost: localhost\\r\\nX-Invalid: \\xff\\r\\n\\r\\n",
+        )
+        .await;
+        assert!(malformed.starts_with("HTTP/1.1 400"), "{malformed}");
+
+        let large = format!(
+            "GET /callback HTTP/1.1\\r\\nHost: localhost\\r\\nX-Large: {}\\r\\n\\r\\n",
+            "x".repeat(MAX_REQUEST_HEADERS)
+        );
+        let oversized = raw_request(port, large.as_bytes()).await;
+        assert!(oversized.starts_with("HTTP/1.1 431"), "{oversized}");
+
+        let valid = request(port, "/callback?code=real-code&state=expected").await;
+        assert!(valid.starts_with("HTTP/1.1 302"), "{valid}");
+        server.await.unwrap();
     }
 
     #[tokio::test]
