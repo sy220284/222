@@ -247,8 +247,47 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 fs::rename(&removed, &installed)?;
                 return Err(error);
             }
-            fs::remove_dir_all(removed)?;
-            Ok(json!({"uninstalled":name}))
+            // The original last-scope uninstall removes persistent plugin
+            // data as well as the installed files. This implementation has
+            // one local scope, so uninstall always releases that data.
+            // Cleanup failures are visible but must not misreport a
+            // successfully committed uninstall as a failed operation.
+            let mut warnings = Vec::new();
+            if let Err(error) = fs::remove_dir_all(&removed) {
+                warnings.push(format!("Could not clean staged plugin files: {error}"));
+            }
+            let data_root = root.join(".atlas/plugin-data");
+            let cleanup = (|| -> Result<()> {
+                let metadata = match fs::symlink_metadata(&data_root) {
+                    Ok(metadata) => metadata,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        return Ok(());
+                    }
+                    Err(error) => return Err(error.into()),
+                };
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    bail!("Plugin data storage is redirected or invalid");
+                }
+                let data = data_root.join(name);
+                match fs::symlink_metadata(&data) {
+                    Ok(metadata) if metadata.file_type().is_symlink() => {
+                        bail!("Plugin data directory is a symbolic link");
+                    }
+                    Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(&data)?,
+                    Ok(_) => bail!("Plugin data directory is not a directory"),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+                Ok(())
+            })();
+            if let Err(error) = cleanup {
+                warnings.push(format!("Could not remove persistent plugin data: {error}"));
+            }
+            if warnings.is_empty() {
+                Ok(json!({"uninstalled":name}))
+            } else {
+                Ok(json!({"uninstalled":name,"warnings":warnings}))
+            }
         }
         PluginCommand::Validate { path } => {
             let path = path.as_deref().context("A plugin directory is required")?;
