@@ -320,8 +320,11 @@ mod tests {
                 if let Some(end) = buffer.windows(4).position(|part| part == b"\r\n\r\n") {
                     let header = String::from_utf8_lossy(&buffer[..end+4]);
                     let content_length = header.lines()
-                        .find_map(|line| line.to_ascii_lowercase().strip_prefix("content-length:")
-                            .and_then(|value| value.trim().parse::<usize>().ok()))
+                        .find_map(|line| {
+                            let lowercase = line.to_ascii_lowercase();
+                            lowercase.strip_prefix("content-length:")
+                                .and_then(|value| value.trim().parse::<usize>().ok())
+                        })
                         .unwrap_or(0);
                     while buffer.len() < end + 4 + content_length {
                         let read = stream.read(&mut block).await.unwrap();
