@@ -5,7 +5,7 @@
 - **实际补齐**：①读取标准 `.claude-plugin/plugin.json`，兼容已有根目录 `plugin.json`，允许仅有 commands/agents/skills 的无清单插件以目录名安装、验证、启用与列举；②按原版读取 `hooks/hooks.json`、清单内追加 Hook 文件和内联命令 Hook，保留事件、匹配器、超时、插件根目录与重复文件去重，越界文件拒绝；③原版 `mcpServers` 名称映射转换成真实 `McpServerConfig` 并继续进入 Agent 的 MCP 初始化；④本地插件复制时排除源仓库顶层 `.git`，避免把仓库历史、远端地址与本地 Git Hooks 放入安装目录。
 - **同功能接线复查**：`88639a1`、`b0cd032` 修正 Hook 零超时按原版使用默认值；`5971d19` 将条件和 Shell 类型接入实际 HookRule，未支持的 async/once 明确拒绝，防止悄悄改变生命周期语义。这些均归入上述 Hook 功能，不重复计数。
 - **提交 SHA**：`d8d673a11cec0430919b837bc45003d46500f06f`、`c554ea70633e99d3f2456df64722dd18ca8ec685`、`6c17c1c5784846f613afe82021d44697ff92640a`、`84f2a6e2996e19feba30b56995951585e007481a`。
-- **保守计数**：4 条独立用户可感知插件业务链获得真实代码补齐，全部**已提交、待验收**；本轮完整 100 条前置缺口清单尚未建立，初始四项 **4/100**，同轮续补后累计 **6/100，剩余 94**。没有运行 Cargo、测试或 CI；没有勾选 Issue #3 的任何冻结项。
+- **保守计数**：4 条独立用户可感知插件业务链获得真实代码补齐，全部**已提交、待验收**；本轮完整 100 条前置缺口清单尚未建立，初始四项 **4/100**，同轮续补后累计 **7/100，剩余 93**。没有运行 Cargo、测试或 CI；没有勾选 Issue #3 的任何冻结项。
 - **未实现差异**：原版插件命令/代理/技能自定义路径、内联命令、HTTP/异步/提示词 Hook、完整 MCP 配置文件引用及 SDK 传输、插件设置、市场多范围安装、插件生命周期与并发回滚、所有 UI/SDK 交互仍待补齐；无清单插件的命令和代理还需要逐入口核对实际可达性。
 
 ### 同轮续补：插件 MCP 标准文件及清单路径引用
@@ -15,6 +15,10 @@
 ### 同轮续补：插件自定义技能目录与读取
 
 原版 `source/src/utils/plugins/pluginLoader.ts::createPluginFromPath`（1557–1583 行）在清单声明 `skills` 时读取自定义路径，未声明时扫描默认 `skills/`。Rust `src/plugins.rs::skill_roots/skill_files/list_skills/read_skill` 现支持相对目录或数组、直接技能目录与目录下多个技能，列表和读取共用同一解析与插件根目录安全边界，安装前 `validate_local` 也检查路径。实际可达入口为 Agent 的技能列表及读取工具。提交 `687d8850684cd2bb1ada1b1028a289344541a530`、`0b146e44253d56286f0f8c8ef9337ef0adbc4436`。 续补 `2075fb59c84abfbfeb9f2bc692e08b22caf52351`：按原版 `loadPluginCommands.ts::getCommandNameFromFile` 的层级规则递归发现嵌套 `SKILL.md`，生成冒号分隔命名空间并在 `read_skill` 复用，属于同一技能路径功能完善，**不重复计数**。**另计 1 条用户可感知业务功能，累计 6/100，剩余 94**；源码已提交、待验收。嵌套技能命名空间、全部技能元数据与 SDK/插件动态刷新仍缺；冻结 362 项不勾选。未运行 Cargo、测试或 CI。
+
+### 同轮续补：插件 Markdown 斜杠命令真正进入模型执行链
+
+原版 `source/src/utils/plugins/loadPluginCommands.ts::collectMarkdownFiles/getCommandNameFromFile/createPluginCommand`（50–213 行）与 `source/src/utils/argumentSubstitution.ts::substituteArguments`（94–144 行）。Rust `src/plugins.rs::command_prompt` 从默认 `commands/` 或清单自定义路径、内联命令/文件元数据中读取 Markdown，解析命名空间、去除 YAML 头、使用现有 `skill_arguments` 的命名/索引/`$ARGUMENTS` 参数替换；`src/main.rs` 的交互式 `/plugin:command` 或 `/plugin:namespace:command` 入口实际调用 `Agent::ask`。提交 `7e2c295fa1ec19b27d5eeb09d5d15134143285be`、`a6e148a31ef70e33f61766e6e9affbe7e06866fe`。**另计 1 项用户可感知业务功能，累计 7/100，剩余 93**；源码已提交、待验收。原版完整 frontmatter 元数据、Shell 内嵌命令执行、动态命令发现、SDK 命令列表、插件变量与命令禁用策略仍未等价；Issue #3 冻结 362 项不勾选。未运行 Cargo、测试或 CI。
 
 ## 2026-10-29：SDK 动态 MCP 服务配置更新进入真实执行链（源码已提交、待验收）
 
