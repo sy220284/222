@@ -1,11 +1,7 @@
 //! Native plugin installation and management for source command integration.
 //! All user-selected local plugin files are copied as real files, loaded
 //! through the same manifest loader as the agent, and rollback on failure.
-use crate::{
-    config::Config,
-    plugin_commands::PluginCommand,
-    plugins::PluginSet,
-};
+use crate::{config::Config, plugin_commands::PluginCommand, plugins::PluginSet};
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::{
@@ -18,7 +14,9 @@ use walkdir::WalkDir;
 fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
-        && name.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+        && name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
 }
 
 fn installed_root(root: &Path) -> PathBuf {
@@ -44,16 +42,17 @@ pub fn installed(root: &Path, config: &Config) -> Result<Value> {
             }
         }
     }
-    names.sort_by(|a,b| a["name"].as_str().cmp(&b["name"].as_str()));
+    names.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
     Ok(json!({"plugins":names}))
 }
 
 fn manifest_name(root: &Path) -> Result<String> {
     let source = root.join("plugin.json");
-    let document: Value = serde_json::from_slice(
-        &fs::read(source).context("Local plugin missing plugin.json")?
-    )?;
-    let name = document["name"].as_str().context("Plugin manifest must contain a name")?;
+    let document: Value =
+        serde_json::from_slice(&fs::read(source).context("Local plugin missing plugin.json")?)?;
+    let name = document["name"]
+        .as_str()
+        .context("Plugin manifest must contain a name")?;
     if !valid_name(name) {
         bail!("Invalid plugin ID in manifest");
     }
@@ -78,7 +77,8 @@ fn copy_local_tree(source: &Path, stage: &Path) -> Result<()> {
 }
 
 pub fn install_local(root: &Path, location: &Path) -> Result<String> {
-    let source = location.canonicalize()
+    let source = location
+        .canonicalize()
         .with_context(|| format!("Cannot access plugin source {}", location.display()))?;
     if !source.is_dir() {
         bail!("Local plugin source must be a directory");
@@ -121,12 +121,17 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 "marketplace <add|remove|update|list>"
             ]
         })),
-        PluginCommand::Install {marketplace, plugin} => {
-            let path = marketplace.as_deref()
+        PluginCommand::Install {
+            marketplace,
+            plugin,
+        } => {
+            let path = marketplace
+                .as_deref()
                 .context("Local plugin install requires a directory path")?;
             let local = if let Some(uri) = path.strip_prefix("file://") {
                 let uri = reqwest::Url::parse(&format!("file://{uri}"))?;
-                uri.to_file_path().map_err(|_| anyhow::anyhow!("Invalid file URL"))?
+                uri.to_file_path()
+                    .map_err(|_| anyhow::anyhow!("Invalid file URL"))?
             } else if path.starts_with("http://") || path.starts_with("https://") {
                 bail!("Remote plugin install requires a configured trusted marketplace");
             } else {
@@ -140,7 +145,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             }
             Ok(json!({"installed":installed_name}))
         }
-        PluginCommand::Enable {plugin} => {
+        PluginCommand::Enable { plugin } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
             if !valid_name(name) {
                 bail!("Invalid plugin name");
@@ -152,7 +157,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             }
             Ok(json!({"enabled":name}))
         }
-        PluginCommand::Disable {plugin} => {
+        PluginCommand::Disable { plugin } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
             let previous = config.enabled_plugins.len();
             config.enabled_plugins.retain(|value| value != name);
@@ -161,7 +166,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             }
             Ok(json!({"disabled":name}))
         }
-        PluginCommand::Uninstall {plugin} => {
+        PluginCommand::Uninstall { plugin } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
             if !valid_name(name) {
                 bail!("Invalid plugin name");
@@ -170,8 +175,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             if !installed.is_dir() || installed.is_symlink() {
                 bail!("Plugin is not installed");
             }
-            let removed = installed_root(&root)
-                .join(format!(".uninstall-{}", Uuid::new_v4()));
+            let removed = installed_root(&root).join(format!(".uninstall-{}", Uuid::new_v4()));
             fs::rename(&installed, &removed)?;
             config.enabled_plugins.retain(|value| value != name);
             if let Err(error) = config.save() {
@@ -181,15 +185,17 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             fs::remove_dir_all(removed)?;
             Ok(json!({"uninstalled":name}))
         }
-        PluginCommand::Validate {path} => {
+        PluginCommand::Validate { path } => {
             let path = path.as_deref().context("A plugin directory is required")?;
             let location = Path::new(path).canonicalize()?;
             let name = manifest_name(&location)?;
             Ok(json!({"name":name,"valid_manifest":true}))
         }
-        PluginCommand::Marketplace {action,..} => {
-            bail!("Marketplace command '{}' requires a trusted registry integration",
-                action.as_deref().unwrap_or("menu"))
+        PluginCommand::Marketplace { action, .. } => {
+            bail!(
+                "Marketplace command '{}' requires a trusted registry integration",
+                action.as_deref().unwrap_or("menu")
+            )
         }
     }
 }
@@ -203,17 +209,31 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let source = tempfile::tempdir().unwrap();
         fs::create_dir_all(source.path().join("skills/review")).unwrap();
-        fs::write(source.path().join("plugin.json"),
-            r#"{"name":"reviewer","version":"1.0","hooks":[],"mcp_servers":[]}"#).unwrap();
-        fs::write(source.path().join("skills/review/SKILL.md"), "Review a source tree").unwrap();
+        fs::write(
+            source.path().join("plugin.json"),
+            r#"{"name":"reviewer","version":"1.0","hooks":[],"mcp_servers":[]}"#,
+        )
+        .unwrap();
+        fs::write(
+            source.path().join("skills/review/SKILL.md"),
+            "Review a source tree",
+        )
+        .unwrap();
         let name = install_local(root.path(), source.path()).unwrap();
         assert_eq!(name, "reviewer");
         let enabled = vec![name.clone()];
-        assert_eq!(crate::plugins::list_skills(root.path(), &enabled).unwrap(),
-            vec!["reviewer:review"]);
-        assert!(crate::plugins::read_skill(root.path(), &enabled, "reviewer:review")
-            .unwrap().contains("source tree"));
-        assert!(installed_root(root.path()).join("reviewer/plugin.json").exists());
+        assert_eq!(
+            crate::plugins::list_skills(root.path(), &enabled).unwrap(),
+            vec!["reviewer:review"]
+        );
+        assert!(
+            crate::plugins::read_skill(root.path(), &enabled, "reviewer:review")
+                .unwrap()
+                .contains("source tree")
+        );
+        assert!(installed_root(root.path())
+            .join("reviewer/plugin.json")
+            .exists());
         assert!(install_local(root.path(), source.path()).is_err());
     }
 }
