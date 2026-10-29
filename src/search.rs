@@ -298,6 +298,135 @@ fn git_ignored_paths(
     Ok(ignored)
 }
 
+/// ripgrep honors .ignore and .rgignore files in addition to Git's
+/// .gitignore rules. The two ripgrep-specific sources have higher priority
+/// than Git ignores; deeper directories override their ancestors.
+struct RipgrepIgnoreRule {
+    matcher: GlobMatcher,
+    exclude: bool,
+    directories_only: bool,
+}
+
+fn ripgrep_ignore_rules(
+    directory: &Path,
+    filename: &str,
+) -> Result<Vec<RipgrepIgnoreRule>> {
+    let path = directory.join(filename);
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error)
+            .with_context(|| format!("Read ripgrep ignore file {}", path.display())),
+    };
+    let mut rules = Vec::new();
+    for (line_number, raw) in content.lines().enumerate() {
+        let raw = raw.trim_end_matches('\\r');
+        if raw.is_empty() || raw.starts_with('#') {
+            continue;
+        }
+        let (exclude, raw) = if let Some(negated) = raw.strip_prefix('!') {
+            (false, negated)
+        } else {
+            (true, raw)
+        };
+        let raw = raw.strip_prefix("\\#").or_else(|| raw.strip_prefix("\\!")).unwrap_or(raw);
+        let directories_only = raw.ends_with('/');
+        let raw = raw.trim_end_matches('/');
+        if raw.is_empty() {
+            continue;
+        }
+        let anchored = raw.starts_with('/');
+        let raw = raw.trim_start_matches('/');
+        let pattern = if !anchored && !raw.contains('/') {
+            format!("**/{raw}")
+        } else {
+            raw.to_owned()
+        };
+        let matcher = Glob::new(&pattern)
+            .with_context(|| format!("Invalid {} rule at {}:{}", filename, path.display(), line_number + 1))?
+            .compile_matcher();
+        rules.push(RipgrepIgnoreRule {
+            matcher,
+            exclude,
+            directories_only,
+        });
+    }
+    Ok(rules)
+}
+
+fn ripgrep_rule_matches(rule: &RipgrepIgnoreRule, relative: &Path) -> bool {
+    let mut candidate = Some(relative);
+    while let Some(path) = candidate {
+        if !path.as_os_str().is_empty()
+            && (!rule.directories_only || path != relative)
+            && rule.matcher.is_match(path)
+        {
+            return true;
+        }
+        candidate = path.parent();
+    }
+    false
+}
+
+/// Return an override only if a ripgrep-specific ignore rule actually
+/// matches. A negated .ignore/.rgignore rule can re-include a Git-ignored
+/// file; a positive rule hides files even outside a Git repository.
+fn ripgrep_custom_ignore(
+    base: &Path,
+    paths: &[PathBuf],
+    deadline: Instant,
+) -> Result<std::collections::HashMap<PathBuf, bool>> {
+    use std::collections::HashMap;
+    let search_root = if base.is_dir() { base } else {
+        base.parent().context("Search file has no parent directory")?
+    };
+    let mut cache: HashMap<(PathBuf, &'static str), Vec<RipgrepIgnoreRule>> = HashMap::new();
+    let mut decisions = HashMap::new();
+    for path in paths {
+        check_search_deadline(Some(deadline))?;
+        let parent = path.parent().context("Search candidate has no parent directory")?;
+        let mut directories = Vec::new();
+        let mut current = Some(parent);
+        while let Some(directory) = current {
+            if !directory.starts_with(search_root) {
+                break;
+            }
+            directories.push(directory.to_path_buf());
+            if directory == search_root {
+                break;
+            }
+            current = directory.parent();
+        }
+        directories.reverse();
+        let mut decision = None;
+        // The source priority is .rgignore > .ignore > .gitignore.
+        // Within each source, the closest directory and last rule win.
+        for filename in [".ignore", ".rgignore"] {
+            let mut source_decision = None;
+            for directory in &directories {
+                let key = (directory.clone(), filename);
+                if !cache.contains_key(&key) {
+                    cache.insert(key.clone(), ripgrep_ignore_rules(directory, filename)?);
+                }
+                let relative = path.strip_prefix(directory)
+                    .context("Ignore rule directory does not contain candidate")?;
+                for rule in cache.get(&key).context("Ignore rule cache entry missing")? {
+                    if ripgrep_rule_matches(rule, relative) {
+                        source_decision = Some(rule.exclude);
+                    }
+                }
+            }
+            if source_decision.is_some() {
+                decision = source_decision;
+            }
+        }
+        if let Some(exclude) = decision {
+            decisions.insert(path.clone(), exclude);
+        }
+    }
+    Ok(decisions)
+}
+
 /// ripgrep.ts::ripGrep defaults to 20 seconds (60 on WSL) and reports
 /// incomplete searches as errors. Do not return partial matches as success.
 /// The provider-neutral override keeps the same positive-seconds semantics.
@@ -531,8 +660,9 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
     check_search_deadline(Some(deadline))?;
     if !skip_gitignore {
         let ignored = git_ignored_paths(base, &matches, deadline)?;
+        let custom = ripgrep_custom_ignore(base, &matches, deadline)?;
         check_search_deadline(Some(deadline))?;
-        matches.retain(|path| !ignored.contains(path));
+        matches.retain(|path| custom.get(path).copied().unwrap_or_else(|| ignored.contains(path)) == false);
     }
     let mut visible = Vec::with_capacity(matches.len());
     for path in matches {
@@ -682,9 +812,11 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
     let mut candidates = files_filtered(base, true, allow_file, Some(deadline))?;
     check_search_deadline(Some(deadline))?;
     let ignored = git_ignored_paths(base, &candidates, deadline)?;
+    let custom = ripgrep_custom_ignore(base, &candidates, deadline)?;
     check_search_deadline(Some(deadline))?;
     candidates.retain(|path| {
-        if !ignored.contains(path) {
+        let is_ignored = custom.get(path).copied().unwrap_or_else(|| ignored.contains(path));
+        if !is_ignored {
             return true;
         }
         path.strip_prefix(base).is_ok_and(|relative| {
