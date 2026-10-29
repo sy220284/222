@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use std::{
     fs,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
     time::SystemTime,
 };
@@ -17,7 +17,9 @@ use walkdir::WalkDir;
 const MAX_INDEX_LINES: usize = 200;
 const MAX_INDEX_BYTES: usize = 25_000;
 const MAX_FILES: usize = 200;
-const MAX_PER_TOPIC_BYTES: usize = 12_000;
+const MAX_PER_TOPIC_BYTES: usize = 4_096;
+const MAX_PER_TOPIC_LINES: usize = 200;
+const MAX_SESSION_MEMORY_UNITS: usize = 60 * 1_024;
 
 #[derive(Clone, Debug)]
 struct Header {
@@ -31,6 +33,8 @@ struct Header {
 pub struct MemoryContext {
     pub text: String,
     pub usage: Option<TokenUsage>,
+    pub surfaced: Vec<String>,
+    pub surfaced_units: usize,
 }
 
 fn trim_utf8(input: &str, cap: usize) -> String {
@@ -93,6 +97,34 @@ fn parse_header(text: &str) -> (Option<String>, Option<String>) {
     (description, memory_type)
 }
 
+/// Bounded memory preview matching the original 200-line/4096-byte attachment.
+fn read_topic_preview(path: &Path) -> Result<(String, usize)> {
+    let mut bytes = Vec::with_capacity(MAX_PER_TOPIC_BYTES + 1);
+    fs::File::open(path)?
+        .take((MAX_PER_TOPIC_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)?;
+    let truncated_by_bytes = bytes.len() > MAX_PER_TOPIC_BYTES;
+    let capped = &bytes[..bytes.len().min(MAX_PER_TOPIC_BYTES)];
+    let valid_end = match std::str::from_utf8(capped) {
+        Ok(_) => capped.len(),
+        Err(error) if error.error_len().is_none() => error.valid_up_to(),
+        Err(error) => return Err(error.into()),
+    };
+    let content = std::str::from_utf8(&capped[..valid_end])?;
+    let truncated_by_lines = content.lines().count() > MAX_PER_TOPIC_LINES;
+    let mut preview = content.lines().take(MAX_PER_TOPIC_LINES)
+        .collect::<Vec<_>>().join("\n");
+    if truncated_by_bytes || truncated_by_lines {
+        let reason = if truncated_by_bytes {
+            format!("{MAX_PER_TOPIC_BYTES} byte limit")
+        } else {
+            format!("first {MAX_PER_TOPIC_LINES} lines")
+        };
+        preview.push_str(&format!("\n\n> This memory file was truncated ({reason}). Use the read_file tool to view the complete file at: {}", path.display()));
+    }
+    let units = preview.encode_utf16().count();
+    Ok((preview, units))
+}
 fn scan(root: &Path) -> Result<(String, Vec<Header>)> {
     let dir = root.join(".atlas").join("memory");
     if !dir.exists() {
@@ -105,6 +137,9 @@ fn scan(root: &Path) -> Result<(String, Vec<Header>)> {
     }
     let index_path = real.join("MEMORY.md");
     let index = if index_path.is_file() {
+        if fs::symlink_metadata(&index_path)?.file_type().is_symlink() {
+            bail!("Memory index must not be a symlink")
+        }
         if fs::metadata(&index_path)?.len() > 256_000 {
             bail!("MEMORY.md exceeds safety limit")
         }
@@ -190,15 +225,32 @@ pub async fn context_with_recent_tools(
     profile: &ProviderProfile,
     recent_tools: &[String],
 ) -> Result<MemoryContext> {
+    context_with_recent_tools_excluding(root, query, provider, profile, recent_tools, &[], 0).await
+}
+
+/// Exclude previously surfaced topics before model ranking.
+pub async fn context_with_recent_tools_excluding(
+    root: &Path,
+    query: &str,
+    provider: &dyn ModelProvider,
+    profile: &ProviderProfile,
+    recent_tools: &[String],
+    already_surfaced: &[String],
+    session_units: usize,
+) -> Result<MemoryContext> {
     let (index, files) = scan(root)?;
+    let excluded: std::collections::HashSet<&str> = already_surfaced.iter().map(String::as_str).collect();
+    let files = files.into_iter()
+        .filter(|file| !excluded.contains(file.filename.as_str()))
+        .collect::<Vec<_>>();
     let mut text = String::new();
     if !index.is_empty() {
         text.push_str("Project memory index (local user-owned file; verify claims):\n");
         text.push_str(&index);
         text.push('\n');
     }
-    if files.is_empty() {
-        return Ok(MemoryContext { text, usage: None });
+    if files.is_empty() || session_units >= MAX_SESSION_MEMORY_UNITS {
+        return Ok(MemoryContext { text, usage: None, surfaced: Vec::new(), surfaced_units: 0 });
     }
     let manifest = files
         .iter()
@@ -251,7 +303,7 @@ pub async fn context_with_recent_tools(
         Ok(response) => response,
         Err(error) => {
             eprintln!("Local memory selection skipped: {error:#}");
-            return Ok(MemoryContext { text, usage: None });
+            return Ok(MemoryContext { text, usage: None, surfaced: Vec::new(), surfaced_units: 0 });
         }
     };
     if response
@@ -263,6 +315,8 @@ pub async fn context_with_recent_tools(
         return Ok(MemoryContext {
             text,
             usage: response.usage,
+            surfaced: Vec::new(),
+            surfaced_units: 0,
         });
     }
     // sideQuery in 2.1.88 reads the first text block. Providers may
@@ -289,10 +343,14 @@ pub async fn context_with_recent_tools(
             return Ok(MemoryContext {
                 text,
                 usage: response.usage,
+                surfaced: Vec::new(),
+                surfaced_units: 0,
             })
         }
     };
     let mut seen = std::collections::HashSet::new();
+    let mut surfaced = Vec::new();
+    let mut surfaced_units = 0usize;
     for name in parsed
         .get("selected_memories")
         .and_then(Value::as_array)
@@ -312,9 +370,12 @@ pub async fn context_with_recent_tools(
         }
         // The topic may disappear or become unreadable after scanning.
         // Skip that selection and keep the other recalled memories.
-        let contents = match fs::read_to_string(&file.path) {
-            Ok(contents) => contents,
-            Err(_) => continue,
+        let (contents, units) = match read_topic_preview(&file.path) {
+            Ok(result) => result,
+            Err(error) => {
+                eprintln!("Memory file {} could not be read: {error:#}", file.path.display());
+                continue;
+            }
         };
         let age_ms = match file.modified.duration_since(SystemTime::UNIX_EPOCH) {
             Ok(t) => t.as_secs_f64() * 1000.0,
@@ -324,12 +385,16 @@ pub async fn context_with_recent_tools(
         text.push_str(&format!(
             "\nRelevant local memory ({name}):\n{}{}\n",
             freshness,
-            trim_utf8(&contents, MAX_PER_TOPIC_BYTES)
+            contents
         ));
+        surfaced.push(file.filename.clone());
+        surfaced_units = surfaced_units.saturating_add(units);
     }
     Ok(MemoryContext {
         text,
         usage: response.usage,
+        surfaced,
+        surfaced_units,
     })
 }
 
