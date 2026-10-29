@@ -3219,6 +3219,7 @@ mod tests {
             interactive: false,
             max_steps: 5,
             session,
+            session_start_source: "startup",
             mcp: None,
             lsp: None,
             hooks: HookRunner::default(),
@@ -3246,6 +3247,8 @@ mod tests {
             hook_rules: Vec::new(),
             model_prices: Vec::new(),
             file_metrics: Arc::new(ToolMetrics::default()),
+            last_context_usage: None,
+            last_model_usage: None,
         };
         agent.compact_history().await.unwrap();
         let restored = Session::load(dir.path(), &id).unwrap();
