@@ -495,3 +495,15 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 2026-10-29：Issue #3 原版 Hook 事件名协议检查
 
 对照原版 `src/utils/hooks.ts` 581–589 行，Rust 过去接受 `hookSpecificOutput` 但不核实 `hookEventName`，可能把 PostToolUse 的响应当作 PreToolUse 输入修改或权限决策。现在非空 `hookSpecificOutput` 必须提供和当前事件完全一致的 `hookEventName`，缺失或错事件返回协议错误；真实 Hook 子进程集成用例更新为原版完整协议，并新增错误事件/缺失事件的拒绝测试。仍须完善原版 Hook 串并行调度、失败回填、各生命周期事件与 UI，不将 `src/utils/hooks.ts` 标已验收。
+
+
+## 2026-10-29：按功能入口审计补齐 ToolSearch 与 AskUserQuestion 真实执行链
+
+对应原始 2.1.88 的 `src/tools/ToolSearchTool/ToolSearchTool.ts` 和 `src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx`，新增 `src/tool_search.rs` 与 `src/ask_user_question.rs`，在 `src/agent.rs` 的模型工具定义、PreToolUse/实际执行/PostToolUse、会话工具结果持久化主链接入。
+
+- `ToolSearch`：按照当前真实工具目录检索，支持 `select:A,B`、工具名精确匹配、MCP 前缀、关键词加权及 `+required` 必须词。模型工具调用的真实查询结果进入下一模型请求，保留于会话。
+- `AskUserQuestion`：仅在实际交互式会话暴露，校验问题/选项数量、重复值、多选、Other 自由回答、关闭输入；模型伪造的 `answers` 不作为用户回答，工具只使用终端实际输入。输出与对话持久化。
+- 新增模块单元测试和 `tests/integration_cli.rs` 的 CLI→真实 HTTP 模型→工具→下一模型请求→会话文件两条端到端测试；专门检验模型伪造回答不渗透到工具结果。
+- 代码 HEAD `1a677171e54da1277128c9f5a5a5d793a299ebb8` 的 GitHub Actions [40838300287](https://github.com/sy220284/222/actions/runs/40838300287)：格式/Clippy、编译/全部测试、依赖检查均成功。之后仅更新迁移台账，最终 HEAD 的 CI 另行判定。
+
+**严格剩余差异**：`ToolSearch` 尚未实现原版 deferred JSONSchema 动态增量注入及 `tool_reference` 跨供应商协议；`AskUserQuestion` 尚未实现 React/Ink 预览与 SDK 外部审批回执，annotations 未覆盖。两条源路径仍记“部分实现”，没有任何新增跨模块全行为等价验收，不改变 1,855 条未完成等价验收的保守统计。继续保留 Draft PR #2，不合并。
