@@ -366,14 +366,18 @@ fn powershell_quote(arg: &str) -> String {
 
 #[cfg(target_os = "windows")]
 fn cmd_quote(arg: &str) -> String {
-    let escaped = arg
-        .replace('%', "%%")
-        .replace('^', "^^")
-        .replace('&', "^&")
-        .replace('|', "^|")
-        .replace('<', "^<")
-        .replace('>', "^>")
-        .replace('"', "\\\"");
+    // cmd.exe does not treat backslash-quote as an escaped quote. An embedded
+    // double quote would end the quoted region and expose &, |, < or > as
+    // commands. Match 2.1.88 terminalLauncher.ts: remove embedded quotes,
+    // escape percent expansion and double trailing backslashes for the
+    // child's Windows argv parser.
+    let mut escaped = arg.replace('"', "").replace('%', "%%");
+    let trailing = escaped
+        .bytes()
+        .rev()
+        .take_while(|byte| *byte == b'\\')
+        .count();
+    escaped.push_str(&"\\".repeat(trailing));
     format!("\"{escaped}\"")
 }
 
