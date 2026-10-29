@@ -1318,3 +1318,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **Rust 真实执行链**：`src/tool_names.rs::canonical_name` 将原版工具名路由到已有 Rust 文件操作；`src/agent.rs` 在 PreToolUse 前执行原版严格输入门禁；`src/semantic_inputs.rs::normalize_source_file_tool` 转换参数并拒绝未知字段、非法类型及未实现的 PDF pages；`src/tools.rs::ToolExecutor::dispatch/read_file_with_mode/edit_file/write_file` 执行真实文件读写，沿用会话级已读状态、文件权限与变更历史。原版 Read 无 limit 时读取整个授权文本文件（256 KiB 上限），其结果不再被通用 16K 字符限制截断。
 - **代码提交**：`41404581f044ebe5bc354cff8e88a0d90e44d733`、`d061352e2050c916f644cc1ea0ec870dd7666885`、`223c5e08719b2e8134a7b5a2ab161c425f68b3f0`、`7959a53125f7bbc6cbdc87e67fbad1523c2ac75c`。分别按 Read、Edit、Write 三条独立用户可感知工具链计数；**本轮累计 7/100，剩余 93 项**。
 - **剩余差异**：Read 的 PDF/图片/Notebook 多媒体完整输出、25K token 实际计数、重复读取去重、原版格式化行号、各工具完整结构化结果和 UI/SDK 事件、更多输入校验及原版文件状态恢复仍待补齐；不将已有通用执行器的历史实现重复计数。未运行 Cargo、测试或 CI，新增完整等价验收 0；Issue #3 冻结 362 项仍全部开放。
+
+
+## 2026-10-29：Read 同范围重复读取去重（源码已提交、待行为验收）
+
+- 原版依据：`source/src/tools/FileReadTool/FileReadTool.ts:523–568`。相同文件、相同 offset/limit、同一磁盘修改时间且前次内容仍在上下文时，Read 返回文件未变化提示，节省重复文本和模型上下文。
+- Rust：`src/tools.rs::FileReadState/read_file_with_mode` 保存原版 Read 范围信息，区分 Edit/Write/SDK seed 后的缓存；按路径规范化、修改时间和读取范围判断是否复用，读取期间文件变化不登记可复用结果。会话压缩或清空后原有缓存已清除，不引用丢失的上下文。
+- 代码提交：`cf83f4b6c4bccc20eb07ca612c16c9fc3e810382`、`1e8b095ad4f0608d7ec3fe1238ac2b248ce03564`、`1b661e191cebeadc864c9cc6fe615a2c5a86dbdc`。作为独立的 Read 去重用户业务行为计 **1 项**，本轮累计 **8/100，剩余 92 项**。
+- 原版完整结构化 file_unchanged 输出、恢复历史会话后的缓存重建及动态配置开关仍待补齐。按要求未运行 Cargo、测试或 CI；已提交、待行为验收，新增最终等价验收 0，Issue #3 冻结 362 项继续开放。
