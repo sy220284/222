@@ -175,14 +175,21 @@ fn searchable_transcript(messages: &[Message]) -> String {
             }
         }
     }
-    parts
+    let text = parts
         .join(" ")
         .split_whitespace()
         .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(2000)
-        .collect()
+        .join(" ");
+    // Original extractTranscript limits 2,000 UTF-16 units and marks
+    // truncation with an ellipsis. Keep Rust Unicode boundaries valid.
+    let mut used = 0;
+    for (offset, ch) in text.char_indices() {
+        if used + ch.len_utf16() > 2_000 {
+            return format!("{}…", &text[..offset]);
+        }
+        used += ch.len_utf16();
+    }
+    text
 }
 
 pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
@@ -591,6 +598,17 @@ mod tests {
             Message::text("assistant", "last"),
         ];
         assert_eq!(searchable_transcript(&short), "first last");
+    }
+
+    #[test]
+    fn transcript_search_uses_original_utf16_limit_and_truncation_marker() {
+        let text = searchable_transcript(&[Message::text("user", "x".repeat(2_100))]);
+        assert_eq!(text, format!("{}…", "x".repeat(2_000)));
+        let unicode = searchable_transcript(&[Message::text(
+            "assistant",
+            format!("{}🦀tail", "x".repeat(1_999)),
+        )]);
+        assert_eq!(unicode, format!("{}…", "x".repeat(1_999)));
     }
 
     #[cfg(unix)]
