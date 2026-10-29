@@ -11,6 +11,14 @@ use tokio::sync::mpsc::UnboundedSender;
 
 #[async_trait]
 pub trait ModelProvider: Send + Sync {
+    /// Token-precise SDK thinking budgets are optional provider capabilities.
+    /// Reject unsupported requests rather than claiming the setting took effect.
+    fn set_thinking_budget(&mut self, budget: Option<u32>) -> Result<()> {
+        if budget.is_some() {
+            bail!("Selected model provider has no token-precise thinking budget capability");
+        }
+        Ok(())
+    }
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse>;
     async fn complete_stream(
         &self,
@@ -44,6 +52,7 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
             client,
             base_url: profile.base_url.clone(),
             key: key.context("Gemini endpoint requires an API key")?,
+            thinking_budget: None,
         })),
         other => bail!("Unsupported provider kind: {other}"),
     }
@@ -262,12 +271,21 @@ struct Gemini {
     client: Client,
     base_url: String,
     key: String,
+    thinking_budget: Option<u32>,
 }
 
 #[async_trait]
 impl ModelProvider for Gemini {
+    fn set_thinking_budget(&mut self, budget: Option<u32>) -> Result<()> {
+        self.thinking_budget = budget;
+        Ok(())
+    }
+
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
-        let body = gemini_request_body(request)?;
+        let mut body = gemini_request_body(request)?;
+        if let Some(budget) = self.thinking_budget {
+            body["generationConfig"] = json!({"thinkingConfig":{"thinkingBudget":budget}});
+        }
         let model = request
             .model
             .strip_prefix("models/")
@@ -341,7 +359,10 @@ impl ModelProvider for Gemini {
         request: &ModelRequest,
         deltas: UnboundedSender<String>,
     ) -> Result<ModelResponse> {
-        let body = gemini_request_body(request)?;
+        let mut body = gemini_request_body(request)?;
+        if let Some(budget) = self.thinking_budget {
+            body["generationConfig"] = json!({"thinkingConfig":{"thinkingBudget":budget}});
+        }
         crate::gemini_sse::complete(
             &self.client,
             &self.base_url,
