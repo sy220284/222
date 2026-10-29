@@ -269,6 +269,29 @@ impl TransportClient {
         }
     }
 }
+/// Translate MCP discovery hints into provider-neutral runtime metadata.
+/// Legacy server extension keys are accepted at the boundary, but are never
+/// forwarded to model providers as part of a tool schema.
+fn mcp_tool_metadata(tool: &Value) -> (bool, Option<String>) {
+    let meta = tool.get("_meta");
+    let always_load = tool.get("alwaysLoad").and_then(Value::as_bool) == Some(true)
+        || meta
+            .and_then(|value| value.get("alwaysLoad").or_else(|| value.get("anthropic/alwaysLoad")))
+            .and_then(Value::as_bool)
+            == Some(true);
+    let hint = tool
+        .get("searchHint")
+        .or_else(|| {
+            meta.and_then(|value| {
+                value.get("searchHint").or_else(|| value.get("anthropic/searchHint"))
+            })
+        })
+        .and_then(Value::as_str)
+        .map(|value| value.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|value| !value.is_empty());
+    (always_load, hint)
+}
+
 pub struct McpManager {
     clients: Vec<TransportClient>,
     tools: Vec<Value>,
@@ -347,7 +370,8 @@ impl McpManager {
                             .get("inputSchema")
                             .cloned()
                             .unwrap_or(json!({"type":"object","properties":{}}));
-                        discovered.push((alias, name.to_owned(), desc.to_owned(), params));
+                        let (always_load, search_hint) = mcp_tool_metadata(tool);
+                        discovered.push((alias, name.to_owned(), desc.to_owned(), params, always_load, search_hint));
                         display_tools.push(json!({"name":name,"description":desc}));
                     }
                     cursor = page
@@ -374,11 +398,11 @@ impl McpManager {
             }
             let client_index = out.clients.len();
             let server_info = client.server_info();
-            for (alias, name, desc, params) in discovered {
+            for (alias, name, desc, params, always_load, search_hint) in discovered {
                 out.tools.push(json!({"type":"function","function":{
                     "name":alias,"description":format!("MCP {}: {desc}. Requires approval.",server.id),
                     "parameters":params
-                }}));
+                },"alwaysLoad":always_load,"searchHint":search_hint}));
                 out.routes.insert(alias, (client_index, name));
             }
             out.server_statuses.push(json!({
@@ -604,7 +628,8 @@ impl McpManager {
                         {
                             bail!("MCP duplicate normalized tool identity: {alias}");
                         }
-                        discovered.push((real, description, schema));
+                        let (always_load, search_hint) = mcp_tool_metadata(tool);
+                        discovered.push((real, description, schema, always_load, search_hint));
                     }
                     cursor = reply
                         .get("nextCursor")
@@ -643,7 +668,7 @@ impl McpManager {
                 })
             });
             let mut listed = Vec::new();
-            for (real, description, schema) in discovered {
+            for (real, description, schema, always_load, search_hint) in discovered {
                 let alias = mcp_tool_alias(&server_name, &real);
                 self.routes
                     .insert(alias.clone(), (client_index, real.clone()));
@@ -651,7 +676,7 @@ impl McpManager {
                     "name":alias,"description":format!(
                         "MCP {server_name}: {description}. Requires approval."),
                     "parameters":schema
-                }}));
+                },"alwaysLoad":always_load,"searchHint":search_hint}));
                 listed.push(json!({"name":real,"description":description}));
             }
             self.server_statuses[status_index]["tools"] = json!(listed);

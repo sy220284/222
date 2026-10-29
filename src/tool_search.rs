@@ -108,7 +108,15 @@ pub fn visible_catalog(
                 continue;
             }
         }
-        visible.push(tool.clone());
+        // Internal discovery hints are not valid fields in OpenAI-compatible
+        // function schemas. Keep them in the searchable catalog only.
+        let mut schema = tool.clone();
+        if let Some(fields) = schema.as_object_mut() {
+            for key in ["alwaysLoad", "searchHint", "shouldDefer", "_meta"] {
+                fields.remove(key);
+            }
+        }
+        visible.push(schema);
     }
     (visible, deferred_names)
 }

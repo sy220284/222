@@ -1,3 +1,12 @@
+## 2026-10-29：MCP 工具直载与搜索提示元数据贯通（源码已提交，待验收）
+
+依据完整原始 2.1.88 源码 `source/src/services/mcp/client.ts:1765–1785` 与 `source/src/tools/ToolSearchTool/prompt.ts:53–108`、`ToolSearchTool.ts:235–290`，对照 Rust `src/mcp.rs::McpManager::connect_with_root/refresh_changed_tools`、`src/tool_search.rs::visible_catalog/execute`：
+
+- **MCP 工具无需搜索直接可用**：原版 MCP 发现结果的 `_meta` 直载开关此前在 Rust `tools/list` 转换时丢失，模型第一轮无法直接调用声明直载的工具。现将原版扩展及中立 `alwaysLoad` 映射为内部布尔值，并贯通初次连接与动态工具列表刷新；直载工具立即进入模型工具清单。
+- **MCP 工具关键词检索提示**：原版 `searchHint` 此前被丢弃，导致模型按服务声明的功能关键词找不到相关工具。现保留并规范化空白字符，供 ToolSearch 原有关键词排名使用；动态刷新同步更新提示。
+- **模型协议边界**：模型实际接收的 `tools` schema 移除内部 `alwaysLoad/searchHint/shouldDefer/_meta` 字段，避免通用模型 API 拒绝非标准函数定义。MCP 原始扩展只在发现阶段解析。
+- **状态**：2 个不同用户可感知业务功能的 Rust 源码已补齐并提交，尚未运行 Cargo、行为测试或 CI；仅做源码静态审阅，均为**已提交、待验收**。仍缺 MCP 待连接服务器提示、所有动态权限/重连/取消及完整工具发现生命周期；Issue #3 固定 362 条全部保持开放，完整等价验收新增 0。
+
 # Rust 全量迁移实况（基于逐文件台账）
 
 ## 2026-10-29：MCP 提示词二进制资源实际落盘（源码已提交、待行为验收）
