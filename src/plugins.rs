@@ -250,7 +250,9 @@ fn merge_server_specs(
     Ok(())
 }
 
-fn manifest_servers(root: &Path, value: &Value) -> Result<Vec<McpServerConfig>> {
+fn manifest_servers(
+    root: &Path, value: &Value, mut diagnostics: Option<&mut Vec<String>>,
+) -> Result<Vec<McpServerConfig>> {
     let mut entries = std::collections::BTreeMap::new();
     let mut visiting = std::collections::HashSet::new();
     let standard = root.join(".mcp.json");
@@ -261,27 +263,30 @@ fn manifest_servers(root: &Path, value: &Value) -> Result<Vec<McpServerConfig>> 
     }
     merge_server_specs(root, value, &mut entries, &mut visiting)?;
     let mut servers = Vec::new();
-    for (name, config) in entries {
-        let mut config = config;
-        let Some(object) = config.as_object_mut() else {
-            continue;
-        };
-        object.insert("id".into(), Value::String(name.clone()));
-        // A malformed server entry must not disable healthy servers in the
-        // same plugin. The original loader validates entries independently.
-        if let Ok(server) = serde_json::from_value::<McpServerConfig>(config) {
-            // McpServerConfigSchema in the source rejects empty commands
-            // and missing remote URLs before attempting any connection.
-            // Serde defaults alone do not enforce these requirements.
+    for (name, mut config) in entries {
+        let parsed = (|| -> Result<McpServerConfig> {
+            let object = config.as_object_mut()
+                .with_context(|| format!("MCP server '{name}' configuration must be an object"))?;
+            object.insert("id".into(), Value::String(name.clone()));
+            let server: McpServerConfig = serde_json::from_value(config)
+                .with_context(|| format!("MCP server '{name}' configuration is invalid"))?;
             let valid = match server.transport.as_deref().unwrap_or("stdio") {
                 "stdio" => !server.command.is_empty(),
                 "http" | "sse" | "ws" => server.url.as_deref()
                     .is_some_and(|url| !url.is_empty()),
                 _ => true,
             };
-            if valid {
-                servers.push(server);
+            if !valid {
+                bail!("MCP server '{name}' is missing its command or URL")
             }
+            Ok(server)
+        })();
+        match parsed {
+            Ok(server) => servers.push(server),
+            Err(error) => match diagnostics.as_deref_mut() {
+                Some(warnings) => warnings.push(format!("{error:#}")),
+                None => return Err(error),
+            },
         }
     }
     Ok(servers)
@@ -435,7 +440,7 @@ pub fn validate_local(location: &Path) -> Result<String> {
     }
     let manifest = read_manifest(&location, fallback)?;
     let _ = manifest_hooks(&location, &manifest.hooks, None)?;
-    let _ = manifest_servers(&location, &manifest.mcp_servers)?;
+    let _ = manifest_servers(&location, &manifest.mcp_servers, None)?;
     let _ = skill_roots(&location, &manifest)?;
     Ok(manifest.name)
 }
@@ -552,15 +557,19 @@ impl PluginSet {
             for error in hook_errors {
                 set.errors.push(format!("Plugin '{name}' hooks unavailable: {error}"));
             }
-            let servers = match manifest_servers(&location, &manifest.mcp_servers) {
+            let mut server_errors = Vec::new();
+            let servers = match manifest_servers(
+                &location, &manifest.mcp_servers, Some(&mut server_errors),
+            ) {
                 Ok(servers) => servers,
                 Err(error) => {
-                    set.errors.push(format!(
-                        "Plugin '{name}' MCP configuration unavailable: {error:#}"
-                    ));
-                    continue;
+                    server_errors.push(format!("{error:#}"));
+                    Vec::new()
                 }
             };
+            for error in server_errors {
+                set.errors.push(format!("Plugin '{name}' MCP configuration unavailable: {error}"));
+            }
             for server in servers {
                 let server_id = server.id.clone();
                 let mut server = match resolve_plugin_mcp_server(&location, name, &manifest, server) {
@@ -1225,7 +1234,7 @@ mod tests {
             r#"{"name":"good","hooks":[{"event":"Stop","command":"true"}]}"#).unwrap();
         fs::write(bad.join("plugin.json"), "{invalid json").unwrap();
         fs::write(broken_hooks.join("plugin.json"),
-            r#"{"name":"broken-hooks","mcp_servers":[{"id":"ok","command":"echo"}],"hooks":{"Stop":[{"hooks":[{"type":"command","command":"true"}]}]}}"#).unwrap();
+            r#"{"name":"broken-hooks","mcp_servers":[{"id":"ok","command":"echo"},{"id":"bad","command":""}],"hooks":{"Stop":[{"hooks":[{"type":"command","command":"true"}]}]}}"#).unwrap();
         fs::write(broken_hooks.join("hooks/hooks.json"), "{invalid json").unwrap();
         let loaded = PluginSet::load(root.path(), &[
             "bad".into(), "good".into(), "broken-hooks".into(),
@@ -1235,6 +1244,7 @@ mod tests {
         assert_eq!(loaded.mcp_servers[0].id, "broken-hooks_ok");
         assert!(loaded.errors.iter().any(|error| error.contains("Plugin 'bad'")));
         assert!(loaded.errors.iter().any(|error| error.contains("Plugin 'broken-hooks' hooks")));
+        assert!(loaded.errors.iter().any(|error| error.contains("MCP server 'bad'")));
     }
 
     #[cfg(unix)]
