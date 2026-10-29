@@ -439,10 +439,11 @@ impl PluginSet {
             for server in manifest_servers(&location, &manifest.mcp_servers)? {
                 // A single unconfigured MCP server must not prevent other
                 // tools, skills and hooks in this plugin from loading.
+                let server_id = server.id.clone();
                 let mut server = match resolve_plugin_mcp_server(&location, name, &manifest, server) {
                     Ok(server) => server,
                     Err(error) => {
-                        eprintln!("Plugin '{name}' MCP server '{}' unavailable: {error:#}", server.id);
+                        eprintln!("Plugin '{name}' MCP server '{server_id}' unavailable: {error:#}");
                         continue;
                     }
                 };
