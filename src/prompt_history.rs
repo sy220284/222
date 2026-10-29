@@ -156,6 +156,9 @@ impl PromptHistory {
         fs::create_dir_all(&self.dir)?;
         let mut file = private_file(&self.history_path(), true)?;
         file.lock_exclusive()?;
+        // Keep pending entries retryable without leaving a partial JSONL line
+        // if an append or disk sync fails while holding the exclusive lock.
+        let previous_len = file.metadata()?.len();
         let outcome = (|| -> Result<()> {
             let mut bytes = Vec::new();
             for entry in &self.pending {
@@ -166,6 +169,9 @@ impl PromptHistory {
             file.sync_data()?;
             Ok(())
         })();
+        if outcome.is_err() {
+            let _ = file.set_len(previous_len);
+        }
         let unlock = FileExt::unlock(&file);
         outcome?;
         unlock?;
