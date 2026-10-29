@@ -159,7 +159,11 @@ impl HttpClient {
             .await?;
         http.server_info = initial.get("serverInfo").cloned();
         http.capabilities = initial.get("capabilities").cloned();
-        http.instructions = initial.get("instructions").and_then(Value::as_str).filter(|text| !text.trim().is_empty()).map(str::to_owned);
+        http.instructions = initial
+            .get("instructions")
+            .and_then(Value::as_str)
+            .filter(|text| !text.trim().is_empty())
+            .map(str::to_owned);
         http.notify("notifications/initialized", json!({})).await?;
         Ok(http)
     }
