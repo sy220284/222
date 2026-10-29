@@ -6309,3 +6309,50 @@ fn failed_auto_rename_preserves_api_usage_and_existing_conversation() {
     assert_eq!(session["usage"]["total_tokens"], 11);
     assert!(session["cost"]["total_api_duration_ms"].is_u64());
 }
+
+#[test]
+fn interactive_project_onboarding_is_persistent_and_disappears_after_init_file() {
+    let root = tempfile::tempdir().unwrap();
+    let settings = tempfile::tempdir().unwrap();
+    let config = settings.path().join("config.json");
+    let init = binary()
+        .arg("init")
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert!(
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
+    );
+    fs::write(root.path().join("Cargo.toml"), "[package]\nname='test'\n").unwrap();
+    let chat = || {
+        let mut process = binary()
+            .args(["--workspace", root.path().to_str().unwrap(), "chat"])
+            .env("ATLAS_CONFIG", &config)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        process.stdin.take().unwrap().write_all(b"/quit\n").unwrap();
+        let output = process.wait_with_output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let first = chat();
+    assert!(first.contains("Project setup: Run /init"), "{first}");
+    assert!(chat().contains("Project setup: Run /init"));
+    fs::write(root.path().join("AGENTS.md"), "Local instructions").unwrap();
+    assert!(!chat().contains("Project setup:"));
+    fs::remove_file(root.path().join("AGENTS.md")).unwrap();
+    // The original caches visibility for the current process, and increments
+    // impressions across starts. Once four impressions are shown it stops.
+    assert!(chat().contains("Project setup:"));
+    assert!(chat().contains("Project setup:"));
+    assert!(!chat().contains("Project setup:"));
+}

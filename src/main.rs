@@ -11,6 +11,7 @@ mod command_manifest;
 mod compat_helpers;
 mod config;
 mod control_message_compat;
+mod conversation_context;
 mod cost;
 mod deep_link;
 mod deep_link_banner;
@@ -66,6 +67,7 @@ mod portable_source_utils;
 mod portable_ui_runtime;
 mod powershell_permission_matching;
 mod project_init;
+mod project_onboarding;
 mod prompt_history;
 mod protocol;
 mod provider;
@@ -1121,6 +1123,13 @@ async fn chat(
     let mut prompt_history =
         prompt_history::PromptHistory::new(agent.workspace_root(), &agent.session_id())?;
     println!("Atlas Agent. /help lists commands; /exit quits.");
+    let mut onboarding = project_onboarding::Onboarding::for_workspace(agent.workspace_root())?;
+    if onboarding.should_show()? {
+        if let Some(suggestion) = onboarding.current_suggestion()? {
+            println!("Project setup: {suggestion}");
+        }
+        onboarding.mark_seen()?;
+    }
     if deep_link_origin {
         let last_fetch = last_fetch_ms.and_then(|value| {
             std::time::SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_millis(value))
@@ -1574,6 +1583,7 @@ async fn chat(
                 Ok(answer) => println!("{answer}"),
                 Err(error) => eprintln!("Project initialization failed: {error:#}"),
             }
+            onboarding.maybe_mark_complete()?;
             continue;
         }
         if input == "/branch" || input.starts_with("/branch ") {
@@ -1722,6 +1732,10 @@ async fn chat(
             println!("Model: {} / {}", agent.profile().id, agent.profile().model);
             continue;
         }
+        // The original marks completion on prompt submission, not on a
+        // successful model response; local project instructions may have
+        // been created by the user outside this chat.
+        onboarding.maybe_mark_complete()?;
         match agent.ask(input).await {
             Ok(answer) => println!("{answer}"),
             Err(err) => eprintln!("Error: {err:#}"),

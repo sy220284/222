@@ -12,7 +12,7 @@
 | `src/Task.ts` | 126 | 3152 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/Tool.ts` | 793 | 29516 | 重写：保持通用行为 | `src/generated_ports/p_2980dcfa0210a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands.ts` | 755 | 25185 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/context.ts` | 190 | 6446 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/context.ts` | 190 | 6446 | 重写：保持通用行为 | `src/conversation_context.rs / src/agent.rs / src/main.rs` | 部分实现：会话首次启动的真实 Git 状态/分支/最近提交快照与本地日期进入模型 system，后续轮次不刷新；原版复杂记忆文件发现、注入过滤及更多配置合并尚未等价 |
 | `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` / `src/cost.rs` / `src/agent.rs` / `src/tool_metrics.rs` | 部分实现：多模型/子代理/团队费用汇总、会话恢复、API/工具/墙钟耗时及改动行数；已补充模型请求最终失败时 API/墙钟耗时持久化；重试逐次耗时拆分、退出回调仍待核对 |
 | `src/costHook.ts` | 23 | 617 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/dialogLaunchers.tsx` | 133 | 22948 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -20,7 +20,7 @@
 | `src/ink.ts` | 86 | 3887 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/interactiveHelpers.tsx` | 366 | 57424 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/main.tsx` | 4684 | 803924 | 重写：CLI／SDK 入口 | `src/main.rs` | 部分实现，多模式与 SDK 未等价 |
-| `src/projectOnboardingState.ts` | 84 | 2337 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/projectOnboardingState.ts` | 84 | 2337 | 重写：保持通用行为 | `src/project_onboarding.rs / src/main.rs` | 部分实现：工作区是否为空、工程指令文件探测、最多四次提示、按工作区持久化完成标记，接入真实交互 CLI；原版交互式 onboarding 视觉组件未等价 |
 | `src/query.ts` | 1730 | 68683 | 重写：模型／Agent 循环 | `src/agent.rs / src/sse.rs` | 部分实现：多轮循环、SSE 增量和工具回填；原版上下文状态机未全等；模型返回非法 JSON/非对象工具参数时逐工具错误回填，不中断同轮合法兄弟工具及后续模型请求；Pre/PostToolUse 子进程 Hook 异常逐工具回填且保留原操作副作用和后续合法工具 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；SSE 无终止标记时拒绝执行未确认工具；多模态 UI/非图片块仍未等价|
 | `src/replLauncher.tsx` | 23 | 3517 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/setup.ts` | 478 | 20646 | 重写：保持通用行为 | 待定 | 未迁移 |

@@ -2,6 +2,7 @@ use crate::{
     background::BackgroundTasks,
     config::ProviderProfile,
     config::{LspServerConfig, McpServerConfig, SearchBackend},
+    conversation_context::ConversationContext,
     cost::{CostLedger, ModelPrice},
     hooks::{HookEvent, HookRule, HookRunner},
     in_memory_mailbox,
@@ -84,6 +85,7 @@ pub struct Agent {
     lsp: Option<LspManager>,
     hooks: HookRunner,
     session_context: String,
+    conversation_context: ConversationContext,
     structured_output: bool,
     child_depth: u8,
     mcp_configs: Vec<McpServerConfig>,
@@ -151,6 +153,7 @@ impl Agent {
                 Approval::Full => permission_mode::Mode::BypassPermissions,
             }
         };
+        let conversation_context = ConversationContext::capture(&root);
         Ok(Self {
             profile,
             provider,
@@ -164,6 +167,7 @@ impl Agent {
             lsp: None,
             hooks: HookRunner::default(),
             session_context: String::new(),
+            conversation_context,
             structured_output: false,
             child_depth: 0,
             mcp_configs: Vec::new(),
@@ -1749,6 +1753,7 @@ impl Agent {
         self.session.messages.push(user_message);
         self.session.save(&self.root)?;
         let mut system = system_prompt(&self.root)?;
+        self.conversation_context.append_to(&mut system);
         if let Some(summary) = &self.session.summary {
             system.push_str("\nVerified session continuity summary:\n");
             system.push_str(summary);
@@ -2420,6 +2425,7 @@ mod tests {
             lsp: None,
             hooks: HookRunner::default(),
             session_context: String::new(),
+            conversation_context: ConversationContext::capture(dir.path()),
             structured_output: false,
             child_depth: 0,
             mcp_configs: Vec::new(),
