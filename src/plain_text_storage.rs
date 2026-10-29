@@ -20,9 +20,9 @@ impl PlainTextStorage {
     }
 
     fn write_secure(&self, data: &Value) -> std::io::Result<()> {
-        let dir = self.path.parent().ok_or_else(|| std::io::Error::new(
-            std::io::ErrorKind::InvalidInput, "Invalid credentials path"
-        ))?;
+        let dir = self.path.parent().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid credentials path")
+        })?;
         fs::create_dir_all(dir)?;
         let temporary = dir.join(format!(".credentials-{}.tmp", Uuid::new_v4()));
         let mut opts = fs::OpenOptions::new();
@@ -105,7 +105,10 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(fs::metadata(file).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                fs::metadata(file).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
         }
         assert!(storage.delete());
         assert!(storage.delete());

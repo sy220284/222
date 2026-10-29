@@ -12,10 +12,16 @@ pub struct WriteResult {
 
 impl WriteResult {
     pub fn success() -> Self {
-        Self { success: true, warning: None }
+        Self {
+            success: true,
+            warning: None,
+        }
     }
     pub fn failure() -> Self {
-        Self { success: false, warning: None }
+        Self {
+            success: false,
+            warning: None,
+        }
     }
 }
 
@@ -35,12 +41,13 @@ pub struct FallbackStorage {
 }
 
 impl FallbackStorage {
-    pub fn new(
-        primary: Arc<dyn SecureStorage>,
-        secondary: Arc<dyn SecureStorage>,
-    ) -> Self {
+    pub fn new(primary: Arc<dyn SecureStorage>, secondary: Arc<dyn SecureStorage>) -> Self {
         let name = format!("{}-with-{}-fallback", primary.name(), secondary.name());
-        Self { name, primary, secondary }
+        Self {
+            name,
+            primary,
+            secondary,
+        }
     }
 }
 
@@ -51,7 +58,9 @@ impl SecureStorage for FallbackStorage {
     }
 
     fn read(&self) -> Option<Value> {
-        self.primary.read().or_else(|| self.secondary.read())
+        self.primary
+            .read()
+            .or_else(|| self.secondary.read())
             .or_else(|| Some(serde_json::json!({})))
     }
 
@@ -59,7 +68,10 @@ impl SecureStorage for FallbackStorage {
         if let Some(value) = self.primary.read_async().await {
             return Some(value);
         }
-        self.secondary.read_async().await.or_else(|| Some(serde_json::json!({})))
+        self.secondary
+            .read_async()
+            .await
+            .or_else(|| Some(serde_json::json!({})))
     }
 
     fn update(&self, data: Value) -> WriteResult {
@@ -98,7 +110,10 @@ impl SecureStorage for FallbackStorage {
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    };
 
     struct MemoryStore {
         label: &'static str,
@@ -118,9 +133,15 @@ mod tests {
 
     #[async_trait]
     impl SecureStorage for MemoryStore {
-        fn name(&self) -> &str { self.label }
-        fn read(&self) -> Option<Value> { self.data.lock().unwrap().clone() }
-        async fn read_async(&self) -> Option<Value> { self.read() }
+        fn name(&self) -> &str {
+            self.label
+        }
+        fn read(&self) -> Option<Value> {
+            self.data.lock().unwrap().clone()
+        }
+        async fn read_async(&self) -> Option<Value> {
+            self.read()
+        }
         fn update(&self, data: Value) -> WriteResult {
             if !self.writable.load(Ordering::SeqCst) {
                 return WriteResult::failure();
@@ -136,7 +157,11 @@ mod tests {
     #[tokio::test]
     async fn secondary_data_used_only_when_primary_is_absent() {
         let first = Arc::new(MemoryStore::new("keychain", None, false));
-        let second = Arc::new(MemoryStore::new("fallback", Some(json!({"access":"secondary"})), true));
+        let second = Arc::new(MemoryStore::new(
+            "fallback",
+            Some(json!({"access":"secondary"})),
+            true,
+        ));
         let store = FallbackStorage::new(first.clone(), second.clone());
         assert_eq!(store.name(), "keychain-with-fallback-fallback");
         assert_eq!(store.read().unwrap()["access"], "secondary");
@@ -151,7 +176,11 @@ mod tests {
 
     #[test]
     fn fallback_write_removes_stale_primary_which_would_shadow_new_token() {
-        let first = Arc::new(MemoryStore::new("keychain", Some(json!({"refresh":"old"})), false));
+        let first = Arc::new(MemoryStore::new(
+            "keychain",
+            Some(json!({"refresh":"old"})),
+            false,
+        ));
         let second = Arc::new(MemoryStore::new("file", None, true));
         let store = FallbackStorage::new(first.clone(), second.clone());
         assert!(store.update(json!({"refresh":"new"})).success);

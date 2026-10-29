@@ -40,11 +40,7 @@ pub async fn sleep(
 /// Unlike tokio::time::timeout(future), timing out this wrapper does not
 /// cancel the underlying task. The detached handle continues executing,
 /// matching the original Promise.race semantics.
-pub async fn with_timeout<F, T>(
-    work: F,
-    timeout: Duration,
-    timeout_message: &str,
-) -> Result<T>
+pub async fn with_timeout<F, T>(work: F, timeout: Duration, timeout_message: &str) -> Result<T>
 where
     F: Future<Output = T> + Send + 'static,
     T: Send + 'static,
@@ -69,9 +65,11 @@ mod tests {
         let signal = AbortController::new();
         signal.abort();
         assert!(sleep(Duration::from_secs(60), Some(&signal), false, None)
-            .await.is_ok());
+            .await
+            .is_ok());
         assert!(sleep(Duration::from_secs(60), Some(&signal), true, None)
-            .await.is_err());
+            .await
+            .is_err());
         let future_signal = AbortController::new();
         let child = future_signal.clone();
         tokio::spawn(async move {
@@ -81,7 +79,9 @@ mod tests {
         assert!(tokio::time::timeout(
             Duration::from_millis(200),
             sleep(Duration::from_secs(120), Some(&future_signal), false, None)
-        ).await.is_ok());
+        )
+        .await
+        .is_ok());
     }
 
     #[tokio::test]
@@ -97,7 +97,10 @@ mod tests {
             "Work took too long",
         )
         .await;
-        assert!(outcome.unwrap_err().to_string().contains("Work took too long"));
+        assert!(outcome
+            .unwrap_err()
+            .to_string()
+            .contains("Work took too long"));
         tokio::time::sleep(Duration::from_millis(70)).await;
         assert!(finished.load(Ordering::SeqCst));
     }

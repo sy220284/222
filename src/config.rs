@@ -231,7 +231,9 @@ impl Config {
                     }
                     if s.url.is_some()
                         || !s.headers.is_empty()
-                        || s.headers_helper.as_deref().is_some_and(|v| !v.trim().is_empty())
+                        || s.headers_helper
+                            .as_deref()
+                            .is_some_and(|v| !v.trim().is_empty())
                     {
                         bail!("MCP stdio server cannot define HTTP url/headers/helper");
                     }

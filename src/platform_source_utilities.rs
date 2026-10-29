@@ -93,15 +93,8 @@ pub fn is_pdf_supported(model: &str) -> bool {
 
 pub fn exports(source: &str) -> Option<&'static [&'static str]> {
     match source {
-        "src/utils/pdfUtils.ts" => Some(&[
-            "parsePDFPageRange",
-            "isPDFSupported",
-            "isPDFExtension",
-        ]),
-        "src/ink/clearTerminal.ts" => Some(&[
-            "getClearTerminalSequence",
-            "clearTerminal",
-        ]),
+        "src/utils/pdfUtils.ts" => Some(&["parsePDFPageRange", "isPDFSupported", "isPDFExtension"]),
+        "src/ink/clearTerminal.ts" => Some(&["getClearTerminalSequence", "clearTerminal"]),
         _ => None,
     }
 }
@@ -109,11 +102,10 @@ pub fn exports(source: &str) -> Option<&'static [&'static str]> {
 pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
     let arg = args.first().and_then(Value::as_str).unwrap_or("");
     match (source, export) {
-        ("src/utils/pdfUtils.ts", "parsePDFPageRange") => {
-            Some(parse_pdf_page_range(arg).map_or(Value::Null, |p| {
-                json!({"firstPage":p.first_page,"lastPage":p.last_page})
-            }))
-        }
+        ("src/utils/pdfUtils.ts", "parsePDFPageRange") => Some(parse_pdf_page_range(arg).map_or(
+            Value::Null,
+            |p| json!({"firstPage":p.first_page,"lastPage":p.last_page}),
+        )),
         ("src/utils/pdfUtils.ts", "isPDFSupported") => Some(json!(is_pdf_supported(arg))),
         ("src/utils/pdfUtils.ts", "isPDFExtension") => Some(json!(is_pdf_extension(arg))),
         ("src/ink/clearTerminal.ts", "getClearTerminalSequence" | "clearTerminal") => {
@@ -131,26 +123,40 @@ mod tests {
     fn page_ranges_follow_source_parseint_semantics() {
         assert_eq!(
             parse_pdf_page_range("5"),
-            Some(PageRange { first_page: 5, last_page: Some(5) })
+            Some(PageRange {
+                first_page: 5,
+                last_page: Some(5)
+            })
         );
         assert_eq!(
             parse_pdf_page_range("1-10"),
-            Some(PageRange { first_page: 1, last_page: Some(10) })
+            Some(PageRange {
+                first_page: 1,
+                last_page: Some(10)
+            })
         );
         assert_eq!(
             parse_pdf_page_range("3-"),
-            Some(PageRange { first_page: 3, last_page: None })
+            Some(PageRange {
+                first_page: 3,
+                last_page: None
+            })
         );
         assert_eq!(
             parse_pdf_page_range("1abc-2junk"),
-            Some(PageRange { first_page: 1, last_page: Some(2) })
+            Some(PageRange {
+                first_page: 1,
+                last_page: Some(2)
+            })
         );
         for input in ["", "-3", "0", "1-0", "10-2", "abc", "5-abc"] {
             assert_eq!(parse_pdf_page_range(input), None);
         }
         assert!(is_pdf_extension(".PDF"));
         assert!(!is_pdf_extension("pdfx"));
-        assert!(!is_pdf_supported("bedrock.anthropic.claude-3-haiku-20240307"));
+        assert!(!is_pdf_supported(
+            "bedrock.anthropic.claude-3-haiku-20240307"
+        ));
         assert!(is_pdf_supported("gpt-6"));
     }
 

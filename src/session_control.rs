@@ -145,8 +145,18 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             .agent_name
             .as_deref()
             .filter(|value| !value.trim().is_empty())
-            .or_else(|| session.custom_title.as_deref().filter(|value| !value.trim().is_empty()))
-            .or_else(|| session.summary.as_deref().filter(|value| !value.trim().is_empty()))
+            .or_else(|| {
+                session
+                    .custom_title
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+            })
+            .or_else(|| {
+                session
+                    .summary
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+            })
             .map(str::to_owned)
             .unwrap_or(fallback_title);
         let modified_ms = meta
@@ -329,7 +339,10 @@ pub fn first_prompt(messages: &[Message]) -> String {
         message.content_blocks.as_ref().and_then(|blocks| {
             blocks.iter().find_map(|block| {
                 if block.get("type").and_then(|value| value.as_str()) == Some("text") {
-                    block.get("text").and_then(|value| value.as_str()).map(str::to_owned)
+                    block
+                        .get("text")
+                        .and_then(|value| value.as_str())
+                        .map(str::to_owned)
                 } else {
                     None
                 }
@@ -410,7 +423,10 @@ fn render_export_block(block: &serde_json::Value) -> Option<String> {
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned),
         Some("tool_use") => {
-            let id = block.get("id").and_then(serde_json::Value::as_str).unwrap_or("");
+            let id = block
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
             let name = block
                 .get("name")
                 .and_then(serde_json::Value::as_str)
@@ -723,10 +739,15 @@ mod tests {
         tool_only.save(root.path()).unwrap();
 
         let found = search(root.path(), "release").unwrap();
-        assert_eq!(
-            found.iter().map(|s| s.id).collect::<Vec<_>>(),
-            vec![tagged.id, summarized.id, transcript.id]
-        );
+        // Both summary and transcript become visible titles containing
+        // "release" (the same rank). Their modification timestamps can be
+        // equal at filesystem resolution; creation order is not a search
+        // ordering contract. Assert rank and membership instead.
+        assert_eq!(found.len(), 3);
+        assert_eq!(found[0].id, tagged.id);
+        let tied_titles = [found[1].id, found[2].id];
+        assert!(tied_titles.contains(&summarized.id));
+        assert!(tied_titles.contains(&transcript.id));
         assert_eq!(search(root.path(), "#release").unwrap()[0].id, tagged.id);
         assert!(search(root.path(), "secret").unwrap().is_empty());
     }

@@ -99,9 +99,8 @@ pub fn parse_plugin_args(args: Option<&str>) -> PluginCommand {
                     };
                     PluginCommand::Marketplace {
                         action: Some(action.into()),
-                        target: (action != "list").then(|| {
-                            parts.iter().skip(2).copied().collect::<Vec<_>>().join(" ")
-                        }),
+                        target: (action != "list")
+                            .then(|| parts.iter().skip(2).copied().collect::<Vec<_>>().join(" ")),
                     }
                 }
                 _ => PluginCommand::Marketplace {

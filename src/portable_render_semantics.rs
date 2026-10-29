@@ -156,9 +156,7 @@ fn ansi_sequence_end(text: &str, start: usize) -> Option<usize> {
         b']' | b'P' | b'^' | b'_' => {
             let mut end = start + 2;
             while end < b.len() {
-                if b[end] == 0x07 || end + 1 < b.len()
-                    && b[end] == 0x1b && b[end + 1] == b'\\'
-                {
+                if b[end] == 0x07 || end + 1 < b.len() && b[end] == 0x1b && b[end + 1] == b'\\' {
                     return Some(if b[end] == 0x07 { end + 1 } else { end + 2 });
                 }
                 end += 1;
@@ -224,12 +222,16 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         }
         ("src/ink/measure-text.ts", "default") => {
             let mut cache = LineWidthCache::default();
-            Some(measure_text(first.as_str()?, args.get(1)?.as_f64()?, &mut cache))
+            Some(measure_text(
+                first.as_str()?,
+                args.get(1)?.as_f64()?,
+                &mut cache,
+            ))
         }
-        ("src/ink/tabstops.ts", "expandTabs") => {
-            Some(json!(expand_tabs(first.as_str()?, args.get(1)
-                .and_then(Value::as_u64).unwrap_or(8) as usize)))
-        }
+        ("src/ink/tabstops.ts", "expandTabs") => Some(json!(expand_tabs(
+            first.as_str()?,
+            args.get(1).and_then(Value::as_u64).unwrap_or(8) as usize
+        ))),
         ("src/ink/termio/esc.ts", "parseEsc") => {
             Some(parse_esc(first.as_str()?).unwrap_or(Value::Null))
         }
@@ -257,8 +259,12 @@ mod tests {
         let one = json!({"type":"attachment","uuid":"first","timestamp":2,
             "attachment":{"type":"task_status","taskType":"in_process_teammate","status":"completed"}});
         let separate = json!({"type":"system","subtype":"info"});
-        assert_eq!(collapse_teammate_shutdowns(&[one.clone()]), vec![one.clone()]);
-        let result = collapse_teammate_shutdowns(&[one.clone(), one.clone(), separate.clone(), one]);
+        assert_eq!(
+            collapse_teammate_shutdowns(&[one.clone()]),
+            vec![one.clone()]
+        );
+        let result =
+            collapse_teammate_shutdowns(&[one.clone(), one.clone(), separate.clone(), one]);
         assert_eq!(result.len(), 3);
         assert_eq!(result[0]["attachment"]["type"], "teammate_shutdown_batch");
         assert_eq!(result[0]["attachment"]["count"], 2);
@@ -274,10 +280,10 @@ mod tests {
         let b = json!({"type":"system","subtype":"stop_hook_summary","hookLabel":"PostToolUse",
             "hookCount":3,"hookInfos":[2],"hookErrors":["bad"],"totalDurationMs":60,
             "preventedContinuation":true,"hasOutput":false});
-        let merged = collapse_hook_summaries(&[a,b]);
+        let merged = collapse_hook_summaries(&[a, b]);
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0]["hookCount"], 5);
-        assert_eq!(merged[0]["hookInfos"], json!([1,2]));
+        assert_eq!(merged[0]["hookInfos"], json!([1, 2]));
         assert_eq!(merged[0]["hookErrors"], json!(["bad"]));
         assert_eq!(merged[0]["totalDurationMs"], 100);
         assert_eq!(merged[0]["preventedContinuation"], true);
@@ -286,14 +292,23 @@ mod tests {
     #[test]
     fn text_measure_tab_expansion_and_ansi_control_match_terminal_rules() {
         let mut cache = LineWidthCache::default();
-        assert_eq!(measure_text("ABCD\n", 2.0, &mut cache),
-            json!({"width":4,"height":3}));
-        assert_eq!(measure_text("ABCD\n", f64::INFINITY, &mut cache),
-            json!({"width":4,"height":2}));
-        assert_eq!(expand_tabs("a\tb\n\tc",8), "a       b\n        c");
-        assert_eq!(expand_tabs("\u{1b}[31ma\tb\u{1b}[0m",8),
-            "\u{1b}[31ma       b\u{1b}[0m");
-        assert_eq!(parse_esc("7"), Some(json!({"type":"cursor","action":{"type":"save"}})));
+        assert_eq!(
+            measure_text("ABCD\n", 2.0, &mut cache),
+            json!({"width":4,"height":3})
+        );
+        assert_eq!(
+            measure_text("ABCD\n", f64::INFINITY, &mut cache),
+            json!({"width":4,"height":2})
+        );
+        assert_eq!(expand_tabs("a\tb\n\tc", 8), "a       b\n        c");
+        assert_eq!(
+            expand_tabs("\u{1b}[31ma\tb\u{1b}[0m", 8),
+            "\u{1b}[31ma       b\u{1b}[0m"
+        );
+        assert_eq!(
+            parse_esc("7"),
+            Some(json!({"type":"cursor","action":{"type":"save"}}))
+        );
         assert_eq!(parse_esc("H"), None);
     }
 }

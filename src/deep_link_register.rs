@@ -63,8 +63,11 @@ fn is_current_linux(executable: &Path) -> bool {
     };
     fs::read_to_string(path)
         .ok()
-        .and_then(|content| linux_exec_line(executable)
-            .ok().map(|line| content.contains(&line)))
+        .and_then(|content| {
+            linux_exec_line(executable)
+                .ok()
+                .map(|line| content.contains(&line))
+        })
         .unwrap_or(false)
 }
 
@@ -75,7 +78,14 @@ fn register_windows(executable: &Path) -> Result<()> {
     let command = format!("{key}\\shell\\open\\command");
     let value = format!("\"{exe}\" handle-uri \"%1\"");
     for args in [
-        vec!["add", &key, "/ve", "/d", "URL:Atlas Agent URL Handler", "/f"],
+        vec![
+            "add",
+            &key,
+            "/ve",
+            "/d",
+            "URL:Atlas Agent URL Handler",
+            "/f",
+        ],
         vec!["add", &key, "/v", "URL Protocol", "/d", "", "/f"],
         vec!["add", &command, "/ve", "/d", &value, "/f"],
     ] {
@@ -115,14 +125,17 @@ fn macos_app_dir() -> Result<PathBuf> {
 fn register_macos(executable: &Path) -> Result<()> {
     let app = macos_app_dir()?;
     let path = executable.to_str().context("Non-UTF-8 executable path")?;
-    if path.contains(['\n','\r']) {
+    if path.contains(['\n', '\r']) {
         bail!("Invalid executable path for AppleScript");
     }
     let script = format!(
         "on open location address\n do shell script quoted form of {executable} & \" handle-uri \" & quoted form of address & \" >/dev/null 2>&1 &\"\nend open location\n",
         executable = applescript_string(path)
     );
-    let temp = std::env::temp_dir().join(format!("atlas-register-{}.applescript", uuid::Uuid::new_v4()));
+    let temp = std::env::temp_dir().join(format!(
+        "atlas-register-{}.applescript",
+        uuid::Uuid::new_v4()
+    ));
     fs::write(&temp, script)?;
     if app.exists() {
         fs::remove_dir_all(&app)?;
@@ -149,7 +162,9 @@ fn register_macos(executable: &Path) -> Result<()> {
     let rewritten = content.replacen("</dict>", &format!("{url_types}</dict>"), 1);
     fs::write(plist, rewritten)?;
     let register = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
-    let _ = Command::new(register).args(["-R", &app.to_string_lossy()]).status();
+    let _ = Command::new(register)
+        .args(["-R", &app.to_string_lossy()])
+        .status();
     // Commit marker is written only after the app was compiled and registered.
     fs::write(app.join("Contents/Resources/atlas-agent-executable"), path)?;
     Ok(())
@@ -228,7 +243,10 @@ mod tests {
     fn desktop_artifact_matches_writer_and_rejects_invalid_binary_path() {
         let binary = Path::new("/home/user/Atlas Agent/atlas-agent");
         let exec = linux_exec_line(binary).unwrap();
-        assert_eq!(exec, "Exec=\"/home/user/Atlas Agent/atlas-agent\" handle-uri %u");
+        assert_eq!(
+            exec,
+            "Exec=\"/home/user/Atlas Agent/atlas-agent\" handle-uri %u"
+        );
         assert!(linux_exec_line(Path::new("/tmp/bad\"name")).is_err());
         assert!(linux_exec_line(Path::new("/tmp/new\nline")).is_err());
     }
