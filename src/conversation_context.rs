@@ -703,12 +703,15 @@ pub fn project_instructions_with_dirs(
     }
     let root = root.canonicalize()?;
     let config = crate::config::Config::load()?;
-    // Original project approval is scoped to the active checkout, never a
-    // global opt-in that silently authorizes unrelated repositories.
+    // Original project approval is scoped to the active checkout, including
+    // invocations from nested working directories, never to all repositories.
+    let approval_root = git(&root, &["rev-parse", "--show-toplevel"])
+        .and_then(|path| PathBuf::from(path).canonicalize().ok())
+        .unwrap_or_else(|| root.clone());
     let external_includes_approved = config.approved_external_instruction_includes
         .iter()
         .any(|(workspace, approved)| {
-            *approved && Path::new(workspace).canonicalize().is_ok_and(|path| path == root)
+            *approved && Path::new(workspace).canonicalize().is_ok_and(|path| path == approval_root)
         });
     let excludes = build_instruction_excludes(&config.instruction_excludes)?;
     let source_enabled = |source: &str| config.instruction_sources.get(source).copied().unwrap_or(true);
