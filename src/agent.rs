@@ -2090,9 +2090,12 @@ impl Agent {
             .run(
                 HookEvent::PreCompact,
                 Some(if automatic { "auto" } else { "manual" }),
-                json!({"session_id":self.session.id, "message_count":self.session.messages.len(),
-                    "trigger":if automatic {"auto"} else {"manual"},
-                    "custom_instructions":custom_instructions}),
+                {
+                    let mut input = self.base_hook_input();
+                    input["trigger"] = json!(if automatic {"auto"} else {"manual"});
+                    input["custom_instructions"] = json!(custom_instructions);
+                    input
+                },
             )
             .await?;
         // 2.1.88 executePreCompactHooks reports failed hook commands as
@@ -2242,9 +2245,12 @@ impl Agent {
             .run(
                 HookEvent::PostCompact,
                 Some(if automatic { "auto" } else { "manual" }),
-                json!({"session_id":self.session.id,"summary":summary,
-                    "trigger":if automatic {"auto"} else {"manual"},
-                    "compact_summary":summary}),
+                {
+                    let mut input = self.base_hook_input();
+                    input["trigger"] = json!(if automatic {"auto"} else {"manual"});
+                    input["compact_summary"] = json!(summary);
+                    input
+                },
             )
             .await?;
         // The source reports unsuccessful PostCompact commands to the user
@@ -2416,7 +2422,12 @@ impl Agent {
             .run(
                 HookEvent::UserPromptSubmit,
                 None,
-                json!({"prompt":prompt,"session_id":self.session.id}),
+                {
+                    let mut input = self.base_hook_input();
+                    input["prompt"] = json!(prompt);
+                    input["permission_mode"] = json!(self.permission_mode.label());
+                    input
+                },
             )
             .await?;
         if let Some(reason) = pre_prompt.blocking_reason {
