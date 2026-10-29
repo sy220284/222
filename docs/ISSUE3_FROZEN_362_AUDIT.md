@@ -498,3 +498,7 @@
 **真实验证：** `permission_rules::tests::persisted_rule_validation_matches_original_settings_filter` 覆盖有效与无效规则格式；`permission_settings::tests::invalid_rules_are_filtered_without_discarding_valid_siblings` 通过真实 JSON 文件、`SettingsPaths::load`、`compile_rules` 和 `ToolExecutor::execute` 实际运行 Shell，验证有效 allow 的文件生成、有效 deny 的文件未生成，其他非法条目不会破坏正常执行。代码提交 `acbf8f00dc832137228813ca4b28454280d3766d`、`2994a1cb62b7e3d076f63b096e75d7160b3b7456`；CI 以最终 HEAD 结果为准。
 
 **仍缺：** 原版 SettingsSchema 全字段校验、特殊自定义规则、来源启用开关、配置变更时的实时缓存失效、MDM/远程托管、审批 UI 和取消／重启完整路径。因此冻结 #16、#19 继续**未验收**，全部 362 项仍为 0 项最终勾选。
+
+## 2026-10-29：冻结 #303 交互问答的原版字符串去重修正（待验收）
+
+对照 `src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx::UNIQUENESS_REFINE`，原版只对问题文本与同题选项标签作**精确**重复检查；Rust `src/ask_user_question.rs::validate` 曾额外 trim 并拒绝 Other 字面量。已修正并接入原有 `Agent::ask → AskUserQuestion` 真实交互链，提交 `5b8ceb2150cecc2b5364ff906991888b679d7939`。本开发任务按当前要求未运行测试或 CI，交互取消、复杂预览、SDK 和完整原版 UI 仍需验收，**#303 不勾选，冻结 362 条仍全部开放**。

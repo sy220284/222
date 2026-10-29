@@ -768,3 +768,15 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - `src/release_notes.rs` 对照 `src/utils/releaseNotes.ts`、`src/commands/release-notes/release-notes.ts`：版本解析/排序、最近 5 条过滤、HTTP(S) 500ms 下载、原子缓存写入和 CLI/交互展示。2 项测试包括真实 localhost TCP 响应。固定品牌服务器 URL 已移除。
 - 本地 `cargo check --all-targets`、`cargo fmt --all -- --check`、`cargo test --all-targets` 均通过：12 个测试套件，共 552 通过、0 失败。此前基线中一处厂商品牌注释导致隐私测试失败，现已由并行提交单独修复，不覆盖其改动。
 - 本轮 5 条未迁移原路径调整为**部分实现**，文件级已验收数量保持 29。GitHub 与工具权限原版全面对照、自动版本更新提示、全量 UI/SDK 路径等缺口继续开放。最新 HEAD 的远端 CI 结果须单独核实。
+
+## 2026-10-29：工具反馈、交互问答、浏览器与会话主链源码补强（本轮 5/100，待行为验收）
+
+本轮对照完整 2.1.88 原始 ZIP 的以下 TS/JS 函数，修改可从实际 CLI/Agent 进入的 Rust 生产代码，均已提交推送。依现行开发任务要求未运行 Cargo、测试或 CI；以下仅为**源码已提交、待行为验收**，不能计入原版完整等价。
+
+1. **工具错误长文本反馈（1 项）**：`src/utils/toolErrors.ts::formatError` 使用 JS UTF-16 `length/slice`。Rust `src/tool_errors.rs::format_error_text` 原先按 Unicode 标量数截断，导致包含表情的错误反馈长度、截断位置和数量不正确。现按 UTF-16 单元处理；若切在代理项中间，Rust 用替代字符表示（仍需协议级边界验证）。真实入口 `ToolExecutor::execute`。提交 `5b8ceb2150cecc2b5364ff906991888b679d7939`。
+2. **交互式问题选项校验（1 项）**：`src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx::UNIQUENESS_REFINE` 按原始字符串精确去重，Zod 未额外裁剪文本或禁止字面量 Other。Rust `src/ask_user_question.rs::validate` 原先擅自 trim 并拒绝该字面量，现恢复原版 schema 语义；`Agent::ask` 的真实交互工具入口仍使用此校验。提交 `5b8ceb2150cecc2b5364ff906991888b679d7939`。剩余交互 UI、预览格式和取消时序待完整验收。
+3. **浏览器打开原始 URL（1 项）**：`src/utils/browser.ts::openBrowser` 先用 `new URL` 验证协议，再将**原始字符串**交给系统浏览器。Rust `src/browser_launcher.rs::open_browser` 先前转用规范化的 `Url::as_str()`，可能更改用户输入的 URL。现保持校验后的原始地址，真实入口 `main.rs::OpenBrowser`。提交 `d3a10503cbe00d939d04b68c4b7fd1723e8677ae`。
+4. **会话重命名后列表一致性（1 项）**：`src/commands/rename/rename.ts::call` 同时调用 `saveCustomTitle` 和 `saveAgentName`。Rust `src/session_control.rs::rename` 原先只保存 custom_title，而会话列表优先显示 agent_name，导致已有代理名的会话重命名后仍显示旧名。现同时保存两个字段，并在持久化失败时一起回滚；`/rename`、CLI Rename 均走此路径。提交 `43f7995133aa1979a433a78fd0aebca8e347dfde`。
+5. **语义会话搜索自定义标题与完整摘要（1 项）**：`src/utils/agenticSessionSearch.ts::agenticSessionSearch` 在显示名不同于 customTitle 时仍将后者送给检索模型，摘要不作额外 2000 字符截断。Rust `src/semantic_session_search.rs::prompt` 现补入两个原版字段语义，真实入口 `main.rs::SemanticSessions`。提交 `f476503335c096417d5a92c9a878a7ee3a7e79e3`、`c6e3f6f52479c42b50b9af99f508832ce9783c7d`。
+
+**本轮准确进度**：5 个互不重复用户业务行为有新 Rust 代码并推送，95 项未完成；尚未形成并逐项核实本轮完整 100 项问题清单，也未完成 100 项源码补齐。无行为测试、无完整等价验收，Issue #3 冻结 362 项继续全部开放。下一轮应复用本页未闭环差异，优先推进剩余真实功能，严禁以原始文件数、纯审计或重复功能凑数。
