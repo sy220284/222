@@ -25,6 +25,7 @@ similar = "2"
 indexmap = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "fs", "time", "io-util", "net", "sync"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+unicode-normalization = "0.1"
 walkdir = "2"
 
 [dev-dependencies]
