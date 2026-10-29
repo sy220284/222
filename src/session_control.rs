@@ -221,13 +221,15 @@ pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
     if query.is_empty() {
         return Ok(matches);
     }
-    let tag_query = query.trim_start_matches('#');
+    // A single # prefixes an explicit tag lookup; a bare # must not
+    // match every tagged conversation through str::contains("").
+    let tag_query = query.strip_prefix('#').unwrap_or(&query);
     let mut ranked = Vec::new();
     for item in matches {
         let tag = item.tag.as_deref().unwrap_or("").to_lowercase();
-        let rank = if !tag.is_empty() && tag == tag_query {
+        let rank = if !tag_query.is_empty() && tag == tag_query {
             Some(0u8)
-        } else if !tag.is_empty() && tag.contains(tag_query) {
+        } else if !tag_query.is_empty() && tag.contains(tag_query) {
             Some(1)
         } else if item.title.to_lowercase().contains(&query) {
             Some(2)
