@@ -2735,8 +2735,6 @@ async fn sdk_nested_control(
                     "hooks",
                     "sdkMcpServers",
                     "jsonSchema",
-                    "systemPrompt",
-                    "appendSystemPrompt",
                     "agents",
                     "promptSuggestions",
                     "agentProgressSummaries",
@@ -2767,6 +2765,18 @@ async fn sdk_nested_control(
                 // unported commands, which must not be advertised as usable.
                 let commands = sdk_visible_commands(agent, config)?;
                 let agents = agent.sdk_agent_descriptors()?;
+                // cli/print.ts::handleInitializeRequest applies both fields
+                // before QueryEngine assembles the next model request. Validate
+                // before mutating the active Agent so bad init leaves it intact.
+                let system_prompt = request.get("systemPrompt")
+                    .map(|value| value.as_str().ok_or_else(|| anyhow::anyhow!(
+                        "initialize systemPrompt must be a string")))
+                    .transpose()?;
+                let append_system_prompt = request.get("appendSystemPrompt")
+                    .map(|value| value.as_str().ok_or_else(|| anyhow::anyhow!(
+                        "initialize appendSystemPrompt must be a string")))
+                    .transpose()?;
+                agent.set_sdk_system_prompts(system_prompt, append_system_prompt);
                 *sdk_initialized = true;
                 Ok(json!({"commands":commands,"agents":agents,"output_style":"default",
                     "available_output_styles":["default"],"models":models,
