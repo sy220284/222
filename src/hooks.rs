@@ -118,6 +118,8 @@ pub struct HookOutcome {
     /// TaskCreated/TaskCompleted feedback. Other callers may use the first.
     pub blocking_reasons: Vec<String>,
     pub additional_context: Vec<String>,
+    /// SessionStart may enqueue the first user turn for headless execution.
+    pub initial_user_message: Option<String>,
     pub updated_input: Option<Value>,
     /// PreToolUse hook decision. An explicit `ask` requires user approval
     /// even when the CLI normally grants full tool access.
@@ -376,6 +378,9 @@ impl HookRunner {
             outcome
                 .additional_context
                 .extend(response.additional_context);
+            if let Some(message) = response.initial_user_message {
+                outcome.initial_user_message = Some(message);
+            }
             outcome
                 .non_blocking_errors
                 .extend(response.non_blocking_errors);
@@ -900,6 +905,13 @@ async fn run_command(
     }
     if payload["hook_event_name"] == "PreToolUse" {
         result.permission_decision = permission_decision.map(str::to_owned);
+    }
+    if payload["hook_event_name"] == "SessionStart" {
+        result.initial_user_message = hook_output
+            .and_then(|v| v.get("initialUserMessage"))
+            .and_then(Value::as_str)
+            .filter(|message| !message.trim().is_empty())
+            .map(str::to_owned);
     }
     if let Some(input) = hook_output.and_then(|v| v.get("updatedInput")) {
         if !input.is_object() {
