@@ -1,3 +1,11 @@
+## 2026-10-29：GlobTool 否定通配符实际排除（已提交、待验收）
+
+- **原版源码**：完整 2.1.88 ZIP `source/src/utils/glob.ts::glob` 第 91–107 行直接将用户 `filePattern` 传给 ripgrep 的 `--glob`，其 `!pattern` 语义为排除匹配文件。
+- **Rust 实际差异**：`src/search.rs::glob_files_filtered` 原先把 `!*.rs` 当成普通字面模式匹配，导致本应返回其他类型文件的请求错误返回空结果。
+- **修复与可达入口**：`src/search.rs` 识别单个 GlobTool 模式开头的 `!`，在授权目录的真实文件遍历中反转匹配条件，继续应用隐藏文件、Git ignore、Read deny、结果排序和超时限制；入口仍为 `ToolExecutor::dispatch("glob_files")`。
+- **提交**：`8510c3d28a808b31e83649309c7d1b9d7dca01b8`。本轮新增 **1 项独立 GlobTool 用户行为**；与 Grep glob 顺序覆盖、Windows 绝对 Glob、Git 忽略子进程超时共 **4/100 项**，余 **96 项**。未运行 Cargo、测试或 CI，均已提交、待行为验收；冻结 Issue #3 362 项保持开放。
+- **剩余**：复杂 glob/转义与 ripgrep 精确匹配差异、动态结果上限、插件缓存过滤和完整取消仍需核对。100 项逐函数双侧确认与实施方案尚未完成，新增完整等价验收 0 项。
+
 ## 2026-10-29：Grep 多条包含/排除 glob 的顺序覆盖（已提交、待验收）
 
 - **原版依据**：完整 2.1.88 ZIP 的 `source/src/tools/GrepTool/GrepTool.ts::call` 第 391–409 行按用户输入顺序逐条传递 `--glob`，由 ripgrep 按最后命中的 glob 规则决定包含或排除。
