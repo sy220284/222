@@ -140,7 +140,6 @@ fn git_status_at_start(root: &Path) -> Option<String> {
     ))
 }
 
-
 /// Load user and project instructions in the outer-to-inner order of the
 /// original context.ts and claudemd.ts, using vendor-neutral AGENTS.md and
 /// .atlas paths. File-conditional rules never enter the global system prompt.
@@ -155,16 +154,21 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
     fn enabled() -> bool {
         !std::env::var("ATLAS_DISABLE_PROJECT_INSTRUCTIONS")
             .ok()
-            .is_some_and(|value| matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            ))
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
     }
 
     fn rule_body(content: &str) -> Option<&str> {
-        let normalized = content.strip_prefix("---\r\n")
+        let normalized = content
+            .strip_prefix("---\r\n")
             .or_else(|| content.strip_prefix("---\n"));
-        let Some(rest) = normalized else { return Some(content) };
+        let Some(rest) = normalized else {
+            return Some(content);
+        };
         let mut header_len = 0;
         let mut conditional = false;
         let mut ended = false;
@@ -182,7 +186,11 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         if !ended {
             return Some(content);
         }
-        if conditional { None } else { Some(&rest[header_len..]) }
+        if conditional {
+            None
+        } else {
+            Some(&rest[header_len..])
+        }
     }
 
     fn add_file(
@@ -195,16 +203,20 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         let metadata = match fs::metadata(path) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(error).with_context(|| format!(
-                "Inspect project instruction: {}", path.display()
-            )),
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("Inspect project instruction: {}", path.display()))
+            }
         };
         if !metadata.is_file() {
             return Ok(());
         }
         let canonical = path.canonicalize()?;
         if !canonical.starts_with(scope) {
-            bail!("Instruction file points outside its approved directory: {}", path.display());
+            bail!(
+                "Instruction file points outside its approved directory: {}",
+                path.display()
+            );
         }
         if seen.contains(&canonical) {
             return Ok(());
@@ -222,12 +234,17 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         }
         let content = String::from_utf8(bytes)
             .with_context(|| format!("Project instructions must be UTF-8: {}", path.display()))?;
-        let body = if is_rule { rule_body(&content) } else { Some(content.as_str()) };
+        let body = if is_rule {
+            rule_body(&content)
+        } else {
+            Some(content.as_str())
+        };
         seen.insert(canonical);
         if let Some(body) = body.filter(|body| !body.trim().is_empty()) {
             output.push_str(&format!(
                 "\nProject instructions from {}:\n{}\n",
-                path.display(), body.trim()
+                path.display(),
+                body.trim()
             ));
         }
         Ok(())
@@ -254,7 +271,10 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         }
         let canonical = directory.canonicalize()?;
         if !canonical.starts_with(scope) {
-            anyhow::bail!("Project rules directory escapes its approved scope: {}", directory.display());
+            anyhow::bail!(
+                "Project rules directory escapes its approved scope: {}",
+                directory.display()
+            );
         }
         if !visited.insert(canonical) {
             return Ok(());
@@ -289,8 +309,21 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         match fs::metadata(home) {
             Ok(metadata) if metadata.is_dir() => {
                 let home = home.canonicalize()?;
-                add_file(&home.join("AGENTS.md"), &home, false, &mut seen, &mut output)?;
-                add_rules(&home.join("rules"), &home, 0, &mut visited, &mut seen, &mut output)?;
+                add_file(
+                    &home.join("AGENTS.md"),
+                    &home,
+                    false,
+                    &mut seen,
+                    &mut output,
+                )?;
+                add_rules(
+                    &home.join("rules"),
+                    &home,
+                    0,
+                    &mut visited,
+                    &mut seen,
+                    &mut output,
+                )?;
             }
             Ok(_) => anyhow::bail!("Configuration home is not a directory: {}", home.display()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -298,17 +331,37 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         }
     }
 
-    let mut scopes = root.ancestors()
+    let mut scopes = root
+        .ancestors()
         .filter(|directory| directory.parent().is_some())
         .collect::<Vec<_>>();
     scopes.reverse();
     for directory in scopes {
         for relative in ["AGENTS.md", ".atlas/AGENTS.md", ".atlas/instructions.md"] {
-            add_file(&directory.join(relative), directory, false, &mut seen, &mut output)?;
+            add_file(
+                &directory.join(relative),
+                directory,
+                false,
+                &mut seen,
+                &mut output,
+            )?;
         }
-        add_rules(&directory.join(".atlas/rules"), directory, 0, &mut visited, &mut seen, &mut output)?;
+        add_rules(
+            &directory.join(".atlas/rules"),
+            directory,
+            0,
+            &mut visited,
+            &mut seen,
+            &mut output,
+        )?;
         for relative in ["AGENTS.local.md", ".atlas/instructions.local.md"] {
-            add_file(&directory.join(relative), directory, false, &mut seen, &mut output)?;
+            add_file(
+                &directory.join(relative),
+                directory,
+                false,
+                &mut seen,
+                &mut output,
+            )?;
         }
     }
     Ok(output)
