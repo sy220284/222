@@ -464,6 +464,17 @@ impl ToolExecutor {
         if !self.interactive {
             bail!("Tool {tool} needs approval; noninteractive mode requires an explicit allow rule or --approval full")
         }
+        if crate::tool_names::canonical_name(tool) == "run_command"
+            && self.shell_kind != crate::shell_runtime::ShellKind::Powershell
+        {
+            if let Some(command) = args.get("command").and_then(Value::as_str) {
+                if let Some(warning) =
+                    crate::bash_permission_suggestions::destructive_command_warning(command)
+                {
+                    eprintln!("{warning}");
+                }
+            }
+        }
         eprintln!("\nProposed {tool}: {}", truncate(&args.to_string(), 600));
         eprint!("Allow once? [y/N] ");
         io::stderr().flush()?;
