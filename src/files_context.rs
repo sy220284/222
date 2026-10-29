@@ -110,17 +110,17 @@ mod tests {
     use crate::protocol::{FunctionCall, ToolCall};
 
     fn tool(id: &str, name: &str, path: &str) -> Message {
-        let field = if name == "NotebookEdit" {
-            "notebook_path"
+        let arguments = if name == "NotebookEdit" {
+            serde_json::json!({"notebook_path": path})
         } else {
-            "path"
+            serde_json::json!({"path": path})
         };
         let call = ToolCall {
             id: id.to_owned(),
             kind: "function".into(),
             function: FunctionCall {
                 name: name.into(),
-                arguments: serde_json::json!({field: path}).to_string(),
+                arguments: arguments.to_string(),
             },
         };
         Message {
