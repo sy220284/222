@@ -458,8 +458,15 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         }
         // ripgrep searches valid text around malformed UTF-8 bytes. Rejecting
         // the entire file with read_to_string silently loses those matches.
-        let Ok(bytes) = fs::read(&path) else {
-            continue;
+        let bytes = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            // A file removed between traversal and reading should not abort
+            // an otherwise useful search. Permission and I/O failures must
+            // remain visible instead of pretending the search was complete.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(error).with_context(|| format!("Reading search file {}", path.display()));
+            }
         };
         let binary = bytes.contains(&0);
         // When scanning a directory, ripgrep suppresses binary file results.
