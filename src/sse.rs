@@ -124,7 +124,7 @@ pub async fn complete(
     let url=format!("{}/chat/completions",base_url.trim_end_matches('/'));
     let mut post=client.post(url).json(&body);
     if let Some(key)=key{post=post.bearer_auth(key)}
-    let response=post.send().await.context("Streaming model request failed")?;
+    let response=crate::provider::send_model_request(post).await.context("Streaming model request failed")?;
     let status=response.status();
     if !status.is_success(){
         bail!("Streaming model HTTP {status}: {}",
