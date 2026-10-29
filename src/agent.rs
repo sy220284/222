@@ -152,6 +152,7 @@ struct SdkAgentDefinition {
     permission_mode: Option<permission_mode::Mode>,
     skills: Vec<String>,
     hooks: Vec<HookRule>,
+    mcp_servers: Vec<serde_json::Value>,
 }
 
 pub struct Agent {
@@ -461,7 +462,7 @@ impl Agent {
             let definition = value.as_object()
                 .with_context(|| format!("SDK agent {name} must be an object"))?;
             for field in definition.keys() {
-                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt" | "permissionMode" | "skills" | "hooks") {
+                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt" | "permissionMode" | "skills" | "hooks" | "mcpServers") {
                     bail!("SDK agent {name} field {field} is not yet supported");
                 }
             }
@@ -585,6 +586,21 @@ impl Agent {
                 }
             }
             HookRunner::new(&hooks)?;
+            let mcp_servers = match definition.get("mcpServers") {
+                None => Vec::new(),
+                Some(serde_json::Value::Array(specs)) => {
+                    for spec in specs {
+                        match spec {
+                            serde_json::Value::String(value) if !value.is_empty() => {},
+                            serde_json::Value::Object(entries) if !entries.is_empty()
+                                && entries.values().all(serde_json::Value::is_object) => {},
+                            _ => bail!("SDK agent {name} mcpServers entries must be named references or inline server maps"),
+                        }
+                    }
+                    specs.clone()
+                }
+                Some(_) => bail!("SDK agent {name} mcpServers must be an array"),
+            };
             parsed.insert(name.clone(), SdkAgentDefinition {
                 description: description.to_owned(),
                 prompt: prompt.to_owned(),
@@ -597,6 +613,7 @@ impl Agent {
                 permission_mode,
                 skills,
                 hooks,
+                mcp_servers,
             });
         }
         self.sdk_agent_definitions = parsed;
@@ -1610,6 +1627,48 @@ impl Agent {
                 }
             }
         }
+        // Agent-specific MCP servers are additive to inherited services.
+        // Validate inline processes/URLs and managed policy before any child
+        // worktree or connection is created; references must resolve now.
+        let mut agent_mcp_configs = Vec::new();
+        if let Some(definition) = &sdk_definition {
+            if !definition.mcp_servers.is_empty() {
+                let inherited = self.mcp.as_ref().map_or_else(
+                    || self.mcp_configs.clone(), McpManager::configured_servers);
+                let settings = crate::permission_settings::SettingsPaths::for_workspace(&self.root)?
+                    .settings_snapshot(&self.profile.model)?;
+                for spec in &definition.mcp_servers {
+                    if let Some(name) = spec.as_str() {
+                        if !inherited.iter().any(|server| server.id == name) {
+                            bail!("SDK agent references unknown MCP server {name}");
+                        }
+                        continue;
+                    }
+                    let entries = spec.as_object().context("Invalid agent MCP server map")?;
+                    for (name, raw) in entries {
+                        if inherited.iter().any(|server| server.id == *name)
+                            || agent_mcp_configs.iter().any(|server: &McpServerConfig| server.id == *name) {
+                            bail!("Duplicate agent MCP server name {name}");
+                        }
+                        let mut value = raw.as_object().cloned()
+                            .context("Inline agent MCP server must be an object")?;
+                        value.insert("id".to_owned(), json!(name));
+                        let server: McpServerConfig = serde_json::from_value(
+                            serde_json::Value::Object(value))?;
+                        if server.transport.as_deref() == Some("sdk") {
+                            bail!("SDK-owned in-process MCP transport is unavailable");
+                        }
+                        let mut validation = crate::config::Config::default();
+                        validation.mcp_servers.push(server.clone());
+                        validation.validate()?;
+                        if !crate::mcp_policy::allows(&settings, &server)? {
+                            bail!("Agent MCP server {name} blocked by managed policy");
+                        }
+                        agent_mcp_configs.push(server);
+                    }
+                }
+            }
+        }
         let isolation = args
             .get("isolation")
             .and_then(|v| v.as_str())
@@ -1674,8 +1733,9 @@ impl Agent {
             }
         }
         let result = async {
-            let inherited_mcp = self.mcp.as_ref().map_or_else(
+            let mut inherited_mcp = self.mcp.as_ref().map_or_else(
                 || self.mcp_configs.clone(), McpManager::configured_servers);
+            inherited_mcp.extend(agent_mcp_configs.clone());
             child.attach_mcp(&inherited_mcp).await?;
             child.attach_lsp(&self.lsp_configs).await?;
             let mut child_hooks = self.hook_rules.clone();
