@@ -112,7 +112,11 @@ fn searchable_transcript(messages: &[Message]) -> String {
     let selected: Vec<&Message> = if messages.len() <= 100 {
         messages.iter().collect()
     } else {
-        messages.iter().take(50).chain(messages.iter().skip(messages.len() - 50)).collect()
+        messages
+            .iter()
+            .take(50)
+            .chain(messages.iter().skip(messages.len() - 50))
+            .collect()
     };
     for message in selected {
         if message.role != "user" && message.role != "assistant" {
@@ -124,7 +128,9 @@ fn searchable_transcript(messages: &[Message]) -> String {
             let text = blocks
                 .iter()
                 .filter_map(|block| {
-                    block.as_str().or_else(|| block.get("text").and_then(|v| v.as_str()))
+                    block
+                        .as_str()
+                        .or_else(|| block.get("text").and_then(|v| v.as_str()))
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
@@ -164,18 +170,24 @@ pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
         } else {
             // The original searches the summary and the first/last transcript
             // excerpts as well as the title and user tag.
-            Session::load(root, &item.id.to_string()).ok().and_then(|session| {
-                if session.summary.as_deref().is_some_and(|s| s.to_lowercase().contains(&query)) {
-                    Some(4)
-                } else if searchable_transcript(&session.messages)
-                    .to_lowercase()
-                    .contains(&query)
-                {
-                    Some(5)
-                } else {
-                    None
-                }
-            })
+            Session::load(root, &item.id.to_string())
+                .ok()
+                .and_then(|session| {
+                    if session
+                        .summary
+                        .as_deref()
+                        .is_some_and(|s| s.to_lowercase().contains(&query))
+                    {
+                        Some(4)
+                    } else if searchable_transcript(&session.messages)
+                        .to_lowercase()
+                        .contains(&query)
+                    {
+                        Some(5)
+                    } else {
+                        None
+                    }
+                })
         };
         if let Some(rank) = rank {
             ranked.push((rank, item));
@@ -458,7 +470,9 @@ mod tests {
 
         let mut summarized = Session::fresh();
         summarized.summary = Some("Release preparation checklist".into());
-        summarized.messages.push(Message::text("user", "other topic"));
+        summarized
+            .messages
+            .push(Message::text("user", "other topic"));
         summarized.save(root.path()).unwrap();
 
         let mut transcript = Session::fresh();
@@ -474,13 +488,16 @@ mod tests {
         transcript.save(root.path()).unwrap();
 
         let mut tool_only = Session::fresh();
-        tool_only.messages.push(Message::text("tool", "release secret output"));
+        tool_only
+            .messages
+            .push(Message::text("tool", "release secret output"));
         tool_only.save(root.path()).unwrap();
 
         let found = search(root.path(), "release").unwrap();
-        assert_eq!(found.iter().map(|s| s.id).collect::<Vec<_>>(), vec![
-            tagged.id, summarized.id, transcript.id
-        ]);
+        assert_eq!(
+            found.iter().map(|s| s.id).collect::<Vec<_>>(),
+            vec![tagged.id, summarized.id, transcript.id]
+        );
         assert_eq!(search(root.path(), "#release").unwrap()[0].id, tagged.id);
         assert!(search(root.path(), "secret").unwrap().is_empty());
     }
@@ -495,7 +512,10 @@ mod tests {
         assert!(text.contains("closing match"));
         assert!(!text.contains("middle 55"));
         assert!(text.chars().count() <= 2000);
-        let short = [Message::text("user", "first"), Message::text("assistant", "last")];
+        let short = [
+            Message::text("user", "first"),
+            Message::text("assistant", "last"),
+        ];
         assert_eq!(searchable_transcript(&short), "first last");
     }
 
