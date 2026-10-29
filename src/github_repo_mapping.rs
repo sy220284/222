@@ -24,8 +24,15 @@ pub fn update_repo_path_mapping(config: &mut Config, cwd: &Path) -> Result<bool>
         return Ok(false);
     };
     let root = git_root(cwd).unwrap_or(cwd);
-    let canonical = root.canonicalize()?;
-    let normalized = canonical.to_string_lossy().nfc().collect::<String>();
+    // githubRepoPathMapping.ts falls back to the original path when
+    // realpath fails (for example, on a restricted mounted checkout).
+    // A path lookup failure must not prevent tracking a known repository.
+    let normalized = root
+        .canonicalize()
+        .unwrap_or_else(|_| root.to_path_buf())
+        .to_string_lossy()
+        .nfc()
+        .collect::<String>();
     let existing = config.github_repo_paths.entry(key(&repo)).or_default();
     if existing.first().is_some_and(|path| path == &normalized) {
         return Ok(false);
