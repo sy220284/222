@@ -36,7 +36,7 @@ fn acceptable_ip(ip: IpAddr) -> bool {
     }
 }
 
-async fn verify_public(url: &Url) -> Result<()> {
+async fn verify_public(url: &Url) -> Result<Vec<std::net::SocketAddr>> {
     if !matches!(url.scheme(), "http" | "https") {
         bail!("Only http(s) URLs supported")
     }
@@ -51,19 +51,29 @@ async fn verify_public(url: &Url) -> Result<()> {
         bail!("Local addresses are not allowed in web_fetch")
     }
     let port = url.port_or_known_default().context("URL missing port")?;
-    let addresses = tokio::net::lookup_host((host, port)).await?;
-    let mut found = false;
-    for address in addresses {
-        found = true;
+    let addresses: Vec<_> = tokio::net::lookup_host((host, port)).await?.collect();
+    if addresses.is_empty() {
+        bail!("Host has no resolved addresses")
+    }
+    for address in &addresses {
         if !acceptable_ip(address.ip()) {
             bail!("Non-public destination blocked: {}", address.ip());
         }
     }
-    if !found {
-        bail!("Host has no resolved addresses")
-    }
-    Ok(())
+    // The request must connect to the address that passed validation.
+    // Resolving again inside the HTTP client permits DNS rebinding.
+    Ok(addresses)
 }
+
+fn permitted_redirect(from: &Url, to: &Url) -> bool {
+    let strip_www = |host: &str| host.strip_prefix("www.").unwrap_or(host);
+    from.scheme() == to.scheme()
+        && from.port_or_known_default() == to.port_or_known_default()
+        && to.username().is_empty()
+        && to.password().is_none()
+        && from.host_str().zip(to.host_str()).is_some_and(|(a, b)| strip_www(a) == strip_www(b))
+}
+
 fn sanitize_html(body: &str) -> String {
     let mut text = body.to_owned();
     for (pattern, replacement) in [
@@ -100,16 +110,19 @@ async fn fetch_with_redirect_policy(
     allow_private_for_test: bool,
     approve_redirect: &(impl Fn(&Url) -> Result<()> + Sync),
 ) -> Result<Value> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(25))
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent("AtlasAgent/0.1 (+user-requested-web-fetch)")
-        .build()?;
     let mut current = Url::parse(url)?;
     for _ in 0..5 {
+        let mut builder = Client::builder()
+            .timeout(Duration::from_secs(25))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent("AtlasAgent/0.1 (+user-requested-web-fetch)");
         if !allow_private_for_test {
-            verify_public(&current).await?;
+            let addresses = verify_public(&current).await?;
+            let host = current.host_str().context("URL missing host")?;
+            // Pin the validated address while preserving Host and TLS SNI.
+            builder = builder.resolve(host, addresses[0]);
         }
+        let client = builder.build()?;
         let mut response = client
             .get(current.clone())
             .send()
@@ -123,11 +136,25 @@ async fn fetch_with_redirect_policy(
                 .to_str()
                 .context("Invalid redirect Location")?;
             let next = current.join(location)?;
-            // Tool approval is scoped to the original hostname. Following a
-            // redirect to another host requires a fresh policy decision
-            // *before* the next HTTP request is sent.
-            if next.host_str() != current.host_str() {
-                approve_redirect(&next)?;
+            if !permitted_redirect(&current, &next) {
+                // The original tool returns the destination to the agent
+                // instead of silently fetching it under the old approval.
+                // Existing explicit deny rules still take precedence.
+                if next.host_str() != current.host_str() {
+                    approve_redirect(&next)?;
+                }
+                let message = format!(
+                    "REDIRECT DETECTED: The URL redirects to a different origin.\n\nOriginal URL: {current}\nRedirect URL: {next}\nStatus: {}\n\nFetch the redirected URL in a new web_fetch call with fresh permission approval.",
+                    response.status()
+                );
+                return Ok(json!({
+                    "url": current.as_str(),
+                    "code": response.status().as_u16(),
+                    "bytes": message.len(),
+                    "content": message,
+                    "redirectUrl": next.as_str(),
+                    "redirect": true
+                }));
             }
             current = next;
             continue;
