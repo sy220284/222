@@ -2632,3 +2632,65 @@ fn sdk_batches_same_workload_text_and_image_as_one_model_turn_without_losing_uui
     assert!(http.contains("second instruction"));
     assert!(http.contains("data:image/png;base64,AQID"));
 }
+
+#[test]
+fn authorized_extra_directory_is_inherited_by_subagent_and_team_member() {
+    let extra=tempfile::tempdir().unwrap();
+    let textfile=extra.path().join("shared.txt");
+    fs::write(&textfile,"Shared directory content for child agents").unwrap();
+    for tool_name in ["spawn_agent","spawn_team"] {
+        let root=tempfile::tempdir().unwrap();
+        let server=TcpListener::bind("127.0.0.1:0").unwrap();
+        let address=server.local_addr().unwrap();
+        let file=textfile.clone();
+        let tool_name=tool_name.to_string();
+        let server_task=thread::spawn(move||{
+            let mut requests=Vec::new();
+            for step in 0..4 {
+                let (mut connection,_)=server.accept().unwrap();
+                requests.push(read_request(&mut connection));
+                let message=match step {
+                    0=>{
+                        let arguments=if tool_name=="spawn_agent" {
+                            json!({"prompt":"Read authorized external directory"})
+                        } else {
+                            json!({"tasks":[{"name":"worker","prompt":"Read authorized external directory"}]})
+                        };
+                        json!({"role":"assistant","content":null,"tool_calls":[{
+                            "id":"delegate-1","type":"function","function":{
+                                "name":tool_name,"arguments":arguments.to_string()
+                            }
+                        }]})
+                    },
+                    1=>json!({"role":"assistant","content":null,"tool_calls":[{
+                        "id":"child-read","type":"function","function":{
+                            "name":"read_file","arguments":json!({"path":file}).to_string()
+                        }
+                    }]}),
+                    2=>json!({"role":"assistant","content":"Child completed external read"}),
+                    _=>json!({"role":"assistant","content":"Parent completed delegation"})
+                };
+                let finish=if step<2 {"tool_calls"} else {"stop"};
+                let body=json!({"choices":[{"message":message,"finish_reason":finish}]}).to_string();
+                write!(connection,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),body).unwrap();
+                connection.flush().unwrap();
+            }
+            requests
+        });
+        let config=root.path().join("config.json");
+        fs::write(&config,json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"test",
+            "base_url":format!("http://{address}/v1")
+        }]}).to_string()).unwrap();
+        let output=binary().args(["--workspace",root.path().to_str().unwrap(),
+            "--add-dir",extra.path().to_str().unwrap(),
+            "--approval","read-only","run","Delegate the external file read"])
+            .env("ATLAS_CONFIG",&config).output().unwrap();
+        let requests=server_task.join().unwrap();
+        assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+        assert!(requests[2].contains("Shared directory content for child agents"),
+            "Child model did not receive authorized file content: {}",requests[2]);
+        assert!(requests[3].contains("Child completed external read"),"{}",requests[3]);
+    }
+}
