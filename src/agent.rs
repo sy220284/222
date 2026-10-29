@@ -356,6 +356,7 @@ impl Agent {
 
     async fn run_task_graph(&self, call: &ToolCall) -> Result<String> {
         let mut args: serde_json::Value = serde_json::from_str(&call.function.arguments)?;
+        task_graph::TaskGraph::validate_tool_input(&call.function.name, &args)?;
         match call.function.name.as_str() {
             "TaskCreate" => {
                 let created = self.graph.create(&args)?;
@@ -2976,10 +2977,10 @@ impl Agent {
                     match serde_json::from_str::<serde_json::Value>(&call.function.arguments) {
                         Err(error) => Some(format!("Invalid tool arguments JSON: {error}")),
                         Ok(value @ serde_json::Value::Object(_)) => {
-                            if call.function.name == "TaskUpdate" {
-                                task_graph::TaskGraph::validate_update_input(&value)
+                            if task_graph::handles(&call.function.name) {
+                                task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
                                     .err()
-                                    .map(|error| format!("Invalid TaskUpdate arguments: {error:#}"))
+                                    .map(|error| format!("Invalid {} arguments: {error:#}", call.function.name))
                             } else {
                                 None
                             }

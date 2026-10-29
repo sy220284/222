@@ -514,6 +514,35 @@ impl TaskGraph {
         }
         Ok(true)
     }
+    /// The original task tools use strict input schemas before PreToolUse.
+    /// Keep validation side-effect free so invalid task calls never invoke
+    /// hooks or write task state.
+    pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
+        match name {
+            "TaskCreate" => {
+                Self::strict(args, &["subject", "description", "activeForm", "metadata"])?;
+                let subject = Self::required(args, "subject")?;
+                let description = Self::required(args, "description")?;
+                Self::optional_string(args, "activeForm")?;
+                if args.get("metadata").is_some_and(|value| !value.is_object()) {
+                    bail!("metadata must be an object")
+                }
+                if subject.len() > 2000 || description.len() > 200_000 {
+                    bail!("Task input too large")
+                }
+                Ok(())
+            }
+            "TaskUpdate" => Self::validate_update_input(args),
+            "TaskGet" => {
+                Self::strict(args, &["taskId"])?;
+                Self::required(args, "taskId")?;
+                Ok(())
+            }
+            "TaskList" => Self::strict(args, &[]),
+            _ => bail!("Unknown task action"),
+        }
+    }
+
     /// Validate the complete TaskUpdate input before any PreToolUse or
     /// TaskCompleted hook can run. The source Zod strict schema rejects
     /// malformed fields before invoking the tool's call method.
