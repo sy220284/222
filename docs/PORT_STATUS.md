@@ -1,3 +1,10 @@
+## 2026-10-29：文件读取、编辑及 SDK 读取状态的原版编码与换行处理（源码已提交、待验收）
+
+- **原版完整源码依据**：`source/src/utils/fileRead.ts::readFileSyncWithMetadata/detectLineEndingsForString`；`source/src/tools/FileEditTool/FileEditTool.ts::readFileForEdit`；`source/src/tools/FileWriteTool/FileWriteTool.ts::call`；`source/src/cli/print.ts` 的 `seed_read_state`。原版按 UTF-16LE BOM 识别编码、读取时规范化 CRLF、编辑时恢复原有换行风格；完整覆盖写入遵从模型明确指定的换行内容并保留原文件编码。
+- **已落地 Rust 真实执行链**：`src/tools.rs::read_editable_text/write_editable_text` 接入 `ToolExecutor::read_file_with_mode/seed_read_state/write_file/edit_file`，贯通 Agent 的 Read/Edit/Write 和 SDK `seed_read_state`。补齐 UTF-16LE、UTF-8 BOM 识别，读取缓存与磁盘编辑内容统一规范化，编辑保留原有编码及 CRLF/LF 风格，完整覆盖写入保留用户指定的换行；无效 UTF-16 字节序列显式报错。
+- **提交**：`3e8d982c9eab6dc13b0c1ef9e2b6523adf64e93b`、`2931b1bc527a88aa01df35460d063a104becd362`。已静态检查读取→缓存→编辑比较→落盘的源码接线与修订点；遵照本任务要求未运行 Cargo、测试或 CI。保守计 **1 条独立用户可感知业务链：多编码文件的安全读取与编辑**，已提交、待行为验收，完整等价验收新增 0。
+- **仍有差异**：原版所有编码探测分支、UTF-16BE、写入原子性与并发文件变更竞态、LSP 编辑通知、原版精确文件大小/编码限制和跨平台换行边界仍待核对。前置 100 条完整独立缺口清单尚未完成核验，本轮 **1/100，尚差 99 项**；不得把本次多入口修改重复计数。Issue #3 冻结 362 项继续开放。
+
 ## 2026-10-29：插件技能发现与实际读取的路径一致性（源码已提交、待验收）
 
 原版参考 `source/src/utils/plugins/pluginLoader.ts` 与 `walkPluginMarkdown.ts` 的插件技能发现流程。Rust `src/plugins.rs::list_skills` 原先只检查技能真实路径是否仍在整个工作区，允许列出指向另一个插件的符号链接技能，而 `read_skill` 会拒绝读取。现发现阶段验证 `skills` 目录及每个 `SKILL.md` 均在当前插件根目录，和读取入口保持同一授权边界。提交 `e45e4187725d7b2de90f365a96bf924615079487`、`5b52f8eaffc729008b1354e8205944da860ad9d8`。
