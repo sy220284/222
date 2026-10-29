@@ -191,6 +191,8 @@ pub struct Agent {
     sdk_system_prompt: Option<String>,
     /// SDK initialize append prompt is layered after the base prompt.
     sdk_append_system_prompt: Option<String>,
+    /// None restores provider defaults, zero disables thinking where supported.
+    sdk_thinking_budget: Option<u32>,
 }
 
 /// Match the source getTaskListId priority, with a provider-neutral explicit
@@ -311,6 +313,7 @@ impl Agent {
             last_model_usage: None,
             sdk_system_prompt: None,
             sdk_append_system_prompt: None,
+            sdk_thinking_budget: None,
         })
     }
 
@@ -343,6 +346,16 @@ impl Agent {
             prompt.push_str(append);
         }
         Ok(prompt)
+    }
+
+    /// print.ts::set_max_thinking_tokens is session-local and applies to
+    /// subsequent requests, including after an SDK model switch.
+    pub fn set_sdk_thinking_budget(&mut self, budget: Option<u32>) -> Result<()> {
+        self.provider.set_thinking_budget(budget)?;
+        self.sdk_thinking_budget = budget;
+        self.last_context_usage = None;
+        self.last_side_question_request = None;
+        Ok(())
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -2477,7 +2490,9 @@ impl Agent {
     }
 
     pub fn switch_model(&mut self, profile: ProviderProfile) -> Result<()> {
-        let new_provider = provider::create(&profile)?;
+        let mut new_provider = provider::create(&profile)?;
+        // Reject incompatible provider changes before replacing the live model.
+        new_provider.set_thinking_budget(self.sdk_thinking_budget)?;
         self.provider = new_provider;
         self.profile = profile;
         self.last_context_usage = None;
