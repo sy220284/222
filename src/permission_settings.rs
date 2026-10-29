@@ -63,6 +63,41 @@ impl SettingsPaths {
         })
     }
 
+    /// Read only non-sensitive plugin options from the user settings source.
+    /// The original pluginOptionsStorage.ts keeps sensitive values in a
+    /// separate secure store; those must never be read into model prompts.
+    pub fn plugin_public_options(&self, plugin_name: &str) -> Result<Map<String, Value>> {
+        let Some(settings) = Self::read_json_raw(&self.user)? else {
+            return Ok(Map::new());
+        };
+        let Some(configs) = settings.get("pluginConfigs") else {
+            return Ok(Map::new());
+        };
+        let configs = configs.as_object()
+            .context("User pluginConfigs must be an object")?;
+        let config = if let Some(exact) = configs.get(plugin_name) {
+            Some(exact)
+        } else {
+            let prefix = format!("{plugin_name}@");
+            let mut matches = configs.iter()
+                .filter(|(key, _)| key.starts_with(&prefix))
+                .map(|(_, value)| value);
+            let first = matches.next();
+            if first.is_some() && matches.next().is_some() {
+                bail!("Ambiguous plugin settings for {plugin_name}")
+            }
+            first
+        };
+        let Some(config) = config else {
+            return Ok(Map::new());
+        };
+        let Some(options) = config.get("options") else {
+            return Ok(Map::new());
+        };
+        options.as_object().cloned()
+            .context("Plugin public options must be an object")
+    }
+
     fn path(&self, source: EditableSource) -> &Path {
         match source {
             EditableSource::User => &self.user,
