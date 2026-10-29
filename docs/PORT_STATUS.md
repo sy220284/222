@@ -1,3 +1,13 @@
+## 2026-10-29：项目指令排除、来源控制与外部引用授权（源码已提交，待验收）
+
+原版依据：用户完整 2.1.88 源码 `source/src/utils/claudemd.ts::isClaudeMdExcluded/resolveExcludePatterns/processMemoryFile/getMemoryFiles`（547–684、790–925 行），以及 `source/src/context.ts::getUserContext`。实际 Rust 入口：`Agent::system_prompt` → `conversation_context::project_instructions_with_dirs` → 指令/规则/@include 读取 → 模型系统提示词。
+
+- **指令文件排除**：`src/config.rs` 新增持久化 `instructionExcludes` glob 配置；`src/conversation_context.rs` 对用户、项目、本地指令、递归规则和引用文件在读取前过滤，绝对路径模式增加符号链接真实路径展开，避免排除文件仍进入模型。代码 `7de3b735`、`03b5697f`。
+- **指令来源开关**：`instructionSources` 可分别设置 `user/project/local` 为 `false`，从实际模型上下文加载入口禁用对应来源；项目开关同步控制附加授权目录。默认全部开启，兼容旧配置。代码 `95f8dde9`、`f3c2c0f6`。
+- **外部 @引用显式授权**：用户级指令按原版允许引用外部文件；项目、本地和附加目录默认继续限制在批准的范围，用户显式设置 `approvedExternalInstructionIncludes: true` 后才允许递归加载工作区外文件，保留深度、大小、去重及排除过滤。代码 `93493750`、`123d67f0`。
+
+按**三个独立用户可感知业务功能**计数：排除指令、选择指令来源、批准外部引用；不按函数或提交数重复计数。均为**已提交、待行为验收**。按本任务要求未运行 Cargo、测试或 CI；完整等价验收新增 0。原版外部引用交互式审批、按访问文件动态加载条件规则、完整 Markdown 词法、托管设置和 SDK 配置来源传播仍有差异；Issue #3 冻结 362 项继续开放。
+
 ## 2026-10-29：MCP 提示词完整多消息与长内容传递（源码已提交，待验收）
 
 原版 `source/src/services/mcp/client.ts:2073–2087` 的 `getPromptForCommand` 对 `result.messages` 逐条转换并展平，没有 64 条消息或 128 KiB 内容的额外限制。Rust `src/mcp_prompt.rs::render_content_in_workspace` 原先在多消息提示词或长文本超出该固定数量时整条拒绝，造成用户调用合法 MCP slash prompt 失败。现移除两项额外硬上限，保留每条消息的角色/内容结构检查、图片格式验证、二进制附件保存及现有真实 Agent 多模态输入路径；不丢弃已成功读取的内容。
