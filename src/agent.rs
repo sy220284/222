@@ -2305,6 +2305,14 @@ impl Agent {
                         "\nPostToolUse hook blocked continuation: {reason}"
                     ));
                 }
+                // PreToolUse hook stdout and system messages are model-visible
+                // attachments in 2.1.88. Preserve them even if the hook did
+                // not rewrite arguments or force a permission decision.
+                if let Some(pre) = pre.as_ref() {
+                    for context in &pre.additional_context {
+                        result.push_str(&format!("\n[PreToolUse hook context] {context}"));
+                    }
+                }
                 for context in post.additional_context {
                     result.push_str(&format!("\n[Local hook context] {context}"));
                 }
