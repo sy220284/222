@@ -1,3 +1,9 @@
+## 2026-10-29：MCP 资源更新通知不再静默丢失（源码已提交，待验收）
+
+原版依据：`source/src/services/mcp/useManageMCPConnections.ts:705–730` 的资源列表变化通知回调会逐次处理事件，不设置 1,024 条静默丢弃门槛。Rust 原有 `src/mcp.rs::Client::request`、`src/mcp_http.rs::HttpClient::post/poll_notifications` 在资源通知积压达到 1,024 条后直接丢弃后续事件，SDK 无法获知全部更新。现移除 stdio、HTTP 请求附带 SSE、HTTP 独立 GET 三处静默上限，保留 `McpManager::drain_resource_updates` 的原有消费入口。源码提交 `1ea7832626d95e7bd641277cd418b6e45f492e4c`、`82c1eb66c4e9d3dd260f8eded24c65e5e823e960`。
+
+按**一个独立用户可感知功能：持续接收 MCP 资源变更通知**计数。源码已提交、待行为验收，未运行 Cargo/测试/CI；仍缺原版的资源自动刷新与技能/提示词缓存联动、通知背压与断线恢复，完整等价验收新增 0，Issue #3 冻结清单不勾选。
+
 ## 2026-10-29：MCP 工具调用超时、完整输出与分页发现（源码已提交，待验收）
 
 对照完整原版源码 `source/src/services/mcp/client.ts:211–228,1743–1757,3067–3099,2662–2799` 和 `source/src/utils/mcpValidation.ts:14–46,151–208`，核查 Rust 真正入口 `src/mcp.rs::McpManager::connect_with_root/refresh_changed_tools/call`，已提交 `c802ab7c014ff60ff0d9bb3c8012c5cf10f9f41f`：
