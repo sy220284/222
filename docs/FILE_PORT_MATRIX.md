@@ -775,7 +775,7 @@
 | `src/hooks/useIdeConnectionStatus.ts` | 34 | 981 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useIdeLogging.ts` | 42 | 1201 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useIdeSelection.ts` | 151 | 4349 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useInboxPoller.ts` | 970 | 34375 | 重写：终端 UI／交互 | `src/agent.rs / src/team_registry.rs / src/team_mailbox.rs` | 部分实现：团队计划请求在队长模型轮次前自动审批、持久回执、成员收到真实关联回复后退出计划模式；原版 React/UI 定时轮询、权限与沙箱请求分发、其他控制消息及渲染时序未迁移 |
+| `src/hooks/useInboxPoller.ts` | 970 | 34375 | 重写：终端 UI／交互 | `src/agent.rs / src/team_registry.rs / src/team_mailbox.rs` | 部分实现：队长自动审批计划并持久回执、成员验证来源/关联后退出计划模式；队长模式变更消息真实投递、成员授权校验、会话重启恢复；原版 React/UI 每秒轮询、团队配置模式同步、权限/沙箱请求分发和渲染时序未等价 |
 | `src/hooks/useInputBuffer.ts` | 133 | 3386 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useIssueFlagBanner.ts` | 134 | 3828 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useLogMessages.ts` | 120 | 5710 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -1274,7 +1274,7 @@
 | `src/tools/ScheduleCronTool/CronListTool.ts` | 98 | 2888 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ScheduleCronTool/UI.tsx` | 60 | 8075 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ScheduleCronTool/prompt.ts` | 136 | 7518 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/SendMessageTool/SendMessageTool.ts` | 918 | 27506 | 重写：工具行为、参数和权限 | `src/team_registry.rs / src/team_mailbox.rs / src/agent.rs` | 部分实现：单发/活跃成员广播、摘要校验、关停与计划审批请求/回复进入模型回合；计划回复必须关联真实请求、跨进程去重、失败保留未读；远程路由、权限询问和完整原版协议仍未等价 |
+| `src/tools/SendMessageTool/SendMessageTool.ts` | 918 | 27506 | 重写：工具行为、参数和权限 | `src/team_registry.rs / src/team_mailbox.rs / src/agent.rs` | 部分实现：单发/广播、关停及计划审批请求/回复、队长模式设置均进入真实模型工具链；计划回复关联真实请求、并发去重、失败保留未读；远程路由、权限询问、完整原版协议未等价 |
 | `src/tools/SendMessageTool/UI.tsx` | 31 | 4679 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/SendMessageTool/constants.ts` | 2 | 52 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/SendMessageTool/prompt.ts` | 50 | 2356 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1849,7 +1849,7 @@
 | `src/utils/teamMemoryOps.ts` | 89 | 2471 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teammate.ts` | 293 | 9206 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teammateContext.ts` | 97 | 3161 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/teammateMailbox.ts` | 1184 | 33420 | 重写：保持通用行为 | `src/team_mailbox.rs / src/team_registry.rs / src/agent.rs` | 部分实现：持久化邮箱、并发锁、未读/条件已读、关停及计划审批请求/回执关联、故障重试和并发去重；权限/沙箱/模式/通知分发、完整原版异常行为未等价 |
+| `src/utils/teammateMailbox.ts` | 1184 | 33420 | 重写：保持通用行为 | `src/team_mailbox.rs / src/team_registry.rs / src/agent.rs` | 部分实现：持久邮箱、并发锁、未读/条件已读、关停/计划请求与回执、模式设置通知；请求关联、故障重试、来源校验；权限/沙箱审批与其他通知的完整分发、原版异常语义未等价 |
 | `src/utils/telemetry/betaSessionTracing.ts` | 492 | 15843 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/telemetry/bigqueryExporter.ts` | 253 | 7806 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/telemetry/events.ts` | 76 | 2287 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
