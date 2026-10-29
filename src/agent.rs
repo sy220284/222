@@ -108,6 +108,16 @@ pub struct Agent {
     file_metrics: Arc<ToolMetrics>,
 }
 
+/// Match the source getTaskListId priority, with a provider-neutral explicit
+/// override for SDK users sharing a task list across independent sessions.
+fn task_list_id(session_id: uuid::Uuid, team: Option<&str>) -> String {
+    std::env::var("ATLAS_TASK_LIST_ID")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| team.map(str::to_owned))
+        .unwrap_or_else(|| session_id.to_string())
+}
+
 impl Agent {
     pub fn new(
         profile: ProviderProfile,
@@ -119,10 +129,7 @@ impl Agent {
     ) -> Result<Self> {
         let provider = provider::create(&profile)?;
         let background = Arc::new(BackgroundTasks::new(&root)?);
-        let list_id = session
-            .team_name
-            .clone()
-            .unwrap_or_else(|| session.id.to_string());
+        let list_id = task_list_id(session.id, session.team_name.as_deref());
         let graph = task_graph::TaskGraph::new(&root, &list_id)?;
         let restored_team = session.team_name.clone();
         let restored_member = session.agent_name.clone();
@@ -382,9 +389,15 @@ impl Agent {
                 let description = args.get("description").and_then(serde_json::Value::as_str);
                 let team = registry.create(name, description, &self.session.id.to_string())?;
                 let graph = match (|| -> Result<task_graph::TaskGraph> {
-                    let graph = task_graph::TaskGraph::new(&self.root, &team.name)?;
-                    graph.reset()?;
-                    Ok(graph)
+                    // Team creation resets its own task storage. An explicit
+                    // SDK task-list override still takes priority when tools
+                    // subsequently resolve the active list.
+                    let team_graph = task_graph::TaskGraph::new(&self.root, &team.name)?;
+                    team_graph.reset()?;
+                    task_graph::TaskGraph::new(
+                        &self.root,
+                        &task_list_id(self.session.id, Some(&team.name)),
+                    )
                 })() {
                     Ok(graph) => graph,
                     Err(error) => {
@@ -412,8 +425,10 @@ impl Agent {
                 let old_team = self.team_name.clone();
                 let response = registry.delete(old_team.as_deref())?;
                 if response["success"] == true {
-                    if old_team.is_some() {
-                        self.graph.remove_storage()?;
+                    if let Some(team) = old_team.as_deref() {
+                        // Remove the team-owned directory, never an explicitly
+                        // shared task list selected by ATLAS_TASK_LIST_ID.
+                        task_graph::TaskGraph::new(&self.root, team)?.remove_storage()?;
                     }
                     self.team_name = None;
                     self.agent_name = None;
@@ -421,8 +436,10 @@ impl Agent {
                     self.session.team_name = None;
                     self.session.agent_name = None;
                     self.session.save(&self.root)?;
-                    self.graph =
-                        task_graph::TaskGraph::new(&self.root, &self.session.id.to_string())?;
+                    self.graph = task_graph::TaskGraph::new(
+                        &self.root,
+                        &task_list_id(self.session.id, None),
+                    )?;
                     task_events::notify_tasks_updated();
                 }
                 Ok(response.to_string())
@@ -1204,7 +1221,7 @@ impl Agent {
         let graph = if child.team_name.is_none() {
             Some(task_graph::TaskGraph::new(
                 &self.root,
-                &child.id.to_string(),
+                &task_list_id(child.id, None),
             )?)
         } else {
             None
@@ -1676,7 +1693,7 @@ impl Agent {
         next.team_name = self.team_name.clone();
         next.agent_name = self.agent_name.clone();
         let graph = if self.team_name.is_none() {
-            task_graph::TaskGraph::new(&self.root, &next.id.to_string())?
+            task_graph::TaskGraph::new(&self.root, &task_list_id(next.id, None))?
         } else {
             self.graph.clone()
         };
