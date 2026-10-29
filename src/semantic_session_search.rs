@@ -72,11 +72,19 @@ fn prompt(query: &str, candidates: &[(SessionItem, Option<Session>)]) -> String 
                 fields.push(format!("[tag: {tag}]"));
             }
             if let Some(session) = loaded {
+                // The original search includes the custom title separately
+                // when a session's display name comes from another source.
+                // Omitting it makes renamed conversations hard to rediscover.
+                if let Some(custom_title) = session
+                    .custom_title
+                    .as_deref()
+                    .filter(|title| *title != item.title)
+                {
+                    fields.push(format!("[custom title: {custom_title}]"));
+                }
                 if let Some(summary) = session.summary.as_deref() {
-                    fields.push(format!(
-                        "- Summary: {}",
-                        summary.chars().take(2_000).collect::<String>()
-                    ));
+                    // The original sends the full summary to the ranker.
+                    fields.push(format!("- Summary: {summary}"));
                 }
                 if let Some(first) = session.messages.iter().find(|m| m.role == "user") {
                     let text = excerpt(std::slice::from_ref(first));
