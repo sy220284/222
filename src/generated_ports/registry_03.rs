@@ -169,6 +169,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/TeammateViewHeader.tsx" => match export {
+            "view" => serde_json::to_value(super::p_00d240667df39::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/TeleportProgress.tsx" => match export {
@@ -190,6 +194,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/TokenWarning.tsx" => match export {
+            "view" => serde_json::to_value(super::p_236973c85ed82::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/ToolUseLoader.tsx" => match export {
@@ -384,14 +392,14 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/StructuredDiffList.tsx", vec![]),
         ("src/components/TagTabs.tsx", vec![]),
         ("src/components/TaskListV2.tsx", vec![]),
-        ("src/components/TeammateViewHeader.tsx", vec![]),
+        ("src/components/TeammateViewHeader.tsx", vec!["view"]),
         ("src/components/TeleportProgress.tsx", vec![]),
         ("src/components/TeleportResumeWrapper.tsx", vec![]),
         ("src/components/TeleportStash.tsx", vec![]),
         ("src/components/TextInput.tsx", vec![]),
         ("src/components/ThemePicker.tsx", vec![]),
         ("src/components/ThinkingToggle.tsx", vec![]),
-        ("src/components/TokenWarning.tsx", vec![]),
+        ("src/components/TokenWarning.tsx", vec!["view"]),
         ("src/components/ToolUseLoader.tsx", vec![]),
         ("src/components/TrustDialog/TrustDialog.tsx", vec![]),
         ("src/components/ValidationErrorsList.tsx", vec![]),

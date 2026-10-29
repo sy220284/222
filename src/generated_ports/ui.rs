@@ -1,11 +1,10 @@
 //! Native virtual terminal tree. Static JSX nodes are translated into actual
 //! Rust builders; property expression bindings consume runtime JSON props.
 #![allow(dead_code)]
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum VNode {
     Empty,
     Text(String),
@@ -17,6 +16,66 @@ pub enum VNode {
         children: Vec<VNode>,
     },
 }
+// The original internally-tagged derive cannot serialize newtype variants
+// (Text, Value, Group). Keep a stable, self-describing JSON tree, including
+// the existing flat element shape, for CLI source inspection consumers.
+impl Serialize for VNode {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let value = match self {
+            Self::Empty => json!({"kind":"empty"}),
+            Self::Text(text) => json!({"kind":"text","value":text}),
+            Self::Value(value) => json!({"kind":"value","value":value}),
+            Self::Group(children) => json!({"kind":"group","children":children}),
+            Self::Element {
+                tag,
+                attrs,
+                children,
+            } => json!({"kind":"element","tag":tag,"attrs":attrs,"children":children}),
+        };
+        value.serialize(serializer)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum NodeWire {
+    Empty,
+    Text {
+        value: String,
+    },
+    Value {
+        value: Value,
+    },
+    Group {
+        children: Vec<VNode>,
+    },
+    Element {
+        tag: String,
+        attrs: BTreeMap<String, Value>,
+        children: Vec<VNode>,
+    },
+}
+
+impl<'de> Deserialize<'de> for VNode {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match NodeWire::deserialize(deserializer)? {
+            NodeWire::Empty => Self::Empty,
+            NodeWire::Text { value } => Self::Text(value),
+            NodeWire::Value { value } => Self::Value(value),
+            NodeWire::Group { children } => Self::Group(children),
+            NodeWire::Element {
+                tag,
+                attrs,
+                children,
+            } => Self::Element {
+                tag,
+                attrs,
+                children,
+            },
+        })
+    }
+}
+
 impl VNode {
     pub fn text_content(&self) -> String {
         match self {
@@ -65,6 +124,20 @@ impl VNode {
 #[cfg(test)]
 mod conversion_audit_tests {
     use super::*;
+    #[test]
+    fn nested_view_roundtrip_is_lossless_and_preserves_element_wire_shape() {
+        let node = VNode::Element {
+            tag: "Text".into(),
+            attrs: BTreeMap::from([("color".into(), json!("warning"))]),
+            children: vec![VNode::Text("hello".into()), VNode::Value(json!(42))],
+        };
+        let wire = serde_json::to_value(&node).unwrap();
+        assert_eq!(wire["kind"], "element");
+        assert_eq!(wire["tag"], "Text");
+        assert_eq!(wire["children"][0], json!({"kind":"text","value":"hello"}));
+        assert_eq!(serde_json::from_value::<VNode>(wire).unwrap(), node);
+    }
+
     #[test]
     fn unresolved_jsx_does_not_silently_look_complete() {
         let node = VNode::Group(vec![
