@@ -1652,7 +1652,7 @@
 | `src/utils/permissions/permissionRuleParser.ts` | 199 | 7274 | 重写：权限判定 | `src/permission_rules.rs` | 部分实现：已移植原始括号/反斜杠规则解析、旧工具名和规则编码；完整配置优先级仍待对照 |
 | `src/utils/permissions/permissionSetup.ts` | 1533 | 53439 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/permissions/permissions.ts` | 1487 | 52190 | 重写：权限判定 | `src/permission_rules.rs / src/tools.rs / src/agent.rs` | 部分实现：用户明确配置规则的 deny/ask/allow、主子 Agent 继承、只读保护和 Shell 真实测试；原版分类器、模式切换及全部权限来源仍未等价 ；新增按原版 toolMatchesRule 对 mcp__server / mcp__server__* 的跨工具规则与冲突优先级校验 ；WebFetch(domain:hostname) 内容规则与拒绝优先级按原版精确主机名比较，其他权限来源未等价 |
-| `src/utils/permissions/permissionsLoader.ts` | 297 | 8743 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
+| `src/utils/permissions/permissionsLoader.ts` | 297 | 8743 | 重写：权限判定 | `src/permission_settings.rs / src/main.rs / src/permission_rules.rs` | 部分实现：用户/项目/本地/配置/托管规则加载、托管独占、持久化增删、CLI 实时重载及并发文件锁；远程/MDM/注册表、来源开关、完整设置 UI/热更新及异常时序未等价 |
 | `src/utils/permissions/shadowedRuleDetection.ts` | 235 | 8050 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/permissions/shellRuleMatching.ts` | 229 | 6409 | 重写：权限判定 | `src/permission_rules.rs` | 部分实现：精确、legacy :* 前缀、通配符及转义星号规则；已对照原版 BashTool 的复合命令授权边界并加入逐段匹配与异常回归；完整 Shell AST、具体适配与大小写行为尚未等价 |
 | `src/utils/permissions/yoloClassifier.ts` | 1496 | 52160 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
