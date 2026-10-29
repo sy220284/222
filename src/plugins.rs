@@ -481,42 +481,65 @@ impl PluginSet {
         let mut seen = std::collections::HashSet::new();
         for name in enabled {
             if !seen.insert(name) {
-                bail!("Plugin {name} enabled twice")
-            }
-            if plugin_blocked_by_policy(root, name)? {
-                set.errors.push(format!("Plugin '{name}' disabled by managed policy"));
+                set.errors.push(format!("Plugin '{name}' enabled twice"));
                 continue;
             }
-            let location = directory(root, name)?;
-            let manifest = read_manifest(&location, name)?;
-            if manifest.name != *name {
-                bail!("Plugin name does not match directory: {name}")
-            }
-            // Version is metadata; no external update or installation happens.
+            // pluginLoader.ts::loadPluginsFromMarketplaces uses allSettled:
+            // an invalid installation is reported without disabling healthy
+            // plugins. A rejected plugin must contribute no executable hooks.
+            let prepared = (|| -> Result<(PathBuf, Manifest)> {
+                if plugin_blocked_by_policy(root, name)? {
+                    bail!("disabled by managed policy")
+                }
+                let location = directory(root, name)?;
+                let manifest = read_manifest(&location, name)?;
+                if manifest.name != *name {
+                    bail!("Plugin name does not match directory")
+                }
+                Ok((location, manifest))
+            })();
+            let (location, manifest) = match prepared {
+                Ok(plugin) => plugin,
+                Err(error) => {
+                    set.errors.push(format!("Plugin '{name}' unavailable: {error:#}"));
+                    continue;
+                }
+            };
             let _version = &manifest.version;
-            // Keep the validated canonical plugin directory attached to each
-            // hook. Two plugins using the same template command must both
-            // execute, and substitution must resolve inside the right plugin.
-            for mut hook in manifest_hooks(&location, &manifest.hooks)? {
-                hook.plugin_root = Some(location.clone());
-                set.hooks.push(hook);
+            // The source records hook-load errors separately from MCP errors.
+            // Publish a component only after it has parsed completely, so a
+            // malformed hook file cannot leave a half-registered hook list.
+            match manifest_hooks(&location, &manifest.hooks) {
+                Ok(hooks) => {
+                    for mut hook in hooks {
+                        hook.plugin_root = Some(location.clone());
+                        set.hooks.push(hook);
+                    }
+                }
+                Err(error) => set.errors.push(format!(
+                    "Plugin '{name}' hooks unavailable: {error:#}"
+                )),
             }
-            for server in manifest_servers(&location, &manifest.mcp_servers)? {
-                // A single unconfigured MCP server must not prevent other
-                // tools, skills and hooks in this plugin from loading.
+            let servers = match manifest_servers(&location, &manifest.mcp_servers) {
+                Ok(servers) => servers,
+                Err(error) => {
+                    set.errors.push(format!(
+                        "Plugin '{name}' MCP configuration unavailable: {error:#}"
+                    ));
+                    continue;
+                }
+            };
+            for server in servers {
                 let server_id = server.id.clone();
                 let mut server = match resolve_plugin_mcp_server(&location, name, &manifest, server) {
                     Ok(server) => server,
                     Err(error) => {
-                        let diagnostic = format!("Plugin '{name}' MCP server '{server_id}' unavailable: {error:#}");
-                        eprintln!("{diagnostic}");
-                        set.errors.push(diagnostic);
+                        set.errors.push(format!(
+                            "Plugin '{name}' MCP server '{server_id}' unavailable: {error:#}"
+                        ));
                         continue;
                     }
                 };
-                // Plugin-scoped MCP names may exceed the local config's
-                // short identifier limit; the original source scopes the full
-                // plugin and server names without truncating or rejecting them.
                 server.id = format!("{}_{}", name, server.id);
                 set.mcp_servers.push(server);
             }
@@ -1156,6 +1179,32 @@ mod tests {
             .contains("Check formatting"));
         assert!(read_skill(root.path(), &[], "formatter:check").is_err());
     }
+    #[test]
+    fn broken_plugin_and_hook_config_do_not_disable_healthy_plugins() {
+        let root = tempfile::tempdir().unwrap();
+        let base = root.path().join(".atlas/plugins");
+        let good = base.join("good");
+        let bad = base.join("bad");
+        let broken_hooks = base.join("broken-hooks");
+        fs::create_dir_all(&good).unwrap();
+        fs::create_dir_all(&bad).unwrap();
+        fs::create_dir_all(broken_hooks.join("hooks")).unwrap();
+        fs::write(good.join("plugin.json"),
+            r#"{"name":"good","hooks":[{"event":"Stop","command":"true"}]}"#).unwrap();
+        fs::write(bad.join("plugin.json"), "{invalid json").unwrap();
+        fs::write(broken_hooks.join("plugin.json"),
+            r#"{"name":"broken-hooks","mcp_servers":[{"id":"ok","command":"echo"}]}"#).unwrap();
+        fs::write(broken_hooks.join("hooks/hooks.json"), "{invalid json").unwrap();
+        let loaded = PluginSet::load(root.path(), &[
+            "bad".into(), "good".into(), "broken-hooks".into(),
+        ]).unwrap();
+        assert_eq!(loaded.hooks.len(), 1);
+        assert_eq!(loaded.mcp_servers.len(), 1);
+        assert_eq!(loaded.mcp_servers[0].id, "broken-hooks_ok");
+        assert!(loaded.errors.iter().any(|error| error.contains("Plugin 'bad'")));
+        assert!(loaded.errors.iter().any(|error| error.contains("Plugin 'broken-hooks' hooks")));
+    }
+
     #[cfg(unix)]
     #[test]
     fn refuses_symlink_plugin_outside_workspace() {
