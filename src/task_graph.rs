@@ -181,8 +181,13 @@ impl TaskGraph {
     fn all(&self) -> Result<Vec<Item>> {
         let mut tasks = Vec::new();
         for ent in fs::read_dir(&self.directory)? {
-            let ent = ent?;
-            if !ent.file_type()?.is_file() {
+            let ent = match ent {
+                Ok(entry) => entry,
+                Err(_) => continue,
+            };
+            // A single unreadable directory entry is equivalent to a
+            // missing task record in the source's listTasks/getTask chain.
+            if !ent.file_type().is_ok_and(|kind| kind.is_file()) {
                 continue;
             }
             let path = ent.path();
