@@ -26,12 +26,28 @@ impl SessionItem {
     }
 }
 fn preview(messages: &[Message]) -> String {
-    messages
-        .iter()
-        .find(|m| m.role == "user")
-        .and_then(|m| m.content.as_deref())
-        .unwrap_or("")
-        .trim()
+    // 2.1.88 displays the first human prompt even when its content is a
+    // multimodal array. Extract visible text; never use tool output as a title.
+    let Some(first) = messages.iter().find(|m| m.role == "user") else {
+        return String::new();
+    };
+    let text = if let Some(text) = first.content.as_deref() {
+        text.to_owned()
+    } else {
+        first
+            .content_blocks
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .filter_map(|block| {
+                block
+                    .as_str()
+                    .or_else(|| block.get("text").and_then(serde_json::Value::as_str))
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    text.trim()
         .lines()
         .next()
         .unwrap_or("")
@@ -111,12 +127,19 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             }
         };
         let fallback = preview(&session.messages);
+        // getLogDisplayTitle in 2.1.88 prefers teammate name, explicit
+        // title, summary and first prompt, in that order. A session with
+        // no visible text still has a stable, recognizable ID fallback.
         let title = session
-            .custom_title
-            .filter(|v| !v.trim().is_empty())
+            .agent_name
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| session.custom_title.as_deref().filter(|value| !value.trim().is_empty()))
+            .or_else(|| session.summary.as_deref().filter(|value| !value.trim().is_empty()))
+            .map(str::to_owned)
             .unwrap_or_else(|| {
                 if fallback.is_empty() {
-                    "Untitled conversation".into()
+                    id.to_string().chars().take(8).collect()
                 } else {
                     fallback
                 }
