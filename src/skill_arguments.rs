@@ -262,54 +262,103 @@ pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
     if lines.next().map(str::trim) != Some("---") {
         return Vec::new();
     }
-    let mut is_list = false;
     let mut list = Vec::new();
-    for line in lines.take(120) {
-        if line.trim() == "---" {
+    let mut collecting = false;
+    let mut closed = false;
+    for line in lines {
+        if !line.starts_with(' ') && !line.starts_with('\t') && line.trim() == "---" {
+            closed = true;
             break;
         }
-        if is_list {
-            // YAML sequences may contain blank lines and comments between
-            // entries. The source frontmatter parser handles those without
-            // terminating the argument list.
+        if collecting {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
-            if let Some(value) = trimmed.strip_prefix("- ") {
-                list.push(
-                    value
-                        .trim()
-                        .trim_matches(|c| c == '\'' || c == '"')
-                        .to_owned(),
-                );
+            // A YAML sequence belongs to the arguments field only while
+            // indented beneath it; another top-level key ends the sequence.
+            if (line.starts_with(' ') || line.starts_with('\t'))
+                && trimmed.starts_with("- ") {
+                let raw = trimmed[2..].trim();
+                let value = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
+                    serde_json::from_str::<String>(raw)
+                        .unwrap_or_else(|_| raw[1..raw.len() - 1].to_owned())
+                } else if raw.starts_with('\'') && raw.ends_with('\'') && raw.len() >= 2 {
+                    raw[1..raw.len() - 1].replace("''", "'")
+                } else {
+                    raw.split(" #").next().unwrap_or("").trim().to_owned()
+                };
+                list.push(value);
                 continue;
             }
-            break;
+            collecting = false;
         }
-        // Only a top-level YAML field declares skill argument names.
-        // A nested metadata.arguments field must not shadow it.
+        // Ignore nested YAML metadata. The original parser only uses the
+        // top-level "arguments" field for named slash-command substitution.
         let Some(value) = line.strip_prefix("arguments:") else {
             continue;
         };
         let value = value.trim();
-        if value.is_empty() {
-            is_list = true;
+        if value.is_empty() || value.starts_with('#') {
+            collecting = true;
+            list.clear();
             continue;
         }
         if value.starts_with('[') && value.ends_with(']') {
-            return value[1..value.len() - 1]
-                .split(',')
-                .map(|s| s.trim().trim_matches(|c| c == '\'' || c == '"').to_owned())
-                .filter(|s| !s.is_empty() && !s.chars().all(|c| c.is_ascii_digit()))
-                .collect();
+            // Inline YAML lists can contain quoted names with spaces.
+            let raw = &value[1..value.len() - 1];
+            let mut entries = Vec::new();
+            let (mut part, mut quote, mut escaped) = (String::new(), None, false);
+            for ch in raw.chars() {
+                if escaped {
+                    part.push(ch);
+                    escaped = false;
+                    continue;
+                }
+                if ch == '\\' && quote == Some('"') {
+                    part.push(ch);
+                    escaped = true;
+                    continue;
+                }
+                if ch == '"' || ch == '\'' {
+                    if quote == Some(ch) {
+                        quote = None;
+                    } else if quote.is_none() {
+                        quote = Some(ch);
+                    }
+                    part.push(ch);
+                    continue;
+                }
+                if ch == ',' && quote.is_none() {
+                    entries.push(std::mem::take(&mut part));
+                } else {
+                    part.push(ch);
+                }
+            }
+            entries.push(part);
+            list = entries.into_iter().map(|entry| {
+                let entry = entry.trim();
+                if entry.starts_with('"') && entry.ends_with('"') && entry.len() >= 2 {
+                    serde_json::from_str::<String>(entry)
+                        .unwrap_or_else(|_| entry[1..entry.len() - 1].to_owned())
+                } else if entry.starts_with('\'') && entry.ends_with('\'') && entry.len() >= 2 {
+                    entry[1..entry.len() - 1].replace("''", "'")
+                } else {
+                    entry.to_owned()
+                }
+            }).collect();
+            continue;
         }
         return parse_argument_names(Some(&Value::String(
-            value.trim_matches(|c| c == '\'' || c == '"').to_owned(),
+            value.trim_matches(|ch| ch == '\'' || ch == '"').to_owned(),
         )));
+    }
+    if !closed {
+        return Vec::new();
     }
     parse_argument_names(Some(&serde_json::json!(list)))
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
