@@ -1001,13 +1001,20 @@ impl Agent {
              Do not invent completed work. Earlier summary:\n{previous}"
         );
         let api_started=Instant::now();
-        let response = self.provider.complete(&ModelRequest {
+        let response_result = self.provider.complete(&ModelRequest {
             model: self.profile.model.clone(),
             system: prompt,
             messages: self.session.messages.clone(),
             tools: Vec::new(),
-        }).await?;
+        }).await;
         self.session.cost.add_api_duration(api_started.elapsed());
+        let response = match response_result {
+            Ok(response) => response,
+            Err(error) => {
+                self.session.save(&self.root)?;
+                return Err(error);
+            }
+        };
         if let Some(usage) = response.usage { self.record_usage(usage); }
         if !response.message.tool_calls.unwrap_or_default().is_empty() {
             bail!("Compaction model unexpectedly requested tools");
@@ -1160,7 +1167,7 @@ impl Agent {
                 tokio::pin!(future);
                 let result=loop {
                     tokio::select! {
-                        result=&mut future=>break result?,
+                        result=&mut future=>break result,
                         part=deltas.recv()=>{
                             if let Some(delta)=part{
                                 self.emit(json!({"type":"assistant_delta",
@@ -1175,9 +1182,17 @@ impl Agent {
                 }
                 result
             } else {
-                self.provider.complete(&request).await?
+                self.provider.complete(&request).await
             };
             self.session.cost.add_api_duration(api_started.elapsed());
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    self.session.cost.add_wall_duration(ask_started.elapsed());
+                    self.session.save(&self.root)?;
+                    return Err(error);
+                }
+            };
             if let Some(usage) = response.usage { self.record_usage(usage); }
             let calls = response.message.tool_calls.clone().unwrap_or_default();
             let text = response.message.content.clone().unwrap_or_default();
