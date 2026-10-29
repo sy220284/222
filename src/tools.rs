@@ -922,10 +922,11 @@ impl ToolExecutor {
             .map(|n| n.min(usize::MAX as u64) as usize);
         if source_read {
             let key = path.canonicalize()?;
+            let disk_ms = modified_millis(&metadata)?;
             let prior = self.file_reads.lock().unwrap().get(&key);
             if prior.is_some_and(|state| state.read_offset == Some(requested_offset)
                 && state.read_limit == requested_limit
-                && state.timestamp_ms == modified_millis(&metadata).unwrap_or(u64::MAX)) {
+                && state.timestamp_ms == disk_ms) {
                 return Ok(format!("File unchanged since last read: {requested}"));
             }
         }
