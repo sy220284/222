@@ -967,9 +967,7 @@ mod tests {
             env: HashMap::new(),
             transport: Some("http".into()),
             url: Some(format!("http://127.0.0.1:9/mcp?token=${{{key}}}")),
-            headers: HashMap::from([(
-                "Authorization".into(), format!("Bearer ${{{key}}}")
-            )]),
+            headers: HashMap::from([("Authorization".into(), format!("Bearer ${{{key}}}"))]),
             headers_helper: None,
         };
         let resolved = format!("http://127.0.0.1:9/mcp?token={secret}");
