@@ -815,7 +815,7 @@ impl ToolExecutor {
         // Markdown body and skill-local base directory, never YAML metadata.
         let dir = skill_dir.to_string_lossy().replace('\\', "/");
         let body = crate::skill_arguments::markdown_body(&content);
-        let prompt = format!("Base directory for this skill: {dir}\\n\\n{body}");
+        let prompt = format!("Base directory for this skill: {dir}\n\n{body}");
         let rendered = crate::skill_arguments::substitute_arguments(
             &prompt,
             arguments,
