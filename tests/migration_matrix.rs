@@ -77,5 +77,4 @@ fn every_original_path_is_tracked_once_and_no_partial_work_is_called_complete() 
     assert!(!status.contains("现有 Rust 模块覆盖部分行为、但未完成逐文件等价："));
     assert!(!status.contains("当前台账仍标注“未迁移”的文件路径："));
     assert!(!status.contains("非排除项的原始文件级等价验收仍未闭环："));
-
 }
