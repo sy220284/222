@@ -19,6 +19,7 @@ mod copy_response;
 mod context_usage;
 mod cost;
 mod deep_link;
+mod diff_view;
 mod deep_link_banner;
 mod deep_link_protocol;
 mod deep_link_register;
@@ -1556,6 +1557,7 @@ async fn chat(
                     "/files                   show files read successfully in this conversation"
                 );
                 println!("/copy [N] [--code K]     copy recent assistant text or a fenced code block");
+                println!("/diff                    view staged, unstaged and untracked Git changes");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
@@ -1639,6 +1641,13 @@ async fn chat(
             "/permissions" | "/allowed-tools" => {
                 let paths = permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?;
                 println!("{}", paths.render_permission_rules(agent.current_permission_mode())?);
+                continue;
+            }
+            "/diff" => {
+                match diff_view::render(agent.workspace_root()) {
+                    Ok(output) => println!("{output}"),
+                    Err(error) => eprintln!("Cannot inspect diff: {error:#}"),
+                }
                 continue;
             }
 
