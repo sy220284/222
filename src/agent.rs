@@ -1037,6 +1037,13 @@ impl Agent {
             self.additional_dirs.push(path);
         }
     }
+    /// Revocation immediately changes the roots used by subsequent tool calls.
+    /// The primary workspace is never removable.
+    pub fn remove_workspace_directory(&mut self, path: &std::path::Path) -> bool {
+        let before = self.additional_dirs.len();
+        self.additional_dirs.retain(|root| root != path);
+        self.additional_dirs.len() != before
+    }
     pub fn attach_configured_directories(&mut self, dirs: &[String]) -> Result<()> {
         for dir in dirs {
             match self.validate_workspace_directory(dir)? {

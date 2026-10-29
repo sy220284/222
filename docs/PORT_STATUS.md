@@ -624,3 +624,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### /add-dir --remember 按原版保存至项目本地权限设置（源码已提交，待验证）
 
 原版 `source/src/commands/add-dir/add-dir.tsx` 的 `handleAddDirectory` 与 `source/src/utils/permissions/PermissionUpdate.ts:244–266` 将用户确认的附加目录保存到 `localSettings.permissions.additionalDirectories`，并去重。Rust 原先错误写入通用 `config.additional_directories`。现在 `src/main.rs` 的真实交互 `/add-dir --remember` 通过 `SettingsPaths::add_directory(EditableSource::Local)` 原子更新 `.atlas/settings.local.json`，复用已有锁、非法 JSON 保护、托管策略禁改检查，原有会话即时授权保持；下次启动由 `additional_directories` 重新加载。**仅源码提交，未运行测试/CI**；完整沙箱即时刷新、权限 UI 和跨进程设置通知仍待验收。
+
+### 撤销已授权附加目录并同步本地权限设置（源码已提交，待验证）
+
+依据 `source/src/utils/permissions/PermissionUpdate.ts:297–315` 的 `removeDirectories`：先从当前权限上下文移除目录，再持久化到 `localSettings.permissions.additionalDirectories`。Rust `Agent::remove_workspace_directory` 现立即移除非主工作区的额外根目录，后续文件/搜索/命令工具重建授权根列表；交互命令 `/dirs remove PATH` 通过 `SettingsPaths::remove_directory` 原子更新本地权限数组，文件写入失败也保留当前会话撤销结果，拒绝撤销主工作区。**未运行测试/CI**；其他来源目录的跨源优先级、完整权限 UI 和沙箱刷新仍待验证。

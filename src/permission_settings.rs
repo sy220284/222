@@ -532,6 +532,26 @@ impl SettingsPaths {
         .map(|allowed| allowed.is_some())
     }
 
+    /// Source PermissionUpdate.ts::persistPermissionUpdate(removeDirectories):
+    /// revoke a persisted directory without touching unrelated settings.
+    pub fn remove_directory(&self, source: EditableSource, path: &Path) -> Result<bool> {
+        let target = path.to_string_lossy();
+        self.edit(source, |settings| {
+            let Some(entries) = settings
+                .get_mut("permissions")
+                .and_then(Value::as_object_mut)
+                .and_then(|permissions| permissions.get_mut("additionalDirectories"))
+                .and_then(Value::as_array_mut)
+            else {
+                return Ok(false);
+            };
+            let before = entries.len();
+            entries.retain(|entry| entry.as_str() != Some(target.as_ref()));
+            Ok(entries.len() != before)
+        })
+        .map(|changed| changed.unwrap_or(false))
+    }
+
     pub fn delete(
         &self,
         source: EditableSource,

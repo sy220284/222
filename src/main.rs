@@ -1239,6 +1239,39 @@ async fn chat(
             }
             continue;
         }
+        if let Some(raw) = input.strip_prefix("/dirs remove ") {
+            let raw = raw.trim();
+            if raw.is_empty() {
+                eprintln!("Usage: /dirs remove PATH");
+                continue;
+            }
+            let supplied = std::path::Path::new(raw);
+            let resolved = if supplied.is_absolute() {
+                supplied.to_path_buf()
+            } else {
+                agent.workspace_root().join(supplied)
+            };
+            let resolved = resolved.canonicalize().unwrap_or(resolved);
+            if resolved == agent.workspace_root() {
+                eprintln!("Cannot remove the primary workspace");
+                continue;
+            }
+            let removed = agent.remove_workspace_directory(&resolved);
+            if removed {
+                println!("Revoked {} for this session", resolved.display());
+            } else {
+                println!("{} is not an active extra directory", resolved.display());
+            }
+            let paths = permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?;
+            match paths.remove_directory(permission_settings::EditableSource::Local, &resolved) {
+                Ok(true) => println!("Removed {} from local settings", resolved.display()),
+                Ok(false) => println!("No removable local setting for {}", resolved.display()),
+                Err(error) => eprintln!(
+                    "Revoked for this session; local settings update failed: {error:#}"
+                ),
+            }
+            continue;
+        }
         match input {
             "/exit" | "/quit" => break,
             "/help" => {
@@ -1277,6 +1310,7 @@ async fn chat(
                 );
                 println!("/add-dir PATH [--remember] add an authorized working directory");
                 println!("/dirs                    show authorized working directories");
+                println!("/dirs remove PATH        revoke a directory and forget local permission");
                 println!("/env [NAME=VALUE | -u NAME] configure environment for child commands");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
