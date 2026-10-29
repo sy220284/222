@@ -628,3 +628,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 撤销已授权附加目录并同步本地权限设置（源码已提交，待验证）
 
 依据 `source/src/utils/permissions/PermissionUpdate.ts:297–315` 的 `removeDirectories`：先从当前权限上下文移除目录，再持久化到 `localSettings.permissions.additionalDirectories`。Rust `Agent::remove_workspace_directory` 现立即移除非主工作区的额外根目录，后续文件/搜索/命令工具重建授权根列表；交互命令 `/dirs remove PATH` 通过 `SettingsPaths::remove_directory` 原子更新本地权限数组，文件写入失败也保留当前会话撤销结果，拒绝撤销主工作区。**未运行测试/CI**；其他来源目录的跨源优先级、完整权限 UI 和沙箱刷新仍待验证。
+
+### 权限模式修改与默认模式保存接通（源码已提交，待验证）
+
+原版 `source/src/utils/permissions/PermissionUpdate.ts:317–325` 的 `setMode` 将权限模式写入对应设置来源，供下次启动恢复。Rust `SettingsPaths::set_default_mode` 现原子写入 `localSettings.permissions.defaultMode`，终端 `/mode set MODE [--remember]` 先经 Agent 实际授权上限校验和当前会话模式持久化，再按用户选择写入本地默认值；下次启动由已接通的 `SettingsPaths::default_mode` 读取。**仅源码提交、待验证**；原版 UI 设置界面、动态设置订阅与远程模式同步仍未全等价。

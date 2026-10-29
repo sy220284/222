@@ -1239,6 +1239,42 @@ async fn chat(
             }
             continue;
         }
+        if let Some(raw) = input.strip_prefix("/mode set ") {
+            let raw = raw.trim();
+            let remember = raw.ends_with(" --remember");
+            let label = if remember {
+                raw.trim_end_matches(" --remember").trim()
+            } else {
+                raw
+            };
+            let Some(mode) = permission_mode::Mode::parse(label) else {
+                eprintln!("Unknown permission mode: {label}");
+                continue;
+            };
+            agent.set_sdk_permission_mode(mode.label())?;
+            if remember {
+                let paths = permission_settings::SettingsPaths::for_workspace(
+                    agent.workspace_root(),
+                )?;
+                match paths.set_default_mode(permission_settings::EditableSource::Local, mode) {
+                    Ok(true) => println!(
+                        "Permission mode: {} (saved as local default)",
+                        mode.label()
+                    ),
+                    Ok(false) => eprintln!(
+                        "Permission mode: {} (managed policy blocks saving)",
+                        mode.label()
+                    ),
+                    Err(error) => eprintln!(
+                        "Permission mode: {} (local settings save failed: {error:#})",
+                        mode.label()
+                    ),
+                }
+            } else {
+                println!("Permission mode: {}", mode.label());
+            }
+            continue;
+        }
         if let Some(raw) = input.strip_prefix("/dirs remove ") {
             let raw = raw.trim();
             if raw.is_empty() {
@@ -1308,6 +1344,7 @@ async fn chat(
                 println!(
                     "/mode                    cycle permission mode (default/accept edits/plan)"
                 );
+                println!("/mode set MODE [--remember] switch mode and optionally save default");
                 println!("/add-dir PATH [--remember] add an authorized working directory");
                 println!("/dirs                    show authorized working directories");
                 println!("/dirs remove PATH        revoke a directory and forget local permission");

@@ -552,6 +552,28 @@ impl SettingsPaths {
         .map(|changed| changed.unwrap_or(false))
     }
 
+    /// Source PermissionUpdate.ts::persistPermissionUpdate(setMode):
+    /// persist the selected mode in permissions.defaultMode for future runs.
+    pub fn set_default_mode(
+        &self,
+        source: EditableSource,
+        mode: crate::permission_mode::Mode,
+    ) -> Result<bool> {
+        self.edit(source, |settings| {
+            let permissions = settings
+                .entry("permissions")
+                .or_insert_with(|| Value::Object(Map::new()))
+                .as_object_mut()
+                .context("permissions must be an object")?;
+            if permissions.get("defaultMode").and_then(Value::as_str) == Some(mode.label()) {
+                return Ok(false);
+            }
+            permissions.insert("defaultMode".into(), Value::String(mode.label().into()));
+            Ok(true)
+        })
+        .map(|allowed| allowed.is_some())
+    }
+
     pub fn delete(
         &self,
         source: EditableSource,
