@@ -45,7 +45,7 @@ impl Teams {
         {
             bail!("Unsafe registry lock")
         }
-        let lock = OpenOptions::new().create(true).write(true).open(path)?;
+        let lock = OpenOptions::new().create(true).write(true).truncate(false).open(path)?;
         lock.lock_exclusive()?;
         let result = action(self);
         let _ = FileExt::unlock(&lock);
