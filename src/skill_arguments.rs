@@ -163,7 +163,7 @@ pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
     let mut header = Vec::new();
     let mut closed = false;
     for line in lines {
-        if line.trim() == "---" {
+        if !line.starts_with(' ') && !line.starts_with('\t') && line.trim() == "---" {
             closed = true;
             break;
         }
@@ -200,7 +200,7 @@ pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
             }
             let indent = raw_lines.iter()
                 .filter(|line| !line.trim().is_empty())
-                .map(|line| line.len() - line.trim_start_matches([' ', '\t']).len())
+                .map(|line| line.len() - line.trim_start_matches(|ch: char| ch == ' ' || ch == '\t').len())
                 .min().unwrap_or(0);
             let block = raw_lines.into_iter().map(|line| {
                 if line.trim().is_empty() {
