@@ -479,9 +479,17 @@ impl ToolExecutor {
             "glob_files" => {
                 search::validate_tool_input("glob_files", &args)?;
                 let raw = args.get("path").and_then(Value::as_str).unwrap_or(".");
-                let path = self.checked_path(raw)?;
-                // Original GlobTool checks read permission on its search root.
-                self.require_read_rules(raw, &path)?;
+                // An absolute glob overrides the default search directory.
+                // Resolve its static prefix first, then authorize the actual
+                // traversal root, including any explicitly added workspaces.
+                let requested = args
+                    .get("pattern")
+                    .and_then(Value::as_str)
+                    .and_then(search::absolute_glob_base)
+                    .map(|base| base.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| raw.to_owned());
+                let path = self.checked_path(&requested)?;
+                self.require_read_rules(&requested, &path)?;
                 search::glob_files_filtered(&self.root, &path, &args, &|candidate| {
                     self.search_read_not_denied(candidate)
                 })
