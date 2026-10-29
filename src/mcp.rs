@@ -754,19 +754,24 @@ impl McpManager {
 /// Provider-neutral MCP resources and prompts catalog. Preserve server-defined
 /// metadata and content blocks rather than coercing everything into text.
 impl McpManager {
-    fn connected_client(&self, server: &str) -> Result<usize> {
-        let matches = self
+    async fn connected_client(&mut self, server: &str) -> Result<usize> {
+        let positions = self
             .server_statuses
             .iter()
             .enumerate()
-            .filter(|(_, status)| status["name"].as_str() == Some(server))
+            .filter_map(|(index, status)| {
+                (status["name"].as_str() == Some(server)).then_some(index)
+            })
             .collect::<Vec<_>>();
-        if matches.len() != 1 {
+        if positions.len() != 1 {
             bail!("MCP server not uniquely configured: {server}")
         }
-        let (position, status) = matches[0];
-        if status["status"] != "connected" {
-            bail!("MCP server {server} not connected")
+        let position = positions[0];
+        // Resources, prompts and subscriptions must recover the same way as
+        // tools/call after a 401/expired session. A new request is safe to
+        // issue; never replay the previously rejected request automatically.
+        if self.server_statuses[position]["status"] != "connected" {
+            self.reconnect_server(position).await?;
         }
         self.status_clients[position].context("MCP client unavailable")
     }
@@ -850,7 +855,7 @@ impl McpManager {
         if uri.is_empty() {
             bail!("MCP resource subscription requires uri")
         }
-        let index = self.connected_client(server)?;
+        let index = self.connected_client(server).await?;
         if self.clients[index]
             .capabilities()
             .and_then(|x| x.pointer("/resources/subscribe"))
@@ -940,7 +945,7 @@ impl McpManager {
         if uri.is_empty() {
             bail!("MCP resource URI is empty")
         }
-        let index = self.connected_client(server)?;
+        let index = self.connected_client(server).await?;
         timeout(
             RPC_TIMEOUT,
             self.clients[index].request("resources/read", json!({"uri":uri})),
@@ -960,7 +965,7 @@ impl McpManager {
         if !args.values().all(Value::is_string) {
             bail!("MCP prompt arguments must be string values")
         }
-        let index = self.connected_client(server)?;
+        let index = self.connected_client(server).await?;
         timeout(
             RPC_TIMEOUT,
             self.clients[index].request(
