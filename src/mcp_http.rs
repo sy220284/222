@@ -88,13 +88,22 @@ impl HttpClient {
         if !url.username().is_empty() || url.password().is_some() {
             bail!("MCP URL must not contain credentials");
         }
-        let mut headers = HeaderMap::new();
         let dynamic_headers = load_dynamic_headers(config, &url, root)
             .await
             .unwrap_or_default();
-        // Dynamic headers override static ones, even when their names differ in case.
-        for (key, value) in config.headers.iter().chain(dynamic_headers.iter()) {
-            let key = HeaderName::from_str(key).context("Invalid MCP header name")?;
+        // Merge *before* expansion and validation: an overridden static
+        // credential must not fail the connection when its variable is unset.
+        // HTTP header names are case-insensitive, including helper overrides.
+        let mut merged = std::collections::BTreeMap::new();
+        for (key, value) in &config.headers {
+            merged.insert(key.to_ascii_lowercase(), value.as_str());
+        }
+        for (key, value) in &dynamic_headers {
+            merged.insert(key.to_ascii_lowercase(), value.as_str());
+        }
+        let mut headers = HeaderMap::new();
+        for (key, value) in merged {
+            let key = HeaderName::from_str(&key).context("Invalid MCP header name")?;
             if matches!(
                 key.as_str(),
                 "accept"
