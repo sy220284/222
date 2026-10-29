@@ -50,25 +50,41 @@ pub fn detect_terminal() -> Option<TerminalInfo> {
             let selected = selected.to_string_lossy();
             if let Some(found) = which(&selected) {
                 return Some(TerminalInfo {
-                    name: Path::new(selected.as_ref()).file_name()?.to_string_lossy().into_owned(),
+                    name: Path::new(selected.as_ref())
+                        .file_name()?
+                        .to_string_lossy()
+                        .into_owned(),
                     command: found,
                 });
             }
         }
         for name in [
-            "x-terminal-emulator", "ghostty", "kitty", "alacritty",
-            "wezterm", "gnome-terminal", "konsole", "xfce4-terminal",
-            "mate-terminal", "tilix", "xterm",
+            "x-terminal-emulator",
+            "ghostty",
+            "kitty",
+            "alacritty",
+            "wezterm",
+            "gnome-terminal",
+            "konsole",
+            "xfce4-terminal",
+            "mate-terminal",
+            "tilix",
+            "xterm",
         ] {
             if let Some(found) = which(name) {
-                return Some(TerminalInfo { name: name.into(), command: found });
+                return Some(TerminalInfo {
+                    name: name.into(),
+                    command: found,
+                });
             }
         }
         None
     }
     #[cfg(target_os = "macos")]
     {
-        let preferred = std::env::var("TERM_PROGRAM").unwrap_or_default().to_lowercase();
+        let preferred = std::env::var("TERM_PROGRAM")
+            .unwrap_or_default()
+            .to_lowercase();
         let name = match preferred.trim_end_matches(".app") {
             "iterm" | "iterm2" => "iTerm",
             "ghostty" => "Ghostty",
@@ -91,7 +107,10 @@ pub fn detect_terminal() -> Option<TerminalInfo> {
             ("Command Prompt", "cmd.exe"),
         ] {
             if let Some(found) = which(command) {
-                return Some(TerminalInfo { name: name.into(), command: found });
+                return Some(TerminalInfo {
+                    name: name.into(),
+                    command: found,
+                });
             }
         }
         None
@@ -173,7 +192,10 @@ pub fn build_terminal_plan(
             }
             "alacritty" => {
                 if let Some(root) = root {
-                    params.extend([OsString::from("--working-directory"), root.as_os_str().to_owned()]);
+                    params.extend([
+                        OsString::from("--working-directory"),
+                        root.as_os_str().to_owned(),
+                    ]);
                 }
                 params.push("-e".into());
             }
@@ -213,7 +235,11 @@ pub fn build_terminal_plan(
                 source.push("&&".to_owned());
             }
             source.push(posix_quote(&executable.to_string_lossy()));
-            source.extend(arguments.iter().map(|arg| posix_quote(&arg.to_string_lossy())));
+            source.extend(
+                arguments
+                    .iter()
+                    .map(|arg| posix_quote(&arg.to_string_lossy())),
+            );
             let text = source.join(" ");
             let quoted = applescript_quote(&text);
             let script = if name == "iTerm" {
@@ -229,7 +255,11 @@ pub fn build_terminal_plan(
                 cwd: None,
             });
         }
-        params.extend(["-na".into(), terminal.command.as_os_str().to_owned(), "--args".into()]);
+        params.extend([
+            "-na".into(),
+            terminal.command.as_os_str().to_owned(),
+            "--args".into(),
+        ]);
         match name {
             "Ghostty" => {
                 params.push("--window-save-state=never".into());
@@ -240,7 +270,10 @@ pub fn build_terminal_plan(
             }
             "Alacritty" => {
                 if let Some(root) = &action.cwd {
-                    params.extend([OsString::from("--working-directory"), root.as_os_str().to_owned()]);
+                    params.extend([
+                        OsString::from("--working-directory"),
+                        root.as_os_str().to_owned(),
+                    ]);
                 }
                 params.push("-e".into());
             }
@@ -280,9 +313,15 @@ pub fn build_terminal_plan(
             "PowerShell" => {
                 let mut text = String::new();
                 if let Some(root) = &action.cwd {
-                    text.push_str(&format!("Set-Location {}; ", powershell_quote(&root.to_string_lossy())));
+                    text.push_str(&format!(
+                        "Set-Location {}; ",
+                        powershell_quote(&root.to_string_lossy())
+                    ));
                 }
-                text.push_str(&format!("& {}", powershell_quote(&executable.to_string_lossy())));
+                text.push_str(&format!(
+                    "& {}",
+                    powershell_quote(&executable.to_string_lossy())
+                ));
                 for item in &arguments {
                     text.push(' ');
                     text.push_str(&powershell_quote(&item.to_string_lossy()));
@@ -327,9 +366,13 @@ fn powershell_quote(arg: &str) -> String {
 
 #[cfg(target_os = "windows")]
 fn cmd_quote(arg: &str) -> String {
-    let escaped = arg.replace('%', "%%").replace('^', "^^")
-        .replace('&', "^&").replace('|', "^|")
-        .replace('<', "^<").replace('>', "^>")
+    let escaped = arg
+        .replace('%', "%%")
+        .replace('^', "^^")
+        .replace('&', "^&")
+        .replace('|', "^|")
+        .replace('<', "^<")
+        .replace('>', "^>")
         .replace('"', "\\\"");
     format!("\"{escaped}\"")
 }
@@ -338,7 +381,8 @@ pub fn launch_in_terminal(executable: &Path, action: &TerminalLaunch) -> Result<
     let selected = detect_terminal().context("No supported terminal emulator installed")?;
     let plan = build_terminal_plan(&selected, executable, action)?;
     let mut command = Command::new(&plan.executable);
-    command.args(plan.args)
+    command
+        .args(plan.args)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -357,7 +401,9 @@ pub fn launch_in_terminal(executable: &Path, action: &TerminalLaunch) -> Result<
             });
         }
     }
-    command.spawn().context("Unable to launch terminal emulator")?;
+    command
+        .spawn()
+        .context("Unable to launch terminal emulator")?;
     Ok(())
 }
 
@@ -374,11 +420,16 @@ mod tests {
             last_fetch_ms: Some(123456789),
         };
         let program = PathBuf::from("/usr/bin/atlas-agent");
-        let terminal = TerminalInfo { name: "kitty".into(), command: "/usr/bin/kitty".into() };
+        let terminal = TerminalInfo {
+            name: "kitty".into(),
+            command: "/usr/bin/kitty".into(),
+        };
         let plan = build_terminal_plan(&terminal, &program, &action).unwrap();
         assert_eq!(plan.args[0], "--directory");
         assert_eq!(plan.args[1], "/tmp/project folder");
-        assert!(plan.args.contains(&OsString::from("修复 'a'; $(rm -rf /) && review")));
+        assert!(plan
+            .args
+            .contains(&OsString::from("修复 'a'; $(rm -rf /) && review")));
         assert!(plan.args.contains(&OsString::from("org/repo")));
         assert!(!plan.args.contains(&OsString::from("sh")));
         assert!(plan.args.contains(&OsString::from("--prefill")));
@@ -388,18 +439,30 @@ mod tests {
     fn terminal_config_uses_native_cwd_flags_or_spawn_directory() {
         let action = TerminalLaunch {
             cwd: Some(PathBuf::from("/tmp/home with spaces")),
-            query: None, repo: None, last_fetch_ms: None
+            query: None,
+            repo: None,
+            last_fetch_ms: None,
         };
         let bin = Path::new("/bin/atlas");
         let gnome = build_terminal_plan(
-            &TerminalInfo {name: "gnome-terminal".into(), command: "gnome-terminal".into()},
-            bin, &action
-        ).unwrap();
+            &TerminalInfo {
+                name: "gnome-terminal".into(),
+                command: "gnome-terminal".into(),
+            },
+            bin,
+            &action,
+        )
+        .unwrap();
         assert_eq!(gnome.args[0], "--working-directory=/tmp/home with spaces");
         let xterm = build_terminal_plan(
-            &TerminalInfo {name: "xterm".into(), command: "xterm".into()},
-            bin, &action
-        ).unwrap();
+            &TerminalInfo {
+                name: "xterm".into(),
+                command: "xterm".into(),
+            },
+            bin,
+            &action,
+        )
+        .unwrap();
         assert_eq!(xterm.cwd, action.cwd);
     }
 }
