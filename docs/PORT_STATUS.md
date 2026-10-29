@@ -2,7 +2,7 @@
 
 原版依据：用户完整 2.1.88 源码 `source/src/utils/claudemd.ts::isClaudeMdExcluded/resolveExcludePatterns/processMemoryFile/getMemoryFiles`（547–684、790–925 行），以及 `source/src/context.ts::getUserContext`。实际 Rust 入口：`Agent::system_prompt` → `conversation_context::project_instructions_with_dirs` → 指令/规则/@include 读取 → 模型系统提示词。
 
-- **指令文件排除**：`src/config.rs` 新增持久化 `instructionExcludes` glob 配置；`src/conversation_context.rs` 对用户、项目、本地指令、递归规则和引用文件在读取前过滤，绝对路径模式增加符号链接真实路径展开，避免排除文件仍进入模型。代码 `7de3b735`、`03b5697f`。
+- **指令文件排除**：`src/config.rs` 新增持久化 `instructionExcludes` glob 配置；`src/conversation_context.rs` 对用户、项目、本地指令、递归规则和引用文件在读取前过滤，绝对路径模式增加符号链接真实路径展开，避免排除文件仍进入模型。代码 `7de3b735`、`03b5697f`、`0b774e44`（源码复核修正通配符引用匹配）。
 - **指令来源开关**：`instructionSources` 可分别设置 `user/project/local` 为 `false`，从实际模型上下文加载入口禁用对应来源；项目开关同步控制附加授权目录。默认全部开启，兼容旧配置。代码 `95f8dde9`、`f3c2c0f6`。
 - **外部 @引用显式授权**：用户级指令按原版允许引用外部文件；项目、本地和附加目录默认继续限制在批准的范围，用户显式设置 `approvedExternalInstructionIncludes: true` 后才允许递归加载工作区外文件，保留深度、大小、去重及排除过滤。代码 `93493750`、`123d67f0`。
 - **全路径规则生效**：原版 `claudemd.ts::parseFrontmatterPaths` 对 `paths: **`、空列表和仅包含 `**` 的数组按无条件规则加载；Rust 原先遇到任意 `paths:` 就整条跳过。现修复这些规则的全局加载，同时继续隔离有实际路径限制的条件规则。代码 `63133ee2`。
