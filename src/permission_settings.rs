@@ -523,7 +523,7 @@ impl SettingsPaths {
             }
             Ok(changed)
         })
-        .map(|allowed| allowed.is_some())
+        .map(|changed| changed.unwrap_or(false))
     }
 
     /// Source PermissionUpdate.ts::persistPermissionUpdate(addDirectories):
@@ -551,7 +551,7 @@ impl SettingsPaths {
             entries.push(Value::String(value));
             Ok(true)
         })
-        .map(|allowed| allowed.is_some())
+        .map(|changed| changed.unwrap_or(false))
     }
 
     /// Source PermissionUpdate.ts::persistPermissionUpdate(removeDirectories):
@@ -593,7 +593,7 @@ impl SettingsPaths {
             permissions.insert("defaultMode".into(), Value::String(mode.label().into()));
             Ok(true)
         })
-        .map(|allowed| allowed.is_some())
+        .map(|changed| changed.unwrap_or(false))
     }
 
     pub fn delete(
