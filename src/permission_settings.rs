@@ -404,6 +404,50 @@ impl SettingsPaths {
         Ok(result)
     }
 
+    /// Source settings.ts::getSettingsWithSources and SDK get_settings.
+    /// Read fresh values from each enabled source, preserve merge precedence,
+    /// and report the effective runtime model separately from disk settings.
+    pub fn settings_snapshot(&self, model: &str) -> Result<Value> {
+        let policy = self.load_policy()?;
+        let managed_only = Self::managed_only(policy.as_ref());
+        let mut effective = Value::Object(Map::new());
+        let mut sources = Vec::new();
+        if !managed_only {
+            for (name, path) in [
+                ("userSettings", &self.user),
+                ("projectSettings", &self.project),
+                ("localSettings", &self.local),
+            ] {
+                if path == &self.project || path == &self.local {
+                    if let Some(parent) = path.parent() {
+                        if parent.exists() && !parent.canonicalize()?.starts_with(&self.workspace) {
+                            bail!("Project settings escape the workspace");
+                        }
+                    }
+                }
+                if let Some(settings) = Self::read_json_for_execution(path)? {
+                    if settings.as_object().is_some_and(|obj| !obj.is_empty()) {
+                        merge_policy_values(&mut effective, settings.clone());
+                        sources.push(serde_json::json!({"source":name,"settings":settings}));
+                    }
+                }
+            }
+        }
+        if let Some(settings) = policy {
+            if settings.as_object().is_some_and(|obj| !obj.is_empty()) {
+                merge_policy_values(&mut effective, settings.clone());
+                sources.push(serde_json::json!({
+                    "source":"policySettings","settings":settings
+                }));
+            }
+        }
+        Ok(serde_json::json!({
+            "effective":effective,
+            "sources":sources,
+            "applied":{"model":model,"effort":null}
+        }))
+    }
+
     fn validate_edit_path(&self, path: &Path) -> Result<()> {
         let parent = path
             .parent()
