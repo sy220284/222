@@ -219,14 +219,19 @@ async fn main() -> Result<()> {
     match &cli.command {
         Commands::ParseDeepLink { uri } => {
             let action = deep_link::parse_deep_link(uri)?;
-            println!("{}", serde_json::to_string_pretty(&json!({
-                "query":action.query,"cwd":action.cwd,"repo":action.repo
-            }))?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "query":action.query,"cwd":action.cwd,"repo":action.repo
+                }))?
+            );
             return Ok(());
         }
         Commands::BuildDeepLink { query, cwd, repo } => {
             let url = deep_link::build_deep_link(&deep_link::DeepLinkAction {
-                query:query.clone(),cwd:cwd.clone(),repo:repo.clone(),
+                query: query.clone(),
+                cwd: cwd.clone(),
+                repo: repo.clone(),
             })?;
             // The parser is the single validation and sanitization boundary.
             let action = deep_link::parse_deep_link(&url)?;
