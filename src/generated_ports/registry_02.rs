@@ -172,6 +172,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/ExportDialog.tsx" => match export {
+            "view" => serde_json::to_value(super::p_26e43c0a828cf::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/FallbackToolUseErrorMessage.tsx" => match export {
@@ -372,7 +376,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/DevChannelsDialog.tsx", vec![]),
         ("src/components/EffortCallout.tsx", vec![]),
         ("src/components/ExitFlow.tsx", vec![]),
-        ("src/components/ExportDialog.tsx", vec![]),
+        ("src/components/ExportDialog.tsx", vec!["view"]),
         ("src/components/FallbackToolUseErrorMessage.tsx", vec![]),
         ("src/components/FallbackToolUseRejectedMessage.tsx", vec![]),
         ("src/components/FastIcon.tsx", vec![]),
