@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 pub struct Worktree {
     repo: PathBuf,
+    base_head: String,
     pub path: PathBuf,
     pub branch: String,
 }
@@ -43,6 +44,7 @@ impl Worktree {
         debug_assert!(crate::compat_helpers::is_worktree_mode_enabled());
         let original = git(workspace, &["rev-parse", "--show-toplevel"]).await?;
         let repo = PathBuf::from(original).canonicalize()?;
+        let base_head = git(&repo, &["rev-parse", "HEAD"]).await?;
         let id = Uuid::new_v4().simple().to_string();
         let branch = format!("atlas-agent/{id}");
         let base = std::env::temp_dir().join("atlas-agent-worktrees");
@@ -54,17 +56,26 @@ impl Worktree {
             &["worktree", "add", "-b", &branch, &rendered, "HEAD"],
         )
         .await?;
-        Ok(Self { repo, path, branch })
+        Ok(Self { repo, base_head, path, branch })
     }
 
     /// Keep a changed worktree for review; remove a clean worktree and branch.
     pub async fn finish(self) -> Result<String> {
         let changes = git(&self.path, &["status", "--porcelain"]).await?;
-        if !changes.is_empty() {
+        // A clean working directory can still contain new commits. The
+        // original ExitWorktree flow counts commits since the entry HEAD and
+        // asks the user before deleting that branch.
+        let commit_range = format!("{}..HEAD", self.base_head);
+        let new_commits = git(&self.path, &["rev-list", "--count", &commit_range])
+            .await?
+            .parse::<usize>()
+            .context("Invalid worktree commit count")?;
+        if !changes.is_empty() || new_commits > 0 {
             return Ok(format!(
-                "Changes retained for review at {} (branch {}). No merge was performed.",
+                "Changes retained for review at {} (branch {}, {} new commits). No merge was performed.",
                 self.path.display(),
-                self.branch
+                self.branch,
+                new_commits
             ));
         }
         let rendered = self.path.to_string_lossy().to_string();
