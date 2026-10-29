@@ -2150,6 +2150,18 @@ impl Agent {
             if self.interactive {
                 available_tools.push(crate::ask_user_question::definition());
             }
+            if self.child_depth > 0 {
+                if let Some(role) = self.prompt_role.as_deref() {
+                    available_tools.retain(|tool| {
+                        tool.pointer("/function/name")
+                            .or_else(|| tool.get("name"))
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|name| {
+                                crate::prompt_runtime::tool_allowed_for_role(role, name)
+                            })
+                    });
+                }
+            }
             let complete_catalog = available_tools;
             let (visible_tools, deferred_names) =
                 crate::tool_search::visible_catalog(&complete_catalog, &selected_mcp_tools);
@@ -2270,12 +2282,25 @@ impl Agent {
                 // rather than aborting a response containing multiple calls.
                 // A sibling call must still execute and every tool id must
                 // receive a matching result before the next model request.
-                let invalid_input =
+                let restricted_by_role = self.child_depth > 0
+                    && self.prompt_role.as_deref().is_some_and(|role| {
+                        !crate::prompt_runtime::tool_allowed_for_role(
+                            role,
+                            &call.function.name,
+                        )
+                    });
+                let invalid_input = if restricted_by_role {
+                    Some(format!(
+                        "Tool {} is unavailable to this read-only agent role",
+                        call.function.name
+                    ))
+                } else {
                     match serde_json::from_str::<serde_json::Value>(&call.function.arguments) {
                         Err(error) => Some(format!("Invalid tool arguments JSON: {error}")),
                         Ok(serde_json::Value::Object(_)) => None,
                         Ok(_) => Some("Tool arguments must be a JSON object".to_owned()),
-                    };
+                    }
+                };
                 let mut pre_hook_failure = None;
                 let pre = if invalid_input.is_none() {
                     match self.hooks.before_tool(&call).await {
