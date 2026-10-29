@@ -1,5 +1,15 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：复制回复与上下文窗口统计的原版业务补齐（源码已提交，待验收）
+
+原始源码依据：完整 2.1.88 源码包的 `source/src/commands/copy/copy.tsx::collectRecentAssistantTexts/extractCodeBlocks/copyOrWriteToFile`、`source/src/utils/analyzeContext.ts::processAssistantMessage/approximateMessageTokens`；Rust 可达入口 `src/copy_response.rs::copy/recent_assistant_texts`、`src/context_usage.rs::Snapshot::from_request/count_messages`。
+
+1. **/copy 复制助手回复**：结构化回复的多个文本块按原版以两个换行符连接，纯工具调用不被误当成可复制回复；模型输出中未闭合的代码围栏仍可选中复制；反馈中的字符数按 JavaScript UTF-16、行数按换行符加一；终端 OSC52 复制先于文件写入，文件写入失败不会抹掉已经发送的剪贴板内容。修改提交 `ad684791`、`9270d42f`。
+2. **/context 上下文用量**：空 `content_blocks` 时继续统计普通文本，避免误显示 0；SDK 同时提供 `tool_use` 块和同 ID 的 `tool_calls` 时只计一次工具调用，避免重复展示。修改提交 `7d7b99fa`。
+
+这两项属于**两个独立用户可感知业务功能**，内部多个修正不拆分凑数；仅静态源码复核，未执行 Cargo/测试/CI，状态均为**源码已提交、待行为验收**。原版完整 Markdown lexer、复制交互选择器、上下文系统/记忆/工具精确令牌估算等仍待核对。Issue #3 冻结 362 条全部保留开放，新增完整等价验收 0 项。本轮预定 100 项中的其余 98 项尚未完成逐项源码确认与提交，未达标。
+
+
 ## 2026-10-29：真实 Hook 业务链的原版语义补齐（源码已提交，待验收）
 
 **原版依据**：用户原始 `claude-code-2.1.88-main(1).zip` 的 `source/src/utils/hooks.ts::createBaseHookInput/getMatchingHooks/executeTaskCreatedHooks/executeTaskCompletedHooks/executeSubagentStartHooks/executeStopHooks/executeTeammateIdleHooks/executeSessionStartHooks/executeSessionEndHooks/executePreCompactHooks/executePostCompactHooks/executeUserPromptSubmitHooks`，以及 `source/src/query.ts` 的 Stop 阻断后继续状态、`source/src/query/stopHooks.ts` 的队友收尾链和 `source/src/entrypoints/sdk/coreSchemas.ts` 的 Hook 输入约束。逐项对照 `src/hooks.rs`、`src/agent.rs` 的可达调用。
