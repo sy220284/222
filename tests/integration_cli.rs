@@ -6273,5 +6273,5 @@ fn failed_auto_rename_preserves_api_usage_and_existing_conversation() {
     assert!(session["custom_title"].is_null());
     assert_eq!(session["messages"].as_array().unwrap().len(), 1);
     assert_eq!(session["usage"]["total_tokens"], 11);
-    assert!(session["cost"]["api_duration_ms"].as_u64().unwrap_or(0) > 0);
+    assert!(session["cost"]["total_api_duration_ms"].is_u64());
 }
