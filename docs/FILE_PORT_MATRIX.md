@@ -286,7 +286,7 @@
 | `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 重写：保持通用行为 | `src/generated_ports/p_ee2b485a76e48.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/usage/index.ts` | 10 | 233 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/usage/usage.tsx` | 7 | 1403 | 重写：保持通用行为 | `src/generated_ports/p_4c1965fccb05b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | `src/version.rs / src/main.rs` | 部分实现：当前运行二进制版本、可选编译时间、交互 /version 和版本 CLI 已落地；专属用户开关按多模型要求移除，原调用链完整验收待做 |
 | `src/commands/vim/index.ts` | 12 | 273 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/vim/vim.ts` | 39 | 1139 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/voice/index.ts` | 21 | 482 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -1069,7 +1069,7 @@
 | `src/services/notifier.ts` | 157 | 4256 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/oauth/auth-code-listener.ts` | 212 | 6650 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/oauth/client.ts` | 567 | 18254 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/oauth/crypto.ts` | 24 | 566 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/oauth/crypto.ts` | 24 | 566 | 重写：保持通用行为 | `src/oauth_crypto.rs / src/main.rs` | 部分实现：32 字节系统级安全随机数、无填充 Base64URL、SHA-256 PKCE challenge 和独立 state 已有原生 Rust、RFC 7636 向量及真实 CLI 测试；OAuth 授权回调尚未接入 |
 | `src/services/oauth/getOauthProfile.ts` | 54 | 1611 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/oauth/index.ts` | 199 | 6554 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/plugins/PluginInstallationManager.ts` | 185 | 6017 | 重写：保持通用行为 | 待定 | 未迁移 |
