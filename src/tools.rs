@@ -341,6 +341,31 @@ impl ToolExecutor {
         }
     }
 
+    /// Collect both the user's path and the actual filesystem target for
+    /// Edit/Write rule checks. Existing symlinks and non-existent files under
+    /// symlinked directories must not bypass a denied path pattern.
+    fn file_rule_paths(&self, requested: &str) -> Result<Vec<String>> {
+        let path = self.checked_path(requested)?;
+        let mut ancestor = path.as_path();
+        while !ancestor.exists() {
+            ancestor = ancestor.parent().context("File path has no existing ancestor")?;
+        }
+        let resolved = ancestor.canonicalize()?.join(path.strip_prefix(ancestor)?);
+        let mut paths = vec![
+            requested.to_owned(),
+            path.to_string_lossy().into_owned(),
+            resolved.to_string_lossy().into_owned(),
+        ];
+        for candidate in [&path, &resolved] {
+            for root in std::iter::once(&self.root).chain(self.extra_roots.iter()) {
+                if let Ok(relative) = candidate.strip_prefix(root) {
+                    paths.push(relative.to_string_lossy().into_owned());
+                }
+            }
+        }
+        Ok(paths)
+    }
+
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
         let mut security_approved = false;
         if crate::tool_names::canonical_name(tool) == "run_command" || tool == "PowerShell" {
@@ -362,6 +387,14 @@ impl ToolExecutor {
                 }
             }
         }
+        // Path rules are evaluated against the requested path and the
+        // symlink-resolved target, including files not created yet.
+        let mut permission_args = args.clone();
+        if matches!(permission_rules::canonical_tool(tool), "Write" | "Edit") {
+            if let Some(path) = args.get("path").and_then(Value::as_str) {
+                permission_args["paths"] = json!(self.file_rule_paths(path)?);
+            }
+        }
         // PowerShell is a separate source tool with case-insensitive cmdlet
         // and alias permissions. Never evaluate its commands under Bash rules.
         let matched = if (crate::tool_names::canonical_name(tool) == "run_command"
@@ -375,7 +408,7 @@ impl ToolExecutor {
                     .context("PowerShell command is missing")?,
             )?
         } else {
-            permission_rules::policy_for(&self.permission_rules, tool, args)?
+            permission_rules::policy_for(&self.permission_rules, tool, &permission_args)?
         };
         if matched == Some(permission_rules::Behavior::Deny) {
             bail!("Tool {tool} denied by explicit permission rule");
@@ -1045,6 +1078,53 @@ mod tests {
 
     fn executor(root: &Path, approval: Approval) -> ToolExecutor {
         ToolExecutor::new(root.canonicalize().unwrap(), approval, false)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn edit_path_rules_reach_write_execution_and_cannot_be_bypassed_by_symlinks() {
+        // Original filesystem.ts::matchingRuleForInput applies Edit rules to
+        // file mutation and checks the real path, not just a symlink alias.
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("secrets")).unwrap();
+        fs::create_dir_all(root.path().join("public")).unwrap();
+        fs::write(root.path().join("secrets/key.txt"), "original").unwrap();
+        symlink(root.path().join("secrets/key.txt"), root.path().join("alias.txt")).unwrap();
+        let rules = permission_rules::compile_rules(&[
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "Edit(secrets/**)".into(),
+            },
+            permission_rules::RuleSetting {
+                behavior: "allow".into(),
+                rule: "Write(alias.txt)".into(),
+            },
+            permission_rules::RuleSetting {
+                behavior: "allow".into(),
+                rule: "Edit(public/**)".into(),
+            },
+        ])
+        .unwrap();
+        let call = |path: &str, content: &str| ToolCall {
+            id: "edit-glob-parity".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "write_file".into(),
+                arguments: json!({"path":path,"content":content}).to_string(),
+            },
+        };
+        let full = executor(root.path(), Approval::Full).with_permission_rules(rules.clone());
+        let denied = full.execute(&call("alias.txt", "leaked")).await;
+        assert!(denied.contains("explicit permission rule"), "{denied}");
+        assert_eq!(fs::read_to_string(root.path().join("secrets/key.txt")).unwrap(), "original");
+        let denied = full.execute(&call("secrets/new.txt", "leaked")).await;
+        assert!(denied.contains("explicit permission rule"), "{denied}");
+        assert!(!root.path().join("secrets/new.txt").exists());
+        let ask = executor(root.path(), Approval::Ask).with_permission_rules(rules);
+        let allowed = ask.execute(&call("public/new.txt", "safe")).await;
+        assert!(!allowed.starts_with("ERROR:"), "{allowed}");
+        assert_eq!(fs::read_to_string(root.path().join("public/new.txt")).unwrap(), "safe");
     }
 
     #[tokio::test]
