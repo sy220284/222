@@ -5106,7 +5106,6 @@ fn ask_user_question_chat_uses_actual_terminal_selection() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("Which database?"));
 }
 
-
 #[test]
 fn chat_status_reports_live_state_and_never_prints_secrets() {
     let root = tempfile::tempdir().unwrap();
@@ -5117,35 +5116,51 @@ fn chat_status_reports_live_state_and_never_prints_secrets() {
             "id":"mock","kind":"openai-compatible","model":"portable-model",
             "base_url":"https://example.test/v1?token=URL_SECRET_NEVER_PRINT",
             "api_key_env":"STATUS_TEST_SECRET"
-        }]}).to_string(),
-    ).unwrap();
+        }]})
+        .to_string(),
+    )
+    .unwrap();
     let mut child = binary()
-        .args(["--workspace",root.path().to_str().unwrap(),"chat"])
-        .env("ATLAS_CONFIG",&config)
-        .env("STATUS_TEST_SECRET","API_SECRET_NEVER_PRINT")
+        .args(["--workspace", root.path().to_str().unwrap(), "chat"])
+        .env("ATLAS_CONFIG", &config)
+        .env("STATUS_TEST_SECRET", "API_SECRET_NEVER_PRINT")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
-        .spawn().unwrap();
-    child.stdin.take().unwrap()
-        .write_all(b"/status\n/rename fixed-status-test\n/status\n/exit\n").unwrap();
-    let out=child.wait_with_output().unwrap();
-    assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
-    let stdout=String::from_utf8_lossy(&out.stdout);
-    let stderr=String::from_utf8_lossy(&out.stderr);
-    assert!(stdout.contains("Session name: (unnamed)"),"{stdout}");
-    assert!(stdout.contains("Session name: fixed-status-test"),"{stdout}");
-    assert!(stdout.contains("Provider: mock (openai-compatible)"),"{stdout}");
-    assert!(stdout.contains("Model: portable-model"),"{stdout}");
-    assert!(stdout.contains("Permission mode: default"),"{stdout}");
-    assert!(stdout.contains("MCP servers: 0"),"{stdout}");
-    assert!(stdout.contains(root.path().to_str().unwrap()),"{stdout}");
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"/status\n/rename fixed-status-test\n/status\n/exit\n")
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stdout.contains("Session name: (unnamed)"), "{stdout}");
+    assert!(
+        stdout.contains("Session name: fixed-status-test"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("Provider: mock (openai-compatible)"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("Model: portable-model"), "{stdout}");
+    assert!(stdout.contains("Permission mode: default"), "{stdout}");
+    assert!(stdout.contains("MCP servers: 0"), "{stdout}");
+    assert!(stdout.contains(root.path().to_str().unwrap()), "{stdout}");
     assert!(!stdout.contains("API_SECRET_NEVER_PRINT"));
     assert!(!stdout.contains("URL_SECRET_NEVER_PRINT"));
     assert!(!stderr.contains("API_SECRET_NEVER_PRINT"));
     assert!(!stderr.contains("URL_SECRET_NEVER_PRINT"));
 }
-
 
 #[test]
 fn transcript_search_uses_visible_messages_not_model_only_reminders() {
@@ -5165,7 +5180,13 @@ fn transcript_search_uses_visible_messages_not_model_only_reminders() {
     });
     fs::write(directory.join(format!("{id}.json")), session.to_string()).unwrap();
     let output = binary()
-        .args(["--workspace", root.path().to_str().unwrap(), "transcript-search", id, "CAFÉ"])
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "transcript-search",
+            id,
+            "CAFÉ",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -5178,13 +5199,29 @@ fn transcript_search_uses_visible_messages_not_model_only_reminders() {
     assert!(text.contains("3  assistant"));
     assert!(!text.contains("hidden system"));
     let phantom = binary()
-        .args(["--workspace", root.path().to_str().unwrap(), "transcript-search", id, "needle"])
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "transcript-search",
+            id,
+            "needle",
+        ])
         .output()
         .unwrap();
     assert!(phantom.status.success());
-    assert!(phantom.stdout.is_empty(), "{}", String::from_utf8_lossy(&phantom.stdout));
+    assert!(
+        phantom.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&phantom.stdout)
+    );
     let tool = binary()
-        .args(["--workspace", root.path().to_str().unwrap(), "transcript-search", id, "visible grep"])
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "transcript-search",
+            id,
+            "visible grep",
+        ])
         .output()
         .unwrap();
     assert!(tool.status.success());
