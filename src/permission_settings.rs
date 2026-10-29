@@ -392,6 +392,46 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[tokio::test]
+    async fn persisted_policy_blocks_actual_shell_and_filesystem_side_effect() {
+        use crate::{
+            protocol::{FunctionCall, ToolCall},
+            tools::{Approval, ToolExecutor},
+        };
+        let root = tempfile::tempdir().unwrap();
+        let paths = paths(root.path());
+        write(
+            &paths.project,
+            &json!({"permissions":{"allow":["Bash(touch allowed)"]}}),
+        );
+        write(
+            paths.policy.as_ref().unwrap(),
+            &json!({"permissions":{"deny":["Bash(touch blocked)"]}}),
+        );
+        let rules = compile_rules(&paths.load(&[]).unwrap()).unwrap();
+        let executor = ToolExecutor::new(
+            root.path().canonicalize().unwrap(),
+            Approval::Ask,
+            false,
+        )
+        .with_permission_rules(rules);
+        let make_call = |command: &str| ToolCall {
+            id: "permission-source-test".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":command}).to_string(),
+            },
+        };
+        let denied = executor.execute(&make_call("touch blocked")).await;
+        assert!(denied.starts_with("ERROR:"), "{denied}");
+        assert!(!root.path().join("blocked").exists());
+        let allowed = executor.execute(&make_call("touch allowed")).await;
+        assert!(allowed.contains("Exit: exit status: 0"), "{allowed}");
+        assert!(root.path().join("allowed").exists());
+    }
+
+    #[cfg(unix)]
     #[test]
     fn project_settings_symlink_cannot_escape_workspace() {
         use std::os::unix::fs::symlink;
