@@ -129,7 +129,12 @@ impl ToolExecutor {
             },
             "web_fetch" => {
                 self.require_approval("web_fetch", &args)?;
-                webfetch::execute(&args).await
+                webfetch::execute_with_redirect_policy(&args,&|target|{
+                    // A cross-host redirect can hit a domain denied by a
+                    // content rule even when the initial host was allowed.
+                    self.require_approval("web_fetch",
+                        &json!({"url":target.as_str()}))
+                }).await
             },
             "git_status" => self.git_read(vec!["status".into(), "--short".into()]).await,
             "git_diff" => self.git_diff(&args).await,

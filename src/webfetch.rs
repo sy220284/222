@@ -63,7 +63,10 @@ fn sanitize_html(body:&str)->String{
         .collect::<Vec<_>>().join("\n")
 }
 
-async fn fetch(url:&str,allow_private_for_test:bool)->Result<Value>{
+async fn fetch_with_redirect_policy(
+    url:&str,allow_private_for_test:bool,
+    approve_redirect:&(impl Fn(&Url)->Result<()> + Sync)
+)->Result<Value>{
     let client=Client::builder().timeout(Duration::from_secs(25))
         .redirect(reqwest::redirect::Policy::none())
         .user_agent("AtlasAgent/0.1 (+user-requested-web-fetch)").build()?;
@@ -76,7 +79,14 @@ async fn fetch(url:&str,allow_private_for_test:bool)->Result<Value>{
             let location=response.headers().get("location")
                 .context("HTTP redirect missing Location")?
                 .to_str().context("Invalid redirect Location")?;
-            current=current.join(location)?;
+            let next=current.join(location)?;
+            // Tool approval is scoped to the original hostname. Following a
+            // redirect to another host requires a fresh policy decision
+            // *before* the next HTTP request is sent.
+            if next.host_str()!=current.host_str(){
+                approve_redirect(&next)?;
+            }
+            current=next;
             continue
         }
         let code=response.status();
@@ -105,13 +115,23 @@ async fn fetch(url:&str,allow_private_for_test:bool)->Result<Value>{
     bail!("Web redirect limit exceeded")
 }
 
-pub async fn execute(args:&Value)->Result<String>{
+async fn fetch(url:&str,allow_private_for_test:bool)->Result<Value>{
+    fetch_with_redirect_policy(url,allow_private_for_test,&|_|Ok(())).await
+}
+
+pub async fn execute_with_redirect_policy(
+    args:&Value,approve_redirect:&(impl Fn(&Url)->Result<()> + Sync)
+)->Result<String>{
     let url=args.get("url").and_then(Value::as_str)
         .context("web_fetch requires url")?;
     let prompt=args.get("prompt").and_then(Value::as_str).unwrap_or("");
-    let mut output=fetch(url,false).await?;
+    let mut output=fetch_with_redirect_policy(url,false,approve_redirect).await?;
     output["prompt"]=json!(prompt);
     Ok(output.to_string())
+}
+
+pub async fn execute(args:&Value)->Result<String>{
+    execute_with_redirect_policy(args,&|_|Ok(())).await
 }
 
 pub fn definition()->Value{
@@ -142,6 +162,36 @@ mod tests{
         assert!(result.contains("Heading"));
         assert!(result.contains("One & Two"));
         assert!(!result.contains("alert"));
+    }
+    #[tokio::test]
+    async fn cross_hostname_redirect_cannot_bypass_explicit_deny_rule(){
+        use tokio::{io::{AsyncReadExt,AsyncWriteExt},net::TcpListener};
+        let listener=TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let server=tokio::spawn(async move{
+            let (mut stream,_)=listener.accept().await.unwrap();
+            let mut buf=[0u8;1024];
+            stream.read(&mut buf).await.unwrap();
+            let location="http://localhost:9/do-not-fetch";
+            let response=format!("HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            stream.write_all(response.as_bytes()).await.unwrap();
+        });
+        let rules=crate::permission_rules::compile_rules(&[
+            crate::permission_rules::RuleSetting{
+                behavior:"deny".into(),rule:"WebFetch(domain:localhost)".into()
+            },
+        ]).unwrap();
+        let url=format!("http://{address}/start");
+        let denied=fetch_with_redirect_policy(&url,true,&|next|{
+            match crate::permission_rules::policy_for(&rules,"web_fetch",
+                &json!({"url":next.as_str()}))? {
+                Some(crate::permission_rules::Behavior::Deny)=>
+                    bail!("redirect destination explicitly denied"),
+                _=>Ok(()),
+            }
+        }).await.unwrap_err();
+        assert!(denied.to_string().contains("explicitly denied"));
+        server.await.unwrap();
     }
     #[tokio::test]
     async fn web_fetch_reads_local_mock_only_with_internal_test_override(){

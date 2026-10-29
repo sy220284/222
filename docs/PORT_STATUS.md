@@ -391,3 +391,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 **验证**：新增 `semantic_inputs::tests::js_number_precision_and_negative_zero_match_original_preprocessor`，覆盖正负超过 2^53 的精度舍入、负零、直接 JSON 数字与整数型浮点、超出 u64 范围的拒绝。GitHub 提交 `f24f20af22abfb1149067cfc45cba37fe552ae49`；最终 CI 以对应及后续 HEAD 的实际结果为准，未将这两条原路径提升为完整验收。
 
 **仍缺**：原版 Zod 泛型可选/默认组合、全部模型工具 schema 的真实类型边界及上下游用户行为，仍按“部分实现”追踪。
+
+### 2026-10-29：WebFetch 重定向跨域权限重新验收
+
+对照 WebFetchTool 原始 `domain:<hostname>` 权限：原 `ToolExecutor` 仅审查初始 URL，`webfetch.rs` 允许自主跨域 3xx 跳转；即使目标域名有显式 deny，后续 HTTP 仍可能发出。本轮对每次 URL.hostname 跨域跳转在下一请求之前调用 `ToolExecutor::require_approval`：Full 仍受显式 deny，Ask 非交互无法借初始允许域名绕行。原私网/SSRF 限制和 5 跳限制维持。新模拟 HTTP 302 跳至另一个主机的回归测试验证显式 deny 在访问目标前生效。该补齐不涵盖完整浏览器、认证、页面摘要和交互审批，原路径保持部分实现。
