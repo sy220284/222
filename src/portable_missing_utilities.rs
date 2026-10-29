@@ -182,6 +182,10 @@ pub struct MatchSpan {
     pub text: String,
     pub inverse: bool,
 }
+/// Preserve the original highlightMatch.tsx indexing: JS searches the entire
+/// lowercased string, then slices the *original* string using UTF-16 offsets.
+/// Lowercasing can expand a Unicode scalar, so independent character scans
+/// do not reproduce the original offsets or the overlapping-match behavior.
 pub fn highlight_match(text: &str, query: &str) -> Vec<MatchSpan> {
     if query.is_empty() {
         return vec![MatchSpan {
@@ -189,65 +193,58 @@ pub fn highlight_match(text: &str, query: &str) -> Vec<MatchSpan> {
             inverse: false,
         }];
     }
-    let normalized = text.to_lowercase();
-    let needle = query.to_lowercase();
+    let original: Vec<u16> = text.encode_utf16().collect();
+    let normalized: Vec<u16> = text.to_lowercase().encode_utf16().collect();
+    let needle: Vec<u16> = query.to_lowercase().encode_utf16().collect();
+    let query_len = query.encode_utf16().count();
     if needle.is_empty() {
         return vec![MatchSpan {
             text: text.into(),
             inverse: false,
         }];
     }
-    let mut result = Vec::new();
-    let mut next = 0;
-    while next < text.len() {
-        // Casefolding may change byte length; map character indices back
-        // to the original string rather than cutting UTF-8 at a folded index.
-        let mut hit = None;
-        for (i, _) in text.char_indices().filter(|(i, _)| *i >= next) {
-            let tail = &text[i..];
-            if tail.to_lowercase().starts_with(&needle) {
-                let mut stop = i;
-                let mut lowered = String::new();
-                for c in tail.chars() {
-                    lowered.extend(c.to_lowercase());
-                    stop += c.len_utf8();
-                    if lowered.len() >= needle.len() {
-                        break;
-                    }
-                }
-                if lowered == needle {
-                    hit = Some((i, stop));
-                    break;
-                }
-            }
-        }
-        let Some((i, end)) = hit else { break };
-        if i > next {
-            result.push(MatchSpan {
-                text: text[next..i].into(),
+
+    let mut parts = Vec::new();
+    let mut offset = 0;
+    while offset <= normalized.len() && needle.len() <= normalized.len() - offset {
+        let Some(relative) = normalized[offset..]
+            .windows(needle.len())
+            .position(|window| window == needle.as_slice())
+        else {
+            break;
+        };
+        let idx = offset + relative;
+        if idx > offset {
+            parts.push(MatchSpan {
+                text: String::from_utf16_lossy(
+                    &original[offset.min(original.len())..idx.min(original.len())],
+                ),
                 inverse: false,
-            })
+            });
         }
-        result.push(MatchSpan {
-            text: text[i..end].into(),
+        parts.push(MatchSpan {
+            text: String::from_utf16_lossy(
+                &original[idx.min(original.len())..(idx + query_len).min(original.len())],
+            ),
             inverse: true,
         });
-        next = end;
+        offset = idx + query_len;
     }
-    if next < text.len() {
-        result.push(MatchSpan {
-            text: text[next..].into(),
-            inverse: false,
-        })
-    }
-    if result.is_empty() {
-        result.push(MatchSpan {
+    if parts.is_empty() {
+        return vec![MatchSpan {
             text: text.into(),
             inverse: false,
-        })
+        }];
     }
-    result
+    if offset < original.len() {
+        parts.push(MatchSpan {
+            text: String::from_utf16_lossy(&original[offset..]),
+            inverse: false,
+        });
+    }
+    parts
 }
+
 pub fn highlight_view(text: &str, query: &str) -> crate::generated_ports::ui::VNode {
     use crate::generated_ports::ui::VNode;
     VNode::Group(
@@ -398,6 +395,20 @@ mod tests {
             "A test a TEST"
         );
         assert_eq!(highlight_view("hello", "ll").text_content(), "hello");
+        // JavaScript indexes UTF-16 code units, not UTF-8 byte offsets.
+        let spans = highlight_match("😀Hello😀", "hello");
+        assert_eq!(spans, vec![
+            MatchSpan { text: "😀".into(), inverse: false },
+            MatchSpan { text: "Hello".into(), inverse: true },
+            MatchSpan { text: "😀".into(), inverse: false },
+        ]);
+        // A lowercase expansion changes the original JavaScript slice index.
+        let spans = highlight_match("İabc", "a");
+        assert_eq!(spans, vec![
+            MatchSpan { text: "İa".into(), inverse: false },
+            MatchSpan { text: "b".into(), inverse: true },
+            MatchSpan { text: "c".into(), inverse: false },
+        ]);
     }
     #[test]
     fn history_terminal_and_cli() {
