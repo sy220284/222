@@ -1,5 +1,14 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：权限遮蔽告警、MCP 连接诊断与 Bash 危险命令提示（源码已提交、待验收）
+
+- **权限规则可用性诊断（1 项）**：对照 `source/src/utils/permissions/shadowedRuleDetection.ts`、`doctorContextWarnings.ts`，在 `src/diagnostics.rs` 的真实 `/doctor` 入口读取用户、项目、本地、托管和全局有效权限，识别特定允许规则被同工具全局拒绝/询问规则遮蔽，拒绝优先，并给出处理建议。提交 `d9873b96`。当前 Rust 无沙箱自动放行来源模型，原版按来源和沙箱状态排除的特殊情况尚未等价。
+- **MCP 远程连接诊断（1 项）**：对照 `source/src/services/mcp/envExpansion.ts`、`src/mcp_http.rs::connect_with_root`，`/doctor` 先展开 `${NAME}` 和 `${NAME:-fallback}`，对缺失变量提示，拒绝 URL 内嵌账号密码及与实际 HTTP 握手冲突的保留请求头，不再误判正常动态 URL 为无效。提交 `9c9df945`、`0ce1edb2`。动态助手生成的请求头、网络可达性和完整 OAuth 仍未诊断。
+- **Bash 高风险操作交互提醒（1 项）**：对照 `source/src/tools/BashTool/destructiveCommandWarning.ts`，在 `src/bash_permission_suggestions.rs` 实现 Git 强制改写、删除、数据库清空、Kubernetes/Terraform 销毁等危险命令的原版告警与 `git clean --dry-run` 例外，并接入 `src/tools.rs::require_approval` 的真实交互授权界面；仅提示，不改变显式拒绝、非交互策略或已有安全审查。提交 `79e789cc`、`2a13eff5`、`1dbbdb64`。完整 Shell AST、所有复合命令与原版 UI 布局仍未等价。
+- **并行冲突处理**：曾调整权限保存接口返回值，静态复查发现其既有布尔值表达“策略允许写入”而非“本次内容发生变化”，且原有重复规则调用依赖该语义；已通过 `aa2336df` 恢复，不计有效补强。
+- **本次严格计数**：3 个互不重复、用户可感知功能的源码补强已提交，**3/100**，尚差 97 项。没有执行 Cargo、单元/集成测试或 CI，以上均为“已提交、待验收”，Issue #3 冻结 362 条不勾选。已从 Issue #3 和迁移矩阵抽取 100 条部分实现**源路径候选**，但源路径不能替代 100 个独立业务功能，尚需继续逐功能源码级核查、去重、明确 Rust 调用链及补齐；不能当作本轮 100 项清单完成证据。
+
+
 ## 2026-10-29：交互问答注释与诊断警告源码补齐（已提交、待验收）
 
 - **交互问答（1 个独立业务功能）**：对照原版 `src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx` 的严格输入 Schema、`annotations`、`mapToolResultToToolResultBlockParam` 和 `validateHtmlPreview`。Rust `src/ask_user_question.rs` 从真实终端选择收集所选预览及用户备注，不信任模型伪造的答案/注释，按原版问答顺序构建供模型继续推理的文本；`src/agent.rs` 已接通结果回传。新增可选 HTML 预览片段校验（`ATLAS_QUESTION_PREVIEW_FORMAT=html`）。提交 `2da9a86b`、`742306f0`、`3c65520d`、`948cef64`、`63656e5f`、`a2272dae`；仍缺 SDK 外部问答回执、完整预览格式配置传播和 TUI，**未做行为测试，不能标记等价**。
