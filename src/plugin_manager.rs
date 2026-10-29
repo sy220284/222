@@ -66,8 +66,12 @@ pub fn installed(root: &Path, config: &Config) -> Result<Value> {
             {
                 continue;
             }
-            let manifest = entry.path().join("plugin.json");
-            if manifest.is_file() {
+            let location = entry.path();
+            let has_components = ["commands", "agents", "skills", "hooks"]
+                .iter().any(|component| location.join(component).is_dir());
+            let has_manifest = location.join(".claude-plugin/plugin.json").is_file()
+                || location.join("plugin.json").is_file();
+            if has_manifest || has_components {
                 names.push(json!({
                     "name":name,
                     "enabled":config.enabled_plugins.contains(&name),
@@ -80,16 +84,7 @@ pub fn installed(root: &Path, config: &Config) -> Result<Value> {
 }
 
 fn manifest_name(root: &Path) -> Result<String> {
-    let source = root.join("plugin.json");
-    let document: Value =
-        serde_json::from_slice(&fs::read(source).context("Local plugin missing plugin.json")?)?;
-    let name = document["name"]
-        .as_str()
-        .context("Plugin manifest must contain a name")?;
-    if !valid_name(name) {
-        bail!("Invalid plugin ID in manifest");
-    }
-    Ok(name.to_owned())
+    crate::plugins::validate_local(root)
 }
 
 fn copy_local_tree(source: &Path, stage: &Path) -> Result<()> {
