@@ -95,7 +95,10 @@ mod tests {
         let input = "abcdefghijklmnopqrstuvwxyz0123456789";
         let result = format_task_output(input, "x", 5);
         assert!(result.was_truncated);
-        assert_eq!(result.content, format!("{header}{}", &input[header.len() - 5..]));
+        assert_eq!(
+            result.content,
+            format!("{header}{}", &input[header.len() - 5..])
+        );
         // The original slice(-0) returns the entire string when maxLen == header length.
         let result = format_task_output(input, "x", header.len());
         assert_eq!(result.content, format!("{header}{input}"));
