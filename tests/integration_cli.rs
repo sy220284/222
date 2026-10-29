@@ -2865,3 +2865,66 @@ fn chat_auto_names_session_using_selected_provider_without_adding_chat_turn(){
     assert_eq!(session["messages"].as_array().unwrap().len(),2);
     assert!(session["usage"]["total_tokens"].as_u64().unwrap_or(0)>=7);
 }
+
+
+#[cfg(unix)]
+#[test]
+fn configured_powershell_uses_real_shell_protocol_and_delivers_tool_output_to_model() {
+    use std::os::unix::fs::PermissionsExt;
+    let root=tempfile::tempdir().unwrap();
+    let fake_bin=root.path().join("bin");
+    fs::create_dir(&fake_bin).unwrap();
+    let fake_shell=fake_bin.join("pwsh");
+    fs::write(&fake_shell,"#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\" \"$3\" > \"$ATLAS_PS_FLAGS\"\nexec sh -c \"$4\"\n").unwrap();
+    fs::set_permissions(&fake_shell,fs::Permissions::from_mode(0o755)).unwrap();
+    let flags=root.path().join("flags.txt");
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for i in 0..2{
+            let (mut stream,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut stream));
+            let msg=if i==0 {
+                json!({"role":"assistant","content":null,"tool_calls":[{
+                    "id":"shell-call","type":"function","function":{
+                        "name":"run_command","arguments":json!({"command":"printf 'shell-command-success'"}).to_string()
+                    }}]})
+            }else{json!({"role":"assistant","content":"PowerShell execution verified"})};
+            let body=json!({"choices":[{"message":msg,"finish_reason":if i==0 {"tool_calls"} else {"stop"}}]}).to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","default_shell":"powershell",
+        "providers":[{"id":"mock","kind":"openai-compatible","model":"model",
+        "base_url":format!("http://{addr}/v1")}]}).to_string()).unwrap();
+    let inherited=std::env::var_os("PATH").unwrap();
+    let composed=std::env::join_paths(std::iter::once(fake_bin.as_path())
+        .chain(std::env::split_paths(&inherited).collect::<Vec<_>>().iter().map(|p|p.as_path()))).unwrap();
+    let output=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","full","run","test configured shell"])
+        .env("ATLAS_CONFIG",&config).env("PATH",composed)
+        .env("ATLAS_PS_FLAGS",&flags).output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("PowerShell execution verified"));
+    assert!(requests[1].contains("shell-command-success"),"{}",requests[1]);
+    assert_eq!(fs::read_to_string(flags).unwrap(),
+        "-NoProfile\n-NonInteractive\n-Command\n");
+}
+#[test]
+fn invalid_shell_selection_fails_before_model_request() {
+    let root=tempfile::tempdir().unwrap();
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","default_shell":"cmd",
+        "providers":[{"id":"mock","kind":"openai-compatible","model":"unused",
+        "base_url":"http://127.0.0.1:1/v1"}]}).to_string()).unwrap();
+    let output=binary().args(["--workspace",root.path().to_str().unwrap(),"run","hello"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Unsupported default shell"));
+}

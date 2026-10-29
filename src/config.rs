@@ -59,6 +59,8 @@ pub struct Config {
     #[serde(default)]
     pub additional_directories: Vec<String>,
     #[serde(default)]
+    pub default_shell: Option<String>,
+    #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
     #[serde(default)]
     pub hooks: Vec<HookRule>,
@@ -79,6 +81,7 @@ impl Default for Config {
         Self {
             default_provider: "local".into(),
             additional_directories: Vec::new(),
+            default_shell: None,
             providers: vec![
                 ProviderProfile {
                     id: "local".into(),
@@ -167,6 +170,7 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
+        crate::shell_runtime::from_config(self.default_shell.as_deref())?;
         if self.providers.is_empty() { bail!("At least one provider is required") }
         let mut seen = std::collections::HashSet::new();
         for p in &self.providers {

@@ -27,6 +27,7 @@ pub enum Approval {
 pub struct ToolExecutor {
     root: PathBuf,
     extra_roots: Vec<PathBuf>,
+    shell_kind: crate::shell_runtime::ShellKind,
     approval: Approval,
     interactive: bool,
     reads: Mutex<HashMap<PathBuf, u64>>,
@@ -40,10 +41,11 @@ pub struct ToolExecutor {
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, extra_roots: Vec::new(), approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new(), mode: None, metrics: Arc::new(ToolMetrics::default()) }
+        Self { root, extra_roots: Vec::new(), shell_kind: crate::shell_runtime::ShellKind::default(), approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new(), mode: None, metrics: Arc::new(ToolMetrics::default()) }
     }
 
     pub fn with_extra_roots(mut self,roots:Vec<PathBuf>)->Self{self.extra_roots=roots;self}
+    pub fn with_shell(mut self,kind:crate::shell_runtime::ShellKind)->Self{self.shell_kind=kind;self}
     pub fn with_metrics(mut self,metrics:Arc<ToolMetrics>)->Self{
         self.metrics=metrics;
         self
@@ -80,7 +82,7 @@ impl ToolExecutor {
                 &call.id,crate::command_lifecycle::State::Started);
         }
         let result=match self.dispatch(call).await {
-            Ok(output) => truncate(&output, MAX_OUTPUT_CHARS),
+            Ok(output) => truncate(&output,if shell {crate::shell_runtime::max_output_length()} else {MAX_OUTPUT_CHARS}),
             Err(err) => format!("ERROR: {err:#}"),
         };
         if shell {
@@ -471,18 +473,7 @@ impl ToolExecutor {
         let command = required(args, "command")?;
         let secs = args.get("timeout_seconds").and_then(Value::as_u64)
             .unwrap_or(60).clamp(1, 300);
-        #[cfg(windows)]
-        let mut proc = {
-            let mut p = Command::new("cmd");
-            p.arg("/C").arg(command);
-            p
-        };
-        #[cfg(not(windows))]
-        let mut proc = {
-            let mut p = Command::new("sh");
-            p.arg("-c").arg(command);
-            p
-        };
+        let mut proc=self.shell_kind.build_command(command)?;
         proc.current_dir(&self.root).kill_on_drop(true)
             .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child = proc.spawn()?;
@@ -490,7 +481,7 @@ impl ToolExecutor {
         let stderr = child.stderr.take().context("No command stderr")?;
         let (status, out, err) = timeout(Duration::from_secs(secs), async {
             let (out, err) = tokio::try_join!(
-                capped_read(stdout, 128_000),
+                capped_read(stdout, crate::shell_runtime::max_output_length().saturating_mul(4)),
                 capped_read(stderr, 32_000)
             )?;
             let status = child.wait().await?;
@@ -499,7 +490,7 @@ impl ToolExecutor {
         Ok(format!(
             "Exit: {}\nSTDOUT:\n{}\nSTDERR:\n{}",
             status,
-            truncate(&String::from_utf8_lossy(&out), 12_000),
+            truncate(&String::from_utf8_lossy(&out),crate::shell_runtime::max_output_length()),
             truncate(&String::from_utf8_lossy(&err), 4_000)
         ))
     }

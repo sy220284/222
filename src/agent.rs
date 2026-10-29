@@ -80,6 +80,7 @@ pub struct Agent {
     enabled_plugins: Vec<String>,
     search_backend: Option<SearchBackend>,
     background: Arc<BackgroundTasks>,
+    shell_kind: crate::shell_runtime::ShellKind,
     graph: task_graph::TaskGraph,
     team_name: Option<String>,
     agent_name: Option<String>,
@@ -133,7 +134,7 @@ impl Agent {
                 Approval::Full=>permission_mode::Mode::BypassPermissions,
             }
         };
-        Ok(Self { profile, provider, root, additional_dirs: Vec::new(), approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), permission_mode:mode,
+        Ok(Self { profile, provider, root, additional_dirs: Vec::new(), approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, shell_kind: crate::shell_runtime::ShellKind::default(), graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), permission_mode:mode,
         hook_rules: Vec::new(), model_prices: Vec::new(), file_metrics })
     }
 
@@ -508,6 +509,7 @@ impl Agent {
             let permissions=self.permission_rules.clone();
             let model_prices=self.model_prices.clone();
             let additional_dirs=self.additional_dirs.clone();
+            let shell_kind=self.shell_kind;
             let shared_tasks=self.graph.clone();
             let current_team=self.team_name.clone();
             let current_team_root=self.team_root.clone();
@@ -526,6 +528,7 @@ impl Agent {
                     child.child_depth=1;
                     child.enabled_plugins=plugins;
                     child.additional_dirs=additional_dirs;
+                    child.set_default_shell(shell_kind);
                     child.search_backend=search;
                     child.permission_rules=permissions;
                     child.model_prices=model_prices;
@@ -658,6 +661,7 @@ impl Agent {
         child.child_depth = self.child_depth + 1;
         child.enabled_plugins = self.enabled_plugins.clone();
         child.additional_dirs = self.additional_dirs.clone();
+        child.set_default_shell(self.shell_kind);
         child.search_backend = self.search_backend.clone();
         child.permission_rules = self.permission_rules.clone();
         child.model_prices = self.model_prices.clone();
@@ -747,6 +751,10 @@ impl Agent {
             }
         }
         Ok(())
+    }
+    pub fn set_default_shell(&mut self, kind: crate::shell_runtime::ShellKind) {
+        self.shell_kind=kind;
+        self.background.set_shell(kind);
     }
     pub fn profile(&self) -> &ProviderProfile { &self.profile }
     pub fn set_search_backend(&mut self,backend:Option<SearchBackend>){
@@ -1070,6 +1078,7 @@ impl Agent {
             .with_background(self.background.clone())
             .with_permission_rules(self.permission_rules.clone())
             .with_extra_roots(self.additional_dirs.clone())
+            .with_shell(self.shell_kind)
             .with_permission_mode(self.permission_mode);
         let mut stop_hook_active = false;
         for _ in 0..self.max_steps {
@@ -1453,6 +1462,7 @@ mod tests {
             enabled_plugins: Vec::new(),
             search_backend: None,
             background: Arc::new(BackgroundTasks::new(dir.path()).unwrap()),
+            shell_kind: crate::shell_runtime::ShellKind::default(),
             graph: task_graph::TaskGraph::new(dir.path(),"test").unwrap(),
             team_name: None,
             agent_name: None,

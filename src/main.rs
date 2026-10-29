@@ -7,6 +7,7 @@ mod query_guard;
 mod sdk_queue;
 mod queued_prompt_batch;
 mod shell_quote;
+mod shell_runtime;
 mod skill_arguments;
 mod semantic_inputs;
 mod xml_escape;
@@ -211,6 +212,7 @@ async fn main() -> Result<()> {
             _ => bail!("Invalid --add-dir directory: {}",directory.display()),
         }
     }
+    agent.set_default_shell(shell_runtime::from_config(config.default_shell.as_deref())?);
     agent.set_enabled_plugins(config.enabled_plugins.clone());
     agent.set_model_prices(&config.model_prices);
     agent.set_permission_rules(&config.permission_rules)?;

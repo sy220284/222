@@ -43,6 +43,7 @@ struct Running {
 pub struct BackgroundTasks {
     directory: PathBuf,
     entries: Mutex<HashMap<String, Arc<Running>>>,
+    shell_kind: Mutex<crate::shell_runtime::ShellKind>,
 }
 
 impl BackgroundTasks {
@@ -52,9 +53,13 @@ impl BackgroundTasks {
         if !directory.canonicalize()?.starts_with(root) {
             bail!("Background task directory escapes workspace");
         }
-        Ok(Self { directory, entries: Mutex::new(HashMap::new()) })
+        Ok(Self { directory, entries: Mutex::new(HashMap::new()),
+            shell_kind: Mutex::new(crate::shell_runtime::ShellKind::default()) })
     }
 
+    pub fn set_shell(&self, kind:crate::shell_runtime::ShellKind) {
+        *self.shell_kind.lock().unwrap()=kind;
+    }
     fn metadata_path(&self, id: &str) -> Result<PathBuf> {
         let uuid = Uuid::parse_str(id).context("Invalid task ID")?;
         Ok(self.directory.join(format!("{uuid}.json")))
@@ -89,18 +94,8 @@ impl BackgroundTasks {
         let stderr_path = self.directory.join(format!("{id}.stderr"));
         tokio::fs::write(&stdout_path, &[]).await?;
         tokio::fs::write(&stderr_path, &[]).await?;
-        #[cfg(windows)]
-        let mut proc = {
-            let mut p = Command::new("cmd");
-            p.arg("/C").arg(command);
-            p
-        };
-        #[cfg(not(windows))]
-        let mut proc = {
-            let mut p = Command::new("sh");
-            p.arg("-c").arg(command);
-            p
-        };
+        let kind=*self.shell_kind.lock().unwrap();
+        let mut proc=kind.build_command(command)?;
         let workspace = self.directory.parent().and_then(Path::parent)
             .context("Background task workspace missing")?;
         // Place the shell and its descendants into a new process group.

@@ -1775,13 +1775,13 @@
 | `src/utils/settings/validation.ts` | 266 | 7951 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/validationTips.ts` | 165 | 5464 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/shell/bashProvider.ts` | 256 | 11002 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/shell/outputLimits.ts` | 15 | 416 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/shell/powershellDetection.ts` | 108 | 3714 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/shell/powershellProvider.ts` | 124 | 5771 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/shell/outputLimits.ts` | 15 | 416 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
+| `src/utils/shell/powershellDetection.ts` | 108 | 3714 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
+| `src/utils/shell/powershellProvider.ts` | 124 | 5771 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/shell/prefix.ts` | 368 | 11216 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/shell/readOnlyCommandValidation.ts` | 1894 | 68294 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/shell/resolveDefaultShell.ts` | 15 | 496 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/shell/shellProvider.ts` | 34 | 955 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/shell/resolveDefaultShell.ts` | 15 | 496 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
+| `src/utils/shell/shellProvider.ts` | 34 | 955 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/shell/shellToolUtils.ts` | 23 | 1036 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/shell/specPrefix.ts` | 242 | 7905 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/shellConfig.ts` | 168 | 4737 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1893,7 +1893,7 @@
 | `src/utils/userPromptKeywords.ts` | 28 | 929 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/uuid.ts` | 28 | 888 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/warningHandler.ts` | 122 | 4486 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/which.ts` | 83 | 2392 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/which.ts` | 83 | 2392 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/windowsPaths.ts` | 174 | 6008 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/withResolvers.ts` | 14 | 444 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/words.ts` | 801 | 10960 | 重写：保持通用行为 | 待定 | 未迁移 |
