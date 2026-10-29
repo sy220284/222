@@ -181,7 +181,7 @@ pub fn capture_before_edit(path: &Path) -> PendingCheckpoint {
             previous: None,
             previous_mode: None,
             warning: Some(format!(
-                "\\nWarning: file edit may proceed, but its history backup could not be captured: {error:#}"
+                "\nWarning: file edit may proceed, but its history backup could not be captured: {error:#}"
             )),
         },
     }
