@@ -644,7 +644,7 @@ case "$line" in
     echo '{"jsonrpc":"2.0","id":92,"method":"ping"}' ;;
   *'"id":92'*'"result":{}'*)
     echo '{"jsonrpc":"2.0","id":93,"method":"unsupported/request"}' ;;
-  *'"id":93'*'"code":-32601'*)
+  *'"code":-32601'*'"id":93'*)
     echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"ready"}]}}' ;;
 esac
 done"#;
