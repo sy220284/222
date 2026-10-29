@@ -1349,3 +1349,13 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **Rust 可达链**：`PluginSet::load` → `HookRule.plugin_root`（仅加载器内部赋值，不接受用户 JSON 冒充来源）→ `Agent::attach_hooks` → `HookRunner::run` 的按来源去重 → `run_command`。每个插件使用自身已校验的目录替换 Hook 命令中的插件根目录变量，并向脚本提供 `ATLAS_PLUGIN_ROOT`；插件运行期间被移除时给出可见非阻断错误，避免误用退出码 2 阻断用户操作。普通设置 Hook 无插件上下文，保留旧行为。
 - **提交**：`2b1697fbb797ea10538e7efc3bf6ff6a9ffb9d30`、`4ef570c3aa046122c89a10347bbe2ca364e632d3`、`0206d5f136aeb906d6e5cabcaa1e848f7c290047`。按**第 4 项独立用户业务功能**记录，已提交、待行为验收。未运行 Cargo/测试/CI，完整等价新增 0。
 - **剩余差异**：插件自定义选项、独立持久数据目录、技能来源、动态 Hook 注册与注销、HTTP/prompt/agent/async Hook、跨平台引号与命令注入边界、完整取消/权限/重启路径仍待对照。Issue #3 固定 362 条保持开放；本轮 100 项问题清单和 100 项代码补齐均尚未完成。
+
+
+### 2026-10-29：Grep 与 Glob 搜索结果完整性和排序（源码已提交，待行为验收）
+
+- **原版依据**：完整 2.1.88 原始 ZIP 的 `source/src/tools/GrepTool/GrepTool.ts::call`（使用 `--hidden`、仅排除 .git/.svn/.hg/.bzr/.jj/.sl、`--max-columns 500`，没有 2MiB 整文件限制）；`source/src/utils/glob.ts::glob`（`--files --sort=modified`、默认 `--no-ignore --hidden`，且没有对 VCS、插件、构建目录的一刀切排除）；`source/src/tools/GlobTool/GlobTool.ts::call` 实际调用 `glob`。
+- **Rust 可达入口**：`ToolExecutor::dispatch("grep_files"/"glob_files")` → `src/search.rs::grep_files/glob_files` → `files` 目录遍历与筛选。此前两工具共享硬编码排除，导致隐藏文件、.atlas、target、node_modules 等合法目标不可见，且 Grep 整文件超过 2MiB 即被跳过；Glob 排序也与原版相反。
+- **实际修改**：按工具区分目录遍历：Grep 包含隐藏文件，只排除六种 VCS 目录并取消 2MiB 整文件跳过；Glob 保留隐藏/忽略开关且不再额外排除 VCS、插件、构建目录，按修改时间由旧到新排序。未增加静态生成文件、空壳或厂商绑定。
+- **Rust 提交**：`47684bbc618b17595a551d4336a86d7403cf5682`、`b734011b2b8e9b090be11011d6d1d7bec5e1a8de`；迁移矩阵 `a35f011d507898259d4b672f11b5245bbe07cecf`。
+- **保守计数**：两个独立用户可感知业务链（Grep 隐藏/大文件内容检索、Glob 文件发现及时间排序）**2/100**。只做源码审阅和远端接线核查，未运行 Cargo、测试或 CI；均为**源码已提交、待行为验收**，新增完整等价验收 0。
+- **剩余差异**：Grep 的完整 ripgrep 正则/列宽截断、忽略规则、文件删除竞态、取消/错误时序及多平台路径行为；Glob 的孤立插件版本排除、动态上限、取消和全部 glob 边界。当前仍未逐项确认本轮恰好 100 个独立可处理缺口和完整实施方案，其余 98 项没有本轮代码证据。Issue #3 冻结 362 条全部保持开放。
