@@ -1199,6 +1199,37 @@ impl Agent {
             &self.model_prices,
         );
     }
+    /// Terminal counterpart of the original Settings/Status view. It reads
+    /// live runtime state and never renders a configured API key or MCP secret.
+    pub fn status_report(&mut self) -> Result<String> {
+        let mut report = String::new();
+        use std::fmt::Write as _;
+        writeln!(report, "Version: {}", env!("CARGO_PKG_VERSION"))?;
+        writeln!(
+            report,
+            "Session name: {}",
+            self.session.custom_title.as_deref().unwrap_or("(unnamed)")
+        )?;
+        writeln!(report, "Session ID: {}", self.session.id)?;
+        writeln!(report, "cwd: {}", self.root.display())?;
+        writeln!(report, "Provider: {} ({})", self.profile.id, self.profile.kind)?;
+        writeln!(report, "Model: {}", self.profile.model)?;
+        writeln!(report, "Permission mode: {}", self.permission_mode.label())?;
+        writeln!(report, "Configured workspace directories:")?;
+        for root in self.working_directories() {
+            writeln!(report, "  {}", root.display())?;
+        }
+        let statuses = self.mcp_statuses()?;
+        writeln!(report, "MCP servers: {}", statuses.len())?;
+        for server in statuses {
+            let name = server["name"].as_str().unwrap_or("unnamed");
+            let status = server["status"].as_str().unwrap_or("unknown");
+            let count = server["tools"].as_array().map_or(0, Vec::len);
+            writeln!(report, "  {name}: {status} ({count} tools)")?;
+        }
+        Ok(report)
+    }
+
     pub fn mcp_statuses(&mut self) -> Result<Vec<serde_json::Value>> {
         self.mcp
             .as_mut()
