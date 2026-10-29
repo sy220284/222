@@ -59,6 +59,7 @@ mod shell_runtime;
 mod skill_arguments;
 mod slash_command;
 mod source_semantics;
+mod source_semantics_osc;
 mod sse;
 mod subprocess_env;
 mod task;
@@ -232,6 +233,7 @@ async fn main() -> Result<()> {
                 None => Vec::new(),
             };
             match source_semantics::inspect(source, name, &args)
+                .or_else(|| source_semantics_osc::inspect(source, name, &args))
                 .or_else(|| generated_ports::inspect(source, name, &args))
             {
                 Some(value) => {
@@ -257,6 +259,13 @@ async fn main() -> Result<()> {
                 .map(|(_, exports)| exports)
                 .unwrap_or_default();
             if let Some(source_exports) = source_semantics::exports(source) {
+                for name in source_exports {
+                    if !exports.contains(name) {
+                        exports.push(*name);
+                    }
+                }
+            }
+            if let Some(source_exports) = source_semantics_osc::exports(source) {
                 for name in source_exports {
                     if !exports.contains(name) {
                         exports.push(*name);
