@@ -466,6 +466,22 @@ pub fn render(session: &Session) -> String {
         // Content blocks are the lossless representation of SDK multimodal
         // messages. The flattened content field may omit later text blocks.
         if let Some(blocks) = message.content_blocks.as_ref().filter(|b| !b.is_empty()) {
+            // Some providers supply the ordinary text in content while
+            // placing only attachments or tool calls in content_blocks.
+            // Keep that text, but do not duplicate content already present
+            // as a text block or a structured tool result.
+            let has_text_or_result = blocks.iter().any(|block| {
+                block.as_str().is_some()
+                    || matches!(
+                        block.get("type").and_then(serde_json::Value::as_str),
+                        Some("text" | "input_text" | "output_text" | "tool_result")
+                    )
+            });
+            if !has_text_or_result {
+                if let Some(content) = &message.content {
+                    lines.push(content.clone());
+                }
+            }
             for block in blocks {
                 if let Some(text) = render_export_block(block) {
                     lines.push(text);
