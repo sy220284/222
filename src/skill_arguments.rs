@@ -349,9 +349,10 @@ pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
             }).collect();
             continue;
         }
-        return parse_argument_names(Some(&Value::String(
+        list = parse_argument_names(Some(&Value::String(
             value.trim_matches(|ch| ch == '\'' || ch == '"').to_owned(),
         )));
+        continue;
     }
     if !closed {
         return Vec::new();
