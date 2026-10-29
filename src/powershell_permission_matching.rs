@@ -458,7 +458,7 @@ mod tests {
             "Get-ChildItem . $(Remove-Item secret)",
             "Get-ChildItem . | %{ Remove-Item secret }",
             "Get-ChildItem . > output.txt",
-            "Get-ChildItem . ` ; Remove-Item secret",
+            "Get-ChildItem . `; Remove-Item secret",
             "Get-ChildItem \"$(Remove-Item secret)\"",
             "Get-ChildItem 'unterminated",
         ] {
