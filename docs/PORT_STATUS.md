@@ -1,3 +1,12 @@
+## 2026-10-29：任务依赖持久化与任务 Hook 参数安全门禁（源码已提交、待验收）
+
+- 原版依据：`source/src/utils/tasks.ts::blockTask`（458–486 行）双向维护 `blocks` / `blockedBy`；`source/src/tools/TaskCreateTool/TaskCreateTool.ts`、`TaskGetTool.ts`、`TaskListTool.ts`、`TaskUpdateTool.ts` 的 Zod strictObject 输入校验发生在工具调用和生命周期 Hook 之前。
+- `src/task_graph.rs::link` 修复任务自依赖时两份旧快照相继写入导致 `blocks` 丢失，确保同一条任务记录双向关系完整落盘，TaskGet/TaskList/认领阻塞可继续读取；提交 `4f4cf7b1dab280ddea60853c0f91137f20162f0b`。
+- `src/task_graph.rs::validate_update_input` 和 `src/agent.rs::run_task_graph` 在 TaskCompleted Hook 前完整校验字段；模型调用进入 PreToolUse 前同样校验，防止非法状态、元数据或依赖参数先触发 Hook 副作用再报错；提交 `809afbda1ef8c7a913db84819c3a0290a2c539d7`。
+- 将同一严格输入校验扩展至 TaskCreate、TaskGet、TaskList，非法创建/读取/列表请求不进入 PreToolUse Hook，合法请求仍走原业务链；提交 `06c65cc05913a63a94619b6d6103b225651d77d2`。
+- 本轮保守计为 **3 条独立用户可感知业务行为补强**：任务自依赖关系持久化、任务更新前的 Hook 安全校验、任务创建/读取/列表的统一参数安全校验。按用户要求仅做源码接线审阅，不运行 Cargo、测试或 CI；均标为**已提交、待行为验收**，完整等价验收新增 0。Issue #3 冻结 362 项全部继续开放。
+- 尚缺任务系统跨进程通知、原版全状态迁移与并发细节、TaskCompleted/TaskCreated Hook 全协议和 UI/SDK 结构化输出；本轮 100 项预定清单尚未全部完成，不能按功能数宣称达标。
+
 ## 2026-10-29：无工具 MCP 服务与资源/提示词完整目录（源码已提交，待验收）
 
 原版依据：`source/src/services/mcp/client.ts::fetchToolsForClient`（1743–1757 行）在服务未声明 `capabilities.tools` 时返回空工具列表，仍保留连接；`fetchResourcesForClient`（2000–2027 行）和 `fetchCommandsForClient`（2033–2046 行）分别按资源/提示词能力读取。Rust `src/mcp.rs::McpManager::connect_with_root` 以前无条件请求 `tools/list`，使仅提供资源或提示词的合法服务被误判连接失败。提交 `ded394f83f661c8c9b6ec61da1ce2745655cfc2b` 让此类服务正常连接，并继续使用现有目录和读取入口。
