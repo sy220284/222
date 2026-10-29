@@ -420,7 +420,15 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
     } else {
         pattern
     };
-    let compiled = matcher(relative_pattern)?;
+    // ripgrep's glob syntax treats Windows directory separators as path
+    // separators. globset treats a raw backslash as an escape, so normalize
+    // the relative pattern before compiling it on Windows.
+    let normalized_pattern = if cfg!(windows) {
+        relative_pattern.replace('\\\\', "/")
+    } else {
+        relative_pattern.to_owned()
+    };
+    let compiled = matcher(&normalized_pattern)?;
     let hidden = std::env::var("ATLAS_GLOB_HIDDEN")
         .ok()
         .filter(|value| !value.is_empty())
