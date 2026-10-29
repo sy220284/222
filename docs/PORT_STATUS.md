@@ -604,3 +604,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **原版依据**：`source/src/utils/settings/settings.ts:63–120` 的 `loadManagedFileSettings`、同文件 `settingsMergeCustomizer` / `mergeArrays`，以及 `source/src/utils/settings/managedPath.ts`。原版先加载托管基础策略，再按文件名排序合并 `managed-settings.d/*.json`；对象递归合并、权限规则数组拼接去重，后面的标量配置覆盖前面的值；一个损坏的分片不能阻断其他有效分片。
 - **Rust 可达实现**：`src/permission_settings.rs::SettingsPaths::load_policy` 从已配置的 `ATLAS_POLICY_SETTINGS` 基础文件所在目录读取 `managed-settings.d`（可用 `ATLAS_POLICY_DROPIN_DIR` 指定目录），与 `SettingsPaths::load` 的真实规则加载及 `SettingsPaths::edit` 的托管策略禁改判断接通。非 JSON、隐藏文件、非普通文件不进入分片；无效 JSON 或单分片读取失败记录并跳过。合并由 `merge_policy_values` 负责，避免只把新文件映射进台账而不执行。
 - **状态**：本轮按用户最新要求只做源码审阅与代码提交，**未运行 Cargo、测试或 CI**；此项仅登记“源码已补齐并提交、待验证”，不提升任何已验收路径，也不勾选 Issue #3 冻结条目。仍缺完整跨平台 MDM/远程托管来源优先级、原版全量设置 schema 验证、策略分片符号链接兼容和权限 UI。冻结 362 项独立保持开放。
+
+### 托管权限来源在 /status 中显示（源码已提交，待验证）
+
+原版 `source/src/utils/settings/settings.ts:124–150` 的 `getManagedFileSettingsPresence` 将基础托管文件和策略分片分别检测，供状态界面显示 `file`、`drop-ins` 或 `file + drop-ins`。Rust `SettingsPaths::managed_file_presence` 现检查有效基础文件及符合命名条件的策略分片；`Agent::status_report` 的真实聊天 `/status` 输出显示来源类别，不展示敏感策略内容。**未运行测试/CI，待后续验证**；终端原版完整状态面板、其他管理来源及 UI 尚未等价。

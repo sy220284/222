@@ -1359,6 +1359,18 @@ impl Agent {
         )?;
         writeln!(report, "Model: {}", self.profile.model)?;
         writeln!(report, "Permission mode: {}", self.permission_mode.label())?;
+        let (base_policy, dropin_policy) =
+            crate::permission_settings::SettingsPaths::for_workspace(&self.root)?
+                .managed_file_presence();
+        if base_policy || dropin_policy {
+            let source = match (base_policy, dropin_policy) {
+                (true, true) => "file + drop-ins",
+                (true, false) => "file",
+                (false, true) => "drop-ins",
+                (false, false) => unreachable!(),
+            };
+            writeln!(report, "Managed permission settings: ({source})")?;
+        }
         writeln!(report, "Configured workspace directories:")?;
         for root in self.working_directories() {
             writeln!(report, "  {}", root.display())?;

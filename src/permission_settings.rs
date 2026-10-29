@@ -115,6 +115,44 @@ impl SettingsPaths {
         }
     }
 
+    fn dropin_directory(base: &Path) -> PathBuf {
+        std::env::var_os("ATLAS_POLICY_DROPIN_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                base.parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join("managed-settings.d")
+            })
+    }
+
+    /// Source settings.ts::getManagedFileSettingsPresence: report separately
+    /// whether the managed base has valid content and whether any eligible
+    /// drop-in files exist. The status view must not disclose policy contents.
+    pub fn managed_file_presence(&self) -> (bool, bool) {
+        let Some(base) = self.policy.as_ref() else {
+            return (false, false);
+        };
+        let has_base = Self::read_json_for_execution(base)
+            .ok()
+            .flatten()
+            .and_then(|value| value.as_object().map(|object| !object.is_empty()))
+            .unwrap_or(false);
+        let has_dropins = fs::read_dir(Self::dropin_directory(base))
+            .ok()
+            .is_some_and(|entries| {
+                entries.flatten().any(|entry| {
+                    let name = entry.file_name();
+                    let Some(name) = name.to_str() else { return false };
+                    !name.starts_with('.')
+                        && name.ends_with(".json")
+                        && entry
+                            .file_type()
+                            .is_ok_and(|kind| kind.is_file() || kind.is_symlink())
+                })
+            });
+        (has_base, has_dropins)
+    }
+
     /// Original settings.ts::loadManagedFileSettings: load the managed base
     /// first, then alphabetically ordered managed-settings.d/*.json fragments.
     /// Permission arrays concatenate without duplicates; later scalar values
@@ -127,13 +165,7 @@ impl SettingsPaths {
         if let Some(settings) = Self::read_json_for_execution(base)? {
             merge_policy_values(&mut merged, settings);
         }
-        let dropin_dir = std::env::var_os("ATLAS_POLICY_DROPIN_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                base.parent()
-                    .unwrap_or_else(|| Path::new("."))
-                    .join("managed-settings.d")
-            });
+        let dropin_dir = Self::dropin_directory(base);
         let entries = match fs::read_dir(&dropin_dir) {
             Ok(entries) => entries,
             Err(error) if matches!(
