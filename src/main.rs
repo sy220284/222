@@ -2,8 +2,8 @@ mod agent;
 mod array_utils;
 mod ask_user_question;
 mod background;
-mod browser_launcher;
 mod bash_permission_suggestions;
+mod browser_launcher;
 mod cleanup_registry;
 mod collections;
 mod command_lifecycle;
@@ -50,17 +50,17 @@ mod oauth_service;
 mod permission_mode;
 mod permission_rules;
 mod permission_settings;
+mod plain_text_storage;
+mod platform_source_utilities;
 mod plugin_commands;
 mod plugin_manager;
 mod plugins;
-mod plain_text_storage;
-mod platform_source_utilities;
 mod portable_async_runtime;
 mod portable_configuration;
 mod portable_ink_core;
-mod portable_render_semantics;
 mod portable_missing_utilities;
 mod portable_platform;
+mod portable_render_semantics;
 mod portable_settings_runtime;
 mod portable_source_utils;
 mod portable_ui_runtime;
@@ -83,9 +83,9 @@ mod session;
 mod session_control;
 mod shell_quote;
 mod shell_runtime;
-mod sleep_helpers;
 mod skill_arguments;
 mod slash_command;
+mod sleep_helpers;
 mod source_semantics;
 mod source_semantics_osc;
 mod source_semantics_types;
@@ -379,23 +379,22 @@ async fn main() -> Result<()> {
             use secure_fallback::SecureStorage;
             let selected = match file {
                 Some(path) => path.clone(),
-                None => plain_text_storage::PlainTextStorage::default_location()
-                    .ok_or_else(|| anyhow::anyhow!("Cannot determine credential directory"))?
-                    .path,
+                None => {
+                    plain_text_storage::PlainTextStorage::default_location()
+                        .ok_or_else(|| anyhow::anyhow!("Cannot determine credential directory"))?
+                        .path
+                }
             };
             let primary: std::sync::Arc<dyn SecureStorage> =
                 std::sync::Arc::new(plain_text_storage::PlainTextStorage::new(selected));
-            let storage: std::sync::Arc<dyn SecureStorage> =
-                if let Some(path) = fallback_file {
-                    std::sync::Arc::new(secure_fallback::FallbackStorage::new(
-                        primary,
-                        std::sync::Arc::new(plain_text_storage::PlainTextStorage::new(
-                            path.clone(),
-                        )),
-                    ))
-                } else {
-                    primary
-                };
+            let storage: std::sync::Arc<dyn SecureStorage> = if let Some(path) = fallback_file {
+                std::sync::Arc::new(secure_fallback::FallbackStorage::new(
+                    primary,
+                    std::sync::Arc::new(plain_text_storage::PlainTextStorage::new(path.clone())),
+                ))
+            } else {
+                primary
+            };
             match action.as_str() {
                 "read" => println!("{}", serde_json::to_string_pretty(&storage.read())?),
                 "write" => {
@@ -417,10 +416,13 @@ async fn main() -> Result<()> {
                     }
                     println!("Credentials deleted");
                 }
-                "status" => println!("{}", serde_json::to_string_pretty(&json!({
-                    "storage":storage.name(),
-                    "available":storage.read().is_some()
-                }))?),
+                "status" => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "storage":storage.name(),
+                        "available":storage.read().is_some()
+                    }))?
+                ),
                 _ => bail!("Credential action must be read, write, delete, or status"),
             }
             return Ok(());
@@ -445,7 +447,10 @@ async fn main() -> Result<()> {
             return Ok(());
         }
         Commands::ClearScreen => {
-            print!("{}", platform_source_utilities::get_clear_terminal_sequence());
+            print!(
+                "{}",
+                platform_source_utilities::get_clear_terminal_sequence()
+            );
             io::stdout().flush()?;
             return Ok(());
         }
@@ -695,10 +700,20 @@ async fn main() -> Result<()> {
         Commands::RegisterProtocol { check } => {
             let executable = std::env::current_exe()?;
             if *check {
-                println!("{}", deep_link_register::is_protocol_handler_current(&executable));
+                println!(
+                    "{}",
+                    deep_link_register::is_protocol_handler_current(&executable)
+                );
             } else {
                 let changed = deep_link_register::ensure_protocol_handler_current(&executable)?;
-                println!("{}", if changed { "Registered atlas-cli://" } else { "Already registered" });
+                println!(
+                    "{}",
+                    if changed {
+                        "Registered atlas-cli://"
+                    } else {
+                        "Already registered"
+                    }
+                );
             }
             return Ok(());
         }
@@ -1663,7 +1678,10 @@ async fn chat(
                                 agent.workspace_root(),
                             )
                             .and_then(|paths| {
-                                paths.add_directory(permission_settings::EditableSource::Local, &path)
+                                paths.add_directory(
+                                    permission_settings::EditableSource::Local,
+                                    &path,
+                                )
                             });
                             match result {
                                 Ok(true) => {
