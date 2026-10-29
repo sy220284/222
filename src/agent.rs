@@ -2600,6 +2600,44 @@ mod tests {
         );
     }
 
+
+    struct PromptCaptureModel(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+    #[async_trait::async_trait]
+    impl ModelProvider for PromptCaptureModel {
+        async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
+            self.0.lock().unwrap().push(request.system.clone());
+            Ok(crate::protocol::ModelResponse {
+                message: Message::text("assistant", "Validated the supplied prompt."),
+                finish_reason: Some("stop".into()),
+                usage: None,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn delegated_verifier_instructions_reach_model_request() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "Check the real code paths.").unwrap();
+        let profile = ProviderProfile {
+            id: "mock".into(), kind: "openai-compatible".into(),
+            base_url: "http://127.0.0.1:1/v1".into(), model: "mock".into(),
+            api_key_env: None, stream: false,
+        };
+        let mut agent = Agent::new(profile, dir.path().canonicalize().unwrap(),
+            Approval::ReadOnly, false, 2, Session::fresh()).unwrap();
+        let captured = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        agent.provider = Box::new(PromptCaptureModel(captured.clone()));
+        agent.child_depth = 1;
+        agent.prompt_role = Some("verification".to_owned());
+        assert_eq!(agent.ask("Verify changed behavior").await.unwrap(),
+            "Validated the supplied prompt.");
+        let requests = captured.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].contains("# Authority and scope"));
+        assert!(requests[0].contains("# Independent verification agent"));
+        assert!(requests[0].contains("Check the real code paths."));
+    }
+
     struct ToolScript {
         next: std::sync::atomic::AtomicUsize,
         seen: std::sync::Arc<std::sync::Mutex<Vec<Vec<Message>>>>,
