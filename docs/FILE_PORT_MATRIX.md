@@ -1661,7 +1661,7 @@
 | `src/utils/platform.ts` | 151 | 3801 | 重写：保持通用行为 | `src/generated_ports/p_dbebe9c759444.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/addDirPluginSettings.ts` | 72 | 2320 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/cacheUtils.ts` | 197 | 6652 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/dependencyResolver.ts` | 306 | 11673 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/dependencyResolver.ts` | 306 | 11673 | 重写：插件依赖闭包及会话隔离 | `src/plugins.rs / src/plugin_manager.rs` | 部分实现：已按原版 verifyAndDemote 补齐已启用插件依赖的跨市场身份检查、缺失依赖固定点级联停用，覆盖 Hooks、MCP、技能发现/读取和斜杠命令入口；cab6e0fc，源码已提交待验收。安装时依赖闭包自动安装、跨市场信任白名单、完整动态刷新/错误分类和持久化恢复仍未等价 |
 | `src/utils/plugins/fetchTelemetry.ts` | 136 | 4922 | 重写：保持通用行为 | `src/generated_ports/p_c16d3bc443a4b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/gitAvailability.ts` | 70 | 2273 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/plugins/headlessPluginInstall.ts` | 175 | 6775 | 重写：保持通用行为 | 待定 | 未迁移 |
