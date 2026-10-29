@@ -184,6 +184,8 @@ pub struct Agent {
     notebook_reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
     file_reads: Arc<Mutex<tools::FileReadCache>>,
     last_context_usage: Option<crate::context_usage::Snapshot>,
+    /// Exact last model request prefix for isolated SDK side questions.
+    last_side_question_request: Option<ModelRequest>,
     last_model_usage: Option<TokenUsage>,
 }
 
@@ -301,6 +303,7 @@ impl Agent {
             notebook_reads: Arc::new(Mutex::new(HashMap::new())),
             file_reads: Arc::new(Mutex::new(tools::FileReadCache::default())),
             last_context_usage: None,
+            last_side_question_request: None,
             last_model_usage: None,
         })
     }
@@ -308,6 +311,7 @@ impl Agent {
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
         self.mcp_configs = servers.to_vec();
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         if !servers.is_empty() {
             let disabled = load_disabled_mcp_servers()?;
             self.mcp = Some(McpManager::connect_with_root_filtered(
@@ -360,6 +364,7 @@ impl Agent {
         self.hook_rules = hook_rules;
         self.enabled_plugins = config.enabled_plugins.clone();
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         Ok(json!({"mcp_changes":changes,"plugin_error_count":plugin_load_errors}))
     }
 
@@ -433,6 +438,7 @@ impl Agent {
             result.initial_user_message
         };
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         Ok(())
     }
 
@@ -1571,6 +1577,7 @@ impl Agent {
     pub fn set_enabled_plugins(&mut self, names: Vec<String>) {
         self.enabled_plugins = names;
         self.last_context_usage = None;
+        self.last_side_question_request = None;
     }
     /// The SDK may reload plugin settings without restarting the Agent.
     /// Command resolution must use this live set, not startup Config.
@@ -1687,6 +1694,7 @@ impl Agent {
         let branch_id = child.id;
         self.session = child;
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         self.last_model_usage = None;
         if let Some(graph) = graph {
             self.graph = graph;
@@ -1953,6 +1961,36 @@ impl Agent {
         ))
     }
 
+    /// Fork the last main-thread model context for SDK /btw without modifying
+    /// the parent transcript. When no model turn has run, reconstruct the
+    /// same system/session context used by the normal Agent fallback.
+    pub fn side_question_request(&self, question: &str) -> Result<ModelRequest> {
+        let base = if let Some(last) = &self.last_side_question_request {
+            last.clone()
+        } else {
+            let mut system = system_prompt_with_dirs(&self.root, &self.additional_dirs)?;
+            self.conversation_context.append_to(&mut system);
+            if let Some(summary) = &self.session.summary {
+                system.push_str("\nVerified session continuity summary:\n");
+                system.push_str(summary);
+            }
+            if !self.session_context.is_empty() {
+                system.push_str("\nSession start hook context:\n");
+                system.push_str(&self.session_context);
+            }
+            if let Some(mcp) = &self.mcp {
+                system.push_str(&mcp.instruction_context());
+            }
+            ModelRequest {
+                model: self.profile.model.clone(),
+                system,
+                messages: self.session.messages.clone(),
+                tools: Vec::new(),
+            }
+        };
+        crate::side_question::fork_request(base, question)
+    }
+
     pub fn context_usage(&self) -> Result<serde_json::Value> {
         let (snapshot, from_last_request) = self.context_usage_snapshot()?;
         Ok(snapshot.to_json(
@@ -2187,6 +2225,7 @@ impl Agent {
             errors.extend(rejected);
         }
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         Ok(result)
     }
 
@@ -2208,6 +2247,7 @@ impl Agent {
         let result = self.mcp.as_mut().context("No MCP servers configured")?
             .toggle_named(name, enabled).await;
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         result
     }
 
@@ -2215,6 +2255,7 @@ impl Agent {
         let manager = self.mcp.as_mut().context("No MCP servers configured")?;
         let status = manager.reconnect_named(name).await?;
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         Ok(status)
     }
 
@@ -2222,6 +2263,7 @@ impl Agent {
         let manager = self.mcp.as_mut().context("No MCP servers configured")?;
         let failures = manager.reconnect_failed().await;
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         Ok(failures)
     }
 
@@ -2392,6 +2434,7 @@ impl Agent {
         self.provider = new_provider;
         self.profile = profile;
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         self.last_model_usage = None;
         Ok(())
     }
@@ -2780,6 +2823,7 @@ impl Agent {
         self.notebook_reads.lock().unwrap().clear();
         self.file_reads.lock().unwrap().clear();
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         self.last_model_usage = None;
         // Source services/compact/compact.ts marks compaction complete and
         // persists its reduced transcript before PostCompact hooks run.
@@ -2856,6 +2900,7 @@ impl Agent {
         self.notebook_reads.lock().unwrap().clear();
         self.file_reads.lock().unwrap().clear();
         self.last_context_usage = None;
+        self.last_side_question_request = None;
         self.last_model_usage = None;
         self.auto_compact_failures = 0;
         self.graph = graph;
@@ -3235,6 +3280,7 @@ impl Agent {
                 tools: visible_tools,
             };
             self.last_context_usage = Some(crate::context_usage::Snapshot::from_request(&request));
+            self.last_side_question_request = Some(request.clone());
             let api_started = Instant::now();
             let response = if self.profile.stream {
                 let (tx, mut deltas) = tokio::sync::mpsc::unbounded_channel();
@@ -3906,6 +3952,7 @@ mod tests {
             notebook_reads: Arc::new(Mutex::new(HashMap::new())),
             file_reads: Arc::new(Mutex::new(tools::FileReadCache::default())),
             last_context_usage: None,
+            last_side_question_request: None,
             last_model_usage: None,
         };
         agent.compact_history().await.unwrap();
