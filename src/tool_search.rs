@@ -47,6 +47,27 @@ fn parts(name: &str) -> Vec<String> {
     words
 }
 
+/// MCP definitions are discoverable by name but not sent in full on turn one.
+/// Selected schemas become visible on the next model request.
+pub fn visible_catalog(
+    all: &[Value],
+    loaded: &std::collections::HashSet<String>,
+) -> (Vec<Value>, Vec<String>) {
+    let mut visible = Vec::new();
+    let mut deferred_names = Vec::new();
+    for tool in all {
+        let name = tool["function"]["name"].as_str().unwrap_or("");
+        if name.starts_with("mcp__") {
+            deferred_names.push(name.to_owned());
+            if !loaded.contains(name) {
+                continue;
+            }
+        }
+        visible.push(tool.clone());
+    }
+    (visible, deferred_names)
+}
+
 pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
     let query = args
         .get("query")
@@ -173,7 +194,17 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
         scored.sort_by(|a, b| b.1.cmp(&a.1));
         matches = scored.into_iter().take(max).map(|(name, _)| name).collect();
     }
-    Ok(json!({"matches":matches,"query":query,"total_deferred_tools":deferred_count}))
+    let schemas: Vec<Value> = tools
+        .iter()
+        .filter(|tool| {
+            tool["function"]["name"]
+                .as_str()
+                .is_some_and(|name| matches.iter().any(|selected| selected == name))
+        })
+        .cloned()
+        .collect();
+    Ok(json!({"matches":matches,"query":query,
+        "total_deferred_tools":deferred_count,"schemas":schemas}))
 }
 
 #[cfg(test)]
@@ -217,6 +248,29 @@ mod tests {
                 .len(),
             1
         );
+    }
+    #[test]
+    fn dynamic_mcp_catalog_requires_explicit_selection() {
+        let all = catalog();
+        let mut loaded = std::collections::HashSet::new();
+        let (before, deferred) = visible_catalog(&all, &loaded);
+        assert_eq!(deferred.len(), 2);
+        assert!(!before.iter().any(|tool| {
+            tool["function"]["name"] == "mcp__github__search_issues"
+        }));
+        let search = execute(&json!({"query":"select:mcp__github__search_issues"}), &all)
+            .unwrap();
+        assert_eq!(search["schemas"].as_array().unwrap().len(), 1);
+        for value in search["matches"].as_array().unwrap() {
+            loaded.insert(value.as_str().unwrap().to_owned());
+        }
+        let (after, _) = visible_catalog(&all, &loaded);
+        assert!(after.iter().any(|tool| {
+            tool["function"]["name"] == "mcp__github__search_issues"
+        }));
+        assert!(!after.iter().any(|tool| {
+            tool["function"]["name"] == "mcp__github__create_issue"
+        }));
     }
     #[test]
     fn invalid_query_is_rejected() {
