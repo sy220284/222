@@ -40,10 +40,12 @@ pub async fn open_path(path: &str) -> bool {
 }
 
 pub async fn open_browser(uri: &str) -> bool {
-    let Ok(url) = validate_browser_url(uri) else {
+    // The original validates with new URL(uri), then passes the original
+    // string to the browser. Url::as_str() canonicalizes some inputs and can
+    // silently change the address the user asked to open.
+    if validate_browser_url(uri).is_err() {
         return false;
-    };
-    let uri = url.as_str();
+    }
     let preferred = std::env::var("BROWSER").ok().filter(|s| !s.is_empty());
     #[cfg(windows)]
     {
