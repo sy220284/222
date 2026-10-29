@@ -100,6 +100,7 @@ pub struct Agent {
     hook_rules: Vec<HookRule>,
     model_prices: Vec<ModelPrice>,
     file_metrics: Arc<ToolMetrics>,
+    last_context_usage: Option<crate::context_usage::Snapshot>,
 }
 
 /// Match the source getTaskListId priority, with a provider-neutral explicit
@@ -196,6 +197,7 @@ impl Agent {
             hook_rules: Vec::new(),
             model_prices: Vec::new(),
             file_metrics,
+            last_context_usage: None,
         })
     }
 
@@ -1409,6 +1411,68 @@ impl Agent {
     /// Terminal counterpart of the original Settings/Status view. It reads
     /// live runtime state and never renders a configured API key or MCP secret.
     /// /files reconstructs the successful file reads in the active session.
+    /// Shared /context and SDK get_context_usage, measured from the model
+    /// request schema rather than a static command registration catalog.
+    fn context_usage_snapshot(&self) -> Result<(crate::context_usage::Snapshot, bool)> {
+        if let Some(snapshot) = &self.last_context_usage {
+            return Ok((snapshot.clone(), true));
+        }
+        let mut system = system_prompt(&self.root)?;
+        self.conversation_context.append_to(&mut system);
+        if let Some(summary) = &self.session.summary {
+            system.push_str("\nVerified session continuity summary:\n");
+            system.push_str(summary);
+        }
+        if !self.session_context.is_empty() {
+            system.push_str("\nSession start hook context:\n");
+            system.push_str(&self.session_context);
+        }
+        if let Some(mcp) = &self.mcp {
+            system.push_str(&mcp.instruction_context());
+        }
+        let mut definitions = tools::definitions();
+        if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
+            definitions.push(tools::powershell_definition());
+        }
+        definitions.extend(task::definitions());
+        if task::tasks_v2_enabled(self.interactive) {
+            definitions.extend(task_graph::definitions());
+        } else {
+            definitions.push(task::todo_definition());
+        }
+        definitions.extend(crate::team_registry::definitions(
+            self.child_depth == 0,
+            self.team_name.is_some(),
+        ));
+        if let Some(mcp) = &self.mcp {
+            definitions.extend(mcp.definitions());
+        }
+        if self.lsp.is_some() {
+            definitions.push(LspManager::definition());
+        }
+        definitions.push(crate::tool_search::definition());
+        if self.interactive {
+            definitions.push(crate::ask_user_question::definition());
+        }
+        let request = ModelRequest {
+            model: self.profile.model.clone(),
+            system,
+            messages: self.session.messages.clone(),
+            tools: definitions,
+        };
+        Ok((crate::context_usage::Snapshot::from_request(&request), false))
+    }
+
+    pub fn context_usage(&self) -> Result<serde_json::Value> {
+        let (snapshot, from_last_request) = self.context_usage_snapshot()?;
+        Ok(snapshot.to_json(self.session.usage, from_last_request))
+    }
+
+    pub fn context_usage_text(&self) -> Result<String> {
+        let (snapshot, from_last_request) = self.context_usage_snapshot()?;
+        Ok(snapshot.render(self.session.usage, from_last_request))
+    }
+
     pub fn files_in_context(&self) -> String {
         crate::files_context::render(&self.session.messages, &self.root)
     }
@@ -1632,6 +1696,7 @@ impl Agent {
         let new_provider = provider::create(&profile)?;
         self.provider = new_provider;
         self.profile = profile;
+        self.last_context_usage = None;
         Ok(())
     }
 
@@ -2406,6 +2471,7 @@ impl Agent {
                 messages: self.session.messages.clone(),
                 tools: visible_tools,
             };
+            self.last_context_usage = Some(crate::context_usage::Snapshot::from_request(&request));
             let api_started = Instant::now();
             let response = if self.profile.stream {
                 let (tx, mut deltas) = tokio::sync::mpsc::unbounded_channel();
