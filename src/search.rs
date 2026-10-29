@@ -60,24 +60,36 @@ fn matching(matcher: &GlobMatcher, relative: &Path) -> bool {
 }
 /// GrepTool accepts space/comma-separated globs, preserving brace groups
 /// such as "*.{ts,tsx}". Exclusion globs are applied after inclusions.
-fn grep_globs(raw: Option<&str>) -> Result<(Vec<GlobMatcher>, Vec<GlobMatcher>)> {
-    let mut include = Vec::new();
-    let mut exclude = Vec::new();
+/// GrepTool.ts passes --glob flags to ripgrep in the user's original
+/// order. A later matching inclusion can override an earlier exclusion and
+/// vice versa; splitting them into two unordered groups changes results.
+fn grep_globs(raw: Option<&str>) -> Result<Vec<(bool, GlobMatcher)>> {
+    let mut patterns = Vec::new();
     for word in raw.unwrap_or("").split_whitespace() {
-        let patterns: Vec<&str> = if word.contains('{') && word.contains('}') {
+        let entries: Vec<&str> = if word.contains('{') && word.contains('}') {
             vec![word]
         } else {
-            word.split(',').filter(|s| !s.is_empty()).collect()
+            word.split(',').filter(|part| !part.is_empty()).collect()
         };
-        for pattern in patterns {
+        for pattern in entries {
             if let Some(negative) = pattern.strip_prefix('!') {
-                exclude.push(matcher(negative)?);
+                patterns.push((false, matcher(negative)?));
             } else {
-                include.push(matcher(pattern)?);
+                patterns.push((true, matcher(pattern)?));
             }
         }
     }
-    Ok((include, exclude))
+    Ok(patterns)
+}
+
+fn grep_glob_allows(patterns: &[(bool, GlobMatcher)], path: &Path) -> bool {
+    let mut allowed = !patterns.iter().any(|(include, _)| *include);
+    for (include, pattern) in patterns {
+        if matching(pattern, path) {
+            allowed = *include;
+        }
+    }
+    allowed
 }
 
 /// Prune denied directories before traversing them. Checking only the
@@ -568,7 +580,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         .multi_line(multiline)
         .dot_matches_new_line(multiline)
         .build()?;
-    let (include_globs, exclude_globs) = grep_globs(args.get("glob").and_then(Value::as_str))?;
+    let glob_patterns = grep_globs(args.get("glob").and_then(Value::as_str))?;
     let kind = args.get("type").and_then(Value::as_str);
     let mode = args
         .get("output_mode")
@@ -630,9 +642,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         let rel = path
             .strip_prefix(base)
             .context("Invalid grep search root")?;
-        if (!include_globs.is_empty() && !include_globs.iter().any(|m| matching(m, rel)))
-            || exclude_globs.iter().any(|m| matching(m, rel))
-        {
+        if !grep_glob_allows(&glob_patterns, rel) {
             continue;
         }
         if !allow_file(&path)? {
