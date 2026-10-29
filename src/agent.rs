@@ -1831,7 +1831,7 @@ impl Agent {
                                 }
                             }
                             result.to_string()
-                        },
+                        }
                         Err(error) => format!("ERROR: {error:#}"),
                     }
                 } else if call.function.name == "AskUserQuestion" {
