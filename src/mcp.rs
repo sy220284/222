@@ -665,7 +665,18 @@ impl McpManager {
     pub async fn execute(&mut self, call: &ToolCall) -> String {
         match self.call(call).await {
             Ok(content) => content,
-            Err(error) => format!("ERROR: {error:#}"),
+            Err(error) => {
+                let diagnostic = format!("ERROR: {error:#}");
+                // Request errors can include a resolved URL and query token.
+                // Apply the same sanitization as connection-status output.
+                self.routes.get(&call.function.name)
+                    .and_then(|(index, _)| {
+                        self.status_clients.iter().position(|slot| *slot == Some(*index))
+                    })
+                    .and_then(|position| self.configs.get(position))
+                    .map(|config| Self::redact_connection_error(config, diagnostic.clone()))
+                    .unwrap_or(diagnostic)
+            }
         }
     }
 
