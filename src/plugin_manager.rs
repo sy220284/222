@@ -195,9 +195,9 @@ fn replace_local_with_origin(
     if existing_origin.as_deref() != marketplace_id {
         bail!("Cannot replace plugin '{name}' from a different marketplace or source");
     }
-    if crate::plugins::plugin_blocked_by_policy(root, &name)?
-        || marketplace_id.is_some_and(|id|
-            crate::plugins::plugin_blocked_by_policy(root, id).unwrap_or(true)) {
+    let origin_blocked = marketplace_id.map(|id|
+        crate::plugins::plugin_blocked_by_policy(root, id)).transpose()?.unwrap_or(false);
+    if crate::plugins::plugin_blocked_by_policy(root, &name)? || origin_blocked {
         bail!("Plugin '{name}' is disabled by managed policy");
     }
     let stage = home.join(format!(".update-{}", Uuid::new_v4()));
@@ -220,8 +220,10 @@ fn replace_local_with_origin(
         }
         return Err(error);
     }
-    fs::rename(&target, &backup)
-        .with_context(|| format!("Cannot stage previous installation of '{name}'"))?;
+    if let Err(error) = fs::rename(&target, &backup) {
+        fs::remove_dir_all(&stage).context("Cannot clean staged plugin after update failure")?;
+        return Err(error).with_context(|| format!("Cannot stage previous installation of '{name}'"));
+    }
     if let Err(error) = fs::rename(&stage, &target) {
         let restore = fs::rename(&backup, &target);
         if let Err(restore_error) = restore {
@@ -512,7 +514,7 @@ fn dependency_install_plan(
             return Ok(());
         }
         stack.push(name.to_owned());
-        let dependency_source = if existing { target.clone() } else { source.clone() };
+        let dependency_source = if existing && !is_root { target.clone() } else { source.clone() };
         let mut required = dependencies(&dependency_source)?;
         if let Some((plugin, marketplace)) = origin.as_deref()
             .and_then(|id| id.split_once('@')) {
