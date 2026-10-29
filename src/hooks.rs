@@ -648,7 +648,7 @@ async fn run_command(
         let trimmed = rule.command.trim();
         let shell_script = trimmed.ends_with(".sh")
             || trimmed.contains(".sh ")
-            || trimmed.contains(".sh\\"");
+            || trimmed.contains(".sh\"");
         let command = if shell_script && !trimmed.starts_with("bash ") {
             format!("bash {}", rule.command)
         } else {
