@@ -45,8 +45,6 @@ pub fn MAX_VIM_COUNT() -> Value {
     serde_json::from_str(r#"10000"#).expect("Valid source constant")
 }
 
-use serde_json::json;
-
 pub fn createInitialVimState(args: &[Value]) -> Value {
     {
         let mut map = serde_json::Map::new();

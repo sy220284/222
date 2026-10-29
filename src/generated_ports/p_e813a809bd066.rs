@@ -5,11 +5,11 @@ use serde_json::{json, Value};
 pub fn isLocalMarketplaceSource(args: &[Value]) -> Value {
     super::runtime::or(
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "source"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "source"),
             &Value::String("file".into()),
         ),
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "source"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "source"),
             &Value::String("directory".into()),
         ),
     )

@@ -1,6 +1,5 @@
 //! Rust exports derived from original: src/ink/layout/node.ts
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub fn LayoutEdge() -> Value {
     serde_json::from_str(r#"{"All":"all","Horizontal":"horizontal","Vertical":"vertical","Left":"left","Right":"right","Top":"top","Bottom":"bottom","Start":"start","End":"end"}"#).expect("Valid source constant")

@@ -10,40 +10,40 @@ pub fn isPathLikeToken(args: &[Value]) -> Value {
                     &super::runtime::or(
                         &super::runtime::or(
                             &super::runtime::call_method(
-                                &args.get(0).cloned().unwrap_or(Value::Null),
+                                &args.first().cloned().unwrap_or(Value::Null),
                                 "startsWith",
                                 &[Value::String("~/".into())],
                             ),
                             &super::runtime::call_method(
-                                &args.get(0).cloned().unwrap_or(Value::Null),
+                                &args.first().cloned().unwrap_or(Value::Null),
                                 "startsWith",
                                 &[Value::String("/".into())],
                             ),
                         ),
                         &super::runtime::call_method(
-                            &args.get(0).cloned().unwrap_or(Value::Null),
+                            &args.first().cloned().unwrap_or(Value::Null),
                             "startsWith",
                             &[Value::String("./".into())],
                         ),
                     ),
                     &super::runtime::call_method(
-                        &args.get(0).cloned().unwrap_or(Value::Null),
+                        &args.first().cloned().unwrap_or(Value::Null),
                         "startsWith",
                         &[Value::String("../".into())],
                     ),
                 ),
                 &super::runtime::strict_equal(
-                    &args.get(0).cloned().unwrap_or(Value::Null),
+                    &args.first().cloned().unwrap_or(Value::Null),
                     &Value::String("~".into()),
                 ),
             ),
             &super::runtime::strict_equal(
-                &args.get(0).cloned().unwrap_or(Value::Null),
+                &args.first().cloned().unwrap_or(Value::Null),
                 &Value::String(".".into()),
             ),
         ),
         &super::runtime::strict_equal(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             &Value::String("..".into()),
         ),
     )

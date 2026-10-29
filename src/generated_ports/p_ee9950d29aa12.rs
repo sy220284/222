@@ -5,12 +5,12 @@ use serde_json::{json, Value};
 pub fn isMcpbSource(args: &[Value]) -> Value {
     super::runtime::or(
         &super::runtime::call_method(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             "endsWith",
             &[Value::String(".mcpb".into())],
         ),
         &super::runtime::call_method(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             "endsWith",
             &[Value::String(".dxt".into())],
         ),

@@ -7,22 +7,22 @@ pub fn getProxyUrl(args: &[Value]) -> Value {
         &super::runtime::or(
             &super::runtime::or(
                 &super::runtime::property(
-                    &args.get(0).cloned().unwrap_or(Value::Null),
+                    &args.first().cloned().unwrap_or(Value::Null),
                     "https_proxy",
                 ),
                 &super::runtime::property(
-                    &args.get(0).cloned().unwrap_or(Value::Null),
+                    &args.first().cloned().unwrap_or(Value::Null),
                     "HTTPS_PROXY",
                 ),
             ),
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "http_proxy"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "http_proxy"),
         ),
-        &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "HTTP_PROXY"),
+        &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "HTTP_PROXY"),
     )
 }
 pub fn getNoProxy(args: &[Value]) -> Value {
     super::runtime::or(
-        &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "no_proxy"),
-        &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "NO_PROXY"),
+        &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "no_proxy"),
+        &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "NO_PROXY"),
     )
 }

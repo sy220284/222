@@ -12,8 +12,6 @@ pub enum PythonPackageManager {
     pip,
 }
 
-use serde_json::json;
-
 pub fn getPythonApiInstructions(args: &[Value]) -> Value {
     Value::Array(vec![
         Value::String("Almost done! Enable the Python API in iTerm2:".into()),
