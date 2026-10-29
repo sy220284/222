@@ -152,7 +152,10 @@ mod tests {
         assert_eq!(parsed.cwd.as_deref(), Some(""));
         assert_eq!(parsed.repo.as_deref(), Some(""));
         assert_eq!(parsed.query, None);
-        assert_eq!(build_deep_link(&DeepLinkAction::default()).unwrap(), "atlas-cli://open");
+        assert_eq!(
+            build_deep_link(&DeepLinkAction::default()).unwrap(),
+            "atlas-cli://open"
+        );
         assert_eq!(build_deep_link(&parsed).unwrap(), "atlas-cli://open");
     }
     #[test]
