@@ -1,6 +1,6 @@
 //! Rust exports derived from original: src/utils/model/agent.ts
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde_json::{json, Value};
+use serde_json::Value;
 
 pub fn getDefaultSubagentModel(args: &[Value]) -> Value {
     Value::String("inherit".into())

@@ -1,6 +1,6 @@
 //! Rust exports derived from original: src/Tool.ts
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde_json::{json, Value};
+use serde_json::Value;
 
 pub fn toolMatchesName(args: &[Value]) -> Value {
     super::runtime::or(
