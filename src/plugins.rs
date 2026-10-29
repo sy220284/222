@@ -65,7 +65,13 @@ impl PluginSet {
             }
             // Version is metadata; no external update or installation happens.
             let _version = &manifest.version;
-            set.hooks.extend(manifest.hooks);
+            // Keep the validated canonical plugin directory attached to each
+            // hook. Two plugins using the same template command must both
+            // execute, and substitution must resolve inside the right plugin.
+            for mut hook in manifest.hooks {
+                hook.plugin_root = Some(location.clone());
+                set.hooks.push(hook);
+            }
             for mut server in manifest.mcp_servers {
                 server.id = format!("{}_{}", name, server.id);
                 if server.id.len() > 64 {
