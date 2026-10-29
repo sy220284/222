@@ -62,6 +62,16 @@ fn git(root: &Path, args: &[&str]) -> Option<String> {
     Some(String::from_utf8(output.stdout).ok()?.trim().to_owned())
 }
 
+/// Record a stable branch label for session discovery, independent of the
+/// optional Git instructions sent to the model.
+pub fn branch_at_start(root: &Path) -> Option<String> {
+    if git(root, &["rev-parse", "--is-inside-work-tree"])?.trim() != "true" {
+        return None;
+    }
+    git(root, &["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .filter(|branch| !branch.is_empty())
+}
+
 fn git_status_at_start(root: &Path) -> Option<String> {
     if git(root, &["rev-parse", "--is-inside-work-tree"])?.trim() != "true" {
         return None;
