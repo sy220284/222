@@ -47,9 +47,9 @@ mod oauth_service;
 mod permission_mode;
 mod permission_rules;
 mod permission_settings;
-mod plugins;
 mod plugin_commands;
 mod plugin_manager;
+mod plugins;
 mod portable_async_runtime;
 mod portable_configuration;
 mod portable_ink_core;
@@ -71,9 +71,9 @@ mod runtime_contracts;
 mod sdk_queue;
 mod search;
 mod semantic_inputs;
+mod semantic_session_search;
 mod session;
 mod session_control;
-mod semantic_session_search;
 mod shell_quote;
 mod shell_runtime;
 mod skill_arguments;
@@ -430,7 +430,10 @@ async fn main() -> Result<()> {
                         credentials_file,
                         |links| async move {
                             println!("Open the automatic authorization URL:\n{}", links.automatic);
-                            println!("Manual authorization URL (for other devices):\n{}", links.manual);
+                            println!(
+                                "Manual authorization URL (for other devices):\n{}",
+                                links.manual
+                            );
                             io::stdout().flush()?;
                             Ok(())
                         },
@@ -457,7 +460,10 @@ async fn main() -> Result<()> {
                 .refresh_oauth_token(&existing.refresh_token, Some(&existing.scopes))
                 .await?;
             oauth_service::save_oauth_tokens(credentials_file, &refreshed)?;
-            println!("OAuth credentials refreshed: {}", credentials_file.display());
+            println!(
+                "OAuth credentials refreshed: {}",
+                credentials_file.display()
+            );
             return Ok(());
         }
         Commands::OauthPkce => {
@@ -805,15 +811,16 @@ async fn main() -> Result<()> {
         let root = canonical_workspace(&cli.workspace)?;
         let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
         let provider = provider::create(&profile)?;
-        let (matches, _) = semantic_session_search::search(
-            &root,
-            query,
-            provider.as_ref(),
-            &profile.model,
-        )
-        .await?;
+        let (matches, _) =
+            semantic_session_search::search(&root, query, provider.as_ref(), &profile.model)
+                .await?;
         for item in matches {
-            println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
+            println!(
+                "{}  {}  ({} messages)",
+                item.id,
+                item.display_title(),
+                item.messages
+            );
         }
         return Ok(());
     }
@@ -1208,7 +1215,12 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             match agent.semantic_search_sessions(query).await {
                 Ok(matches) => {
                     for item in matches {
-                        println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
+                        println!(
+                            "{}  {}  ({} messages)",
+                            item.id,
+                            item.display_title(),
+                            item.messages
+                        );
                     }
                 }
                 Err(error) => eprintln!("Semantic session search failed: {error:#}"),
