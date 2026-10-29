@@ -1,5 +1,15 @@
 # Issue #3：冻结 362 项源码级等价验收登记表
 
+## 2026-10-29：冻结权限链 dontAsk 显式允许规则误拒绝（待完整验收）
+
+- **固定源路径**：`src/utils/permissions/permissions.ts`（冻结 #17）与 `src/utils/permissions/PermissionMode.ts`（冻结 #12），关联 `src/utils/permissions/permissionRuleParser.ts`（冻结 #16）。源包：`claude-code-2.1.88-main(1).zip`。
+- **原版逐行依据**：`permissions.ts:473–516` 的 `hasPermissionsToUseTool` 对 `allow` 直接返回，只有 `ask` 在 `dontAsk` 模式被转换为 `deny`；`permissions.ts:1183–1206,1262–1305` 中显式规则及模式判定的先后顺序。
+- **Rust 真实调用链**：`Agent::ask` → `ToolExecutor::execute` → `require_approval` → `permission_rules::policy_for` → `write_file` 实际文件系统。原先 `src/tools.rs` 在读取显式 allow 结果后立即按 `DontAsk` 拒绝，造成用户已允许的写入也无法执行。
+- **本次修复**：保留显式 deny、只读授权上限、plan 拒绝的原行为；先处理显式 allow，再将 `dontAsk` 下其余需要询问的操作拒绝，且即使 CLI 全量授权也不能绕过 `dontAsk` 的拒绝。未修改原版特定厂商账号/遥测行为。
+- **真实回归**：`tools::tests::dont_ask_respects_explicit_allow_but_denies_implicit_and_ask` 使用临时工作区和实际 `ToolExecutor::execute` 验证 Ask/Full 授权下显式 allow 写入落盘，未授权与显式 ask 均拒绝且不产生文件，显式 deny 优先。提交 `43e97810807ffcef2136550b0f453dfda6538f56`。**GitHub CI 结果以该提交对应实际工作流为准，尚未取得成功结果前不标记通过**。
+- **未完成**：完整 `permissions.ts` 1,486 行的 Hook、动态规则来源、询问回调、取消/重启、交互与全部工具分支尚未逐函数验收；冻结 #12/#16/#17 均继续开放。冻结总数 362 不变，已完整验收 0。
+
+
 ## 2026-10-29：原版命令 Hook 非零退出与 JSON 优先级修复（冻结项未验收）
 
 原版证据：用户提供 2.1.88 源包 `src/utils/hooks.ts` 2499–2533、2543–2613、2647–2695 行。原版先解析有效 JSON，即使命令退出非零也应用 JSON 决策；没有有效 JSON 时，只有退出码 2 阻止工具，其他非零退出作为可见的非阻断错误；语法错误的 JSON 按普通输出的退出码处理，格式合法但 Schema 不合法的情况仍待补齐完整校验。原 Rust 在解析 JSON 前先拒绝所有非零退出，导致 PreToolUse 的普通 Hook 失败误阻断真实工具、退出码 2 的有效 JSON 决策被忽略。
