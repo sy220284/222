@@ -27,7 +27,7 @@ fn count_text(count: u64) -> String {
     let s = count.to_string();
     let mut out = String::new();
     for (index, c) in s.chars().enumerate() {
-        if index > 0 && (s.len() - index).is_multiple_of(3) {
+        if index > 0 && (s.len() - index) % 3 == 0 {
             out.push(',');
         }
         out.push(c);
