@@ -1,5 +1,12 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+
+## 2026-10-29：PowerShell 复合脚本权限绕过修复（Issue #3 持续开放）
+
+对照原版 `PowerShellTool/powershellPermissions.ts` 的子命令提取、规则优先级与 `utils/powershell/parser.ts`，修复 Rust PowerShell 规则只检查整条脚本、允许 `Get-ChildItem:*` 可能连带放行后续 `Remove-Item` 的问题。Rust 现在分别评估分号／管道／换行／逻辑连接符后的命令，拒绝优先；脚本块、插值执行、重定向和反引号等无法安全拆解的语法需单次人工审批。新增规则单测及 `ToolExecutor::approve_external` 实际授权入口回归，覆盖 Bash/PowerShell 隔离。代码提交 `e1131d8`、`daffb48`。
+
+**状态：原冻结 362 条均保持未验收。** 仍缺 PowerShell 完整 AST、路径安全和权限审批 UI 等原版行为；未调整 `FILE_PORT_MATRIX.md` 的文件分类，也不增加任何已验收数。
+
 **目标：1906 个原始文件的功能逐项重写、等价验证。**
 
 - 明确归入环境/行为遥测删除项：22 个原始文件路径（仅是第一轮整文件分类；其他混合文件也需排除隐式上报）。
