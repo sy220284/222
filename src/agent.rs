@@ -1861,7 +1861,14 @@ impl Agent {
             match result {
                 Ok(response) => {
                     let visible = response.message.visible_text();
-                    if Self::compact_context_limit(&visible) {
+                    // 2.1.88 retries a model *API error* here. A legitimate
+                    // assistant summary may quote "prompt is too long" and
+                    // must never be mistaken for a transport failure.
+                    let api_error = matches!(
+                        response.finish_reason.as_deref(),
+                        Some("error" | "invalid_request" | "context_length_exceeded")
+                    );
+                    if api_error && Self::compact_context_limit(&visible) {
                         // A provider may return context-length failures as
                         // ordinary responses with billable usage. Retain that
                         // usage even if another request is attempted.
