@@ -2982,3 +2982,46 @@ fn chat_session_environment_is_used_by_real_shell_tool_and_can_be_unset() {
         .map(|e|fs::read_to_string(e.unwrap().path()).unwrap()).collect::<Vec<_>>();
     assert!(saved.iter().all(|s|!s.contains("session_env")));
 }
+
+#[test]
+fn subprocess_secret_scrub_blocks_model_provider_credential_from_shell_tool() {
+    let root=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for step in 0..2 {
+            let (mut connection,_)=listener.accept().unwrap();
+            requests.push(read_request(&mut connection));
+            let reply=if step==0 {
+                json!({"role":"assistant","content":null,"tool_calls":[{
+                    "id":"inspect-env","type":"function","function":{
+                        "name":"run_command","arguments":json!({
+                            "command":"printenv OPENAI_API_KEY || printf 'credential-not-present'"
+                        }).to_string()
+                    }
+                }]})
+            }else{json!({"role":"assistant","content":"Secret isolation checked"})};
+            let body=json!({"choices":[{"message":reply,
+                "finish_reason":if step==0 {"tool_calls"} else {"stop"}}]}).to_string();
+            write!(connection,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            connection.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"test",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let output=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","full","run","Inspect credential visibility"])
+        .env("ATLAS_CONFIG",&config).env("ATLAS_SUBPROCESS_ENV_SCRUB","true")
+        .env("OPENAI_API_KEY","SENSITIVE_TEST_VALUE")
+        .output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(requests[1].contains("credential-not-present"),"{}",requests[1]);
+    assert!(!requests[1].contains("SENSITIVE_TEST_VALUE"));
+}

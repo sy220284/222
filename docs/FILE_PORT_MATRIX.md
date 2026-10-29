@@ -1806,7 +1806,7 @@
 | `src/utils/streamJsonStdoutGuard.ts` | 124 | 3987 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/streamlinedTransform.ts` | 202 | 5941 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/stringUtils.ts` | 236 | 6595 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/subprocessEnv.ts` | 100 | 3975 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/subprocessEnv.ts` | 100 | 3975 | 重写：保持通用行为 | `src/subprocess_env.rs / src/tools.rs / src/background.rs / src/hooks.rs / src/mcp.rs / src/lsp.rs` | 部分实现：通用凭据环境隔离，接入 Shell、Git、Hook、MCP、LSP 全部进程入口；上游代理环境尚缺 |
 | `src/utils/suggestions/commandSuggestions.ts` | 568 | 18558 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/suggestions/directoryCompletion.ts` | 264 | 7098 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/suggestions/shellHistoryCompletion.ts` | 120 | 3456 | 重写：保持通用行为 | 待定 | 未迁移 |

@@ -102,6 +102,7 @@ impl BackgroundTasks {
         let kind=*self.shell_kind.lock().unwrap();
         let mut proc=kind.build_command(command)?;
         proc.envs(self.session_env.lock().unwrap().iter());
+        crate::subprocess_env::apply(&mut proc);
         let workspace = self.directory.parent().and_then(Path::parent)
             .context("Background task workspace missing")?;
         // Place the shell and its descendants into a new process group.

@@ -204,6 +204,7 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
     };
     proc.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
         .kill_on_drop(true);
+    crate::subprocess_env::apply(&mut proc);
     let mut child = proc.spawn()
         .with_context(|| format!("Starting hook '{}'", rule.command))?;
     let mut stdin = child.stdin.take().context("Hook stdin unavailable")?;

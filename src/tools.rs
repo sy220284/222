@@ -395,6 +395,7 @@ impl ToolExecutor {
 
     async fn git_read(&self, arguments: Vec<String>) -> Result<String> {
         let mut command = Command::new("git");
+        crate::subprocess_env::apply(&mut command);
         command.arg("-C").arg(&self.root).arg("--no-pager")
             .args(arguments).kill_on_drop(true);
         let output = timeout(Duration::from_secs(30), command.output())
@@ -477,6 +478,7 @@ impl ToolExecutor {
             .unwrap_or(60).clamp(1, 300);
         let mut proc=self.shell_kind.build_command(command)?;
         proc.envs(&self.session_env);
+        crate::subprocess_env::apply(&mut proc);
         proc.current_dir(&self.root).kill_on_drop(true)
             .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child = proc.spawn()?;

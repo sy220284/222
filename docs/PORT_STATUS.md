@@ -3,8 +3,8 @@
 **目标：1906 个原始文件的功能逐项重写、等价验证。**
 
 - 明确归入环境/行为遥测删除项：22 个原始文件路径（仅是第一轮整文件分类；其他混合文件也需排除隐式上报）。
-- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：382 个原始文件路径。
-- 当前台账仍标注“未迁移”的文件路径：1473 个（与部分实现项互斥，按当前状态字段分类）。
+- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：383 个原始文件路径。
+- 当前台账仍标注“未迁移”的文件路径：1472 个（与部分实现项互斥，按当前状态字段分类）。
 - **达到原始文件纯函数行为/边界等价且有验证证据的路径：29 个（包括独立纯函数、状态模块与固定常量文件；完整调用链仍需逐项验证）；其上下游业务逻辑仍需完整验证。** 其他当前已实现的功能仅在特定测试场景验证，不能把“部分实现”升级为“完成”。
 - 非排除项的原始文件级等价验收仍未闭环：1855 个。
 
@@ -339,3 +339,8 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 2026-10-29：Issue #3 MCP roots/list 工作区身份与重连一致性
 
 对照 2.1.88 源码 `src/services/mcp/client.ts` 1009–1018 行的 ListRootsRequestSchema 及当前 Rust `server_request_reply`：原实现以进程 `current_dir()` 回答任何服务端 roots/list，即使 CLI 用 `--workspace` 指向不同项目，或子 Agent 在独立 worktree。此时 MCP 服务获得错误根目录，破坏路径权限和上下文隔离。改为每个 MCP 管理器持有经过 canonicalize 的当前 Agent 根目录，stdio 子进程在工作区内启动；stdio 和 Streamable HTTP SSE 服务端 roots/list 均从绑定根目录产生 URI。断线重连也继承此根目录而非回退为进程 CWD。新增真实 stdio 子进程初始化时服务端主动 roots/list 并对照期望 URI 测试，HTTP SSE 服务端主动 roots/list 检验与独立工作区相等，另加权限回归检测根目录不等于全局 CWD。仍不代表 MCP client 完整等价；交互 elicitation/独立 GET SSE/完整授权/UI 尚缺，源路径继续标部分实现。
+
+
+### 2026-10-29：通用子进程环境隔离
+
+新建 `src/subprocess_env.rs`，选择启用 `ATLAS_SUBPROCESS_ENV_SCRUB=1|true|yes|on` 时，Shell 前后台、Git、Hook、LSP、MCP stdio 真实启动入口统一过滤模型 API/云凭据、GHA OIDC、缓存运行令牌、OTLP 凭据头和其 `INPUT_*` 镜像；保留按原版约定工作流所需的 `GH_TOKEN` 与 `GITHUB_TOKEN`，且过滤发生在自定义环境变量注入之后。补充真实子进程、CLI→模型→Shell 回填集成测试；原始上游代理和动态远程环境仍未完全覆盖，因此仅登记部分实现。

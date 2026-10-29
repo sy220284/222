@@ -73,6 +73,7 @@ impl Client {
         let mut process = Command::new(&executable);
         process.args(&args).envs(env).current_dir(root).stdin(Stdio::piped())
             .stdout(Stdio::piped()).stderr(Stdio::inherit()).kill_on_drop(true);
+        crate::subprocess_env::apply(&mut process);
         let mut child = process.spawn()
             .with_context(|| format!("Starting MCP server {}", server.id))?;
         let input = child.stdin.take().context("MCP stdin unavailable")?;

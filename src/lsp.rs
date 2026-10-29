@@ -54,6 +54,7 @@ impl LspClient {
         command.args(&config.args).current_dir(root)
             .stdin(Stdio::piped()).stdout(Stdio::piped())
             .stderr(Stdio::inherit()).kill_on_drop(true);
+        crate::subprocess_env::apply(&mut command);
         let mut child=command.spawn().with_context(||format!("Starting LSP {}",config.id))?;
         let input=child.stdin.take().context("LSP stdin missing")?;
         let output=BufReader::new(child.stdout.take().context("LSP stdout missing")?);
