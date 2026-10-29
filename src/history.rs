@@ -26,11 +26,22 @@ pub struct Record {
 fn fingerprint(content: &[u8]) -> String {
     format!("{:x}", Sha256::digest(content))
 }
-fn storage(root: &Path) -> Result<PathBuf> {
-    let folder = root.join(".atlas/history");
-    fs::create_dir_all(&folder)?;
-    if !folder.canonicalize()?.starts_with(root) {
+fn storage(root: &Path, session_id: Option<&str>) -> Result<PathBuf> {
+    let root = root.canonicalize().context("History workspace unavailable")?;
+    let base = root.join(".atlas/history");
+    fs::create_dir_all(&base)?;
+    let base = base.canonicalize()?;
+    if !base.starts_with(&root) {
         bail!("History directory escapes workspace")
+    }
+    // Original fileHistory.ts::resolveBackupPath isolates backup data by session.
+    let Some(session_id) = session_id else { return Ok(base) };
+    let session = Uuid::parse_str(session_id).context("History session id must be a UUID")?;
+    let folder = base.join(session.to_string());
+    fs::create_dir_all(&folder)?;
+    let folder = folder.canonicalize()?;
+    if !folder.starts_with(&base) {
+        bail!("History session directory escapes workspace")
     }
     Ok(folder)
 }
@@ -70,6 +81,7 @@ pub fn snapshot_mode(path: &Path) -> Result<Option<u32>> {
 
 pub fn record(
     root: &Path,
+    session_id: Option<&str>,
     path: &Path,
     previous: Option<String>,
     previous_mode: Option<u32>,
@@ -91,16 +103,16 @@ pub fn record(
         updated_hash: fingerprint(&now),
         updated_mode: snapshot_mode(path)?,
     };
-    let folder = storage(root)?;
+    let folder = storage(root, session_id)?;
     let final_path = folder.join(format!("{id}.json"));
     let temporary = folder.join(format!("{id}.tmp"));
     fs::write(&temporary, serde_json::to_vec_pretty(&entry)?)?;
     fs::rename(temporary, final_path)?;
     Ok(Some(id))
 }
-pub fn load(root: &Path, id: &str) -> Result<Record> {
+pub fn load(root: &Path, session_id: Option<&str>, id: &str) -> Result<Record> {
     let id = Uuid::parse_str(id).context("History id must be a UUID")?;
-    let path = storage(root)?.join(format!("{id}.json"));
+    let path = storage(root, session_id)?.join(format!("{id}.json"));
     let record: Record = serde_json::from_slice(&fs::read(path)?)?;
     if record.id != id {
         bail!("History id mismatch")
@@ -130,8 +142,8 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
         Ok(format!("Removed newly created {}", record.path))
     }
 }
-pub fn list(root: &Path) -> Result<String> {
-    let folder = storage(root)?;
+pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
+    let folder = storage(root, session_id)?;
     let mut results = Vec::<Value>::new();
     for entry in fs::read_dir(folder)? {
         let entry = entry?;
@@ -167,9 +179,9 @@ mod tests {
         fs::write(&source, "old").unwrap();
         let before = snapshot(&source).unwrap();
         fs::write(&source, "new").unwrap();
-        let id = record(root.path(), &source, before, None).unwrap().unwrap();
-        assert!(list(root.path()).unwrap().contains(&id.to_string()));
-        let entry = load(root.path(), &id.to_string()).unwrap();
+        let id = record(root.path(), None, &source, before, None).unwrap().unwrap();
+        assert!(list(root.path(), None).unwrap().contains(&id.to_string()));
+        let entry = load(root.path(), None, &id.to_string()).unwrap();
         fs::write(&source, "external change").unwrap();
         assert!(restore(&entry, &source).is_err());
         fs::write(&source, "new").unwrap();
@@ -180,8 +192,8 @@ mod tests {
         let before = snapshot(&created).unwrap();
         assert!(before.is_none());
         fs::write(&created, "hello").unwrap();
-        let id = record(root.path(), &created, before, None).unwrap().unwrap();
-        restore(&load(root.path(), &id.to_string()).unwrap(), &created).unwrap();
+        let id = record(root.path(), None, &created, before, None).unwrap().unwrap();
+        restore(&load(root.path(), None, &id.to_string()).unwrap(), &created).unwrap();
         assert!(!created.exists());
     }
 }
