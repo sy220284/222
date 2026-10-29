@@ -119,15 +119,15 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                     .context("queued command disappeared after reservation")?;
                 let mut batch=vec![item];
                 // Original headless drain batches consecutive prompt commands
-                // with equal workload and meta status into ONE model request.
+                // with equal workload/meta even when values mix text and
+                // image blocks: join_prompt_values preserves their order.
                 while processed+batch.len()<max {
                     let candidate=queue.peek(|c|c.agent_id.is_none() &&
                         c.priority().rank_for_sdk()<=threshold.rank_for_sdk()).cloned();
                     let Some(candidate)=candidate else{break};
                     if !queued_prompt_batch::can_batch_with(
                         &batch[0].command,Some(&candidate.command))
-                        || batch[0].command.contains_image()
-                        || candidate.command.is_slash() || candidate.command.contains_image()
+                        || candidate.command.is_slash()
                     || crate::multimodal::parse(&candidate.command.value).is_err(){
                         break;
                     }
