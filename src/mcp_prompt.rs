@@ -162,9 +162,6 @@ pub fn render_content_in_workspace(
         .get("messages")
         .and_then(Value::as_array)
         .context("MCP prompts/get response missing messages array")?;
-    if messages.len() > 64 {
-        bail!("MCP prompt returned too many messages")
-    }
     let mut text = format!("[MCP prompt from {server}:{name}]\n");
     let mut blocks = vec![serde_json::json!({"type":"text","text":text})];
     let mut images = false;
@@ -289,9 +286,6 @@ pub fn render_content_in_workspace(
                     blocks.push(serde_json::json!({"type":"text","text":rendered}));
                 }
                 _ => bail!("Unsupported MCP prompt block type"),
-            }
-            if text.len() > 128_000 {
-                bail!("MCP prompt exceeds 128 KB")
             }
         }
     }

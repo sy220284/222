@@ -1,3 +1,9 @@
+## 2026-10-29：MCP 提示词完整多消息与长内容传递（源码已提交，待验收）
+
+原版 `source/src/services/mcp/client.ts:2073–2087` 的 `getPromptForCommand` 对 `result.messages` 逐条转换并展平，没有 64 条消息或 128 KiB 内容的额外限制。Rust `src/mcp_prompt.rs::render_content_in_workspace` 原先在多消息提示词或长文本超出该固定数量时整条拒绝，造成用户调用合法 MCP slash prompt 失败。现移除两项额外硬上限，保留每条消息的角色/内容结构检查、图片格式验证、二进制附件保存及现有真实 Agent 多模态输入路径；不丢弃已成功读取的内容。
+
+按**一个独立用户可感知功能：完整执行 MCP 多消息提示词**计数；数量与长度属于同一功能，不重复计数。源码已提交、待行为验收，未运行 Cargo/测试/CI。仍缺原版图片缩放、MCP 会话取消/重连、二进制文件生命周期及全协议等价；Issue #3 固定 362 条继续开放。
+
 ## 2026-10-29：MCP 多服务器连接不再整批拒绝（源码已提交，待验收）
 
 原版 `source/src/services/mcp/client.ts::fetchToolsForClient`、`source/src/services/mcp/config.ts` 与 `MCPConnectionManager.tsx` 对 MCP 服务器连接/发现没有全局 16 个服务的硬上限。Rust `src/mcp.rs::McpManager::connect_with_root` 原先在用户配置第 17 个服务器时立即报错，导致包括前 16 个正常服务器在内的所有工具不可用。现删除此额外数量闸门，继续使用原有逐服务启动失败隔离、名称冲突检查及各自工具发现逻辑，避免因数量超过 16 而整批失败。
