@@ -63,6 +63,107 @@ fn which(command: &str) -> Option<PathBuf> {
     None
 }
 
+#[cfg(target_os = "macos")]
+const MACOS_TERMINALS: [(&str, &str, &str); 6] = [
+    ("iTerm", "iTerm", "com.googlecode.iterm2"),
+    ("Ghostty", "Ghostty", "com.mitchellh.ghostty"),
+    ("kitty", "kitty", "net.kovidgoyal.kitty"),
+    ("Alacritty", "Alacritty", "org.alacritty"),
+    ("WezTerm", "WezTerm", "com.github.wez.wezterm"),
+    ("Terminal", "Terminal", "com.apple.Terminal"),
+];
+
+#[cfg(target_os = "macos")]
+fn macos_terminal_preference(preference: &str) -> Option<TerminalInfo> {
+    let normalized = preference.trim().trim_end_matches(".app").to_ascii_lowercase();
+    MACOS_TERMINALS.iter().find_map(|(name, app, _)| {
+        let matches = name.to_ascii_lowercase() == normalized
+            || app.to_ascii_lowercase() == normalized
+            || (normalized == "iterm2" && *app == "iTerm");
+        matches.then(|| TerminalInfo {
+            name: (*name).to_owned(),
+            command: PathBuf::from(app),
+        })
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn spotlight_has_bundle(bundle: &str) -> bool {
+    use std::{io::Read, thread, time::{Duration, Instant}};
+    let query = format!("kMDItemCFBundleIdentifier == \"{bundle}\"");
+    let mut child = match Command::new("/usr/bin/mdfind")
+        .args(["-count", &query])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(_) => return false,
+    };
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let mut result = String::new();
+                if let Some(mut stdout) = child.stdout.take() {
+                    let _ = stdout.read_to_string(&mut result);
+                }
+                return status.success()
+                    && result.trim().parse::<usize>().is_ok_and(|count| count > 0);
+            }
+            Ok(None) if start.elapsed() < Duration::from_secs(5) => {
+                thread::sleep(Duration::from_millis(20));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn detect_macos_terminal() -> TerminalInfo {
+    // Browser-initiated LaunchServices processes usually lack TERM_PROGRAM.
+    // The persisted choice is therefore checked before the environment.
+    if let Some(selected) = crate::config::Config::load()
+        .ok()
+        .and_then(|config| config.deep_link_terminal)
+        .and_then(|value| macos_terminal_preference(&value))
+    {
+        return selected;
+    }
+    if let Ok(value) = std::env::var("TERM_PROGRAM") {
+        if let Some(selected) = macos_terminal_preference(&value) {
+            return selected;
+        }
+    }
+    for (name, app, bundle) in MACOS_TERMINALS {
+        if spotlight_has_bundle(bundle) {
+            return TerminalInfo {
+                name: name.to_owned(),
+                command: PathBuf::from(app),
+            };
+        }
+    }
+    for (name, app, _) in MACOS_TERMINALS {
+        if Path::new(&format!("/Applications/{app}.app")).is_dir()
+            || dirs::home_dir().is_some_and(|home| home.join("Applications").join(format!("{app}.app")).is_dir())
+        {
+            return TerminalInfo {
+                name: name.to_owned(),
+                command: PathBuf::from(app),
+            };
+        }
+    }
+    TerminalInfo {
+        name: "Terminal".to_owned(),
+        command: PathBuf::from("Terminal"),
+    }
+}
+
 pub fn detect_terminal() -> Option<TerminalInfo> {
     #[cfg(target_os = "linux")]
     {
@@ -102,21 +203,7 @@ pub fn detect_terminal() -> Option<TerminalInfo> {
     }
     #[cfg(target_os = "macos")]
     {
-        let preferred = std::env::var("TERM_PROGRAM")
-            .unwrap_or_default()
-            .to_lowercase();
-        let name = match preferred.trim_end_matches(".app") {
-            "iterm" | "iterm2" => "iTerm",
-            "ghostty" => "Ghostty",
-            "kitty" => "kitty",
-            "alacritty" => "Alacritty",
-            "wezterm" => "WezTerm",
-            _ => "Terminal",
-        };
-        Some(TerminalInfo {
-            name: name.into(),
-            command: PathBuf::from(name),
-        })
+        Some(detect_macos_terminal())
     }
     #[cfg(target_os = "windows")]
     {
