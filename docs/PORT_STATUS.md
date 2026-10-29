@@ -1,5 +1,17 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：定时任务遗留差异续接：会话压缩与记忆召回（源码已提交、待验收）
+
+完整原始依据：source/src/services/compact/compact.ts::truncateHeadForPTLRetry/compactConversation/stripImagesFromMessages、source/src/services/compact/grouping.ts::groupMessagesByApiRound、source/src/utils/attachments.ts::readMemoriesForSurfacing、source/src/memdir/findRelevantMemories.ts。冻结 Issue #3 的 362 条不勾选。
+
+- **压缩重试与历史保护**：src/agent.rs::compact_history/truncate_compact_rounds 对超长上下文错误最多进行三次按对话轮次截断重试，保留原会话，候选会话落盘成功后才交换；PostCompact Hook 阻断时不清空历史。提交 d529af4d。原版 token-gap 定量截断、取消及完整失败时序仍待补齐。
+- **工具结果媒体净化**：原版工具结果为 user 块，Rust 为 role=tool；现两者均清除用于压缩的图片/文档二进制，只更改摘要请求副本。提交 038d4971。其他嵌套附件格式待核实。
+- **记忆实际名额和累计预算**：只按成功召回的文件计算五个名额，跳过丢失/损坏文件，并逐文件校验会话 60 Ki UTF-16 单元额度。提交 145d07bf。
+- **结构化记忆选择**：通过 Message::visible_text 读取多段模型文本块，而非只读取首块或扁平字段。提交 6fd66806。
+
+按用户现行开发任务指令，本轮未运行 Cargo、单元/集成测试或 CI；变更统一为“源码已提交、待验收”。不能将同一业务功能的多处补强拆分为独立完成数。后续优先处理压缩 token-gap 精确截断/取消、记忆召回取消、MCP 动态认证与权限生命周期。
+
+
 ## 2026-10-29：PowerShell 授权界面的破坏性操作提醒（源码已提交，待验收）
 
 - **原版对照**：完整原始 ZIP `source/src/tools/PowerShellTool/destructiveCommandWarning.ts::getDestructiveCommandWarning`（12–108 行），以及 `source/src/tools/PowerShellTool/UI.tsx` 的权限界面。
