@@ -264,6 +264,16 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/IdleReturnDialog.tsx" => match export {
+            "view" => serde_json::to_value(super::p_3ab35d9de2f94::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
+            "formatIdleDuration" => args.first().and_then(Value::as_f64).map(|minutes| {
+                Value::String(super::p_3ab35d9de2f94::format_idle_duration(minutes))
+            }),
+            "formatTokens" => args.first().and_then(Value::as_f64).map(|tokens| {
+                Value::String(super::p_3ab35d9de2f94::format_token_count(tokens))
+            }),
             _ => None,
         },
         "src/components/InterruptedByUser.tsx" => match export {
@@ -430,7 +440,10 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ),
         ("src/components/IdeOnboardingDialog.tsx", vec![]),
         ("src/components/IdeStatusIndicator.tsx", vec![]),
-        ("src/components/IdleReturnDialog.tsx", vec![]),
+        (
+            "src/components/IdleReturnDialog.tsx",
+            vec!["view", "formatIdleDuration", "formatTokens"],
+        ),
         ("src/components/InterruptedByUser.tsx", vec![]),
         ("src/components/InvalidConfigDialog.tsx", vec![]),
         ("src/components/InvalidSettingsDialog.tsx", vec![]),
