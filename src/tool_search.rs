@@ -255,22 +255,21 @@ mod tests {
         let mut loaded = std::collections::HashSet::new();
         let (before, deferred) = visible_catalog(&all, &loaded);
         assert_eq!(deferred.len(), 2);
-        assert!(!before.iter().any(|tool| {
-            tool["function"]["name"] == "mcp__github__search_issues"
-        }));
-        let search = execute(&json!({"query":"select:mcp__github__search_issues"}), &all)
-            .unwrap();
+        assert!(!before
+            .iter()
+            .any(|tool| { tool["function"]["name"] == "mcp__github__search_issues" }));
+        let search = execute(&json!({"query":"select:mcp__github__search_issues"}), &all).unwrap();
         assert_eq!(search["schemas"].as_array().unwrap().len(), 1);
         for value in search["matches"].as_array().unwrap() {
             loaded.insert(value.as_str().unwrap().to_owned());
         }
         let (after, _) = visible_catalog(&all, &loaded);
-        assert!(after.iter().any(|tool| {
-            tool["function"]["name"] == "mcp__github__search_issues"
-        }));
-        assert!(!after.iter().any(|tool| {
-            tool["function"]["name"] == "mcp__github__create_issue"
-        }));
+        assert!(after
+            .iter()
+            .any(|tool| { tool["function"]["name"] == "mcp__github__search_issues" }));
+        assert!(!after
+            .iter()
+            .any(|tool| { tool["function"]["name"] == "mcp__github__create_issue" }));
     }
     #[test]
     fn invalid_query_is_rejected() {
