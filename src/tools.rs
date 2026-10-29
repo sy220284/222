@@ -925,6 +925,19 @@ fn truncate(input: &str, max: usize) -> String {
     }
 }
 
+/// Expose the original PowerShell tool wire name only for PowerShell
+/// sessions. The executor still uses a provider-neutral command runner.
+pub fn powershell_definition() -> Value {
+    json!({"type":"function","function":{"name":"PowerShell",
+        "description":"Execute a PowerShell command in the workspace with permission checks.",
+        "parameters":{"type":"object","properties":{
+            "command":{"type":"string"},
+            "timeout":{"type":"integer","description":"Timeout in milliseconds"},
+            "run_in_background":{"type":"boolean"},
+            "description":{"type":"string"}
+        },"required":["command"]}}})
+}
+
 pub fn definitions() -> Vec<Value> {
     let mut tools = vec![
         json!({"type":"function","function":{"name":"read_file",
@@ -1281,6 +1294,39 @@ mod tests {
         // The PowerShell rule set must not silently authorize a Bash command.
         let bash = executor(root.path(), Approval::Ask).with_permission_rules(rules);
         assert!(bash.approve_external(&call("Get-ChildItem .")).is_err());
+    }
+
+    #[tokio::test]
+    async fn explicit_powershell_tool_uses_its_own_shell_and_permission_rules() {
+        let root = tempfile::tempdir().unwrap();
+        let rules = permission_rules::compile_rules(&[
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "PowerShell(Remove-Item:*)".into(),
+            },
+        ])
+        .unwrap();
+        let tool = executor(root.path(), Approval::Full)
+            .with_shell(crate::shell_runtime::ShellKind::Bash)
+            .with_permission_rules(rules);
+        let call = |command: &str| ToolCall {
+            id: "explicit-ps".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "PowerShell".into(),
+                arguments: json!({"command":command}).to_string(),
+            },
+        };
+        let denied = tool.approve_external(&call("rm secret")).unwrap_err();
+        assert!(denied.to_string().contains("explicit permission rule"));
+        let output = tool.execute(&call("Write-Output 'PowerShell-only'")).await;
+        // CI hosts without pwsh must report the missing executable, never
+        // run the PowerShell command through the configured Bash fallback.
+        assert!(
+            output.contains("PowerShell-only") || output.contains("PowerShell is not installed"),
+            "{output}"
+        );
+        assert_eq!(powershell_definition()["function"]["name"], "PowerShell");
     }
 
     #[cfg(unix)]
