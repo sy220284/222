@@ -83,7 +83,9 @@ pub fn negate(v: &Value) -> Value {
     to_number(v).as_f64().map_or(Value::Null, |x| json!(-x))
 }
 pub fn add(a: &Value, b: &Value) -> Value {
-    if a.is_string() || b.is_string() {
+    // JavaScript ToPrimitive converts arrays and plain objects to strings
+    // before deciding whether + means concatenation.
+    if a.is_string() || b.is_string() || a.is_array() || b.is_array() || a.is_object() || b.is_object() {
         json!(format!("{}{}", to_string(a), to_string(b)))
     } else {
         numeric2(a, b, |a, b| a + b)
@@ -118,22 +120,35 @@ pub fn strict_unequal(a: &Value, b: &Value) -> Value {
     json!(a != b)
 }
 pub fn gt(a: &Value, b: &Value) -> Value {
-    rel(a, b, |a, b| a > b)
+    rel(a, b, |a, b| a > b, |a, b| a > b)
 }
 pub fn lt(a: &Value, b: &Value) -> Value {
-    rel(a, b, |a, b| a < b)
+    rel(a, b, |a, b| a < b, |a, b| a < b)
 }
 pub fn gte(a: &Value, b: &Value) -> Value {
-    rel(a, b, |a, b| a >= b)
+    rel(a, b, |a, b| a >= b, |a, b| a >= b)
 }
 pub fn lte(a: &Value, b: &Value) -> Value {
-    rel(a, b, |a, b| a <= b)
+    rel(a, b, |a, b| a <= b, |a, b| a <= b)
 }
-fn rel(a: &Value, b: &Value, cmp: impl Fn(f64, f64) -> bool) -> Value {
-    if let (Some(a), Some(b)) = (a.as_f64(), b.as_f64()) {
-        json!(cmp(a, b))
-    } else {
-        json!(false)
+fn rel(
+    a: &Value,
+    b: &Value,
+    number_cmp: impl Fn(f64, f64) -> bool,
+    string_cmp: impl Fn(&[u16], &[u16]) -> bool,
+) -> Value {
+    // Both string primitives compare lexicographically by UTF-16 code units,
+    // not by numeric conversion (unlike arithmetic operators).
+    if let (Some(a), Some(b)) = (a.as_str(), b.as_str()) {
+        let aa = a.encode_utf16().collect::<Vec<_>>();
+        let bb = b.encode_utf16().collect::<Vec<_>>();
+        return json!(string_cmp(&aa, &bb));
+    }
+    let a = to_number(a);
+    let b = to_number(b);
+    match (a.as_f64(), b.as_f64()) {
+        (Some(a), Some(b)) => json!(number_cmp(a, b)),
+        _ => json!(false),
     }
 }
 pub fn and(a: &Value, b: &Value) -> Value {
@@ -176,7 +191,9 @@ pub fn call_method(v: &Value, method: &str, args: &[Value]) -> Value {
                 .position(|x| x == a)
                 .map(|i| i as i64)
                 .unwrap_or(-1)),
-            Value::String(s) => json!(s.find(&to_string(a)).map(|i| i as i64).unwrap_or(-1)),
+            Value::String(s) => json!(s.find(&to_string(a))
+                .map(|i| s[..i].encode_utf16().count() as i64)
+                .unwrap_or(-1)),
             _ => json!(-1),
         },
         "trim" => json!(v.as_str().unwrap_or("").trim()),
@@ -185,11 +202,13 @@ pub fn call_method(v: &Value, method: &str, args: &[Value]) -> Value {
         "toLowerCase" => json!(v.as_str().unwrap_or("").to_lowercase()),
         "toUpperCase" => json!(v.as_str().unwrap_or("").to_uppercase()),
         "slice" | "substring" => {
-            let s = v.as_str().unwrap_or("");
-            let chars = s.chars().collect::<Vec<_>>();
-            let n = chars.len() as i64;
+            let n = match v {
+                Value::Array(xs) if method == "slice" => xs.len() as i64,
+                Value::String(s) => s.chars().count() as i64,
+                _ => return Value::Null,
+            };
             let to_index = |v: &Value, default: i64| {
-                let i = v.as_i64().unwrap_or(default);
+                let i = to_number(v).as_i64().unwrap_or(default);
                 if method == "slice" && i < 0 {
                     (n + i).max(0) as usize
                 } else {
@@ -197,14 +216,22 @@ pub fn call_method(v: &Value, method: &str, args: &[Value]) -> Value {
                 }
             };
             let mut left = to_index(a, 0);
-            let mut right = to_index(args.get(1).unwrap_or(&Value::Null), n);
+            let mut right = if args.len() > 1 {
+                to_index(&args[1], n)
+            } else {
+                n as usize
+            };
             if method == "substring" && left > right {
                 std::mem::swap(&mut left, &mut right)
             }
             if left > right {
                 left = right
             }
-            json!(chars[left..right].iter().collect::<String>())
+            match v {
+                Value::Array(xs) => json!(xs[left..right].to_vec()),
+                Value::String(s) => json!(s.chars().skip(left).take(right - left).collect::<String>()),
+                _ => Value::Null,
+            }
         }
         "split" => {
             let s = v.as_str().unwrap_or("");
@@ -286,5 +313,13 @@ mod tests {
         assert_eq!(to_number(&json!(["7"])), json!(7.0));
         assert_eq!(add(&json!(null), &json!(4)), json!(4.0));
         assert_eq!(negate(&json!("2")), json!(-2.0));
+        assert_eq!(add(&json!([]), &json!(1)), json!("1"));
+        assert_eq!(add(&json!([1, 2]), &json!(3)), json!("1,23"));
+        assert_eq!(lt(&json!("apple"), &json!("banana")), json!(true));
+        assert_eq!(lt(&json!("10"), &json!("2")), json!(true));
+        assert_eq!(gt(&json!(true), &json!(0)), json!(true));
+        assert_eq!(gte(&json!(null), &json!(0)), json!(true));
+        assert_eq!(call_method(&json!([1,2,3]), "slice", &[json!(-2)]), json!([2,3]));
+        assert_eq!(call_method(&json!("😀abc"), "indexOf", &[json!("a")]), json!(2));
     }
 }
