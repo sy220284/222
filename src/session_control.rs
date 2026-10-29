@@ -31,22 +31,7 @@ fn preview(messages: &[Message]) -> String {
     let Some(first) = messages.iter().find(|m| m.role == "user") else {
         return String::new();
     };
-    let text = if let Some(text) = first.content.as_deref() {
-        text.to_owned()
-    } else {
-        first
-            .content_blocks
-            .as_deref()
-            .unwrap_or(&[])
-            .iter()
-            .filter_map(|block| {
-                block
-                    .as_str()
-                    .or_else(|| block.get("text").and_then(serde_json::Value::as_str))
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
+    let text = first.visible_text();
     text.trim()
         .lines()
         .next()
@@ -64,16 +49,9 @@ pub fn conversation_text_for_name(messages: &[Message]) -> String {
         if !matches!(message.role.as_str(), "user" | "assistant") {
             continue;
         }
-        if let Some(content) = message.content.as_deref() {
-            parts.push(content);
-        } else if let Some(blocks) = message.content_blocks.as_deref() {
-            for block in blocks {
-                if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
-                    if let Some(text) = block.get("text").and_then(serde_json::Value::as_str) {
-                        parts.push(text);
-                    }
-                }
-            }
+        let visible = message.visible_text();
+        if !visible.is_empty() {
+            parts.push(visible);
         }
     }
     let text = parts.join("\n");
