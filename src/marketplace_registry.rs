@@ -20,6 +20,8 @@ struct StoredMarketplace {
     source: MarketplaceSource,
     install_location: PathBuf,
     last_updated: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    registered_at: Option<String>,
 }
 
 type Registry = BTreeMap<String, StoredMarketplace>;
@@ -238,7 +240,8 @@ pub fn resolve_local_plugin_by_name(project: &Path, plugin: &str) -> Result<(Str
         let _guard = exclusive_lock(project)?;
         let mut entries = load(project)?.into_iter().collect::<Vec<_>>();
         entries.sort_by(|(left_name, left), (right_name, right)| {
-            left.last_updated.cmp(&right.last_updated)
+            left.registered_at.as_deref().unwrap_or(&left.last_updated)
+                .cmp(right.registered_at.as_deref().unwrap_or(&right.last_updated))
                 .then_with(|| left_name.cmp(right_name))
         });
         entries
@@ -319,12 +322,14 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
                 }
                 return Ok(json!({"name":name,"alreadyMaterialized":true}));
             }
+            let registered_at = now();
             registry.insert(
                 name.clone(),
                 StoredMarketplace {
                     source,
                     install_location: file,
-                    last_updated: now(),
+                    last_updated: registered_at.clone(),
+                    registered_at: Some(registered_at),
                 },
             );
             save(root, &registry)?;
