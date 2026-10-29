@@ -33,7 +33,12 @@ pub fn absolute_glob_base(pattern: &str) -> Option<PathBuf> {
     match wildcard {
         Some(index) => {
             let prefix = &pattern[..index];
-            let separator = prefix.rfind(std::path::MAIN_SEPARATOR)?;
+            // glob.ts::extractGlobBaseDirectory accepts both '/' and the
+            // native Windows separator. A Windows absolute pattern may use
+            // forward slashes even when MAIN_SEPARATOR is a backslash.
+            let separator = prefix.rfind(|ch: char| {
+                ch == std::path::MAIN_SEPARATOR || (cfg!(windows) && ch == '/')
+            })?;
             Some(PathBuf::from(&prefix[..=separator]))
         }
         None => path.parent().map(Path::to_path_buf),
