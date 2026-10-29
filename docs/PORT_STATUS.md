@@ -1,3 +1,11 @@
+## 2026-10-29：指令继承与附加目录补齐（源码已提交、待验收）
+
+原版依据：`source/src/utils/claudemd.ts::getMemoryFiles` 第859–975行，`source/src/context.ts::getUserContext`。Rust 真实调用链：`Agent::run/context_usage_snapshot` → `system_prompt_with_dirs` → `project_instructions_with_dirs`。
+
+- 嵌套 Git 工作树：识别主仓库与子工作树，跳过主仓库已签入指令/规则，仍加载本地私有指令，避免双份冲突。代码 `fb4210e7`。
+- 已授权附加目录：显式 `ATLAS_ADDITIONAL_DIRECTORIES_INSTRUCTIONS=1` 后，读取 `--add-dir` 或配置授权目录中的指令和规则，接入 Agent 请求与 /context 统计，保留大小、数量、边界和去重检查。代码 `80336875`、`22b50ecd`。
+- 两条独立业务功能**源码已提交、待行为验收**。未运行 Cargo、测试或 CI；完整验收新增 0，Issue #3 冻结362条保持开放。外部引用审批、条件规则动态加载、记忆排除、来源开关、SDK 全路径及跨平台行为仍缺。本轮100项硬目标仍差98，100项问题清单和方案尚未完成。
+
 ## 2026-10-29：MCP 长说明与服务器指令按原版安全截断（源码已提交，待验收）
 
 完整原版 `source/src/services/mcp/client.ts:218,1157–1170,1786–1794` 对 MCP 服务说明和工具说明分别应用 2,048 个 JavaScript UTF-16 单元上限并附加可见截断提示。Rust `src/mcp.rs` 原先对模型工具说明无上限，服务器说明允许 16,384 个 Unicode 字符，导致大量服务器文本进入模型上下文。现新增 Unicode 边界安全的 2,048 UTF-16 单元截断函数，分别接入初次发现/动态刷新工具说明和 Agent 实际使用的 MCP 服务器指令，保留 `… [truncated]` 提示，避免长文本挤占模型上下文。
