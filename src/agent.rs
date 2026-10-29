@@ -2292,6 +2292,9 @@ impl Agent {
                 system.push_str(&format!("{}\n", dir.display()));
             }
         }
+        if let Some(mcp) = &self.mcp {
+            system.push_str(&mcp.instruction_context());
+        }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_session_id(self.session.id.to_string())
             .with_metrics(self.file_metrics.clone())
