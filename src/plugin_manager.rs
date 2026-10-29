@@ -359,7 +359,14 @@ fn dependency_install_plan(
         if stack.iter().any(|item| item == name) {
             bail!("Plugin dependency cycle: {} -> {name}", stack.join(" -> "));
         }
-        if visited.contains(name) { return Ok(()); }
+        if visited.contains(name) {
+            if ordered.iter().any(|(existing_name, _, existing_origin, _):
+                &(String, PathBuf, Option<String>, bool)|
+                existing_name == name && existing_origin != &origin) {
+                bail!("Dependency '{name}' resolves to conflicting marketplaces");
+            }
+            return Ok(());
+        }
         let target = checked_installed_root(root, false)?.join(name);
         let existing = match fs::symlink_metadata(&target) {
             Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => true,
@@ -380,14 +387,17 @@ fn dependency_install_plan(
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
                 Err(error) => return Err(error.into()),
             };
-            if existing_origin != origin {
+            if origin.is_some() && existing_origin != origin {
                 bail!("Installed plugin '{name}' belongs to a different marketplace");
             }
         }
-        if crate::plugins::plugin_blocked_by_policy(root, name)?
-            || origin.as_deref().is_some_and(|id|
-                crate::plugins::plugin_blocked_by_policy(root, id).unwrap_or(true)) {
+        if crate::plugins::plugin_blocked_by_policy(root, name)? {
             bail!("Plugin '{name}' is disabled by managed policy");
+        }
+        if let Some(id) = origin.as_deref() {
+            if crate::plugins::plugin_blocked_by_policy(root, id)? {
+                bail!("Plugin '{id}' is disabled by managed policy");
+            }
         }
         // The original resolver does not traverse dependencies already enabled
         // in the current scope, but the installed identity must be real.
@@ -397,7 +407,18 @@ fn dependency_install_plan(
         }
         stack.push(name.to_owned());
         let dependency_source = if existing { target.clone() } else { source.clone() };
-        for raw in dependencies(&dependency_source)? {
+        let mut required = dependencies(&dependency_source)?;
+        if let Some((plugin, marketplace)) = origin.as_deref()
+            .and_then(|id| id.split_once('@')) {
+            for dependency in crate::marketplace_registry::local_plugin_dependencies(
+                root, marketplace, plugin,
+            )? {
+                if !required.contains(&dependency) {
+                    required.push(dependency);
+                }
+            }
+        }
+        for raw in required {
             let (dep_name, dep_marketplace) = match raw.split_once('@') {
                 Some((plugin, market)) if !plugin.is_empty() && !market.is_empty() =>
                     (plugin, Some(market)),
