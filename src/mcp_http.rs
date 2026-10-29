@@ -26,6 +26,46 @@ pub struct HttpClient {
     root: PathBuf,
     last_event_id: Option<HeaderValue>,
 }
+/// Execute a configured credential helper once when opening a remote MCP connection.
+/// A failed helper must not disable the server: the static headers remain usable.
+async fn load_dynamic_headers(
+    config: &McpServerConfig,
+    url: &Url,
+    root: &Path,
+) -> Option<std::collections::HashMap<String, String>> {
+    let helper = config.headers_helper.as_deref()?.trim();
+    if helper.is_empty() {
+        return None;
+    }
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = tokio::process::Command::new("cmd");
+        command.arg("/C").arg(helper);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = tokio::process::Command::new("sh");
+        command.arg("-c").arg(helper);
+        command
+    };
+    command
+        .current_dir(root)
+        .env("ATLAS_MCP_SERVER_NAME", &config.id)
+        .env("ATLAS_MCP_SERVER_URL", url.as_str())
+        .kill_on_drop(true);
+    crate::subprocess_env::apply(&mut command);
+    let output = tokio::time::timeout(Duration::from_secs(10), command.output())
+        .await
+        .ok()?
+        .ok()?;
+    if !output.status.success() || output.stdout.is_empty() {
+        return None;
+    }
+    // Parsing into a string map rejects arrays, nulls, and non-string values.
+    serde_json::from_slice(&output.stdout).ok()
+}
+
 impl HttpClient {
     pub async fn connect(config: &McpServerConfig) -> Result<Self> {
         let root = std::env::current_dir().context("MCP workspace directory unavailable")?;
@@ -33,7 +73,15 @@ impl HttpClient {
     }
     pub async fn connect_with_root(config: &McpServerConfig, root: &Path) -> Result<Self> {
         let url = config.url.as_deref().context("HTTP MCP requires url")?;
-        let url = Url::parse(url).context("Invalid MCP URL")?;
+        let expanded = compat_helpers::expand_env_vars_in_string(url);
+        if !expanded.missing_vars.is_empty() {
+            bail!(
+                "MCP {} missing URL environment variables: {}",
+                config.id,
+                expanded.missing_vars.join(", ")
+            );
+        }
+        let url = Url::parse(&expanded.expanded).context("Invalid MCP URL")?;
         if !matches!(url.scheme(), "http" | "https") {
             bail!("MCP HTTP requires http(s)")
         }
@@ -41,7 +89,11 @@ impl HttpClient {
             bail!("MCP URL must not contain credentials");
         }
         let mut headers = HeaderMap::new();
-        for (key, value) in &config.headers {
+        let dynamic_headers = load_dynamic_headers(config, &url, root)
+            .await
+            .unwrap_or_default();
+        // Dynamic headers override static ones, even when their names differ in case.
+        for (key, value) in config.headers.iter().chain(dynamic_headers.iter()) {
             let key = HeaderName::from_str(key).context("Invalid MCP header name")?;
             if matches!(
                 key.as_str(),
@@ -427,6 +479,7 @@ mod tests {
             transport: Some("http".into()),
             url: Some(url),
             headers: HashMap::new(),
+            headers_helper: None,
         }
     }
     #[tokio::test]
