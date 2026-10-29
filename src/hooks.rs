@@ -86,6 +86,10 @@ pub struct HookRule {
     /// Regular expression against tool name for tool events.
     #[serde(default)]
     pub matcher: Option<String>,
+    /// Original hooks.ts `if` permission-style condition. Only tool events
+    /// with a validated tool input may satisfy a content-bearing condition.
+    #[serde(default, rename = "if", skip_serializing_if = "Option::is_none")]
+    pub if_condition: Option<String>,
     /// User-configured local command. Never downloaded or installed automatically.
     pub command: String,
     /// The source selects a shell per hook; legacy hooks default to Bash.
@@ -216,6 +220,38 @@ impl HookMatcher {
     }
 }
 
+/// Evaluate conditional hooks against the same live tool arguments that are
+/// passed to the hook. Unknown or unsupported input patterns do not match;
+/// they must never turn a conditional command into an unconditional hook.
+fn hook_if_matches(condition: &str, event: &str, tool_name: Option<&str>, input: &Value) -> bool {
+    if !matches!(event, "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "PermissionRequest") {
+        return false;
+    }
+    let Some(name) = tool_name.or_else(|| input.get("tool_name").and_then(Value::as_str)) else {
+        return false;
+    };
+    let parsed = crate::permission_rules::parse_rule(condition);
+    if crate::permission_rules::canonical_tool(&parsed.tool_name)
+        != crate::permission_rules::canonical_tool(name)
+    {
+        return false;
+    }
+    if parsed.rule_content.is_none() {
+        return true;
+    }
+    let Some(arguments) = input.get("tool_input").filter(|v| v.is_object()) else {
+        return false;
+    };
+    let condition_rule = crate::permission_rules::Rule {
+        behavior: crate::permission_rules::Behavior::Allow,
+        value: parsed,
+    };
+    matches!(
+        crate::permission_rules::policy_for(&[condition_rule], name, arguments),
+        Ok(Some(crate::permission_rules::Behavior::Allow))
+    )
+}
+
 #[derive(Default)]
 pub struct HookRunner {
     rules: Vec<(HookRule, HookMatcher)>,
@@ -312,14 +348,19 @@ impl HookRunner {
         // launching them. Preserve first-registration order while retaining
         // the last matching definition for an identical command.
         let mut unique_rules: Vec<&HookRule> = Vec::new();
-        let mut positions = std::collections::HashMap::<(&str, &str), usize>::new();
+        let mut positions = std::collections::HashMap::<(&str, &str, Option<&str>), usize>::new();
         for (rule, matcher) in &self.rules {
             if rule.event.name() != event_name || !matcher.matches(match_query) {
                 continue;
             }
+            if rule.if_condition.as_deref().is_some_and(|condition| {
+                !hook_if_matches(condition, event_name, match_query, &input)
+            }) {
+                continue;
+            }
             // hooks.ts::getMatchingHooks deduplicates commands by both
             // command text and shell; explicit bash equals the legacy default.
-            let key = (rule.command.as_str(), rule.shell.unwrap_or_default().label());
+            let key = (rule.command.as_str(), rule.shell.unwrap_or_default().label(), rule.if_condition.as_deref());
             if let Some(&position) = positions.get(&key) {
                 unique_rules[position] = rule;
             } else {
@@ -967,13 +1008,13 @@ mod tests {
     #[tokio::test]
     async fn subagent_matcher_receives_type_and_flattened_agent_identity() {
         let hook = HookRunner::new(&[
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::SubagentStart,
                 matcher: Some("^explore$".into()),
                 command: "cat | grep -q '\"agent_id\":\"worker-1\"'".into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::SubagentStart,
                 matcher: Some("^plan$".into()),
                 command: "echo 'wrong hook' >&2; exit 2".into(),
@@ -1003,7 +1044,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn subagent_stop_blocking_does_not_mutate_prior_tool_output() {
-        let hook = HookRunner::new(&[HookRule {
+        let hook = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::SubagentStop,
             matcher: Some("^general$".into()),
             command: "echo 'review not complete' >&2; exit 2".into(),
@@ -1029,11 +1070,11 @@ mod tests {
     #[tokio::test]
     async fn post_tool_mcp_output_is_replaced_before_next_hook() {
         let runner=HookRunner::new(&[
-            HookRule{event:HookEvent::PostToolUse,
+            HookRule{ if_condition: None,event:HookEvent::PostToolUse,
                 matcher:Some("^mcp__mock__secret$".into()),
                 command:r#"printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedMCPToolOutput":{"content":[{"type":"text","text":"REDACTED_MCP_OUTPUT"}]}}}'"#.into(),
                 shell: None, timeout_seconds:3},
-            HookRule{event:HookEvent::PostToolUse,
+            HookRule{ if_condition: None,event:HookEvent::PostToolUse,
                 matcher:Some("^mcp__mock__secret$".into()),
                 command:"cat | grep -q REDACTED_MCP_OUTPUT".into(),
                 shell: None, timeout_seconds:3},
@@ -1059,7 +1100,7 @@ mod tests {
             r#"{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}"#,
             r#"{"hookSpecificOutput":{"permissionDecision":"allow"}}"#,
         ] {
-            let runner = HookRunner::new(&[HookRule {
+            let runner = HookRunner::new(&[HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: format!("printf '%s' '{}'", json_output),
@@ -1082,7 +1123,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn legacy_approve_and_invalid_permission_variants_match_source_contract() {
-        let approved = HookRunner::new(&[HookRule {
+        let approved = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"decision\":\"approve\"}'".into(),
@@ -1099,7 +1140,7 @@ mod tests {
             r#"{"decision":"unrestricted"}"#,
             r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"unrestricted"}}"#,
         ] {
-            let runner = HookRunner::new(&[HookRule {
+            let runner = HookRunner::new(&[HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: format!("printf '%s' '{}'", json_output),
@@ -1124,9 +1165,9 @@ mod tests {
         };
         let root = tempfile::tempdir().unwrap();
         let runner=HookRunner::new(&[
-            HookRule {event:HookEvent::PreToolUse,matcher:None,
+            HookRule { if_condition: None,event:HookEvent::PreToolUse,matcher:None,
                 command:r#"printf '{"decision":"approve","continue":"no"}'; exit 2"#.into(),shell: None, timeout_seconds:3},
-            HookRule {event:HookEvent::PreToolUse,matcher:None,
+            HookRule { if_condition: None,event:HookEvent::PreToolUse,matcher:None,
                 command:r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"touch hook_schema_ok"}}}'"#.into(),shell: None, timeout_seconds:3},
         ]).unwrap();
         let mut call = ToolCall {
@@ -1151,7 +1192,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn continuation_flag_does_not_become_permission_denial() {
-        let runner = HookRunner::new(&[HookRule {
+        let runner = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: r#"printf '{"continue":false,"stopReason":"stop requested"}'"#.into(),
@@ -1218,7 +1259,7 @@ mod tests {
     }
     #[test]
     fn validates_hook_configuration() {
-        let invalid = HookRunner::new(&[HookRule {
+        let invalid = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::PreToolUse,
             matcher: Some("[".into()),
             command: "true".into(),
@@ -1227,7 +1268,7 @@ mod tests {
         .unwrap();
         assert!(matches!(&invalid.rules[0].1, HookMatcher::Invalid));
         assert!(!invalid.rules[0].1.matches(Some("Bash")));
-        let zero = HookRunner::new(&[HookRule {
+        let zero = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::Stop,
             matcher: None,
             command: "true".into(),
@@ -1235,7 +1276,7 @@ mod tests {
         }])
         .unwrap();
         assert_eq!(zero.rules[0].0.timeout_seconds, 600);
-        let extended = HookRunner::new(&[HookRule {
+        let extended = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::Stop,
             matcher: None,
             command: "true".into(),
@@ -1247,7 +1288,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn blocks_tool_and_rewrites_input() {
-        let blocker = HookRunner::new(&[HookRule {
+        let blocker = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::PreToolUse,
             matcher: Some("^run_command$".into()),
             command: "printf '{\"decision\":\"block\",\"reason\":\"policy\"}'".into(),
@@ -1271,7 +1312,7 @@ mod tests {
                 .as_deref(),
             Some("policy")
         );
-        let updater = HookRunner::new(&[HookRule {
+        let updater = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"updatedInput\":{\"path\":\"safe.txt\"}}}'"
@@ -1285,7 +1326,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn exit_code_two_blocks() {
-        let hooks = HookRunner::new(&[HookRule {
+        let hooks = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::Stop,
             matcher: None,
             command: "echo 'Need tests' >&2; exit 2".into(),
@@ -1304,13 +1345,13 @@ mod tests {
         };
         let root = tempfile::tempdir().unwrap();
         let runner = HookRunner::new(&[
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: Some("^run_command$".into()),
                 command: "echo 'advisory hook failed' >&2; exit 1".into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: Some("^run_command$".into()),
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"touch after_warning"}}}'"#.into(),
@@ -1343,13 +1384,13 @@ mod tests {
     #[tokio::test]
     async fn pretool_hooks_observe_original_input_like_the_source() {
         let runner = HookRunner::new(&[
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"rm sensitive"}}}'"#.into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"cat | grep -q 'echo safe' && { echo 'original input observed' >&2; exit 2; } || { echo 'unexpected rewritten input' >&2; exit 2; }"#.into(),
@@ -1385,13 +1426,13 @@ mod tests {
             )
         };
         let runner = HookRunner::new(&[
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: command(&first, &second),
                 shell: None, timeout_seconds: 5,
             },
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: command(&second, &first),
@@ -1411,19 +1452,19 @@ mod tests {
     #[tokio::test]
     async fn hook_permission_decisions_keep_deny_over_ask_over_allow() {
         let runner = HookRunner::new(&[
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'"#.into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask"}}'"#.into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}'"#.into(),
@@ -1442,7 +1483,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn command_hook_json_precedes_exit_status_and_invalid_json_is_nonblocking() {
-        let approved = HookRunner::new(&[HookRule {
+        let approved = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"decision\":\"approve\"}'; exit 2".into(),
@@ -1457,13 +1498,13 @@ mod tests {
         assert_eq!(outcome.permission_decision.as_deref(), Some("allow"));
 
         let malformed = HookRunner::new(&[
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: "printf '{not-json'; exit 1".into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule {
+            HookRule { if_condition: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: "printf '{\"decision\":\"approve\"}'".into(),
@@ -1480,7 +1521,7 @@ mod tests {
         assert_eq!(outcome.non_blocking_errors.len(), 1);
         assert!(outcome.non_blocking_errors[0].contains("invalid JSON"));
 
-        let malformed_block = HookRunner::new(&[HookRule {
+        let malformed_block = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{not-json'; echo 'blocked syntax' >&2; exit 2".into(),
@@ -1497,7 +1538,7 @@ mod tests {
             Some("blocked syntax")
         );
 
-        let blocked = HookRunner::new(&[HookRule {
+        let blocked = HookRunner::new(&[HookRule { if_condition: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "echo 'explicit denial' >&2; exit 2".into(),
