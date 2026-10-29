@@ -201,17 +201,24 @@ impl Snapshot {
                 if name == "Free space" { continue; }
                 let tokens = category["tokens"].as_u64().unwrap_or(0);
                 if tokens == 0 { continue; }
-                let squares_for_category = ((tokens as f64 / max as f64)
-                    * count as f64).round().max(1.0) as usize;
-                for _ in 0..squares_for_category {
+                let exact = tokens as f64 / max as f64 * count as f64;
+                let squares_for_category = exact.round().max(1.0) as usize;
+                let whole = exact.floor() as usize;
+                let fraction = exact.fract();
+                for index in 0..squares_for_category {
                     if squares.len() >= count { break; }
+                    let fullness = if index == whole && fraction > 0.0 {
+                        fraction
+                    } else {
+                        1.0
+                    };
                     squares.push(json!({
                         "color":category["color"],
                         "isFilled":true,
                         "categoryName":name,
                         "tokens":tokens,
                         "percentage":(tokens as f64 * 100.0 / max as f64).round(),
-                        "squareFullness":1.0
+                        "squareFullness":fullness
                     }));
                 }
             }
