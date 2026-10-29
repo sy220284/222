@@ -122,6 +122,8 @@ pub struct HookOutcome {
     /// Replacement for an MCP tool's model-visible output from PostToolUse.
     pub updated_mcp_tool_output: Option<Value>,
     pub prevent_continuation: bool,
+    /// Original hook JSON stopReason, retained for SDK and CLI stop feedback.
+    pub stop_reason: Option<String>,
     /// Non-blocking command-hook failures remain visible without denying the tool.
     pub non_blocking_errors: Vec<String>,
 }
@@ -360,6 +362,9 @@ impl HookRunner {
             }
             if response.prevent_continuation {
                 outcome.prevent_continuation = true;
+            }
+            if let Some(reason) = response.stop_reason {
+                outcome.stop_reason = Some(reason);
             }
         }
         Ok(outcome)
@@ -787,6 +792,9 @@ async fn run_command(
         // A sync hook's continue:false is not an implicit tool denial.
         // Stop/agent callers decide how to handle prevent_continuation.
     }
+    result.stop_reason = value.get("stopReason")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     if let Some(context) = hook_output
         .and_then(|v| v.get("additionalContext"))
         .or_else(|| value.get("additionalContext"))
