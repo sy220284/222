@@ -144,6 +144,7 @@ struct SdkAgentDefinition {
     description: String,
     prompt: String,
     model: Option<String>,
+    tools: Option<std::collections::HashSet<String>>,
 }
 
 pub struct Agent {
@@ -204,6 +205,7 @@ pub struct Agent {
     /// None restores provider defaults, zero disables thinking where supported.
     sdk_thinking_budget: Option<u32>,
     sdk_agent_definitions: std::collections::BTreeMap<String, SdkAgentDefinition>,
+    sdk_allowed_tools: Option<std::collections::HashSet<String>>,
 }
 
 /// Match the source getTaskListId priority, with a provider-neutral explicit
@@ -326,6 +328,7 @@ impl Agent {
             sdk_append_system_prompt: None,
             sdk_thinking_budget: None,
             sdk_agent_definitions: std::collections::BTreeMap::new(),
+            sdk_allowed_tools: None,
         })
     }
 
@@ -449,7 +452,7 @@ impl Agent {
             let definition = value.as_object()
                 .with_context(|| format!("SDK agent {name} must be an object"))?;
             for field in definition.keys() {
-                if !matches!(field.as_str(), "description" | "prompt" | "model") {
+                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools") {
                     bail!("SDK agent {name} field {field} is not yet supported");
                 }
             }
@@ -467,10 +470,27 @@ impl Agent {
                 Some(serde_json::Value::String(value)) if !value.trim().is_empty() => Some(value.clone()),
                 Some(_) => bail!("SDK agent {name} model must be a nonempty string"),
             };
+            let tools = match definition.get("tools") {
+                None => None,
+                Some(serde_json::Value::String(value)) => Some(value.split(',')
+                    .map(str::trim).filter(|tool| !tool.is_empty())
+                    .map(str::to_owned).collect()),
+                Some(serde_json::Value::Array(values)) => {
+                    let mut names = std::collections::HashSet::new();
+                    for value in values {
+                        let tool = value.as_str().filter(|value| !value.trim().is_empty())
+                            .with_context(|| format!("SDK agent {name} tools must be strings"))?;
+                        names.insert(tool.to_owned());
+                    }
+                    Some(names)
+                }
+                Some(_) => bail!("SDK agent {name} tools must be a list or comma-separated string"),
+            };
             parsed.insert(name.clone(), SdkAgentDefinition {
                 description: description.to_owned(),
                 prompt: prompt.to_owned(),
                 model,
+                tools,
             });
         }
         self.sdk_agent_definitions = parsed;
@@ -1496,6 +1516,7 @@ impl Agent {
         child.prompt_role = Some(agent_type.clone());
         if let Some(definition) = sdk_definition {
             child.set_sdk_system_prompts(Some(&definition.prompt), None);
+            child.sdk_allowed_tools = definition.tools;
         }
         let result = async {
             let inherited_mcp = self.mcp.as_ref().map_or_else(
@@ -3442,6 +3463,14 @@ impl Agent {
                     });
                 }
             }
+            if let Some(allowed) = &self.sdk_allowed_tools {
+                available_tools.retain(|tool| {
+                    tool.pointer("/function/name").or_else(|| tool.get("name"))
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|name| allowed.contains(name)
+                            || allowed.contains(crate::tool_names::canonical_name(name)))
+                });
+            }
             let complete_catalog = available_tools;
             let (visible_tools, deferred_names) =
                 crate::tool_search::visible_catalog(&complete_catalog, &selected_mcp_tools);
@@ -3586,13 +3615,16 @@ impl Agent {
                 // rather than aborting a response containing multiple calls.
                 // A sibling call must still execute and every tool id must
                 // receive a matching result before the next model request.
-                let restricted_by_role = self.child_depth > 0
+                let restricted_by_role = (self.child_depth > 0
                     && self.prompt_role.as_deref().is_some_and(|role| {
                         !crate::prompt_runtime::tool_allowed_for_role(role, &call.function.name)
+                    })) || self.sdk_allowed_tools.as_ref().is_some_and(|allowed| {
+                        !allowed.contains(&call.function.name)
+                            && !allowed.contains(crate::tool_names::canonical_name(&call.function.name))
                     });
                 let invalid_input = if restricted_by_role {
                     Some(format!(
-                        "Tool {} is unavailable to this read-only agent role",
+                        "Tool {} is unavailable to this agent's tool policy",
                         call.function.name
                     ))
                 } else {
