@@ -51,7 +51,10 @@ pub fn format_task_output(output: &str, path: &str, max_len: usize) -> Formatted
     // longer than maxLen, -availableSpace becomes positive and JS returns
     // the suffix starting at that positive UTF-16 index (not empty output).
     let header_units = unit_count(&header);
-    let tail = if max_len >= header_units {
+    let tail = if max_len == header_units {
+        // JavaScript output.slice(-0) means slice(0), preserving all output.
+        output.to_owned()
+    } else if max_len > header_units {
         last_utf16_units(output, max_len - header_units)
     } else {
         let units: Vec<u16> = output.encode_utf16().collect();
