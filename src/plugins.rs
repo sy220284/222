@@ -422,9 +422,42 @@ fn valid_name(value: &str) -> bool {
     matches!(bytes.next(), Some(c) if c.is_ascii_alphanumeric())
         && bytes.all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.'))
 }
+/// Preserve marketplace identity for managed policy checks even after a
+/// plugin has been installed. Only the installer may create the origin file.
+fn plugin_blocked_by_policy(root: &Path, name: &str) -> Result<bool> {
+    let settings = crate::permission_settings::SettingsPaths::for_workspace(root)?;
+    if settings.plugin_blocked_by_policy(name)? {
+        return Ok(true);
+    }
+    let installed = root.join(".atlas/plugins").join(name);
+    let metadata = match fs::symlink_metadata(&installed) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_symlink() {
+        bail!("Plugin installation cannot be a symbolic link");
+    }
+    let origin = installed.join(".atlas-plugin-origin.json");
+    let metadata = match fs::symlink_metadata(&origin) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        bail!("Plugin marketplace identity is not a regular file");
+    }
+    let value: Value = serde_json::from_slice(&fs::read(origin)?)?;
+    let plugin_id = value.get("pluginId").and_then(Value::as_str)
+        .context("Installed plugin marketplace identity is invalid")?;
+    settings.plugin_blocked_by_policy(plugin_id)
+}
 fn directory(root: &Path, name: &str) -> Result<PathBuf> {
     if !valid_name(name) {
         bail!("Invalid plugin id: {name}")
+    }
+    if plugin_blocked_by_policy(root, name)? {
+        bail!("Plugin '{name}' is disabled by managed policy");
     }
     let base = root.join(".atlas/plugins").join(name);
     let real = base
@@ -449,6 +482,10 @@ impl PluginSet {
         for name in enabled {
             if !seen.insert(name) {
                 bail!("Plugin {name} enabled twice")
+            }
+            if plugin_blocked_by_policy(root, name)? {
+                set.errors.push(format!("Plugin '{name}' disabled by managed policy"));
+                continue;
             }
             let location = directory(root, name)?;
             let manifest = read_manifest(&location, name)?;
@@ -559,6 +596,9 @@ fn skill_files(plugin_root: &Path, manifest: &Manifest) -> Result<Vec<(String, P
 pub fn list_skills(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
     let mut names = Vec::new();
     for name in enabled {
+        if plugin_blocked_by_policy(root, name)? {
+            continue;
+        }
         let plugin_root = directory(root, name)?;
         let manifest = read_manifest(&plugin_root, name)?;
         for (skill, _) in skill_files(&plugin_root, &manifest)? {
@@ -854,6 +894,9 @@ pub fn command_prompt_with_session(
 pub fn list_commands(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
     let mut names = std::collections::BTreeSet::new();
     for plugin in enabled {
+        if plugin_blocked_by_policy(root, plugin)? {
+            continue;
+        }
         let location = directory(root, plugin)?;
         let manifest = read_manifest(&location, plugin)?;
         let mut candidates = skill_files(&location, &manifest)?
