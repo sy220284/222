@@ -168,6 +168,47 @@ pub fn output_style_label(style: &str) -> Option<&'static str> {
     }
 }
 
+/// Select a built-in output style or a user-authored workspace style.
+/// Custom styles are explicit opt-in and remain within the current workspace.
+pub fn output_style_instructions(
+    root: &std::path::Path,
+    name: &str,
+) -> anyhow::Result<String> {
+    use anyhow::{bail, Context};
+
+    if let Some(style) = output_style_label(name) {
+        return Ok(style.to_owned());
+    }
+    if crate::agent_definition::validate_agent_type(name).is_some() {
+        bail!("Invalid output style name");
+    }
+    let path = root.join(".atlas").join("output-styles").join(format!("{name}.md"));
+    if !path.is_file() {
+        bail!("Output style not found: {name}");
+    }
+    let root = root.canonicalize().context("Cannot resolve workspace")?;
+    let path = path.canonicalize().context("Cannot resolve output style")?;
+    if !path.starts_with(&root) {
+        bail!("Output style escapes workspace");
+    }
+    let raw = std::fs::read(&path).context("Read output style")?;
+    if raw.len() > 50_000 {
+        bail!("Output style exceeds 50 KB");
+    }
+    let source = String::from_utf8(raw).context("Output style must be UTF-8")?;
+    let content = if let Some(rest) = source.strip_prefix("---\n") {
+        rest.split_once("\n---\n")
+            .map(|(_, body)| body)
+            .context("Output style frontmatter was not closed")?
+    } else {
+        &source
+    };
+    if content.trim().is_empty() {
+        bail!("Output style is empty");
+    }
+    Ok(content.trim().to_owned())
+}
+
 /// Load an explicitly configured project agent's Markdown body. Built-in roles
 /// use role_instructions when no project definition exists.
 pub fn custom_role_instructions(
@@ -213,6 +254,29 @@ pub fn custom_role_instructions(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_output_styles_are_explicit_and_workspace_scoped() {
+        let workspace = tempfile::tempdir().unwrap();
+        let styles = workspace.path().join(".atlas/output-styles");
+        std::fs::create_dir_all(&styles).unwrap();
+        std::fs::write(styles.join("technical.md"),
+            "---\nname: technical\n---\nUse concise technical explanations.").unwrap();
+        let text = output_style_instructions(workspace.path(), "technical").unwrap();
+        assert_eq!(text, "Use concise technical explanations.");
+        assert!(output_style_instructions(workspace.path(), "../escape").is_err());
+        assert!(output_style_instructions(workspace.path(), "unknown").is_err());
+        assert!(output_style_instructions(workspace.path(), "learning")
+            .unwrap().contains("Explain"));
+        #[cfg(unix)]
+        {
+            let outside = tempfile::tempdir().unwrap();
+            std::fs::write(outside.path().join("secret.md"), "secret").unwrap();
+            std::os::unix::fs::symlink(outside.path().join("secret.md"),
+                styles.join("redirect.md")).unwrap();
+            assert!(output_style_instructions(workspace.path(), "redirect").is_err());
+        }
+    }
 
     #[test]
     fn custom_role_loads_only_from_workspace_with_valid_frontmatter() {
