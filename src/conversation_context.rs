@@ -478,15 +478,59 @@ pub fn project_instructions_with_dirs(
         paths
     }
 
+    // Source claudemd.ts excludes user/project/local memory before reading,
+    // including files reached through @includes. Absolute globs also need
+    // their symlink-resolved variants (e.g. /tmp versus /private/tmp).
+    fn build_instruction_excludes(patterns: &[String]) -> anyhow::Result<globset::GlobSet> {
+        let mut builder = globset::GlobSetBuilder::new();
+        for raw in patterns {
+            let pattern = raw.trim().replace('\\', "/");
+            if pattern.is_empty() {
+                continue;
+            }
+            let mut expanded = vec![pattern.clone()];
+            if pattern.starts_with('/') {
+                let wildcard = pattern.char_indices()
+                    .find(|(_, ch)| matches!(ch, '*' | '?' | '{' | '['))
+                    .map(|(index, _)| index)
+                    .unwrap_or(pattern.len());
+                if let Some(parent) = Path::new(&pattern[..wildcard]).parent() {
+                    if let Ok(real_parent) = parent.canonicalize() {
+                        let original = parent.to_string_lossy().replace('\\', "/");
+                        let resolved = real_parent.to_string_lossy().replace('\\', "/");
+                        if resolved != original && pattern.starts_with(&original) {
+                            expanded.push(format!("{resolved}{}", &pattern[original.len()..]));
+                        }
+                    }
+                }
+            }
+            for variant in expanded {
+                builder.add(
+                    globset::GlobBuilder::new(&variant)
+                        .literal_separator(true)
+                        .backslash_escape(false)
+                        .build()
+                        .with_context(|| format!("Invalid instruction exclusion pattern: {variant}"))?,
+                );
+            }
+        }
+        builder.build().context("Compile instruction exclusion patterns")
+    }
+
+    fn excluded_file(path: &Path, excludes: &globset::GlobSet) -> bool {
+        excludes.is_match(Path::new(&path.to_string_lossy().replace('\\', "/")))
+    }
+
     fn add_file(
         path: &Path,
         scope: &Path,
         include_scope: &Path,
         is_rule: bool,
+        excludes: &globset::GlobSet,
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
     ) -> anyhow::Result<()> {
-        add_file_inner(path, scope, include_scope, is_rule, seen, output, 0)
+        add_file_inner(path, scope, include_scope, is_rule, excludes, seen, output, 0)
     }
 
     fn add_file_inner(
@@ -494,11 +538,12 @@ pub fn project_instructions_with_dirs(
         scope: &Path,
         include_scope: &Path,
         is_rule: bool,
+        excludes: &globset::GlobSet,
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
         depth: usize,
     ) -> anyhow::Result<()> {
-        if depth >= 5 {
+        if depth >= 5 || excluded_file(path, excludes) {
             return Ok(());
         }
         let metadata = match fs::metadata(path) {
@@ -513,6 +558,9 @@ pub fn project_instructions_with_dirs(
             return Ok(());
         }
         let canonical = path.canonicalize()?;
+        if excluded_file(&canonical, excludes) {
+            return Ok(());
+        }
         if !canonical.starts_with(scope) {
             bail!(
                 "Instruction file points outside its approved directory: {}",
@@ -566,6 +614,7 @@ pub fn project_instructions_with_dirs(
                         scope,
                         include_scope,
                         false,
+                        excludes,
                         seen,
                         output,
                         depth + 1,
@@ -582,6 +631,7 @@ pub fn project_instructions_with_dirs(
         include_scope: &Path,
         depth: usize,
         visited: &mut HashSet<PathBuf>,
+        excludes: &globset::GlobSet,
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
     ) -> anyhow::Result<()> {
@@ -619,13 +669,14 @@ pub fn project_instructions_with_dirs(
                     include_scope,
                     depth + 1,
                     visited,
+                    excludes,
                     seen,
                     output,
                 )?;
             } else if metadata.is_file()
                 && entry.extension().and_then(|extension| extension.to_str()) == Some("md")
             {
-                add_file(&entry, scope, include_scope, true, seen, output)?;
+                add_file(&entry, scope, include_scope, true, excludes, seen, output)?;
             }
         }
         Ok(())
@@ -635,6 +686,8 @@ pub fn project_instructions_with_dirs(
         return Ok(String::new());
     }
     let root = root.canonicalize()?;
+    let config = crate::config::Config::load()?;
+    let excludes = build_instruction_excludes(&config.instruction_excludes)?;
     let mut output = String::new();
     let mut seen = HashSet::new();
     let mut visited = HashSet::new();
@@ -649,6 +702,7 @@ pub fn project_instructions_with_dirs(
                     &home,
                     &home,
                     false,
+                    &excludes,
                     &mut seen,
                     &mut output,
                 )?;
@@ -658,6 +712,7 @@ pub fn project_instructions_with_dirs(
                     &home,
                     0,
                     &mut visited,
+                    &excludes,
                     &mut seen,
                     &mut output,
                 )?;
@@ -688,6 +743,7 @@ pub fn project_instructions_with_dirs(
                     directory,
                     &root,
                     false,
+                    &excludes,
                     &mut seen,
                     &mut output,
                 )?;
@@ -698,6 +754,7 @@ pub fn project_instructions_with_dirs(
                 &root,
                 0,
                 &mut visited,
+                &excludes,
                 &mut seen,
                 &mut output,
             )?;
@@ -708,6 +765,7 @@ pub fn project_instructions_with_dirs(
                 directory,
                 &root,
                 false,
+                &excludes,
                 &mut seen,
                 &mut output,
             )?;
@@ -733,6 +791,7 @@ pub fn project_instructions_with_dirs(
                     &directory,
                     &directory,
                     false,
+                    &excludes,
                     &mut seen,
                     &mut output,
                 )?;
@@ -743,6 +802,7 @@ pub fn project_instructions_with_dirs(
                 &directory,
                 0,
                 &mut visited,
+                &excludes,
                 &mut seen,
                 &mut output,
             )?;
