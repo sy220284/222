@@ -5657,3 +5657,65 @@ fn project_init_uses_real_repo_landmarks_and_interactive_model_questions() {
     assert!(!root.path().join("AGENTS.md").exists(),
         "a model mock without a write call must not create project instructions");
 }
+
+
+#[test]
+fn files_command_shows_actual_successful_model_reads_and_survives_resume() {
+    let root=tempfile::tempdir().unwrap();
+    fs::write(root.path().join("example.rs"),"pub fn hello() {}").unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut reqs=Vec::new();
+        for index in 0..2 {
+            let (mut stream,_) = listener.accept().unwrap();
+            reqs.push(read_request(&mut stream));
+            let body=if index==0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"read-one","type":"function","function":{
+                        "name":"read_file","arguments":json!({"path":"example.rs"}).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant","content":"Read complete"},
+                    "finish_reason":"stop"}]})
+            }.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            stream.flush().unwrap();
+        }
+        reqs
+    });
+    let config=root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"local","providers":[{
+        "id":"local","kind":"openai-compatible","model":"test",
+        "base_url":format!("http://{address}/v1")
+    }]}).to_string()).unwrap();
+    let mut process=binary()
+        .args(["--workspace",root.path().to_str().unwrap(),
+            "--approval","read-only","chat"])
+        .env("ATLAS_CONFIG",&config)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped()).spawn().unwrap();
+    process.stdin.take().unwrap().write_all(b"/files\nRead a source file\n/files\n/exit\n").unwrap();
+    let output=process.wait_with_output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert_eq!(requests.len(),2);
+    let text=String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("No files in context"),"{text}");
+    assert!(text.contains("Files in context:\nexample.rs"),"{text}");
+    let saved=fs::read_dir(root.path().join(".atlas/sessions")).unwrap()
+        .next().unwrap().unwrap().path();
+    let document:Value=serde_json::from_str(&fs::read_to_string(saved).unwrap()).unwrap();
+    let mut child=binary()
+        .args(["--workspace",root.path().to_str().unwrap(),"chat",
+            "--resume",document["id"].as_str().unwrap()])
+        .env("ATLAS_CONFIG",&config)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped()).spawn().unwrap();
+    child.stdin.take().unwrap().write_all(b"/files\n/exit\n").unwrap();
+    let resumed=child.wait_with_output().unwrap();
+    assert!(resumed.status.success(),"{}",String::from_utf8_lossy(&resumed.stderr));
+    assert!(String::from_utf8_lossy(&resumed.stdout).contains("Files in context:\nexample.rs"));
+}
