@@ -308,7 +308,8 @@ impl PromptHistory {
         Ok(current.iter().map(|entry| self.resolve(entry)).collect())
     }
     pub fn get_timestamped_history(&self) -> Result<Vec<TimestampedEntry>> {
-        Ok(self.newest_project_entries(true)?
+        Ok(self
+            .newest_project_entries(true)?
             .into_iter()
             .map(|entry| TimestampedEntry {
                 display: entry.display,
@@ -320,7 +321,9 @@ impl PromptHistory {
         fs::create_dir_all(self.paste_dir())?;
         let path = self.paste_dir().join(format!("{hash}.txt"));
         // Readers in other sessions must never observe a half-written paste.
-        let temp = self.paste_dir().join(format!(".{hash}-{}.tmp", uuid::Uuid::new_v4()));
+        let temp = self
+            .paste_dir()
+            .join(format!(".{hash}-{}.tmp", uuid::Uuid::new_v4()));
         let outcome = (|| -> Result<()> {
             let mut file = private_file(&temp, false)?;
             file.write_all(content.as_bytes())?;

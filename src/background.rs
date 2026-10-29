@@ -298,7 +298,8 @@ impl BackgroundTasks {
             "newOffset":from_offset.saturating_add(bytes_read),
             "bytesRead":bytes_read,
             "bytesTotal":total,
-        }).to_string())
+        })
+        .to_string())
     }
 
     pub fn list(&self) -> Result<String> {
@@ -397,7 +398,11 @@ impl BackgroundTasks {
     }
 }
 
-fn read_output_range(path: &Path, offset: u64, max_bytes: u64) -> Result<Option<(String, u64, u64)>> {
+fn read_output_range(
+    path: &Path,
+    offset: u64,
+    max_bytes: u64,
+) -> Result<Option<(String, u64, u64)>> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -411,15 +416,24 @@ fn read_output_range(path: &Path, offset: u64, max_bytes: u64) -> Result<Option<
         Err(error) => return Err(error.into()),
     };
     let meta = file.metadata()?;
-    if !meta.is_file() { bail!("Task output is not a regular file") }
+    if !meta.is_file() {
+        bail!("Task output is not a regular file")
+    }
     let total = meta.len();
-    if offset >= total { return Ok(Some((String::new(), 0, total))) }
+    if offset >= total {
+        return Ok(Some((String::new(), 0, total)));
+    }
     use std::io::{Read, Seek, SeekFrom};
     file.seek(SeekFrom::Start(offset))?;
     let mut bytes = Vec::with_capacity((total - offset).min(max_bytes) as usize);
-    file.take((total - offset).min(max_bytes)).read_to_end(&mut bytes)?;
+    file.take((total - offset).min(max_bytes))
+        .read_to_end(&mut bytes)?;
     let count = bytes.len() as u64;
-    Ok(Some((String::from_utf8_lossy(&bytes).into_owned(), count, total)))
+    Ok(Some((
+        String::from_utf8_lossy(&bytes).into_owned(),
+        count,
+        total,
+    )))
 }
 
 fn tail(path: &str) -> Result<String> {
@@ -462,7 +476,11 @@ async fn spool<R: AsyncRead + Unpin>(stream: R, file: tokio::fs::File) -> Result
     spool_with_limit(stream, file, LOG_CAP).await
 }
 
-async fn spool_with_limit<R: AsyncRead + Unpin>(mut stream: R, mut file: tokio::fs::File, limit: u64) -> Result<bool> {
+async fn spool_with_limit<R: AsyncRead + Unpin>(
+    mut stream: R,
+    mut file: tokio::fs::File,
+    limit: u64,
+) -> Result<bool> {
     let mut buffer = [0u8; 8192];
     let mut size = 0u64;
     let mut truncated = false;
@@ -524,13 +542,17 @@ mod tests {
         let file = create_output_file(&path).unwrap();
         let (mut tx, rx) = tokio::io::duplex(32);
         let sending = tokio::spawn(async move {
-            tx.write_all(b"0123456789abcdefghijklmnopqrstuvwxyz").await.unwrap();
+            tx.write_all(b"0123456789abcdefghijklmnopqrstuvwxyz")
+                .await
+                .unwrap();
             tx.shutdown().await.unwrap();
         });
         assert!(spool_with_limit(rx, file, 10).await.unwrap());
         sending.await.unwrap();
-        assert_eq!(fs::read_to_string(path).unwrap(),
-            "0123456789\n[output truncated: exceeded 5GB disk cap]\n");
+        assert_eq!(
+            fs::read_to_string(path).unwrap(),
+            "0123456789\n[output truncated: exceeded 5GB disk cap]\n"
+        );
     }
 
     #[test]
@@ -544,7 +566,8 @@ mod tests {
         let first: Value = serde_json::from_str(&tasks.output_delta(&id, 0, 3).unwrap()).unwrap();
         assert_eq!(first["bytesRead"], 3);
         assert_eq!(first["newOffset"], 3);
-        let second: Value = serde_json::from_str(&tasks.output_delta(&id, 3, 800).unwrap()).unwrap();
+        let second: Value =
+            serde_json::from_str(&tasks.output_delta(&id, 3, 800).unwrap()).unwrap();
         assert_eq!(second["content"], "llo中文");
         assert_eq!(second["newOffset"], "héllo中文".len());
         let idle: Value = serde_json::from_str(&tasks.output_delta(&id, 999, 40).unwrap()).unwrap();
