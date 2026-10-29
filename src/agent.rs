@@ -1668,7 +1668,9 @@ impl Agent {
         let actual_end = number.find(|ch: char| !ch.is_ascii_digit())?;
         let actual = number[..actual_end].parse::<usize>().ok()?;
         let remaining = number[actual_end..].trim_start();
-        let suffix = remaining.strip_prefix("tokens").or_else(|| remaining.strip_prefix("token"))?;
+        let suffix = remaining
+            .strip_prefix("tokens")
+            .or_else(|| remaining.strip_prefix("token"))?;
         let after_delimiter = suffix.trim_start().strip_prefix('>')?.trim_start();
         let limit_end = after_delimiter
             .find(|ch: char| !ch.is_ascii_digit())
@@ -1701,31 +1703,49 @@ impl Agent {
                     _ => 0,
                 },
                 Some("tool_use") => {
-                    let name = block.get("name").and_then(serde_json::Value::as_str).unwrap_or("");
+                    let name = block
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("");
                     estimate(name)
-                        + block.get("input").map(|v| estimate(&v.to_string())).unwrap_or(0)
+                        + block
+                            .get("input")
+                            .map(|v| estimate(&v.to_string()))
+                            .unwrap_or(0)
                 }
-                Some("thinking") => block.get("thinking")
+                Some("thinking") => block
+                    .get("thinking")
                     .and_then(serde_json::Value::as_str)
                     .map(estimate)
                     .unwrap_or(0),
                 _ => estimate(&block.to_string()),
             }
         }
-        messages.iter().map(|message| {
-            let block_tokens = message.content_blocks.as_ref()
-                .filter(|blocks| !blocks.is_empty())
-                .map(|blocks| blocks.iter().map(estimate_block).sum::<usize>());
-            let text_tokens = block_tokens.unwrap_or_else(|| {
-                message.content.as_deref().map(estimate).unwrap_or(0)
-            });
-            let calls = message.tool_calls.as_ref()
-                .map(|calls| calls.iter().map(|call| {
-                    estimate(&call.function.name) + estimate(&call.function.arguments)
-                }).sum::<usize>())
-                .unwrap_or(0);
-            text_tokens.saturating_add(calls)
-        }).sum()
+        messages
+            .iter()
+            .map(|message| {
+                let block_tokens = message
+                    .content_blocks
+                    .as_ref()
+                    .filter(|blocks| !blocks.is_empty())
+                    .map(|blocks| blocks.iter().map(estimate_block).sum::<usize>());
+                let text_tokens = block_tokens
+                    .unwrap_or_else(|| message.content.as_deref().map(estimate).unwrap_or(0));
+                let calls = message
+                    .tool_calls
+                    .as_ref()
+                    .map(|calls| {
+                        calls
+                            .iter()
+                            .map(|call| {
+                                estimate(&call.function.name) + estimate(&call.function.arguments)
+                            })
+                            .sum::<usize>()
+                    })
+                    .unwrap_or(0);
+                text_tokens.saturating_add(calls)
+            })
+            .sum()
     }
 
     fn truncate_compact_rounds(history: &mut Vec<Message>, token_gap: Option<usize>) -> bool {
@@ -1735,7 +1755,11 @@ impl Agent {
         let previous_marker = history.first().is_some_and(|message| {
             message.role == "user" && message.content.as_deref() == Some(MARKER)
         });
-        let original = if previous_marker { &history[1..] } else { &history[..] };
+        let original = if previous_marker {
+            &history[1..]
+        } else {
+            &history[..]
+        };
         let mut boundaries = vec![0];
         for (index, message) in original.iter().enumerate() {
             if message.role == "assistant" && index > 0 {
@@ -1752,9 +1776,8 @@ impl Agent {
             for index in 0..boundaries.len() {
                 let first = boundaries[index];
                 let last = boundaries.get(index + 1).copied().unwrap_or(original.len());
-                estimated = estimated.saturating_add(
-                    Self::compact_round_token_estimate(&original[first..last])
-                );
+                estimated = estimated
+                    .saturating_add(Self::compact_round_token_estimate(&original[first..last]));
                 count += 1;
                 if estimated >= gap {
                     break;
@@ -1768,7 +1791,10 @@ impl Agent {
         let offset = usize::from(previous_marker);
         let drop_index = boundaries[groups_to_drop] + offset;
         let mut remaining = history.split_off(drop_index);
-        if remaining.first().is_some_and(|message| message.role == "assistant") {
+        if remaining
+            .first()
+            .is_some_and(|message| message.role == "assistant")
+        {
             remaining.insert(0, Message::text("user", MARKER));
         }
         *history = remaining;
@@ -1782,9 +1808,15 @@ impl Agent {
     }
 
     async fn compact_history_with_trigger(&mut self, automatic: bool) -> Result<()> {
-        if std::env::var("ATLAS_DISABLE_COMPACT").ok().is_some_and(|value| {
-            matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
-        }) {
+        if std::env::var("ATLAS_DISABLE_COMPACT")
+            .ok()
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+        {
             bail!("Compaction is disabled by ATLAS_DISABLE_COMPACT")
         }
         if self.session.messages.is_empty() {
@@ -1875,7 +1907,12 @@ impl Agent {
                         if let Some(usage) = response.usage {
                             self.record_usage(usage);
                         }
-                        if retries < 3 && Self::truncate_compact_rounds(&mut history, Self::compact_token_gap(&visible)) {
+                        if retries < 3
+                            && Self::truncate_compact_rounds(
+                                &mut history,
+                                Self::compact_token_gap(&visible),
+                            )
+                        {
                             retries += 1;
                             continue;
                         }
@@ -1885,7 +1922,12 @@ impl Agent {
                     break response;
                 }
                 Err(error) if Self::compact_context_limit(&format!("{error:#}")) => {
-                    if retries < 3 && Self::truncate_compact_rounds(&mut history, Self::compact_token_gap(&format!("{error:#}"))) {
+                    if retries < 3
+                        && Self::truncate_compact_rounds(
+                            &mut history,
+                            Self::compact_token_gap(&format!("{error:#}")),
+                        )
+                    {
                         retries += 1;
                         continue;
                     }
@@ -2028,15 +2070,21 @@ impl Agent {
             )));
         let auto_disabled = ["ATLAS_DISABLE_COMPACT", "ATLAS_DISABLE_AUTO_COMPACT"]
             .iter()
-            .any(|key| std::env::var(key).ok().is_some_and(|value| {
-                matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
-            }));
+            .any(|key| {
+                std::env::var(key).ok().is_some_and(|value| {
+                    matches!(
+                        value.trim().to_ascii_lowercase().as_str(),
+                        "1" | "true" | "yes" | "on"
+                    )
+                })
+            });
         // Model providers have different context windows. When the user
         // supplies the known window, use the original 13k-token headroom.
         // Without window metadata retain the prior ~25k-token threshold.
         let threshold = match std::env::var("ATLAS_CONTEXT_WINDOW_TOKENS") {
             Ok(raw) => {
-                let window = raw.parse::<usize>()
+                let window = raw
+                    .parse::<usize>()
                     .context("ATLAS_CONTEXT_WINDOW_TOKENS must be a positive integer")?;
                 if window < 1_024 {
                     bail!("ATLAS_CONTEXT_WINDOW_TOKENS must be at least 1024")
@@ -2044,7 +2092,11 @@ impl Agent {
                 // The original reserves 13k tokens for large contexts.
                 // Provider-neutral small models cannot reserve more tokens
                 // than their entire context window; use a quarter headroom.
-                if window > 13_000 { window - 13_000 } else { window - window / 4 }
+                if window > 13_000 {
+                    window - 13_000
+                } else {
+                    window - window / 4
+                }
             }
             Err(std::env::VarError::NotPresent) => 25_000,
             Err(error) => return Err(error.into()),
@@ -2056,8 +2108,7 @@ impl Agent {
             match self.compact_history_with_trigger(true).await {
                 Ok(()) => self.auto_compact_failures = 0,
                 Err(error) => {
-                    self.auto_compact_failures =
-                        self.auto_compact_failures.saturating_add(1);
+                    self.auto_compact_failures = self.auto_compact_failures.saturating_add(1);
                     eprintln!(
                         "Automatic compaction failed ({}/3): {error:#}",
                         self.auto_compact_failures
@@ -2406,10 +2457,7 @@ impl Agent {
                 // receive a matching result before the next model request.
                 let restricted_by_role = self.child_depth > 0
                     && self.prompt_role.as_deref().is_some_and(|role| {
-                        !crate::prompt_runtime::tool_allowed_for_role(
-                            role,
-                            &call.function.name,
-                        )
+                        !crate::prompt_runtime::tool_allowed_for_role(role, &call.function.name)
                     });
                 let invalid_input = if restricted_by_role {
                     Some(format!(
@@ -2923,7 +2971,8 @@ mod tests {
         async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
             if request.system.contains("# Independent verification agent") {
                 for tool in &request.tools {
-                    let name = tool.pointer("/function/name")
+                    let name = tool
+                        .pointer("/function/name")
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or("");
                     assert!(!matches!(name, "write_file" | "edit_file" | "spawn_agent"));
