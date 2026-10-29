@@ -349,6 +349,7 @@ fn dependency_install_plan(
         source: PathBuf,
         origin: Option<String>,
         root_marketplace: Option<&str>,
+        allowed_cross_marketplaces: &[String],
         is_root: bool,
         enabled: &[String],
         visited: &mut HashSet<String>,
@@ -432,8 +433,12 @@ fn dependency_install_plan(
             // automatic cross-market installation requires explicit trust.
             if dep_marketplace != root_marketplace {
                 let installed = checked_installed_root(root, false)?.join(dep_name);
-                if !enabled.iter().any(|item| item == dep_name) || !installed.is_dir() {
-                    bail!("Cross-marketplace dependency '{raw}' requires explicit installation");
+                let already_enabled = enabled.iter().any(|item| item == dep_name)
+                    && installed.is_dir();
+                let explicitly_trusted = dep_marketplace.is_some_and(|market|
+                    allowed_cross_marketplaces.iter().any(|trusted| trusted == market));
+                if !already_enabled && !explicitly_trusted {
+                    bail!("Cross-marketplace dependency '{raw}' is not trusted by the root marketplace");
                 }
             }
             let dep_source = if let Some(market) = dep_marketplace {
@@ -446,7 +451,7 @@ fn dependency_install_plan(
                 else { bail!("Dependency '{raw}' requires a registered marketplace"); }
             };
             visit(root, dep_name, dep_source, dep_origin, root_marketplace,
-                false, enabled, visited, stack, ordered)?;
+                allowed_cross_marketplaces, false, enabled, visited, stack, ordered)?;
         }
         stack.pop();
         visited.insert(name.to_owned());
@@ -455,10 +460,18 @@ fn dependency_install_plan(
     }
 
     let name = manifest_name(source)?;
+    let root_marketplace = root_origin.and_then(|id|
+        id.split_once('@').map(|(_, market)| market));
+    let allowed_cross_marketplaces = match root_marketplace {
+        Some(marketplace) => crate::marketplace_registry::local_marketplace_dependency_allowlist(
+            root, marketplace,
+        )?,
+        None => Vec::new(),
+    };
     let mut ordered = Vec::new();
     let mut visited = HashSet::new();
     visit(root, &name, source.to_owned(), root_origin.map(str::to_owned),
-        root_origin.and_then(|id| id.split_once('@').map(|(_, market)| market)),
+        root_marketplace, &allowed_cross_marketplaces,
         true, enabled, &mut visited, &mut Vec::new(), &mut ordered)?;
     Ok(ordered)
 }
