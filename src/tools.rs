@@ -75,6 +75,90 @@ impl FileReadCache {
     }
 }
 
+/// Source FileEditTool/utils.ts: match a model's straight quotes against
+/// typographic quotes while returning the exact on-disk byte span.
+fn normalized_quote(ch: char) -> char {
+    match ch {
+        '‘' | '’' => '\'',
+        '“' | '”' => '"',
+        other => other,
+    }
+}
+
+fn actual_edit_text(content: &str, requested: &str) -> Option<String> {
+    if content.contains(requested) {
+        return Some(requested.to_owned());
+    }
+    let needle: Vec<char> = requested.chars().map(normalized_quote).collect();
+    let haystack: Vec<(usize, char)> = content.char_indices().collect();
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return None;
+    }
+    for start in 0..=haystack.len() - needle.len() {
+        if needle.iter().enumerate().all(|(offset, expected)| {
+            normalized_quote(haystack[start + offset].1) == *expected
+        }) {
+            let first = haystack[start].0;
+            let end = haystack.get(start + needle.len())
+                .map(|(index, _)| *index).unwrap_or(content.len());
+            return Some(content[first..end].to_owned());
+        }
+    }
+    None
+}
+
+fn opening_quote_context(chars: &[char], index: usize) -> bool {
+    index == 0 || matches!(chars[index - 1], ' ' | '\t' | '\n' | '\r'
+        | '(' | '[' | '{' | '—' | '–')
+}
+
+fn preserve_curly_quotes(requested: &str, actual: &str, replacement: &str) -> String {
+    if requested == actual {
+        return replacement.to_owned();
+    }
+    let double = actual.contains('“') || actual.contains('”');
+    let single = actual.contains('‘') || actual.contains('’');
+    let chars: Vec<char> = replacement.chars().collect();
+    chars.iter().enumerate().map(|(i, ch)| match ch {
+        '"' if double => if opening_quote_context(&chars, i) { '“' } else { '”' },
+        '\'' if single => {
+            if i > 0 && i + 1 < chars.len()
+                && chars[i - 1].is_alphabetic() && chars[i + 1].is_alphabetic() {
+                '’'
+            } else if opening_quote_context(&chars, i) { '‘' } else { '’' }
+        }
+        other => *other,
+    }).collect()
+}
+
+/// Keep Markdown hard line breaks, while matching the original edit-input
+/// normalization for ordinary files.
+fn normalize_edit_replacement(path: &Path, replacement: &str) -> String {
+    let markdown = path.extension().and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("md")
+            || ext.eq_ignore_ascii_case("mdx"));
+    if markdown {
+        return replacement.to_owned();
+    }
+    let mut result = String::new();
+    let mut start = 0;
+    let mut chars = replacement.char_indices().peekable();
+    while let Some((index, ch)) = chars.next() {
+        if ch != '\r' && ch != '\n' { continue; }
+        result.push_str(replacement[start..index].trim_end_matches(char::is_whitespace));
+        if ch == '\r' && chars.peek().is_some_and(|(_, next)| *next == '\n') {
+            chars.next();
+            result.push_str("\r\n");
+            start = index + 2;
+        } else {
+            result.push(ch);
+            start = index + ch.len_utf8();
+        }
+    }
+    result.push_str(replacement[start..].trim_end_matches(char::is_whitespace));
+    result
+}
+
 fn modified_millis(metadata: &fs::Metadata) -> Result<u64> {
     Ok(metadata
         .modified()?
@@ -1178,7 +1262,10 @@ impl ToolExecutor {
         if content != prior.content {
             bail!("File has been modified since read. Read it again before editing");
         }
-        let hits = content.matches(old).count();
+        let actual_old = actual_edit_text(&content, old).unwrap_or_else(|| old.to_owned());
+        let hits = content.matches(&actual_old).count();
+        let normalized_new = normalize_edit_replacement(&path, new);
+        let replacement = preserve_curly_quotes(old, &actual_old, &normalized_new);
         let replace_all = args
             .get("replace_all")
             .and_then(Value::as_bool)
@@ -1187,9 +1274,9 @@ impl ToolExecutor {
             bail!("Expected exactly one match; found {hits}")
         }
         let updated = if replace_all {
-            content.replace(old, new)
+            content.replace(&actual_old, &replacement)
         } else {
-            content.replacen(old, new, 1)
+            content.replacen(&actual_old, &replacement, 1)
         };
         if updated.len() as u64 > MAX_FILE_BYTES {
             bail!("Updated file too large")
