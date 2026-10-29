@@ -306,7 +306,7 @@ async fn main() -> Result<()> {
                         return None;
                     }
                     let value = args.first().unwrap_or(&Value::Null);
-                    match name {
+                    match name.as_str() {
                         "renderableSearchText" => {
                             Some(json!(transcript_search::renderable_search_text(value)))
                         }
