@@ -67,18 +67,15 @@ mod tests {
             &second.state,
         ] {
             assert_eq!(value.len(), 43);
-            assert!(value.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'
-            }));
+            assert!(value
+                .bytes()
+                .all(|byte| { byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_' }));
             assert_eq!(URL_SAFE_NO_PAD.decode(value).unwrap().len(), 32);
         }
         assert_ne!(first.verifier, second.verifier);
         assert_ne!(first.state, second.state);
         assert_ne!(first.verifier, first.state);
-        assert_eq!(
-            first.challenge,
-            generate_code_challenge(&first.verifier)
-        );
+        assert_eq!(first.challenge, generate_code_challenge(&first.verifier));
         assert_eq!(first.challenge.len(), 43);
     }
 

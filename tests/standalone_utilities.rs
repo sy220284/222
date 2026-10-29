@@ -33,9 +33,9 @@ fn oauth_pkce_cli_uses_rfc_7636_sha256_with_independent_random_secrets() {
         for name in ["verifier", "challenge", "state"] {
             let token = item[name].as_str().unwrap();
             assert_eq!(token.len(), 43);
-            assert!(token.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')
-            }));
+            assert!(token
+                .bytes()
+                .all(|byte| { byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_') }));
         }
         assert_eq!(item["challenge_method"], "S256");
     }
