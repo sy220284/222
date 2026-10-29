@@ -1796,6 +1796,7 @@ impl Agent {
                     "parameters":{"type":"object","properties":{
                         "prompt":{"type":"string"},
                         "model":{"type":"string"},
+                        "subagent_type":{"type":"string","description":"Configured agent type; subject to Agent(type) permission rules."},
                         "isolation":{"type":"string","enum":["none","worktree"]}
                     },"required":["prompt"]}
                 }}));
@@ -2963,6 +2964,47 @@ mod tests {
         assert!(worker.run_team_tools(&call(id), &executor).await.is_err());
         let inbox = crate::team_mailbox::Mailbox::new(root.path(), "team").unwrap();
         assert_eq!(inbox.unread("team-lead").unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn agent_type_specific_deny_blocks_real_subagent_before_model_request() {
+        // permissions.ts::getDenyRuleForAgent uses exact Agent(type) matching.
+        let root = tempfile::tempdir().unwrap();
+        let profile = ProviderProfile {
+            id: "mock".into(),
+            kind: "openai-compatible".into(),
+            base_url: "http://127.0.0.1:1/v1".into(),
+            model: "mock".into(),
+            api_key_env: None,
+            stream: false,
+        };
+        let mut agent = Agent::new(
+            profile,
+            root.path().to_path_buf(),
+            Approval::Full,
+            false,
+            5,
+            Session::fresh(),
+        ).unwrap();
+        agent.set_permission_rules(&[permission_rules::RuleSetting {
+            behavior: "deny".into(),
+            rule: "Agent(Explore)".into(),
+        }]).unwrap();
+        let executor = ToolExecutor::new(root.path().to_path_buf(), Approval::Full, false)
+            .with_permission_rules(agent.permission_rules.clone());
+        let call = |agent_type: &str| ToolCall {
+            id: "agent-type-rule".into(),
+            kind: "function".into(),
+            function: crate::protocol::FunctionCall {
+                name: "spawn_agent".into(),
+                arguments: json!({"prompt":"Inspect project","subagent_type":agent_type})
+                    .to_string(),
+            },
+        };
+        let blocked = agent.run_subagent(&call("Explore"), &executor).await.unwrap_err();
+        assert!(blocked.to_string().contains("denied"), "{blocked:#}");
+        assert!(executor.approve_delegation(&call("Explorer")).is_ok());
+        assert!(!root.path().join(".atlas/worktrees").exists());
     }
 
     #[tokio::test]
