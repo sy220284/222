@@ -705,8 +705,11 @@ mod tests {
                 .unwrap();
             assert!(outcome.blocking_reason.is_none());
             assert_eq!(outcome.non_blocking_errors.len(), 1);
-            assert!(outcome.non_blocking_errors[0].contains("incorrect event name")
-                || outcome.non_blocking_errors[0].contains("hookEventName must be a known event"));
+            assert!(
+                outcome.non_blocking_errors[0].contains("incorrect event name")
+                    || outcome.non_blocking_errors[0]
+                        .contains("hookEventName must be a known event")
+            );
         }
     }
     #[cfg(unix)]
