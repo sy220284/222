@@ -298,3 +298,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：SDK 文本与图片混合消息贯通到多模型及会话（Issue #3）
 
 对照原始 2.1.88 SDK/Headless 用户消息数组、模型请求和消息恢复路径：新增 `src/multimodal.rs`，验证 image/png、jpeg、gif、webp 的本地 base64 图片，限制大小/数量，拒绝远程 URL、未知块及无效编码，不在文本预览中暴露原始 base64。`protocol::Message` 新增可选结构化块并存入既有会话，`Agent::ask_with_blocks` 让 SDK 直接消息和排队图片单项实际进入模型 API。OpenAI 兼容非流式和 SSE 分别使用同一 `image_url` data URI 转换，Gemini 非流式与流式共用 `inlineData` 转换；其他角色及工具调用不受影响。队列中的图片不会和旁边不同内容强行合批造成类型丢失，并继续保留原始 UUID 回放。新增真实 SDK 进程/模拟模型 HTTP 的直接+排队图片请求测试，同时验证原始图片块落盘及请求内容保真；另有两种模型编码适配、非法数据边界测试。当前仅支持本地 base64 图片和文本，语音、PDF、非图片资源、终端多模态 UI、全部 SDK Hook/权限/复杂附件仍未等价。本改动不升级任何已验收计数，CI 以最新提交检查结果为准。
+
+### 2026-10-29：补齐 Headless 图片与文本同负载合批回放
+
+进一步对照 `src/cli/print.ts` 的 `canBatchWith` 与 `joinPromptValues`：当排队消息 `workload` 和 `isMeta` 相同且为同组 `prompt`，允许图片和文本块跟随原队列顺序在一个 ModelRequest 中合并，不丢失图片、文本段或 UUID；既有 `skipSlashCommands`/Bash/权限通知的阻断规则保留。加入真实 SDK 进程与 HTTP 模拟模型单次请求测试：两条原始 UUID 分别回放/分别返回结果，模型仅接到一次包含文字+原始图片的图文请求，且本次队列排空；完整原厂多模态 UI/图片编码及 SDK 异步状态机仍待等价验收。本轮修复将旧文本数组测试从扁平字符串改为线协议中的结构化文本块逐项对照，验证拒绝非文本文件类型仍生效。以上不构成源路径逐文件完整验收。
