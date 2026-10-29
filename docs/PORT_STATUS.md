@@ -5,10 +5,11 @@
 - **补齐 1**：`Agent::set_sdk_agent_definitions` 对 SDK 初始化的定义进行完整字段验证、原子替换；`sdk_agent_descriptors` 合并会话内存 Agent 目录；`run_subagent` 在真实委派模型请求前使用定义中的 `prompt` 和 `model`，保留显式调用模型参数优先级及父级权限继承。提交 `4059f9436b57fb4def6660472fc6aea12c2d60a1`、`ddf8de52c0f59adad3efe125957c816b5a11c082`。
 - **补齐 2**：定义中的 `tools` 白名单既过滤子模型实际收到的工具目录，也在模型返回工具调用后、任何 PreToolUse Hook 或文件/命令副作用前强制复查，阻止模型自行构造被隐藏工具的调用；不扩大已有 Agent 角色权限。提交 `c691bf2fc076498e501a95ac5bbe14ae26b76e4b`。
 - **源码静态核对**：已在远端 HEAD `c691bf2fc076498e501a95ac5bbe14ae26b76e4b` 复查 SDK initialize → Agent 定义保存 → SDK 目录 → spawn_agent → 子模型提示词/模型/工具目录 → 工具执行前授权链，九个关键接线点均存在。按当前任务要求未运行 Cargo、测试或 CI，**以上 2 项仅已提交、待行为验收**。
-- **剩余差异**：原版 Agent 的 `skills`、`hooks`、`mcpServers`、`permissionMode`、`memory`、`initialPrompt`、`background`、`effort` 尚未进入完整 SDK 运行时；本轮对不支持的字段显式报错，避免默默丢弃权限限制。原版所有 agent 类型、团队传播、模型切换竞态和恢复时序仍待核对。
+- **剩余差异**：原版 Agent 的 `skills`、`hooks`、`mcpServers`、`permissionMode`、`memory`、`background`、`effort` 尚未进入完整 SDK 运行时；本轮对不支持的字段显式报错，避免默默丢弃权限限制。原版所有 agent 类型、团队传播、模型切换竞态和恢复时序仍待核对。
 - **补齐 3**：原版 `source/src/tools/AgentTool/loadAgentsDir.ts::parseAgentFromJson` 的 `disallowedTools` 在 SDK Agent 模型工具目录和实际工具执行前双重拦截，避免工具隐藏后仍被直接调用；`maxTurns` 限制委派子 Agent 的实际模型迭代次数，不能超过父级上限。代码提交 `7c6a945f023a12e30c769e86bbd16656ee4de4cf`。黑名单属于上述工具权限同一功能的深化，不重复计数；独立的最大轮次限制另计 1 项。
 - **补齐 4**：SDK Agent 定义的 `isolation: "worktree"` 现在实际进入 `run_subagent` 的工作树创建与外部操作权限检查；显式委派参数优先于定义默认值，子 Agent 在隔离工作区运行，继续保留原有工作树生命周期。代码提交 `cb4b6c9aa630accb9e84d1cb73ad62a76f7a9f3f`。此项按独立的用户工作区隔离行为计 1 项。
-- **本轮数量**：**4/100，剩余 96**。先行恰好 100 项逐功能源码缺口清单及全量实施方案仍未完成，A/B 流程和本轮数量目标未达标；冻结 Issue #3 的 362 项全部继续开放，新增完整等价验收 0。仅更新现有 Draft PR #2 分支，未修改 main、未合并。
+- **补齐 5**：对照 `source/src/main.tsx` 与 `source/src/tools/AgentTool/loadAgentsDir.ts` 的 `initialPrompt` 首轮提示词语义，SDK 自定义 Agent 现在会在首次子模型请求中将初始提示词放在用户委派任务之前，后续 Stop Hook 续问不重复注入。提交 `6f4bac9aa7603bcbe378e8cfc062e86003bf09e9`、换行修正 `5abf665595297ffd8f216cb54a0f5d863b72e9f3`。此项作为独立的首轮 Agent 引导行为计 1 项。
+- **本轮数量**：**5/100，剩余 95**。先行恰好 100 项逐功能源码缺口清单及全量实施方案仍未完成，A/B 流程和本轮数量目标未达标；冻结 Issue #3 的 362 项全部继续开放，新增完整等价验收 0。仅更新现有 Draft PR #2 分支，未修改 main、未合并。
 
 ## 2026-10-29：分支会话保留文件历史备份（源码已提交、待验收）
 
