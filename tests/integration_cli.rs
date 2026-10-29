@@ -4836,7 +4836,6 @@ fn sdk_polls_independent_http_mcp_get_resource_notifications_end_to_end() {
         .contains("mcp-session-id: sdk-session"));
 }
 
-
 #[test]
 fn interactive_permission_settings_persist_and_reload_without_model_calls() {
     let root = tempfile::tempdir().unwrap();
@@ -4846,8 +4845,10 @@ fn interactive_permission_settings_persist_and_reload_without_model_calls() {
         json!({"default_provider":"local","providers":[{
             "id":"local","kind":"openai-compatible","model":"test",
             "base_url":"http://127.0.0.1:9/v1","stream":false
-        }]}).to_string(),
-    ).unwrap();
+        }]})
+        .to_string(),
+    )
+    .unwrap();
     let local = root.path().join(".atlas/settings.local.json");
     fs::create_dir_all(local.parent().unwrap()).unwrap();
     fs::write(&local, json!({"hooks":{"keep":"untouched"}}).to_string()).unwrap();
@@ -4864,7 +4865,11 @@ fn interactive_permission_settings_persist_and_reload_without_model_calls() {
         b"/permission add local allow Bash(touch allowed)\n/permission add local allow Bash(touch allowed)\n/permission delete local allow Bash(touch allowed)\n/exit\n"
     ).unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Permission updated"), "{stdout}");
     let settings: Value = serde_json::from_slice(&fs::read(&local).unwrap()).unwrap();
@@ -4881,14 +4886,18 @@ fn interactive_managed_only_policy_blocks_persistent_grants() {
         json!({"default_provider":"local","providers":[{
             "id":"local","kind":"openai-compatible","model":"test",
             "base_url":"http://127.0.0.1:9/v1","stream":false
-        }]}).to_string(),
-    ).unwrap();
+        }]})
+        .to_string(),
+    )
+    .unwrap();
     let policy = root.path().join("managed.json");
     fs::write(
         &policy,
         json!({"allowManagedPermissionRulesOnly":true,
-            "permissions":{"deny":["Bash(touch forbidden)"]}}).to_string(),
-    ).unwrap();
+            "permissions":{"deny":["Bash(touch forbidden)"]}})
+        .to_string(),
+    )
+    .unwrap();
     let mut child = binary()
         .args(["--workspace", root.path().to_str().unwrap(), "chat"])
         .env("ATLAS_CONFIG", &config)
@@ -4899,13 +4908,18 @@ fn interactive_managed_only_policy_blocks_persistent_grants() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    child.stdin.take().unwrap().write_all(
-        b"/permission add local allow Bash(touch forbidden)\n/exit\n"
-    ).unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"/permission add local allow Bash(touch forbidden)\n/exit\n")
+        .unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("policy-locked")
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
     );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("policy-locked"));
     assert!(!root.path().join(".atlas/settings.local.json").exists());
 }
