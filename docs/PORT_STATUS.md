@@ -1,5 +1,10 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：权限规则来源接入 Agent 执行链
+
+已对照原版 `permissionsLoader.ts`、`settings/constants.ts`、`settings/settings.ts`、`permissionRuleParser.ts`，在 `src/permission_settings.rs` 实现用户/项目/本地/配置/托管规则加载、托管策略独占、规范化规则持久化增删、跨进程锁和原子写入，并从 `src/main.rs` 接入 Agent 工具权限执行。新增真实 Shell 文件副作用、16 线程并发、损坏 JSON、符号链接越界和来源优先级回归。未实现原版全部设置来源/热更新/审批 UI，**冻结 362 项不勾选，已验收数不变**。CI 以最新 HEAD 为准。
+
+
 ## 2026-10-29：PowerShell 独立模型工具名接通真实执行器
 
 对照原版 `PowerShellTool.tsx`、`toolName.ts`、`powershellPermissions.ts`，补齐此前原版 `PowerShell` 工具名不在模型工具清单且执行器返回 Unknown tool 的主链缺口。PowerShell 会话现可发现原版工具定义，显式工具调用使用 PowerShell 进程、PowerShell 规则、毫秒超时及前后台任务生命周期；后台进程逐次指定 shell，不更改共享默认值，避免并发任务互相污染。测试覆盖真实工具入口、缺少 PowerShell 安装时不回退 Bash、权限拒绝及后台 Shell 隔离。代码涉及 `src/agent.rs`、`src/tools.rs`、`src/background.rs`。
