@@ -335,3 +335,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### Shell 会话环境变量生产链补充
 
 按原版 `src/utils/sessionEnvVars.ts` 的会话内增删查语义，提供交互 `/env NAME=VALUE`、`/env -u NAME`、`/env`；变量不污染主进程全局环境，也不写会话文件。Agent 负责唯一状态，前台命令、后台任务与子代理/团队成员共享其本会话变量快照；更新后后台任务新启动的进程得到新值。真实 CLI→模拟模型→Shell→模型回填覆盖设置、撤销和隔离。完整 Hook/MCP/LSP 子进程环境透传和原版交互表单待补，该路径仅计部分实现。
+
+### 2026-10-29：Issue #3 MCP roots/list 工作区身份与重连一致性
+
+对照 2.1.88 源码 `src/services/mcp/client.ts` 1009–1018 行的 ListRootsRequestSchema 及当前 Rust `server_request_reply`：原实现以进程 `current_dir()` 回答任何服务端 roots/list，即使 CLI 用 `--workspace` 指向不同项目，或子 Agent 在独立 worktree。此时 MCP 服务获得错误根目录，破坏路径权限和上下文隔离。改为每个 MCP 管理器持有经过 canonicalize 的当前 Agent 根目录，stdio 子进程在工作区内启动；stdio 和 Streamable HTTP SSE 服务端 roots/list 均从绑定根目录产生 URI。断线重连也继承此根目录而非回退为进程 CWD。新增真实 stdio 子进程初始化时服务端主动 roots/list 并对照期望 URI 测试，HTTP SSE 服务端主动 roots/list 检验与独立工作区相等，另加权限回归检测根目录不等于全局 CWD。仍不代表 MCP client 完整等价；交互 elicitation/独立 GET SSE/完整授权/UI 尚缺，源路径继续标部分实现。

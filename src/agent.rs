@@ -142,7 +142,7 @@ impl Agent {
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
         self.mcp_configs = servers.to_vec();
         if !servers.is_empty() {
-            self.mcp = Some(McpManager::connect(servers).await?);
+            self.mcp = Some(McpManager::connect_with_root(servers,&self.root).await?);
         }
         Ok(())
     }

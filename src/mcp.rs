@@ -1,7 +1,7 @@
 use crate::{config::McpServerConfig, protocol::ToolCall, compat_helpers, runtime_contracts};
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
-use std::{collections::HashMap, process::Stdio, time::Duration};
+use std::{collections::HashMap, path::{Path,PathBuf}, process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout, Command},
@@ -11,6 +11,12 @@ use tokio::{
 /// Handle server-initiated requests before comparing JSON-RPC IDs with
 /// outstanding client calls; both sides have independent ID namespaces.
 pub(crate) fn server_request_reply(message:&Value)->Result<Option<Value>>{
+    let root=std::env::current_dir()?;
+    server_request_reply_for_root(message,&root)
+}
+/// Respond with this agent session's workspace, not the host process CWD.
+/// CLI --workspace and delegated worktrees must never leak a different root.
+pub(crate) fn server_request_reply_for_root(message:&Value,root:&Path)->Result<Option<Value>>{
     let Some(method)=message.get("method").and_then(Value::as_str) else{
         return Ok(None)
     };
@@ -21,9 +27,8 @@ pub(crate) fn server_request_reply(message:&Value)->Result<Option<Value>>{
     let result=match method{
         "ping"=>json!({}),
         "roots/list"=>{
-            let root=std::env::current_dir()
-                .context("MCP workspace directory unavailable")?
-                .canonicalize().context("MCP workspace directory invalid")?;
+            let root=root.canonicalize().context("MCP workspace directory invalid")?;
+            if !root.is_dir(){bail!("MCP workspace root must be a directory")}
             let uri=reqwest::Url::from_directory_path(&root)
                 .map_err(|_|anyhow::anyhow!("MCP workspace has no file URI"))?;
             json!({"roots":[{"uri":uri.as_str()}]})
@@ -48,10 +53,11 @@ struct Client {
     capabilities: Option<Value>,
     tools_changed: bool,
     resource_updates: Vec<Value>,
+    root: PathBuf,
 }
 
 impl Client {
-    async fn connect(server: &McpServerConfig) -> Result<Self> {
+    async fn connect(server: &McpServerConfig, root:&Path) -> Result<Self> {
         let expand = |raw: &str| -> Result<String> {
             let data=compat_helpers::expand_env_vars_in_string(raw);
             if !data.missing_vars.is_empty() {
@@ -65,14 +71,14 @@ impl Client {
         let mut env=std::collections::HashMap::new();
         for (k,v) in &server.env {env.insert(k.clone(),expand(v)?);}
         let mut process = Command::new(&executable);
-        process.args(&args).envs(env).stdin(Stdio::piped())
+        process.args(&args).envs(env).current_dir(root).stdin(Stdio::piped())
             .stdout(Stdio::piped()).stderr(Stdio::inherit()).kill_on_drop(true);
         let mut child = process.spawn()
             .with_context(|| format!("Starting MCP server {}", server.id))?;
         let input = child.stdin.take().context("MCP stdin unavailable")?;
         let output = BufReader::new(child.stdout.take().context("MCP stdout unavailable")?);
         let mut client = Self { name: server.id.clone(), _child: child, input, output, id: 1, server_info: None, capabilities: None,
-            tools_changed: false, resource_updates: Vec::new() };
+            tools_changed: false, resource_updates: Vec::new(), root: root.to_path_buf() };
         let initialized=timeout(RPC_TIMEOUT, client.request("initialize", json!({
             "protocolVersion":"2025-03-26",
             "capabilities":{"roots":{},"elicitation":{}},
@@ -103,7 +109,7 @@ impl Client {
             }
             let message: Value = serde_json::from_str(&line)
                 .with_context(|| format!("MCP server {} returned non-JSON data", self.name))?;
-            if let Some(response)=server_request_reply(&message)?{
+            if let Some(response)=server_request_reply_for_root(&message,&self.root)?{
                 self.send(&response).await?;
                 continue;
             }
@@ -135,10 +141,10 @@ enum TransportClient {
     Http(crate::mcp_http::HttpClient),
 }
 impl TransportClient {
-    async fn connect(config:&McpServerConfig)->Result<Self>{
+    async fn connect(config:&McpServerConfig,root:&Path)->Result<Self>{
         match config.transport.as_deref().unwrap_or("stdio"){
-            "stdio"=>Ok(Self::Stdio(Client::connect(config).await?)),
-            "http"=>Ok(Self::Http(crate::mcp_http::HttpClient::connect(config).await?)),
+            "stdio"=>Ok(Self::Stdio(Client::connect(config,root).await?)),
+            "http"=>Ok(Self::Http(crate::mcp_http::HttpClient::connect_with_root(config,root).await?)),
             other=>bail!("Unsupported MCP transport: {other}"),
         }
     }
@@ -194,19 +200,26 @@ pub struct McpManager {
     status_clients: Vec<Option<usize>>,
     resource_subscriptions: std::collections::HashSet<(String,String)>,
     configs: Vec<McpServerConfig>,
+    root: PathBuf,
 }
 
 impl McpManager {
-    pub async fn connect(servers: &[McpServerConfig])->Result<Self>{
+    pub async fn connect(servers:&[McpServerConfig])->Result<Self>{
+        let root=std::env::current_dir().context("MCP workspace directory unavailable")?;
+        Self::connect_with_root(servers,&root).await
+    }
+    pub async fn connect_with_root(servers:&[McpServerConfig],root:&Path)->Result<Self>{
         if servers.len()>16 {bail!("Too many MCP servers")}
+        let root=root.canonicalize().context("MCP workspace does not exist")?;
+        if !root.is_dir(){bail!("MCP workspace must be a directory")}
         let mut out=Self{clients:Vec::new(),tools:Vec::new(),
             routes:HashMap::new(),server_statuses:Vec::new(),status_clients:Vec::new(),
             resource_subscriptions:std::collections::HashSet::new(),
-            configs:servers.to_vec()};
+            configs:servers.to_vec(),root:root.clone()};
         for server in servers{
             // Failed servers are isolated; one broken MCP process must not
             // prevent the healthy tools from operating.
-            let mut client=match TransportClient::connect(server).await{
+            let mut client=match TransportClient::connect(server,&root).await{
                 Ok(client)=>client,
                 Err(error)=>{
                     out.failed_status(server,format!("Connection failed: {error:#}"));
@@ -303,7 +316,7 @@ impl McpManager {
     async fn reconnect_server(&mut self,position:usize)->Result<()>{
         let config=self.configs.get(position)
             .context("MCP reconnect config not found")?.clone();
-        let mut fresh=Self::connect(&[config.clone()]).await?;
+        let mut fresh=Self::connect_with_root(&[config.clone()],&self.root).await?;
         if fresh.server_statuses[0]["status"]!="connected"{
             bail!("MCP {} reconnect failed",config.id)
         }
@@ -759,6 +772,50 @@ done"#;
         assert_eq!(mgr.definitions().len(),2);
     }
 
+    #[tokio::test]
+    async fn stdio_server_initialization_roots_are_bound_to_requested_workspace(){
+        let workspace=tempfile::tempdir().unwrap();
+        let expected=reqwest::Url::from_directory_path(workspace.path().canonicalize().unwrap())
+            .unwrap().to_string();
+        let script=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":"server-roots-request","method":"roots/list"}'
+    IFS= read -r roots
+    case "$roots" in
+      *'"id":"server-roots-request"'*"$EXPECTED_WORKSPACE"*)
+        printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"tools":{}}}}'
+        ;;
+      *)
+        printf '%s\n' '{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"incorrect workspace root"}}'
+        ;;
+    esac
+    ;;
+  *'"method":"tools/list"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"root_verified"}]}}'
+    ;;
+esac
+done"#;
+        let mut env=HashMap::new();env.insert("EXPECTED_WORKSPACE".to_owned(),expected);
+        let config=McpServerConfig{id:"workspace".into(),command:"sh".into(),
+            args:vec!["-c".into(),script.into()],env,transport:None,url:None,
+            headers:HashMap::new()};
+        let manager=McpManager::connect_with_root(&[config],workspace.path()).await.unwrap();
+        assert_eq!(manager.server_statuses[0]["status"],"connected",
+            "{:?}",manager.server_statuses);
+        assert!(manager.handles("mcp__workspace__root_verified"));
+    }
+    #[test]
+    fn roots_reply_uses_explicit_workspace_not_global_process_directory(){
+        let dir=tempfile::tempdir().unwrap();
+        let request=json!({"jsonrpc":"2.0","id":"server-request","method":"roots/list"});
+        let actual=server_request_reply_for_root(&request,dir.path()).unwrap().unwrap();
+        assert_eq!(actual["id"],"server-request");
+        let expected=reqwest::Url::from_directory_path(dir.path().canonicalize().unwrap())
+            .unwrap().to_string();
+        assert_eq!(actual["result"]["roots"][0]["uri"],expected);
+        assert_ne!(dir.path().canonicalize().unwrap(),std::env::current_dir().unwrap());
+    }
     #[tokio::test]
     async fn normalized_tool_identity_collisions_are_rejected_without_route_overwrite(){
         let one=r#"while IFS= read -r line; do

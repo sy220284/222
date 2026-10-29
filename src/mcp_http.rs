@@ -4,7 +4,7 @@ use crate::{compat_helpers,config::McpServerConfig};
 use anyhow::{bail,Context,Result};
 use reqwest::{Client,Url,header::{HeaderMap,HeaderName,HeaderValue,CONTENT_TYPE,ACCEPT}};
 use serde_json::{json,Value};
-use std::{str::FromStr,time::Duration};
+use std::{str::FromStr,path::{Path,PathBuf},time::Duration};
 pub struct HttpClient {
     name:String,
     client:Client,
@@ -16,9 +16,14 @@ pub struct HttpClient {
     pub capabilities:Option<Value>,
     pub tools_changed:bool,
     pub resource_updates:Vec<Value>,
+    root:PathBuf,
 }
 impl HttpClient{
     pub async fn connect(config:&McpServerConfig)->Result<Self>{
+        let root=std::env::current_dir().context("MCP workspace directory unavailable")?;
+        Self::connect_with_root(config,&root).await
+    }
+    pub async fn connect_with_root(config:&McpServerConfig,root:&Path)->Result<Self>{
         let url=config.url.as_deref().context("HTTP MCP requires url")?;
         let url=Url::parse(url).context("Invalid MCP URL")?;
         if !matches!(url.scheme(),"http"|"https"){bail!("MCP HTTP requires http(s)")}
@@ -44,7 +49,7 @@ impl HttpClient{
             .redirect(reqwest::redirect::Policy::none()).build()?;
         let mut http=Self{name:config.id.clone(),client,url,headers,
             session:None,id:1,server_info:None,capabilities:None,
-            tools_changed:false,resource_updates:Vec::new()};
+            tools_changed:false,resource_updates:Vec::new(),root:root.to_path_buf()};
         let initial=http.request("initialize",json!({
             "protocolVersion":"2025-03-26","capabilities":{"roots":{},"elicitation":{}},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
@@ -117,7 +122,7 @@ impl HttpClient{
                     let frame=std::str::from_utf8(&pending[..end])
                         .context("Invalid MCP SSE UTF-8")?;
                     for event in parse_sse(frame)?{
-                        if let Some(response)=crate::mcp::server_request_reply(&event)?{
+                        if let Some(response)=crate::mcp::server_request_reply_for_root(&event,&self.root)?{
                             self.reply_to_server(&response).await?;
                             continue;
                         }
@@ -232,6 +237,9 @@ mod tests{
         }
         let listener=TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address=listener.local_addr().unwrap();
+        let workspace=tempfile::tempdir().unwrap();
+        let expected_root=reqwest::Url::from_directory_path(
+            workspace.path().canonicalize().unwrap()).unwrap().to_string();
         let (release,finish)=oneshot::channel::<()>();
         let server=tokio::spawn(async move{
             let mut sse:Option<TcpStream>=None;
@@ -264,7 +272,7 @@ mod tests{
                     3=>{
                         assert!(raw.to_ascii_lowercase().contains("mcp-session-id: test-session"));
                         assert_eq!(value["id"],91);
-                        assert!(value["result"]["roots"][0]["uri"].as_str().unwrap().starts_with("file://"));
+                        assert_eq!(value["result"]["roots"][0]["uri"],expected_root);
                         socket.write_all(accepted).await.unwrap();
                         frame(sse.as_mut().unwrap(),json!({"jsonrpc":"2.0","id":92,
                             "method":"ping"})).await;
@@ -283,7 +291,8 @@ mod tests{
             let _=finish.await;
         });
         let mut client=timeout(Duration::from_secs(4),
-            HttpClient::connect(&config(format!("http://{address}/mcp"))))
+            HttpClient::connect_with_root(&config(format!("http://{address}/mcp")),
+                workspace.path()))
             .await.unwrap().unwrap();
         let result=timeout(Duration::from_secs(4),
             client.request("tools/list",json!({}))).await.unwrap().unwrap();
