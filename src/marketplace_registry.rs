@@ -288,6 +288,54 @@ pub fn resolve_local_plugin_by_name(project: &Path, plugin: &str) -> Result<(Str
     )
 }
 
+/// Resolve enabled-plugin identities from installed origin records. The
+/// marketplace's name alone is insufficient: two catalogs may contain a
+/// plugin with the same short name. Never follow redirected storage or origin
+/// files while deciding which user plugins to disable.
+fn installed_plugins_from_marketplace(root: &Path, marketplace: &str) -> Result<Vec<String>> {
+    let directory = root.join(".atlas/plugins");
+    let metadata = match fs::symlink_metadata(&directory) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        bail!("Installed plugin storage is redirected or invalid");
+    }
+    if !directory.canonicalize()?.starts_with(root.canonicalize()?) {
+        bail!("Installed plugin storage escapes the workspace");
+    }
+    let mut affected = Vec::new();
+    for entry in fs::read_dir(&directory)? {
+        let entry = entry?;
+        let metadata = entry.file_type()?;
+        if metadata.is_symlink() || !metadata.is_dir() {
+            continue;
+        }
+        let Some(plugin) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        let origin = entry.path().join(".atlas-plugin-origin.json");
+        let metadata = match fs::symlink_metadata(&origin) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            bail!("Plugin '{plugin}' has an invalid marketplace identity file");
+        }
+        let value: Value = serde_json::from_slice(&fs::read(&origin)?)
+            .with_context(|| format!("Invalid marketplace identity for plugin '{plugin}'"))?;
+        let identity = value.get("pluginId").and_then(Value::as_str)
+            .with_context(|| format!("Plugin '{plugin}' is missing its marketplace identity"))?;
+        if identity == format!("{plugin}@{marketplace}") {
+            affected.push(plugin);
+        }
+    }
+    affected.sort();
+    Ok(affected)
+}
+
 fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
@@ -339,12 +387,38 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
             let name = target
                 .filter(|t| !t.trim().is_empty())
                 .context("Marketplace name is required")?;
-            if registry.remove(name).is_none() {
+            if !registry.contains_key(name) {
                 bail!("Marketplace '{name}' not found");
             }
-            // No deletion of the user-owned source folder/file.
-            save(root, &registry)?;
-            Ok(json!({"removed":name}))
+            // marketplaceManager.ts::removeMarketplaceSource removes every
+            // enabled plugin belonging to this marketplace from settings.
+            // Our local installations are named by plugin, so use their
+            // persisted origin identity to avoid disabling an unrelated
+            // plugin with the same short name.
+            let affected = installed_plugins_from_marketplace(root, name)?;
+            let original_config = crate::config::Config::load()?;
+            let mut updated_config = original_config.clone();
+            updated_config.enabled_plugins.retain(|plugin| !affected.contains(plugin));
+            let changed = updated_config.enabled_plugins != original_config.enabled_plugins;
+            if changed {
+                updated_config.save()?;
+            }
+            registry.remove(name);
+            // Do not leave the user's plugins disabled if the marketplace
+            // registry cannot be saved. Preserve the original error and
+            // report any failure to restore the previous configuration.
+            if let Err(error) = save(root, &registry) {
+                if changed {
+                    if let Err(rollback) = original_config.save() {
+                        bail!("Could not remove marketplace '{name}': {error:#}; could not restore enabled plugins: {rollback:#}");
+                    }
+                }
+                return Err(error);
+            }
+            // Removing a registry entry never deletes user-owned sources or
+            // installed plugin data; it only prevents the removed catalog's
+            // plugins from executing in future sessions.
+            Ok(json!({"removed":name,"disabledPlugins":affected}))
         }
         "update" => {
             let names = if let Some(name) = target.filter(|v| !v.trim().is_empty()) {
