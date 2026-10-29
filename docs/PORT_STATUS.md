@@ -5,13 +5,14 @@
 - **补齐 1**：`Agent::set_sdk_agent_definitions` 对 SDK 初始化的定义进行完整字段验证、原子替换；`sdk_agent_descriptors` 合并会话内存 Agent 目录；`run_subagent` 在真实委派模型请求前使用定义中的 `prompt` 和 `model`，保留显式调用模型参数优先级及父级权限继承。提交 `4059f9436b57fb4def6660472fc6aea12c2d60a1`、`ddf8de52c0f59adad3efe125957c816b5a11c082`。
 - **补齐 2**：定义中的 `tools` 白名单既过滤子模型实际收到的工具目录，也在模型返回工具调用后、任何 PreToolUse Hook 或文件/命令副作用前强制复查，阻止模型自行构造被隐藏工具的调用；不扩大已有 Agent 角色权限。提交 `c691bf2fc076498e501a95ac5bbe14ae26b76e4b`；补充原版 `tools: ["*"]` 通配允许语义并保持执行门禁一致的提交 `d309e2abddce42129f09e9376ceec6be88946389`。 进一步对工具名执行原版别名规范化，并在尚无命令级权限解析的参数化规则上显式拒绝，避免误把 `Bash(git:*)` 扩大成完整 Shell 授权：`b73e4ee07ce1b3242367bfaa50e345135b384e7f`。
 - **源码静态核对**：已在远端 HEAD `c691bf2fc076498e501a95ac5bbe14ae26b76e4b` 复查 SDK initialize → Agent 定义保存 → SDK 目录 → spawn_agent → 子模型提示词/模型/工具目录 → 工具执行前授权链，九个关键接线点均存在。按当前任务要求未运行 Cargo、测试或 CI，**以上 2 项仅已提交、待行为验收**。
-- **剩余差异**：原版 Agent 的 `skills`、`hooks`、`mcpServers`、`memory`、`background`、`effort` 尚未进入完整 SDK 运行时；本轮对不支持的字段显式报错，避免默默丢弃权限限制。原版所有 agent 类型、团队传播、模型切换竞态和恢复时序仍待核对。
+- **剩余差异**：原版 Agent 的 `hooks`、`mcpServers`、`memory`、`background`、`effort` 尚未进入完整 SDK 运行时；本轮对不支持的字段显式报错，避免默默丢弃权限限制。原版所有 agent 类型、团队传播、模型切换竞态和恢复时序仍待核对。
 - **补齐 3**：原版 `source/src/tools/AgentTool/loadAgentsDir.ts::parseAgentFromJson` 的 `disallowedTools` 在 SDK Agent 模型工具目录和实际工具执行前双重拦截，避免工具隐藏后仍被直接调用；`maxTurns` 限制委派子 Agent 的实际模型迭代次数，不能超过父级上限。代码提交 `7c6a945f023a12e30c769e86bbd16656ee4de4cf`。黑名单属于上述工具权限同一功能的深化，不重复计数；独立的最大轮次限制另计 1 项。
 - **补齐 4**：SDK Agent 定义的 `isolation: "worktree"` 现在实际进入 `run_subagent` 的工作树创建与外部操作权限检查；显式委派参数优先于定义默认值，子 Agent 在隔离工作区运行，继续保留原有工作树生命周期。代码提交 `cb4b6c9aa630accb9e84d1cb73ad62a76f7a9f3f`。此项按独立的用户工作区隔离行为计 1 项。
 - **补齐 5**：对照 `source/src/main.tsx` 与 `source/src/tools/AgentTool/loadAgentsDir.ts` 的 `initialPrompt` 首轮提示词语义，SDK 自定义 Agent 现在会在首次子模型请求中将初始提示词放在用户委派任务之前，后续 Stop Hook 续问不重复注入。提交 `6f4bac9aa7603bcbe378e8cfc062e86003bf09e9`、换行修正 `5abf665595297ffd8f216cb54a0f5d863b72e9f3`。此项作为独立的首轮 Agent 引导行为计 1 项。
 - **最终静态复核**：在远端 HEAD `d5ebd9cd34156b9709b53dcc811d9658b7157413` 重新核对初始化、定义替换、目录、子模型提示词、模型选择、白/黑名单、参数化规则拒绝、轮次限制、工作树隔离、初始提示词等 11 个关键入口与关联分支均存在；PR #2 仍是中文标题 Draft，Issue #3 仍开放。未进行行为验收或 Cargo/CI。
 - **补齐 6**：SDK Agent 定义的 `permissionMode` 进入实际子 Agent `ToolExecutor` 权限判断；根据父会话的权限上限阻止自动编辑、完全授权等越权切换，保留计划模式和免询问模式的限制，拒绝尚无分类器的 `auto`。原版依据 `source/src/tools/AgentTool/loadAgentsDir.ts` 与 `runAgent.ts`，提交 `ada3c4e0d7c18bc84858bebb0e5d1360b73e908a`、权限上限修正 `163b51bca33409b2c3b33253aa069d6c52dbee98`；进一步将拒绝判断前置到工作树创建和子进程启动之前，避免越权请求留下副作用：`b216ed1683d84711e891a23f60e67c1544849cad`。此项作为独立的子 Agent 权限模式控制计 1 项。
-- **本轮数量**：**6/100，剩余 94**。先行恰好 100 项逐功能源码缺口清单及全量实施方案仍未完成，A/B 流程和本轮数量目标未达标；冻结 Issue #3 的 362 项全部继续开放，新增完整等价验收 0。仅更新现有 Draft PR #2 分支，未修改 main、未合并。
+- **补齐 7**：对照原版 `source/src/tools/AgentTool/runAgent.ts` 的技能预加载，SDK 自定义 Agent `skills` 列表现在经 `ToolExecutor::preload_agent_skill` 实际读取已授权的项目/插件技能内容，按声明顺序作为独立用户上下文消息进入子 Agent 的首次模型请求；读取使用模型可调用技能规则，缺失/拒绝明确报错，且在创建隔离工作树之前处理。提交 `7c1e1502efe2aff9bcac35de10c09c1bce107a4a`、`2bef33fa7038e1979aae985bd9a9267f33985010`、换行修正 `cdc00b6dc9930916b41d6e41101d07ebe39db418`。独立计 1 项用户可感知的 Agent 技能预加载；原版的技能别名宽松匹配、缺失技能警告跳过、元消息 UI 仍有差异。
+- **本轮数量**：**7/100，剩余 93**。先行恰好 100 项逐功能源码缺口清单及全量实施方案仍未完成，A/B 流程和本轮数量目标未达标；冻结 Issue #3 的 362 项全部继续开放，新增完整等价验收 0。仅更新现有 Draft PR #2 分支，未修改 main、未合并。
 
 ## 2026-10-29：分支会话保留文件历史备份（源码已提交、待验收）
 
