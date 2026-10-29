@@ -192,14 +192,16 @@ fn sort_oldest(items: &mut [PathBuf]) {
 fn relative<'a>(root: &'a Path, path: &'a Path) -> Result<&'a Path> {
     Ok(path.strip_prefix(root).unwrap_or(path))
 }
-fn bounded_num(args: &Value, name: &str, default: u64, max: u64) -> Result<usize> {
+fn nonnegative_num(args: &Value, name: &str, default: u64) -> Result<usize> {
     let number = match args.get(name) {
         Some(raw) => raw
             .as_u64()
             .with_context(|| format!("{name} must be nonnegative integer"))?,
         None => default,
     };
-    Ok(number.min(max) as usize)
+    // GrepTool.ts passes caller-supplied offsets, context sizes and limits
+    // through to ripgrep. Silent caps returned fewer lines than requested.
+    usize::try_from(number).with_context(|| format!("{name} exceeds platform index range"))
 }
 /// Validate original strict GlobTool/GrepTool inputs before permissions or
 /// PreToolUse hooks. Schema-hidden semantic strings are normalized first,
@@ -447,8 +449,8 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
     if !matches!(mode, "files_with_matches" | "count" | "content") {
         bail!("Invalid output_mode: {mode}")
     }
-    let offset = bounded_num(args, "offset", 0, 100_000)?;
-    let requested_limit = bounded_num(args, "head_limit", 250, 100_000)?;
+    let offset = nonnegative_num(args, "offset", 0)?;
+    let requested_limit = nonnegative_num(args, "head_limit", 250)?;
     // GrepTool.ts: explicit head_limit=0 disables pagination, not "show 10000".
     let limit = if requested_limit == 0 {
         usize::MAX
@@ -458,9 +460,9 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
     // The original -C/context option overrides -A and -B, rather than
     // taking their maximum. Explicit 0 must override other context flags.
     let around = if args.get("context").is_some() {
-        Some(bounded_num(args, "context", 0, 100)?)
+        Some(nonnegative_num(args, "context", 0)?)
     } else if args.get("-C").is_some() {
-        Some(bounded_num(args, "-C", 0, 100)?)
+        Some(nonnegative_num(args, "-C", 0)?)
     } else {
         None
     };
@@ -468,8 +470,8 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         (context, context)
     } else {
         (
-            bounded_num(args, "-B", 0, 100)?,
-            bounded_num(args, "-A", 0, 100)?,
+            nonnegative_num(args, "-B", 0)?,
+            nonnegative_num(args, "-A", 0)?,
         )
     };
     let show_line_numbers = args.get("-n").and_then(Value::as_bool).unwrap_or(true);
@@ -564,7 +566,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         let mut selected = vec![false; lines.len()];
         for (index, is_match) in matched.iter().enumerate() {
             if *is_match {
-                for at in index.saturating_sub(before)..=(index + after).min(lines.len() - 1) {
+                for at in index.saturating_sub(before)..=index.saturating_add(after).min(lines.len() - 1) {
                     selected[at] = true;
                 }
             }
