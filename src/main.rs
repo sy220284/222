@@ -1676,6 +1676,14 @@ async fn chat(
                     };
                     println!("/{}{}  {}", entry.name, alias, entry.description);
                 }
+                match plugins::list_commands(agent.workspace_root(), &config.enabled_plugins) {
+                    Ok(commands) => {
+                        for command in commands {
+                            println!("/{command}  plugin Markdown command");
+                        }
+                    }
+                    Err(error) => eprintln!("Plugin command discovery failed: {error:#}"),
+                }
                 continue;
             }
             "/dirs" => {
