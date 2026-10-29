@@ -645,7 +645,16 @@ async fn run_command(
         // hooks.ts::execCommandHook uses Git Bash for default hooks on
         // Windows. cmd.exe changes quoting, pipelines and POSIX script
         // behavior, so use the same Bash execution path as the tool runtime.
-        crate::shell_runtime::ShellKind::Bash.build_command(&rule.command)?
+        let trimmed = rule.command.trim();
+        let shell_script = trimmed.ends_with(".sh")
+            || trimmed.contains(".sh ")
+            || trimmed.contains(".sh\\"");
+        let command = if shell_script && !trimmed.starts_with("bash ") {
+            format!("bash {}", rule.command)
+        } else {
+            rule.command.clone()
+        };
+        crate::shell_runtime::ShellKind::Bash.build_command(&command)?
     };
     #[cfg(not(windows))]
     let mut proc = {
