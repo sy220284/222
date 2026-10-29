@@ -33,7 +33,11 @@ fn real_git_state_is_read_from_disk_and_remote_credentials_are_redacted() {
         .arg("git-state")
         .output()
         .unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let data: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(data["worktree_count"], 1);
     assert_eq!(data["remote"]["host"], "github.com");
@@ -59,7 +63,10 @@ fn git_config_cli_parses_real_file_and_missing_keys() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "git@github.com:team/example.git");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap().trim(),
+        "git@github.com:team/example.git"
+    );
     let absent = binary()
         .arg("--workspace")
         .arg(repo.path())
@@ -67,7 +74,10 @@ fn git_config_cli_parses_real_file_and_missing_keys() {
         .output()
         .unwrap();
     assert!(absent.status.success());
-    assert_eq!(String::from_utf8(absent.stdout).unwrap().trim(), "(not found)");
+    assert_eq!(
+        String::from_utf8(absent.stdout).unwrap().trim(),
+        "(not found)"
+    );
 }
 
 #[test]
@@ -83,7 +93,11 @@ fn git_ignore_cli_uses_real_nested_local_ignore_rules() {
             .args(["git-ignore", candidate])
             .output()
             .unwrap();
-        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
         assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), expected);
     }
 }
