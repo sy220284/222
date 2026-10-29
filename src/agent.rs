@@ -1239,15 +1239,27 @@ impl Agent {
         if self.session.team_name.is_some() && self.session.agent_name.is_some() {
             bail!("Cannot rename: This session is a swarm teammate. Teammate names are set by the team leader.");
         }
-        let completion=self.provider.complete(&ModelRequest{
-            model:self.profile.model.clone(),
-            system:"Generate a short kebab-case name (2-4 words) that captures the main topic of this conversation. Use lowercase words separated by hyphens. Return valid JSON with exactly a \"name\" string field.".into(),
-            messages:vec![Message::text("user",context)],
-            tools:Vec::new(),
-        }).await.context("Could not generate a session name")?;
+        let started = Instant::now();
+        let response = self.provider.complete(&ModelRequest {
+            model: self.profile.model.clone(),
+            system: "Generate a short kebab-case name (2-4 words) that captures the main topic of this conversation. Use lowercase words separated by hyphens. Return valid JSON with exactly a \"name\" string field.".into(),
+            messages: vec![Message::text("user", context)],
+            tools: Vec::new(),
+        }).await;
+        self.session.cost.add_api_duration(started.elapsed());
+        let completion = match response {
+            Ok(completion) => completion,
+            Err(error) => {
+                self.session.save(&self.root)?;
+                return Err(error).context("Could not generate a session name");
+            }
+        };
         if let Some(usage) = completion.usage {
             self.record_usage(usage);
         }
+        // A model request incurs time/tokens even if its JSON is malformed.
+        // Persist before validation so a failed /rename never loses the cost.
+        self.session.save(&self.root)?;
         if completion
             .message
             .tool_calls
