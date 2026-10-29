@@ -1,0 +1,28 @@
+name: 导出本地核验快照
+on:
+  push:
+    branches: [feat/full-rust-parity]
+    paths:
+      - '.github/workflows/port-snapshot.yml'
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: 封装工作分支最新代码快照
+        run: |
+          git archive --format=tar -o 222-code.tar HEAD~1
+          gzip -9 222-code.tar
+          git rev-parse HEAD~1 > 222-snapshot-base.sha
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-port-source-snapshot
+          path: |
+            222-code.tar.gz
+            222-snapshot-base.sha
+          retention-days: 1
