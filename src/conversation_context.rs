@@ -509,7 +509,7 @@ pub fn project_instructions_with_dirs(
             let mut expanded = vec![pattern.clone()];
             if pattern.starts_with('/') {
                 let wildcard = pattern.char_indices()
-                    .find(|(_, ch)| matches!(ch, '*' | '?' | '{' | '['))
+                    .find(|(_, ch)| matches!(*ch, '*' | '?' | '{' | '['))
                     .map(|(index, _)| index)
                     .unwrap_or(pattern.len());
                 if let Some(parent) = Path::new(&pattern[..wildcard]).parent() {
