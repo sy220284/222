@@ -779,6 +779,15 @@ impl McpManager {
         }
     }
 
+    fn redact_request_error(&self, client_index: usize, error: anyhow::Error) -> anyhow::Error {
+        let Some(config) = self.status_clients.iter()
+            .position(|slot| *slot == Some(client_index))
+            .and_then(|position| self.configs.get(position)) else {
+                return error;
+            };
+        anyhow::anyhow!(Self::redact_connection_error(config, format!("{error:#}")))
+    }
+
     async fn connected_client(&mut self, server: &str) -> Result<usize> {
         let positions = self
             .server_statuses
@@ -877,8 +886,9 @@ impl McpManager {
                 Ok(()) => servers.push(json!({"server":name,"ok":true,"items":entries})),
                 Err(error) => {
                     self.mark_expired_client(client_index, &error);
+                    let redacted = self.redact_request_error(client_index, error);
                     servers.push(json!({"server":name,"ok":false,
-                        "error":format!("{error:#}")}));
+                        "error":format!("{redacted:#}")}));
                 },
             }
         }
@@ -922,7 +932,7 @@ impl McpManager {
         .context("MCP resource subscription timed out")?;
         if let Err(error) = reply {
             self.mark_expired_client(index, &error);
-            return Err(error);
+            return Err(self.redact_request_error(index, error));
         }
         if subscribe {
             self.resource_subscriptions.insert(key);
@@ -962,7 +972,8 @@ impl McpManager {
                     self.server_statuses[position]["error"] =
                         json!("MCP session or authentication expired; reconnect required");
                 }
-                errors.push(json!({"server":name,"error":format!("{error:#}")}));
+                let diagnostic = self.redact_request_error(client_index, error);
+                errors.push(json!({"server":name,"error":format!("{diagnostic:#}")}));
             }
         }
         let mut result = self.drain_resource_updates();
@@ -997,7 +1008,7 @@ impl McpManager {
         if let Err(error) = &result {
             self.mark_expired_client(index, error);
         }
-        result
+        result.map_err(|error| self.redact_request_error(index, error))
     }
     pub async fn get_prompt(
         &mut self,
@@ -1026,7 +1037,7 @@ impl McpManager {
         if let Err(error) = &result {
             self.mark_expired_client(index, error);
         }
-        result
+        result.map_err(|error| self.redact_request_error(index, error))
     }
 }
 
