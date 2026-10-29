@@ -47,9 +47,18 @@ pub fn format_task_output(output: &str, path: &str, max_len: usize) -> Formatted
         };
     }
     let header = format!("[Truncated. Full output: {path}]\n\n");
-    let available = max_len.saturating_sub(unit_count(&header));
+    // Original JS uses output.slice(-availableSpace). If the header is
+    // longer than maxLen, -availableSpace becomes positive and JS returns
+    // the suffix starting at that positive UTF-16 index (not empty output).
+    let header_units = unit_count(&header);
+    let tail = if max_len >= header_units {
+        last_utf16_units(output, max_len - header_units)
+    } else {
+        let units: Vec<u16> = output.encode_utf16().collect();
+        String::from_utf16_lossy(&units[(header_units - max_len).min(units.len())..])
+    };
     let mut content = header;
-    content.push_str(&last_utf16_units(output, available));
+    content.push_str(&tail);
     Formatted {
         content,
         was_truncated: true,
@@ -75,6 +84,18 @@ mod tests {
         assert!(!emoji.was_truncated);
         let short = format_task_output("abcdef", "a", header.len() + 3);
         assert!(!short.was_truncated);
+    }
+
+    #[test]
+    fn negative_available_space_uses_original_js_slice_semantics() {
+        let header = "[Truncated. Full output: x]\n\n";
+        let input = "abcdefghijklmnopqrstuvwxyz0123456789";
+        let result = format_task_output(input, "x", 5);
+        assert!(result.was_truncated);
+        assert_eq!(result.content, format!("{header}{}", &input[header.len() - 5..]));
+        // The original slice(-0) returns the entire string when maxLen == header length.
+        let result = format_task_output(input, "x", header.len());
+        assert_eq!(result.content, format!("{header}{input}"));
     }
 
     #[test]

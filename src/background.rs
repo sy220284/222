@@ -18,7 +18,9 @@ use tokio::{
 };
 use uuid::Uuid;
 
-const LOG_CAP: usize = 2_000_000;
+// Original diskOutput.ts allows up to 5 GiB of task output per stream.
+// Keep the cap in bytes (u64), not characters, to preserve large outputs.
+const LOG_CAP: u64 = 5 * 1024 * 1024 * 1024;
 const DISPLAY_CAP: usize = 640_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,8 +120,16 @@ impl BackgroundTasks {
         let id = Uuid::new_v4().to_string();
         let stdout_path = self.directory.join(format!("{id}.stdout"));
         let stderr_path = self.directory.join(format!("{id}.stderr"));
-        tokio::fs::write(&stdout_path, &[]).await?;
-        tokio::fs::write(&stderr_path, &[]).await?;
+        // Hold the descriptors from exclusive creation through spooling: never
+        // reopen by path. This closes the symlink substitution race.
+        let stdout_file = create_output_file(&stdout_path)?;
+        let stderr_file = match create_output_file(&stderr_path) {
+            Ok(file) => file,
+            Err(error) => {
+                let _ = fs::remove_file(&stdout_path);
+                return Err(error);
+            }
+        };
         let mut proc = kind.build_command(command)?;
         proc.envs(self.session_env.lock().unwrap().iter());
         crate::subprocess_env::apply(&mut proc);
@@ -163,8 +173,8 @@ impl BackgroundTasks {
             .insert(id.clone(), running.clone());
         let folder = self.directory.clone();
         tokio::spawn(async move {
-            let stdout_task = tokio::spawn(spool(stdout, stdout_path));
-            let stderr_task = tokio::spawn(spool(stderr, stderr_path));
+            let stdout_task = tokio::spawn(spool(stdout, stdout_file));
+            let stderr_task = tokio::spawn(spool(stderr, stderr_file));
             let (state, code) = tokio::select! {
                 result = child.wait() => match result {
                     Ok(status) if status.success() => ("completed", status.code()),
@@ -361,7 +371,17 @@ impl BackgroundTasks {
 }
 
 fn tail(path: &str) -> Result<String> {
-    let file = fs::File::open(path)?;
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        bail!("Task output path is not a regular file");
+    }
     let len = file.metadata()?.len();
     let start = len.saturating_sub(DISPLAY_CAP as u64);
     use std::io::{Read, Seek, SeekFrom};
@@ -372,20 +392,31 @@ fn tail(path: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&bytes).to_string())
 }
 
-async fn spool<R: AsyncRead + Unpin>(mut stream: R, path: PathBuf) -> Result<bool> {
-    let mut file = tokio::fs::File::create(path).await?;
+fn create_output_file(path: &Path) -> Result<tokio::fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let file = options.open(path).with_context(|| format!("Securely creating background output {}", path.display()))?;
+    Ok(tokio::fs::File::from_std(file))
+}
+
+async fn spool<R: AsyncRead + Unpin>(mut stream: R, mut file: tokio::fs::File) -> Result<bool> {
     let mut buffer = [0u8; 8192];
-    let mut size = 0usize;
+    let mut size = 0u64;
     let mut truncated = false;
     loop {
         let n = stream.read(&mut buffer).await?;
         if n == 0 {
             break;
         }
-        let writable = n.min(LOG_CAP.saturating_sub(size));
+        let writable = n.min(LOG_CAP.saturating_sub(size).min(n as u64) as usize);
         if writable > 0 {
             file.write_all(&buffer[..writable]).await?;
-            size += writable;
+            size += writable as u64;
         }
         if writable < n {
             truncated = true;
@@ -418,6 +449,37 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn task_output_never_follows_symlink_for_read_or_creation() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let secret = temp.path().join("private");
+        fs::write(&secret, "host private data").unwrap();
+        let link = temp.path().join("output");
+        symlink(&secret, &link).unwrap();
+        assert!(create_output_file(&link).is_err());
+        assert!(tail(link.to_str().unwrap()).is_err());
+        assert_eq!(fs::read_to_string(&secret).unwrap(), "host private data");
+    }
+
+    #[tokio::test]
+    async fn output_larger_than_previous_two_megabyte_cap_is_persisted() {
+        use tokio::io::AsyncWriteExt;
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("large.stdout");
+        let file = create_output_file(&path).unwrap();
+        let (mut writer, reader) = tokio::io::duplex(64 * 1024);
+        let send = tokio::spawn(async move {
+            writer.write_all(&vec![b'x'; 2_200_000]).await.unwrap();
+            writer.shutdown().await.unwrap();
+        });
+        assert!(!spool(reader, file).await.unwrap());
+        send.await.unwrap();
+        assert_eq!(fs::metadata(path).unwrap().len(), 2_200_000);
+        assert_eq!(LOG_CAP, 5 * 1024 * 1024 * 1024);
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn explicit_shell_override_does_not_mutate_background_default() {
