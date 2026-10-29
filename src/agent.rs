@@ -1561,6 +1561,9 @@ impl Agent {
         for _ in 0..self.max_steps {
             self.absorb_team_messages()?;
             let mut available_tools = tools::definitions();
+            if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
+                available_tools.push(tools::powershell_definition());
+            }
             available_tools.extend(task::definitions());
             available_tools.extend(task_graph::definitions());
             available_tools.extend(crate::team_registry::definitions(
@@ -1689,7 +1692,7 @@ impl Agent {
                 eprintln!("{text}");
             }
             for mut call in calls {
-                let label = if matches!(call.function.name.as_str(), "run_command" | "Bash") {
+                let label = if matches!(call.function.name.as_str(), "run_command" | "Bash" | "PowerShell") {
                     serde_json::from_str::<serde_json::Value>(&call.function.arguments)
                         .ok()
                         .and_then(|args| {
