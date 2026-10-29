@@ -798,3 +798,8 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 对照原版 `src/utils/which.ts` 使用 `which` / `where.exe` / `Bun.which` 查找**可执行命令**的语义，修复 `src/diagnostics.rs` 只检查 `is_file()` 的偏差：POSIX 系统必须具有执行权限，Windows 按 PATHEXT 逐个检查；Doctor 的 Git 检测及 MCP stdio 启动预检查均接入同一函数。提交 `0a5791afe65b775bd0781748bfa42db79be67d5a`。未运行 Cargo、测试或 CI，仍待行为验收。
 
 以上为两条独立业务功能链的源码补齐；与此前同轮 TodoWrite、队员任务反馈共计四条源码补齐、待验收。Issue #3 冻结 362 项均保持开放，100 项目标未达成。
+
+
+## 2026-10-29：分支会话任务清单隔离（源码已提交，待验收）
+
+对照 `src/commands/branch/branch.ts::createFork` 生成新会话 ID、`src/tools/TodoWriteTool/TodoWriteTool.ts` 以 `getSessionId()` 索引清单、`src/utils/tasks.ts::getTaskListId` 按新会话分配 V2 列表的行为，修复 Rust `src/agent.rs` 创建会话分支时克隆旧 `Session.todos` 和兼容 `Session.tasks` 导致清单串线的问题。保留完整历史消息与原版来源信息，新分支从独立空任务清单开始，团队 V2 任务图仍按团队身份共享。提交 `ad9edbdf291d73105dd5320aded0fb0c58a225ee`。源码已提交，待行为验收；未运行 Cargo/测试/CI。
