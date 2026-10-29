@@ -109,10 +109,11 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
 // a separate feature and must not be claimed as implemented here.
 fn searchable_transcript(messages: &[Message]) -> String {
     let mut parts = Vec::new();
-    let first = messages.len().min(50);
-    let tail = if messages.len() > 100 { messages.len() - 50 } else { first };
-    let selected = messages.iter().take(if messages.len() <= 100 { messages.len() } else { first });
-    let selected = selected.chain(messages.iter().skip(tail));
+    let selected: Vec<&Message> = if messages.len() <= 100 {
+        messages.iter().collect()
+    } else {
+        messages.iter().take(50).chain(messages.iter().skip(messages.len() - 50)).collect()
+    };
     for message in selected {
         if message.role != "user" && message.role != "assistant" {
             continue;
@@ -494,6 +495,8 @@ mod tests {
         assert!(text.contains("closing match"));
         assert!(!text.contains("middle 55"));
         assert!(text.chars().count() <= 2000);
+        let short = [Message::text("user", "first"), Message::text("assistant", "last")];
+        assert_eq!(searchable_transcript(&short), "first last");
     }
 
     #[cfg(unix)]
