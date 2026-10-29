@@ -1,5 +1,17 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：本地记忆与文件上下文真实调用链补齐（本任务本轮 5/100，已提交待验收）
+
+原始源码：`source/src/memdir/memoryScan.ts`、`source/src/memdir/findRelevantMemories.ts`、`source/src/utils/fileStateCache.ts`、`source/src/commands/files/files.ts`。Rust 可达入口：`src/agent.rs` → `src/memory.rs::context_with_recent_tools`；`/files` → `src/files_context.rs::paths`。
+
+1. **记忆主题扫描与容错（1 项）**：扫描不再被五层目录深度和 100 KB 文件大小限制截断；只读前 30 行 frontmatter，单文件读取失败不影响其他主题。提交 `409202b2`。
+2. **记忆选择故障回退（1 项）**：多模型选择请求失败或返回工具调用时，保留本地 MEMORY.md 索引，正常处理用户主请求；选中主题消失时跳过该主题继续读取其余文件。提交 `409202b2`。
+3. **记忆相关性与工具历史（1 项）**：主题清单附带原版 ISO 修改时间，Agent 从真实历史工具调用提取最近 10 种工具供记忆选择器过滤重复 API 文档，保留警告与经验记录。提交 `409202b2`、`39d5265a`、`2db1722b`、`2fb3645a`。
+4. **多模型结构化记忆选择（1 项）**：兼容 SDK 文本内容块的 JSON 选择结果，不再仅依赖普通文本字段。提交 `a2eb96dc`。
+5. **SDK 多模态会话文件上下文恢复（1 项）**：`/files` 识别工具调用与结果的结构化内容块，过滤失败结果、去重并维持最近访问顺序，修复恢复会话后遗漏成功读取文件的问题。提交 `1fa93c31`、`fe14c67e`。
+
+期间发现记忆检索提示的字符串转义错误，已继续修正并重新读取远端确认，修复提交 `123a8bcb`、`2fb3645a`。本轮实际涉及 **5 项独立用户业务行为**；尚差 95 项，未完成预先逐项核实的 100 项功能清单，不把文件路径数量当作功能数。原版完整 YAML frontmatter 解析、实时文件缓存/25 MiB LRU、记忆已呈现去重、完整取消/并发、SDK UI 与行为等价仍待实现或验证。按本任务现行规则未运行 Cargo、测试或 CI；Issue #3 冻结清单不勾选，以上均为**源码已提交、待验收**。
+
 ## 2026-10-29：WebFetch 与 macOS 深链终端源码补齐（本任务本轮 9/100，待验收）
 
 原始 ZIP 源码依据：source/src/tools/WebFetchTool/utils.ts（50–95、262–329、347–482）、source/src/tools/WebFetchTool/WebFetchTool.ts（214–295）、source/src/utils/mcpOutputStorage.ts（61–135、148–174）、source/src/utils/deepLink/terminalLauncher.ts（26–120）。Rust 可达链：src/tools.rs → src/webfetch.rs；src/main.rs → src/terminal_launcher.rs → src/config.rs。
