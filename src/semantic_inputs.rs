@@ -63,6 +63,8 @@ pub fn number(value: Value) -> Value {
 pub fn normalize_tool_fields(tool: &str, args: &mut Value) -> Result<()> {
     let bool_fields: &[&str] = match tool {
         "run_command" => &["run_in_background"],
+        "PowerShell" => &["run_in_background"],
+        "grep_files" => &["-i", "-n", "multiline"],
         "write_file" => &["create_only"],
         "edit_file" => &["replace_all"],
         "task_output" => &["block"],
@@ -75,6 +77,8 @@ pub fn normalize_tool_fields(tool: &str, args: &mut Value) -> Result<()> {
         "search_text" => &["limit"],
         "git_log" => &["count"],
         "run_command" => &["timeout_seconds"],
+        "PowerShell" => &["timeout"],
+        "grep_files" => &["-A", "-B", "-C", "context", "head_limit", "offset"],
         "task_output" => &["timeout"],
         _ => &[],
     };
