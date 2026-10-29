@@ -1,3 +1,12 @@
+## 2026-10-29：Shell 毫秒超时、任务停止与输出的真实执行门禁（源码已提交、待验收）
+
+- 原版源码：`source/src/tools/BashTool/BashTool.tsx:227–247,857–882` 的毫秒 timeout 与 semanticNumber；`TaskStopTool/TaskStopTool.ts:43–105` 的状态预校验；`TaskOutputTool/TaskOutputTool.tsx` 的严格参数与 semanticBoolean。
+- **后台任务停止**：`src/background.rs::validate_stop` 先读取实时任务状态；`src/tools.rs::validate_task_stop` 统一 task_id/shell_id、未知字段与任务状态；`src/agent.rs` 在 PreToolUse 前拒绝非法停止请求，授权后 `stop` 再检查竞态。代码 `9008bf39b12b2f1908d1fb444dc10a16fe4acc94`、`9b0a7fef2a9e1846e00a2188db758f69d9ab37f5`。
+- **后台任务输出**：`ToolExecutor::validate_task_output` 同时用于模型工具调用前置校验与真实执行分发，保留 `block` 语义布尔转换、默认 30 秒和 0–600000 毫秒范围，非法字段不触发 Hook。代码 `0bb6043f8829e2f728b63785ae157fc2df350c61`。
+- **Shell 毫秒超时**：`src/tools.rs::run_command_with_shell` 支持原版 Bash/PowerShell 的毫秒 timeout 与通用 timeout_seconds，执行超时改用毫秒精度；`src/semantic_inputs.rs` 处理原版 semanticNumber 数字字符串。代码 `6de19f6a211eab3b11a83cf5ea5656cf7daf3624`。
+- **Shell 输入安全门禁**：`ToolExecutor::validate_shell_input` 对命令、描述、后台标志和超时字段执行无副作用检查，接入 Agent 的 PreToolUse 前置入口与执行器，非法模型参数不触发 Hook 或 Shell 进程。代码 `105373ea261e99c4b4a8891121f0b715cf12c9e5`。
+- 本段保守计 **4 项独立用户可感知业务行为补强**，与前段任务图 3 项合计 **7 项**。未运行 Cargo、单元/集成测试或 CI；均为**已提交、待行为验收**，没有新增等价验收路径。Issue #3 冻结 362 项保持开放。仍缺多类型任务统一停止、跨进程状态、完整 Bash 自动后台化/沙箱与 Hook 全协议；本轮 100 项硬目标尚未达到。
+
 ## 2026-10-29：任务依赖持久化与任务 Hook 参数安全门禁（源码已提交、待验收）
 
 - 原版依据：`source/src/utils/tasks.ts::blockTask`（458–486 行）双向维护 `blocks` / `blockedBy`；`source/src/tools/TaskCreateTool/TaskCreateTool.ts`、`TaskGetTool.ts`、`TaskListTool.ts`、`TaskUpdateTool.ts` 的 Zod strictObject 输入校验发生在工具调用和生命周期 Hook 之前。

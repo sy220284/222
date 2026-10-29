@@ -1165,7 +1165,7 @@
 | `src/tools/AgentTool/runAgent.ts` | 974 | 35768 | 重写：工具行为、参数和权限 | `src/agent.rs / src/worktree.rs` | 部分实现：独立子 Agent 调用；后台管理未等价 |
 | `src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx` | 266 | 39887 | 重写：工具行为、参数和权限 | `src/ask_user_question.rs / src/agent.rs` | 部分实现：已接入交互式模型工具主链，验证1-4问题、2-4选项、去重、多选、Other、拒绝模型伪造答案；CLI→HTTP模型→真实输入→模型返回集成测试通过；终端已支持所选预览与用户备注 annotations 回传模型、严格输入字段校验；SDK 外部问答回执、预览格式的 SDK 配置传播及原版 TUI 仍未等价；新增可选 HTML 片段安全校验（ATLAS_QUESTION_PREVIEW_FORMAT=html）；新改动待行为验证 |
 | `src/tools/AskUserQuestionTool/prompt.ts` | 45 | 2903 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/BashTool/BashTool.tsx` | 1144 | 160530 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/BashTool/BashTool.tsx` | 1144 | 160530 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Bash 毫秒超时与语义数字输入接通真实进程截止时间，Shell 严格参数校验提前至 Hook 前（6de19f6、105373e），待验收 |
 | `src/tools/BashTool/BashToolResultMessage.tsx` | 191 | 19215 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/UI.tsx` | 185 | 25213 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/bashCommandHelpers.ts` | 266 | 8589 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1293,9 +1293,9 @@
 | `src/tools/TaskListTool/TaskListTool.ts` | 117 | 2803 | 重写：工具行为、参数和权限 | `src/task_graph.rs / src/agent.rs` | 部分实现：任务过滤 _internal、已完成依赖解除、负责人/阻塞展示；完整 UI/排序与团队可见性待核对；TaskList 拒绝未知参数的校验已接入实际 Agent Hook 前置门禁（06c65cc） |
 | `src/tools/TaskListTool/constants.ts` | 2 | 46 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/TaskListTool/prompt.ts` | 50 | 2066 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/TaskOutputTool/TaskOutputTool.tsx` | 584 | 66568 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs` | 部分实现：阻塞/非阻塞输出、超时和状态；Agent/远程输出尚未覆盖 |
+| `src/tools/TaskOutputTool/TaskOutputTool.tsx` | 584 | 66568 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs` | 部分实现：阻塞/非阻塞输出、超时和状态；Agent/远程输出尚未覆盖；原版严格参数/semanticBoolean 统一预校验，在 PreToolUse 前拒绝无效请求（0bb6043），待验收 |
 | `src/tools/TaskOutputTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
-| `src/tools/TaskStopTool/TaskStopTool.ts` | 132 | 3935 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs` | 部分实现：task_id、shell_id、KillShell、成功返回和异常状态对齐；新增停止与自然完成竞态结果核对，源码已提交待验收；其余任务类型/完整生命周期待验收 |
+| `src/tools/TaskStopTool/TaskStopTool.ts` | 132 | 3935 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs` | 部分实现：task_id、shell_id、KillShell、成功返回和异常状态对齐；新增停止与自然完成竞态结果核对，源码已提交待验收；其余任务类型/完整生命周期待验收；停止前核对实时状态、旧 shell_id 与严格参数，阻止不存在/已完成任务触发权限与 Hook（9008bf3、9b0a7fe），待验收 |
 | `src/tools/TaskStopTool/UI.tsx` | 41 | 5672 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskStopTool/prompt.ts` | 9 | 280 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskUpdateTool/TaskUpdateTool.ts` | 407 | 12161 | 重写：工具行为、参数和权限 | `src/task_graph.rs / src/agent.rs / src/team_mailbox.rs` | 部分实现：状态/所有者/元数据、双向依赖与删除级联、TaskCompleted hook 阻断、队员启动任务自动认领及负责人邮箱通知；队员完成任务后收到领取下一任务的提示；验证提醒、UI 与完整时序未等价；完成 Hook 前校验全部 TaskUpdate 字段，非法参数不触发副作用（809afb、06c65cc） |
