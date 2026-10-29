@@ -1310,3 +1310,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - Rust：`src/tools.rs::actual_edit_text/preserve_curly_quotes/normalize_edit_replacement/ToolExecutor::edit_file`，已接通真正的文件编辑与读后写校验，Unicode 字符索引按原文件字节边界取实际匹配片段，避免中文、表情和弯引号切片错误。
 - 提交：`9eed00bee33d97e367076e151930243de05eab91`、`645510ed51d21a767cf816af7527903005d30ac6`、`f17bb1c92e038a6b5e173efd6c6f121c091ff28b`。本项按一个独立用户可感知的编辑排版业务行为计数，**本轮累计 4/100，剩余 96**；其余细节不拆分计数。
 - 剩余：原版 `desanitizeMatchString` 全部转义恢复、完整多编辑输入、特殊编码与行尾格式、UI 差异视图仍待逐项移植。未运行 Cargo、测试或 CI，新增完整等价验收 0；Issue #3 冻结 362 项不勾选。
+
+
+## 2026-10-29：原版 Read/Edit/Write 三条工具调用链（源码已提交、待行为验收）
+
+- **原版依据**：`source/src/tools/FileReadTool/FileReadTool.ts:227–243,496–507,1019–1036` 的 `Read(file_path,offset,limit)`、`FileReadTool/limits.ts` 的默认 256 KiB 文件限制；`FileEditTool/types.ts:5–19` 的 `Edit(file_path,old_string,new_string,replace_all)`；`FileWriteTool/FileWriteTool.ts:56–65` 的 `Write(file_path,content)`。
+- **Rust 真实执行链**：`src/tool_names.rs::canonical_name` 将原版工具名路由到已有 Rust 文件操作；`src/agent.rs` 在 PreToolUse 前执行原版严格输入门禁；`src/semantic_inputs.rs::normalize_source_file_tool` 转换参数并拒绝未知字段、非法类型及未实现的 PDF pages；`src/tools.rs::ToolExecutor::dispatch/read_file_with_mode/edit_file/write_file` 执行真实文件读写，沿用会话级已读状态、文件权限与变更历史。原版 Read 无 limit 时读取整个授权文本文件（256 KiB 上限），其结果不再被通用 16K 字符限制截断。
+- **代码提交**：`41404581f044ebe5bc354cff8e88a0d90e44d733`、`d061352e2050c916f644cc1ea0ec870dd7666885`、`223c5e08719b2e8134a7b5a2ab161c425f68b3f0`、`7959a53125f7bbc6cbdc87e67fbad1523c2ac75c`。分别按 Read、Edit、Write 三条独立用户可感知工具链计数；**本轮累计 7/100，剩余 93 项**。
+- **剩余差异**：Read 的 PDF/图片/Notebook 多媒体完整输出、25K token 实际计数、重复读取去重、原版格式化行号、各工具完整结构化结果和 UI/SDK 事件、更多输入校验及原版文件状态恢复仍待补齐；不将已有通用执行器的历史实现重复计数。未运行 Cargo、测试或 CI，新增完整等价验收 0；Issue #3 冻结 362 项仍全部开放。
