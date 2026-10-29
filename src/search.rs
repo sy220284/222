@@ -59,7 +59,7 @@ fn matching(matcher: &GlobMatcher, relative: &Path) -> bool {
             .is_some_and(|n| matcher.is_match(Path::new(n)))
 }
 /// GrepTool accepts space/comma-separated globs, preserving brace groups
-/// such as "*.{ts,tsx}". Exclusion globs are applied after inclusions.
+/// such as "*.{ts,tsx}". Keep include/exclude precedence in input order.
 /// GrepTool.ts passes --glob flags to ripgrep in the user's original
 /// order. A later matching inclusion can override an earlier exclusion and
 /// vice versa; splitting them into two unordered groups changes results.
