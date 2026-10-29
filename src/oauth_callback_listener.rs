@@ -188,7 +188,7 @@ async fn read_headers(stream: &mut TcpStream) -> std::result::Result<String, Hea
             if data.len() > MAX_REQUEST_HEADERS {
                 return Err(HeaderReadError::TooLarge);
             }
-            if data.windows(4).any(|slice| slice == b"\\r\\n\\r\\n") {
+            if data.windows(4).any(|slice| slice == b"\r\n\r\n") {
                 return String::from_utf8(data).map_err(|_| HeaderReadError::Invalid);
             }
         }
@@ -262,13 +262,13 @@ mod tests {
 
         let malformed = raw_request(
             port,
-            b"GET /callback HTTP/1.1\\r\\nHost: localhost\\r\\nX-Invalid: \\xff\\r\\n\\r\\n",
+            b"GET /callback HTTP/1.1\r\nHost: localhost\r\nX-Invalid: \xff\r\n\r\n",
         )
         .await;
         assert!(malformed.starts_with("HTTP/1.1 400"), "{malformed}");
 
         let large = format!(
-            "GET /callback HTTP/1.1\\r\\nHost: localhost\\r\\nX-Large: {}\\r\\n\\r\\n",
+            "GET /callback HTTP/1.1\r\nHost: localhost\r\nX-Large: {}\r\n\r\n",
             "x".repeat(MAX_REQUEST_HEADERS)
         );
         let oversized = raw_request(port, large.as_bytes()).await;
