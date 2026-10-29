@@ -1,3 +1,12 @@
+## 2026-10-29：插件加载故障隔离与 Hook 部分可用性（已提交、待验收）
+
+- **原版源码**：完整 2.1.88 ZIP 的 `source/src/utils/plugins/pluginLoader.ts::loadPluginsFromMarketplaces`（约 1962–2088 行）通过 `Promise.allSettled` 按插件隔离失败并收集错误；同文件 `createPluginFromPath` 的 Hook 文件读取（约 1620–1710 行）按文件记录错误，继续处理其他有效配置。原始 ZIP 已从资料库根目录取得并逐段核对。
+- **真实 Rust 入口**：`src/main.rs` → `PluginSet::load` → `manifest_hooks` / `manifest_servers` → `Agent::attach_mcp/attach_hooks`；`Agent::reload_plugins` 也调用 `PluginSet::load`。原实现一个损坏插件清单就会中断整组插件加载；一个损坏 Hook 文件会丢弃同插件其他有效 Hook。
+- **源码补齐**：`src/plugins.rs` 按插件隔离安装路径/清单错误，保留健康插件的 Hook 与 MCP；按 Hook 文件/清单项隔离配置错误，保留同一插件有效 Hook，严格插件校验入口继续拒绝损坏配置。诊断收集至 `PluginSet.errors`，`src/main.rs` 在启动时明确输出错误，不静默吞掉失败。原有按服务隔离 MCP 配置和托管策略拒绝继续生效。
+- **实际提交**：`2903fca6c8fffd438f3b98083f36c9b43210a001`、`5c4286da9329a037e3fba37627b1e755b6566b12`、`60953ca7a28ff78937e1b9c9ea4f4b3e9278ab83`。前期 `614f0978` 的重复权限检查经源码核对发现已由 `directory` 统一执行，已在 `e49ba519` 撤回，**不计完成项**。
+- **独立业务计数**：①某插件损坏时其他插件仍能启用 Hook/MCP；②同一插件某 Hook 配置损坏时其他有效 Hook 仍可注册。**本轮 2/100，剩余 98**。增加了对应 Rust 回归测试代码，但遵照本任务要求未运行 Cargo、单测、CI 或行为验证；全部为“已提交、待验收”。
+- **剩余精确差异**：原版插件依赖闭包/安装源优先级、全部 Hook 类型与异步/once 生命周期、SDK 结构化加载诊断、MCPB/远程市场、动态插件刷新及取消传播仍待补齐；`manifest_servers` 仍有部分无效项缺少逐条诊断。Issue #3 冻结 362 项均保持开放，0 项新增完整等价验收。**本轮尚未形成先行 100 项逐功能确认清单与完整实施方案，流程 A/B 和数量目标未达标。**
+
 ## 2026-10-29：SDK 与终端 /btw 独立提问真实执行链（源码已提交、待验收）
 
 - **原版依据**：用户完整 ZIP `source/src/utils/sideQuestion.ts::runSideQuestion/extractSideQuestionResponse`、`source/src/cli/print.ts` 的 `side_question` 控制请求；原版使用独立 fork、原会话缓存上下文、单轮模型、无工具、异步回执，主对话不写入独立问答。
