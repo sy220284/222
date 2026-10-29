@@ -318,9 +318,14 @@ pub fn rename(session: &mut Session, root: &Path, title: &str) -> Result<String>
     if session.team_name.is_some() && session.agent_name.is_some() {
         bail!("Cannot rename: This session is a swarm teammate. Teammate names are set by the team leader.");
     }
-    let old = session.custom_title.replace(title.to_owned());
+    // rename.ts saves both the user-visible custom title and the session's
+    // agent name. Session listings prefer agent_name; updating only the
+    // custom title leaves an old name visible after a successful /rename.
+    let old_title = session.custom_title.replace(title.to_owned());
+    let old_agent_name = session.agent_name.replace(title.to_owned());
     if let Err(err) = session.save(root) {
-        session.custom_title = old;
+        session.custom_title = old_title;
+        session.agent_name = old_agent_name;
         return Err(err).context("Failed to persist session title");
     }
     Ok(format!("Session renamed to: {title}"))
