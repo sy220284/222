@@ -115,7 +115,14 @@ pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
             break;
         }
         if is_list {
-            if let Some(value) = line.trim().strip_prefix("- ") {
+            // YAML sequences may contain blank lines and comments between
+            // entries. The source frontmatter parser handles those without
+            // terminating the argument list.
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            if let Some(value) = trimmed.strip_prefix("- ") {
                 list.push(
                     value
                         .trim()
@@ -126,7 +133,9 @@ pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
             }
             break;
         }
-        let Some(value) = line.trim_start().strip_prefix("arguments:") else {
+        // Only a top-level YAML field declares skill argument names.
+        // A nested metadata.arguments field must not shadow it.
+        let Some(value) = line.strip_prefix("arguments:") else {
             continue;
         };
         let value = value.trim();
