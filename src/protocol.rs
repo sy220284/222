@@ -30,6 +30,22 @@ pub struct Message {
 }
 
 impl Message {
+    /// Extract the visible text of a structured provider message. This
+    /// mirrors the original getAssistantMessageText block ordering while
+    /// retaining flattened text for OpenAI-compatible transports.
+    pub fn visible_text(&self) -> String {
+        if let Some(blocks) = self.content_blocks.as_ref() {
+            let parts = blocks.iter().filter_map(|block| {
+                if let Some(text) = block.as_str() { return Some(text); }
+                if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
+                    block.get("text").and_then(serde_json::Value::as_str)
+                } else { None }
+            }).collect::<Vec<_>>();
+            if !parts.is_empty() { return parts.join("\n"); }
+        }
+        self.content.clone().unwrap_or_default()
+    }
+
     pub fn text(role: &str, content: impl Into<String>) -> Self {
         Self {
             role: role.to_owned(),
