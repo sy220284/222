@@ -1,5 +1,13 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：OAuth PKCE 加密与运行版本入口源码迁移
+
+原始源文件 `src/services/oauth/crypto.ts` 的三个功能已迁入 `src/oauth_crypto.rs`：32 字节系统安全随机数、无填充 Base64URL、SHA-256 challenge 与独立 state，含 RFC 7636 校验向量和跨进程 CLI 随机性验证；`oauth-pkce` 显式调用可以直接用于多模型 OAuth 客户端，但 OAuth 授权服务完整回调、令牌保存尚未完成。
+
+原始 `src/commands/version.ts` 已迁为 `src/version.rs`：读取当前运行二进制编译版本、可选 `ATLAS_BUILD_TIME`，`version` CLI 与聊天 `/version` 都走本地真实函数。原版专属用户开关按要求去除。两条源路径仍标注部分实现，未冒称全功能等价验收。
+
+
+
 ## 2026-10-29：会话自动命名原版近期上下文与多模态文本补全（保持部分实现）
 
 实际阅读 2.1.88 原始 `src/commands/rename/generateSessionName.ts:10–15` 与 `src/utils/sessionTitle.ts:26–58`：原版生成名称时读取用户和助手文本、提取多模态消息中的 text 块，排除工具消息，并只向模型提供对话最后 1000 个 UTF-16 代码单元。此前 Rust `src/agent.rs::rename_session_or_generate` 取前 50 条、截取最前 8000 字符、遗漏多模态文本，导致长会话按过时话题命名，纯多模态文本对话无法自动命名。
