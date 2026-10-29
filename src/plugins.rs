@@ -235,8 +235,19 @@ fn manifest_servers(root: &Path, value: &Value) -> Result<Vec<McpServerConfig>> 
         object.insert("id".into(), Value::String(name.clone()));
         // A malformed server entry must not disable healthy servers in the
         // same plugin. The original loader validates entries independently.
-        if let Ok(server) = serde_json::from_value(config) {
-            servers.push(server);
+        if let Ok(server) = serde_json::from_value::<McpServerConfig>(config) {
+            // McpServerConfigSchema in the source rejects empty commands
+            // and missing remote URLs before attempting any connection.
+            // Serde defaults alone do not enforce these requirements.
+            let valid = match server.transport.as_deref().unwrap_or("stdio") {
+                "stdio" => !server.command.is_empty(),
+                "http" | "sse" | "ws" => server.url.as_deref()
+                    .is_some_and(|url| !url.is_empty()),
+                _ => true,
+            };
+            if valid {
+                servers.push(server);
+            }
         }
     }
     Ok(servers)
