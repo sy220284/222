@@ -441,14 +441,17 @@ pub fn copy_for_resume(root: &Path, previous_session: &str, next_session: &str) 
         }
         Ok(entries.len())
     })();
-    if operation.is_err() {
-        // The destination ID is new and unpublished. Never leave a partially
-        // migrated history that could later claim to be complete.
-        if let Err(cleanup) = fs::remove_dir_all(&destination) {
-            bail!("History copy failed: {:#}; cleanup failed: {cleanup}", operation.unwrap_err())
+    match operation {
+        Ok(count) => Ok(count),
+        Err(error) => {
+            // The destination ID is new and unpublished. Never leave a
+            // partially migrated history that could claim to be complete.
+            if let Err(cleanup) = fs::remove_dir_all(&destination) {
+                bail!("History copy failed: {error:#}; cleanup failed: {cleanup:#}")
+            }
+            Err(error)
         }
     }
-    operation
 }
 
 /// Called only if persisting a newly branched conversation fails after its
