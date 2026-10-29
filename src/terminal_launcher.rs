@@ -82,7 +82,7 @@ fn macos_terminal_preference(preference: &str) -> Option<TerminalInfo> {
             || (normalized == "iterm2" && *app == "iTerm");
         matches.then(|| TerminalInfo {
             name: (*name).to_owned(),
-            command: PathBuf::from(app),
+            command: PathBuf::from(*app),
         })
     })
 }
@@ -92,7 +92,8 @@ fn spotlight_has_bundle(bundle: &str) -> bool {
     use std::{io::Read, thread, time::{Duration, Instant}};
     let query = format!("kMDItemCFBundleIdentifier == \"{bundle}\"");
     let mut child = match Command::new("/usr/bin/mdfind")
-        .args(["-count", &query])
+        .arg("-count")
+        .arg(&query)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
