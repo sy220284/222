@@ -141,9 +141,7 @@ fn mcp_check(server: &McpServerConfig) -> Finding {
 /// Report specific allow rules that a tool-wide deny/ask rule makes
 /// unreachable. Mirrors shadowedRuleDetection.ts: deny wins over ask and
 /// tool-wide allow rules are not flagged as shadowed.
-fn shadowed_permission_findings(
-    settings: &[crate::permission_rules::RuleSetting],
-) -> Vec<Finding> {
+fn shadowed_permission_findings(settings: &[crate::permission_rules::RuleSetting]) -> Vec<Finding> {
     use crate::permission_rules::{canonical_tool, compile_rules, Behavior};
     let rules = match compile_rules(settings) {
         Ok(rules) => rules,
