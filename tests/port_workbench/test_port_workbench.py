@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -6,7 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from port_workbench import (AuditError, affected_source_paths, check_evidence, collect, label_status,
-                            read_matrix, report, resolve_import, verify_counts)
+                            read_matrix, report, resolve_import, verify_counts, current_counts, main)
 
 
 class WorkbenchTests(unittest.TestCase):
@@ -42,6 +44,20 @@ class WorkbenchTests(unittest.TestCase):
         (self.repo / 'docs/PORT_BASELINE.json').write_text(json.dumps({
             'statuses':{p: r['status'] for p,r in rows.items()},
             'source_hashes':{p:__import__('hashlib').sha256((self.src/p).read_bytes()).hexdigest() for p in rows}}))
+
+    def test_counts_command_tracks_matrix_changes_without_manual_copying(self):
+        initial = current_counts(read_matrix(self.repo), strict=False)
+        self.assertEqual((initial['partial'], initial['unported'], initial['remaining']),
+                         (1, 1, 2))
+        self.write_matrix(status1='部分实现', status2='部分实现')
+        moved = current_counts(read_matrix(self.repo), strict=False)
+        self.assertEqual((moved['partial'], moved['unported'], moved['remaining']),
+                         (2, 0, 2))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(['counts', '--repo', str(self.repo), '--allow-fixture']), 0)
+        printed = json.loads(output.getvalue())
+        self.assertEqual(printed, moved)
 
     def test_static_inventory_and_grouping(self):
         rows = read_matrix(self.repo)
