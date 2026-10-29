@@ -12,6 +12,7 @@ mod config;
 mod control_message_compat;
 mod cost;
 mod deep_link;
+mod detect_repository;
 mod diagnostics;
 mod env_validation;
 mod event_signal;
