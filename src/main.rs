@@ -2,6 +2,7 @@ mod agent;
 mod array_utils;
 mod ask_user_question;
 mod background;
+mod browser_launcher;
 mod bash_permission_suggestions;
 mod cleanup_registry;
 mod collections;
@@ -53,6 +54,7 @@ mod plugin_commands;
 mod plugin_manager;
 mod plugins;
 mod plain_text_storage;
+mod platform_source_utilities;
 mod portable_async_runtime;
 mod portable_configuration;
 mod portable_ink_core;
@@ -322,6 +324,12 @@ enum Commands {
         #[arg(long)]
         fallback_file: Option<PathBuf>,
     },
+    /// Open an HTTP(S) URL with the user's operating-system browser
+    OpenBrowser { url: String },
+    /// Open a local path with the default system handler
+    OpenPath { path: String },
+    /// Clear screen and supported terminal scrollback
+    ClearScreen,
     /// Show configured providers and active default without connecting to them
     Models,
     /// Execute a single prompt; pass '-' to read the prompt from stdin
@@ -422,6 +430,23 @@ async fn main() -> Result<()> {
             let command = plugin_commands::parse_plugin_args(Some(&args.join(" ")));
             let output = plugin_manager::execute(&root, &command)?;
             println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
+        Commands::OpenBrowser { url } => {
+            if !browser_launcher::open_browser(url).await {
+                bail!("Unable to open URL in system browser");
+            }
+            return Ok(());
+        }
+        Commands::OpenPath { path } => {
+            if !browser_launcher::open_path(path).await {
+                bail!("Unable to open path in default OS handler");
+            }
+            return Ok(());
+        }
+        Commands::ClearScreen => {
+            print!("{}", platform_source_utilities::get_clear_terminal_sequence());
+            io::stdout().flush()?;
             return Ok(());
         }
         Commands::Version => {
@@ -766,6 +791,7 @@ async fn main() -> Result<()> {
                 .or_else(|| source_semantics_osc::inspect(source, name, &args))
                 .or_else(|| source_semantics_types::inspect(source, name, &args))
                 .or_else(|| portable_render_semantics::inspect(source, name, &args))
+                .or_else(|| platform_source_utilities::inspect(source, name, &args))
                 .or_else(|| generated_ports::inspect(source, name, &args))
                 .or_else(|| {
                     if source != "src/utils/transcriptSearch.ts" {
@@ -823,6 +849,13 @@ async fn main() -> Result<()> {
             }
             if let Some(source_exports) = source_semantics_types::exports(source) {
                 for name in source_exports {
+                    if !exports.contains(name) {
+                        exports.push(*name);
+                    }
+                }
+            }
+            if let Some(names) = platform_source_utilities::exports(source) {
+                for name in names {
                     if !exports.contains(name) {
                         exports.push(*name);
                     }
