@@ -148,7 +148,7 @@
 | `src/commands/fast/index.ts` | 27 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/feedback/feedback.tsx` | 25 | 5095 | 重写：保持通用行为 | `src/generated_ports/p_db7aa9242d70e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/feedback/index.ts` | 27 | 931 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/files/files.ts` | 20 | 688 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/files/files.ts` | 20 | 688 | 重写：保持通用行为 | `src/files_context.rs / src/agent.rs / src/main.rs` | 部分实现：/files 从真实当前会话成功 read_file/FileRead 工具结果复建已读文件清单、规范化/去重/相对工作目录显示，并经会话持久化跨进程恢复；原版独立 readFileState 缓存、压缩后保留及文件失效淘汰语义尚未等价 |
 | `src/commands/files/index.ts` | 13 | 316 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/good-claude/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：原版禁用注册节点 Rust 化，保持不可调用并等待统一验收 |
 | `src/commands/heapdump/heapdump.ts` | 18 | 398 | 重写：保持通用行为 | 待定 | 未迁移 |
