@@ -2215,6 +2215,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut bridge_session = bridge_core::BridgeSession::new(agent.session_id());
     let mut sdk_initialized = false;
     let mut sdk_end_requested = false;
+    let mut side_question_tasks = Vec::<tokio::task::JoinHandle<()>>::new();
     print_json!(json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
@@ -2408,7 +2409,8 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     })();
                     match prepared {
                         Ok((id, profile, request)) => {
-                            tokio::spawn(async move {
+                            side_question_tasks.retain(|task| !task.is_finished());
+                            side_question_tasks.push(tokio::spawn(async move {
                                 let outcome = side_question::answer(profile, request).await;
                                 let reply = match outcome {
                                     Ok(response) => json!({"type":"control_response",
@@ -2419,7 +2421,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                                             "request_id":id,"error":format!("{error:#}")}}),
                                 };
                                 print_json!(reply);
-                            });
+                            }));
                         }
                         Err(error) => print_json!(json!({"type":"control_response",
                             "response":{"subtype":"error",
@@ -2599,6 +2601,12 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             other => print_json!(json!({"type":"error",
                 "message":format!("Unsupported SDK event {other}")})),
         }
+    }
+    // A producer may close stdin immediately after issuing a side question.
+    // Give already accepted independent replies a bounded chance to flush
+    // before the SDK process exits.
+    for task in side_question_tasks {
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), task).await;
     }
     Ok(())
 }
