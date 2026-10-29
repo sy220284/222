@@ -95,13 +95,13 @@ fn memory_yaml_scalar(raw: &str) -> Option<String> {
 
 fn parse_header(text: &str) -> (Option<String>, Option<String>) {
     let lines = text.lines().take(30).collect::<Vec<_>>();
-    if lines.first().map(|line| line.trim()) != Some("---") {
+    if lines.first().map(|line| line.trim_end()) != Some("---") {
         return (None, None);
     }
     // parseFrontmatter requires a complete closing delimiter. Incomplete
     // headers must not leak Markdown body text into the selector manifest.
     let Some(end) = lines.iter().enumerate().skip(1)
-        .find(|(_, line)| line.trim() == "---")
+        .find(|(_, line)| line.trim_end() == "---")
         .map(|(index, _)| index) else {
             return (None, None);
         };
