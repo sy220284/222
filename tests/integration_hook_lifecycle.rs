@@ -89,7 +89,7 @@ fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
         {"event":"PreToolUse","matcher":"^read_file$",
             "command":"printf '{\"decision\":\"block\",\"reason\":\"read denied\"}'"},
         {"event":"PreToolUse","matcher":"^write_file$",
-            "command":"printf '{\"hookSpecificOutput\":{\"updatedInput\":{\"path\":\"rewritten.txt\",\"content\":\"effective content\"}}}'"},
+            "command":"printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"updatedInput\":{\"path\":\"rewritten.txt\",\"content\":\"effective content\"}}}'"},
         {"event":"PreToolUse","matcher":"^write_file$",
             "command":format!("cat > '{}'", pre_payload.display()),
             "timeout_seconds":3},

@@ -479,3 +479,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 2026-10-29：Issue #3 PowerShell 变量泄露与伪装应用授权漏洞
 
 对照原始 2.1.88 `src/tools/PowerShellTool/powershellPermissions.ts` 539–624、932–962、1300–1315、1458–1515 行：原版在准许 cmdlet 前验证 AST 的变量/子表达式/脚本路径属性；Rust 词法权限曾将 `Get-Content $env:SECRET_API_KEY`、`Write-Output "$env:SECRET_API_KEY"`、`scripts\\Get-Content secret` 当作已授权命令执行。现补上动态/环境变量、@splat、path-qualified executable、#Requires、using 和 stop-parsing 的保守拒绝自动放行规则；拒绝仍优先，静态单引号命令保持通过。新增权限匹配回归及真实 `ToolExecutor::approve_external` 授权链回归。原版完整 PowerShell AST、控制流/脚本块、反馈 UI 仍未等价，本次不勾选 Issue #3 冻结项，自动生成模块不作为等价证据。
+
+### 2026-10-29：Issue #3 原版 Hook 事件名协议检查
+
+对照原版 `src/utils/hooks.ts` 581–589 行，Rust 过去接受 `hookSpecificOutput` 但不核实 `hookEventName`，可能把 PostToolUse 的响应当作 PreToolUse 输入修改或权限决策。现在非空 `hookSpecificOutput` 必须提供和当前事件完全一致的 `hookEventName`，缺失或错事件返回协议错误；真实 Hook 子进程集成用例更新为原版完整协议，并新增错误事件/缺失事件的拒绝测试。仍须完善原版 Hook 串并行调度、失败回填、各生命周期事件与 UI，不将 `src/utils/hooks.ts` 标已验收。

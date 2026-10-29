@@ -1555,7 +1555,7 @@
 | `src/utils/hooks/sessionHooks.ts` | 448 | 12132 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` |部分实现，复杂子类型仍未迁移；SubagentStart/Stop、TeammateIdle Rust 实际代理链与测试已补，未覆盖其余全部子类型 |
 | `src/utils/hooks/skillImprovement.ts` | 268 | 8362 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移 |
 | `src/utils/hooks/ssrfGuard.ts` | 295 | 8732 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移 |
-| `src/utils/hooks.ts` | 5023 | 159458 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` |部分实现，复杂子类型仍未迁移；SubagentStart/Stop、TeammateIdle Rust 实际代理链与测试已补，PostToolUse MCP 结果覆盖已进入真实模型调用链，未覆盖其余全部子类型 |
+| `src/utils/hooks.ts` | 5023 | 159458 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` |部分实现，复杂子类型仍未迁移；SubagentStart/Stop、TeammateIdle Rust 实际代理链与测试已补，PostToolUse MCP 结果覆盖已进入真实模型调用链，未覆盖其余全部子类型；对照原版 2.1.88 对 hookSpecificOutput.hookEventName 强制匹配当前事件，缺失/错事件不能修改工具输入或权限；完整并行 Hook、消息/中止/异步时序仍待验收 |
 | `src/utils/horizontalScroll.ts` | 138 | 4302 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/http.ts` | 137 | 4928 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/hyperlink.ts` | 40 | 1465 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |

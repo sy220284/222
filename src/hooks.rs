@@ -295,6 +295,18 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
     let mut result = HookOutcome::default();
     let decision = value.get("decision").and_then(Value::as_str);
     let hook_output = value.get("hookSpecificOutput");
+    // Original 2.1.88 hooks.ts:581-589 rejects outputs whose
+    // hookEventName is missing or mismatched. A response for another
+    // lifecycle event must not rewrite this tool's inputs or permissions.
+    if let Some(output) = hook_output.filter(|item| !item.is_null()) {
+        let expected = payload.get("hook_event_name").and_then(Value::as_str)
+            .context("Hook input missing hook_event_name")?;
+        let actual = output.get("hookEventName").and_then(Value::as_str);
+        if actual != Some(expected) {
+            bail!("Hook returned incorrect event name: expected '{expected}', got '{}'",
+                actual.unwrap_or("<missing>"));
+        }
+    }
     let permission_decision = hook_output
         .and_then(|x| x.get("permissionDecision"))
         .and_then(Value::as_str);
@@ -453,6 +465,30 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn wrong_hook_specific_event_is_a_protocol_error_not_a_permission_grant() {
+        for json_output in [
+            r#"{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}"#,
+            r#"{"hookSpecificOutput":{"permissionDecision":"allow"}}"#,
+        ] {
+            let runner = HookRunner::new(&[HookRule {
+                event: HookEvent::PreToolUse,
+                matcher: None,
+                command: format!("printf '%s' '{}'", json_output),
+                timeout_seconds: 3,
+            }])
+            .unwrap();
+            let error = runner
+                .run(HookEvent::PreToolUse, None, json!({}))
+                .await
+                .unwrap_err();
+            assert!(
+                error.to_string().contains("incorrect event name"),
+                "{error:#}"
+            );
+        }
+    }
     #[test]
     fn validates_hook_configuration() {
         assert!(HookRunner::new(&[HookRule {
@@ -500,7 +536,7 @@ mod tests {
         let updater = HookRunner::new(&[HookRule {
             event: HookEvent::PreToolUse,
             matcher: None,
-            command: "printf '{\"hookSpecificOutput\":{\"updatedInput\":{\"path\":\"safe.txt\"}}}'"
+            command: "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"updatedInput\":{\"path\":\"safe.txt\"}}}'"
                 .into(),
             timeout_seconds: 5,
         }])
