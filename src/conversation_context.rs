@@ -688,12 +688,17 @@ pub fn project_instructions_with_dirs(
     let root = root.canonicalize()?;
     let config = crate::config::Config::load()?;
     let excludes = build_instruction_excludes(&config.instruction_excludes)?;
+    let source_enabled = |source: &str| config.instruction_sources.get(source).copied().unwrap_or(true);
     let mut output = String::new();
     let mut seen = HashSet::new();
     let mut visited = HashSet::new();
 
-    let config = crate::config::Config::path()?;
-    if let Some(home) = config.parent() {
+    let user_config = if source_enabled("user") {
+        Some(crate::config::Config::path()?)
+    } else {
+        None
+    };
+    if let Some(home) = user_config.as_deref().and_then(Path::parent) {
         match fs::metadata(home) {
             Ok(metadata) if metadata.is_dir() => {
                 let home = home.canonicalize()?;
@@ -736,7 +741,7 @@ pub fn project_instructions_with_dirs(
         let skip_project = nested_worktree.as_ref().is_some_and(|(worktree, main)| {
             directory.starts_with(main) && !directory.starts_with(worktree)
         });
-        if !skip_project {
+        if !skip_project && source_enabled("project") {
             for relative in ["AGENTS.md", ".atlas/AGENTS.md", ".atlas/instructions.md"] {
                 add_file(
                     &directory.join(relative),
@@ -759,20 +764,23 @@ pub fn project_instructions_with_dirs(
                 &mut output,
             )?;
         }
-        for relative in ["AGENTS.local.md", ".atlas/instructions.local.md"] {
-            add_file(
-                &directory.join(relative),
-                directory,
-                &root,
-                false,
-                &excludes,
-                &mut seen,
-                &mut output,
-            )?;
+        if source_enabled("local") {
+            for relative in ["AGENTS.local.md", ".atlas/instructions.local.md"] {
+                add_file(
+                    &directory.join(relative),
+                    directory,
+                    &root,
+                    false,
+                    &excludes,
+                    &mut seen,
+                    &mut output,
+                )?;
+            }
         }
     }
     // The original getMemoryFiles loads entrypoints at added roots only.
-    if std::env::var("ATLAS_ADDITIONAL_DIRECTORIES_INSTRUCTIONS")
+    if source_enabled("project")
+        && std::env::var("ATLAS_ADDITIONAL_DIRECTORIES_INSTRUCTIONS")
         .ok()
         .is_some_and(|value| {
             matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
