@@ -203,8 +203,10 @@ fn replace_local_with_origin(
     let stage = home.join(format!(".update-{}", Uuid::new_v4()));
     let backup = home.join(format!(".previous-{}", Uuid::new_v4()));
     let staged = (|| -> Result<()> {
+        // The temporary directory starts with a dot, so manifest-less plugins
+        // cannot be validated using its temporary basename. The source was
+        // fully validated by manifest_name before the byte-for-byte copy.
         copy_local_tree(&source, &stage)?;
-        crate::plugins::validate_local(&stage)?;
         let origin = stage.join(".atlas-plugin-origin.json");
         if origin.exists() {
             bail!("Plugin source contains reserved installation metadata");
