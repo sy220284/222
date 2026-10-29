@@ -252,7 +252,16 @@ impl ToolExecutor {
                 }
             }
         }
-        let matched = permission_rules::policy_for(&self.permission_rules,tool,args)?;
+        // PowerShell is a separate source tool with case-insensitive cmdlet
+        // and alias permissions. Never evaluate its commands under Bash rules.
+        let matched = if crate::tool_names::canonical_name(tool)=="run_command"
+            && self.shell_kind==crate::shell_runtime::ShellKind::Powershell {
+            crate::powershell_permission_matching::policy_for(
+                &self.permission_rules, args.get("command").and_then(Value::as_str)
+                    .context("PowerShell command is missing")?)?
+        } else {
+            permission_rules::policy_for(&self.permission_rules,tool,args)?
+        };
         if matched == Some(permission_rules::Behavior::Deny) {
             bail!("Tool {tool} denied by explicit permission rule");
         }

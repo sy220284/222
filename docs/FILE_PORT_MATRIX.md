@@ -1256,7 +1256,7 @@
 | `src/tools/PowerShellTool/gitSafety.ts` | 177 | 7695 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/PowerShellTool/modeValidation.ts` | 405 | 17399 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/PowerShellTool/pathValidation.ts` | 2050 | 73059 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/PowerShellTool/powershellPermissions.ts` | 1649 | 67606 | 重写：工具行为、参数和权限 | `src/tools.rs / src/bash_permission_suggestions.rs` | 部分实现：按原版过滤包含换行/星号的长期授权建议；PowerShell 全部执行器、权限分类与确认界面仍缺 |
+| `src/tools/PowerShellTool/powershellPermissions.ts` | 1649 | 67606 | 重写：工具行为、参数和权限 | `src/tools.rs / src/powershell_permission_matching.rs / src/bash_permission_suggestions.rs` | 部分实现：依据原版 PowerShell 区分 Bash 权限、大小写不敏感、常见别名、模块限定 allow 防跨模块扩大、tab 规则与 deny 优先；完整 AST 安全分类及反馈 UI 仍未等价 |
 | `src/tools/PowerShellTool/powershellSecurity.ts` | 1091 | 37651 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/PowerShellTool/prompt.ts` | 146 | 9826 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/PowerShellTool/readOnlyValidation.ts` | 1824 | 67327 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |

@@ -451,3 +451,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 冻结 Issue #3 的 Bash/PowerShell 授权建议源码补齐
 
 直接核对 2.1.88 `src/tools/BashTool/bashPermissions.ts` 161–354 行以及 `src/tools/PowerShellTool/powershellPermissions.ts` 143–159 行，移植安全环境前缀、2 词建议、heredoc 和多行分支、危险首词 UI 过滤、PowerShell 星号/换行拒绝，以及共享权限规则 JSON 对象。源码依据与回归见 `src/bash_permission_suggestions.rs`。现阶段功能函数尚未完整接通交互式权限决策 UI，也未实现完整 Shell AST 和 PowerShell 执行器，冻结条目继续保持部分实现、不得验收关闭。
+
+### PowerShell/Bash 权限作用域纠正（Issue #3）
+
+依据原始 `src/tools/PowerShellTool/powershellPermissions.ts` 163–326 行、`src/utils/powershell/parser.ts` 814–826/1326–1451 行与 `readOnlyValidation.ts` 976–994 行，修复之前默认 PowerShell 运行时仍把 `run_command` 的规则映射到 Bash、导致 PowerShell 专用 deny/allow 内容规则未进入执行链的问题。Rust `src/powershell_permission_matching.rs` 实现不区分大小写、按原版常用别名转换和模块前缀 fail-open 防护；`src/tools.rs` 的权限评估按实际 shell 类型分流。新增源级边界与拒绝回归。仍缺原版 PowerShell AST、路径级权限、沙箱、完整审批模型；对应冻结原路径保留部分实现。
