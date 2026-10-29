@@ -272,7 +272,7 @@ impl FileReadCache{
         if !self.cache.contains_key(path){self.order.push_back(path.to_path_buf())}
         self.cache.insert(path.to_path_buf(),FileCacheEntry{data:data.clone(),mtime});
         while self.cache.len()>1000 {
-            if let Some(old)=self.order.pop_front(){self.cache.remove(&old)} else{break}
+            if let Some(old)=self.order.pop_front(){self.cache.remove(&old);} else{break}
         }
         Ok(data)
     }
