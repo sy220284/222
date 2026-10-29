@@ -2,7 +2,7 @@
 
 - **原版依据**：完整 2.1.88 源码 `source/src/utils/plugins/orphanedPluginFilter.ts::getGlobExclusionsForPluginCache` 检查 `cache/<marketplace>/<plugin>/<version>/.orphaned_at` 并向 Grep/Glob 提供版本排除；`source/src/tools/GrepTool/GrepTool.ts::call` 与 `source/src/utils/glob.ts::glob` 实际使用排除规则。`source/src/utils/permissions/filesystem.ts::checkWritePermissionForTool` 与 `source/src/utils/fileHistory.ts::fileHistoryRewind/applySnapshot` 说明文件回退会修改真实文件，应遵循编辑路径安全边界。
 - **源码补强 1：过期插件缓存不再混入搜索结果**。Rust `src/search.rs::files_filtered` 在实际遍历前识别版本级 `.orphaned_at` 标记，跳过过期目录及其全部文件，Grep、Glob 共用入口；仅在 `.atlas/plugins/cache` 或显式 `ATLAS_PLUGIN_CACHE_DIR` 的真实版本层级生效，普通项目同名文件不受影响。代码提交 `952cf33fb2ac597d20270e33d425be7219e71a19`、`5218a04fe97c3d5f025c324fdae8b9547278b9bb`。剩余：原版会话级缓存冻结、`/reload-plugins` 刷新与其他插件缓存来源尚未完整接线。
-- **源码补强 2：历史文件回退不能绕过编辑路径拒绝**。Rust `src/tools.rs::dispatch(file_revert)` 在已获工具级授权后、实际 `history::restore` 前，复用 `file_rule_paths` 与 `permission_rules::policy_for(edit_file)`；`Edit(path)` 明确 deny 会拒绝回退，ask 必须额外获得批准，检查包含规范化与符号链接目标路径。代码提交 `70d0bd1e72d5fe42ba733c85d2ea89e7c40031b4`。剩余：完整原版历史快照、100 次保留、Shell 修改跟踪、跨进程并发竞态与完整交互确认。
+- **源码补强 2：历史文件回退不能绕过编辑路径拒绝**。Rust `src/tools.rs::dispatch(file_revert)` 在工具级审批前先检查显式拒绝、实际 `history::restore` 前复核需要询问的编辑规则，复用 `file_rule_paths` 与 `permission_rules::policy_for(edit_file)`；`Edit(path)` 明确 deny 会拒绝回退，ask 必须额外获得批准，检查包含规范化与符号链接目标路径。代码提交 `70d0bd1e72d5fe42ba733c85d2ea89e7c40031b4`、`a30100f02004cce63541b8141af7524b96d2777d`。剩余：完整原版历史快照、100 次保留、Shell 修改跟踪、跨进程并发竞态与完整交互确认。
 - **本轮可核实交付**：2 条不同的用户可感知业务功能有新 Rust 代码并已推送，**2/100，剩余 98**。只做源码及远端提交静态复核，未运行 Cargo、单元/集成测试或 CI，全部标记**已提交、待行为验收**，新增完整等价验收 0；冻结 Issue #3 的 362 项不勾选。先行 100 项逐函数缺口清单及实施方案尚未形成，A/B 与数量目标未达标。PR #2 继续 Draft，不合并，不修改 main。
 
 ## 2026-10-29：插件市场移除与批量刷新生命周期（源码已提交、待验收）
