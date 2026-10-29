@@ -571,10 +571,10 @@ fn plugin_command_body(content: &str, args: &str, root: &Path, session_id: Optio
     let prompt = crate::skill_arguments::substitute_arguments(
         crate::skill_arguments::markdown_body(content), Some(args), true, &names,
     );
-    let root = root.to_string_lossy();
+    let root_text = root.to_string_lossy();
     #[cfg(windows)]
-    let root = root.replace('\\', "/");
-    let prompt = prompt.replace("${CLAUDE_PLUGIN_ROOT}", root.as_ref());
+    let root_text = root_text.replace('\\', "/");
+    let prompt = prompt.replace("${CLAUDE_PLUGIN_ROOT}", root_text.as_ref());
     let prompt = match session_id {
         Some(id) => prompt.replace("${CLAUDE_SESSION_ID}", id),
         None => prompt,
