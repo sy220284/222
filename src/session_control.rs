@@ -39,6 +39,7 @@ pub fn list(root:&Path)->Result<Vec<SessionItem>>{
             .unwrap_or_else(||if fallback.is_empty(){"Untitled conversation".into()}else{fallback});
         let modified_ms=meta.modified().ok().and_then(|t|t.duration_since(UNIX_EPOCH).ok())
             .map(|t|t.as_millis()).unwrap_or(0);
+        let title=crate::portable_ui_runtime::strip_display_tags(&title);
         entries.push(SessionItem{id,title,messages:session.messages.len(),modified_ms});
     }
     entries.sort_by(|a,b|b.modified_ms.cmp(&a.modified_ms).then(a.id.cmp(&b.id)));
