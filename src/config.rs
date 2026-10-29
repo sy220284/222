@@ -69,6 +69,9 @@ pub struct Config {
     pub additional_directories: Vec<String>,
     #[serde(default)]
     pub default_shell: Option<String>,
+    /// Preferred terminal for browser deep links, retained across headless launches.
+    #[serde(default, rename = "deepLinkTerminal", alias = "deep_link_terminal", skip_serializing_if = "Option::is_none")]
+    pub deep_link_terminal: Option<String>,
     #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
     #[serde(default)]
@@ -93,6 +96,7 @@ impl Default for Config {
             default_provider: "local".into(),
             additional_directories: Vec::new(),
             default_shell: None,
+            deep_link_terminal: None,
             providers: vec![
                 ProviderProfile {
                     id: "local".into(),
