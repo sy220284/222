@@ -918,6 +918,61 @@ mod remote_tests {
         String::from_utf8_lossy(&bytes).into_owned()
     }
     #[tokio::test]
+    async fn expired_http_session_reconnects_with_new_session_and_tools_without_replaying_call(){
+        let listener=TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let server=tokio::spawn(async move{
+            let mut all=Vec::new();
+            for n in 0..7{
+                let (mut socket,_)=listener.accept().await.unwrap();
+                let request=take_http(&mut socket).await;
+                all.push(request);
+                let (status,body)=match n{
+                    0|4=>(200,json!({"jsonrpc":"2.0","id":1,"result":{
+                        "serverInfo":{"name":"recoverable"}}}).to_string()),
+                    1|5=>(202,String::new()),
+                    2=>(200,json!({"jsonrpc":"2.0","id":2,"result":{
+                        "tools":[{"name":"before","inputSchema":{"type":"object"}}]}}).to_string()),
+                    3=>(404,String::new()),
+                    _=>(200,json!({"jsonrpc":"2.0","id":2,"result":{
+                        "tools":[{"name":"after","inputSchema":{"type":"object"}}]}}).to_string())
+                };
+                let extra=match n{
+                    0=>"Mcp-Session-Id: session-A\r\n",
+                    4=>"Mcp-Session-Id: session-B\r\n",
+                    _=>"",
+                };
+                let header=format!("HTTP/1.1 {status} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{extra}Connection: close\r\n\r\n",
+                    body.len());
+                socket.write_all(header.as_bytes()).await.unwrap();
+                socket.write_all(body.as_bytes()).await.unwrap();
+                socket.shutdown().await.unwrap();
+            }
+            all
+        });
+        let cfg=McpServerConfig{id:"restore".into(),command:String::new(),
+            args:vec![],env:HashMap::new(),transport:Some("http".into()),
+            url:Some(format!("http://{address}/mcp")),headers:HashMap::new()};
+        let mut mgr=McpManager::connect(&[cfg]).await.unwrap();
+        assert!(mgr.handles("mcp__restore__before"));
+        let call=ToolCall{id:"once".into(),kind:"function".into(),
+            function:FunctionCall{name:"mcp__restore__before".into(),
+                arguments:"{}".into()}};
+        let first=mgr.execute(&call).await;
+        assert!(first.contains("session expired"),"{first}");
+        assert_eq!(mgr.statuses().unwrap()[0]["status"],"failed");
+        mgr.refresh_changed_tools().await.unwrap();
+        assert!(mgr.handles("mcp__restore__after"));
+        assert!(!mgr.handles("mcp__restore__before"));
+        assert_eq!(mgr.statuses().unwrap()[0]["status"],"connected");
+        let seen=server.await.unwrap();
+        assert_eq!(seen.len(),7);
+        assert!(seen[3].contains("tools/call"));
+        assert!(seen[3].contains("session-A"));
+        assert!(seen[5].contains("session-B"));
+        assert!(!seen[6].contains("tools/call"));
+    }
+    #[tokio::test]
     async fn generic_http_mcp_negotiates_session_sse_discovery_and_tool_dispatch(){
         let listener=TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address=listener.local_addr().unwrap();
