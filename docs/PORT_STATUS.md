@@ -1288,6 +1288,6 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 
 - **原版依据**：`src/utils/hooks.ts:627–635` 解析 `hookSpecificOutput.initialUserMessage`；`src/utils/sessionStart.ts:20–31,129–155` 保留一次性首条用户消息；`src/cli/print.ts:697–705` 在无头模式把它放入用户消息队列。原始 ZIP：`claude-code-2.1.88-main(1).zip`。
 - **原有差异**：`src/hooks.rs::run_command` 忽略该字段，`HookRunner::run` 丢弃汇总值，`Agent::ask_with_blocks` 对空输入一律拒绝；无头自动化即使 SessionStart Hook 提供首条任务也无法开始模型交互。
-- **本次真实 Rust 代码**：`src/hooks.rs` 校验后解析、按原版 Hook 注册顺序汇总最后一条有效初始消息；`src/agent.rs::attach_hooks/clear_history` 将消息保留为单次消费的会话用户输入，`ask_with_blocks` 在空输入时使用该消息，有显式输入时将启动消息置于其前面作为独立用户轮次。交互终端不自动注入该消息；`SessionStart` 其他 Hook 上下文和阻断警告继续保留。
-- **提交证据**：`1311f062d94782fd9300b2aff7e0410df39d948a`、`7485c83fecee206c5b724cb46590d35a32e36156`。只进行源码和可达入口审查，未运行 Cargo、CI 或行为测试，状态为**已提交、待验收**。
-- **未闭环差异**：原版自动启动的 SDK 输入队列时序、`watchPaths` 动态文件监听、插件 Hook 动态注册、异步 Hook 生命周期和全事件取消传播；冻结 Issue #3 的 362 项保持开放。本次只计 **1 项独立用户可感知业务功能**，本轮 100 项先行缺口清单与 100 项补齐目标仍未达成。
+- **本次真实 Rust 代码**：`src/hooks.rs` 校验后解析、按原版 Hook 注册顺序汇总最后一条有效初始消息；`src/agent.rs::attach_hooks/clear_history` 将消息保留为单次消费的会话用户输入，`ask_with_blocks` 在空输入时使用该消息，有显式输入时将启动消息置于其前面作为独立用户轮次；`src/main.rs::sdk` 在发出初始化消息后、读取外部 SDK 输入前自动执行首条用户任务。交互终端不自动注入该消息；`SessionStart` 其他 Hook 上下文和阻断警告继续保留。
+- **提交证据**：`1311f062d94782fd9300b2aff7e0410df39d948a`、`7485c83fecee206c5b724cb46590d35a32e36156`、`1e055ef50f6aa80d39f0d0c151e40e383dab010e`、`974dd6767248fa5f404e9bc5616e580c7dc8dbeb`。只进行源码和可达入口审查，未运行 Cargo、CI 或行为测试，状态为**已提交、待验收**。
+- **未闭环差异**：SDK 首条消息与外部并发输入的完整队列时序、`watchPaths` 动态文件监听、插件 Hook 动态注册、异步 Hook 生命周期和全事件取消传播；冻结 Issue #3 的 362 项保持开放。本次只计 **1 项独立用户可感知业务功能**，本轮 100 项先行缺口清单与 100 项补齐目标仍未达成。
