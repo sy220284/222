@@ -396,3 +396,14 @@
 每行必须补齐源码定位、原版函数/事件、Rust 真实执行入口、正常路径、输入验证、错误和取消、权限/并发时序、重启持久化、UI/SDK/远程调用及与原版结果逐项对照的测试；提交与 CI 可复查后才更新原始矩阵并勾选 Issue。空值、模拟返回、常量替代实现不得作为验收。
 
 当前原始 362 项涉及权限与 Bash/PowerShell、MCP OAuth 与多传输、模型/Agent、Hook、任务图和团队、终端 UI、会话记忆、SDK/流式、LSP、插件等关联主链，均仍有需要逐项关闭的差异。不能仅据 Rust `cargo test` 通过声称对原版等价。后续严格只更新同一 PR #2。
+
+
+## 2026-10-29：冻结路径 #349 Hook 权限询问与实际执行阻断
+
+**原版源码证据：** 2.1.88 `src/utils/hooks.ts` 的 `executePreToolHooks` 聚合 `permissionDecision: ask`，并在约 2849–2875 行将该权限行为及修改后的输入交给工具执行链；`src/services/tools/toolHooks.ts` 约 322–432 行的 `resolveHookPermissionDecision` 将 `ask` 作为 `forceDecision` 传给用户授权回调，而不是当作普通的无决定 Hook。即使正常工具策略允许，显式 `ask` 也应要求用户确认。
+
+**Rust 实际差异与修复：** 原 `src/hooks.rs::run_command` 只处理 `deny`，丢失 `ask`，`src/agent.rs::ask` 因而在 `--approval full` 下直接执行有副作用的工具。现将 `PreToolUse` 的 `permissionDecision` 从 Hook JSON 传入 `HookOutcome`，在 Agent 每条真实工具调用前强制确认；非交互运行返回与工具 ID 对应的错误回填，拒绝执行和事后 Hook，仍允许同轮其余工具及下一轮模型请求；交互运行需用户明确输入 y/yes。多个 Hook 的询问不会被后续允许决定覆盖，原有显式拒绝仍优先。
+
+**真实调用链回归：** `tests/integration_hook_lifecycle.rs::pre_tool_hook_ask_cannot_be_bypassed_by_full_approval` 使用独立 CLI 进程、真实 Shell Hook、模拟模型 HTTP 两轮工具调用和临时文件系统，验证 `--approval full` 下 Hook `ask` 不产生文件副作用、下一轮模型收到 `must-ask` 的拒绝结果。代码提交 `a1091560`、`2c08cb75`，格式及相邻并行改动整合 `c9e3b7b5`。最终 CI 应以最新 HEAD 的 Actions 实际结论为准。
+
+**未闭环：** 原版 `allow` 跳过一般询问但仍服从显式 deny/ask 的完整决策、复杂交互式权限回调、全部 Hook 类型/异步取消、多个 Hook 输入修改时序及重启行为尚待补全；冻结 #349 **仍为部分实现、未通过完整等价验收**，362 条均不勾选。
