@@ -24,9 +24,17 @@ struct CodeBlock {
 }
 
 fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
+    // Original copy.tsx strips hidden prompt analysis XML before Markdown
+    // lexing. Keep the full response untouched when copying it directly.
+    let mut cleaned = markdown.to_owned();
+    for tag in ["commit_analysis", "context", "function_analysis", "pr_analysis"] {
+        let pattern = format!(r"(?s)<{tag}>.*?</{tag}>\\n?");
+        let matcher = regex::Regex::new(&pattern).expect("fixed XML tag regex");
+        cleaned = matcher.replace_all(&cleaned, "").into_owned();
+    }
     let mut blocks = Vec::new();
     let mut fence: Option<(char, usize, String, Vec<String>)> = None;
-    for line in markdown.lines() {
+    for line in cleaned.lines() {
         let trimmed = line.trim_start_matches(' ');
         let indent = line.len() - trimmed.len();
         let marker = trimmed.chars().next().unwrap_or(' ');
