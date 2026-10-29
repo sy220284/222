@@ -2736,6 +2736,15 @@ impl Agent {
                     self.session.save(&self.root)?;
                     continue;
                 }
+                if hook.prevent_continuation {
+                    self.emit(json!({
+                        "type": "hook_stopped_continuation",
+                        "hook_event_name": "Stop",
+                        "session_id": self.session.id,
+                        "message": hook.stop_reason.as_deref()
+                            .unwrap_or("Stop hook prevented continuation"),
+                    }));
+                }
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
                 return Ok(text);
