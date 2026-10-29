@@ -637,6 +637,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                     "/doctor                  run local installation and configuration diagnostics"
                 );
                 println!("/tag NAME                add/replace a searchable session tag; repeat to remove");
+                println!("/branch [name]           fork the conversation and resume independently");
                 println!("/history [query]         search saved prompt history");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
@@ -801,6 +802,14 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 }
             } else {
                 println!("{}", agent.set_session_tag(Some(tag))?);
+            }
+            continue;
+        }
+        if input == "/branch" || input.starts_with("/branch ") {
+            let name = input.strip_prefix("/branch").unwrap_or("").trim();
+            match agent.branch_session((!name.is_empty()).then_some(name)) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Cannot branch: {error:#}"),
             }
             continue;
         }
