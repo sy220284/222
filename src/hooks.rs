@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{process::Stdio, time::Duration};
+use std::{path::{Path, PathBuf}, process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     process::Command,
@@ -122,6 +122,7 @@ pub struct HookOutcome {
 #[derive(Default)]
 pub struct HookRunner {
     rules: Vec<(HookRule, Option<Regex>)>,
+    workspace: Option<PathBuf>,
 }
 
 impl HookRunner {
@@ -137,7 +138,17 @@ impl HookRunner {
             let matcher = rule.matcher.as_deref().map(Regex::new).transpose()?;
             compiled.push((rule.clone(), matcher));
         }
-        Ok(Self { rules: compiled })
+        Ok(Self {
+            rules: compiled,
+            workspace: None,
+        })
+    }
+
+    /// Run user-configured hooks from the same workspace as the Agent,
+    /// including nested worktree/subagent sessions.
+    pub fn with_workspace(mut self, workspace: PathBuf) -> Self {
+        self.workspace = Some(workspace);
+        self
     }
 
     pub fn is_empty(&self) -> bool {
@@ -157,6 +168,7 @@ impl HookRunner {
         // after the hook results have been collected.
         let mut pending = FuturesUnordered::new();
         let shutdown_cap = (event.name() == "SessionEnd").then(session_end_timeout);
+        let workspace = self.workspace.as_deref();
         for (rule, matcher) in &self.rules {
             if rule.event.name() != event.name() {
                 continue;
@@ -181,14 +193,14 @@ impl HookRunner {
             }
             pending.push(async move {
                 let result = if let Some(cap) = shutdown_cap {
-                    match timeout(cap, run_command(rule, &data)).await {
+                    match timeout(cap, run_command(rule, &data, workspace)).await {
                         Ok(result) => result,
                         Err(_) => Err(anyhow::anyhow!(
                             "SessionEnd hook exceeded shutdown timeout"
                         )),
                     }
                 } else {
-                    run_command(rule, &data).await
+                    run_command(rule, &data, workspace).await
                 };
                 (rule, result)
             });
@@ -434,7 +446,11 @@ fn plain_hook_context(payload: &Value, output: &[u8]) -> Vec<String> {
     }
 }
 
-async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
+async fn run_command(
+    rule: &HookRule,
+    payload: &Value,
+    workspace: Option<&Path>,
+) -> Result<HookOutcome> {
     #[cfg(windows)]
     let mut proc = {
         let mut cmd = Command::new("cmd");
@@ -452,6 +468,12 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     crate::subprocess_env::apply(&mut proc);
+    if let Some(root) = workspace {
+        // Original hooks.ts runs in safeCwd and exposes the project root
+        // to scripts. Use the provider-neutral environment variable.
+        proc.current_dir(root);
+        proc.env("ATLAS_PROJECT_DIR", root);
+    }
     let mut child = proc
         .spawn()
         .with_context(|| format!("Starting hook '{}'", rule.command))?;
