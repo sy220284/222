@@ -1057,3 +1057,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - `src/mcp_http.rs` 的远程 MCP 动态 HTTP 凭据 helper 和 `src/portable_configuration.rs` 的 gh 认证检测采用共享执行器，保留原有环境隔离及权限入口。
 - 新增 9 项专项测试已本地通过。当前版本另有 Stop Hook 集成测试调整（已由并行提交完成）；本次保留该变更。
 - 未完差异：Windows cmd/.bat 规则、显式 shell 选项、全部同步/异步原版调用方接线及跨平台故障恢复验证，继续登记为部分实现。
+
+
+### 原版同步 Shell 包装层补全（2026-10-29）
+
+- 对照 `src/utils/execFileNoThrowPortable.ts` 和 `src/utils/execSyncWrapper.ts`，新增 `src/exec_sync_compat.rs` 同步执行公共层，支持 stderr/stdout 并行有限缓冲、stdin、工作目录、环境、超时、取消、stdio 模式和 Shell 命令。
+- 对非抛出旧 API 保留 stdout trim/空值回退和非零状态下的 stdout；严格旧 API 在非零状态报错；`src/portable_configuration.rs::exec_sync` 真实接入该执行器并保留现有状态码三元组返回。
+- 源码自包含验证 6 项测试通过，覆盖运行状态/非零、stdio、环境/工作目录、输入、超时、取消与溢出。主仓库 `cargo check --offline --all-targets`、`cargo fmt --all -- --check` 通过；现有全量单元测试在本地构建过程中耗时中断，最新 CI 另行核对。
+- 剩余差异：IDE/macOS钥匙串等上游同步调用方收敛、Windows shell 实际行为、全量跨平台入口测试仍待补齐；保持部分实现。

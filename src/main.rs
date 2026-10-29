@@ -29,6 +29,7 @@ mod env_runtime;
 mod env_validation;
 mod event_signal;
 mod exec_file;
+mod exec_sync_compat;
 mod files_context;
 mod gemini_sse;
 mod generated_ports;

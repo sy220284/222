@@ -121,27 +121,17 @@ pub fn current_workspace_cwd() -> Result<PathBuf> {
 }
 // src/utils/execSyncWrapper.ts (unrestricted shell calls must pass authorization gate)
 pub fn exec_sync(command: &str, cwd: &Path) -> Result<(i32, String, String)> {
-    if command.trim().is_empty() {
-        anyhow::bail!("Empty process command")
-    }
-    #[cfg(windows)]
-    let mut cmd = {
-        let mut p = std::process::Command::new("cmd");
-        p.arg("/C").arg(command);
-        p
-    };
-    #[cfg(not(windows))]
-    let mut cmd = {
-        let mut p = std::process::Command::new("sh");
-        p.arg("-c").arg(command);
-        p
-    };
-    cmd.current_dir(cwd);
-    let out = cmd.output().context("Cannot run local process")?;
+    let output = crate::exec_sync_compat::run_shell(
+        command,
+        crate::exec_sync_compat::SyncOptions {
+            cwd: Some(cwd.to_path_buf()),
+            ..Default::default()
+        },
+    )?;
     Ok((
-        out.status.code().unwrap_or(-1),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-        String::from_utf8_lossy(&out.stderr).to_string(),
+        output.code,
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
     ))
 }
 // src/utils/github/ghAuthStatus.ts

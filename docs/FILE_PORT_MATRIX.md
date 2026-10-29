@@ -1493,8 +1493,8 @@
 | `src/utils/errors.ts` | 239 | 7655 | 重写：保持通用行为 | `src/generated_ports/p_bf458f64de43d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/exampleCommands.ts` | 185 | 6200 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/execFileNoThrow.ts` | 151 | 4329 | 重写：保持通用行为 | `src/exec_file.rs / src/mcp_http.rs / src/portable_configuration.rs` | 部分实现：argv、cwd/env、stdin/EOF、stdout/stderr并发读取、失败输出策略、非零退出码、取消/超时与上限已在MCP凭据和gh认证真实链路接入；Windows批处理、shell参数及全部下游调用需继续验收 |
-| `src/utils/execFileNoThrowPortable.ts` | 90 | 2685 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/execSyncWrapper.ts` | 39 | 1203 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
+| `src/utils/execFileNoThrowPortable.ts` | 90 | 2685 | 重写：保持通用行为 | `src/exec_sync_compat.rs / src/portable_configuration.rs` | 部分实现：默认十分钟超时、Shell 执行、cwd/env/stdin、非零退出保留stdout并trim/null、标准流选项、输出缓冲上限、超时与取消的 Rust 同步兼容层；IDE/钥匙串等原版跨模块调用及平台差异仍待完整接线和对照 |
+| `src/utils/execSyncWrapper.ts` | 39 | 1203 | 重写：保持通用行为 | `src/portable_configuration.rs / src/exec_sync_compat.rs` | 部分实现：统一执行器已实现同步 Shell、cwd/env/stdin、退出码、输出、超时/取消；严格的非零退出错误与宽松非抛出接口分离；所有业务入口与跨平台权限验收待补齐 |
 | `src/utils/exportRenderer.tsx` | 98 | 16635 | 重写：保持通用行为 | `src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/utils/extraUsage.ts` | 24 | 635 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/utils/fastMode.ts` | 533 | 17723 | 重写：保持通用行为 | `src/generated_ports/p_9a3112a5d3add.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
