@@ -2089,7 +2089,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         Ok(result) => send_control!(json!({"type":"control_response",
                             "action":action,"ok":true,"result":result})),
                         Err(error) => send_control!(json!({"type":"control_response",
-                            "action":action,"ok":false,"error":format!("{error:#")})),
+                            "action":action,"ok":false,"error":format!("{error:#}")})),
                     }
                     continue;
                 }
