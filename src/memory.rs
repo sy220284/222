@@ -423,7 +423,9 @@ pub async fn context_with_recent_tools_excluding(
         if !seen.insert(name) {
             continue;
         }
-        if seen.len() > 5 {
+        // Count successfully injected memories, not attempted paths. A
+        // missing or unreadable file should not exhaust a recall slot.
+        if surfaced.len() >= 5 {
             break;
         }
         // The topic may disappear or become unreadable after scanning.
@@ -435,6 +437,15 @@ pub async fn context_with_recent_tools_excluding(
                 continue;
             }
         };
+        // The 2.1.88 recall budget is cumulative across the entire session.
+        // Do not inject a new topic when it would exceed the remaining quota.
+        if session_units
+            .saturating_add(surfaced_units)
+            .saturating_add(units)
+            > MAX_SESSION_MEMORY_UNITS
+        {
+            continue;
+        }
         let age_ms = match file.modified.duration_since(SystemTime::UNIX_EPOCH) {
             Ok(t) => t.as_secs_f64() * 1000.0,
             Err(t) => -(t.duration().as_secs_f64() * 1000.0),
