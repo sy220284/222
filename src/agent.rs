@@ -311,9 +311,13 @@ impl Agent {
                     .await;
                 match outcome {
                     Ok(result) => {
-                        if let Some(reason) = result.blocking_reason {
+                        if !result.blocking_reasons.is_empty() {
                             self.graph.delete_for_blocking_hook(id)?;
-                            bail!("TaskCreated hook feedback:\n{reason}")
+                            let feedback = result.blocking_reasons.iter()
+                                .map(|reason| format!("TaskCreated hook feedback:\n{reason}"))
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            bail!("{feedback}")
                         }
                     }
                     Err(error) => {
@@ -361,10 +365,13 @@ impl Agent {
                                     ),
                                 )
                                 .await?;
-                            if let Some(reason) = outcome.blocking_reason {
+                            if !outcome.blocking_reasons.is_empty() {
                                 // A denied completion is ordinary tool feedback in 2.1.88.
-                                // It must not become an executor error that cancels sibling tools.
-                                return Ok(format!("TaskCompleted hook feedback:\n{reason}"));
+                                // Preserve every blocking hook without cancelling sibling tools.
+                                return Ok(outcome.blocking_reasons.iter()
+                                    .map(|reason| format!("TaskCompleted hook feedback:\n{reason}"))
+                                    .collect::<Vec<_>>()
+                                    .join("\n"));
                             }
                         }
                     }
