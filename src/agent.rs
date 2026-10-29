@@ -1744,7 +1744,26 @@ impl Agent {
         } else {
             None
         };
-        child.save(&self.root)?;
+        // Source fileHistory.ts::copyFileHistoryForResume preserves backups
+        // when a conversation receives a new session ID. Without this copy,
+        // the branched transcript shows checkpoints that cannot be restored.
+        let history_enabled =
+            crate::history::enabled(self.interactive, self.file_checkpointing_enabled);
+        if history_enabled {
+            crate::history::copy_for_resume(
+                &self.root, &original_id.to_string(), &child.id.to_string(),
+            )?;
+        }
+        if let Err(error) = child.save(&self.root) {
+            if history_enabled {
+                if let Err(cleanup) =
+                    crate::history::discard_copied_session(&self.root, &child.id.to_string())
+                {
+                    bail!("Failed to save branched session: {error:#}; history cleanup failed: {cleanup:#}")
+                }
+            }
+            return Err(error);
+        }
         let branch_id = child.id;
         self.session = child;
         self.last_context_usage = None;
