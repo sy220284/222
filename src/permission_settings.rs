@@ -1,6 +1,8 @@
 //! Source parity: permissionsLoader.ts, settings/constants.ts and settings/settings.ts.
 //! Paths and policy injection are vendor-neutral; incomplete UI/MDM behavior is audited.
-use crate::permission_rules::{format_rule, parse_rule, valid_stored_rule, Behavior, RuleSetting, RuleValue};
+use crate::permission_rules::{
+    format_rule, parse_rule, valid_stored_rule, Behavior, RuleSetting, RuleValue,
+};
 use anyhow::{bail, Context, Result};
 use fs2::FileExt;
 use serde_json::{Map, Value};
