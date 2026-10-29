@@ -1,10 +1,17 @@
+## 2026-10-29：插件技能自定义路径真实接线及数据目录（已提交、待验收）
+
+- **原版完整源码**：`source/src/utils/plugins/loadPluginCommands.ts:60–95,288–313,326–376,685–820`、`source/src/skills/loadSkillsDir.ts:344–373`、`source/src/tools/SkillTool/SkillTool.ts:1070–1086`、`source/src/utils/plugins/pluginDirectories.ts::pluginDataDirPath/getPluginDataDir`。原版从清单中的技能目录查找真实文件，支持技能路径、会话 ID、插件根目录及按需创建的持久数据目录变量。
+- **Rust 真实调用链**：`ToolExecutor::list_skills/read_skill` → `plugins::resolve_skill_path` → `manifest.skills` 指定目录/嵌套 `SKILL.md` → `workspace_dirs::checked_path` 和 Read 权限规则 → 实际文件读取及技能本地路径/插件根路径/会话 ID 展开。插件命令 `src/main.rs::chat` → `plugins::command_prompt_with_session` → `plugin_data_directory`，只有真正执行且引用 `${CLAUDE_PLUGIN_DATA}` 时才创建工作区 `.atlas/plugin-data/<插件名>`，防止符号链接逃逸；列举命令时不产生数据目录副作用。
+- **本次新增 Rust 提交**：`7af75f97ead51637caa167d32800d6ab104a7aa2`、`f3e7bdf8f67a4903d052ce468ac3352e36fe7f2a`、`a4c00e2dbc96aa37fd940dbbaf4a3b7032f1fe49`、`7aeb692c8266ca31e1ab0be4b56f6a47bbb08bc4`。新增 **4 项独立业务功能**：①插件自定义/嵌套技能在模型工具目录中实际可见；②模型可从清单真实位置读取该技能并执行权限检查；③技能内容展开原版技能路径/插件根路径/会话变量；④插件命令按需建立可持久保存的插件数据目录。与下方插件命令的 3 项不重复计数，**本轮合计 7/100，余 93**。
+- **差异和限制**：SDK/无头插件命令调用、插件 user-config 敏感值遮蔽、内嵌 Shell/权限、插件热更新与异步取消、完整技能模型/effort 元数据、跨平台权限和交互 UI 尚缺。已静态核对真实源码入口和提交文件，**未运行 Cargo/测试/CI**，均为“已提交、待验收”，Issue #3 冻结 362 项保持开放。先行 100 项经逐项确认的缺口清单仍未完成，流程 A/B 与本轮数量硬目标未达标。
+
 ## 2026-10-29：插件命令用户可调用边界与运行时变量（源码已提交、待验收）
 
 - **原版逐函数依据**：完整用户 ZIP 的 `source/src/utils/plugins/loadPluginCommands.ts:288–313,326–376`：`user-invocable` 由 frontmatter 决定用户能否直接调用；命令执行时展开 `${CLAUDE_PLUGIN_ROOT}` 和 `${CLAUDE_SESSION_ID}`；`source/src/utils/plugins/pluginOptionsStorage.ts::substitutePluginVariables` 负责插件根路径替换。
 - **Rust 真实调用链**：交互 CLI `src/main.rs::chat` 解析 `/plugin:command` → `plugins::command_prompt_with_session` → `src/plugins.rs::plugin_command_body` → frontmatter 用户可调用检查、参数展开、插件规范化根路径与当前 Agent 会话 ID 展开 → `Agent::ask`。不可由用户调用的命令被显式拒绝，不会回退成普通模型提问；`/commands` 的发现仍过滤隐藏命令。
 - **本轮实际 Rust 提交**：`2bd844132dc791f7e01ef32918d616368a1d209f`、`86909a567d1f08d32b1af725805c791a4182986a`、`b1e64546dd35eeadf620f0ee22433a884f18a947`、`e0e67d017bea4fb33118c203b8039f359e26c026`、`5a565f304ce5416710c956aefa9c4a9369b6c889`。保守计 **3 项独立用户可感知功能**：①隐藏插件命令禁止用户调用；②插件根目录变量在实际命令提示中展开；③当前会话 ID 在交互调用时展开。多个修正提交不重复计数。
-- **静态核查与限制**：已核对源文件、Rust 插件解析与交互 Agent 入口，未运行 Cargo、单元/集成/端到端测试及 CI；均为**已提交、待验收**，Issue #3 冻结 362 项不勾选。仍缺插件数据目录变量、敏感用户配置占位符、Shell 内嵌执行及其权限、插件命令模型/effort 元数据、SDK/无头命令调用、动态刷新与取消传播。
-- **本轮目标状态**：100 项先行逐项确认的缺口清单尚未形成；实际代码补齐 **3/100，余 97**。流程 A/B 与本轮 100 项硬目标未完成，不能把静态源码审阅当成行为等价验收。
+- **静态核查与限制**：已核对源文件、Rust 插件解析与交互 Agent 入口，未运行 Cargo、单元/集成/端到端测试及 CI；均为**已提交、待验收**，Issue #3 冻结 362 项不勾选。仍缺敏感用户配置占位符、Shell 内嵌执行及其权限、插件命令模型/effort 元数据、SDK/无头命令调用、动态刷新与取消传播。
+- **本轮目标状态**：100 项先行逐项确认的缺口清单尚未形成；截至该小节的代码补齐 **3/100**；结合上方技能及数据目录新增 4 项，**本轮累计 7/100，余 93**。流程 A/B 与本轮 100 项硬目标未完成，不能把静态源码审阅当成行为等价验收。
 
 ## 2026-10-29：SDK 会话标题生成、独立保存及历史显示（已提交、待验收）
 
