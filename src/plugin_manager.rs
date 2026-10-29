@@ -283,6 +283,17 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             if let Err(error) = cleanup {
                 warnings.push(format!("Could not remove persistent plugin data: {error}"));
             }
+            // Plugin options are keyed by the installed identity. Delete only
+            // the exact or unambiguous scoped entry; never erase another
+            // marketplace's options merely because the short name matches.
+            match crate::permission_settings::SettingsPaths::for_workspace(&root)
+                .and_then(|settings| settings.delete_plugin_public_options(name))
+            {
+                Ok(_) => {}
+                Err(error) => {
+                    warnings.push(format!("Could not remove stored plugin options: {error}"));
+                }
+            }
             if warnings.is_empty() {
                 Ok(json!({"uninstalled":name}))
             } else {
