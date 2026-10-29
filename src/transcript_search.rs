@@ -48,7 +48,11 @@ fn visible_user_text(content: &Value, native_tool_result: Option<&Value>) -> Str
                 Some("tool_result") => {
                     // The block.content is a model-facing serialization and
                     // may contain non-visible security/system reminders.
-                    parts.push(native_tool_result.map(tool_result_search_text).unwrap_or_default());
+                    parts.push(
+                        native_tool_result
+                            .map(tool_result_search_text)
+                            .unwrap_or_default(),
+                    );
                 }
                 _ => {}
             }
@@ -85,8 +89,15 @@ pub fn tool_use_search_text(input: &Value) -> String {
     }
     let mut parts = Vec::new();
     for key in [
-        "command", "pattern", "file_path", "path", "prompt",
-        "description", "query", "url", "skill",
+        "command",
+        "pattern",
+        "file_path",
+        "path",
+        "prompt",
+        "description",
+        "query",
+        "url",
+        "skill",
     ] {
         if let Some(text) = input.get(key).and_then(Value::as_str) {
             parts.push(text.to_owned());
@@ -95,7 +106,13 @@ pub fn tool_use_search_text(input: &Value) -> String {
     for key in ["args", "files"] {
         if let Some(items) = input.get(key).and_then(Value::as_array) {
             if items.iter().all(Value::is_string) {
-                parts.push(items.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" "));
+                parts.push(
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                );
             }
         }
     }
@@ -128,7 +145,13 @@ pub fn tool_result_search_text(result: &Value) -> String {
     for key in ["filenames", "lines", "results"] {
         if let Some(items) = result.get(key).and_then(Value::as_array) {
             if items.iter().all(Value::is_string) {
-                parts.push(items.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("\n"));
+                parts.push(
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                );
             }
         }
     }
@@ -144,7 +167,9 @@ pub fn renderable_search_text(message: &Value) -> String {
             visible_user_text(content, message.get("toolUseResult"))
         }
         Some("assistant") => {
-            let blocks = message.pointer("/message/content").and_then(Value::as_array);
+            let blocks = message
+                .pointer("/message/content")
+                .and_then(Value::as_array);
             let mut parts = Vec::new();
             if let Some(blocks) = blocks {
                 for block in blocks {
@@ -166,12 +191,22 @@ pub fn renderable_search_text(message: &Value) -> String {
         Some("attachment") => match message.pointer("/attachment/type").and_then(Value::as_str) {
             Some("relevant_memories") => memories_text(message.pointer("/attachment/memories")),
             Some("queued_command")
-                if message.pointer("/attachment/commandMode").and_then(Value::as_str)
+                if message
+                    .pointer("/attachment/commandMode")
+                    .and_then(Value::as_str)
                     != Some("task-notification")
-                    && message.pointer("/attachment/isMeta").and_then(Value::as_bool) != Some(true) =>
+                    && message
+                        .pointer("/attachment/isMeta")
+                        .and_then(Value::as_bool)
+                        != Some(true) =>
             {
-                let prompt = message.pointer("/attachment/prompt").unwrap_or(&Value::Null);
-                prompt.as_str().map(str::to_owned).unwrap_or_else(|| text_blocks(prompt))
+                let prompt = message
+                    .pointer("/attachment/prompt")
+                    .unwrap_or(&Value::Null);
+                prompt
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| text_blocks(prompt))
             }
             _ => String::new(),
         },
@@ -251,7 +286,11 @@ impl TranscriptIndex {
                 .iter()
                 .enumerate()
                 .map(|(index, message)| {
-                    (index + 1, message.role.clone(), stored_message_search_text(message))
+                    (
+                        index + 1,
+                        message.role.clone(),
+                        stored_message_search_text(message),
+                    )
                 })
                 .collect(),
         }
@@ -332,9 +371,12 @@ mod tests {
     #[test]
     fn session_search_indexes_visible_text_without_model_or_mutation() {
         let messages = vec![
-            Message::text("system","hidden system instruction"),
-            Message::text("user","Repair café <system-reminder>SECRET</system-reminder> header"),
-            Message::text("assistant","I fixed the café"),
+            Message::text("system", "hidden system instruction"),
+            Message::text(
+                "user",
+                "Repair café <system-reminder>SECRET</system-reminder> header",
+            ),
+            Message::text("assistant", "I fixed the café"),
         ];
         let idx = TranscriptIndex::from_stored(&messages);
         let hits = idx.find("CAFÉ");
