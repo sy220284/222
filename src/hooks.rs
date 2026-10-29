@@ -94,11 +94,18 @@ impl HookRunner {
             if let Some(pattern) = matcher {
                 if !pattern.is_match(tool_name.unwrap_or("")) { continue; }
             }
-            let data = json!({
-                "hook_event_name": event.name(),
-                "tool_name": tool_name,
-                "input": input,
-            });
+            // Original hook stdin fields are top-level, not nested in input.
+            let mut data = json!({"hook_event_name": event.name()});
+            if let Some(name) = tool_name { data["tool_name"] = json!(name); }
+            if let Some(fields) = input.as_object() {
+                for (key, value) in fields {
+                    if key != "hook_event_name" && key != "tool_name" {
+                        data[key] = value.clone();
+                    }
+                }
+            } else {
+                data["input"] = input;
+            }
             let response = run_command(rule, &data).await?;
             if response.blocking_reason.is_some() {
                 return Ok(response);
@@ -130,9 +137,14 @@ impl HookRunner {
         // The hook protocol carries the effective tool input as a JSON
         // object, not an escaped JSON string. PreToolUse may rewrite it.
         let arguments: Value = serde_json::from_str(&call.function.arguments)?;
-        self.run(event, Some(&call.function.name),
-            json!({"tool_use_id":call.id, "tool_input":arguments,
-                "tool_response":output})).await
+        let mut payload = json!({"tool_use_id":call.id, "tool_input":arguments});
+        if matches!(event, HookEvent::PostToolUseFailure) {
+            payload["error"] = json!(output.strip_prefix("ERROR:").unwrap_or(output).trim());
+            payload["is_interrupt"] = json!(false);
+        } else {
+            payload["tool_response"] = json!(output);
+        }
+        self.run(event, Some(&call.function.name), payload).await
     }
 }
 

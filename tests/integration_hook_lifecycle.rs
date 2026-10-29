@@ -26,6 +26,7 @@ fn read_request(stream: &mut TcpStream) -> String {
 fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join("secret.txt"), "DO_NOT_EXPOSE_PREHOOK\n").unwrap();
+    let pre_payload = root.path().join("pre-payload.json");
     let post_success = root.path().join("post-success.json");
     let post_failure = root.path().join("post-failure.json");
     let blocked_post = root.path().join("blocked-post.txt");
@@ -72,6 +73,9 @@ fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
             "command":"printf '{\"decision\":\"block\",\"reason\":\"read denied\"}'"},
         {"event":"PreToolUse","matcher":"^write_file$",
             "command":"printf '{\"hookSpecificOutput\":{\"updatedInput\":{\"path\":\"rewritten.txt\",\"content\":\"effective content\"}}}'"},
+        {"event":"PreToolUse","matcher":"^write_file$",
+            "command":format!("cat > '{}'", pre_payload.display()),
+            "timeout_seconds":3},
         {"event":"PostToolUseFailure","matcher":"^read_file$",
             "command":format!("printf unexpected > '{}'", blocked_post.display())},
         {"event":"PostToolUseFailure","matcher":"^edit_file$",
@@ -101,15 +105,22 @@ fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
     assert!(!root.path().join("original.txt").exists());
     assert_eq!(fs::read_to_string(root.path().join("rewritten.txt")).unwrap(),
         "effective content");
+    let pre: Value = serde_json::from_str(&fs::read_to_string(pre_payload).unwrap()).unwrap();
+    assert_eq!(pre["hook_event_name"], "PreToolUse");
+    assert_eq!(pre["tool_use_id"], "rewritten-write");
+    assert_eq!(pre["tool_input"]["path"], "original.txt");
+    assert!(pre.get("input").is_none());
     let post: Value = serde_json::from_str(&fs::read_to_string(post_success).unwrap()).unwrap();
     assert_eq!(post["hook_event_name"], "PostToolUse");
-    assert_eq!(post["input"]["tool_use_id"], "rewritten-write");
-    assert_eq!(post["input"]["tool_input"]["path"], "rewritten.txt");
-    assert_eq!(post["input"]["tool_input"]["content"], "effective content");
-    assert!(post["input"]["tool_response"].is_string());
+    assert_eq!(post["tool_use_id"], "rewritten-write");
+    assert_eq!(post["tool_input"]["path"], "rewritten.txt");
+    assert_eq!(post["tool_input"]["content"], "effective content");
+    assert!(post["tool_response"].is_string());
     let failed: Value = serde_json::from_str(&fs::read_to_string(post_failure).unwrap()).unwrap();
     assert_eq!(failed["hook_event_name"], "PostToolUseFailure");
-    assert_eq!(failed["input"]["tool_use_id"], "failed-edit");
-    assert_eq!(failed["input"]["tool_input"]["path"], "absent.txt");
-    assert!(failed["input"]["tool_response"].as_str().unwrap().starts_with("ERROR:"));
+    assert_eq!(failed["tool_use_id"], "failed-edit");
+    assert_eq!(failed["tool_input"]["path"], "absent.txt");
+    assert!(failed["error"].as_str().unwrap().contains("Missing required parameter"));
+    assert_eq!(failed["is_interrupt"], false);
+    assert!(failed.get("tool_response").is_none());
 }
