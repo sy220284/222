@@ -586,6 +586,19 @@ impl ToolExecutor {
                 }
                 history::list(&self.root, self.session_id.as_deref())
             },
+            "file_history_diff" => {
+                if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
+                    bail!("File checkpointing is disabled")
+                }
+                let record = history::load(
+                    &self.root, self.session_id.as_deref(), required(&args, "id")?,
+                )?;
+                let path = self.checked_path(&record.path)?;
+                // A diff preview reads the current file. Enforce the same
+                // Read deny/ask rules as a normal Read before exposing stats.
+                self.require_read_rules(&record.path, &path)?;
+                history::preview(&record, &path)
+            }
             "file_revert" => {
                 if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
                     bail!("File checkpointing is disabled")
@@ -1781,7 +1794,7 @@ pub fn definitions_with_checkpointing(enabled: bool) -> Vec<Value> {
         tools.retain(|tool| {
             !matches!(
                 tool.pointer("/function/name").and_then(Value::as_str),
-                Some("file_history" | "file_revert")
+                Some("file_history" | "file_history_diff" | "file_revert")
             )
         });
     }
