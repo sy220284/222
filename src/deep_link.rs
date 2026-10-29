@@ -26,15 +26,22 @@ fn valid_repo_slug(input: &str) -> bool {
     match (parts.next(), parts.next(), parts.next()) {
         (Some(owner), Some(repo), None) => [owner, repo].iter().all(|segment| {
             !segment.is_empty()
-                && segment.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+                && segment
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
         }),
         _ => false,
     }
 }
 fn absolute_cwd(input: &str) -> bool {
-    if input.starts_with('/') { return true }
+    if input.starts_with('/') {
+        return true;
+    }
     let bytes = input.as_bytes();
-    bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && matches!(bytes[2], b'/' | b'\\')
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\')
 }
 
 /// URL decoding, canonical validation and Unicode prompt security correspond
@@ -49,10 +56,13 @@ pub fn parse_deep_link(uri: &str) -> Result<DeepLinkAction> {
     } else {
         bail!("Invalid deep link: expected {explicit} scheme, got \"{uri}\"")
     };
-    let url = Url::parse(&normalized)
-        .with_context(|| format!("Invalid deep link URL: \"{uri}\""))?;
+    let url =
+        Url::parse(&normalized).with_context(|| format!("Invalid deep link URL: \"{uri}\""))?;
     if url.host_str() != Some("open") {
-        bail!("Unknown deep link action: \"{}\"", url.host_str().unwrap_or(""));
+        bail!(
+            "Unknown deep link action: \"{}\"",
+            url.host_str().unwrap_or("")
+        );
     }
 
     // URLSearchParams.get returns the *first* matching parameter.
@@ -75,7 +85,10 @@ pub fn parse_deep_link(uri: &str) -> Result<DeepLinkAction> {
             bail!("Deep link cwd contains disallowed control characters");
         }
         if utf16_len(s) > MAX_CWD_LENGTH {
-            bail!("Deep link cwd exceeds {MAX_CWD_LENGTH} characters (got {})", utf16_len(s));
+            bail!(
+                "Deep link cwd exceeds {MAX_CWD_LENGTH} characters (got {})",
+                utf16_len(s)
+            );
         }
     }
     if let Some(s) = repo.as_deref().filter(|s| !s.is_empty()) {
@@ -85,14 +98,23 @@ pub fn parse_deep_link(uri: &str) -> Result<DeepLinkAction> {
     }
     let query = raw_query.and_then(|q| {
         let clean = q.trim();
-        if clean.is_empty() { None } else { Some(crate::unicode_sanitization::partially_sanitize_unicode(clean)) }
+        if clean.is_empty() {
+            None
+        } else {
+            Some(crate::unicode_sanitization::partially_sanitize_unicode(
+                clean,
+            ))
+        }
     });
     if let Some(ref q) = query {
         if contains_control_chars(q) {
             bail!("Deep link query contains disallowed control characters");
         }
         if utf16_len(q) > MAX_QUERY_LENGTH {
-            bail!("Deep link query exceeds {MAX_QUERY_LENGTH} characters (got {})", utf16_len(q));
+            bail!(
+                "Deep link query exceeds {MAX_QUERY_LENGTH} characters (got {})",
+                utf16_len(q)
+            );
         }
     }
     Ok(DeepLinkAction {
@@ -125,18 +147,36 @@ mod tests {
     use super::*;
     #[test]
     fn accepts_both_uri_forms_and_decodes_first_values() {
-        let a = parse_deep_link("atlas-cli://open?q=hello+world&cwd=%2Ftmp%2Fproject&repo=x%2Fy&q=ignored").unwrap();
+        let a = parse_deep_link(
+            "atlas-cli://open?q=hello+world&cwd=%2Ftmp%2Fproject&repo=x%2Fy&q=ignored",
+        )
+        .unwrap();
         assert_eq!(a.query.as_deref(), Some("hello world"));
         assert_eq!(a.cwd.as_deref(), Some("/tmp/project"));
         assert_eq!(a.repo.as_deref(), Some("x/y"));
-        assert_eq!(parse_deep_link("atlas-cli:open").unwrap(), DeepLinkAction::default());
+        assert_eq!(
+            parse_deep_link("atlas-cli:open").unwrap(),
+            DeepLinkAction::default()
+        );
     }
     #[test]
     fn normalizes_unicode_but_rejects_hidden_controls() {
-        assert_eq!(parse_deep_link("atlas-cli://open?q=Ｈi%E2%80%8B").unwrap().query.as_deref(), Some("Hi"));
+        assert_eq!(
+            parse_deep_link("atlas-cli://open?q=Ｈi%E2%80%8B")
+                .unwrap()
+                .query
+                .as_deref(),
+            Some("Hi")
+        );
         assert!(parse_deep_link("atlas-cli://open?q=hello%0Aworld").is_err());
         assert!(parse_deep_link("atlas-cli://open?cwd=%2Ftmp%0Aevil").is_err());
-        assert_eq!(parse_deep_link("atlas-cli://open?cwd=C%3A%5Cwork").unwrap().cwd.as_deref(), Some("C:\\work"));
+        assert_eq!(
+            parse_deep_link("atlas-cli://open?cwd=C%3A%5Cwork")
+                .unwrap()
+                .cwd
+                .as_deref(),
+            Some("C:\\work")
+        );
     }
     #[test]
     fn validates_host_repo_and_bounds_without_truncation() {
