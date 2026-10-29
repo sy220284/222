@@ -3174,7 +3174,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(agent.current_permission_mode(), "default");
-        assert!(agent.set_sdk_permission_mode("unknown-future-mode").is_err());
+        assert!(agent
+            .set_sdk_permission_mode("unknown-future-mode")
+            .is_err());
         assert!(agent.set_sdk_permission_mode("bypassPermissions").is_err());
         assert_eq!(agent.current_permission_mode(), "default");
         agent.set_sdk_permission_mode("plan").unwrap();
