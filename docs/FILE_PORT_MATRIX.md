@@ -1074,7 +1074,7 @@
 | `src/services/oauth/index.ts` | 199 | 6554 | 重写：保持通用行为 | `src/oauth_service.rs / src/main.rs` | 部分实现：自动 localhost 回调和手动输入两条授权链、PKCE 状态、授权后凭据 0600 原子保存、真实 CLI 入口和出错浏览器回调已实现；原版浏览器自动弹出及 SDK 权限同步仍待补 |
 | `src/services/plugins/PluginInstallationManager.ts` | 185 | 6017 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/plugins/pluginCliCommands.ts` | 345 | 10894 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/plugins/pluginOperations.ts` | 1089 | 35619 | 重写：保持通用行为 | `src/generated_ports/p_d37d4b8c26098.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/services/plugins/pluginOperations.ts` | 1089 | 35619 | 重写：保持通用行为 | `src/plugin_manager.rs / src/generated_ports/p_d37d4b8c26098.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收；本地安装身份预检、启用与回滚已有真实 Rust 执行链，原版市场/依赖闭包仍缺 |
 | `src/services/policyLimits/index.ts` | 664 | 18064 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/policyLimits/types.ts` | 28 | 792 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/preventSleep.ts` | 166 | 4586 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1690,7 +1690,7 @@
 | `src/utils/plugins/pluginDirectories.ts` | 179 | 6669 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginFlagging.ts` | 209 | 5621 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginIdentifier.ts` | 124 | 3928 | 重写：保持通用行为 | `src/generated_ports/p_d5db58adb3fd2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/plugins/pluginInstallationHelpers.ts` | 596 | 20629 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/pluginInstallationHelpers.ts` | 596 | 20629 | 重写：保持通用行为 | `src/plugin_manager.rs` | 部分实现：本地插件安装时校验预期 ID、安装即启用、配置失败回滚；市场依赖闭包与原版多范围安装仍未迁移 |
 | `src/utils/plugins/pluginLoader.ts` | 3303 | 110261 | 重写：保持通用行为 | `src/plugins.rs` | 部分实现：本地启用插件、MCP、Hooks、技能加载；市场与扩展生态未等价 |
 | `src/utils/plugins/pluginOptionsStorage.ts` | 401 | 15302 | 重写：保持通用行为 | `src/generated_ports/p_3b4c92a0203d8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/pluginPolicy.ts` | 21 | 827 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
