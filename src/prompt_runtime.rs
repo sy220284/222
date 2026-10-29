@@ -94,6 +94,38 @@ pub fn role_instructions(role: &str, is_teammate: bool) -> &'static str {
     }
 }
 
+
+/// Enforce the built-in exploration/planning/verification tool boundary in
+/// addition to describing it in the system prompt. Unknown tools are denied.
+pub fn tool_allowed_for_role(role: &str, name: &str) -> bool {
+    let normalized = role.to_ascii_lowercase().replace('-', "").replace('_', "");
+    let is_explore_or_plan = matches!(
+        normalized.as_str(),
+        "explore" | "exploration" | "exploreagent"
+            | "plan" | "planner" | "planagent"
+    );
+    let is_verification = matches!(
+        normalized.as_str(),
+        "verification" | "verify" | "verificationagent" | "reviewer"
+    );
+    if !is_explore_or_plan && !is_verification {
+        return true;
+    }
+    let canonical = crate::tool_names::canonical_name(name);
+    let read_tool = matches!(
+        canonical,
+        "read_file" | "list_files" | "search_text" | "git_status" | "git_diff"
+            | "git_log" | "list_skills" | "read_skill" | "web_search" | "web_fetch"
+            | "Glob" | "Grep" | "Read" | "LSP" | "ToolSearch"
+    );
+    if read_tool {
+        return true;
+    }
+    // Verifiers need to run real builds/tests. Existing approval and shell
+    // permission rules remain in force; no extra authority is granted here.
+    is_verification && matches!(canonical, "run_command" | "PowerShell" | "Bash")
+}
+
 /// Compact in a separate tool-less model request and keep its summary factual.
 pub fn compact_prompt(previous: &str) -> String {
     format!(
@@ -184,6 +216,21 @@ mod tests {
         assert!(custom_role_instructions(workspace.path(), "missing")
             .unwrap()
             .is_none());
+    }
+
+
+    #[test]
+    fn read_only_roles_never_receive_write_tools() {
+        for role in ["explore", "plan", "verification"] {
+            assert!(tool_allowed_for_role(role, "read_file"));
+            assert!(!tool_allowed_for_role(role, "write_file"));
+            assert!(!tool_allowed_for_role(role, "edit_file"));
+            assert!(!tool_allowed_for_role(role, "spawn_agent"));
+            assert!(!tool_allowed_for_role(role, "unknown_MCP_tool"));
+        }
+        assert!(!tool_allowed_for_role("explore", "run_command"));
+        assert!(tool_allowed_for_role("verification", "run_command"));
+        assert!(tool_allowed_for_role("general", "write_file"));
     }
 
     #[test]
