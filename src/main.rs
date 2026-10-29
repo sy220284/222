@@ -547,15 +547,15 @@ async fn main() -> Result<()> {
         }
         Commands::ResolveDeepLink { cwd, repo } => {
             let config = Config::load()?;
-            let resolved = github_repo_mapping::resolve_cwd(
-                &config,
-                cwd.as_deref(),
-                repo.as_deref(),
-            )?;
-            println!("{}", serde_json::to_string_pretty(&json!({
-                "cwd":resolved.cwd,
-                "resolved_repo":resolved.resolved_repo
-            }))?);
+            let resolved =
+                github_repo_mapping::resolve_cwd(&config, cwd.as_deref(), repo.as_deref())?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "cwd":resolved.cwd,
+                    "resolved_repo":resolved.resolved_repo
+                }))?
+            );
             return Ok(());
         }
         Commands::DeepLinkBanner {
