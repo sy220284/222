@@ -1,3 +1,11 @@
+## 2026-10-29：Grep/Glob 搜索超时错误与不完整结果保护（源码已提交、待验收）
+
+- **原版依据**：用户完整 ZIP `source/src/utils/ripgrep.ts::ripGrep` 第 128–133、169–191、218–228 行：普通平台默认 20 秒、WSL 60 秒，正整数秒环境配置可覆盖；超时不应把未扫描完的搜索当作完整成功。原版 `source/src/tools/GrepTool/GrepTool.ts::call` 第 329–441 行和 `source/src/utils/glob.ts::glob` 第 70–121 行均经过 `ripGrep`。
+- **Rust 可达执行链**：`ToolExecutor::dispatch` → `search::grep_files_filtered` / `search::glob_files_filtered` → `files_filtered` 目录遍历 → 匹配、忽略、输出。新增 `search_deadline/check_search_deadline`，使用厂商中立环境配置 `ATLAS_GLOB_TIMEOUT_SECONDS`，默认 20 秒、WSL 环境 60 秒。Grep 在遍历、候选文件、读取、逐行输出和分页前检查；Glob 在遍历、过滤、排序和输出前检查。到期明确返回错误，避免误报为完整的空结果或部分列表。
+- **源码提交**：Grep `fbd4a626b93eb922d6bb6fbc18e96f2b9cd9d9fe`，Glob `17a8e25ed7980c8a044146315cfafd0e422b2d6a`；修改 `src/search.rs`，保守计 **2 条独立用户可感知工具行为补齐**，未运行 Cargo、测试或 CI，均登记为已提交、待行为验收。
+- **精确剩余差异**：当前超时属于同步遍历的协作式检查，`fs::read`、`git check-ignore` 子进程及单次正则计算尚不能被立即抢占；原版通过子进程终止及信号升级取消，Rust 仍缺原版 AbortSignal 取消、子进程级硬超时、完整 ripgrep ignore/.rgignore 规则、所有文件类型与错误传播语义。不得据此将 `ripgrep.ts`、GrepTool 或 GlobTool 标为完全等价，Issue #3 冻结 362 项保持开放。
+- **本轮目标进度**：2/100 项实际新增 Rust 代码并提交，剩余 98 项；100 项完整先行缺口清单与实施方案未形成，A/B 流程未达标，未新增任何完整等价验收。
+
 ## 2026-10-29：插件市场安装与卸载数据生命周期补齐（源码已提交、待验收）
 
 - **原版依据**：完整 2.1.88 源码 `source/src/services/plugins/pluginOperations.ts::installPluginOp/setPluginEnabledOp/uninstallPluginOp` 在未指定市场时搜索已配置市场，区分启停当前状态；`source/src/commands/plugin/ManagePlugins.tsx` 在最后一份安装的数据目录非空时要求用户选择清理或保留；`source/src/utils/plugins/pluginDirectories.ts::getPluginDataDirSize/deletePluginDataDir` 与 `source/src/utils/plugins/pluginOptionsStorage.ts::deletePluginOptions` 负责卸载后的持久数据和配置清理。
