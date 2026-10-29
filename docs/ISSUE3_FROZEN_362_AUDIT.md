@@ -1,5 +1,13 @@
 # Issue #3：冻结 362 项源码级等价验收登记表
 
+
+### 2026-10-29：PowerShell 复合命令权限主链补证（未验收）
+
+- 原版定位：`src/tools/PowerShellTool/powershellPermissions.ts` 的 `filterRulesByContentsMatchingInput`（163–326 行）、`getSubCommandsForPermissionCheck`（527 行起）和解析后 deny > ask > allow 汇总（877 行起）；邻接 `src/utils/powershell/parser.ts` 的语句／管道 AST。
+- Rust 实际修改：`src/powershell_permission_matching.rs` 在规则判定前按 PowerShell 引号与注释边界拆分分号、管道、换行、`&&`、`||`；对每个子命令独立执行别名、大小写、拒绝／询问／允许匹配，拒绝优先。反引号转义、脚本块、子表达式、重定向等无法凭文本安全判定的语法要求人工审批，不再由首个命令的前缀允许规则放行。对明确整条命令授权仍保留精确匹配入口。
+- 回归：`powershell_permission_matching::tests::compound_scripts_cannot_bypass_later_denies_or_unknown_statements`、`quotes_comments_and_dynamic_script_blocks_do_not_inherit_prefix_allow`，以及 `tools::tests::powershell_compound_permission_checks_reach_actual_tool_dispatch_gate`，覆盖真实工具授权入口、拒绝优先、管道、分号、换行、注释、嵌套表达式及 Bash/PowerShell 隔离。
+- 证据提交：`e1131d8`、`daffb48`。**仍未通过完整源文件验收**：原版 PowerShell AST、路径安全、沙箱、用户审批 UI 和取消时序尚待逐函数／跨模块对照；Issue #3 冻结清单不得勾选。
+
 ## 真实进度（不以静态映射冒充验收）
 
 - 固定范围：Issue #3 所列 **362 个唯一原文件**，冻结参照提交 `34292c9033a461d516ccebb9f559c79cce5c394e`；当前 PR #2 HEAD `8e53b87187744ec3090ace5602e7ee9a9f4efeb4`。
