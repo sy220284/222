@@ -694,3 +694,14 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 直接按 2.1.88 原版 `src/keybindings/KeybindingContext.tsx`、`KeybindingProviderSetup.tsx`、`useKeybinding.ts`、`useShortcutDisplay.ts` 的注册、注销、上下文、回调和 chord 生命周期补齐 `src/keybindings.rs::KeybindingRuntime`。终端输入交给一个状态持有者，支持按键组合的 1000 毫秒过期、首键拦截阻止编辑器吞键、动作回调返回 false 时后续输入仍可处理、注册令牌注销、嵌套界面上下文引用计数、配置更改后取消旧组合键并更新警告与快捷键显示。新增 3 个状态/限时/注销/磁盘重新加载的 Rust 回归测试，均在本地通过。
 
 此运行时提供真实键事件消费接口，但现有 CLI 仍是按行读取，未有 Ink 同级完整事件循环、异步文件监听、全界面生命周期，故新增 4 原路径只标记部分实现，不计已验收；`src/keybindings/loadUserBindings.ts` 仍部分实现。远端 CI 必须按本提交 SHA 单独核对。
+
+
+## 2026-10-29：后台 Shell 任务原版短 ID、旧记录恢复与输出工具别名（源码已提交、待验收）
+
+逐项对照原版 `src/Task.ts:78–105`、`src/utils/task/diskOutput.ts:304–355`、`src/tools/TaskOutputTool/TaskOutputTool.tsx:29–35,144–151` 与 Rust `src/background.rs`、`src/tool_names.rs`、`src/tools.rs`。实际补齐三项关联用户行为：
+
+1. 新建后台 Shell 任务返回原版 `b` + 8 位小写字母数字任务 ID，任务列表、停止、完整输出、增量输出和持久化文件使用同一 ID；此前 Rust 返回 UUID。继续识别既有 UUID 记录及其日志，避免升级后历史任务不可读取。源码提交 `dbfb1b2df6d4a3f563a962cd23b8e7273b4b7d9e`。
+2. 后台任务的 stdout/stderr 文件被清理或尚未产生时，仍返回任务状态及可读取的其他日志；只对文件不存在返回空字符串，权限错误与不安全符号链接继续报错。原版 `getTaskOutput` 对 ENOENT 返回空日志。源码提交 `5830739854ade9906f6917cb86f362da70364fae`。
+3. 旧 SDK/工具调用的 `AgentOutputTool`、`BashOutputTool` 与 `TaskOutput` 统一映射至现有 `task_output` 执行链，保留参数标准化、后台任务查询与返回格式；别名集中在 `tool_names::canonical_name`，避免各调用点重复适配。源码提交 `6356d785f0a97dd66790489af2700bdb7fb91540`、`898c72887b77915060d24478dee08739aea53e0d`。
+
+**未实现/待核对**：原版其他任务类型（local_agent、remote_agent、teammate、workflow、monitor、dream）的 ID 与状态机、按会话隔离的输出目录、跨进程运行任务感知、取消/恢复/通知完整时序、输出驱逐及全部工具别名的行为验收。以上三项只计本轮新增源码补齐、待验证；不升级任何冻结 Issue #3 条目。遵循用户最新指令，本轮未运行 Cargo、测试或 CI。
