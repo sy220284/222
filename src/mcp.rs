@@ -643,9 +643,14 @@ impl McpManager {
             .with_context(|| format!("MCP server {name:?} not found"))?;
         if enabled {
             let was_disabled = self.disabled.remove(name);
-            // An already-enabled server can have failed since its last
-            // request; an explicit enable also acts as a safe reconnect.
-            if was_disabled || self.server_statuses[position]["status"] != "connected" {
+            // A connected stdio process may have exited without any new
+            // request. Explicit enable must recover it as well.
+            let exited = if let Some(index) = self.status_clients[position] {
+                self.clients[index].failed_process()?.is_some()
+            } else {
+                false
+            };
+            if was_disabled || exited || self.server_statuses[position]["status"] != "connected" {
                 if let Err(error) = self.reconnect_server(position).await {
                     let diagnostic = Self::redact_connection_error(
                         &self.configs[position], format!("{error:#}"));

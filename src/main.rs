@@ -1487,6 +1487,30 @@ async fn chat(
             }
             continue;
         }
+        if let Some(name) = input.strip_prefix("/mcp enable ") {
+            let name = name.trim();
+            if name.is_empty() {
+                eprintln!("Usage: /mcp enable SERVER_NAME");
+            } else {
+                match agent.toggle_named_mcp(name, true).await {
+                    Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
+                    Err(error) => eprintln!("MCP enable failed: {error:#}"),
+                }
+            }
+            continue;
+        }
+        if let Some(name) = input.strip_prefix("/mcp disable ") {
+            let name = name.trim();
+            if name.is_empty() {
+                eprintln!("Usage: /mcp disable SERVER_NAME");
+            } else {
+                match agent.toggle_named_mcp(name, false).await {
+                    Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
+                    Err(error) => eprintln!("MCP disable failed: {error:#}"),
+                }
+            }
+            continue;
+        }
         if let Some(name) = input.strip_prefix("/mcp reconnect ") {
             let name = name.trim();
             if name.is_empty() {
@@ -1629,6 +1653,7 @@ async fn chat(
                 println!("/shell-spec [name]       show registered shell command specs");
                 println!("/mcp [status|reconnect]  inspect or recover MCP connections");
                 println!("/mcp reconnect SERVER_NAME  reconnect only the named MCP server");
+                println!("/mcp enable|disable SERVER_NAME  persistently toggle one MCP server");
                 println!("/mcp-prompts             list available MCP prompt commands");
                 println!("/server:prompt (MCP) ARGS  execute an MCP prompt");
                 println!("/exit                    quit");
