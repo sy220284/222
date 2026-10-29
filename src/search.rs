@@ -33,6 +33,28 @@ fn matching(matcher: &GlobMatcher, relative: &Path) -> bool {
             .file_name()
             .is_some_and(|n| matcher.is_match(Path::new(n)))
 }
+/// GrepTool accepts space/comma-separated globs, preserving brace groups
+/// such as "*.{ts,tsx}". Exclusion globs are applied after inclusions.
+fn grep_globs(raw: Option<&str>) -> Result<(Vec<GlobMatcher>, Vec<GlobMatcher>)> {
+    let mut include = Vec::new();
+    let mut exclude = Vec::new();
+    for word in raw.unwrap_or("").split_whitespace() {
+        let patterns: Vec<&str> = if word.contains('{') && word.contains('}') {
+            vec![word]
+        } else {
+            word.split(',').filter(|s| !s.is_empty()).collect()
+        };
+        for pattern in patterns {
+            if let Some(negative) = pattern.strip_prefix('!') {
+                exclude.push(matcher(negative)?);
+            } else {
+                include.push(matcher(pattern)?);
+            }
+        }
+    }
+    Ok((include, exclude))
+}
+
 fn files(base: &Path) -> Result<Vec<PathBuf>> {
     if base.is_file() {
         return Ok(vec![base.to_path_buf()]);
@@ -166,11 +188,8 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         .multi_line(multiline)
         .dot_matches_new_line(multiline)
         .build()?;
-    let file_pattern = args
-        .get("glob")
-        .and_then(Value::as_str)
-        .map(matcher)
-        .transpose()?;
+    let (include_globs, exclude_globs) =
+        grep_globs(args.get("glob").and_then(Value::as_str))?;
     let kind = args.get("type").and_then(Value::as_str);
     let mode = args
         .get("output_mode")
@@ -220,7 +239,9 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         let rel = path
             .strip_prefix(base)
             .context("Invalid grep search root")?;
-        if file_pattern.as_ref().is_some_and(|m| !matching(m, rel)) {
+        if (!include_globs.is_empty() && !include_globs.iter().any(|m| matching(m, rel)))
+            || exclude_globs.iter().any(|m| matching(m, rel))
+        {
             continue;
         }
         let Ok(content) = fs::read_to_string(&path) else {
