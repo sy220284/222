@@ -2070,7 +2070,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 }
             }
             "control_request" if event.get("request").is_some() => {
-                print_json!(sdk_nested_control(agent, config, &event, &mut queue).await);
+                print_json!(sdk_nested_control(agent, config, &event, &mut queue, &mut bridge_session).await);
             }
             "control" | "control_request" => {
                 macro_rules! send_control {
@@ -2218,6 +2218,7 @@ async fn sdk_nested_control(
     config: &Config,
     event: &Value,
     queue: &mut message_queue::Queue,
+    bridge_session: &mut bridge_core::BridgeSession,
 ) -> Value {
     let id = event
         .get("request_id")
@@ -2326,6 +2327,9 @@ async fn sdk_nested_control(
                     .ok_or_else(|| anyhow::anyhow!("stop_task requires task_id"))?;
                 let result = agent.stop_background_task(task_id).await?;
                 Ok(json!({"task":serde_json::from_str::<Value>(&result)?}))
+            }
+            other if other.starts_with("bridge_") => {
+                bridge_session.dispatch(other, &Value::Object(request.clone()))
             }
             other => bail!("Unsupported SDK control subtype: {other}"),
         }
