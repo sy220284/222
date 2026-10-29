@@ -1098,7 +1098,7 @@
 | `src/services/tokenEstimation.ts` | 496 | 16883 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/toolUseSummary/toolUseSummaryGenerator.ts` | 113 | 3376 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/tools/toolExecution.ts` | 1746 | 60309 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/tools/toolExecution.ts` | 1746 | 60309 | 重写：工具调用与 Hook 生命周期 | `src/agent.rs / src/hooks.rs / src/tools.rs` | 部分实现：非法输入与 PreToolUse 阻止/失败逐工具回填，跳过实际执行的工具不触发 PostToolUseFailure；已执行工具的 PostToolUse/Failure 获得结构化有效输入；并行调度、取消与完整原版事件时序仍待对照 |
 | `src/services/tools/toolHooks.ts` | 651 | 22333 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移 |
 | `src/services/tools/toolOrchestration.ts` | 189 | 5501 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/vcr.ts` | 407 | 12166 | 重写：保持通用行为 | 待定 | 未迁移 |

@@ -880,12 +880,17 @@ impl Agent {
                 if let Some(updated) = pre.as_ref().and_then(|hook|hook.updated_input.as_ref()) {
                     call.function.arguments = serde_json::to_string(updated)?;
                 }
+                // A rejected or malformed invocation never executed a tool.
+                // PostToolUse/Failure hooks belong to actual executions only.
+                let pre_blocked=pre.as_ref().and_then(|hook|hook.blocking_reason.clone());
+                let skipped_tool=invalid_input.is_some() || pre_hook_failure.is_some()
+                    || pre_blocked.is_some();
                 let tool_started=Instant::now();
                 let result = if let Some(reason)=invalid_input {
                     format!("ERROR: {reason}")
                 } else if let Some(reason)=pre_hook_failure {
                     format!("ERROR: PreToolUse hook failed: {reason}")
-                } else if let Some(reason) = pre.and_then(|hook|hook.blocking_reason) {
+                } else if let Some(reason) = pre_blocked {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
                 } else if matches!(call.function.name.as_str(),
                     "TeamCreate"|"TeamDelete"|"SendMessage"|"TeamInbox") {
@@ -931,7 +936,9 @@ impl Agent {
                 let (added,removed)=self.file_metrics.counts();
                 self.session.cost.set_changed_lines(added,removed);
                 let (post,mut result):(crate::hooks::HookOutcome,String)=
-                    match self.hooks.after_tool(&call,&result).await {
+                    if skipped_tool {
+                        (Default::default(),result)
+                    } else { match self.hooks.after_tool(&call,&result).await {
                         Ok(outcome)=>(outcome,result),
                         Err(error)=>(
                             Default::default(),
@@ -940,7 +947,7 @@ impl Agent {
                             // an unsafe blind retry.
                             format!("ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: {result}")
                         )
-                    };
+                    }};
                 if let Some(reason) = post.blocking_reason {
                     result.push_str(&format!("\nPostToolUse hook blocked continuation: {reason}"));
                 }

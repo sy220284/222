@@ -127,8 +127,11 @@ impl HookRunner {
         } else {
             HookEvent::PostToolUse
         };
+        // The hook protocol carries the effective tool input as a JSON
+        // object, not an escaped JSON string. PreToolUse may rewrite it.
+        let arguments: Value = serde_json::from_str(&call.function.arguments)?;
         self.run(event, Some(&call.function.name),
-            json!({"tool_use_id":call.id, "tool_input":call.function.arguments,
+            json!({"tool_use_id":call.id, "tool_input":arguments,
                 "tool_response":output})).await
     }
 }
