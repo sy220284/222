@@ -78,8 +78,21 @@ fn mcp_check(server: &McpServerConfig) -> Finding {
             }
         }
         "http" => {
+            // Match the connection path: MCP URLs support ${NAME} and
+            // ${NAME:-fallback}, and unresolved variables prevent startup.
             let target = server.url.as_deref().unwrap_or("");
-            match reqwest::Url::parse(target) {
+            let expanded = crate::compat_helpers::expand_env_vars_in_string(target);
+            if !expanded.missing_vars.is_empty() {
+                return Finding::warning(
+                    "MCP",
+                    format!(
+                        "{}: missing URL environment variables: {}",
+                        server.id,
+                        expanded.missing_vars.join(", ")
+                    ),
+                );
+            }
+            match reqwest::Url::parse(&expanded.expanded) {
                 Ok(url) if matches!(url.scheme(), "http" | "https") => {
                     // Do not print the full URL: queries may contain credentials.
                     Finding::passed(
