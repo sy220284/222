@@ -26,7 +26,7 @@ fn installed_root(root: &Path) -> PathBuf {
 /// Plugin management must never follow a redirected storage directory.
 /// The manifest loader checks the final plugin directory, but installation
 /// writes files before loading the manifest, so validate the entire base first.
-fn checked_installed_root(root: &Path) -> Result<PathBuf> {
+fn checked_installed_root(root: &Path, create: bool) -> Result<PathBuf> {
     let root = root.canonicalize().context("Workspace unavailable")?;
     let atlas = root.join(".atlas");
     let home = installed_root(&root);
@@ -40,7 +40,12 @@ fn checked_installed_root(root: &Path) -> Result<PathBuf> {
             Err(error) => return Err(error.into()),
         }
     }
-    fs::create_dir_all(&home)?;
+    if create {
+        fs::create_dir_all(&home)?;
+    } else if !home.exists() {
+        // Listing installed plugins is read-only; do not create storage.
+        return Ok(home);
+    }
     let real = home.canonicalize()?;
     if !real.starts_with(&root) {
         bail!("Plugin storage escapes the workspace")
@@ -49,7 +54,7 @@ fn checked_installed_root(root: &Path) -> Result<PathBuf> {
 }
 
 pub fn installed(root: &Path, config: &Config) -> Result<Value> {
-    let dir = checked_installed_root(root)?;
+    let dir = checked_installed_root(root, false)?;
     let mut names = Vec::new();
     if dir.exists() {
         for entry in fs::read_dir(dir)? {
@@ -112,7 +117,7 @@ pub fn install_local(root: &Path, location: &Path) -> Result<String> {
         bail!("Local plugin source must be a directory");
     }
     let name = manifest_name(&source)?;
-    let home = checked_installed_root(root)?;
+    let home = checked_installed_root(root, true)?;
     fs::create_dir_all(&home)?;
     let target = home.join(&name);
     if target.exists() {
@@ -185,7 +190,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 if let Err(error) = config.save() {
                     // Keep installation atomic from the user's perspective.
                     // The installation base was already verified by install_local.
-                    if let Ok(home) = checked_installed_root(&root) {
+                    if let Ok(home) = checked_installed_root(&root, true) {
                         let _ = fs::remove_dir_all(home.join(&installed_name));
                     }
                     return Err(error);
@@ -219,7 +224,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             if !valid_name(name) {
                 bail!("Invalid plugin name");
             }
-            let home = checked_installed_root(&root)?;
+            let home = checked_installed_root(&root, true)?;
             let installed = home.join(name);
             if !installed.is_dir() || installed.is_symlink() {
                 bail!("Plugin is not installed");
