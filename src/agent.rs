@@ -1572,6 +1572,11 @@ impl Agent {
         self.enabled_plugins = names;
         self.last_context_usage = None;
     }
+    /// The SDK may reload plugin settings without restarting the Agent.
+    /// Command resolution must use this live set, not startup Config.
+    pub fn enabled_plugins(&self) -> &[String] {
+        &self.enabled_plugins
+    }
 
     pub fn set_structured_output(&mut self, enabled: bool) {
         self.structured_output = enabled;
