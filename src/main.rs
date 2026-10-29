@@ -2189,7 +2189,7 @@ async fn chat(
                 Ok((agent.profile().clone(), request))
             });
             match result {
-                Ok((profile, request)) => match side_question::answer(profile, request).await {
+                Ok((profile, request)) => match side_question::answer(profile, request, None).await {
                     Ok(reply) => println!("{}", reply["response"].as_str()
                         .unwrap_or("No response received")),
                     Err(error) => eprintln!("Side question failed: {error:#}"),
@@ -2417,7 +2417,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     == Some("side_question")
                 {
                     let prepared: Result<(String, config::ProviderProfile,
-                        protocol::ModelRequest)> = (|| {
+                        protocol::ModelRequest, Option<u32>)> = (|| {
                         let id = event.get("request_id")
                             .and_then(Value::as_str)
                             .filter(|value| !value.is_empty())
@@ -2428,13 +2428,14 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                             .ok_or_else(|| anyhow::anyhow!(
                                 "side_question requires question string"))?;
                         Ok((id.to_owned(), agent.profile().clone(),
-                            agent.side_question_request(question)?))
+                            agent.side_question_request(question)?,
+                            agent.sdk_thinking_budget()))
                     })();
                     match prepared {
-                        Ok((id, profile, request)) => {
+                        Ok((id, profile, request, thinking_budget)) => {
                             side_question_tasks.retain(|task| !task.is_finished());
                             side_question_tasks.push(tokio::spawn(async move {
-                                let outcome = side_question::answer(profile, request).await;
+                                let outcome = side_question::answer(profile, request, thinking_budget).await;
                                 let reply = match outcome {
                                     Ok(response) => json!({"type":"control_response",
                                         "response":{"subtype":"success",
