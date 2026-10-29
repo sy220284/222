@@ -816,7 +816,8 @@ impl Agent {
     /// An MCP prompt is only invoked by an explicit /server:prompt (MCP)
     /// command. Discover its metadata first, then bind positional arguments.
     /// This is a user request, not a privileged system instruction.
-    async fn expand_mcp_prompt_command(&mut self,text:&str)->Result<Option<String>>{
+    async fn expand_mcp_prompt_command(&mut self,text:&str)
+        ->Result<Option<crate::multimodal::Input>>{
         let Some(call)=crate::mcp_prompt::parse(text)? else{return Ok(None)};
         let mcp=self.mcp.as_mut().context("No MCP servers configured")?;
         let catalog=mcp.catalog("prompts").await?;
@@ -835,7 +836,7 @@ impl Agent {
             .with_context(||format!("Unknown MCP prompt {}:{}",call.server,call.name))?;
         let args=crate::mcp_prompt::named_arguments(prompt,&call.args)?;
         let result=mcp.get_prompt(&call.server,&call.name,&args).await?;
-        crate::mcp_prompt::render_response(&call.server,&call.name,&result).map(Some)
+        crate::mcp_prompt::render_content(&call.server,&call.name,&result).map(Some)
     }
 
     pub fn background_tasks(&self) -> Result<String> { self.background.list() }
@@ -961,7 +962,9 @@ impl Agent {
         let expansion=if blocks.is_none(){
             self.expand_mcp_prompt_command(prompt).await?
         }else{None};
-        let prompt=expansion.as_deref().unwrap_or(prompt);
+        let prompt=expansion.as_ref().map(|value|value.preview.as_str())
+            .unwrap_or(prompt);
+        let blocks=blocks.or_else(||expansion.as_ref().and_then(|value|value.blocks.clone()));
         let history_chars: usize = self.session.messages.iter()
             .map(|m| m.content.as_deref().unwrap_or("").len()
                 + m.tool_calls.as_ref().map(|c| c.iter()

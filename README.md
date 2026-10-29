@@ -266,7 +266,7 @@ MCP SDK 新增 `mcp_resource_subscribe`、`mcp_resource_unsubscribe`（均需 `s
 
 ### MCP Prompt 命令
 
-在 `chat` 终端中输入 `/mcp-prompts` 显示已连接 MCP 服务的 Prompt，或执行 `/服务器名:Prompt名称 (MCP) 参数1 参数2`。SDK 的 `user.content` 也接受同样命令，`mcp_prompt_commands`（平铺 `action` 或嵌套 `subtype`）返回命令名称、可见名称、描述及参数名。仅用户显式调用，服务端文本作为普通用户上下文交给配置的模型；不支持的图片、音频或嵌入资源会明确报错。
+在 `chat` 终端中输入 `/mcp-prompts` 显示已连接 MCP 服务的 Prompt，或执行 `/服务器名:Prompt名称 (MCP) 参数1 参数2`。SDK 的 `user.content` 也接受同样命令，`mcp_prompt_commands`（平铺 `action` 或嵌套 `subtype`）返回命令名称、可见名称、描述及参数名。仅用户显式调用，服务端文本作为普通用户上下文交给配置的模型；来自 MCP 的 PNG/JPEG/WebP/GIF 图片（base64）同样进入已配置模型的结构化多模态通道；音频、嵌入资源和其他不支持类型会明确报错。
 
 ### SDK 图像输入（文本 + 图片）
 

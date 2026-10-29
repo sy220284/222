@@ -44,10 +44,20 @@ pub fn named_arguments(prompt:&Value,args:&str)->Result<Map<String,Value>>{
     Ok(result)
 }
 pub fn render_response(server:&str,name:&str,result:&Value)->Result<String>{
+    let content=render_content(server,name,result)?;
+    if content.blocks.is_some(){
+        bail!("MCP prompt contains image blocks; use structured render_content");
+    }
+    Ok(content.preview)
+}
+pub fn render_content(server:&str,name:&str,result:&Value)
+    ->Result<crate::multimodal::Input>{
     let messages=result.get("messages").and_then(Value::as_array)
         .context("MCP prompts/get response missing messages array")?;
     if messages.len()>64{bail!("MCP prompt returned too many messages")}
     let mut text=format!("[MCP prompt from {server}:{name}]\n");
+    let mut blocks=vec![serde_json::json!({"type":"text","text":text})];
+    let mut images=false;
     for msg in messages{
         let role=msg.get("role").and_then(Value::as_str)
             .context("MCP prompt message missing role")?;
@@ -56,23 +66,41 @@ pub fn render_response(server:&str,name:&str,result:&Value)->Result<String>{
         let parts=if let Some(items)=content.as_array(){
             items.iter().collect::<Vec<_>>()
         }else{vec![content]};
-        text.push_str("\n[");
-        text.push_str(role);
-        text.push_str("]\n");
+        let prefix=format!("\n[{role}]\n");
+        text.push_str(&prefix);
+        blocks.push(serde_json::json!({"type":"text","text":prefix}));
         for (index,part) in parts.iter().enumerate(){
-            // Image/audio/resource blocks cannot travel through the current
-            // text-only ModelRequest. Explicitly reject; never drop them.
-            if part.get("type").and_then(Value::as_str)!=Some("text"){
-                bail!("MCP prompt contains non-text content unsupported by this model adapter");
+            match part.get("type").and_then(Value::as_str){
+                Some("text")=>{
+                    let value=part.get("text").and_then(Value::as_str)
+                        .context("MCP prompt text block missing text")?;
+                    let line=if index>0{format!("\n{value}")}else{value.to_owned()};
+                    text.push_str(&line);
+                    blocks.push(serde_json::json!({"type":"text","text":line}));
+                },
+                Some("image")=>{
+                    let mime=part.get("mimeType").and_then(Value::as_str)
+                        .context("MCP image missing mimeType")?;
+                    let data=part.get("data").and_then(Value::as_str)
+                        .context("MCP image missing data")?;
+                    blocks.push(serde_json::json!({"type":"image","source":{
+                        "type":"base64","media_type":mime,"data":data
+                    }}));
+                    images=true;
+                    text.push_str(&format!("[image: {mime}]"));
+                },
+                _=>bail!("Unsupported MCP prompt block type"),
             }
-            let value=part.get("text").and_then(Value::as_str)
-                .context("MCP prompt text block missing text")?;
-            if index>0{text.push('\n')}
-            text.push_str(value);
             if text.len()>128_000{bail!("MCP prompt exceeds 128 KB")}
         }
     }
-    Ok(text)
+    if images{
+        // The same SDK validator is used for user and remote MCP images.
+        // It rejects oversized, malformed and unsupported binary content.
+        crate::multimodal::parse(&Value::Array(blocks))
+    }else{
+        Ok(crate::multimodal::Input{preview:text,blocks:None})
+    }
 }
 
 pub fn listed_commands(catalog:&Value)->Result<Vec<Value>>{
@@ -112,6 +140,24 @@ pub fn listed_commands(catalog:&Value)->Result<Vec<Value>>{
 mod tests{
     use super::*;
     use serde_json::json;
+    #[test]
+    fn mcp_image_blocks_are_adapted_to_same_multimodal_model_channel(){
+        let result=render_content("docs","diagram",&json!({"messages":[
+            {"role":"user","content":[
+                {"type":"text","text":"Review diagram"},
+                {"type":"image","mimeType":"image/png","data":"AQID"}
+            ]}
+        ]})).unwrap();
+        let blocks=result.blocks.unwrap();
+        let wire=crate::multimodal::openai(&blocks).unwrap();
+        assert!(result.preview.contains("[image: image/png]"));
+        assert_eq!(wire.last().unwrap()["image_url"]["url"],
+            "data:image/png;base64,AQID");
+        assert!(render_content("docs","diagram",&json!({"messages":[{
+            "role":"user","content":{"type":"image","mimeType":"image/png",
+                "data":"BAD!"}
+        }]})).is_err());
+    }
     #[test]
     fn original_mcp_marker_and_literal_space_parameter_order(){
         let call=parse("/docs:inspect (MCP) first  third").unwrap().unwrap();

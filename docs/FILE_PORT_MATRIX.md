@@ -73,7 +73,7 @@
 | `src/cli/handlers/plugins.ts` | 879 | 31073 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/util.tsx` | 110 | 14501 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/ndjsonSafeStringify.ts` | 33 | 1408 | 重写：保持通用行为 | `src/ndjson.rs / src/main.rs / src/agent.rs` | 部分实现：JS 特殊行分隔符转义、SDK 输出回环与 JSON 值保持；jsonStringify 的非标准对象语义待核对 |
-| `src/cli/print.ts` | 5595 | 212735 | 重写：Headless 排队消息合并与会话执行 | `src/queued_prompt_batch.rs` / `src/sdk_queue.rs` / `src/main.rs` | 部分实现：同 workload/meta 提示合并调用和去重计费、结构化 task_notification 系统事件、状态/用量解析；新增按 UUID 原始内容逐条回放（含批次合并与直接 SDK 消息），实际进程+HTTP 验证；原版全输出协议、完整消息确认/生命周期回调、远端 IO 和命令主流程仍未等价；SDK 原生取消待处理 UUID，取消后不会发送模型请求 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；队列同 workload/meta 图文合并单次模型调用及各 UUID 回放已验证；多模态 UI/非图片块仍未等价|
+| `src/cli/print.ts` | 5595 | 212735 | 重写：Headless 排队消息合并与会话执行 | `src/queued_prompt_batch.rs` / `src/sdk_queue.rs` / `src/main.rs` | 部分实现：同 workload/meta 提示合并调用和去重计费、结构化 task_notification 系统事件、状态/用量解析；新增按 UUID 原始内容逐条回放（含批次合并与直接 SDK 消息），实际进程+HTTP 验证；原版全输出协议、完整消息确认/生命周期回调、远端 IO 和命令主流程仍未等价；SDK 原生取消待处理 UUID，取消后不会发送模型请求 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；队列同 workload/meta 图文合并单次模型调用及各 UUID 回放已验证；多模态 UI/非图片块仍未等价；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/资源等仍待验证|
 | `src/cli/remoteIO.ts` | 256 | 9946 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/structuredIO.ts` | 860 | 28720 | 重写：保持通用行为 | `src/main.rs / src/agent.rs / src/sse.rs` | 部分实现：NDJSON SDK 多轮、事件和实时文本增量；控制请求体系未全等；SDK 本地控制包络初始化/状态/取消回环，其他协议仍未全等 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；多模态 UI/非图片块仍未等价|
 | `src/cli/transports/HybridTransport.ts` | 283 | 10883 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1049,7 +1049,7 @@
 | `src/services/mcp/channelNotification.ts` | 317 | 12540 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/channelPermissions.ts` | 241 | 8981 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/claudeai.ts` | 165 | 6126 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
-| `src/services/mcp/client.ts` | 3349 | 119060 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、故障隔离、资源/提示订阅及重连、MCP Prompt 命令发现/位置参数绑定/服务端取回/进入真实模型请求；多模态 Prompt、OAuth、独立 SSE GET/退避、其他传输及完整回调/UI 仍未等价 |
+| `src/services/mcp/client.ts` | 3349 | 119060 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、故障隔离、资源/提示订阅及重连、MCP Prompt 命令发现/位置参数绑定/服务端取回/进入真实模型请求；多模态 Prompt、OAuth、独立 SSE GET/退避、其他传输及完整回调/UI 仍未等价 ；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/资源等仍待验证|
 | `src/services/mcp/config.ts` | 1579 | 51130 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、故障隔离、资源/提示订阅及重连、MCP Prompt 命令发现/位置参数绑定/服务端取回/进入真实模型请求；多模态 Prompt、OAuth、独立 SSE GET/退避、其他传输及完整回调/UI 仍未等价 |
 | `src/services/mcp/elicitationHandler.ts` | 314 | 10166 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/envExpansion.ts` | 39 | 1047 | 重写：多模型通用 MCP | `src/compat_helpers.rs` | 已验收：环境变量展开、默认值、缺失列表及重复缺失项的纯函数语义对照；证据 compat_helpers::tests::source_env_expansion_cases |

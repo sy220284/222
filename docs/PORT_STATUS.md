@@ -302,3 +302,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：补齐 Headless 图片与文本同负载合批回放
 
 进一步对照 `src/cli/print.ts` 的 `canBatchWith` 与 `joinPromptValues`：当排队消息 `workload` 和 `isMeta` 相同且为同组 `prompt`，允许图片和文本块跟随原队列顺序在一个 ModelRequest 中合并，不丢失图片、文本段或 UUID；既有 `skipSlashCommands`/Bash/权限通知的阻断规则保留。加入真实 SDK 进程与 HTTP 模拟模型单次请求测试：两条原始 UUID 分别回放/分别返回结果，模型仅接到一次包含文字+原始图片的图文请求，且本次队列排空；完整原厂多模态 UI/图片编码及 SDK 异步状态机仍待等价验收。本轮修复将旧文本数组测试从扁平字符串改为线协议中的结构化文本块逐项对照，验证拒绝非文本文件类型仍生效。以上不构成源路径逐文件完整验收。
+
+### 2026-10-29：MCP Prompt 图片与 SDK 多模态模型通道贯通
+
+原版 `services/mcp/client.ts::fetchCommandsForClient` 使用 `transformResultContent` 处理 MCP `prompts/get` 的图片内容；此前 Rust `/server:prompt (MCP)` 遇到图片会直接报错。本轮在 `mcp_prompt.rs` 中保留每条消息的 role 与原内容顺序，将 `mimeType`、base64 图片作为结构化图片块传给已验证的 `multimodal` 校验与模型转换，不把远端内容提升为系统指令；文本命令继续保留原有纯文本处理。`Agent` 在 UserPromptSubmit Hook 和会话保存前获得展开后内容及图像块，并通过 OpenAI/Gemini 通用模型请求链发送。新增真实 MCP stdio 子进程、SDK 和 HTTP 视觉模型全调用链集成测试，以及格式缺失/非法编码单测。MCP 音频、完整嵌入资源、历史多模态恢复等仍不等价，固定 Issue #3 保持开放，不将相关文件标已验收。

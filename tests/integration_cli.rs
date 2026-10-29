@@ -2694,3 +2694,53 @@ fn authorized_extra_directory_is_inherited_by_subagent_and_team_member() {
         assert!(requests[3].contains("Child completed external read"),"{}",requests[3]);
     }
 }
+
+
+#[cfg(unix)]
+#[test]
+fn sdk_mcp_prompt_image_content_flows_to_real_model_multimodal_request(){
+    use std::process::Stdio;
+    let dir=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let address=listener.local_addr().unwrap();
+    let http=thread::spawn(move||{
+        let (mut socket,_)=listener.accept().unwrap();
+        let request=read_request(&mut socket);
+        let response=json!({"choices":[{"message":{"role":"assistant",
+            "content":"MCP vision complete"},"finish_reason":"stop"}]}).to_string();
+        write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response.len(),response).unwrap();
+        socket.flush().unwrap();
+        request
+    });
+    let script=r#"while IFS= read -r line; do
+case "$line" in
+ *'"id":1'*) echo '{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"prompts":{},"tools":{}}}}' ;;
+ *'"id":2'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}' ;;
+ *'"id":3'*) echo '{"jsonrpc":"2.0","id":3,"result":{"prompts":[{"name":"diagram","arguments":[{"name":"topic"}]}]}}' ;;
+ *'"id":4'*) echo '{"jsonrpc":"2.0","id":4,"result":{"messages":[{"role":"user","content":[{"type":"text","text":"Analyze the attached image"},{"type":"image","mimeType":"image/png","data":"AQID"}]}]}}' ;;
+esac
+done"#;
+    let config=dir.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"vision",
+        "base_url":format!("http://{address}/v1")
+    }],"mcp_servers":[{"id":"docs","command":"sh","args":["-c",script]}]})
+        .to_string()).unwrap();
+    let mut sdk=binary().args(["--workspace",dir.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut stdin=sdk.stdin.take().unwrap();
+        writeln!(stdin,"{}",json!({"type":"user",
+            "content":"/docs:diagram (MCP) inspection"})).unwrap();
+    }
+    let output=sdk.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let wire=String::from_utf8(output.stdout).unwrap();
+    assert!(wire.contains("MCP vision complete"),"{wire}");
+    let request=http.join().unwrap();
+    assert!(request.contains("Analyze the attached image"));
+    assert!(request.contains("data:image/png;base64,AQID"));
+    assert!(!request.contains("/docs:diagram (MCP)"));
+}
