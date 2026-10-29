@@ -1499,7 +1499,7 @@
 | `src/utils/extraUsage.ts` | 24 | 635 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/utils/fastMode.ts` | 533 | 17723 | 重写：保持通用行为 | `src/generated_ports/p_9a3112a5d3add.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/file.ts` | 585 | 18256 | 重写：保持通用行为 | `src/generated_ports/p_0ff2be80aab56.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/fileHistory.ts` | 1116 | 34660 | 重写：保持通用行为 | `src/history.rs` | 部分实现：本地检查点与校验回退；消息粒度与 Bash 修改跟踪未等价 |
+| `src/utils/fileHistory.ts` | 1116 | 34660 | 重写：保持通用行为 | `src/history.rs / src/tools.rs / src/agent.rs / src/config.rs` | 部分实现：本地检查点与内容校验回退；按原版备份恢复原 Unix 文件权限，若回退前权限已被外部修改则拒绝覆盖（2a0f929b、0f3e5461）；按原版会话 ID 隔离检查点创建/查询/回退（28b82752、1b90480a）；交互配置 fileCheckpointingEnabled 与 SDK 显式 opt-in/全局禁用开关接入真实 Write/Edit/NotebookEdit 工具链（b63e2803、af837473、d8a79bb8、68f00be1），源码已提交待验收。仍缺原版按消息 ID 快照、100 次保留上限、Bash 修改跟踪、完整跨会话恢复、竞态与跨平台权限行为 |
 | `src/utils/fileOperationAnalytics.ts` | 72 | 2287 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/filePersistence/filePersistence.ts` | 288 | 7763 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/filePersistence/outputsScanner.ts` | 127 | 3682 | 重写：保持通用行为 | 待定 | 未迁移 |
