@@ -79,10 +79,16 @@ fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
                 if hook.get("async").and_then(Value::as_bool) == Some(true) {
                     bail!("Asynchronous plugin command hooks are not yet supported")
                 }
+                if hook.get("once").and_then(Value::as_bool) == Some(true) {
+                    bail!("One-shot plugin command hooks require lifecycle tracking")
+                }
+                let shell = hook.get("shell").map(|value|
+                    serde_json::from_value(value.clone())).transpose()?;
                 rules.push(HookRule {
                     event: event.clone(), matcher: matcher_name.clone(),
-                    if_condition: None, plugin_root: Some(root.to_owned()),
-                    command: command.to_owned(), shell: None, timeout_seconds,
+                    if_condition: matcher.get("if").and_then(Value::as_str).map(str::to_owned),
+                    plugin_root: Some(root.to_owned()),
+                    command: command.to_owned(), shell, timeout_seconds,
                 });
             }
         }
