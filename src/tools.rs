@@ -474,8 +474,10 @@ impl ToolExecutor {
 
     async fn run_command(&self, args: &Value) -> Result<String> {
         let command = required(args, "command")?;
+        let env=std::env::vars().collect::<HashMap<String,String>>();
         let secs = args.get("timeout_seconds").and_then(Value::as_u64)
-            .unwrap_or(60).clamp(1, 300);
+            .unwrap_or_else(|| crate::portable_source_utils::default_bash_timeout_ms(&env)/1000)
+            .clamp(1,crate::portable_source_utils::max_bash_timeout_ms(&env)/1000);
         let mut proc=self.shell_kind.build_command(command)?;
         proc.envs(&self.session_env);
         crate::subprocess_env::apply(&mut proc);

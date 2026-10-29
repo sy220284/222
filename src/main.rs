@@ -10,6 +10,7 @@ mod queued_prompt_batch;
 mod shell_quote;
 mod shell_runtime;
 mod subprocess_env;
+mod portable_source_utils;
 mod skill_arguments;
 mod semantic_inputs;
 mod xml_escape;
