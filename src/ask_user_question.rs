@@ -99,13 +99,14 @@ fn validate(input: &Value) -> Result<&[Value]> {
     }
     let mut seen_questions = HashSet::new();
     for q in questions {
+        // The original Zod uniqueness refinement compares exact strings,
+        // without trimming. Preserve user-visible question text verbatim.
         let question = q
             .get("question")
             .and_then(Value::as_str)
-            .context("question text required")?
-            .trim();
-        if question.is_empty() || !seen_questions.insert(question) {
-            bail!("Question texts must be nonempty and unique");
+            .context("question text required")?;
+        if !seen_questions.insert(question) {
+            bail!("Question texts must be unique");
         }
         q.get("header")
             .and_then(Value::as_str)
@@ -125,8 +126,7 @@ fn validate(input: &Value) -> Result<&[Value]> {
             let label = opt
                 .get("label")
                 .and_then(Value::as_str)
-                .context("option label required")?
-                .trim();
+                .context("option label required")?;
             opt.get("description")
                 .and_then(Value::as_str)
                 .context("option description required")?;
@@ -142,8 +142,10 @@ fn validate(input: &Value) -> Result<&[Value]> {
                     }
                 }
             }
-            if label.is_empty() || label.eq_ignore_ascii_case("other") || !labels.insert(label) {
-                bail!("Option labels must be nonempty, unique and cannot be Other");
+            // The source schema checks only exact duplicate labels. "Other"
+            // is UI guidance, not an additional schema-level rejection.
+            if !labels.insert(label) {
+                bail!("Option labels must be unique within each question");
             }
         }
     }

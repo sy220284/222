@@ -9,12 +9,18 @@ pub fn format_error_text(message: &str) -> String {
     } else {
         message
     };
-    let len = message.chars().count();
+    // JavaScript String.length and slice() use UTF-16 code units. Counting
+    // Unicode scalar values would show the wrong truncation size and omit
+    // extra output when a tool error contains emoji or supplementary text.
+    let units: Vec<u16> = message.encode_utf16().collect();
+    let len = units.len();
     if len <= 10_000 {
         return message.to_owned();
     }
-    let head: String = message.chars().take(5_000).collect();
-    let tail: String = message.chars().skip(len - 5_000).collect();
+    // Rust strings cannot contain unpaired UTF-16 surrogates. If the original
+    // slice cuts through one, preserve the boundary with U+FFFD.
+    let head = String::from_utf16_lossy(&units[..5_000]);
+    let tail = String::from_utf16_lossy(&units[len - 5_000..]);
     format!(
         "{head}\n\n... [{} characters truncated] ...\n\n{tail}",
         len - 10_000
