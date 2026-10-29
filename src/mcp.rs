@@ -75,7 +75,7 @@ impl Client {
             tools_changed: false, resource_updates: Vec::new() };
         let initialized=timeout(RPC_TIMEOUT, client.request("initialize", json!({
             "protocolVersion":"2025-03-26",
-            "capabilities":{"roots":{"listChanged":false}},
+            "capabilities":{"roots":{},"elicitation":{}},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
         }))).await.context("MCP initialize timed out")??;
         client.server_info=initialized.get("serverInfo").cloned();

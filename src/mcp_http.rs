@@ -46,7 +46,7 @@ impl HttpClient{
             session:None,id:1,server_info:None,capabilities:None,
             tools_changed:false,resource_updates:Vec::new()};
         let initial=http.request("initialize",json!({
-            "protocolVersion":"2025-03-26","capabilities":{"roots":{"listChanged":false}},
+            "protocolVersion":"2025-03-26","capabilities":{"roots":{},"elicitation":{}},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
         })).await?;
         http.server_info=initial.get("serverInfo").cloned();
@@ -244,7 +244,8 @@ mod tests{
                 match step{
                     0=>{
                         assert_eq!(value["method"],"initialize");
-                        assert_eq!(value["params"]["capabilities"]["roots"]["listChanged"],false);
+                        assert_eq!(value["params"]["capabilities"]["roots"],json!({}));
+                        assert_eq!(value["params"]["capabilities"]["elicitation"],json!({}));
                         let result=json!({"jsonrpc":"2.0","id":1,"result":{
                             "capabilities":{"tools":{}}}}).to_string();
                         socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nMcp-Session-Id: test-session\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{result}",result.len()).as_bytes()).await.unwrap();
