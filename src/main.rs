@@ -2231,6 +2231,21 @@ async fn chat(
     Ok(())
 }
 
+/// Run a SessionStart-provided initial user turn after SDK initialization
+/// has installed the caller's prompt and runtime options (print.ts:2914-2917).
+async fn sdk_run_initial_turn(agent: &mut Agent) {
+    match agent.ask("").await {
+        Ok(answer) => print_json!(json!({
+            "type":"result","session_id":agent.session_id(),
+            "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
+        })),
+        Err(error) => print_json!(json!({
+            "type":"error","session_id":agent.session_id(),
+            "message":format!("{error:#}")
+        })),
+    }
+}
+
 async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut queue = message_queue::Queue::default();
     queue.enable_journal(agent.workspace_root(), &agent.session_id())?;
@@ -2243,22 +2258,10 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
         "usage_schema":runtime_contracts::empty_usage()}));
-    // The original print.ts prepends a SessionStart initialUserMessage to
-    // the SDK input queue, even when stdin never supplies a user event.
-    // Execute it as the first user turn before consuming external input.
-    if agent.has_initial_user_message() {
-        sdk_initialized = true;
-        match agent.ask("").await {
-            Ok(answer) => print_json!(json!({
-                "type":"result","session_id":agent.session_id(),
-                "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
-            })),
-            Err(error) => print_json!(json!({
-                "type":"error","session_id":agent.session_id(),
-                "message":format!("{error:#}")
-            })),
-        }
-    }
+    // Source print.ts queues the SessionStart message and drains it only
+    // after initialize has installed systemPrompt, agents and hooks. Eager
+    // execution previously rejected a subsequent valid initialize request.
+    let mut initial_turn_pending = agent.has_initial_user_message();
     let stdin = io::stdin();
     for input in stdin.lock().lines() {
         let line = input?;
@@ -2276,6 +2279,12 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
         let kind = event.get("type").and_then(Value::as_str).unwrap_or("user");
         match kind {
             "user" => {
+                // A stream without explicit initialize still executes the
+                // SessionStart turn first, preserving user message ordering.
+                if initial_turn_pending {
+                    initial_turn_pending = false;
+                    sdk_run_initial_turn(agent).await;
+                }
                 // Keep bridge user content and UUID on the validated SDK path.
                 let bridge_user = multimodal::extract_inbound_user_fields(&event);
                 let prompt_value = event
@@ -2455,18 +2464,25 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     }
                     continue;
                 }
-                print_json!(
-                    sdk_nested_control(
-                        agent,
-                        config,
-                        &event,
-                        &mut queue,
-                        &mut bridge_session,
-                        &mut sdk_initialized,
-                        &mut sdk_end_requested
-                    )
-                    .await
-                );
+                let is_initialize = event.pointer("/request/subtype")
+                    .and_then(Value::as_str) == Some("initialize");
+                let response = sdk_nested_control(
+                    agent,
+                    config,
+                    &event,
+                    &mut queue,
+                    &mut bridge_session,
+                    &mut sdk_initialized,
+                    &mut sdk_end_requested,
+                ).await;
+                let initialized = is_initialize
+                    && response.pointer("/response/subtype").and_then(Value::as_str)
+                        == Some("success");
+                print_json!(response);
+                if initialized && initial_turn_pending {
+                    initial_turn_pending = false;
+                    sdk_run_initial_turn(agent).await;
+                }
                 if sdk_end_requested {
                     break;
                 }
