@@ -1559,6 +1559,7 @@ async fn chat(
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
+                println!("/permissions             inspect persisted rules by source");
                 println!("/sessions [query]        search saved conversation titles");
                 println!("/sessions --semantic QUERY use model-ranked session search");
                 println!("One-shot model search: atlas-agent semantic-sessions QUERY");
@@ -1633,6 +1634,11 @@ async fn chat(
             }
             "/context" => {
                 println!("{}", agent.context_usage_text()?);
+                continue;
+            }
+            "/permissions" | "/allowed-tools" => {
+                let paths = permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?;
+                println!("{}", paths.render_permission_rules(agent.current_permission_mode())?);
                 continue;
             }
 
@@ -2335,6 +2341,9 @@ async fn sdk_nested_control(
             }
             "mcp_status" => Ok(json!({"mcpServers":agent.mcp_statuses()?})),
             "get_context_usage" => agent.context_usage(),
+            "get_settings" => permission_settings::SettingsPaths::for_workspace(
+                agent.workspace_root()
+            )?.settings_snapshot(&agent.profile().model),
             "mcp_prompt_commands" => agent.list_mcp_prompt_commands().await,
             "mcp_resources"
             | "mcp_prompts"
