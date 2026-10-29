@@ -112,14 +112,18 @@ impl ToolExecutor {
             },
             "list_files" => self.list_files(&args),
             "glob_files" => {
-                let path = self.checked_path(args.get("path").and_then(Value::as_str).unwrap_or("."))?;
-                search::glob_files_filtered(&self.root, &path, &args,
-                    &|candidate|self.search_read_allowed(candidate))
+                let raw=args.get("path").and_then(Value::as_str).unwrap_or(".");
+                let path=self.checked_path(raw)?;
+                // Original GlobTool checks read permission on its search root.
+                self.require_read_rules(raw,&path)?;
+                search::glob_files(&self.root,&path,&args)
             },
             "grep_files" => {
-                let path = self.checked_path(args.get("path").and_then(Value::as_str).unwrap_or("."))?;
-                search::grep_files_filtered(&self.root, &path, &args,
-                    &|candidate|self.search_read_allowed(candidate))
+                let raw=args.get("path").and_then(Value::as_str).unwrap_or(".");
+                let path=self.checked_path(raw)?;
+                // Original GrepTool checks read permission on its search root.
+                self.require_read_rules(raw,&path)?;
+                search::grep_files(&self.root,&path,&args)
             },
             "search_text" => self.search_text(&args),
             "list_skills" => self.list_skills(),
@@ -742,14 +746,16 @@ mod tests {
         let search=tool.execute(&call("search_text",json!({"pattern":"marker"}))).await;
         assert!(search.contains("public-marker"),"{search}");
         assert!(!search.contains("secret-marker"),"{search}");
+        // Original Grep/Glob permissions are checked on the requested root,
+        // not on every file returned from a broad workspace search.
         let grep=tool.execute(&call("grep_files",json!({
-            "pattern":"marker","output_mode":"content"
+            "pattern":"marker","path":"secrets","output_mode":"content"
         }))).await;
-        assert!(grep.contains("public-marker"),"{grep}");
-        assert!(!grep.contains("secret-marker"),"{grep}");
-        let glob=tool.execute(&call("glob_files",json!({"pattern":"**/*.txt"}))).await;
-        assert!(glob.contains("public.txt"),"{glob}");
-        assert!(!glob.contains("key.txt"),"{glob}");
+        assert!(grep.contains("explicit permission rule"),"{grep}");
+        let glob=tool.execute(&call("glob_files",json!({
+            "pattern":"**/*.txt","path":"secrets"
+        }))).await;
+        assert!(glob.contains("explicit permission rule"),"{glob}");
         let listed=tool.execute(&call("list_files",json!({}))).await;
         assert!(listed.contains("public.txt"),"{listed}");
         assert!(!listed.contains("key.txt"),"{listed}");
