@@ -278,6 +278,39 @@ impl SettingsPaths {
         Ok(false)
     }
 
+    /// Source permissionSetup.ts:995-1010: directories configured under
+    /// permissions.additionalDirectories join the CLI --add-dir roots and
+    /// pass through the same workspace validation before becoming accessible.
+    pub fn additional_directories(&self) -> Result<Vec<String>> {
+        let policy = self.load_policy()?;
+        let mut directories = Vec::new();
+        let mut append = |settings: &Value| {
+            if let Some(entries) = settings
+                .pointer("/permissions/additionalDirectories")
+                .and_then(Value::as_array)
+            {
+                for entry in entries {
+                    if let Some(path) = entry.as_str() {
+                        if !directories.iter().any(|known| known.as_str() == path) {
+                            directories.push(path.to_owned());
+                        }
+                    }
+                }
+            }
+        };
+        if !Self::managed_only(policy.as_ref()) {
+            for path in [&self.user, &self.project, &self.local] {
+                if let Some(settings) = Self::read_json_for_execution(path)? {
+                    append(&settings);
+                }
+            }
+        }
+        if let Some(settings) = policy.as_ref() {
+            append(settings);
+        }
+        Ok(directories)
+    }
+
     fn managed_only(policy: Option<&Value>) -> bool {
         policy
             .and_then(|value| value.get("allowManagedPermissionRulesOnly"))

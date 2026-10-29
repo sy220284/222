@@ -616,3 +616,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 组织策略禁用绕过审批模式进入真实启动/恢复链（源码已提交，待验证）
 
 对照原版 `source/src/utils/permissions/permissionSetup.ts:704–710,775–799` 和 `source/src/utils/settings/types.ts:67–70`：`permissions.disableBypassPermissionsMode: "disable"` 应阻止进入 `bypassPermissions`。Rust `SettingsPaths::bypass_disabled` 现读取用户、项目、本地与托管来源，尊重托管-only 限制；`src/main.rs` 启动时即使显式 `--approval full` 也将执行上限降至 Ask，已有会话中持久化的绕过模式安全回退 default，后续 `/mode` 和 SDK 切换也受 Agent 授权上限限制。**代码已提交，未运行测试/CI**；原版动态配置重载、远程托管、所有 UI 提示仍待验证，冻结清单不勾选。
+
+### 权限设置附加目录进入真实文件与命令授权范围（源码已提交，待验证）
+
+对照原版 `source/src/utils/permissions/permissionSetup.ts:978–1010` 和 `source/src/utils/settings/types.ts:79–82`，`permissions.additionalDirectories` 应与 `--add-dir` 一同经过工作区目录校验后进入文件/搜索/Shell 可访问范围。Rust `SettingsPaths::additional_directories` 按用户、项目、本地及托管策略来源合并去重，并尊重 managed-only 限制；`src/main.rs` 的 Agent 初始化现将这些路径接入既有 `attach_configured_directories` 校验及真实工具访问链。**仅源码提交，未运行测试/CI**；原版交互授权确认、沙箱刷新、跨工作树/远程路径语义仍待验证，Issue #3 冻结项保持开放。

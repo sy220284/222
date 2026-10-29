@@ -976,6 +976,7 @@ async fn main() -> Result<()> {
     let active_permission_rules = permission_paths.load(&config.permission_rules)?;
     let configured_default_mode = permission_paths.default_mode()?;
     let bypass_disabled = permission_paths.bypass_disabled()?;
+    let permission_directories = permission_paths.additional_directories()?;
     let plugins = PluginSet::load(&root, &config.enabled_plugins)?;
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. } | Commands::ProjectInit);
@@ -1021,6 +1022,7 @@ async fn main() -> Result<()> {
         }
     }
     agent.attach_configured_directories(&config.additional_directories)?;
+    agent.attach_configured_directories(&permission_directories)?;
     for directory in &cli.additional_directory {
         let raw = directory.to_string_lossy();
         match agent.validate_workspace_directory(raw.as_ref())? {
