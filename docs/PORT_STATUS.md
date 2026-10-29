@@ -1,5 +1,22 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：Hook 标准输入、工作区、超时和模型可见输出（源码已提交，待验收）
+
+本次对照完整用户原始 ZIP 的 `source/src/utils/hooks.ts`（166–181、877–879、986–1027、1616–1645、2499–2695、2743–2880 行）、`source/src/utils/ShellCommand.ts`（337–346 行），并检查 Rust 的 `Agent::attach_hooks/ask/finish` 与 `HookRunner::run/run_command` 真实可达链，补齐下列 7 条相互独立的用户业务行为：
+
+1. **逐行读取 Hook 输入**：在 JSON 标准输入后写入换行，用户脚本 `read -r line` 能正常解析完整事件，不再因无换行在 EOF 时跳过分支（`457dabb`）。
+2. **Hook 在正确的项目目录运行**：Agent、子代理与工作树通过 `with_workspace` 将实际工作区传入 Hook 进程，设置当前目录及中立环境变量 `ATLAS_PROJECT_DIR`，修复相对路径读取错误（`e867516`、`c598420`）。
+3. **退出时的 Hook 有独立超时**：SessionEnd 使用原版 1500ms 上限，可通过 `ATLAS_SESSIONEND_HOOKS_TIMEOUT_MS` 调整，避免退出卡在普通十分钟 Hook 超时（`457dabb`、`f80ccba`）。
+4. **正常 Hook 允许较长工作**：普通命令 Hook 缺省超时由 30 秒改为原版 600 秒，保留显式 1–600 秒设置（`457dabb`）。
+5. **Hook 可见输出真正进入对话**：成功的 SessionStart/UserPromptSubmit/PreToolUse/PostToolUse 普通文本及 JSON `systemMessage` 进入 Agent 上下文和模型可见工具结果，避免用户脚本输出丢失（`457dabb`、`dd17705`）。
+6. **启动/退出 Hook 的非阻断错误可见**：SessionStart/SessionEnd 的执行失败、超时警告进入终端及结构化 SDK 事件，不再被丢弃（`fd370ca`）。
+7. **超时/取消杀掉 Hook 子进程树**：Unix Hook 在独立进程组执行，取消或超时清理后代进程，防止脚本后台子进程继续写文件或占住管道（`2526ef1`）。
+
+**本轮计数 7/100 项真实用户业务链源码补强，已提交、待验收；尚差 93 项。** 相关修改提交：`457dabbad4efcc2cd46b5059647dbdd844bd6c91`、`f80ccba52f63afec27a554468a8157bf58d9ebbf`、`dd177053a521a9ba38a3a0690159e0e80aa486f3`、`e867516960c6e10fb0a7ae5c5ef34629dbc8657e`、`c5984200f1a61e30bc12da9d683977aed1f634e1`、`fd370ca7dd13a42a93318a3a436d08194965718f`、`2526ef14e2d2732893b6fbb030d72e82283c68f8`。
+
+**剩余真实差异**：AsyncHookRegistry 注册、响应轮询及中断/重试；HTTP/Agent/Prompt Hook；完整权限询问与 allow 决策传递；跨平台进程树终止、全部事件的附件 UI；Hook 动态来源与热重载。冻结 Issue #3 不勾选。遵循当前开发要求未运行 Cargo、测试或 CI；本轮未完成 100 项预先逐项确认的完整清单，不将源文件或静态候选充数。
+
+
 ## 2026-10-29：多模型结构化文本贯通 Agent、命名及三类搜索（源码已提交、待验收）
 
 原版依据：`source/src/utils/messages.ts::getAssistantMessageText`、`source/src/utils/sessionTitle.ts`、`source/src/utils/agenticSessionSearch.ts`、`source/src/utils/transcriptSearch.ts`。新增 `src/protocol.rs::Message::visible_text` 统一提取 SDK `text` 块并在缺少结构化文本时使用扁平内容，落实以下五个独立用户业务入口：
