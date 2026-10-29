@@ -22,6 +22,8 @@ struct Manifest {
     commands: Value,
     #[serde(default, alias = "userConfig")]
     user_config: Value,
+    #[serde(default)]
+    dependencies: Vec<String>,
 }
 
 fn checked_component(root: &Path, path: &Path) -> Result<PathBuf> {
@@ -46,6 +48,7 @@ fn read_manifest(root: &Path, fallback: &str) -> Result<Manifest> {
             hooks: Value::Null, mcp_servers: Value::Null,
             skills: Value::Null, commands: Value::Null,
             user_config: Value::Null,
+            dependencies: Vec::new(),
         });
     };
     let path = checked_component(root, &path)?;
@@ -507,6 +510,81 @@ fn directory(root: &Path, name: &str) -> Result<PathBuf> {
     }
     Ok(real)
 }
+/// Match dependencyResolver.ts::verifyAndDemote: enabled plugins with missing
+/// dependencies are disabled for this session, without changing user settings.
+/// Iterate to a fixed point so dependents of a disabled plugin are also hidden.
+fn active_plugin_names(root: &Path, enabled: &[String])
+    -> (std::collections::HashSet<String>, Vec<String>) {
+    let mut prepared = std::collections::HashMap::<String, (String, Manifest)>::new();
+    let mut errors = Vec::new();
+    for name in enabled {
+        if prepared.contains_key(name) {
+            errors.push(format!("Plugin '{name}' enabled twice"));
+            continue;
+        }
+        let result = (|| -> Result<(String, Manifest)> {
+            let location = directory(root, name)?;
+            let manifest = read_manifest(&location, name)?;
+            if manifest.name != *name { bail!("Plugin manifest identity mismatch"); }
+            let origin = location.join(".atlas-plugin-origin.json");
+            let identity = match fs::symlink_metadata(&origin) {
+                Ok(meta) => {
+                    if meta.file_type().is_symlink() || !meta.is_file() {
+                        bail!("Plugin origin must be a regular file");
+                    }
+                    let value: Value = serde_json::from_slice(&fs::read(&origin)?)?;
+                    let id = value.get("pluginId").and_then(Value::as_str)
+                        .context("Plugin origin has no pluginId")?;
+                    if id.split_once('@').map(|(n, _)| n) != Some(name.as_str()) {
+                        bail!("Plugin origin does not match its directory");
+                    }
+                    id.to_owned()
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => format!("{name}@inline"),
+                Err(e) => return Err(e.into()),
+            };
+            Ok((identity, manifest))
+        })();
+        match result {
+            Ok(plugin) => { prepared.insert(name.clone(), plugin); }
+            Err(error) => errors.push(format!("Plugin '{name}' unavailable: {error:#}")),
+        }
+    }
+    let mut active = prepared.keys().cloned().collect::<std::collections::HashSet<_>>();
+    loop {
+        let mut changed = false;
+        for name in enabled {
+            if !active.contains(name) { continue; }
+            let (identity, manifest) = &prepared[name];
+            let marketplace = identity.split_once('@').map(|(_, m)| m);
+            for dep in &manifest.dependencies {
+                let (dep_name, explicit) = match dep.split_once('@') {
+                    Some((n, m)) if !n.is_empty() && !m.is_empty() => (n, Some(dep.as_str())),
+                    Some(_) => ("", Some(dep.as_str())),
+                    None => (dep.as_str(), None),
+                };
+                let satisfied = !dep_name.is_empty() && active.contains(dep_name)
+                    && prepared.get(dep_name).is_some_and(|(candidate, _)| {
+                        if let Some(explicit) = explicit {
+                            candidate == explicit
+                        } else if let Some(m) = marketplace {
+                            m == "inline" || candidate == &format!("{dep_name}@{m}")
+                        } else { true }
+                    });
+                if !satisfied {
+                    active.remove(name);
+                    errors.push(format!(
+                        "Plugin '{name}' unavailable: dependency '{dep}' is missing, disabled or from a different marketplace"
+                    ));
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if !changed { break; }
+    }
+    (active, errors)
+}
 impl PluginSet {
     pub fn load(root: &Path, enabled: &[String]) -> Result<Self> {
         let mut set = Self {
@@ -514,12 +592,10 @@ impl PluginSet {
             mcp_servers: Vec::new(),
             errors: Vec::new(),
         };
-        let mut seen = std::collections::HashSet::new();
+        let (active, dependency_errors) = active_plugin_names(root, enabled);
+        set.errors.extend(dependency_errors);
         for name in enabled {
-            if !seen.insert(name) {
-                set.errors.push(format!("Plugin '{name}' enabled twice"));
-                continue;
-            }
+            if !active.contains(name) { continue; }
             // pluginLoader.ts::loadPluginsFromMarketplaces uses allSettled:
             // an invalid installation is reported without disabling healthy
             // plugins. A rejected plugin must contribute no executable hooks.
@@ -659,7 +735,9 @@ fn skill_files(plugin_root: &Path, manifest: &Manifest) -> Result<Vec<(String, P
 
 pub fn list_skills(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
     let mut names = Vec::new();
+    let (active, _) = active_plugin_names(root, enabled);
     for name in enabled {
+        if !active.contains(name) { continue; }
         if plugin_blocked_by_policy(root, name)? {
             continue;
         }
@@ -680,7 +758,7 @@ pub fn resolve_skill_path(root: &Path, enabled: &[String], identifier: &str) -> 
         .split_once(':')
         .context("Use plugin:skill as plugin skill name")?;
     if !valid_name(name) || !skill.split(':').all(valid_name)
-        || !enabled.iter().any(|n| n == name) {
+        || !active_plugin_names(root, enabled).0.contains(name) {
         bail!("Plugin skill not enabled")
     }
     let plugin_root = directory(root, name)?;
@@ -774,7 +852,7 @@ pub fn expand_skill_user_config(
 ) -> Result<String> {
     let (plugin, _) = identifier.split_once(':')
         .context("Plugin skill requires plugin:name")?;
-    if !valid_name(plugin) || !enabled.iter().any(|name| name == plugin) {
+    if !valid_name(plugin) || !active_plugin_names(root, enabled).0.contains(plugin) {
         bail!("Plugin skill not enabled")
     }
     let location = directory(root, plugin)?;
@@ -830,6 +908,9 @@ pub fn command_prompt_with_session(
     if !enabled.iter().any(|name| name == plugin)
         || !valid_name(plugin) || !suffix.split(':').all(valid_name) {
         return Ok(None);
+    }
+    if !active_plugin_names(root, enabled).0.contains(plugin) {
+        bail!("Plugin command unavailable: required plugin dependency is disabled");
     }
     let plugin_root = directory(root, plugin)?;
     let manifest = read_manifest(&plugin_root, plugin)?;
@@ -957,7 +1038,9 @@ pub fn command_prompt_with_session(
 /// Keep the /commands view aligned with executable plugin command paths.
 pub fn list_commands(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
     let mut names = std::collections::BTreeSet::new();
+    let (active, _) = active_plugin_names(root, enabled);
     for plugin in enabled {
+        if !active.contains(plugin) { continue; }
         if plugin_blocked_by_policy(root, plugin)? {
             continue;
         }
