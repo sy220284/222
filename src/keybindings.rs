@@ -717,7 +717,7 @@ pub fn load_from(path: &Path) -> Loaded {
             return loaded;
         }
     };
-    let configuration: Configuration = match serde_json::from_str(&contents) {
+    let configuration: Configuration = match crate::json_runtime::parse_json(&contents) {
         Ok(c) => c,
         Err(e) => {
             loaded.warnings.push(warning(
@@ -851,6 +851,18 @@ mod tests {
                 Some(&pending)
             ),
             Resolution::ChordCancelled
+        );
+    }
+    #[test]
+    fn user_bindings_json_with_utf8_bom_is_read_from_disk() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("keybindings.json");
+        fs::write(&path, "\u{feff}{\"bindings\":[{\"context\":\"Chat\",\"bindings\":{\"ctrl+o\":\"chat:submit\"}}]}").unwrap();
+        let loaded = load_from(&path);
+        assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+        assert_eq!(
+            display_for_action("chat:submit", "Chat", &loaded.bindings, "linux"),
+            Some("ctrl+o".into())
         );
     }
     #[test]

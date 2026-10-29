@@ -41,6 +41,7 @@ mod hooks;
 mod in_memory_mailbox;
 mod ink_constants;
 mod json_read;
+mod json_runtime;
 mod keybindings;
 mod lsp;
 mod mcp;
@@ -423,9 +424,9 @@ async fn main() -> Result<()> {
     let result = run_cli().await;
     let cleanup = cleanup_registry::run_cleanup_functions().await;
     match (result, cleanup) {
-        (Err(error), Err(cleanup_error)) => {
-            Err(error.context(format!("Process cleanup also failed: {cleanup_error:#}")))
-        }
+        (Err(error), Err(cleanup_error)) => Err(error.context(format!(
+            "Process cleanup also failed: {cleanup_error:#}"
+        ))),
         (Err(error), _) => Err(error),
         (Ok(()), result) => result,
     }

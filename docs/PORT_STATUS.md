@@ -1016,3 +1016,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - `src/task_graph.rs` 只读非法任务 ID 的结果恢复为“Task not found”，修改仍拒绝非法 ID；针对对应真实回归测试修复。
 - 本地在离线源码快照中运行 `cargo fmt --all -- --check`、`cargo check --offline --all-targets -q` 与 `cargo test --offline --all-targets -q`；557 项测试通过，0 失败。最新远端 HEAD 的 CI 另行核实。
 - 六条完整业务链的串行推进顺序及逐路径完成标准见 `docs/PORT_CLOSURE_PLAN.md`。
+
+
+### JSON、JSONC 与 JSONL 源码迁移（2026-10-29）
+
+- 原路径 `src/utils/json.ts` 对照源码写入 `src/json_runtime.rs`：BOM、安全解析和容量 50 的小文本 LRU、JSONC 注释与尾逗号解析、保留已有注释的数组追加、JSONL 损坏行容错、100MB 文件尾部读取。
+- `src/keybindings.rs` 的真实用户配置入口与 `src/session.rs` 的会话恢复入口复用统一 JSON 解析，新增带 BOM 的磁盘配置回归测试。
+- 新模块专项测试在首次编写后 5 项通过；修改后的源码运行了 Rust 格式检查。最新全部测试与 GitHub CI 需要按新 HEAD 完成核验。
+- 待补充源码差异：原版 jsonc-parser 的更复杂编辑布局、终端 setup 调用、其它配置与插件入口、不同文件编码等，保留部分实现状态。

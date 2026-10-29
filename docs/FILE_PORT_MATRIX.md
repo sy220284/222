@@ -1572,7 +1572,7 @@
 | `src/utils/ink.ts` | 27 | 921 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/intl.ts` | 95 | 2824 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/jetbrains.ts` | 192 | 5805 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/json.ts` | 278 | 9144 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/json.ts` | 278 | 9144 | 重写：保持通用行为 | `src/json_runtime.rs / src/keybindings.rs / src/session.rs` | 部分实现：已实现 BOM 安全 JSON、50 条限额缓存、JSONC 注释/尾逗号解析、保留注释的数组追加、容错 JSONL 与 100MB 文件尾部读取，并接入快捷键配置和会话加载；终端设置、其它调用链及源版边界行为仍待完整验收 |
 | `src/utils/jsonRead.ts` | 17 | 657 | 重写：处理 UTF-8 BOM 的 JSON 读取 | `src/json_read.rs` / `src/config.rs` / `src/session.rs` | 已验收：前缀 U+FEFF 精确移除一次、空输入、非前缀保留、跨平台配置和会话读取；证据 json_read::tests / config::tests / session::tests |
 | `src/utils/keyboardShortcuts.ts` | 15 | 568 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/lazySchema.ts` | 9 | 295 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |

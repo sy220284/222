@@ -108,7 +108,7 @@ impl Session {
         let file = Self::checked_path(root, id)?;
         let data = fs::read(&file).with_context(|| format!("Cannot resume {}", file.display()))?;
         let session: Self =
-            serde_json::from_str(crate::json_read::strip_bom(std::str::from_utf8(&data)?))?;
+            crate::json_runtime::parse_json(std::str::from_utf8(&data)?)?;
         if session.id != id {
             anyhow::bail!("Session id mismatch")
         }
