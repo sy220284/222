@@ -1725,3 +1725,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **真实源码提交**：`b72b803de4350592119a90858de68440f7510d6a`、`e311d9424f9744ab0108838716a0967d25926be7`、`ee329ec4407614a660e32d2204ecb38164f4560a`、`2c7d3ca7312451dcbe8d2a26e8a9377fea4d6c6e`；迁移矩阵同步提交 `847484f5`、`47a7f644`。
 - **保守计数**：归为同一条 Grep 用户搜索业务链，**本轮 1/100 项，剩余 99 项**。静态检查了 Agent 入口、工具分发及改动文件；遵循本轮要求未运行 Cargo、单元/集成/端到端测试或 CI，完整等价验收新增 0，Issue #3 冻结 362 项不核销。
 - **未实现差异**：完整 ripgrep 类型与忽略规则、取消/超时、流式/二进制边界、文件系统并发与异常传播仍未等价；本轮未完成先行确认 100 条独立功能缺口与其完整实施方案，不将源路径候选数或内部修正数计入完成。
+
+
+## 2026-10-29：插件传递依赖安装闭包（源码已提交、待行为验收）
+
+- **原版源码依据**：完整 `claude-code-2.1.88-main(1).zip` 中 `source/src/utils/plugins/dependencyResolver.ts::resolveDependencyClosure`（传递依赖深度遍历、循环依赖、已启用跳过、同市场默认信任边界）与 `source/src/utils/plugins/pluginInstallationHelpers.ts::installResolvedPlugin`（依赖先于主插件安装、一次性更新启用状态、策略阻断），以及 `source/src/utils/plugins/schemas.ts::PluginManifestMetadataSchema`。
+- **Rust 入口与实际修改**：`src/plugin_manager.rs::execute(PluginCommand::Install)` → `dependency_install_plan` → `src/marketplace_registry.rs::local_plugin_dependencies/resolve_local_plugin` → `install_local_with_origin` → `Config::save`。读取插件清单与注册市场条目的依赖，先形成去重、循环检测、来源身份与托管策略校验后的依赖优先安装序列；依赖和主插件按序安装，一次保存启用状态，出现安装或配置保存错误时撤销本轮新安装的目录。已启用且确实安装的依赖保留，不擅自重装。跨市场自动安装仍要求显式信任能力后续补齐。
+- **提交**：`54da3d9727a4411d82af26fc72fd7106bd1b8c3c`、`78a825603c36662c0774655d0a750f1d4e9b7f43`、`15a78584338834ffec568d979c09a1a295fd8d98`。本轮保守计 **1/100 个独立用户可感知业务功能源码补强**；相关子逻辑、函数和提交不重复计数。
+- **待补差异**：原版根市场 `allowCrossMarketplaceDependenciesOn` 白名单尚未实现；远程市场及下载仍缺；多安装范围、版本约束、跨进程原子事务、安装失败清理异常传播与完整安装交互仍待对照。仅作原始源码、Rust 接线及提交静态核查，未运行 Cargo、测试或 CI；**已提交、待行为验收**，完整等价验收新增 0。Issue #3 冻结 362 项不勾选。本轮 100 项先行缺口清单与完整方案未完成，余 99 项未达硬目标。
