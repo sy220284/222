@@ -111,6 +111,7 @@ pub fn canonical_tool(name:&str)->&str{
         "task_stop"|"TaskStop"|"KillShell"=>"TaskStop",
         "task_output"|"TaskOutput"|"AgentOutputTool"|"BashOutputTool"=>"TaskOutput",
         "spawn_agent"|"spawn_team"|"Agent"|"Task"=>"Agent",
+        "read_file"|"Read"=>"Read",
         "write_file"|"Write"=>"Write",
         "edit_file"|"Edit"=>"Edit",
         "web_fetch"|"WebFetch"=>"WebFetch",
@@ -265,11 +266,20 @@ pub fn policy_for(rules:&[Rule],tool:&str,args:&Value)->Result<Option<Behavior>>
             Some(pattern)=>{
                 let argument=match name{
                     "Bash"=>args.get("command").and_then(Value::as_str),
-                    "Write"|"Edit"=>args.get("path").and_then(Value::as_str),
+                    "Read"|"Write"|"Edit"=>args.get("path").and_then(Value::as_str),
                     "TaskStop"=>args.get("task_id").or_else(||args.get("shell_id")).and_then(Value::as_str),
                     _=>None,
                 };
-                if name=="WebFetch"{
+                if name=="Read"{
+                    // The original filesystem read policy tests both the
+                    // requested path and the resolved symlink target. Read
+                    // patterns are filesystem globs, not shell command rules.
+                    let glob=globset::Glob::new(pattern)?.compile_matcher();
+                    args.get("paths").and_then(Value::as_array)
+                        .into_iter().flatten().filter_map(Value::as_str)
+                        .any(|path|glob.is_match(path.replace('\\',"/")))
+                        || argument.is_some_and(|path|glob.is_match(path.replace('\\',"/")))
+                }else if name=="WebFetch"{
                     // WebFetchTool.ts constructs domain:<URL.hostname> and
                     // looks up that exact content key (not a prefix/wildcard).
                     match args.get("url").and_then(Value::as_str)
@@ -302,6 +312,30 @@ mod tests{
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn read_rules_apply_to_requested_and_resolved_paths_with_glob_semantics(){
+        let rules=compile_rules(&[
+            RuleSetting{behavior:"deny".into(),rule:"Read(**/.env)".into()},
+            RuleSetting{behavior:"ask".into(),rule:"Read(secrets/**)".into()},
+            RuleSetting{behavior:"allow".into(),rule:"Read(public/**)".into()},
+        ]).unwrap();
+        assert_eq!(canonical_tool("read_file"),"Read");
+        assert_eq!(policy_for(&rules,"read_file",&json!({
+            "path":"alias","paths":["alias","/workspace/.env",".env"]
+        })).unwrap(),Some(Behavior::Deny));
+        assert_eq!(policy_for(&rules,"read_file",&json!({
+            "path":"secrets/nested/key.txt","paths":["secrets/nested/key.txt"]
+        })).unwrap(),Some(Behavior::Ask));
+        assert_eq!(policy_for(&rules,"read_file",&json!({
+            "path":"public/hello.txt","paths":["public/hello.txt"]
+        })).unwrap(),Some(Behavior::Allow));
+        assert_eq!(policy_for(&rules,"read_file",&json!({
+            "path":"ordinary.txt","paths":["ordinary.txt"]
+        })).unwrap(),None);
+        let all=compile_rules(&[RuleSetting{behavior:"deny".into(),rule:"Read".into()}]).unwrap();
+        assert_eq!(policy_for(&all,"read_file",&json!({"path":"ordinary.txt"})).unwrap(),
+            Some(Behavior::Deny));
+    }
     #[test]
     fn webfetch_domain_content_rules_match_exact_url_hostname_only(){
         let rules=compile_rules(&[
