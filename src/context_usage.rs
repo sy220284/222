@@ -66,7 +66,7 @@ fn block_tokens(block: &Value) -> (u64, u64) {
 }
 
 fn message_content_tokens(message: &Message) -> (u64, u64) {
-    if let Some(blocks) = message.content_blocks.as_ref() {
+    if let Some(blocks) = message.content_blocks.as_ref().filter(|blocks| !blocks.is_empty()) {
         return blocks.iter().fold((0, 0), |(text, attachment), block| {
             let (t, a) = block_tokens(block);
             (text + t, attachment + a)
@@ -180,7 +180,18 @@ impl Snapshot {
                 _ => self.user_tokens += content,
             }
             if let Some(calls) = message.tool_calls.as_ref() {
+                // SDK messages can carry both normalized tool_use blocks and
+                // OpenAI-compatible tool_calls for the same invocation.
+                // The source analyzeContext.ts counts each tool_use once.
+                let block_call_ids = message.content_blocks.as_ref().into_iter()
+                    .flatten()
+                    .filter(|block| block.get("type").and_then(Value::as_str) == Some("tool_use"))
+                    .filter_map(|block| block.get("id").and_then(Value::as_str))
+                    .collect::<std::collections::HashSet<_>>();
                 for call in calls {
+                    if block_call_ids.contains(call.id.as_str()) {
+                        continue;
+                    }
                     let tokens = estimate(&call.function.name) + estimate(&call.function.arguments);
                     self.tool_call_tokens += tokens;
                     self.tool_calls
