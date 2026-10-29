@@ -893,7 +893,7 @@ impl Agent {
                         let mut continuation_rounds = 0usize;
                         let mut subagent_stop_active = false;
                         let answer = loop {
-                            let answer = Box::pin(child.ask(&continuation)).await?;
+                            let output = Box::pin(child.ask(&continuation)).await;
                             let transcript = child
                                 .root
                                 .join(".atlas/sessions")
@@ -907,10 +907,15 @@ impl Agent {
                                     input["agent_id"] = json!(session_id);
                                     input["agent_type"] = json!(name);
                                     input["agent_transcript_path"] = json!(transcript);
-                                    input["last_assistant_message"] = json!(answer);
+                                    if let Ok(answer) = &output {
+                                        input["last_assistant_message"] = json!(answer);
+                                    }
                                     input
                                 })
                                 .await?;
+                            // SubagentStop must still fire when the model run
+                            // fails; only a successful run proceeds to idle.
+                            let answer = output?;
                             if stop.prevent_continuation {
                                 bail!(
                                     "SubagentStop hook stopped continuation: {}",
