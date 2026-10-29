@@ -58,7 +58,15 @@ pub async fn get_oauth_profile_from_api_key(
     if let Some((name, value)) = &config.compatibility_header {
         request = request.header(name.as_str(), value.as_str());
     }
-    request.send().await.ok()?.error_for_status().ok()?.json().await.ok()
+    request
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .await
+        .ok()
 }
 
 pub async fn get_oauth_profile_from_oauth_token(
@@ -91,7 +99,10 @@ mod tests {
         net::TcpListener,
     };
 
-    async fn fake_profile_server(body: &str, status: &str) -> (String, tokio::task::JoinHandle<String>) {
+    async fn fake_profile_server(
+        body: &str,
+        status: &str,
+    ) -> (String, tokio::task::JoinHandle<String>) {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
         let body = body.to_owned();
@@ -122,16 +133,14 @@ mod tests {
 
     #[tokio::test]
     async fn user_profile_uses_account_uuid_api_key_and_compatible_headers() {
-        let (base, server) = fake_profile_server(r#"{"account":{"id":"account-1"}}"#, "200 OK").await;
+        let (base, server) =
+            fake_profile_server(r#"{"account":{"id":"account-1"}}"#, "200 OK").await;
         let mut config = ProfileEndpoints::new(&base).unwrap();
         config.compatibility_header = Some(("x-provider-beta".into(), "profile-v1".into()));
-        let profile = get_oauth_profile_from_api_key(
-            &config,
-            Some("user id"),
-            Some("sample-api-key"),
-        )
-        .await
-        .unwrap();
+        let profile =
+            get_oauth_profile_from_api_key(&config, Some("user id"), Some("sample-api-key"))
+                .await
+                .unwrap();
         assert_eq!(profile["account"]["id"], "account-1");
         let request = server.await.unwrap();
         assert!(request.starts_with("GET /api/profile?account_uuid=user+id "));
@@ -160,7 +169,8 @@ mod tests {
 
     #[tokio::test]
     async fn http_error_does_not_fabricate_a_profile() {
-        let (base, server) = fake_profile_server(r#"{"error":"invalid_token"}"#, "401 Unauthorized").await;
+        let (base, server) =
+            fake_profile_server(r#"{"error":"invalid_token"}"#, "401 Unauthorized").await;
         let config = ProfileEndpoints::new(&base).unwrap();
         assert_eq!(
             get_oauth_profile_from_oauth_token(&config, "expired").await,
