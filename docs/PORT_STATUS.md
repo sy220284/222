@@ -1,3 +1,11 @@
+## 2026-10-29：Glob/Grep 搜索逐文件读取权限与错误传播（源码已提交、待验收）
+
+- **原版完整源码**：`source/src/tools/GrepTool/GrepTool.ts:411–435` 在 ripgrep 搜索前加入 `getFileReadIgnorePatterns` 生成的排除规则；`source/src/utils/glob.ts:86–117` 对文件名搜索应用相同 Read 排除；`source/src/utils/permissions/filesystem.ts:800–851` 汇总并按搜索目录转换 Read deny 规则；`source/src/utils/ripgrep.ts:382–388` 对 EACCES/EPERM 关键读取错误显式失败。
+- **真实 Rust 业务链**：Agent 模型 `glob_files` / `grep_files` → `src/tools.rs::ToolExecutor::dispatch` 根目录检查 → `src/search.rs::glob_files_filtered/grep_files_filtered` → 每个候选文件 `ToolExecutor::search_read_allowed` → `read_rule_decision` / `permission_rules::policy_for` → 搜索结果或错误。根目录可读不再意味着其内部所有文件都可被模型搜索；路径规则、解析后的目标和问询规则均被逐文件执行。Grep 的内容、计数、文件名三种模式都在打开文件前过滤；文件消失继续处理，其他读取失败返回可见错误。
+- **实际 Rust 提交**：`93fa1d9bdde6377a391c7bcf7775dd41a149dd6e`（搜索过滤入口）、`7c5a8dde22ae4142e97fd8625e8a64c6904438fd`（Agent 工具实际接线）、`e039a06f53306e09dc321f0f3cef350337a07675`（读取错误传播）。保守计 **2 项不同用户可感知业务功能**：① Glob 文件名发现遵守 Read 拒绝规则；② Grep 内容/路径/计数检索遵守 Read 拒绝规则并正确上报读取错误。多处内部修复不额外计数。源码已提交、待行为验收，新增完整等价验收 **0**。
+- **静态核对**：从最终远端 HEAD 读取 `src/search.rs`、`src/tools.rs`，确认两个过滤函数、候选文件检查和 Agent 实际调用均存在；遵照要求未运行 Cargo、测试或 CI。PR #2 保持 Draft，Issue #3 冻结 362 项保持开放。
+- **未实现差异**：原版 Read 排除模式的全部根目录转换、完整 ripgrep 的 `.ignore` / `.rgignore` / 嵌套忽略优先级、插件缓存排除、取消/超时、并发文件变化、跨平台路径及部分输出语义尚未等价；100 条独立功能缺口前置清单未完成逐函数确认，本次 **2/100，剩余 98**，不宣称达标。
+
 ## 2026-10-29：插件 MCP 配置兼容与独立加载补强（源码已提交、待验收）
 
 - 原版对照：`source/src/utils/plugins/mcpPluginIntegration.ts::loadMcpServersFromFile/loadPluginMcpServers/resolvePluginMcpEnvironment/extractMcpServersFromPlugins`（默认 `.mcp.json` 可选、逐服务 schema 验证、插件根/数据目录变量、环境变量展开及独立失败）；`source/src/utils/plugins/pluginOptionsStorage.ts::substitutePluginVariables`、`source/src/services/mcp/envExpansion.ts::expandEnvVarsInString`。
