@@ -1,5 +1,6 @@
 mod agent;
 mod array_utils;
+mod ask_user_question;
 mod background;
 mod bash_permission_suggestions;
 mod cleanup_registry;
@@ -74,7 +75,6 @@ mod team_registry;
 mod tool_metrics;
 mod tool_names;
 mod tool_search;
-mod ask_user_question;
 mod tools;
 mod webfetch;
 mod websearch;

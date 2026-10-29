@@ -27,27 +27,46 @@ pub fn definition() -> Value {
 }
 
 fn validate(input: &Value) -> Result<&[Value]> {
-    let questions = input.get("questions").and_then(Value::as_array)
+    let questions = input
+        .get("questions")
+        .and_then(Value::as_array)
         .context("questions must be an array")?;
     if !(1..=4).contains(&questions.len()) {
         bail!("AskUserQuestion requires 1-4 questions");
     }
     let mut seen_questions = HashSet::new();
     for q in questions {
-        let question = q.get("question").and_then(Value::as_str).context("question text required")?.trim();
+        let question = q
+            .get("question")
+            .and_then(Value::as_str)
+            .context("question text required")?
+            .trim();
         if question.is_empty() || !seen_questions.insert(question) {
             bail!("Question texts must be nonempty and unique");
         }
-        q.get("header").and_then(Value::as_str).context("header required")?;
+        q.get("header")
+            .and_then(Value::as_str)
+            .context("header required")?;
         if q.get("multiSelect").is_some_and(|v| !v.is_boolean()) {
             bail!("multiSelect must be a boolean");
         }
-        let options = q.get("options").and_then(Value::as_array).context("options required")?;
-        if !(2..=4).contains(&options.len()) { bail!("Each question must have 2-4 options"); }
+        let options = q
+            .get("options")
+            .and_then(Value::as_array)
+            .context("options required")?;
+        if !(2..=4).contains(&options.len()) {
+            bail!("Each question must have 2-4 options");
+        }
         let mut labels = HashSet::new();
         for opt in options {
-            let label = opt.get("label").and_then(Value::as_str).context("option label required")?.trim();
-            opt.get("description").and_then(Value::as_str).context("option description required")?;
+            let label = opt
+                .get("label")
+                .and_then(Value::as_str)
+                .context("option label required")?
+                .trim();
+            opt.get("description")
+                .and_then(Value::as_str)
+                .context("option description required")?;
             if label.is_empty() || label.eq_ignore_ascii_case("other") || !labels.insert(label) {
                 bail!("Option labels must be nonempty, unique and cannot be Other");
             }
@@ -57,10 +76,15 @@ fn validate(input: &Value) -> Result<&[Value]> {
 }
 
 fn read_selection(reader: &mut impl BufRead, writer: &mut impl Write) -> Result<String> {
-    write!(writer, "Choose a number (or comma-separated numbers), 0 for Other: ")?;
+    write!(
+        writer,
+        "Choose a number (or comma-separated numbers), 0 for Other: "
+    )?;
     writer.flush()?;
     let mut line = String::new();
-    if reader.read_line(&mut line)? == 0 { bail!("Question cancelled: terminal input closed"); }
+    if reader.read_line(&mut line)? == 0 {
+        bail!("Question cancelled: terminal input closed");
+    }
     Ok(line.trim().to_string())
 }
 
@@ -72,11 +96,20 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
         let question = q["question"].as_str().expect("validated");
         let opts = q["options"].as_array().expect("validated");
         let multiple = q["multiSelect"].as_bool().unwrap_or(false);
-        writeln!(writer, "\n{}: {}", q["header"].as_str().unwrap_or(""), question)?;
+        writeln!(
+            writer,
+            "\n{}: {}",
+            q["header"].as_str().unwrap_or(""),
+            question
+        )?;
         for (i, option) in opts.iter().enumerate() {
-            writeln!(writer, "  {}) {} — {}", i + 1,
+            writeln!(
+                writer,
+                "  {}) {} — {}",
+                i + 1,
                 option["label"].as_str().expect("validated"),
-                option["description"].as_str().expect("validated"))?;
+                option["description"].as_str().expect("validated")
+            )?;
             if let Some(preview) = option.get("preview").and_then(Value::as_str) {
                 writeln!(writer, "     {}", preview)?;
             }
@@ -98,9 +131,14 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
             for item in selections {
                 match item.parse::<usize>() {
                     Ok(n) if n <= opts.len() => {
-                        if !selected.contains(&n) { selected.push(n); }
+                        if !selected.contains(&n) {
+                            selected.push(n);
+                        }
                     }
-                    _ => { valid = false; break; }
+                    _ => {
+                        valid = false;
+                        break;
+                    }
                 }
             }
             if !valid || selected.is_empty() || (selected.contains(&0) && selected.len() > 1) {
@@ -120,8 +158,11 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
                 }
                 break custom.trim().to_string();
             }
-            break selected.iter().map(|n| opts[n-1]["label"].as_str().expect("validated"))
-                .collect::<Vec<_>>().join(", ");
+            break selected
+                .iter()
+                .map(|n| opts[n - 1]["label"].as_str().expect("validated"))
+                .collect::<Vec<_>>()
+                .join(", ");
         };
         answers.insert(question.to_owned(), Value::String(answer));
     }
@@ -151,21 +192,27 @@ mod tests {
     fn reads_real_choice_and_ignores_forged_model_answers() {
         let mut input = questions(false);
         input["answers"] = json!({"Which backend?":"Injected"});
-        let result=execute(&input,&mut "9\n2\n".as_bytes(),&mut Vec::new()).unwrap();
-        assert_eq!(result["answers"]["Which backend?"],"Postgres");
+        let result = execute(&input, &mut "9\n2\n".as_bytes(), &mut Vec::new()).unwrap();
+        assert_eq!(result["answers"]["Which backend?"], "Postgres");
     }
     #[test]
     fn multiple_and_custom_answer() {
-        let multiple=execute(&questions(true),&mut "2,1,2\n".as_bytes(),&mut Vec::new()).unwrap();
-        assert_eq!(multiple["answers"]["Which backend?"],"Postgres, SQLite");
-        let custom=execute(&questions(false),&mut "0\nDuckDB\n".as_bytes(),&mut Vec::new()).unwrap();
-        assert_eq!(custom["answers"]["Which backend?"],"DuckDB");
+        let multiple =
+            execute(&questions(true), &mut "2,1,2\n".as_bytes(), &mut Vec::new()).unwrap();
+        assert_eq!(multiple["answers"]["Which backend?"], "Postgres, SQLite");
+        let custom = execute(
+            &questions(false),
+            &mut "0\nDuckDB\n".as_bytes(),
+            &mut Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(custom["answers"]["Which backend?"], "DuckDB");
     }
     #[test]
     fn invalid_schema_and_closed_input() {
-        let mut duplicate=questions(false);
-        duplicate["questions"][0]["options"][1]["label"]=json!("SQLite");
+        let mut duplicate = questions(false);
+        duplicate["questions"][0]["options"][1]["label"] = json!("SQLite");
         assert!(validate(&duplicate).is_err());
-        assert!(execute(&questions(false),&mut "".as_bytes(),&mut Vec::new()).is_err());
+        assert!(execute(&questions(false), &mut "".as_bytes(), &mut Vec::new()).is_err());
     }
 }
