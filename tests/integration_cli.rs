@@ -5310,51 +5310,82 @@ fn doctor_inspects_invalid_config_without_starting_model() {
     assert!(text.contains("settings could not be loaded"), "{text}");
 }
 
-
 #[test]
 fn chat_tag_toggles_with_confirmation_and_is_searchable_after_resume() {
     let root = tempfile::tempdir().unwrap();
     let config = root.path().join("config.json");
-    fs::write(&config, json!({
-        "default_provider":"local",
-        "providers":[{"id":"local","kind":"openai-compatible",
-            "model":"unused","base_url":"http://127.0.0.1:9/v1"}]
-    }).to_string()).unwrap();
+    fs::write(
+        &config,
+        json!({
+            "default_provider":"local",
+            "providers":[{"id":"local","kind":"openai-compatible",
+                "model":"unused","base_url":"http://127.0.0.1:9/v1"}]
+        })
+        .to_string(),
+    )
+    .unwrap();
     let mut process = binary()
-        .args(["--workspace",root.path().to_str().unwrap(),"chat"])
-        .env("ATLAS_CONFIG",&config)
+        .args(["--workspace", root.path().to_str().unwrap(), "chat"])
+        .env("ATLAS_CONFIG", &config)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped()).spawn().unwrap();
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
     process.stdin.take().unwrap().write_all(
         b"/tag bugfix\n/sessions #bugfix\n/tag bugfix\nn\n/tag bugfix\ny\n/tag feature\n/status\n/exit\n"
     ).unwrap();
     let output = process.wait_with_output().unwrap();
-    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
-    let stdout=String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Tagged session with #bugfix"),"{stdout}");
-    assert!(stdout.contains("Kept tag #bugfix"),"{stdout}");
-    assert!(stdout.contains("Removed session tag"),"{stdout}");
-    assert!(stdout.contains("Tagged session with #feature"),"{stdout}");
-    assert!(stdout.contains("Session tag: #feature"),"{stdout}");
-    assert!(stdout.contains("Untitled conversation #bugfix"),"{stdout}");
-    let stored = fs::read_dir(root.path().join(".atlas/sessions")).unwrap()
-        .next().unwrap().unwrap().path();
-    let doc: Value=serde_json::from_str(&fs::read_to_string(&stored).unwrap()).unwrap();
-    assert_eq!(doc["tag"],"feature");
-    let id=doc["id"].as_str().unwrap().to_owned();
-    let mut resumed=binary()
-        .args(["--workspace",root.path().to_str().unwrap(),"chat","--resume",&id])
-        .env("ATLAS_CONFIG",&config)
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Tagged session with #bugfix"), "{stdout}");
+    assert!(stdout.contains("Kept tag #bugfix"), "{stdout}");
+    assert!(stdout.contains("Removed session tag"), "{stdout}");
+    assert!(stdout.contains("Tagged session with #feature"), "{stdout}");
+    assert!(stdout.contains("Session tag: #feature"), "{stdout}");
+    assert!(stdout.contains("Untitled conversation #bugfix"), "{stdout}");
+    let stored = fs::read_dir(root.path().join(".atlas/sessions"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let doc: Value = serde_json::from_str(&fs::read_to_string(&stored).unwrap()).unwrap();
+    assert_eq!(doc["tag"], "feature");
+    let id = doc["id"].as_str().unwrap().to_owned();
+    let mut resumed = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "chat",
+            "--resume",
+            &id,
+        ])
+        .env("ATLAS_CONFIG", &config)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped()).spawn().unwrap();
-    resumed.stdin.take().unwrap().write_all(b"/sessions #feature\n/status\n/exit\n").unwrap();
-    let result=resumed.wait_with_output().unwrap();
-    assert!(result.status.success(),"{}",String::from_utf8_lossy(&result.stderr));
-    let text=String::from_utf8_lossy(&result.stdout);
-    assert!(text.contains("Session tag: #feature"),"{text}");
-    assert!(text.contains("Untitled conversation #feature"),"{text}");
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    resumed
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"/sessions #feature\n/status\n/exit\n")
+        .unwrap();
+    let result = resumed.wait_with_output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let text = String::from_utf8_lossy(&result.stdout);
+    assert!(text.contains("Session tag: #feature"), "{text}");
+    assert!(text.contains("Untitled conversation #feature"), "{text}");
 }
 
 
