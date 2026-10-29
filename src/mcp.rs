@@ -892,9 +892,13 @@ impl McpManager {
                     .as_str()
                     .unwrap_or("unknown")
                     .to_owned();
-                if format!("{error:#}").contains("session expired") {
+                let diagnostic = format!("{error:#}");
+                if diagnostic.contains("session expired")
+                    || diagnostic.contains("authentication expired")
+                {
                     self.server_statuses[position]["status"] = json!("failed");
-                    self.server_statuses[position]["error"] = json!("MCP session expired");
+                    self.server_statuses[position]["error"] =
+                        json!("MCP session or authentication expired; reconnect required");
                 }
                 errors.push(json!({"server":name,"error":format!("{error:#}")}));
             }
