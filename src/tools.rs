@@ -1226,6 +1226,16 @@ impl ToolExecutor {
     }
 
     fn read_skill(&self, args: &Value) -> Result<String> {
+        self.render_skill(args, true)
+    }
+
+    /// User-invoked slash skills and model SkillTool calls have independent
+    /// frontmatter permission switches in the original skill loader.
+    pub fn invoke_user_skill(&self, name: &str, arguments: &str) -> Result<String> {
+        self.render_skill(&json!({"name":name,"arguments":arguments}), false)
+    }
+
+    fn render_skill(&self, args: &Value, for_model: bool) -> Result<String> {
         let name = required(args, "name")?;
         let (content, skill_dir) = if name.contains(':') {
             let resolved = plugins::resolve_skill_path(
@@ -1258,10 +1268,16 @@ impl ToolExecutor {
                 .to_path_buf();
             (fs::read_to_string(path)?, dir)
         };
-        if crate::skill_arguments::frontmatter_boolean(
-            &content, "disable-model-invocation",
-        ).unwrap_or(false) {
-            bail!("Skill cannot be invoked by the model")
+        if for_model {
+            if crate::skill_arguments::frontmatter_boolean(
+                &content, "disable-model-invocation",
+            ).unwrap_or(false) {
+                bail!("Skill cannot be invoked by the model")
+            }
+        } else if !crate::skill_arguments::frontmatter_boolean(
+            &content, "user-invocable",
+        ).unwrap_or(true) {
+            bail!("Skill cannot be invoked by the user")
         }
         let raw = args.get("arguments");
         let arguments = raw
@@ -2392,6 +2408,22 @@ mod tests {
         assert!(!tool.list_skills().unwrap().contains("manual"));
         assert!(tool.read_skill(&json!({"name":"manual"})).is_err());
         assert!(tool.list_user_skills().unwrap().contains("manual"));
+    }
+    #[test]
+    fn local_user_only_skill_can_run_without_model_skill_permission() {
+        let root = tempfile::tempdir().unwrap();
+        let folder = root.path().join(".atlas/skills/manual");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(folder.join("SKILL.md"),
+            "---\ndisable-model-invocation: true\n---\nExplain $ARGUMENTS").unwrap();
+        let tool = executor(root.path(), Approval::ReadOnly);
+        assert_eq!(tool.invoke_user_skill("manual", "changes").unwrap()
+            .contains("Explain changes"), true);
+        assert!(tool.read_skill(&json!({"name":"manual"})).is_err());
+        fs::write(folder.join("SKILL.md"),
+            "---\nuser-invocable: false\n---\nModel-only").unwrap();
+        assert!(tool.invoke_user_skill("manual", "").is_err());
+        assert!(tool.read_skill(&json!({"name":"manual"})).is_ok());
     }
     #[test]
     fn skills_are_discovered_and_loaded_from_workspace() {
