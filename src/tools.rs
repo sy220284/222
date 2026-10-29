@@ -1686,7 +1686,10 @@ mod tests {
             let path = format!("allowed-{approval:?}.txt");
             let result = tool.execute(&call(&path)).await;
             assert!(!result.starts_with("ERROR:"), "{result}");
-            assert_eq!(fs::read_to_string(root.path().join(&path)).unwrap(), "permitted");
+            assert_eq!(
+                fs::read_to_string(root.path().join(&path)).unwrap(),
+                "permitted"
+            );
         }
         let unruled = executor(root.path(), Approval::Full)
             .with_permission_mode(permission_mode::Mode::DontAsk);
@@ -1715,7 +1718,10 @@ mod tests {
             .with_permission_mode(permission_mode::Mode::DontAsk)
             .with_permission_rules(deny);
         let result = denied.execute(&call("denied.txt")).await;
-        assert!(result.contains("denied by explicit permission rule"), "{result}");
+        assert!(
+            result.contains("denied by explicit permission rule"),
+            "{result}"
+        );
         assert!(!root.path().join("denied.txt").exists());
     }
 
