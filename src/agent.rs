@@ -119,8 +119,13 @@ impl Agent {
         approval: Approval,
         interactive: bool,
         max_steps: usize,
-        session: Session,
+        mut session: Session,
     ) -> Result<Self> {
+        // 2.1.88 stores the Git branch associated with a conversation.
+        // Capture it only for a new session, never replace a resumed branch.
+        if session.git_branch.is_none() && session.messages.is_empty() {
+            session.git_branch = ConversationContext::branch_at_start(&root);
+        }
         let provider = provider::create(&profile)?;
         let background = Arc::new(BackgroundTasks::new(&root)?);
         let list_id = task_list_id(session.id, session.team_name.as_deref());
