@@ -162,6 +162,73 @@ fn normalize_edit_replacement(path: &Path, replacement: &str) -> String {
     result
 }
 
+
+#[derive(Clone, Copy)]
+enum TextEncoding {
+    Utf8,
+    Utf8Bom,
+    Utf16Le,
+}
+
+struct EditableText {
+    content: String,
+    encoding: TextEncoding,
+    crlf: bool,
+}
+
+/// Original fileRead.ts decodes UTF-16LE BOMs and normalizes CRLF for the
+/// read/edit state. Keep the disk representation separately so edits can
+/// preserve encoding and the predominant original newline convention.
+fn read_editable_text(path: &Path) -> Result<EditableText> {
+    let bytes = fs::read(path)?;
+    let (encoding, decoded) = if bytes.starts_with(&[0xff, 0xfe]) {
+        let raw = &bytes[2..];
+        if raw.len() % 2 != 0 {
+            bail!("UTF-16LE file contains an incomplete code unit: {}", path.display());
+        }
+        let units = raw.chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect::<Vec<_>>();
+        (TextEncoding::Utf16Le, String::from_utf16(&units)
+            .with_context(|| format!("Invalid UTF-16LE in {}", path.display()))?)
+    } else if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
+        (TextEncoding::Utf8Bom, String::from_utf8(bytes[3..].to_vec())
+            .with_context(|| format!("Invalid UTF-8 in {}", path.display()))?)
+    } else {
+        (TextEncoding::Utf8, String::from_utf8(bytes)
+            .with_context(|| format!("Invalid UTF-8 in {}", path.display()))?)
+    };
+    let sample: String = decoded.chars().take(4096).collect();
+    let crlf_count = sample.matches("\r\n").count();
+    let lf_count = sample.matches('\n').count().saturating_sub(crlf_count);
+    Ok(EditableText {
+        content: decoded.replace("\r\n", "\n"),
+        encoding,
+        crlf: crlf_count > lf_count,
+    })
+}
+
+fn write_editable_text(path: &Path, content: &str, encoding: TextEncoding, crlf: bool) -> Result<()> {
+    let normalized = content.replace("\r\n", "\n");
+    let text = if crlf { normalized.replace('\n', "\r\n") } else { normalized };
+    match encoding {
+        TextEncoding::Utf8 => fs::write(path, text.as_bytes())?,
+        TextEncoding::Utf8Bom => {
+            let mut bytes = vec![0xef, 0xbb, 0xbf];
+            bytes.extend_from_slice(text.as_bytes());
+            fs::write(path, bytes)?;
+        }
+        TextEncoding::Utf16Le => {
+            let mut bytes = vec![0xff, 0xfe];
+            for unit in text.encode_utf16() {
+                bytes.extend_from_slice(&unit.to_le_bytes());
+            }
+            fs::write(path, bytes)?;
+        }
+    }
+    Ok(())
+}
+
 fn modified_millis(metadata: &fs::Metadata) -> Result<u64> {
     Ok(metadata
         .modified()?
@@ -262,7 +329,7 @@ impl ToolExecutor {
         if before.len() > MAX_FILE_BYTES || disk_ms > observed_ms {
             return Ok(());
         }
-        let content = fs::read_to_string(&path)?;
+        let content = read_editable_text(&path)?.content;
         let after = fs::metadata(&path)?;
         if modified_millis(&after)? != disk_ms || after.len() != before.len() {
             return Ok(());
@@ -936,8 +1003,8 @@ impl ToolExecutor {
         if metadata.len() > max_bytes {
             bail!("File too large (limit {max_bytes} bytes)");
         }
-        let content =
-            fs::read_to_string(&path).with_context(|| format!("Reading {}", path.display()))?;
+        let content = read_editable_text(&path)
+            .with_context(|| format!("Reading {}", path.display()))?.content;
         self.reads
             .lock()
             .unwrap()
@@ -1235,7 +1302,7 @@ impl ToolExecutor {
             bail!("File already exists; create_only forbids overwriting it");
         }
         let before = if existed {
-            let original = fs::read_to_string(&path)?;
+            let original = read_editable_text(&path)?.content;
             let key = path.canonicalize()?;
             let prior = self.file_reads.lock().unwrap().get(&key)
                 .context("File has not been read yet. Read it first before writing to it.")?;
@@ -1261,14 +1328,19 @@ impl ToolExecutor {
                 .open(&path)?;
             file.write_all(content.as_bytes())?;
         } else {
-            fs::write(&path, content)?;
+            let encoding = if existed {
+                read_editable_text(&path)?.encoding
+            } else {
+                TextEncoding::Utf8
+            };
+            write_editable_text(&path, content, encoding, false)?;
         }
         if !existed || before.is_some() {
             self.metrics.record_change(before.as_deref(), content);
         }
         let metadata = fs::metadata(&path)?;
         self.file_reads.lock().unwrap().insert(path.canonicalize()?, FileReadState {
-            content: content.to_owned(),
+            content: content.replace("\r\n", "\n"),
             timestamp_ms: modified_millis(&metadata)?,
             full: true,
             read_offset: None,
@@ -1296,7 +1368,8 @@ impl ToolExecutor {
         }
         // Validate against the complete content previously shown to the
         // model, including reads made in earlier turns of this session.
-        let content = fs::read_to_string(&path)?;
+        let original_text = read_editable_text(&path)?;
+        let content = original_text.content.as_str();
         let key = path.canonicalize()?;
         let prior = self.file_reads.lock().unwrap().get(&key)
             .context("File has not been read yet. Read it first before writing to it.")?;
@@ -1325,8 +1398,8 @@ impl ToolExecutor {
         if updated.len() as u64 > MAX_FILE_BYTES {
             bail!("Updated file too large")
         }
-        fs::write(&path, &updated)?;
-        self.metrics.record_change(Some(&content), &updated);
+        write_editable_text(&path, &updated, original_text.encoding, original_text.crlf)?;
+        self.metrics.record_change(Some(content), &updated);
         let metadata = fs::metadata(&path)?;
         self.file_reads.lock().unwrap().insert(key, FileReadState {
             content: updated,
