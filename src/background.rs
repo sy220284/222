@@ -23,7 +23,7 @@ use uuid::Uuid;
 const LOG_CAP: u64 = 5 * 1024 * 1024 * 1024;
 const DEFAULT_DELTA_READ_BYTES: u64 = 8 * 1024 * 1024;
 const OUTPUT_CAPPED_NOTICE: &str = "\n[output truncated: exceeded 5GB disk cap]\n";
-const DISPLAY_CAP: usize = 640_000;
+const DISPLAY_CAP: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRecord {
@@ -282,11 +282,8 @@ impl BackgroundTasks {
     pub fn output_delta(&self, id: &str, from_offset: u64, max_bytes: u64) -> Result<String> {
         let id = Uuid::parse_str(id).context("Invalid task ID")?.to_string();
         let path = self.directory.join(format!("{id}.stdout"));
-        let max_bytes = if max_bytes == 0 {
-            DEFAULT_DELTA_READ_BYTES
-        } else {
-            max_bytes.min(DEFAULT_DELTA_READ_BYTES)
-        };
+        // Explicit zero is a zero-byte read, not an implicit default.
+        let max_bytes = max_bytes.min(DEFAULT_DELTA_READ_BYTES);
         let delta = read_output_range(&path, from_offset, max_bytes)?;
         let (content, bytes_read, total) = match delta {
             Some((content, bytes_read, total)) => (content, bytes_read, total),
@@ -437,6 +434,10 @@ fn read_output_range(
 }
 
 fn tail(path: &str) -> Result<String> {
+    tail_with_limit(Path::new(path), DISPLAY_CAP as u64)
+}
+
+fn tail_with_limit(path: &Path, max_bytes: u64) -> Result<String> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -444,18 +445,26 @@ fn tail(path: &str) -> Result<String> {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_NOFOLLOW);
     }
-    let file = options.open(path)?;
+    let mut file = options.open(path)?;
     if !file.metadata()?.is_file() {
         bail!("Task output path is not a regular file");
     }
     let len = file.metadata()?.len();
-    let start = len.saturating_sub(DISPLAY_CAP as u64);
+    let start = len.saturating_sub(max_bytes);
     use std::io::{Read, Seek, SeekFrom};
-    let mut file = file;
     file.seek(SeekFrom::Start(start))?;
     let mut bytes = Vec::new();
-    file.take(DISPLAY_CAP as u64).read_to_end(&mut bytes)?;
-    Ok(String::from_utf8_lossy(&bytes).to_string())
+    file.take(max_bytes).read_to_end(&mut bytes)?;
+    let earlier = len.saturating_sub(bytes.len() as u64);
+    let content = String::from_utf8_lossy(&bytes);
+    if earlier == 0 {
+        Ok(content.into_owned())
+    } else {
+        Ok(format!(
+            "[{}KB of earlier output omitted]\n{content}",
+            (earlier as f64 / 1024.0).round()
+        ))
+    }
 }
 
 fn create_output_file(path: &Path) -> Result<tokio::fs::File> {
@@ -534,6 +543,17 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tail_defaults_to_eight_megabytes_and_reports_omitted_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let output = dir.path().join("tail.stdout");
+        fs::write(&output, "prefix-hello-world".as_bytes()).unwrap();
+        assert_eq!(tail_with_limit(&output, 100).unwrap(), "prefix-hello-world");
+        let shortened = tail_with_limit(&output, 5).unwrap();
+        assert_eq!(shortened, "[0KB of earlier output omitted]\nworld");
+        assert_eq!(DISPLAY_CAP, 8 * 1024 * 1024);
+    }
+
     #[tokio::test]
     async fn disk_cap_emits_single_original_notice_but_drains_remaining_output() {
         use tokio::io::AsyncWriteExt;
@@ -570,6 +590,9 @@ mod tests {
             serde_json::from_str(&tasks.output_delta(&id, 3, 800).unwrap()).unwrap();
         assert_eq!(second["content"], "llo中文");
         assert_eq!(second["newOffset"], "héllo中文".len());
+        let zero: Value = serde_json::from_str(&tasks.output_delta(&id, 0, 0).unwrap()).unwrap();
+        assert_eq!(zero["bytesRead"], 0);
+        assert_eq!(zero["newOffset"], 0);
         let idle: Value = serde_json::from_str(&tasks.output_delta(&id, 999, 40).unwrap()).unwrap();
         assert_eq!(idle["newOffset"], 999);
         assert_eq!(idle["bytesRead"], 0);
