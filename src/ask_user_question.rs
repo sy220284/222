@@ -239,7 +239,8 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
                 }
                 let custom = custom.trim().to_owned();
                 let selected_indices = selected.into_iter().filter(|n| *n > 0).collect::<Vec<_>>();
-                let mut labels = selected_indices.iter()
+                let mut labels = selected_indices
+                    .iter()
                     .map(|n| opts[*n - 1]["label"].as_str().expect("validated"))
                     .collect::<Vec<_>>();
                 labels.push(&custom);
