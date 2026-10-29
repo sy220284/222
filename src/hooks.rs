@@ -222,14 +222,18 @@ impl HookRunner {
             if rule.command.trim().is_empty() {
                 bail!("Hook command cannot be empty");
             }
-            if !(1..=600).contains(&rule.timeout_seconds) {
-                bail!("Hook timeout must be between 1 and 600 seconds");
+            // hooks.ts::execCommandHook uses a zero/absent timeout as the
+            // default and accepts user timeouts longer than ten minutes.
+            // Rejecting them here prevented the entire session from starting.
+            let mut rule = rule.clone();
+            if rule.timeout_seconds == 0 {
+                rule.timeout_seconds = default_timeout();
             }
             // hooks.ts::matchesPattern treats a malformed regex as a
             // non-match. A broken matcher must not prevent other user hooks
             // from running or stop the Agent from starting.
             let matcher = HookMatcher::compile(rule.matcher.as_deref());
-            compiled.push((rule.clone(), matcher));
+            compiled.push((rule, matcher));
         }
         Ok(Self {
             rules: compiled,
@@ -1108,13 +1112,22 @@ mod tests {
         .unwrap();
         assert!(matches!(&invalid.rules[0].1, HookMatcher::Invalid));
         assert!(!invalid.rules[0].1.matches(Some("Bash")));
-        assert!(HookRunner::new(&[HookRule {
+        let zero = HookRunner::new(&[HookRule {
             event: HookEvent::Stop,
             matcher: None,
             command: "true".into(),
             timeout_seconds: 0,
         }])
-        .is_err());
+        .unwrap();
+        assert_eq!(zero.rules[0].0.timeout_seconds, 600);
+        let extended = HookRunner::new(&[HookRule {
+            event: HookEvent::Stop,
+            matcher: None,
+            command: "true".into(),
+            timeout_seconds: 3_600,
+        }])
+        .unwrap();
+        assert_eq!(extended.rules[0].0.timeout_seconds, 3_600);
     }
     #[cfg(unix)]
     #[tokio::test]
