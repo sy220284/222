@@ -316,7 +316,7 @@ impl Agent {
                 let before = self.graph.peek(id)?;
                 let result = self.graph.update(&args)?;
                 if let (Some(previous), Some(owner), Some(team)) = (
-                    before,
+                    before.as_ref(),
                     args.get("owner").and_then(serde_json::Value::as_str),
                     self.team_name.as_deref(),
                 ) {
@@ -347,6 +347,18 @@ impl Agent {
                             },
                         )?;
                     }
+                }
+                // 2.1.88 TaskUpdateTool reminds a teammate to claim their
+                // next available task after a successful completion. Preserve
+                // this feedback in the model-visible tool result.
+                if args.get("status").and_then(serde_json::Value::as_str) == Some("completed")
+                    && before.as_ref().is_some_and(|task| task.status != "completed")
+                    && self.team_name.is_some()
+                    && self.agent_name.as_deref().is_some_and(|name| name != "team-lead")
+                {
+                    return Ok(format!(
+                        "{result}\n\nTask completed. Call TaskList now to find your next available task or see if your work unblocked others."
+                    ));
                 }
                 Ok(result)
             }
