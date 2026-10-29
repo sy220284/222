@@ -160,16 +160,8 @@ async fn main() -> Result<()> {
         println!("Created {}", path.display());
         return Ok(());
     }
-    let mut config = Config::load()?;
-    if let Commands::Models = &cli.command {
-        for profile in &config.providers {
-            let default = if profile.id == config.default_provider { " (default)" } else { "" };
-            println!("{}{}: {} / {} @ {}", profile.id, default, profile.kind, profile.model, profile.base_url);
-        }
-        return Ok(());
-    }
-    if cli.max_steps == 0 { bail!("--max-steps must be at least 1") }
-    let root = canonical_workspace(&cli.workspace)?;
+    if matches!(&cli.command,Commands::Sessions{..}|Commands::Rename{..}|Commands::Export{..}) {
+        let root = canonical_workspace(&cli.workspace)?;
     match &cli.command{
         Commands::Sessions{query}=>{
             for item in session_control::search(&root,query.as_deref().unwrap_or(""))?{
@@ -188,6 +180,17 @@ async fn main() -> Result<()> {
         }
         _=>{}
     }
+    }
+    let mut config = Config::load()?;
+    if let Commands::Models = &cli.command {
+        for profile in &config.providers {
+            let default = if profile.id == config.default_provider { " (default)" } else { "" };
+            println!("{}{}: {} / {} @ {}", profile.id, default, profile.kind, profile.model, profile.base_url);
+        }
+        return Ok(());
+    }
+    if cli.max_steps == 0 { bail!("--max-steps must be at least 1") }
+    let root = canonical_workspace(&cli.workspace)?;
     let plugins = PluginSet::load(&root,&config.enabled_plugins)?;
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. });
