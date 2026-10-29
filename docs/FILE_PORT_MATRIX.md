@@ -1522,7 +1522,7 @@
 | `src/utils/getWorktreePathsPortable.ts` | 28 | 847 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
 | `src/utils/ghPrStatus.ts` | 107 | 2823 | 重写：保持通用行为 | `src/generated_ports/p_c00507bfc0c68.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/git/gitConfigParser.ts` | 278 | 6645 | 重写：保持通用行为 | `src/git_config_parser.rs / src/main.rs` | 部分实现：原版配置读取、节/子节和键匹配、引号/转义/注释、首值语义及真实磁盘测试；已接入 GitConfig CLI 和仓库识别回退，完整 worktree Git 文件系统调用方待补 |
-| `src/utils/git/gitFilesystem.ts` | 700 | 22340 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/git/gitFilesystem.ts` | 700 | 22340 | 重写：保持通用行为 | `src/git_filesystem.rs / src/main.rs / src/detect_repository.rs` | 部分实现：原始 .git 文件/目录、HEAD、普通与 packed refs、worktree common dir、SHA/引用名安全校验、远端及默认分支、浅克隆和工作树计数；Rust 按文件实际变化更新缓存并接入 GitState CLI；原版异步 watchFile 生命周期仍待完整验收 |
 | `src/utils/git/gitignore.ts` | 100 | 3200 | 重写：保持通用行为 | `src/git_ignore.rs / src/main.rs` | 部分实现：原版 git check-ignore 本地/全局规则优先级、非仓库处理、全局忽略路径和幂等追加；已接入 GitIgnore CLI，项目本地设置自动调用及插件动态技能发现待补 |
 | `src/utils/git.ts` | 927 | 30270 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/gitDiff.ts` | 533 | 16039 | 重写：保持通用行为 | 待定 | 未迁移 |
