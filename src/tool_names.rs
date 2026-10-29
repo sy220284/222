@@ -22,7 +22,7 @@ pub fn canonical_name(name: &str) -> &str {
     match name {
         BASH_TOOL_NAME => "run_command",
         NOTEBOOK_EDIT_TOOL_NAME => "notebook_edit",
-        TASK_OUTPUT_TOOL_NAME => "task_output",
+        TASK_OUTPUT_TOOL_NAME | "AgentOutputTool" | "BashOutputTool" => "task_output",
         "TaskStop" => "task_stop",
         "Glob" => "glob_files",
         "Grep" => "grep_files",
