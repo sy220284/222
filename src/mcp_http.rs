@@ -183,6 +183,70 @@ mod tests{
             env:HashMap::new(),transport:Some("http".into()),url:Some(url),
             headers:HashMap::new()}
     }
+    #[tokio::test]
+    async fn http_sse_resource_update_before_rpc_response_survives_and_does_not_wait_for_eof(){
+        use tokio::{io::{AsyncReadExt,AsyncWriteExt},net::TcpListener};
+        let listener=TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let server=tokio::spawn(async move{
+            let mut observed=Vec::new();
+            for n in 0..4{
+                let (mut connection,_)=listener.accept().await.unwrap();
+                let mut input=Vec::new();let mut buf=[0u8;4096];
+                loop{
+                    let count=connection.read(&mut buf).await.unwrap();
+                    assert!(count>0);
+                    input.extend_from_slice(&buf[..count]);
+                    if let Some(split)=input.windows(4).position(|b|b==b"\r\n\r\n"){
+                        let header=String::from_utf8_lossy(&input[..split]);
+                        let len=header.lines().find_map(|line|line.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .and_then(|value|value.trim().parse::<usize>().ok())).unwrap_or(0);
+                        if input.len()>=split+4+len{break}
+                    }
+                }
+                observed.push(String::from_utf8_lossy(&input).into_owned());
+                let (kind,body)=match n{
+                    0=>("application/json",json!({"jsonrpc":"2.0","id":1,
+                        "result":{"capabilities":{"resources":{"subscribe":true}}}}).to_string()),
+                    1=>("application/json",String::new()),
+                    2=>("text/event-stream",format!(
+                        "event: message\r\ndata: {}\r\n\r\n\
+                        event: message\r\ndata: {}\r\n\r\n",
+                        json!({"jsonrpc":"2.0","method":"notifications/resources/updated",
+                            "params":{"uri":"file:///image","revision":3}}),
+                        json!({"jsonrpc":"2.0","id":2,"result":{}})
+                    )),
+                    _=>("application/json",json!({"jsonrpc":"2.0","id":3,
+                        "result":{}}).to_string())
+                };
+                let header=format!("HTTP/1.1 {} OK\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    if n==1{202}else{200},body.len());
+                connection.write_all(header.as_bytes()).await.unwrap();
+                if !body.is_empty(){
+                    // Deliberately split the JSON payload across TCP reads.
+                    let mid=body.len()/2;
+                    connection.write_all(&body.as_bytes()[..mid]).await.unwrap();
+                    connection.write_all(&body.as_bytes()[mid..]).await.unwrap();
+                }
+                connection.shutdown().await.unwrap();
+            }
+            observed
+        });
+        let mut http=HttpClient::connect(&config(format!("http://{address}/mcp")))
+            .await.unwrap();
+        assert_eq!(http.capabilities.as_ref().unwrap()["resources"]["subscribe"],true);
+        http.request("resources/subscribe",json!({"uri":"file:///image"}))
+            .await.unwrap();
+        assert_eq!(http.resource_updates.len(),1);
+        assert_eq!(http.resource_updates[0]["params"]["revision"],3);
+        assert_eq!(http.resource_updates[0]["method"],"notifications/resources/updated");
+        http.request("resources/unsubscribe",json!({"uri":"file:///image"}))
+            .await.unwrap();
+        let requests=server.await.unwrap();
+        assert!(requests[2].contains("resources/subscribe"));
+        assert!(requests[3].contains("resources/unsubscribe"));
+    }
     #[test]
     fn stream_parser_skips_keepalives_and_nonmessage_events(){
         let stream=": keepalive\r\nevent: update\r\ndata: {}\r\n\r\n\
