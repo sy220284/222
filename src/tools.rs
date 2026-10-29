@@ -1299,12 +1299,10 @@ mod tests {
     #[tokio::test]
     async fn explicit_powershell_tool_uses_its_own_shell_and_permission_rules() {
         let root = tempfile::tempdir().unwrap();
-        let rules = permission_rules::compile_rules(&[
-            permission_rules::RuleSetting {
-                behavior: "deny".into(),
-                rule: "PowerShell(Remove-Item:*)".into(),
-            },
-        ])
+        let rules = permission_rules::compile_rules(&[permission_rules::RuleSetting {
+            behavior: "deny".into(),
+            rule: "PowerShell(Remove-Item:*)".into(),
+        }])
         .unwrap();
         let tool = executor(root.path(), Approval::Full)
             .with_shell(crate::shell_runtime::ShellKind::Bash)
