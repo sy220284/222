@@ -304,8 +304,7 @@ impl HttpClient {
                                 "notifications/resources/updated"
                                     | "notifications/resources/list_changed"
                             )
-                        ) && self.resource_updates.len() < 1024
-                        {
+                        ) {
                             self.resource_updates.push(event.clone());
                         }
                         if event.get("id") == Some(id) {
@@ -419,10 +418,8 @@ impl HttpClient {
                                 "notifications/resources/updated"
                                 | "notifications/resources/list_changed",
                             ) => {
-                                if self.resource_updates.len() < 1024 {
-                                    self.resource_updates.push(event);
-                                    count += 1;
-                                }
+                                self.resource_updates.push(event);
+                                count += 1;
                             }
                             _ => {}
                         }
