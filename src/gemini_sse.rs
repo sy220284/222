@@ -202,7 +202,7 @@ mod tests {
             for attempt in 0..2 {
                 let (mut socket, _) = listener.accept().await.unwrap();
                 let mut data = [0u8; 4096];
-                socket.read(&mut data).await.unwrap();
+                socket.read_exact(&mut data[..1]).await.unwrap();
                 let (status, body) = if attempt == 0 {
                     (
                         "429 Too Many Requests",
