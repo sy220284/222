@@ -1,3 +1,11 @@
+## 2026-10-29：文件历史备份迁出工作区并迁移旧会话（源码已提交、待验收）
+
+- **原版依据**：完整 Claude Code 2.1.88 的 `source/src/utils/fileHistory.ts:733–740::resolveBackupPath` 将文件历史备份保存在用户配置目录下的 `file-history/<sessionId>/`，与工程源码隔离。
+- **原 Rust 缺口**：`src/history.rs::storage` 把备份放在工作区 `.atlas/history`，可能被文件搜索或版本控制纳入工程数据，且原版跨工作区的私有备份目录语义缺失。
+- **实际修改**：`storage` 改用 `Config::path()` 所在用户配置目录；按 UUID 会话隔离，未指定会话时按工作区路径哈希隔离。拒绝符号链接重定向，Unix 私有目录权限收紧至 0700；首次访问时迁移旧目录下的 JSON 检查点及二进制备份，先在私有目录完成复制与同步，再发布并删除旧记录；中断后仅在字节一致时完成清理，冲突明确报错。真实 Write/Edit/NotebookEdit→历史记录、file_history→查询、file_revert→恢复、Agent 分支复制调用链均复用同一 `storage`。
+- **代码提交**：`53add254bab35bebbaa0e5fc0a086b69e1c46ba9`、`02ba3fe4aeecb06c65fe7ef53c635c1a0dac5184`；`src/history.rs`。保守计 **1 项用户可感知的文件历史隐私与迁移功能**。只完成远端源码静态审查，未运行 Cargo/测试/CI，**已提交、待行为验收**。
+- **剩余差异**：原版消息 ID 聚合多文件快照、100 次快照保留上限、Bash 修改追踪、完整日志恢复、跨进程迁移锁和跨平台权限行为仍缺。冻结 Issue #3 保持开放。本轮 100 项完整缺口清单与对应方案尚未确认，数量硬目标未达成。
+
 ## 2026-10-29：插件重复安装更新已有版本（源码已提交、待验收）
 
 - **原版依据**：完整 2.1.88 源包 `source/src/utils/plugins/dependencyResolver.ts:69–76,109–117::resolveDependencyClosure` 明确根插件即使已经启用也必须重新缓存；`source/src/utils/plugins/pluginInstallationHelpers.ts:348–480::installResolvedPlugin` 在解析完整依赖闭包后重新安装根插件。
