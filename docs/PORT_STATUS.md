@@ -1,3 +1,9 @@
+## 2026-10-29：长技能读取补齐真实模型入口遗漏（已提交、待验收）
+
+- **续接上一节长技能功能**：发现仅解除 `src/plugins.rs` 的两处 64 KiB 限制仍不足，`src/tools.rs::skill_invocable / ToolExecutor::render_skill` 在模型技能目录、插件技能读取、本地技能读取三条真实路径仍有相同额外拒绝，导致长技能继续不可见或无法调用。
+- **本次代码补齐**：移除上述三处无原版依据的硬限制，保留真实 Read 权限、`disable-model-invocation`、`user-invocable` 与目录边界。提交 `d5df6c3affe09be355419524ec2be9469b17829e`，已经在最新分支复用并行改动后成功推送。
+- **计数**：这是同一“长技能读取”业务功能的遗漏链路补齐，**不重复增加计数**；本轮仍为 **3/100，余 97**。仅源码静态核对，未运行 Cargo、测试或 CI，待行为验收。
+
 ## 2026-10-29：SDK 排队斜杠技能命令进入真实模型调用链（已提交、待验收）
 
 - **原版依据**：`source/src/utils/processUserInput/processUserInput.ts:325–343,422–445,531–550` 在队列实际处理时识别斜杠命令；数组内容取最后一个文本块，保留之前的图片；`source/src/utils/plugins/loadPluginCommands.ts` 和 `source/src/skills/loadSkillsDir.ts` 限制用户可调用命令。
