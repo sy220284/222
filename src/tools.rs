@@ -1199,6 +1199,67 @@ mod tests {
         assert!(tool.approve_external(&call("Write")).is_err());
     }
 
+    #[test]
+    fn powershell_compound_permission_checks_reach_actual_tool_dispatch_gate() {
+        let root = tempfile::tempdir().unwrap();
+        let rules = permission_rules::compile_rules(&[
+            permission_rules::RuleSetting {
+                behavior: "allow".into(),
+                rule: "PowerShell(Get-ChildItem:*)".into(),
+            },
+            permission_rules::RuleSetting {
+                behavior: "allow".into(),
+                rule: "PowerShell(Get-Content:*)".into(),
+            },
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "PowerShell(Remove-Item:*)".into(),
+            },
+        ])
+        .unwrap();
+        let call = |command: &str| ToolCall {
+            id: "ps-permission".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":command}).to_string(),
+            },
+        };
+        for approval in [Approval::Ask, Approval::Full] {
+            let executor = executor(root.path(), approval)
+                .with_shell(crate::shell_runtime::ShellKind::Powershell)
+                .with_permission_rules(rules.clone());
+            assert!(executor.approve_external(&call("Get-ChildItem .")).is_ok());
+            assert!(executor
+                .approve_external(&call("Get-ChildItem . | Get-Content file"))
+                .is_ok());
+            for script in [
+                "Get-ChildItem .; Remove-Item secret",
+                "Get-ChildItem . | rm secret",
+                "Get-ChildItem . && del secret",
+            ] {
+                let err = executor.approve_external(&call(script)).unwrap_err();
+                assert!(
+                    err.to_string().contains("explicit permission rule"),
+                    "{script}: {err:#}"
+                );
+            }
+            for script in [
+                "Get-ChildItem .; Invoke-Expression 'danger'",
+                "Get-ChildItem . $(Remove-Item secret)",
+            ] {
+                let err = executor.approve_external(&call(script)).unwrap_err();
+                assert!(
+                    err.to_string().contains("needs approval"),
+                    "{script}: {err:#}"
+                );
+            }
+        }
+        // The PowerShell rule set must not silently authorize a Bash command.
+        let bash = executor(root.path(), Approval::Ask).with_permission_rules(rules);
+        assert!(bash.approve_external(&call("Get-ChildItem .")).is_err());
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn shell_command_respects_output_limit() {
