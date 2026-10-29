@@ -286,6 +286,7 @@ impl ToolExecutor {
                 history::restore(&record, &path)
             }
             "run_command" | "PowerShell" => {
+                Self::validate_shell_input(name, &args)?;
                 let kind = if call.function.name == "PowerShell" {
                     crate::shell_runtime::ShellKind::Powershell
                 } else {
@@ -356,6 +357,46 @@ impl ToolExecutor {
             }
             other => bail!("Unknown tool: {other}"),
         }
+    }
+
+    /// Validate shell inputs before PreToolUse, following the source tool's
+    /// strict schema and semanticBoolean/semanticNumber preprocessors.
+    /// Runtime permission and command safety checks still run after approval.
+    pub fn validate_shell_input(name: &str, args: &Value) -> Result<()> {
+        let mut normalized = args.clone();
+        crate::semantic_inputs::normalize_tool_fields(name, &mut normalized)?;
+        let fields = normalized.as_object().context("Shell arguments must be an object")?;
+        if let Some(key) = fields.keys().find(|key| {
+            !matches!(
+                key.as_str(),
+                "command" | "description" | "timeout" | "timeout_seconds" | "run_in_background"
+            )
+        }) {
+            bail!("Unrecognized shell parameter {key}");
+        }
+        required(&normalized, "command")?;
+        if normalized.get("description").is_some_and(|value| !value.is_string()) {
+            bail!("Shell description must be a string");
+        }
+        if normalized
+            .get("run_in_background")
+            .is_some_and(|value| !value.is_boolean())
+        {
+            bail!("run_in_background must be a boolean");
+        }
+        if normalized
+            .get("timeout_seconds")
+            .is_some_and(|value| value.as_u64().is_none())
+        {
+            bail!("timeout_seconds must be a nonnegative integer");
+        }
+        if let Some(timeout) = normalized.get("timeout") {
+            let value = timeout.as_f64().context("timeout must be a number")?;
+            if !value.is_finite() || value < 0.0 {
+                bail!("timeout must be a nonnegative number of milliseconds");
+            }
+        }
+        Ok(())
     }
 
     /// TaskOutputTool uses strict arguments, semanticBoolean for block and

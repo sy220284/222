@@ -2994,6 +2994,16 @@ impl Agent {
                                 ToolExecutor::validate_task_output(&value)
                                     .err()
                                     .map(|error| format!("Invalid TaskOutput arguments: {error:#}"))
+                            } else if matches!(
+                                crate::tool_names::canonical_name(&call.function.name),
+                                "run_command" | "PowerShell"
+                            ) {
+                                ToolExecutor::validate_shell_input(
+                                    crate::tool_names::canonical_name(&call.function.name),
+                                    &value,
+                                )
+                                .err()
+                                .map(|error| format!("Invalid Shell arguments: {error:#}"))
                             } else {
                                 None
                             }
