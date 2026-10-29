@@ -221,14 +221,14 @@ pub async fn context_with_recent_tools(
     let recent_tool_section = if recent_tools.is_empty() {
         String::new()
     } else {
-        format!("\\n\\nRecently used tools: {}", recent_tools.join(", "))
+        format!("\n\nRecently used tools: {}", recent_tools.join(", "))
     };
     let selection = provider
         .complete(&ModelRequest {
             model: profile.model.clone(),
             system: concat!(
                 "Select up to five filenames of memories clearly relevant to the query. ",
-                "Return only JSON: {\\\"selected_memories\\\":[\\\"filename.md\\\"]}. ",
+                "Return only JSON: {\"selected_memories\":[\"filename.md\"]}. ",
                 "If none are relevant return an empty array. Never invent filenames. ",
                 "Do not select usage reference or API documentation for recently used tools; ",
                 "do select their warnings, gotchas and known issues."
