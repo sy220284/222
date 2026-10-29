@@ -1,7 +1,6 @@
 //! Rust exports derived from original: src/components/mcp/utils/reconnectHelpers.tsx
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReconnectResult {
     #[serde(rename = "message")]

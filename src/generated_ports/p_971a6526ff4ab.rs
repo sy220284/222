@@ -8,14 +8,17 @@ pub fn addCleanupResults(args: &[Value]) -> Value {
         map.insert(
             "messages".into(),
             super::runtime::add(
-                &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "messages"),
+                &super::runtime::property(
+                    &args.first().cloned().unwrap_or(Value::Null),
+                    "messages",
+                ),
                 &super::runtime::property(&args.get(1).cloned().unwrap_or(Value::Null), "messages"),
             ),
         );
         map.insert(
             "errors".into(),
             super::runtime::add(
-                &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "errors"),
+                &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "errors"),
                 &super::runtime::property(&args.get(1).cloned().unwrap_or(Value::Null), "errors"),
             ),
         );
