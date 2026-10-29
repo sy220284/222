@@ -496,7 +496,7 @@
 | `src/components/agents/ColorPicker.tsx` | 112 | 14204 | 重写：终端 UI／交互 | `src/generated_ports/p_b91406e37fdf3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/ModelSelector.tsx` | 68 | 6927 | 重写：终端 UI／交互 | `src/generated_ports/p_2757935ec52a4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/ToolSelector.tsx` | 562 | 64871 | 重写：终端 UI／交互 | `src/generated_ports/p_4f1f5ef1057ac.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/agents/agentFileUtils.ts` | 273 | 7487 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/agents/agentFileUtils.ts` | 273 | 7487 | 重写：终端 UI／交互 | `src/agent_definition.rs / src/main.rs` | 部分实现：Markdown 元数据、转义、项目与用户配置文件、创建/覆盖/删除及同步落盘已接通；其他设置来源和 UI 生命周期待迁 |
 | `src/components/agents/generateAgent.ts` | 198 | 10151 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/agents/new-agent-creation/CreateAgentWizard.tsx` | 97 | 10427 | 重写：终端 UI／交互 | `src/generated_ports/p_5df7355c6cbdd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/new-agent-creation/wizard-steps/ColorStep.tsx` | 84 | 10430 | 重写：终端 UI／交互 | `src/generated_ports/p_ec56e2d844582.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -513,7 +513,7 @@
 | `src/components/agents/new-agent-creation/wizard-steps/TypeStep.tsx` | 103 | 12474 | 重写：终端 UI／交互 | `src/generated_ports/p_9d5de99c90d12.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/types.ts` | 28 | 915 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/agents/utils.ts` | 19 | 528 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
-| `src/components/agents/validateAgent.ts` | 110 | 3150 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/agents/validateAgent.ts` | 110 | 3150 | 重写：终端 UI／交互 | `src/agent_definition.rs / src/main.rs` | 部分实现：名称、描述、系统提示词、当前可用工具与跨来源重复校验已进入真实 CLI；完整配置编辑 UI 尚未迁移 |
 | `src/components/design-system/Byline.tsx` | 77 | 6493 | 重写：终端 UI／交互 | `src/generated_ports/p_d78b4b20e79ce.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/design-system/Dialog.tsx` | 138 | 14112 | 重写：终端 UI／交互 | `src/generated_ports/p_5bbc621df3eba.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/design-system/Divider.tsx` | 149 | 11094 | 重写：终端 UI／交互 | `src/generated_ports/p_24c4306aaf4fa.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
