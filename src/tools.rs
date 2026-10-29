@@ -482,7 +482,9 @@ impl ToolExecutor {
                 let path = self.checked_path(raw)?;
                 // Original GlobTool checks read permission on its search root.
                 self.require_read_rules(raw, &path)?;
-                search::glob_files(&self.root, &path, &args)
+                search::glob_files_filtered(&self.root, &path, &args, &|candidate| {
+                    self.search_read_allowed(candidate)
+                })
             }
             "grep_files" => {
                 search::validate_tool_input("grep_files", &args)?;
@@ -490,7 +492,9 @@ impl ToolExecutor {
                 let path = self.checked_path(raw)?;
                 // Original GrepTool checks read permission on its search root.
                 self.require_read_rules(raw, &path)?;
-                search::grep_files(&self.root, &path, &args)
+                search::grep_files_filtered(&self.root, &path, &args, &|candidate| {
+                    self.search_read_allowed(candidate)
+                })
             }
             "search_text" => self.search_text(&args),
             "list_skills" => self.list_skills(),
