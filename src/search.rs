@@ -204,11 +204,12 @@ fn type_matches(path: &Path, kind: &str) -> bool {
     let extension = path.extension().and_then(|v| v.to_str()).unwrap_or("");
     match kind {
         "rust" | "rs" => extension == "rs",
-        "js" => matches!(extension, "js" | "jsx" | "mjs" | "cjs"),
-        "ts" => matches!(extension, "ts" | "tsx"),
-        "py" | "python" => extension == "py",
-        "json" => matches!(extension, "json" | "jsonl"),
-        "md" => matches!(extension, "md" | "mdx"),
+        "js" => matches!(extension, "js" | "jsx" | "mjs" | "cjs" | "vue"),
+        "ts" => matches!(extension, "ts" | "tsx" | "mts" | "cts"),
+        "py" | "python" => matches!(extension, "py" | "pyi"),
+        "json" => matches!(extension, "json" | "sarif")
+            || path.file_name().is_some_and(|name| name == "composer.lock"),
+        "md" => matches!(extension, "markdown" | "md" | "mdown" | "mdwn" | "mdx" | "mkd" | "mkdn"),
         "go" => extension == "go",
         "java" => extension == "java",
         "cpp" | "c++" => matches!(
