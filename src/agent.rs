@@ -1311,6 +1311,11 @@ impl Agent {
     }
     /// Terminal counterpart of the original Settings/Status view. It reads
     /// live runtime state and never renders a configured API key or MCP secret.
+    /// /files reconstructs the successful file reads in the active session.
+    pub fn files_in_context(&self) -> String {
+        crate::files_context::render(&self.session.messages, &self.root)
+    }
+
     pub fn status_report(&mut self) -> Result<String> {
         let mut report = String::new();
         use std::fmt::Write as _;
