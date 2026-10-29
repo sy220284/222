@@ -114,6 +114,15 @@ impl ToolExecutor {
             );
         }
         let result = match self.dispatch(call).await {
+            Ok(output)
+                if crate::tool_names::canonical_name(&call.function.name) == "web_fetch"
+                    && output.chars().count() > MAX_OUTPUT_CHARS =>
+            {
+                match self.persist_large_web_fetch(&output) {
+                    Ok(saved) => saved,
+                    Err(err) => format!("ERROR: Could not preserve large WebFetch result: {err:#}"),
+                }
+            }
             Ok(output) => truncate(
                 &output,
                 if shell {
@@ -134,6 +143,38 @@ impl ToolExecutor {
             );
         }
         result
+    }
+
+    /// Original toolResultStorage persists oversized results instead of
+    /// silently discarding the rest of the model-visible content.
+    fn persist_large_web_fetch(&self, output: &str) -> Result<String> {
+        let result: Value = serde_json::from_str(output)?;
+        let directory = self.root.join(".atlas").join("tool-results");
+        fs::create_dir_all(&directory)?;
+        let directory = directory.canonicalize()?;
+        let root = self.root.canonicalize()?;
+        if !directory.starts_with(&root) {
+            bail!("WebFetch result storage escapes workspace");
+        }
+        let path = directory.join(format!("webfetch-result-{}.json", uuid::Uuid::new_v4()));
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        file.write_all(output.as_bytes())?;
+        file.sync_all()?;
+        let relative = path.strip_prefix(&root).unwrap_or(&path);
+        let url = result.get("url").and_then(Value::as_str).unwrap_or("");
+        let code = result.get("code").and_then(Value::as_u64).unwrap_or(0);
+        let preview = result.get("content").and_then(Value::as_str).unwrap_or("");
+        let binary = result.get("persistedPath").and_then(Value::as_str);
+        Ok(format!(
+            "WebFetch {code} {url}\nFull response ({} bytes) saved to {}.\nUse read_file or run_command to inspect it in chunks.{}\n\nPreview:\n{}",
+            output.len(),
+            relative.display(),
+            binary.map(|path| format!("\nBinary attachment: {path}")).unwrap_or_default(),
+            truncate(preview, 1_000)
+        ))
     }
 
     async fn dispatch(&self, call: &ToolCall) -> Result<String> {
