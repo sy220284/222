@@ -423,10 +423,31 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         {
             continue;
         }
-        let Ok(content) = fs::read_to_string(&path) else {
+        // ripgrep searches valid text around malformed UTF-8 bytes. Rejecting
+        // the entire file with read_to_string silently loses those matches.
+        let Ok(bytes) = fs::read(&path) else {
             continue;
         };
+        let binary = bytes.contains(&0);
+        // When scanning a directory, ripgrep suppresses binary file results.
+        // An explicitly requested file remains searchable in -l/-c modes.
+        if binary && base.is_dir() {
+            continue;
+        }
+        let content = String::from_utf8_lossy(&bytes);
         let filename = relative(root, &path)?.to_string_lossy().to_string();
+        if binary && mode == "content" {
+            if matching_lines(&content, &regex, multiline)
+                .into_iter()
+                .any(|matched| matched)
+            {
+                let nul_offset = bytes.iter().position(|byte| *byte == 0).unwrap_or(0);
+                matches.push(format!(
+                    "binary file matches (found \"\\0\" byte around offset {nul_offset})"
+                ));
+            }
+            continue;
+        }
         if mode == "files_with_matches" {
             // rg -l matches line-by-line unless -U is enabled. Checking the
             // whole file with a non-multiline regex incorrectly makes ^/$
@@ -466,9 +487,9 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         }
         // rg --max-columns=500 measures bytes, including the line ending.
         // split_inclusive preserves LF/CRLF byte lengths while lines() strips them.
-        let line_byte_lengths = content
-            .split_inclusive('\n')
-            .map(str::len)
+        let line_byte_lengths = bytes
+            .split_inclusive(|byte| *byte == b'\n')
+            .map(<[u8]>::len)
             .collect::<Vec<_>>();
         let mut previous_selected = None;
         for (index, line) in lines.iter().enumerate() {
