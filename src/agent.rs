@@ -145,6 +145,7 @@ pub struct Agent {
     additional_dirs: Vec<PathBuf>,
     approval: Approval,
     interactive: bool,
+    file_checkpointing_enabled: bool,
     max_steps: usize,
     session: Session,
     /// Captured before new sessions can be saved by teammate setup.
@@ -221,6 +222,8 @@ impl Agent {
             "startup"
         };
         let provider = provider::create(&profile)?;
+        let file_checkpointing_enabled =
+            crate::config::Config::load()?.file_checkpointing_enabled;
         let background = Arc::new(BackgroundTasks::for_session(&root, session.id)?);
         let list_id = task_list_id(session.id, session.team_name.as_deref());
         let graph = task_graph::TaskGraph::new(&root, &list_id)?;
@@ -263,6 +266,7 @@ impl Agent {
             additional_dirs: Vec::new(),
             approval,
             interactive,
+            file_checkpointing_enabled,
             max_steps,
             session,
             session_start_source,
@@ -3069,6 +3073,7 @@ impl Agent {
         }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_session_id(self.session.id.to_string())
+            .with_file_checkpointing(self.file_checkpointing_enabled)
             .with_metrics(self.file_metrics.clone())
             .with_shared_reads(self.notebook_reads.clone(), self.file_reads.clone())
             .with_plugins(self.enabled_plugins.clone())
