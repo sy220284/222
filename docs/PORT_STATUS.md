@@ -1,5 +1,32 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：真实 Hook 业务链的原版语义补齐（源码已提交，待验收）
+
+**原版依据**：用户原始 `claude-code-2.1.88-main(1).zip` 的 `source/src/utils/hooks.ts::createBaseHookInput/getMatchingHooks/executeTaskCreatedHooks/executeTaskCompletedHooks/executeSubagentStartHooks/executeStopHooks/executeTeammateIdleHooks/executeSessionStartHooks/executeSessionEndHooks/executePreCompactHooks/executePostCompactHooks/executeUserPromptSubmitHooks`，以及 `source/src/query.ts` 的 Stop 阻断后继续状态、`source/src/query/stopHooks.ts` 的队友收尾链和 `source/src/entrypoints/sdk/coreSchemas.ts` 的 Hook 输入约束。逐项对照 `src/hooks.rs`、`src/agent.rs` 的可达调用。
+
+**已真实写入 Rust 的业务行为，保守按 16 项不同用户功能计入“已提交、待验收”**（同一事件在独立/团队两条调用链只计一次；同一工具前后 Hook 上下文接线合并计一次）：
+
+1. TaskCreated：创建任务时向脚本传递实际会话、工作目录、记录路径及可选团队身份。
+2. TaskCompleted：完成任务时传递相同的任务/会话/团队身份。
+3. Task Hook：多个独立脚本同时阻断时保留全部反馈，任务完成的拒绝仍以普通工具结果返回。
+4. SubagentStart：独立委派和团队成员启动时传递会话与代理类型。
+5. SubagentStop：独立委派和团队成员停止时传递会话、代理记录路径、最终回复、`stop_hook_active` 与权限模式。
+6. TeammateIdle：队友空闲脚本获得会话、团队名称、成员名称与权限模式，移除原版未声明的额外代理 ID。
+7. Hook 选择：简单名称与 `A|B` 精确匹配、`*` 通配、正则、旧工具名别名，以及按事件选用触发来源/代理类型/工具名；无匹配查询的事件不过滤。
+8. SessionStart：区分新会话 `startup`、已有会话 `resume`、清空后的 `clear`，传递真实会话字段和模型。
+9. SessionEnd：提供合法的 `other` / `clear` 退出原因及会话字段。
+10. Stop：模型在阻断反馈后再次结束时，继续运行 Hook 并传递 `stop_hook_active=true`，不绕过第二次检查。
+11. Stop：保留 JSON `stopReason`，将 `continue:false` 的主动停止原因送入会话事件。
+12. UserPromptSubmit：真实用户提示触发 Hook 时传递当前权限模式及会话字段。
+13. PreCompact：手动/自动压缩前传递原版 `trigger/custom_instructions` 和会话字段。
+14. PostCompact：压缩后传递 `trigger/compact_summary` 和会话字段。
+15. PreToolUse/PostToolUse/PostToolUseFailure：工具执行前后从活跃 Agent 注入当前权限模式、会话、工作目录及子代理身份，保留实际工具输入/结果/错误。
+16. Hook 去重：同一事件多个匹配配置注册相同命令时只执行一次，保留配置顺序及最后匹配定义。
+
+**代码提交**：`a9fe5f0`、`85abed0`、`55bac27`、`a3bae8e`、`58535d3`、`21d7fb0`、`1699678`、`19a0854`、`5dc39a5`、`73e1dca`、`bc39e3c`、`dd9a015`、`33c487c`、`7fe8348`、`1a06c78`、`289222c`、`ce3343f`、`0daa3b0`。均为原草稿 PR #2 分支上的真实代码修改，未新建 PR、未合并 main。按当前任务约束未运行 Cargo、测试或 CI。
+
+**明确未闭环**：本轮 100 个独立业务功能的硬目标仍差 **84 项**，不把现有 16 项扩写成 100 项。原版异步 Hook 注册、prompt/agent/http/callback Hook、`if` 条件、全部 SDK 回调与取消传播、PermissionRequest/PermissionDenied 触发、TeammateIdle 阻断后的继续工作、队友空闲时在办任务的 TaskCompleted Hook、StopFailure 和全事件 schema 精确验证仍需逐项实现；任务/远程等其他主链差异也未消失。下一续接点：`source/src/query/stopHooks.ts:330–460` 对照 `src/agent.rs::run_team`，以及 `source/src/utils/hooks.ts:1615–1867,2909–3021` 对照 `src/hooks.rs`。Issue #3 冻结 362 条仍全部开放，完整等价验收仍 **0/362**。
+
 ## 2026-10-29：/compact 自定义指令对齐原版并接入 CLI、SDK（源码已提交、待验收）
 
 完整原版依据：`source/src/commands/compact/compact.ts::call` 第 40–53、96–108 行保留 /compact 参数作为自定义摘要指令；`source/src/services/compact/compact.ts::compactConversation/mergeHookInstructions` 保证用户指令在前，PreCompact Hook 附加指令在后。
