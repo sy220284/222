@@ -10,6 +10,24 @@ use uuid::Uuid;
 
 const MAX_SNAPSHOT_BYTES: u64 = 8_000_000;
 
+/// Original fileHistoryEnabled: interactive sessions honor the user setting;
+/// headless/SDK sessions require explicit opt-in. Disable always wins.
+fn env_truthy(name: &str) -> bool {
+    std::env::var(name).ok().is_some_and(|value| {
+        matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+    })
+}
+pub fn enabled(interactive: bool, user_enabled: bool) -> bool {
+    if env_truthy("ATLAS_DISABLE_FILE_CHECKPOINTING") {
+        return false;
+    }
+    if interactive {
+        user_enabled
+    } else {
+        env_truthy("ATLAS_ENABLE_SDK_FILE_CHECKPOINTING")
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Record {
     pub id: Uuid,
