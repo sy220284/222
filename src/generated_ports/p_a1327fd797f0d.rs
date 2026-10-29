@@ -20,16 +20,14 @@ pub enum PaneBackendType {
     iterm2,
 }
 
-use serde_json::json;
-
 pub fn isPaneBackend(args: &[Value]) -> Value {
     super::runtime::or(
         &super::runtime::strict_equal(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             &Value::String("tmux".into()),
         ),
         &super::runtime::strict_equal(
-            &args.get(0).cloned().unwrap_or(Value::Null),
+            &args.first().cloned().unwrap_or(Value::Null),
             &Value::String("iterm2".into()),
         ),
     )

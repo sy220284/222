@@ -18,8 +18,6 @@ pub enum FocusMove {
     lineEnd,
 }
 
-use serde_json::json;
-
 pub fn createSelectionState(args: &[Value]) -> Value {
     {
         let mut map = serde_json::Map::new();
@@ -38,11 +36,11 @@ pub fn createSelectionState(args: &[Value]) -> Value {
 pub fn hasSelection(args: &[Value]) -> Value {
     super::runtime::and(
         &super::runtime::strict_unequal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "anchor"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "anchor"),
             &Value::Null,
         ),
         &super::runtime::strict_unequal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "focus"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "focus"),
             &Value::Null,
         ),
     )

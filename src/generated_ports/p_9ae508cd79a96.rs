@@ -6,7 +6,7 @@ pub fn isRemoteSessionStaging(args: &[Value]) -> Value {
     super::runtime::or(
         &super::runtime::strict_equal(
             &super::runtime::call_method(
-                &args.get(0).cloned().unwrap_or(Value::Null),
+                &args.first().cloned().unwrap_or(Value::Null),
                 "includes",
                 &[Value::String("_staging_".into())],
             ),
@@ -26,7 +26,7 @@ pub fn isRemoteSessionLocal(args: &[Value]) -> Value {
     super::runtime::or(
         &super::runtime::strict_equal(
             &super::runtime::call_method(
-                &args.get(0).cloned().unwrap_or(Value::Null),
+                &args.first().cloned().unwrap_or(Value::Null),
                 "includes",
                 &[Value::String("_local_".into())],
             ),
