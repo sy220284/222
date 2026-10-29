@@ -670,6 +670,19 @@ impl McpManager {
     }
 
     async fn call(&mut self, call: &ToolCall) -> Result<String> {
+        // The prior invocation may have failed with HTTP 401 or a stale
+        // session. Reopen the affected server before a *new* tool call even
+        // when the agent is still in the same model turn. No failed call is
+        // replayed: its server-side effects were not necessarily reversible.
+        if let Some((previous_index, _)) = self.routes.get(&call.function.name).cloned() {
+            if let Some(position) = self.status_clients.iter().position(|slot| {
+                *slot == Some(previous_index)
+            }) {
+                if self.server_statuses[position]["status"] == "failed" {
+                    self.reconnect_server(position).await?;
+                }
+            }
+        }
         let (index, real_name) = self
             .routes
             .get(&call.function.name)
