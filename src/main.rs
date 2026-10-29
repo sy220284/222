@@ -2096,6 +2096,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     queue.enable_journal(agent.workspace_root(), &agent.session_id())?;
     let mut query_guard = query_guard::QueryGuard::default();
     let mut bridge_session = bridge_core::BridgeSession::new(agent.session_id());
+    let mut sdk_initialized = false;
     print_json!(json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
@@ -2202,7 +2203,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             "control_request" if event.get("request").is_some() => {
                 print_json!(
-                    sdk_nested_control(agent, config, &event, &mut queue, &mut bridge_session)
+                    sdk_nested_control(agent, config, &event, &mut queue, &mut bridge_session, &mut sdk_initialized)
                         .await
                 );
             }
@@ -2372,6 +2373,7 @@ async fn sdk_nested_control(
     event: &Value,
     queue: &mut message_queue::Queue,
     bridge_session: &mut bridge_core::BridgeSession,
+    sdk_initialized: &mut bool,
 ) -> Value {
     let id = event
         .get("request_id")
@@ -2391,6 +2393,9 @@ async fn sdk_nested_control(
             .ok_or_else(|| anyhow::anyhow!("control request requires subtype"))?;
         match subtype {
             "initialize" => {
+                if *sdk_initialized {
+                    bail!("SDK initialization already completed for this stream");
+                }
                 // The Rust session is already attached to locally configured
                 // hooks/MCP before stdin is read. Never silently claim to have
                 // installed SDK callback hooks or SDK-owned MCP transports.
@@ -2425,6 +2430,7 @@ async fn sdk_nested_control(
                         })
                     })
                     .collect::<Vec<_>>();
+                *sdk_initialized = true;
                 Ok(json!({"commands":[],"agents":[],"output_style":"default",
                     "available_output_styles":["default"],"models":models,
                     "account":{},"pid":std::process::id()}))
