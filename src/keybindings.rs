@@ -681,7 +681,6 @@ pub fn create_template(path: &Path) -> Result<bool> {
             .retain(|key, _| !non_rebindable.contains(key.as_str()));
     }
     let content = serde_json::to_string_pretty(&serde_json::json!({
-        "$schema":"https://json.schemastore.org/claude-code-keybindings.json",
         "bindings":default,
     }))?;
     fs::create_dir_all(path.parent().context("Invalid keybindings path")?)?;
