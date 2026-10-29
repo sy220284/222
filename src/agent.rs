@@ -508,6 +508,25 @@ impl Agent {
                 }
                 Some(_) => bail!("SDK agent {name} disallowedTools must be a list or comma-separated string"),
             };
+            // Source permissionSetup.ts normalizes legacy tool names. A
+            // parameterized rule (e.g. Bash(git:*)) needs command-level
+            // enforcement; reject it until that gate is implemented, rather
+            // than accidentally granting unrestricted Bash access.
+            let normalize = |specs: std::collections::HashSet<String>, field: &str|
+                -> Result<std::collections::HashSet<String>> {
+                let mut normalized = std::collections::HashSet::new();
+                for spec in specs {
+                    if spec.contains('(') || spec.contains(')') {
+                        bail!("SDK agent {name} {field} parameterized tool rules are not supported");
+                    }
+                    for item in spec.split_whitespace() {
+                        normalized.insert(crate::tool_names::canonical_name(item).to_owned());
+                    }
+                }
+                Ok(normalized)
+            };
+            let tools = tools.map(|specs| normalize(specs, "tools")).transpose()?;
+            let disallowed_tools = normalize(disallowed_tools, "disallowedTools")?;
             let max_turns = match definition.get("maxTurns") {
                 None => None,
                 Some(value) => {
