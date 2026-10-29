@@ -216,7 +216,11 @@ pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
             Some(1)
         } else if item.title.to_lowercase().contains(&query) {
             Some(2)
-        } else if item.git_branch.as_deref().is_some_and(|branch| branch.to_lowercase().contains(&query)) {
+        } else if item
+            .git_branch
+            .as_deref()
+            .is_some_and(|branch| branch.to_lowercase().contains(&query))
+        {
             Some(3)
         } else if item.id.to_string().contains(&query) {
             Some(4)
