@@ -1765,7 +1765,34 @@ async fn chat(
             "/skills" => {
                 match agent.list_user_skills() {
                     Ok(skills) if skills.is_empty() => println!("No accessible skills."),
-                    Ok(skills) => println!("{skills}"),
+                    Ok(skills) => {
+                        for name in skills.lines() {
+                            let source = if name.contains(':') {
+                                plugins::read_skill(
+                                    agent.workspace_root(), &config.enabled_plugins, name,
+                                )
+                            } else {
+                                agent.workspace_root().join(".atlas/skills")
+                                    .join(name).join("SKILL.md").canonicalize()
+                                    .and_then(std::fs::read_to_string)
+                                    .map_err(anyhow::Error::from)
+                            };
+                            match source {
+                                Ok(source) => {
+                                    let (description, hint) =
+                                        skill_arguments::command_metadata(&source, "Project skill");
+                                    if hint.is_empty() {
+                                        println!("/{name}  {description}");
+                                    } else {
+                                        println!("/{name} {hint}  {description}");
+                                    }
+                                }
+                                Err(error) => eprintln!(
+                                    "Cannot describe skill {name}: {error:#}"
+                                ),
+                            }
+                        }
+                    }
                     Err(error) => eprintln!("Cannot list skills: {error:#}"),
                 }
                 continue;
