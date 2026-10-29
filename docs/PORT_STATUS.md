@@ -1,3 +1,11 @@
+## 2026-10-29：文件历史差异预览与备份完整性（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 ZIP 的 `source/src/utils/fileHistory.ts:414–484::fileHistoryGetDiffStats`、`:677–723::computeDiffStatsForFile`，按回退方向统计新增/删除行；`:600–673::checkOriginFileChanged` 与 `:804–838::restoreBackup` 在恢复前读取并检查原始文件及备份。
+- **原 Rust 缺口**：`src/history.rs` 原有检查点仅能列表与回退，无法在实际操作前预览会删除/恢复多少行；备份在创建后遭外部篡改时，回退会直接把被修改的备份复制到用户文件。
+- **真实补齐**：`src/history.rs::preview` 读取当前文件和历史版本，按原版回退方向返回 `changed/restorable/insertions/deletions`，二进制内容明确标记而不虚报文本行数；`src/tools.rs::file_history_diff` 复用会话隔离、Read 拒绝/询问、SDK 检查点启停门禁，并加入模型可达工具定义。创建备份时保存原始内容 SHA-256，预览与实际回退前校验备份完整性，损坏时明确拒绝覆盖；旧记录没有摘要时仍可读取。
+- **提交**：`ecd0dfcada180ed579734dc36fa200079ee04ad9`（历史实现、摘要校验、工具定义），`54c9aa156c8afb56d6a2236cd0dd5d792a01ed2e`（实际工具入口、Read 权限与禁用门禁）。**保守计 2 项**独立用户可感知能力；本轮 **2/100，剩余 98**，源码已提交、待行为验收。按要求未运行 Cargo、测试或 CI，新增等价验收 0。
+- **未实现差异**：原版以消息 ID 组织多文件快照、100 次快照上限、Shell 修改跟踪、跨会话备份迁移、完整并发快照状态及跨平台权限行为仍缺；现有预览以单次文件编辑检查点为单位，尚未达到原版消息级聚合。100 项先行逐函数确认清单及完整实施方案仍未形成，流程 A/B 和数量目标未达标。Issue #3 冻结 362 项不核销。
+
 ## 2026-10-29：插件缺失依赖固定点级联隔离（源码已提交、待验收）
 
 - **原版源码依据**：完整 ZIP 的 `source/src/utils/plugins/dependencyResolver.ts:161–234::verifyAndDemote`；对每个已启用插件核对依赖，缺失或被停用的依赖导致该插件在本会话停用，重复计算直到所有级联依赖稳定，原用户设置不改写；`dependencyResolver.ts:27–46::qualifyDependency` 将短名称绑定到声明者市场，`@inline` 插件的短名称按名字匹配。
