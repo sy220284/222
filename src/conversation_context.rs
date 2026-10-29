@@ -193,6 +193,60 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         }
     }
 
+    // The source removes HTML comment tokens from injected memory content,
+    // while retaining literal comments inside Markdown code spans and fences.
+    fn strip_memory_comments(content: &str) -> String {
+        let mut result = String::with_capacity(content.len());
+        let mut fence: Option<char> = None;
+        let mut in_comment = false;
+        for line in content.split_inclusive('\n') {
+            let trimmed = line.trim_start();
+            if !in_comment {
+                if let Some(marker) = trimmed.chars().next().filter(|c| *c == '`' || *c == '~') {
+                    if trimmed.chars().take_while(|c| *c == marker).count() >= 3 {
+                        if fence == Some(marker) {
+                            fence = None;
+                        } else if fence.is_none() {
+                            fence = Some(marker);
+                        }
+                        result.push_str(line);
+                        continue;
+                    }
+                }
+            }
+            if fence.is_some() {
+                result.push_str(line);
+                continue;
+            }
+            let mut inline_code = false;
+            let mut cursor = 0;
+            while cursor < line.len() {
+                let remaining = &line[cursor..];
+                if in_comment {
+                    if let Some(end) = remaining.find("-->") {
+                        cursor += end + 3;
+                        in_comment = false;
+                    } else {
+                        break;
+                    }
+                    continue;
+                }
+                if !inline_code && remaining.starts_with("<!--") {
+                    in_comment = true;
+                    cursor += 4;
+                    continue;
+                }
+                let ch = remaining.chars().next().expect("cursor is inside line");
+                if ch == '`' {
+                    inline_code = !inline_code;
+                }
+                result.push(ch);
+                cursor += ch.len_utf8();
+            }
+        }
+        result
+    }
+
     // 2.1.88 claudemd.ts extracts @includes from Markdown text nodes, skips
     // fenced/inline code and HTML comments, and limits recursive expansion.
     // An unapproved include outside the current instruction scope is ignored.
@@ -364,6 +418,7 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         }
         let content = String::from_utf8(bytes)
             .with_context(|| format!("Project instructions must be UTF-8: {}", path.display()))?;
+        let content = strip_memory_comments(&content);
         let body = if is_rule {
             rule_body(&content)
         } else {
