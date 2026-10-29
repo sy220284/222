@@ -1558,6 +1558,7 @@ impl Agent {
             .with_environment(self.session_env.clone())
             .with_permission_mode(self.permission_mode);
         let mut stop_hook_active = false;
+        let mut selected_mcp_tools = std::collections::HashSet::new();
         for _ in 0..self.max_steps {
             self.absorb_team_messages()?;
             let mut available_tools = tools::definitions();
@@ -1612,11 +1613,25 @@ impl Agent {
             if self.interactive {
                 available_tools.push(crate::ask_user_question::definition());
             }
+            let complete_catalog = available_tools;
+            let (visible_tools, deferred_names) =
+                crate::tool_search::visible_catalog(&complete_catalog, &selected_mcp_tools);
+            let mut request_system = system.clone();
+            if !deferred_names.is_empty() {
+                request_system.push_str("\n<available-deferred-tools>\n");
+                for name in deferred_names {
+                    request_system.push_str(&name);
+                    request_system.push('\n');
+                }
+                request_system.push_str(
+                    "</available-deferred-tools>\nUse ToolSearch to fetch the schema before calling a deferred tool.\n",
+                );
+            }
             let request = ModelRequest {
                 model: self.profile.model.clone(),
-                system: system.clone(),
+                system: request_system,
                 messages: self.session.messages.clone(),
-                tools: available_tools,
+                tools: visible_tools,
             };
             let api_started = Instant::now();
             let response = if self.profile.stream {
@@ -1807,9 +1822,16 @@ impl Agent {
                 } else if call.function.name == "ToolSearch" {
                     match serde_json::from_str::<serde_json::Value>(&call.function.arguments)
                         .map_err(anyhow::Error::from)
-                        .and_then(|args| crate::tool_search::execute(&args, &request.tools))
+                        .and_then(|args| crate::tool_search::execute(&args, &complete_catalog))
                     {
-                        Ok(result) => result.to_string(),
+                        Ok(result) => {
+                            if let Some(matches) = result["matches"].as_array() {
+                                for name in matches.iter().filter_map(|name| name.as_str()) {
+                                    selected_mcp_tools.insert(name.to_owned());
+                                }
+                            }
+                            result.to_string()
+                        },
                         Err(error) => format!("ERROR: {error:#}"),
                     }
                 } else if call.function.name == "AskUserQuestion" {
