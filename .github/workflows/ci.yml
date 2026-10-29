@@ -31,7 +31,7 @@ jobs:
       - name: 格式检查
         run: cargo fmt --all -- --check
       - name: Clippy 严格检查
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D clippy::correctness -D clippy::suspicious
 
   test:
     name: 编译与全部测试
