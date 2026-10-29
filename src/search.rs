@@ -34,11 +34,13 @@ fn orphaned_plugin_cache_entry(path: &Path) -> bool {
         if cache.file_name().and_then(|name| name.to_str()) != Some("cache") {
             continue;
         }
-        let default_plugin_root = cache.parent()
-            .and_then(|parent| parent.file_name())
-            .and_then(|name| name.to_str()) == Some("plugins");
+        let default_plugin_root = cache.parent().is_some_and(|plugins| {
+            plugins.file_name().and_then(|name| name.to_str()) == Some("plugins")
+                && plugins.parent().and_then(|parent| parent.file_name())
+                    .and_then(|name| name.to_str()) == Some(".atlas")
+        });
         let overridden_plugin_root = std::env::var_os("ATLAS_PLUGIN_CACHE_DIR")
-            .is_some_and(|root| cache == Path::new(&root).join("cache"));
+            .is_some_and(|root| cache == Path::new(&root).join("cache").as_path());
         if !(default_plugin_root || overridden_plugin_root) {
             continue;
         }
