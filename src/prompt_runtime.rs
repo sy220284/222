@@ -81,7 +81,12 @@ pub fn role_instructions(role: &str, is_teammate: bool) -> &'static str {
     if is_teammate {
         return WORKER;
     }
-    match role.to_ascii_lowercase().replace('-', "").replace('_', "").as_str() {
+    match role
+        .to_ascii_lowercase()
+        .replace('-', "")
+        .replace('_', "")
+        .as_str()
+    {
         "verification" | "verify" | "verificationagent" | "reviewer" => VERIFICATION,
         "explore" | "exploration" | "exploreagent" => EXPLORATION,
         "plan" | "planner" | "planagent" => PLANNING,
@@ -118,7 +123,6 @@ pub fn output_style_label(style: &str) -> Option<&'static str> {
     }
 }
 
-
 /// Load an explicitly configured project agent's Markdown body. Built-in roles
 /// use role_instructions when no project definition exists.
 pub fn custom_role_instructions(
@@ -129,12 +133,17 @@ pub fn custom_role_instructions(
     if crate::agent_definition::validate_agent_type(role).is_some() {
         return Ok(None);
     }
-    let path = root.join(".atlas").join("agents").join(format!("{role}.md"));
+    let path = root
+        .join(".atlas")
+        .join("agents")
+        .join(format!("{role}.md"));
     if !path.exists() {
         return Ok(None);
     }
     let real_root = root.canonicalize().context("Cannot resolve workspace")?;
-    let real_path = path.canonicalize().context("Cannot resolve agent definition")?;
+    let real_path = path
+        .canonicalize()
+        .context("Cannot resolve agent definition")?;
     if !real_path.starts_with(&real_root) {
         bail!("Agent definition escapes workspace");
     }
@@ -160,7 +169,6 @@ pub fn custom_role_instructions(
 mod tests {
     use super::*;
 
-
     #[test]
     fn custom_role_loads_only_from_workspace_with_valid_frontmatter() {
         let workspace = tempfile::tempdir().unwrap();
@@ -170,8 +178,12 @@ mod tests {
             "---\nname: reviewer\ndescription: Review changes\n---\n\nReview the entire call chain.\n").unwrap();
         let loaded = custom_role_instructions(workspace.path(), "reviewer").unwrap();
         assert_eq!(loaded.as_deref(), Some("Review the entire call chain."));
-        assert!(custom_role_instructions(workspace.path(), "../private").unwrap().is_none());
-        assert!(custom_role_instructions(workspace.path(), "missing").unwrap().is_none());
+        assert!(custom_role_instructions(workspace.path(), "../private")
+            .unwrap()
+            .is_none());
+        assert!(custom_role_instructions(workspace.path(), "missing")
+            .unwrap()
+            .is_none());
     }
 
     #[test]
