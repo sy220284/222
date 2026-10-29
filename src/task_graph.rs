@@ -338,8 +338,11 @@ impl TaskGraph {
                 blocked_by: vec![],
                 metadata,
             };
+            // Source createTask writes the task file under the list lock
+            // and returns its ID. The high-water mark is only advanced by
+            // deletion/reset; a separate mark write after successful create
+            // could fail and falsely report an already-created task as failed.
             this.save(&task)?;
-            this.mark(id)?;
             Ok(format!(
                 "Task #{} created successfully: {}",
                 task.id, task.subject
@@ -903,7 +906,8 @@ mod tests {
             .unwrap();
         let directory = graph.directory.clone();
         assert!(directory.join("1.json").exists());
-        assert!(directory.join(".highwatermark").exists());
+        // Source creates the counter file on reset/deletion, not creation.
+        assert!(!directory.join(".highwatermark").exists());
         graph.remove_storage().unwrap();
         assert!(!directory.exists());
     }
