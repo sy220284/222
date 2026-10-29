@@ -805,7 +805,10 @@ impl McpManager {
         // tools/call after a 401/expired session. A new request is safe to
         // issue; never replay the previously rejected request automatically.
         if self.server_statuses[position]["status"] != "connected" {
-            self.reconnect_server(position).await?;
+            let config = self.configs[position].clone();
+            self.reconnect_server(position).await.map_err(|error| {
+                anyhow::anyhow!(Self::redact_connection_error(&config, format!("{error:#}")))
+            })?;
         }
         self.status_clients[position].context("MCP client unavailable")
     }
@@ -830,8 +833,11 @@ impl McpManager {
             // keep its failure isolated if reconnect still fails.
             if self.server_statuses[index]["status"] != "connected" {
                 if let Err(error) = self.reconnect_server(index).await {
+                    let safe_error = Self::redact_connection_error(
+                        &self.configs[index], format!("{error:#}")
+                    );
                     servers.push(json!({"server":name,"ok":false,
-                        "error":format!("{error:#}")}));
+                        "error":safe_error}));
                     continue;
                 }
             }
