@@ -229,6 +229,62 @@ pub fn resolve_local_plugin(project: &Path, marketplace: &str, plugin: &str) -> 
     Ok(canonical)
 }
 
+/// Find an unqualified plugin in the registered local marketplaces. The
+/// original installer searches configured marketplaces in registration order
+/// when the user supplies a bare plugin name. A malformed marketplace is
+/// isolated so other healthy catalogs remain usable.
+pub fn resolve_local_plugin_by_name(project: &Path, plugin: &str) -> Result<(String, PathBuf)> {
+    let registered = {
+        let _guard = exclusive_lock(project)?;
+        let mut entries = load(project)?.into_iter().collect::<Vec<_>>();
+        entries.sort_by(|(left_name, left), (right_name, right)| {
+            left.last_updated.cmp(&right.last_updated)
+                .then_with(|| left_name.cmp(right_name))
+        });
+        entries
+    };
+    let mut failures = Vec::new();
+    for (name, record) in registered {
+        let manifest = match inspect_local(&record.source) {
+            Ok((actual, manifest)) if actual == name => manifest,
+            Ok((actual, _)) => {
+                failures.push(format!("{name}: manifest now identifies as {actual}"));
+                continue;
+            }
+            Err(error) => {
+                failures.push(format!("{name}: {error}"));
+                continue;
+            }
+        };
+        let document: Value = match fs::read(&manifest)
+            .map_err(anyhow::Error::from)
+            .and_then(|bytes| serde_json::from_slice(&bytes).map_err(anyhow::Error::from))
+        {
+            Ok(document) => document,
+            Err(error) => {
+                failures.push(format!("{name}: {error}"));
+                continue;
+            }
+        };
+        let found = document["plugins"].as_array().is_some_and(|entries| {
+            entries.iter().any(|entry| entry["name"].as_str() == Some(plugin))
+        });
+        if found {
+            // Resolve again under the registry lock and recheck canonical paths.
+            // This prevents a catalog edit from bypassing source containment.
+            return resolve_local_plugin(project, &name, plugin)
+                .map(|path| (name, path));
+        }
+    }
+    if failures.is_empty() {
+        bail!("Plugin '{plugin}' not found in any configured marketplace");
+    }
+    bail!(
+        "Plugin '{plugin}' not found in any usable marketplace; catalog errors: {}",
+        failures.join("; ")
+    )
+}
+
 fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
