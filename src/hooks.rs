@@ -684,6 +684,20 @@ async fn run_command(
         // Original hooks.ts runs in safeCwd and exposes the project root
         // to scripts. Use the provider-neutral environment variable.
         proc.current_dir(root);
+        #[cfg(windows)]
+        {
+            let project_dir = if rule.shell.unwrap_or_default()
+                == crate::shell_runtime::ShellKind::Bash
+            {
+                crate::portable_platform::windows_path_to_posix_path(
+                    &root.to_string_lossy(),
+                )
+            } else {
+                root.to_string_lossy().into_owned()
+            };
+            proc.env("ATLAS_PROJECT_DIR", project_dir);
+        }
+        #[cfg(not(windows))]
         proc.env("ATLAS_PROJECT_DIR", root);
     }
     // Each hook owns a fresh process group, so cancellation never kills
