@@ -143,11 +143,21 @@ fn manifest_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> {
 /// mcpPluginIntegration.ts loads .mcp.json first, then merges the manifest's
 /// mcpServers (inline map, file path or ordered array) with later entries
 /// overriding earlier entries for the same server name.
-fn mcp_file(root: &Path, relative: &str) -> Result<Value> {
-    let path = checked_component(root, &root.join(relative))?;
-    let document: Value = serde_json::from_slice(&fs::read(&path)?)
-        .with_context(|| format!("Invalid plugin MCP file {}", path.display()))?;
-    Ok(document.get("mcpServers").cloned().unwrap_or(document))
+fn mcp_file(root: &Path, relative: &str) -> Result<Option<Value>> {
+    let requested = root.join(relative);
+    // Optional plugin MCP files are ignored when absent, as in the source
+    // loader. Existing paths must still pass the plugin-root boundary check.
+    if !requested.exists() && !requested.is_symlink() {
+        return Ok(None);
+    }
+    let path = checked_component(root, &requested)?;
+    let document: Value = match fs::read(&path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok()) {
+        Some(document) => document,
+        None => return Ok(None),
+    };
+    Ok(Some(document.get("mcpServers").cloned().unwrap_or(document)))
 }
 
 fn merge_server_specs(
@@ -166,7 +176,10 @@ fn merge_server_specs(
             if !visiting.insert(file.clone()) {
                 bail!("Plugin MCP configuration contains a file reference cycle")
             }
-            let result = merge_server_specs(root, &mcp_file(root, relative)?, servers, visiting);
+            let result = match mcp_file(root, relative)? {
+                Some(document) => merge_server_specs(root, &document, servers, visiting),
+                None => Ok(()),
+            };
             visiting.remove(&file);
             result?;
         }
@@ -194,7 +207,9 @@ fn manifest_servers(root: &Path, value: &Value) -> Result<Vec<McpServerConfig>> 
     let mut visiting = std::collections::HashSet::new();
     let standard = root.join(".mcp.json");
     if standard.exists() {
-        merge_server_specs(root, &mcp_file(root, ".mcp.json")?, &mut entries, &mut visiting)?;
+        if let Some(document) = mcp_file(root, ".mcp.json")? {
+            merge_server_specs(root, &document, &mut entries, &mut visiting)?;
+        }
     }
     merge_server_specs(root, value, &mut entries, &mut visiting)?;
     let mut servers = Vec::new();
@@ -202,10 +217,81 @@ fn manifest_servers(root: &Path, value: &Value) -> Result<Vec<McpServerConfig>> 
         let mut config = config;
         let object = config.as_object_mut()
             .with_context(|| format!("Plugin MCP server {name} must be an object"))?;
-        object.insert("id".into(), Value::String(name));
-        servers.push(serde_json::from_value(config)?);
+        object.insert("id".into(), Value::String(name.clone()));
+        // A malformed server entry must not disable healthy servers in the
+        // same plugin. The original loader validates entries independently.
+        if let Ok(server) = serde_json::from_value(config) {
+            servers.push(server);
+        }
     }
     Ok(servers)
+}
+
+/// Resolve plugin-scoped variables before handing a server to the shared MCP
+/// transport. Plugin paths are stable across subprocess startup and must not
+/// depend on the caller's ambient environment.
+fn resolve_plugin_mcp_server(
+    root: &Path,
+    plugin_name: &str,
+    mut server: McpServerConfig,
+) -> Result<McpServerConfig> {
+    let plugin_root = if cfg!(windows) {
+        root.to_string_lossy().replace('\\', "/")
+    } else {
+        root.to_string_lossy().into_owned()
+    };
+    let storage_root = root.parent().and_then(Path::parent)
+        .context("Plugin installation has no storage directory")?;
+    let data = storage_root.join("plugin-data").join(plugin_name);
+    // Reject redirected storage: plugins must not turn an environment
+    // expansion into a write outside their installation's workspace.
+    if data.is_symlink() || data.parent().is_some_and(|parent| parent.is_symlink()) {
+        bail!("Plugin data directory is redirected");
+    }
+    if server.transport.as_deref().unwrap_or("stdio") == "stdio" {
+        fs::create_dir_all(&data)?;
+    }
+    let plugin_data = if cfg!(windows) {
+        data.to_string_lossy().replace('\\', "/")
+    } else {
+        data.to_string_lossy().into_owned()
+    };
+    let expand = |raw: &str| -> Result<String> {
+        let result = crate::compat_helpers::expand_env_vars_with(raw, |key| {
+            match key {
+                "ATLAS_PLUGIN_ROOT" | "CLAUDE_PLUGIN_ROOT" => Some(plugin_root.clone()),
+                "ATLAS_PLUGIN_DATA" | "CLAUDE_PLUGIN_DATA" => Some(plugin_data.clone()),
+                _ => std::env::var(key).ok(),
+            }
+        });
+        if !result.missing_vars.is_empty() {
+            bail!("Plugin MCP {} is missing environment variables: {}",
+                server.id, result.missing_vars.join(", "));
+        }
+        Ok(result.expanded)
+    };
+    match server.transport.as_deref().unwrap_or("stdio") {
+        "stdio" => {
+            server.command = expand(&server.command)?;
+            server.args = server.args.iter().map(|arg| expand(arg))
+                .collect::<Result<Vec<_>>>()?;
+            server.env = server.env.iter()
+                .map(|(key, value)| Ok((key.clone(), expand(value)?)))
+                .collect::<Result<_>>()?;
+            server.env.insert("ATLAS_PLUGIN_ROOT".into(), plugin_root);
+            server.env.insert("ATLAS_PLUGIN_DATA".into(), plugin_data);
+        }
+        "http" | "sse" | "ws" => {
+            if let Some(url) = &server.url {
+                server.url = Some(expand(url)?);
+            }
+            server.headers = server.headers.iter()
+                .map(|(key, value)| Ok((key.clone(), expand(value)?)))
+                .collect::<Result<_>>()?;
+        }
+        _ => {}
+    }
+    Ok(server)
 }
 
 /// Validate an unpacked plugin before installing it. The original loader
@@ -279,7 +365,12 @@ impl PluginSet {
                 hook.plugin_root = Some(location.clone());
                 set.hooks.push(hook);
             }
-            for mut server in manifest_servers(&location, &manifest.mcp_servers)? {
+            for server in manifest_servers(&location, &manifest.mcp_servers)? {
+                // A single unconfigured MCP server must not prevent other
+                // tools, skills and hooks in this plugin from loading.
+                let Ok(mut server) = resolve_plugin_mcp_server(&location, name, server) else {
+                    continue;
+                };
                 server.id = format!("{}_{}", name, server.id);
                 if server.id.len() > 64 {
                     bail!("Plugin MCP tool prefix too long")
