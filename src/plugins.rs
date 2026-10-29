@@ -16,6 +16,8 @@ struct Manifest {
     hooks: Value,
     #[serde(default, alias = "mcpServers")]
     mcp_servers: Value,
+    #[serde(default)]
+    skills: Value,
 }
 
 fn checked_component(root: &Path, path: &Path) -> Result<PathBuf> {
@@ -38,6 +40,7 @@ fn read_manifest(root: &Path, fallback: &str) -> Result<Manifest> {
         return Ok(Manifest {
             name: fallback.to_owned(), version: None,
             hooks: Value::Null, mcp_servers: Value::Null,
+            skills: Value::Null,
         });
     };
     let path = checked_component(root, &path)?;
@@ -274,18 +277,52 @@ impl PluginSet {
         Ok(set)
     }
 }
-pub fn list_skills(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
-    let mut names = Vec::new();
-    for name in enabled {
-        let plugin_root = directory(root, name)?;
-        let dir = plugin_root.join("skills");
-        if !dir.is_dir() {
+/// pluginLoader.ts::createPluginFromPath accepts manifest.skills as a
+/// relative directory (or array of directories), overriding the default
+/// skills/ directory. Keep every resolved directory inside this plugin.
+fn skill_roots(plugin_root: &Path, manifest: &Manifest) -> Result<Vec<PathBuf>> {
+    let paths: Vec<String> = match &manifest.skills {
+        Value::Null => vec!["skills".into()],
+        Value::String(path) => vec![path.clone()],
+        Value::Array(paths) => paths.iter().map(|path| path.as_str()
+            .map(str::to_owned).context("Plugin skill path must be a string"))
+            .collect::<Result<Vec<_>>>()?,
+        _ => bail!("Plugin skills must be a relative path or array of paths"),
+    };
+    let mut roots = Vec::new();
+    for path in paths {
+        let target = plugin_root.join(&path);
+        if !target.exists() {
+            if manifest.skills.is_null() {
+                continue;
+            }
+            bail!("Plugin skills directory does not exist: {path}")
+        }
+        let target = checked_component(plugin_root, &target)?;
+        if !target.is_dir() {
+            bail!("Plugin skills path must be a directory: {path}")
+        }
+        if !roots.contains(&target) {
+            roots.push(target);
+        }
+    }
+    Ok(roots)
+}
+
+fn skill_files(plugin_root: &Path, manifest: &Manifest) -> Result<Vec<(String, PathBuf)>> {
+    let mut files = std::collections::BTreeMap::new();
+    for root in skill_roots(plugin_root, manifest)? {
+        // A custom manifest path may point directly to one skill directory.
+        if root.join("SKILL.md").is_file() {
+            let name = root.file_name().and_then(|name| name.to_str())
+                .context("Invalid skill directory name")?;
+            if valid_name(name) {
+                let file = checked_component(plugin_root, &root.join("SKILL.md"))?;
+                files.insert(name.to_owned(), file);
+            }
             continue;
         }
-        if !dir.canonicalize()?.starts_with(&plugin_root) {
-            bail!("Plugin skills directory leaves plugin root")
-        }
-        for entry in fs::read_dir(dir)? {
+        for entry in fs::read_dir(&root)? {
             let entry = entry?;
             let skill = entry.file_name().to_string_lossy().to_string();
             if !valid_name(&skill) {
@@ -293,14 +330,21 @@ pub fn list_skills(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
             }
             let path = entry.path().join("SKILL.md");
             if path.is_file() {
-                // Discovery and read_skill must enforce the same plugin
-                // boundary. A link into another installed plugin could
-                // otherwise appear in the list but fail when opened.
-                if !path.canonicalize()?.starts_with(&plugin_root) {
-                    bail!("Plugin skill path leaves plugin root")
-                }
-                names.push(format!("{name}:{skill}"));
+                let file = checked_component(plugin_root, &path)?;
+                files.insert(skill, file);
             }
+        }
+    }
+    Ok(files.into_iter().collect())
+}
+
+pub fn list_skills(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    for name in enabled {
+        let plugin_root = directory(root, name)?;
+        let manifest = read_manifest(&plugin_root, name)?;
+        for (skill, _) in skill_files(&plugin_root, &manifest)? {
+            names.push(format!("{name}:{skill}"));
         }
     }
     names.sort();
@@ -313,15 +357,11 @@ pub fn read_skill(root: &Path, enabled: &[String], identifier: &str) -> Result<S
     if !valid_name(skill) || !enabled.iter().any(|n| n == name) {
         bail!("Plugin skill not enabled")
     }
-    let dir = directory(root, name)?;
-    let path = dir
-        .join("skills")
-        .join(skill)
-        .join("SKILL.md")
-        .canonicalize()?;
-    if !path.starts_with(&dir) {
-        bail!("Plugin skill path leaves plugin root")
-    }
+    let plugin_root = directory(root, name)?;
+    let manifest = read_manifest(&plugin_root, name)?;
+    let path = skill_files(&plugin_root, &manifest)?
+        .into_iter().find(|(candidate, _)| candidate == skill)
+        .map(|(_, path)| path).context("Plugin skill not found")?;
     if fs::metadata(&path)?.len() > 64_000 {
         bail!("Plugin skill too large")
     }
