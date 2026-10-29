@@ -21,6 +21,7 @@ mod gemini_sse;
 mod generated_ports;
 mod git_config_parser;
 mod git_ignore;
+mod git_filesystem;
 mod history;
 mod hooks;
 mod in_memory_mailbox;
@@ -184,6 +185,8 @@ enum Commands {
         #[arg(long)]
         git_dir: Option<PathBuf>,
     },
+    /// Inspect Git HEAD, branch and worktree state without contacting a remote
+    GitState,
     /// Check Git ignore status, or explicitly append a global ignore rule
     GitIgnore {
         pattern: String,
@@ -256,7 +259,9 @@ async fn main() -> Result<()> {
             git_dir,
         } => {
             let root = canonical_workspace(&cli.workspace)?;
-            let directory = git_dir.clone().unwrap_or_else(|| root.join(".git"));
+            let directory = git_dir.clone().unwrap_or_else(|| {
+                git_filesystem::resolve_git_dir(&root).unwrap_or_else(|| root.join(".git"))
+            });
             let result = git_config_parser::parse_git_config_value(
                 &directory,
                 section,
@@ -267,6 +272,30 @@ async fn main() -> Result<()> {
                 Some(value) => println!("{value}"),
                 None => println!("(not found)"),
             }
+            return Ok(());
+        }
+        Commands::GitState => {
+            let root = canonical_workspace(&cli.workspace)?;
+            let state = git_filesystem::snapshot(&root);
+            let remote = state
+                .remote_url
+                .as_deref()
+                .and_then(detect_repository::parse_git_remote);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "branch":state.branch,
+                    "head":state.head,
+                    "default_branch":state.default_branch,
+                    "shallow":state.shallow,
+                    "worktree_count":state.worktree_count,
+                    "remote":remote.map(|repo| json!({
+                        "host":repo.host,
+                        "owner":repo.owner,
+                        "name":repo.name
+                    }))
+                }))?
+            );
             return Ok(());
         }
         Commands::GitIgnore {
