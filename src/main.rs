@@ -57,6 +57,7 @@ mod search;
 mod semantic_inputs;
 mod session;
 mod session_control;
+mod transcript_search;
 mod shell_quote;
 mod shell_runtime;
 mod skill_arguments;
@@ -199,6 +200,8 @@ enum Commands {
     },
     /// List saved conversations in the current workspace
     Sessions { query: Option<String> },
+    /// Search visible content of a saved conversation, without a model
+    TranscriptSearch { session_id: String, query: String },
     /// Give an existing conversation a persisted custom title
     Rename { session_id: String, title: String },
     /// Export a saved conversation, including tool activity
@@ -333,13 +336,20 @@ async fn main() -> Result<()> {
     }
     if matches!(
         &cli.command,
-        Commands::Sessions { .. } | Commands::Rename { .. } | Commands::Export { .. }
+        Commands::Sessions { .. } | Commands::Rename { .. } | Commands::Export { .. } | Commands::TranscriptSearch { .. }
     ) {
         let root = canonical_workspace(&cli.workspace)?;
         match &cli.command {
             Commands::Sessions { query } => {
                 for item in session_control::search(&root, query.as_deref().unwrap_or(""))? {
                     println!("{}  {}  ({} messages)", item.id, item.title, item.messages);
+                }
+                return Ok(());
+            }
+            Commands::TranscriptSearch { session_id, query } => {
+                let session = session_control::resolve(&root, session_id)?;
+                for hit in transcript_search::TranscriptIndex::from_stored(&session.messages).find(query) {
+                    println!("{}  {}  {}", hit.message_index, hit.role, hit.excerpt);
                 }
                 return Ok(());
             }
@@ -523,6 +533,17 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             }
             continue;
         }
+        if input == "/find" || input.starts_with("/find ") {
+            let query = input.strip_prefix("/find").unwrap_or("").trim();
+            if query.is_empty() {
+                eprintln!("Usage: /find TEXT");
+            } else {
+                for hit in agent.search_transcript(query) {
+                    println!("{}  {}  {}", hit.message_index, hit.role, hit.excerpt);
+                }
+            }
+            continue;
+        }
         if input == "/history" || input.starts_with("/history ") {
             let query = input
                 .strip_prefix("/history")
@@ -560,6 +581,8 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("/session                 show resumable session id");
                 println!("/status                  show live session, model, permissions and MCP status");
                 println!("/history [query]         search saved prompt history");
+                println!("/find TEXT               search visible messages in this conversation");
+                println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
                 println!("/sessions [query]        search saved conversation titles");
                 println!("/resume TERM             find session, show restart command");
