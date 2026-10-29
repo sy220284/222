@@ -163,7 +163,9 @@ fn read_topic_preview(path: &Path) -> Result<(String, usize)> {
     let capped = &bytes[..bytes.len().min(MAX_PER_TOPIC_BYTES)];
     let valid_end = match std::str::from_utf8(capped) {
         Ok(_) => capped.len(),
-        Err(error) if error.error_len().is_none() => error.valid_up_to(),
+        // A cut in the middle of a UTF-8 scalar is expected only when
+        // the byte budget truncated an otherwise valid memory file.
+        Err(error) if byte_truncated && error.error_len().is_none() => error.valid_up_to(),
         Err(error) => return Err(error.into()),
     };
     let content = std::str::from_utf8(&capped[..valid_end])?;
