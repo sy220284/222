@@ -200,7 +200,7 @@ impl Agent {
     }
 
     pub async fn attach_hooks(&mut self, rules: &[HookRule]) -> Result<()> {
-        self.hooks = HookRunner::new(rules)?;
+        self.hooks = HookRunner::new(rules)?.with_workspace(self.root.clone());
         self.hook_rules = rules.to_vec();
         let result = self
             .hooks
