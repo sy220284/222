@@ -3410,12 +3410,14 @@ done"#;
             self.seen.lock().unwrap().push(request.messages.clone());
             let step = self.next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let call = if self.send && step == 0 {
-                assert!(request.tools.iter().any(|tool| {
-                    tool["function"]["name"] == "ToolSearch"
-                }));
-                assert!(!request.tools.iter().any(|tool| {
-                    tool["function"]["name"] == "SendMessage"
-                }));
+                assert!(request
+                    .tools
+                    .iter()
+                    .any(|tool| { tool["function"]["name"] == "ToolSearch" }));
+                assert!(!request
+                    .tools
+                    .iter()
+                    .any(|tool| { tool["function"]["name"] == "SendMessage" }));
                 Some(crate::protocol::ToolCall {
                     id: "search-1".into(),
                     kind: "function".into(),
@@ -3425,12 +3427,17 @@ done"#;
                     },
                 })
             } else if self.send && step == 1 {
-                assert!(request.tools.iter().any(|tool| {
-                    tool["function"]["name"] == "SendMessage"
-                }));
+                assert!(request
+                    .tools
+                    .iter()
+                    .any(|tool| { tool["function"]["name"] == "SendMessage" }));
                 assert!(request.messages.iter().any(|message| {
                     message.role == "tool"
-                        && message.content.as_deref().unwrap_or("").contains("SendMessage")
+                        && message
+                            .content
+                            .as_deref()
+                            .unwrap_or("")
+                            .contains("SendMessage")
                 }));
                 Some(crate::protocol::ToolCall {
                     id: "send-1".into(),
