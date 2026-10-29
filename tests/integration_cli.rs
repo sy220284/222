@@ -2392,3 +2392,42 @@ done"#;
     assert!(request.contains("Use safe checks"),"{request}");
     assert!(!request.contains("/docs:review (MCP)"),"{request}");
 }
+
+#[test]
+fn chat_additional_directory_requires_confirmation_and_persists_only_when_requested() {
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let external=tempfile::tempdir().unwrap();
+    let folder=external.path().join("folder with spaces");
+    fs::create_dir(&folder).unwrap();
+    let approved=folder.canonicalize().unwrap();
+    let config=root.path().join("outside-config.json");
+    fs::write(&config,json!({
+        "default_provider":"local",
+        "providers":[{"id":"local","kind":"openai-compatible",
+            "base_url":"http://127.0.0.1:9/v1","model":"offline"}]
+    }).to_string()).unwrap();
+    let run=|instructions:String|{
+        let mut child=binary()
+            .args(["--workspace",root.path().to_str().unwrap(),"chat"])
+            .env("ATLAS_CONFIG",&config)
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+            .spawn().unwrap();
+        let mut stdin=child.stdin.take().unwrap();
+        stdin.write_all(instructions.as_bytes()).unwrap();
+        drop(stdin);
+        let output=child.wait_with_output().unwrap();
+        assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let rejected=run(format!("/add-dir {}\nn\n/dirs\n/exit\n",approved.display()));
+    assert!(rejected.contains("Did not add"),"{rejected}");
+    assert!(!serde_json::from_str::<Value>(&fs::read_to_string(&config).unwrap()).unwrap()
+        .as_object().unwrap().contains_key("additional_directories"));
+    let accepted=run(format!("/add-dir {} --remember\ny\n/dirs\n/exit\n",approved.display()));
+    assert!(accepted.contains("saved to local settings"),"{accepted}");
+    let saved:Value=serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+    assert_eq!(saved["additional_directories"][0],approved.to_str().unwrap());
+    let resumed=run("/dirs\n/exit\n".to_string());
+    assert!(resumed.contains(approved.to_str().unwrap()),"{resumed}");
+}
