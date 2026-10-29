@@ -144,6 +144,7 @@ fn canonical_hook_tool(name: &str) -> &str {
         "Read" => "read_file",
         "Write" => "write_file",
         "Edit" => "edit_file",
+        "spawn_agent" | "spawn_team" | "Agent" => "Agent",
         other => crate::tool_names::canonical_name(other),
     }
 }
@@ -161,6 +162,7 @@ fn source_hook_tool(name: &str) -> Option<&'static str> {
         "task_output" => Some("TaskOutput"),
         "task_stop" => Some("TaskStop"),
         "notebook_edit" => Some("NotebookEdit"),
+        "Agent" => Some("Agent"),
         _ => None,
     }
 }
@@ -1100,6 +1102,17 @@ mod tests {
         assert!(result.prevent_continuation);
         assert!(result.blocking_reason.is_none());
         assert!(result.permission_decision.is_none());
+    }
+    #[test]
+    fn agent_tool_hooks_match_the_reachable_rust_spawn_entrypoints() {
+        // Agent::ask calls HookRunner::before_tool_with_context before
+        // dispatching spawn_agent/spawn_team; source matchers use "Agent".
+        for name in ["spawn_agent", "spawn_team"] {
+            assert!(HookMatcher::compile(Some("Agent")).matches(Some(name)));
+            assert!(HookMatcher::compile(Some("^Agent$")).matches(Some(name)));
+            assert!(HookMatcher::compile(Some("Task")).matches(Some(name)));
+            assert!(HookMatcher::compile(Some("^Task$")).matches(Some(name)));
+        }
     }
     #[test]
     fn validates_hook_configuration() {
