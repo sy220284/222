@@ -420,17 +420,25 @@ impl ToolExecutor {
                 let name = entry.file_name().to_string_lossy().to_string();
                 if !valid_skill_name(&name) { continue; }
                 let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
-                if path.is_file() { skills.push(name); }
+                if path.is_file() && self.search_read_allowed(&path)? { skills.push(name); }
             }
         }
-        skills.extend(plugins::list_skills(&self.root,&self.enabled_plugins)?);
+        for name in plugins::list_skills(&self.root,&self.enabled_plugins)?{
+            let (plugin,skill)=name.split_once(':').context("Invalid plugin skill identity")?;
+            let raw=format!(".atlas/plugins/{plugin}/skills/{skill}/SKILL.md");
+            let path=self.checked_path(&raw)?;
+            if self.search_read_allowed(&path)? { skills.push(name); }
+        }
         skills.sort();
         Ok(skills.join("\n"))
     }
 
     fn read_skill(&self, args: &Value) -> Result<String> {
         let name = required(args, "name")?;
-        let content=if name.contains(':'){
+        let content=if let Some((plugin,skill))=name.split_once(':'){
+            let raw=format!(".atlas/plugins/{plugin}/skills/{skill}/SKILL.md");
+            let path=self.checked_path(&raw)?;
+            self.require_read_rules(&raw,&path)?;
             plugins::read_skill(&self.root,&self.enabled_plugins,name)?
         }else{
             if !valid_skill_name(name) { bail!("Invalid skill name") }
@@ -745,6 +753,32 @@ mod tests {
         let listed=tool.execute(&call("list_files",json!({}))).await;
         assert!(listed.contains("public.txt"),"{listed}");
         assert!(!listed.contains("key.txt"),"{listed}");
+    }
+    #[tokio::test]
+    async fn read_deny_also_covers_local_skill_listing_and_loading(){
+        let root=tempfile::tempdir().unwrap();
+        let skills=root.path().join(".atlas/skills");
+        fs::create_dir_all(skills.join("private")).unwrap();
+        fs::create_dir_all(skills.join("public")).unwrap();
+        fs::write(skills.join("private/SKILL.md"),"private-instructions").unwrap();
+        fs::write(skills.join("public/SKILL.md"),"public-instructions").unwrap();
+        let rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{behavior:"deny".into(),
+                rule:"Read(.atlas/skills/private/**)".into()},
+        ]).unwrap();
+        let tool=executor(root.path(),Approval::Full).with_permission_rules(rules);
+        let call=|name:&str,args:Value|ToolCall{
+            id:"skill".into(),kind:"function".into(),
+            function:FunctionCall{name:name.into(),arguments:args.to_string()},
+        };
+        let names=tool.execute(&call("list_skills",json!({}))).await;
+        assert!(names.contains("public"),"{names}");
+        assert!(!names.contains("private"),"{names}");
+        let denied=tool.execute(&call("read_skill",json!({"name":"private"}))).await;
+        assert!(denied.contains("explicit permission rule"),"{denied}");
+        assert!(!denied.contains("private-instructions"));
+        let allowed=tool.execute(&call("read_skill",json!({"name":"public"}))).await;
+        assert!(allowed.contains("public-instructions"),"{allowed}");
     }
     #[test]
     fn webfetch_domain_deny_is_enforced_before_network_even_in_full_mode(){
