@@ -55,6 +55,7 @@ impl Accumulator{
             message:Message{
                 role:"assistant".into(),
                 content:if self.text.is_empty(){None}else{Some(self.text)},
+                content_blocks:None,
                 tool_calls:if self.calls.is_empty(){None}else{Some(self.calls)},
                 tool_call_id:None
             },

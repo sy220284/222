@@ -946,12 +946,18 @@ impl Agent {
         self.session.save(&self.root)
     }
 
-    pub async fn ask(&mut self, prompt: &str) -> Result<String> {
+    pub async fn ask(&mut self,prompt:&str)->Result<String>{
+        self.ask_with_blocks(prompt,None).await
+    }
+    pub async fn ask_with_blocks(&mut self,prompt:&str,
+        blocks:Option<Vec<serde_json::Value>>)->Result<String>{
         let ask_started=Instant::now();
-        if prompt.trim().is_empty() { bail!("Prompt cannot be empty") }
-        // Expand only explicitly marked MCP commands. A failed resource/prompt
-        // request must not fall through to the normal provider as raw syntax.
-        let expansion=self.expand_mcp_prompt_command(prompt).await?;
+        if prompt.trim().is_empty(){bail!("Prompt cannot be empty")}
+        // MCP prompts are explicit text commands, never inferred from
+        // structured multimodal SDK content.
+        let expansion=if blocks.is_none(){
+            self.expand_mcp_prompt_command(prompt).await?
+        }else{None};
         let prompt=expansion.as_deref().unwrap_or(prompt);
         let history_chars: usize = self.session.messages.iter()
             .map(|m| m.content.as_deref().unwrap_or("").len()
@@ -969,7 +975,9 @@ impl Agent {
         } else {
             format!("{prompt}\n\n[Local hook context]\n{}", pre_prompt.additional_context.join("\n"))
         };
-        self.session.messages.push(Message::text("user", &prompt));
+        let mut user_message=Message::text("user",&prompt);
+        user_message.content_blocks=blocks;
+        self.session.messages.push(user_message);
         self.session.save(&self.root)?;
         let mut system = system_prompt(&self.root)?;
         if let Some(summary) = &self.session.summary {
@@ -1434,7 +1442,7 @@ mod tests {
                 };
                 return Ok(crate::protocol::ModelResponse{
                     message:Message{
-                        role:"assistant".into(),content:None,
+                        role:"assistant".into(),content:None,content_blocks:None,
                         tool_calls:Some(vec![call]),tool_call_id:None
                     },
                     finish_reason:Some("tool_calls".into()),usage:None

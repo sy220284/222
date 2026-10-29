@@ -13,6 +13,7 @@ mod xml_escape;
 mod json_read;
 mod slash_command;
 mod mcp_prompt;
+mod multimodal;
 mod hooks;
 mod worktree;
 mod mcp;
@@ -380,11 +381,10 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                         "revision":queue.revision(),"length":queue.len()}));
                     continue;
                 }
-                // The SDK accepts structured user content. This text-only
-                // Agent flattens valid text blocks and rejects unsupported
-                // blocks explicitly instead of silently dropping them.
-                let prompt=match sdk_queue::text_only_value(prompt_value){
-                    Ok(prompt)=>prompt,
+                // Preserve and validate SDK text/image blocks before routing
+                // to a provider. Never silently flatten away image payloads.
+                let user=match multimodal::parse(prompt_value){
+                    Ok(user)=>user,
                     Err(error)=>{
                         print_json!(json!({"type":"error",
                             "message":format!("Unsupported user content: {error:#}")}));
@@ -400,7 +400,7 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                         sdk_queue::emit_user_replay(prompt_value,uuid,&agent.session_id());
                     }
                 }
-                match agent.ask(&prompt).await{
+                match agent.ask_with_blocks(&user.preview,user.blocks).await{
                     Ok(answer)=>print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
                         "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()

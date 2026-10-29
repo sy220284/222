@@ -99,8 +99,7 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                     Mode::Bash=>Some("bash"),
                     Mode::OrphanedPermission=>Some("permission"),
                     _ if next.command.is_slash()=>Some("slash-command"),
-                    _ if next.command.contains_image()=>Some("multimodal"),
-                    _ if text_only_value(&next.command.value).is_err()=>Some("unsupported-content"),
+                    _ if crate::multimodal::parse(&next.command.value).is_err()=>Some("unsupported-content"),
                     _=>None,
                 };
                 if let Some(reason)=reason {
@@ -127,8 +126,9 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                     let Some(candidate)=candidate else{break};
                     if !queued_prompt_batch::can_batch_with(
                         &batch[0].command,Some(&candidate.command))
+                        || batch[0].command.contains_image()
                         || candidate.command.is_slash() || candidate.command.contains_image()
-                    || text_only_value(&candidate.command.value).is_err(){
+                    || crate::multimodal::parse(&candidate.command.value).is_err(){
                         break;
                     }
                     let follower=queue.dequeue(|c|c.agent_id.is_none() &&
@@ -138,9 +138,10 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                 }
                 let joined=queued_prompt_batch::join_prompt_values(
                     &batch.iter().map(|i|i.command.value.clone()).collect::<Vec<_>>());
-                // Validate every content block before removal; never flatten
-                // unknown structured blocks into an incomplete model prompt.
-                let prompt=text_only_value(&joined)?;
+                // Content is validated before dequeue; retain image blocks
+                // through real provider wire conversion and session persistence.
+                let structured=crate::multimodal::parse(&joined)?;
+                let prompt=structured.preview;
                 if next.command.mode==Mode::TaskNotification{
                     if let Some(notification)=parse_task_notification(&prompt,&agent.session_id()){
                         println!("{}",crate::ndjson::stringify_value(&notification));
@@ -154,7 +155,7 @@ pub async fn control(action:&str,request:&Value,queue:&mut Queue,
                         }
                     }
                 }
-                let answer=agent.ask(&prompt).await;
+                let answer=agent.ask_with_blocks(&prompt,structured.blocks).await;
                 let ended=guard.end(generation);
                 if !ended{bail!("Query generation changed during execution")}
                 processed+=batch.len();

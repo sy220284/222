@@ -28,6 +28,22 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
     }
 }
 
+/// Serialize session messages to provider-native blocks without leaking the
+/// internal persisted content_blocks attribute to an OpenAI-compatible API.
+pub(crate) fn openai_messages(request:&ModelRequest)->Result<Vec<Value>>{
+    let mut messages=Vec::with_capacity(request.messages.len()+1);
+    for msg in std::iter::once(Message::text("system",&request.system))
+        .chain(request.messages.iter().cloned()){
+        let mut wire=serde_json::to_value(&msg)?;
+        if let Some(blocks)=msg.content_blocks.as_deref(){
+            wire["content"]=json!(crate::multimodal::openai(blocks)?);
+            if let Some(map)=wire.as_object_mut(){map.remove("content_blocks");}
+        }
+        messages.push(wire);
+    }
+    Ok(messages)
+}
+
 struct OpenAiCompatible {
     client: Client,
     base_url: String,
@@ -37,9 +53,8 @@ struct OpenAiCompatible {
 #[async_trait]
 impl ModelProvider for OpenAiCompatible {
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
-        let mut messages = vec![Message::text("system", &request.system)];
-        messages.extend_from_slice(&request.messages);
-        let mut body = json!({"model":request.model,"messages":messages});
+        let mut body = json!({"model":request.model,
+            "messages":openai_messages(request)?});
         if !request.tools.is_empty() {
             body["tools"] = json!(request.tools);
             body["tool_choice"] = json!("auto");
@@ -99,7 +114,13 @@ fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
                 let name = names.get(id).context("Tool response has no matching call")?;
                 vec![json!({"functionResponse":{"name":name,"response":{"content":msg.content}}})]
             }
-            _ => vec![json!({"text":msg.content.as_deref().unwrap_or("")})],
+            _ => {
+                if let Some(blocks)=msg.content_blocks.as_deref(){
+                    crate::multimodal::gemini(blocks)?
+                }else{
+                    vec![json!({"text":msg.content.as_deref().unwrap_or("")})]
+                }
+            },
         };
         if parts.is_empty() { continue; }
         contents.push(json!({"role": if msg.role == "assistant" {"model"} else {"user"}, "parts":parts}));
@@ -166,6 +187,7 @@ impl ModelProvider for Gemini {
             message: Message {
                 role: "assistant".into(),
                 content: if texts.is_empty() { None } else { Some(texts.join("\n")) },
+                content_blocks:None,
                 tool_calls: if calls.is_empty() { None } else { Some(calls) },
                 tool_call_id: None,
             },
@@ -233,6 +255,25 @@ fn error_summary(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn provider_adapters_preserve_user_image_blocks_and_keep_roles(){
+        let parsed=crate::multimodal::parse(&json!([
+            {"type":"text","text":"What is in this photo?"},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"AQID"}}
+        ])).unwrap();
+        let mut message=Message::text("user",parsed.preview);
+        message.content_blocks=parsed.blocks;
+        let req=ModelRequest{model:"vision".into(),system:"Be precise".into(),
+            messages:vec![message],tools:vec![]};
+        let openai=openai_messages(&req).unwrap();
+        assert_eq!(openai[0]["role"],"system");
+        assert_eq!(openai[1]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,AQID");
+        assert!(openai[1].get("content_blocks").is_none());
+        let gemini=gemini_request_body(&req).unwrap();
+        assert_eq!(gemini["contents"][0]["parts"][1]["inlineData"]["mimeType"],"image/png");
+        assert_eq!(gemini["contents"][0]["parts"][1]["inlineData"]["data"],"AQID");
+    }
     #[test]
     fn gemini_stream_and_nonstream_use_identical_request_body() {
         let request=ModelRequest{

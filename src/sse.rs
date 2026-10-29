@@ -76,6 +76,7 @@ impl Assembler{
         Ok(ModelResponse{
             message:Message{role:"assistant".into(),
                 content:if self.content.is_empty(){None}else{Some(self.content)},
+                content_blocks:None,
                 tool_calls:if calls.is_empty(){None}else{Some(calls)},
                 tool_call_id:None,
             },
@@ -113,9 +114,8 @@ pub async fn complete(
     request:&ModelRequest,
     deltas:UnboundedSender<String>,
 )->Result<ModelResponse>{
-    let mut messages=vec![Message::text("system",&request.system)];
-    messages.extend_from_slice(&request.messages);
-    let mut body=json!({"model":request.model,"messages":messages,
+    let mut body=json!({"model":request.model,
+        "messages":crate::provider::openai_messages(request)?,
         "stream":true,"stream_options":{"include_usage":true}});
     if !request.tools.is_empty(){
         body["tools"]=json!(request.tools);

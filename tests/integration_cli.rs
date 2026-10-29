@@ -2431,3 +2431,70 @@ fn chat_additional_directory_requires_confirmation_and_persists_only_when_reques
     let resumed=run("/dirs\n/exit\n".to_string());
     assert!(resumed.contains(approved.to_str().unwrap()),"{resumed}");
 }
+
+#[test]
+fn sdk_multimodal_direct_and_queued_messages_reach_model_and_survive_session_restore(){
+    use std::process::Stdio;
+    let dir=tempfile::tempdir().unwrap();
+    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr=listener.local_addr().unwrap();
+    let server=thread::spawn(move||{
+        let mut requests=Vec::new();
+        for turn in 0..2{
+            let (mut socket,_)=listener.accept().unwrap();
+            let request=read_request(&mut socket);
+            requests.push(request);
+            let response=json!({"choices":[{"message":{"role":"assistant",
+                "content":if turn==0{"direct image ok"}else{"queued image ok"}},
+                "finish_reason":"stop"}]}).to_string();
+            write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(),response).unwrap();
+            socket.flush().unwrap();
+        }
+        requests
+    });
+    let config=dir.path().join("models.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"vision-test",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let image=||json!({"type":"image","source":{
+        "type":"base64","media_type":"image/png","data":"AQID"
+    }});
+    let direct=json!({"type":"user","content":[
+        {"type":"text","text":"Describe direct picture"},image()
+    ]});
+    let queued=json!({"type":"control","action":"queue_enqueue",
+        "command":{"value":[{"type":"text","text":"Describe queued picture"},image()],
+            "mode":"prompt","priority":"next"}});
+    let drain=json!({"type":"control","action":"queue_drain","max_priority":"next"});
+    let mut child=binary().args(["--workspace",dir.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut stdin=child.stdin.take().unwrap();
+        for event in [direct,queued,drain]{writeln!(stdin,"{event}").unwrap()}
+    }
+    let output=child.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let wire=String::from_utf8(output.stdout).unwrap();
+    assert!(wire.contains("direct image ok"),"{wire}");
+    assert!(wire.contains("queued image ok"),"{wire}");
+    let requests=server.join().unwrap();
+    assert_eq!(requests.len(),2);
+    for request in &requests {
+        let lower=request.to_ascii_lowercase();
+        assert!(lower.contains("data:image/png;base64,aqid"),"{request}");
+        assert!(request.contains("image_url"),"{request}");
+        assert!(!request.contains("content_blocks"),"{request}");
+    }
+    assert!(requests[0].contains("Describe direct picture"));
+    assert!(requests[1].contains("Describe queued picture"));
+    let session_dir=dir.path().join(".atlas/sessions");
+    let paths=fs::read_dir(session_dir).unwrap().collect::<Vec<_>>();
+    assert_eq!(paths.len(),1);
+    let saved=fs::read_to_string(paths[0].as_ref().unwrap().path()).unwrap();
+    assert!(saved.contains("content_blocks"));
+    assert!(saved.contains("AQID"));
+    assert!(saved.contains("Describe queued picture"));
+}

@@ -267,3 +267,7 @@ MCP SDK 新增 `mcp_resource_subscribe`、`mcp_resource_unsubscribe`（均需 `s
 ### MCP Prompt 命令
 
 在 `chat` 终端中输入 `/mcp-prompts` 显示已连接 MCP 服务的 Prompt，或执行 `/服务器名:Prompt名称 (MCP) 参数1 参数2`。SDK 的 `user.content` 也接受同样命令，`mcp_prompt_commands`（平铺 `action` 或嵌套 `subtype`）返回命令名称、可见名称、描述及参数名。仅用户显式调用，服务端文本作为普通用户上下文交给配置的模型；不支持的图片、音频或嵌入资源会明确报错。
+
+### SDK 图像输入（文本 + 图片）
+
+SDK `type=user` 的 `content` 接受文本或内容块数组；图片块格式为 `{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AQID"}}`。支持 PNG/JPEG/WebP/GIF，不在文本日志输出原始图片数据；OpenAI 兼容模型通过 data URI `image_url` 发送，Gemini 通过 `inlineData` 发送，流式与非流式共用转换。用户消息和会话文件保留图片块；SDK `queue_enqueue` + `queue_drain` 也支持有效图片输入，图片项单独调用模型而不丢块。远程 URL 图片、PDF、音频等尚未实现，输入不支持时明确报错。

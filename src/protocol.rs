@@ -19,6 +19,10 @@ pub struct Message {
     pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    /// SDK multimodal content, stored durably in sessions and translated
+    /// into each model provider's native content blocks at the wire boundary.
+    #[serde(default,skip_serializing_if = "Option::is_none")]
+    pub content_blocks: Option<Vec<serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -27,13 +31,14 @@ pub struct Message {
 
 impl Message {
     pub fn text(role: &str, content: impl Into<String>) -> Self {
-        Self { role: role.to_owned(), content: Some(content.into()), tool_calls: None, tool_call_id: None }
+        Self { role: role.to_owned(), content: Some(content.into()), content_blocks:None, tool_calls: None, tool_call_id: None }
     }
 
     pub fn tool_result(call: &ToolCall, content: String) -> Self {
         Self {
             role: "tool".into(),
             content: Some(content),
+            content_blocks:None,
             tool_calls: None,
             tool_call_id: Some(call.id.clone()),
         }

@@ -294,3 +294,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ## 2026-10-29：按功能地图推进 /add-dir 工作目录授权
 
 对照原版 `src/commands/add-dir/validation.ts`、`index.ts`、`add-dir.tsx` 和目录权限判定，新增 Rust 目录校验、路径边界与符号链接检查，接入 CLI `/add-dir PATH [--remember]` 用户确认、`/dirs` 查询、文件工具读写、搜索、检查点及配置文件原子持久化，启动恢复已保存的额外目录。原版 JSX 表单、沙箱刷新、SDK 跨入口和团队子代理继承权限仍缺，因此 3 条原路径由未迁移改为部分实现，未提升已验收数。
+
+### 2026-10-29：SDK 文本与图片混合消息贯通到多模型及会话（Issue #3）
+
+对照原始 2.1.88 SDK/Headless 用户消息数组、模型请求和消息恢复路径：新增 `src/multimodal.rs`，验证 image/png、jpeg、gif、webp 的本地 base64 图片，限制大小/数量，拒绝远程 URL、未知块及无效编码，不在文本预览中暴露原始 base64。`protocol::Message` 新增可选结构化块并存入既有会话，`Agent::ask_with_blocks` 让 SDK 直接消息和排队图片单项实际进入模型 API。OpenAI 兼容非流式和 SSE 分别使用同一 `image_url` data URI 转换，Gemini 非流式与流式共用 `inlineData` 转换；其他角色及工具调用不受影响。队列中的图片不会和旁边不同内容强行合批造成类型丢失，并继续保留原始 UUID 回放。新增真实 SDK 进程/模拟模型 HTTP 的直接+排队图片请求测试，同时验证原始图片块落盘及请求内容保真；另有两种模型编码适配、非法数据边界测试。当前仅支持本地 base64 图片和文本，语音、PDF、非图片资源、终端多模态 UI、全部 SDK Hook/权限/复杂附件仍未等价。本改动不升级任何已验收计数，CI 以最新提交检查结果为准。
