@@ -40,6 +40,102 @@ fn read_request(stream: &mut TcpStream) -> String {
 }
 
 #[test]
+fn model_capacity_retry_keeps_one_logical_tool_turn_and_session() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("sample.txt"), "SECRET_TOKEN_READ_ONCE\n").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for index in 0..4 {
+            let (mut stream, _) = listener.accept().unwrap();
+            requests.push(read_request(&mut stream));
+            let (status, payload) = match index {
+                0 => ("503 Service Unavailable", json!({"error":{"message":"capacity"}})),
+                1 => ("429 Too Many Requests", json!({"error":{"message":"rate limit"}})),
+                2 => ("200 OK", json!({"choices":[{"message":{
+                    "role":"assistant","content":null,"tool_calls":[{
+                        "id":"one_tool_call","type":"function","function":{
+                            "name":"read_file","arguments":"{\"path\":\"sample.txt\"}"
+                        }
+                    }]
+                },"finish_reason":"tool_calls"}]})),
+                _ => ("200 OK", json!({"choices":[{"message":{
+                    "role":"assistant","content":"Retried request completed once."
+                },"finish_reason":"stop"}]})),
+            };
+            let body = payload.to_string();
+            write!(stream,
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nRetry-After: 0\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()).unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let config = root.path().join("model.json");
+    fs::write(&config, json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"test",
+        "base_url":format!("http://{addr}/v1"),"stream":false
+    }]}).to_string()).unwrap();
+    let output = binary().args([
+        "--workspace",root.path().to_str().unwrap(),
+        "--approval","read-only","run","Inspect sample.txt"
+    ]).env("ATLAS_CONFIG",&config).output().unwrap();
+    let requests = server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout)
+        .contains("Retried request completed once."));
+    let bodies = requests.iter().map(|raw|
+        raw.split_once("\r\n\r\n").unwrap().1).collect::<Vec<_>>();
+    assert_eq!(bodies[0],bodies[1],"503 retry changed the request body");
+    assert_eq!(bodies[1],bodies[2],"429 retry changed the request body");
+    assert_eq!(bodies[3].matches("SECRET_TOKEN_READ_ONCE").count(),1,
+        "tool output must be inserted exactly once after retries");
+    assert_eq!(fs::read_to_string(root.path().join("sample.txt")).unwrap(),
+        "SECRET_TOKEN_READ_ONCE\n");
+    let session_dir = root.path().join(".atlas/sessions");
+    let session_file = fs::read_dir(session_dir).unwrap().next().unwrap().unwrap().path();
+    let session = fs::read_to_string(session_file).unwrap();
+    assert_eq!(session.matches("one_tool_call").count(),2,
+        "assistant tool call and its result must be saved once each");
+}
+
+#[test]
+fn provider_explicit_no_retry_and_invalid_request_do_not_replay() {
+    for (status, extra) in [
+        ("503 Service Unavailable","x-should-retry: false\r\n"),
+        ("400 Bad Request",""),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_request(&mut stream);
+            let body = json!({"error":{"message":"not retryable"}}).to_string();
+            write!(stream,
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()).unwrap();
+            stream.flush().unwrap();
+            request
+        });
+        let config = root.path().join("model.json");
+        fs::write(&config,json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"test",
+            "base_url":format!("http://{addr}/v1"),"stream":false
+        }]}).to_string()).unwrap();
+        let output = binary().args([
+            "--workspace",root.path().to_str().unwrap(),"run","Try model"
+        ]).env("ATLAS_CONFIG",&config).output().unwrap();
+        let request = server.join().unwrap();
+        assert!(request.contains("Try model"));
+        assert!(!output.status.success(),"non-retryable model error unexpectedly succeeded");
+        let stderr=String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains(&status[..3]),"expected original HTTP error, got {stderr}");
+    }
+}
+
+#[test]
 fn real_http_tool_roundtrip_and_session_persistence() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("example.txt"), "hello from workspace\n").unwrap();
