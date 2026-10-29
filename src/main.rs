@@ -54,6 +54,7 @@ mod search;
 mod semantic_inputs;
 mod session;
 mod session_control;
+mod source_semantics;
 mod shell_quote;
 mod shell_runtime;
 mod skill_arguments;
@@ -160,6 +161,15 @@ enum Commands {
         #[arg(long)]
         args: Option<String>,
     },
+    /// Render ANSI-formatted text as SVG using the native Rust terminal renderer
+    RenderAnsiSvg {
+        /// Text containing ANSI escape sequences (stdin if omitted)
+        #[arg(long)]
+        text: Option<String>,
+        /// SVG rendering options JSON (fontSize, paddingX, etc.)
+        #[arg(long)]
+        options: Option<String>,
+    },
     /// Show configured providers and active default without connecting to them
     Models,
     /// Execute a single prompt; pass '-' to read the prompt from stdin
@@ -193,6 +203,22 @@ async fn main() -> Result<()> {
         println!("Created {}", path.display());
         return Ok(());
     }
+    if let Commands::RenderAnsiSvg { text, options } = &cli.command {
+        let input = match text {
+            Some(value) => value.clone(),
+            None => {
+                let mut value = String::new();
+                io::stdin().read_to_string(&mut value)?;
+                value
+            }
+        };
+        let opts = match options {
+            Some(raw) => serde_json::from_str::<Value>(raw)?,
+            None => json!({}),
+        };
+        println!("{}", source_semantics::ansi_to_svg(&input, &opts));
+        return Ok(());
+    }
     if let Commands::InspectSource {
         source,
         export,
@@ -205,7 +231,9 @@ async fn main() -> Result<()> {
                     .map_err(|err| anyhow::anyhow!("--args must be a JSON array: {err}"))?,
                 None => Vec::new(),
             };
-            match generated_ports::inspect(source, name, &args) {
+            match source_semantics::inspect(source, name, &args)
+                .or_else(|| generated_ports::inspect(source, name, &args))
+            {
                 Some(value) => {
                     if name == "view" {
                         if let Ok(tree) =
@@ -223,11 +251,21 @@ async fn main() -> Result<()> {
             }
         } else {
             let entries = generated_ports::catalog();
-            let exports = entries
+            let mut exports = entries
                 .into_iter()
                 .find(|(s, _)| *s == source)
                 .map(|(_, exports)| exports)
-                .ok_or_else(|| anyhow::anyhow!("Unknown migrated source: {source}"))?;
+                .unwrap_or_default();
+            if let Some(source_exports) = source_semantics::exports(source) {
+                for name in source_exports {
+                    if !exports.contains(name) {
+                        exports.push(*name);
+                    }
+                }
+            }
+            if exports.is_empty() {
+                bail!("Unknown migrated source: {source}");
+            }
             for name in exports {
                 println!("{name}")
             }
