@@ -391,7 +391,9 @@ async fn sdk(agent:&mut Agent,config:&Config)->Result<()>{
                     continue;
                 }
                 if matches!(action,"mcp_resources"|"mcp_prompts"|
-                    "mcp_resource_templates"|"mcp_read_resource"|"mcp_get_prompt") {
+                    "mcp_resource_templates"|"mcp_read_resource"|"mcp_get_prompt"|
+                    "mcp_resource_subscribe"|"mcp_resource_unsubscribe"|
+                    "mcp_resource_updates") {
                     let result=mcp_control_request(agent,action,&event).await;
                     match result{
                         Ok(value)=>send_control!(json!({"type":"control_response",
@@ -510,7 +512,9 @@ async fn sdk_nested_control(agent:&mut Agent,config:&Config,event:&Value,
                 Ok(json!({"mcpServers":agent.mcp_statuses()?}))
             },
             "mcp_resources"|"mcp_prompts"|"mcp_resource_templates"|
-            "mcp_read_resource"|"mcp_get_prompt"=>{
+            "mcp_read_resource"|"mcp_get_prompt"|
+            "mcp_resource_subscribe"|"mcp_resource_unsubscribe"|
+            "mcp_resource_updates"=>{
                 mcp_control_request(agent,subtype,&Value::Object(request.clone())).await
             },
             "cancel_async_message"=>{
@@ -566,6 +570,15 @@ async fn mcp_control_request(agent:&mut Agent,action:&str,request:&Value)
         "mcp_resources"=>agent.mcp_catalog("resources").await,
         "mcp_prompts"=>agent.mcp_catalog("prompts").await,
         "mcp_resource_templates"=>agent.mcp_catalog("resource_templates").await,
+        "mcp_resource_updates"=>Ok(agent.mcp_resource_updates()),
+        "mcp_resource_subscribe"|"mcp_resource_unsubscribe"=>{
+            let server=request.get("server").and_then(Value::as_str)
+                .ok_or_else(||anyhow::anyhow!("MCP subscription requires server"))?;
+            let uri=request.get("uri").and_then(Value::as_str)
+                .ok_or_else(||anyhow::anyhow!("MCP subscription requires uri"))?;
+            agent.mcp_subscribe_resource(server,uri,
+                action=="mcp_resource_subscribe").await
+        },
         "mcp_read_resource"=>{
             let server=request.get("server").and_then(Value::as_str)
                 .ok_or_else(||anyhow::anyhow!("mcp_read_resource requires server"))?;

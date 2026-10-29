@@ -13,7 +13,9 @@ pub struct HttpClient {
     session:Option<HeaderValue>,
     id:u64,
     pub server_info:Option<Value>,
+    pub capabilities:Option<Value>,
     pub tools_changed:bool,
+    pub resource_updates:Vec<Value>,
 }
 impl HttpClient{
     pub async fn connect(config:&McpServerConfig)->Result<Self>{
@@ -41,12 +43,14 @@ impl HttpClient{
         let client=Client::builder().timeout(Duration::from_secs(60))
             .redirect(reqwest::redirect::Policy::none()).build()?;
         let mut http=Self{name:config.id.clone(),client,url,headers,
-            session:None,id:1,server_info:None,tools_changed:false};
+            session:None,id:1,server_info:None,capabilities:None,
+            tools_changed:false,resource_updates:Vec::new()};
         let initial=http.request("initialize",json!({
             "protocolVersion":"2025-03-26","capabilities":{},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
         })).await?;
         http.server_info=initial.get("serverInfo").cloned();
+        http.capabilities=initial.get("capabilities").cloned();
         http.notify("notifications/initialized",json!({})).await?;
         Ok(http)
     }
@@ -99,9 +103,14 @@ impl HttpClient{
                     let frame=std::str::from_utf8(&pending[..end])
                         .context("Invalid MCP SSE UTF-8")?;
                     for event in parse_sse(frame)?{
-                        if event.get("method").and_then(Value::as_str)
-                            ==Some("notifications/tools/list_changed"){
+                        let kind=event.get("method").and_then(Value::as_str);
+                        if kind==Some("notifications/tools/list_changed"){
                             self.tools_changed=true;
+                        }
+                        if matches!(kind,Some("notifications/resources/updated"|
+                            "notifications/resources/list_changed")) &&
+                            self.resource_updates.len()<1024{
+                            self.resource_updates.push(event.clone());
                         }
                         if event.get("id")==Some(id){
                             return Ok(Some(event));

@@ -2263,3 +2263,71 @@ fn blocking_subagent_start_hook_prevents_child_provider_request(){
     assert!(requests[1].contains("SubagentStart hook blocked"));
     assert!(requests[1].contains("review denied"));
 }
+
+
+#[cfg(unix)]
+#[test]
+fn sdk_mcp_resource_subscriptions_preserve_notifications_and_idempotence(){
+    use std::process::Stdio;
+    let dir=tempfile::tempdir().unwrap();
+    let config=dir.path().join("mcp-subscriptions.json");
+    let script=r#"while IFS= read -r line; do
+case "$line" in
+  *'"id":1'*)
+    echo '{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"resources":{"subscribe":true}}}}' ;;
+  *'"id":2'*)
+    echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}' ;;
+  *'"id":3'*)
+    echo '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"file:///document","revision":2}}'
+    echo '{"jsonrpc":"2.0","id":3,"result":{}}' ;;
+  *'"id":4'*)
+    echo '{"jsonrpc":"2.0","id":4,"result":{}}' ;;
+  *)
+    echo '{"jsonrpc":"2.0","id":999,"error":{"code":-32601,"message":"unexpected request"}}' ;;
+esac
+done"#;
+    fs::write(&config,json!({
+        "default_provider":"local",
+        "providers":[{"id":"local","kind":"openai-compatible","model":"unused",
+            "base_url":"http://127.0.0.1:9/v1"}],
+        "mcp_servers":[{"id":"documents","command":"sh","args":["-c",script]}]
+    }).to_string()).unwrap();
+    let mut process=binary().args(["--workspace",dir.path().to_str().unwrap(),"sdk"])
+        .env("ATLAS_CONFIG",&config).stdin(Stdio::piped())
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    {
+        let mut input=process.stdin.take().unwrap();
+        for value in [
+            json!({"type":"control_request","request_id":"subscribe","request":{
+                "subtype":"mcp_resource_subscribe","server":"documents",
+                "uri":"file:///document"}}),
+            json!({"type":"control","request_id":"duplicate",
+                "action":"mcp_resource_subscribe","server":"documents",
+                "uri":"file:///document"}),
+            json!({"type":"control","request_id":"events",
+                "action":"mcp_resource_updates"}),
+            json!({"type":"control","request_id":"events-again",
+                "action":"mcp_resource_updates"}),
+            json!({"type":"control_request","request_id":"unsubscribe","request":{
+                "subtype":"mcp_resource_unsubscribe","server":"documents",
+                "uri":"file:///document"}}),
+            json!({"type":"control","request_id":"duplicate-unsub",
+                "action":"mcp_resource_unsubscribe","server":"documents",
+                "uri":"file:///document"})
+        ]{writeln!(input,"{value}").unwrap();}
+    }
+    let output=process.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let lines=String::from_utf8(output.stdout).unwrap();
+    let replies=lines.lines().map(|x|serde_json::from_str::<Value>(x).unwrap())
+        .filter(|x|x["type"]=="control_response").collect::<Vec<_>>();
+    let item=|id:&str|replies.iter().find(|x|x["request_id"]==id ||
+        x["response"]["request_id"]==id).unwrap();
+    assert_eq!(item("subscribe")["response"]["response"]["subscribed"],true,"{lines}");
+    assert_eq!(item("duplicate")["result"]["already_subscribed"],true);
+    assert_eq!(item("events")["result"]["updates"][0]["server"],"documents");
+    assert_eq!(item("events")["result"]["updates"][0]["params"]["revision"],2);
+    assert_eq!(item("events-again")["result"]["updates"].as_array().unwrap().len(),0);
+    assert_eq!(item("unsubscribe")["response"]["response"]["subscribed"],false);
+    assert_eq!(item("duplicate-unsub")["result"]["already_unsubscribed"],true);
+}

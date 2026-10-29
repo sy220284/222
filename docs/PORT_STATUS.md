@@ -267,3 +267,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 `/mode` 现复用 SDK/团队同一权限校验和会话保存路径，避免终端显示已切换但重启丢失；只读启动跳过会授权文件编辑的 acceptEdits，依次使用可用模式。新增磁盘会话重读回归。该路径仍属部分实现，原版完整交互、自动分类器和终端 UI 尚未等价。
 
 权限状态更新已进一步改为**先保存会话，再切换内存授权**：模拟会话目录被不安全链接替换时，模式变更失败且旧权限保持不变；修复存储后可重试，避免持久化失败导致权限状态与磁盘不一致。该边界有文件系统故障注入测试。
+
+### 2026-10-29：MCP 资源订阅与推送事件回环（统一 Issue #3）
+
+对照原始 `services/mcp/client.ts` 中的 `capabilities.resources.subscribe` 及 JSON-RPC 资源订阅通用协议：在实际 stdio 与 HTTP MCP 客户端记录 server capabilities，允许明确 SDK 请求资源订阅/取消，并拒绝不支持订阅的服务。订阅按 server/URI 去重，实际发送 `resources/subscribe`/`resources/unsubscribe`；等待 RPC 回复时穿插到达的 `notifications/resources/updated` 和 `notifications/resources/list_changed` 会保留为结构化事件，附来源服务名并支持 SDK 一次性取走，避免消息丢失或重复消费；HTTP SSE 同样收集在响应中收到的事件。新增 SDK 进程+本地 MCP stdio 服务端到端测试，覆盖响应前通知、重复订阅、取消、取走后队列清空；尚待独立 HTTP GET/SSE 长连、重连恢复订阅、持久化和 UI，仍为部分实现。

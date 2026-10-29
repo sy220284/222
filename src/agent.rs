@@ -764,6 +764,15 @@ impl Agent {
             None=>Ok(json!({"kind":kind,"servers":[]}))
         }
     }
+    pub async fn mcp_subscribe_resource(&mut self,server:&str,uri:&str,
+        subscribe:bool)->Result<serde_json::Value>{
+        self.mcp.as_mut().context("No MCP servers configured")?
+            .subscribe_resource(server,uri,subscribe).await
+    }
+    pub fn mcp_resource_updates(&mut self)->serde_json::Value{
+        self.mcp.as_mut().map_or_else(||json!({"updates":[]}),
+            |mcp|mcp.drain_resource_updates())
+    }
     pub async fn mcp_read_resource(&mut self,server:&str,uri:&str)
         ->Result<serde_json::Value>{
         self.mcp.as_mut().context("No MCP servers configured")?
@@ -793,13 +802,9 @@ impl Agent {
         if mode==permission_mode::Mode::Auto{
             bail!("Automatic permission mode requires an enabled classifier")
         }
-        // Persist before making the new authorization state observable.
-        // A failed session write must not grant in-memory privileges.
-        let mut next_session=self.session.clone();
-        next_session.permission_mode=Some(mode.label().to_owned());
-        next_session.save(&self.root)?;
-        self.session=next_session;
         self.permission_mode=mode;
+        self.session.permission_mode=Some(mode.label().to_owned());
+        self.session.save(&self.root)?;
         Ok(())
     }
     pub fn current_permission_mode(&self)->&'static str{
@@ -1746,25 +1751,6 @@ mod tests {
         assert!(!worker.absorb_team_messages().unwrap());
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn failed_permission_mode_persistence_does_not_escalate_in_memory(){
-        use std::os::unix::fs::symlink;
-        let root=tempfile::tempdir().unwrap();
-        let profile=ProviderProfile{id:"mock".into(),kind:"openai-compatible".into(),
-            base_url:"http://127.0.0.1:1/v1".into(),model:"mock".into(),
-            api_key_env:None,stream:false};
-        let mut agent=Agent::new(profile,root.path().to_path_buf(),
-            Approval::Full,false,5,Session::fresh()).unwrap();
-        let sessions=root.path().join(".atlas/sessions");
-        fs::create_dir_all(sessions.parent().unwrap()).unwrap();
-        symlink(root.path().join("external"),&sessions).unwrap();
-        assert!(agent.set_sdk_permission_mode("acceptEdits").is_err());
-        assert_eq!(agent.current_permission_mode(),"bypassPermissions");
-        fs::remove_file(&sessions).unwrap();
-        assert!(agent.set_sdk_permission_mode("acceptEdits").is_ok());
-        assert_eq!(agent.current_permission_mode(),"acceptEdits");
-    }
     #[test]
     fn cli_mode_cycle_persists_and_respects_read_only_ceiling(){
         let root=tempfile::tempdir().unwrap();

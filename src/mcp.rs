@@ -17,7 +17,9 @@ struct Client {
     output: BufReader<ChildStdout>,
     id: u64,
     server_info: Option<Value>,
+    capabilities: Option<Value>,
     tools_changed: bool,
+    resource_updates: Vec<Value>,
 }
 
 impl Client {
@@ -41,13 +43,15 @@ impl Client {
             .with_context(|| format!("Starting MCP server {}", server.id))?;
         let input = child.stdin.take().context("MCP stdin unavailable")?;
         let output = BufReader::new(child.stdout.take().context("MCP stdout unavailable")?);
-        let mut client = Self { name: server.id.clone(), _child: child, input, output, id: 1, server_info: None, tools_changed: false };
+        let mut client = Self { name: server.id.clone(), _child: child, input, output, id: 1, server_info: None, capabilities: None,
+            tools_changed: false, resource_updates: Vec::new() };
         let initialized=timeout(RPC_TIMEOUT, client.request("initialize", json!({
             "protocolVersion":"2025-03-26",
             "capabilities":{},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
         }))).await.context("MCP initialize timed out")??;
         client.server_info=initialized.get("serverInfo").cloned();
+        client.capabilities=initialized.get("capabilities").cloned();
         client.send(&json!({"jsonrpc":"2.0","method":"notifications/initialized"})).await?;
         Ok(client)
     }
@@ -80,6 +84,10 @@ impl Client {
             let method=message.get("method").and_then(Value::as_str);
             if method==Some("notifications/tools/list_changed"){
                 self.tools_changed=true;
+            }
+            if matches!(method,Some("notifications/resources/updated"|
+                "notifications/resources/list_changed")) && self.resource_updates.len()<1024{
+                self.resource_updates.push(message.clone());
             }
             if message.get("id").is_some() && method.is_some(){
                 if method==Some("ping"){
@@ -117,6 +125,18 @@ impl TransportClient {
             Self::Http(c)=>c.request(method,params).await,
         }
     }
+    fn capabilities(&self)->Option<&Value>{
+        match self{
+            Self::Stdio(c)=>c.capabilities.as_ref(),
+            Self::Http(c)=>c.capabilities.as_ref(),
+        }
+    }
+    fn take_resource_updates(&mut self)->Vec<Value>{
+        match self{
+            Self::Stdio(c)=>std::mem::take(&mut c.resource_updates),
+            Self::Http(c)=>std::mem::take(&mut c.resource_updates),
+        }
+    }
     fn take_tools_changed(&mut self)->bool{
         match self{
             Self::Stdio(c)=>std::mem::take(&mut c.tools_changed),
@@ -149,13 +169,15 @@ pub struct McpManager {
     routes: HashMap<String, (usize, String)>,
     server_statuses: Vec<Value>,
     status_clients: Vec<Option<usize>>,
+    resource_subscriptions: std::collections::HashSet<(String,String)>,
 }
 
 impl McpManager {
     pub async fn connect(servers: &[McpServerConfig])->Result<Self>{
         if servers.len()>16 {bail!("Too many MCP servers")}
         let mut out=Self{clients:Vec::new(),tools:Vec::new(),
-            routes:HashMap::new(),server_statuses:Vec::new(),status_clients:Vec::new()};
+            routes:HashMap::new(),server_statuses:Vec::new(),status_clients:Vec::new(),
+            resource_subscriptions:std::collections::HashSet::new()};
         for server in servers{
             // Failed servers are isolated; one broken MCP process must not
             // prevent the healthy tools from operating.
@@ -444,6 +466,43 @@ impl McpManager {
             }
         }
         Ok(json!({"kind":kind,"servers":servers}))
+    }
+    pub async fn subscribe_resource(&mut self,server:&str,uri:&str,
+        subscribe:bool)->Result<Value>{
+        if uri.is_empty(){bail!("MCP resource subscription requires uri")}
+        let index=self.connected_client(server)?;
+        if self.clients[index].capabilities().and_then(|x|
+            x.pointer("/resources/subscribe")).and_then(Value::as_bool)!=Some(true){
+            bail!("MCP server does not advertise resource subscriptions")
+        }
+        let key=(server.to_owned(),uri.to_owned());
+        if subscribe && self.resource_subscriptions.contains(&key) {
+            return Ok(json!({"subscribed":true,"already_subscribed":true}))
+        }
+        if !subscribe && !self.resource_subscriptions.contains(&key) {
+            return Ok(json!({"subscribed":false,"already_unsubscribed":true}))
+        }
+        let method=if subscribe{"resources/subscribe"}else{"resources/unsubscribe"};
+        timeout(RPC_TIMEOUT,self.clients[index].request(method,json!({"uri":uri})))
+            .await.context("MCP resource subscription timed out")??;
+        if subscribe{self.resource_subscriptions.insert(key);}
+        else{self.resource_subscriptions.remove(&key);}
+        Ok(json!({"subscribed":subscribe}))
+    }
+    pub fn drain_resource_updates(&mut self)->Value{
+        let mut updates=Vec::new();
+        for (status,which) in self.server_statuses.iter()
+            .zip(self.status_clients.iter()){
+            let Some(index)=which else{continue};
+            let name=status["name"].as_str().unwrap_or("");
+            for mut item in self.clients[*index].take_resource_updates(){
+                if let Some(fields)=item.as_object_mut(){
+                    fields.insert("server".into(),json!(name));
+                }
+                updates.push(item);
+            }
+        }
+        json!({"updates":updates})
     }
     pub async fn read_resource(&mut self,server:&str,uri:&str)->Result<Value>{
         if uri.is_empty(){bail!("MCP resource URI is empty")}
