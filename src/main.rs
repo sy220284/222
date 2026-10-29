@@ -2205,6 +2205,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     })),
                 }
             }
+            // SDK transport heartbeats are deliberately silent; they must
+            // not create errors or mutate the active conversation.
+            "keep_alive" => {}
             "control_request" if event.get("request").is_some() => {
                 print_json!(
                     sdk_nested_control(agent, config, &event, &mut queue, &mut bridge_session, &mut sdk_initialized, &mut sdk_end_requested)
