@@ -154,7 +154,7 @@ fn nested_worktree_main_checkout(root: &Path) -> Option<(std::path::PathBuf, std
         root.join(common_dir)
     };
     let common_dir = common_dir.canonicalize().ok()?;
-    if common_dir.file_name()? != ".git" {
+    if common_dir.file_name()? != std::ffi::OsStr::new(".git") {
         return None;
     }
     let main_root = common_dir.parent()?.canonicalize().ok()?;
