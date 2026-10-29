@@ -1,5 +1,11 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：PowerShell 独立模型工具名接通真实执行器
+
+对照原版 `PowerShellTool.tsx`、`toolName.ts`、`powershellPermissions.ts`，补齐此前原版 `PowerShell` 工具名不在模型工具清单且执行器返回 Unknown tool 的主链缺口。PowerShell 会话现可发现原版工具定义，显式工具调用使用 PowerShell 进程、PowerShell 规则、毫秒超时及前后台任务生命周期；后台进程逐次指定 shell，不更改共享默认值，避免并发任务互相污染。测试覆盖真实工具入口、缺少 PowerShell 安装时不回退 Bash、权限拒绝及后台 Shell 隔离。代码涉及 `src/agent.rs`、`src/tools.rs`、`src/background.rs`。
+
+**未完成完整等价**：原版 PowerShell AST、沙箱、命令语义、全部输出格式／图片、取消／重启／后台通知和审批 UI 尚需对照，冻结 362 项全部保持未验收；迁移分类和验收计数不增加。
+
 
 ## 2026-10-29：PowerShell 复合脚本权限绕过修复（Issue #3 持续开放）
 
