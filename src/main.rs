@@ -15,6 +15,7 @@ mod compat_helpers;
 mod config;
 mod control_message_compat;
 mod conversation_context;
+mod copy_response;
 mod context_usage;
 mod cost;
 mod deep_link;
@@ -1554,6 +1555,7 @@ async fn chat(
                 println!(
                     "/files                   show files read successfully in this conversation"
                 );
+                println!("/copy [N] [--code K]     copy recent assistant text or a fenced code block");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
@@ -1804,6 +1806,14 @@ async fn chat(
                 Err(error) => eprintln!("Project initialization failed: {error:#}"),
             }
             onboarding.maybe_mark_complete()?;
+            continue;
+        }
+        if input == "/copy" || input.starts_with("/copy ") {
+            let selection = input.strip_prefix("/copy").unwrap_or("").trim();
+            match agent.copy_response(selection) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Copy failed: {error:#}"),
+            }
             continue;
         }
         if input == "/branch" || input.starts_with("/branch ") {
