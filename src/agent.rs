@@ -101,6 +101,7 @@ pub struct Agent {
     model_prices: Vec<ModelPrice>,
     file_metrics: Arc<ToolMetrics>,
     last_context_usage: Option<crate::context_usage::Snapshot>,
+    last_model_usage: Option<TokenUsage>,
 }
 
 /// Match the source getTaskListId priority, with a provider-neutral explicit
@@ -198,6 +199,7 @@ impl Agent {
             model_prices: Vec::new(),
             file_metrics,
             last_context_usage: None,
+            last_model_usage: None,
         })
     }
 
@@ -1415,7 +1417,7 @@ impl Agent {
     /// request schema rather than a static command registration catalog.
     fn context_usage_snapshot(&self) -> Result<(crate::context_usage::Snapshot, bool)> {
         if let Some(snapshot) = &self.last_context_usage {
-            return Ok((snapshot.clone(), true));
+            return Ok((snapshot.with_messages(&self.session.messages), true));
         }
         let mut system = system_prompt(&self.root)?;
         self.conversation_context.append_to(&mut system);
@@ -1465,12 +1467,12 @@ impl Agent {
 
     pub fn context_usage(&self) -> Result<serde_json::Value> {
         let (snapshot, from_last_request) = self.context_usage_snapshot()?;
-        Ok(snapshot.to_json(self.session.usage, from_last_request))
+        Ok(snapshot.to_json(self.last_model_usage, from_last_request))
     }
 
     pub fn context_usage_text(&self) -> Result<String> {
         let (snapshot, from_last_request) = self.context_usage_snapshot()?;
-        Ok(snapshot.render(self.session.usage, from_last_request))
+        Ok(snapshot.render(self.last_model_usage, from_last_request))
     }
 
     pub fn files_in_context(&self) -> String {
@@ -1697,6 +1699,7 @@ impl Agent {
         self.provider = new_provider;
         self.profile = profile;
         self.last_context_usage = None;
+        self.last_model_usage = None;
         Ok(())
     }
 
@@ -2505,6 +2508,7 @@ impl Agent {
                     return Err(error);
                 }
             };
+            self.last_model_usage = response.usage;
             if let Some(usage) = response.usage {
                 self.record_usage(usage);
             }
