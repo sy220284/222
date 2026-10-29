@@ -1,5 +1,16 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：会话 Git 分支检索、任务更新校验及后台任务参数（源码已提交、待验收）
+
+对照用户完整 2.1.88 原始 ZIP 的 `source/src/utils/agenticSessionSearch.ts:110–139,202–253`、`source/src/tools/TaskUpdateTool/TaskUpdateTool.ts:33–65,158–274`、`source/src/tools/TaskOutputTool/TaskOutputTool.tsx:30–34` 和 `source/src/utils/semanticBoolean.ts`，本次完成三条独立用户可感知功能的 Rust 代码补齐：
+
+1. **历史会话按创建时 Git 分支查找**：`src/conversation_context.rs::branch_at_start` 在新会话创建时读取实际分支；`src/agent.rs::Agent::new` 仅在空的新会话设置，`src/session.rs` 兼容旧会话持久化，`src/session_control.rs::list/search` 及 `src/semantic_session_search.rs::prompt` 将分支加入本地预筛和模型排序，语义排序提示遵循原版标签、标题、分支、摘要、全文优先级，并以 UTF-16 单元截取首条消息。提交 `398be3f7`、`fd4c5ef8`、`65bcd09a`、`6f1cb0d6`、`a6b7205a`、`b93bfc26`。未覆盖旧会话缺失分支元数据的历史补录和完整跨项目日志。
+2. **任务更新失败时不发生部分修改**：`src/task.rs::dispatch(task_update)` 在改变任务标题、状态、备注前一次性校验所有提供字段；非法状态或错误类型直接返回错误，保留任务原值。提交 `fb380559`。该入口为现有本地会话任务工具，TaskGraph V2 的完整 Hooks、依赖和团队行为仍需单独对照。
+3. **后台任务输出输入校验**：`src/semantic_inputs.rs` 不再错误地将 TaskOutput 的数字字符串超时转换为数字；`src/tools.rs::dispatch(task_output)` 按原版 strictObject 拒绝未知字段，接受精确布尔或已规范化的字符串布尔值，超时只允许 0–600000 毫秒数字，保留默认 30000 毫秒；防止超界被静默截断或错误类型触发不必要等待。提交 `12a0cc2e`、`edaaab06`。完整多类型后台任务与跨进程生命周期仍未等价。
+
+以上 **3 项源码已提交、待行为验收**；本轮尚未形成 100 个独立功能缺口的完整预先排查和实施方案，剩余 97 项未交付，不以源码文件或提交次数充数。按现行指令未运行 Cargo、测试或 CI。Issue #3 冻结 362 项继续开放，原迁移矩阵的已验收数量不变。
+
+
 ## 2026-10-29：定时任务遗留差异续接：会话压缩与记忆召回（源码已提交、待验收）
 - **自动/手动压缩 Hook 来源**：src/agent.rs::compact_history_with_trigger 使 PreCompact 与 PostCompact 获得正确 auto/manual trigger，并传递压缩摘要；独立的手动 /compact 保留原命令入口。提交 fbbcccd7，待行为验收。
 - **自动压缩失败后的提问连续性**：按原版 source/src/services/compact/autoCompact.ts 的连续失败熔断（3 次），为 Rust Agent 增加会话级失败计数。自动压缩失败继续用户提问，三次后停止无效自动压缩尝试，手动压缩成功/清空会话重置计数。提交 2e9ba408；阈值模型上下文计算、取消和重试时序仍待验收。
