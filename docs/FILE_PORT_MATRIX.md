@@ -263,7 +263,7 @@
 | `src/commands/stats/index.ts` | 11 | 252 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/stats/stats.tsx` | 7 | 1141 | 重写：保持通用行为 | `src/generated_ports/p_b1cd3e4d8150c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/status/index.ts` | 13 | 322 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/status/status.tsx` | 8 | 1855 | 重写：保持通用行为 | `src/generated_ports/p_abd6c0adc2f8c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/status/status.tsx` | 8 | 1855 | 重写：保持通用行为 | `src/agent.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：/status 已连入交互终端，展示真实会话标题/ID、工作区、模型/供应商、权限模式、MCP 服务及工具数，测试覆盖动态改名与不泄露凭据；原版 Settings 各页、IDE、完整安装/沙箱诊断 UI 仍未等价 |
 | `src/commands/statusline.tsx` | 24 | 3568 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/stickers/index.ts` | 12 | 268 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/stickers/stickers.ts` | 17 | 476 | 重写：保持通用行为 | 待定 | 未迁移 |
