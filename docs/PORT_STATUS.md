@@ -1291,3 +1291,13 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **本次真实 Rust 代码**：`src/hooks.rs` 校验后解析、按原版 Hook 注册顺序汇总最后一条有效初始消息；`src/agent.rs::attach_hooks/clear_history` 将消息保留为单次消费的会话用户输入，`ask_with_blocks` 在空输入时使用该消息，有显式输入时将启动消息置于其前面作为独立用户轮次；`src/main.rs::sdk` 在发出初始化消息后、读取外部 SDK 输入前自动执行首条用户任务。交互终端不自动注入该消息；`SessionStart` 其他 Hook 上下文和阻断警告继续保留。
 - **提交证据**：`1311f062d94782fd9300b2aff7e0410df39d948a`、`7485c83fecee206c5b724cb46590d35a32e36156`、`1e055ef50f6aa80d39f0d0c151e40e383dab010e`、`974dd6767248fa5f404e9bc5616e580c7dc8dbeb`。只进行源码和可达入口审查，未运行 Cargo、CI 或行为测试，状态为**已提交、待验收**。
 - **未闭环差异**：SDK 首条消息与外部并发输入的完整队列时序、`watchPaths` 动态文件监听、插件 Hook 动态注册、异步 Hook 生命周期和全事件取消传播；冻结 Issue #3 的 362 项保持开放。本次只计 **1 项独立用户可感知业务功能**，本轮 100 项先行缺口清单与 100 项补齐目标仍未达成。
+
+
+## 2026-10-29：文件读后编辑/覆盖与 SDK 已读状态恢复（源码已提交、待行为验收）
+
+- **原版依据**：完整原始 ZIP 的 `source/src/cli/print.ts:3017–3054,2168–2181`（`seed_read_state` 的 mtime 保护与跨查询合并）、`source/src/tools/FileReadTool/FileReadTool.ts:814–846`（读取状态）、`source/src/tools/FileEditTool/FileEditTool.ts:275–309,451–465,519–525`（必须先读、外部修改拒绝、编辑后更新状态）、`source/src/tools/FileWriteTool/FileWriteTool.ts:198–220,281–300,331–336`（覆盖已有文件的读后写保护）。
+- **实际 Rust 调用链**：`src/main.rs::sdk_nested_control(seed_read_state)` → `src/agent.rs::Agent::seed_read_state` → `src/tools.rs::ToolExecutor::seed_read_state`；`Agent` 共享文件和 Notebook 已读缓存 → 每轮 `ToolExecutor::read_file/edit_file/write_file/notebook_edit`。新文件写入后也登记可继续编辑的状态；文件内容与此前读取不符、读取范围不完整或显示结果被截断时拒绝直接编辑/覆盖，避免模型误写已变化文件。
+- **代码提交**：`ae165e76207a653aa7510a39df903f1b258dff87`、`2206e0f9a8b0f22feea4bf02dff486e5c019df26`、`9743d9bcff011836b5239f6a0d077cb3ef15d90c`、`af2534e9ec3b38cf43a9bd1070275f766d058474`。已在原 Draft PR #2 的 `feat/full-rust-parity` 分支提交。
+- **计数**：保守计为 3 条独立用户业务链：①完整读后安全编辑及跨轮保持，②已有文件覆盖前的读后写防误覆盖，③ SDK `seed_read_state` 外部已读状态恢复。Notebook 跨轮读取作为①的相邻状态修复，不额外拆分凑数。**3/100 已提交、待行为验收，剩余 97 项；新增完整等价验收 0**。
+- **剩余差异**：恢复历史会话时从完整对话重建读取状态、原版更细的部分读取/缓存合并时序、文件编码和换行完整保真、原子替换与并发文件竞争、SDK 动态 MCP/插件重载等仍未实现；本轮未预先逐项确认全部 100 个独立业务缺口，不能宣称完成该流程。
+- 按本任务现行要求，**没有运行 Cargo、测试或 CI**；仅作源代码接线与提交差异静态核对。Issue #3 冻结 362 项全部保持开放，未改变已验收数量。
