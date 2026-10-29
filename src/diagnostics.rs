@@ -118,6 +118,22 @@ pub fn inspect(root: &Path, config: Option<&Config>) -> Vec<Finding> {
         Some(path) => Finding::passed("Git", format!("available at {}", path.display())),
         None => Finding::warning("Git", "not found in PATH"),
     });
+    // Doctor.tsx reports invalid/capped output limits rather than silently
+    // treating the effective default as a healthy user configuration.
+    // These are the source's provider-neutral Bash and task output limits.
+    for (name, default, upper) in [
+        ("BASH_MAX_OUTPUT_LENGTH", 30_000, 150_000),
+        ("TASK_MAX_OUTPUT_LENGTH", 32_000, 160_000),
+    ] {
+        let value = std::env::var(name).ok();
+        let result = crate::env_validation::validate(name, value.as_deref(), default, upper);
+        if result.status != crate::env_validation::ValidationStatus::Valid {
+            findings.push(Finding::warning(
+                "Environment",
+                format!("{name}: {}", result.message.unwrap_or_default()),
+            ));
+        }
+    }
     if let Some(repo) = crate::detect_repository::detect_current_repository_with_host(root) {
         findings.push(Finding::passed(
             "Repository",
