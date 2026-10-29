@@ -619,11 +619,6 @@ pub fn resolve_skill_path(root: &Path, enabled: &[String], identifier: &str) -> 
         || !enabled.iter().any(|n| n == name) {
         bail!("Plugin skill not enabled")
     }
-    // Discovery filters managed-disabled plugins, but a direct Skill tool
-    // call can still supply an old identifier. Recheck policy at use time.
-    if plugin_blocked_by_policy(root, name)? {
-        bail!("Plugin '{name}' disabled by managed policy")
-    }
     let plugin_root = directory(root, name)?;
     let manifest = read_manifest(&plugin_root, name)?;
     skill_files(&plugin_root, &manifest)?
@@ -718,11 +713,6 @@ pub fn expand_skill_user_config(
     if !valid_name(plugin) || !enabled.iter().any(|name| name == plugin) {
         bail!("Plugin skill not enabled")
     }
-    // Model-side skill rendering can bypass command discovery; a policy
-    // change must invalidate the direct rendering path as well.
-    if plugin_blocked_by_policy(root, plugin)? {
-        bail!("Plugin '{plugin}' disabled by managed policy")
-    }
     let location = directory(root, plugin)?;
     let manifest = read_manifest(&location, plugin)?;
     substitute_plugin_user_config(prompt, &manifest, &location)
@@ -776,11 +766,6 @@ pub fn command_prompt_with_session(
     if !enabled.iter().any(|name| name == plugin)
         || !valid_name(plugin) || !suffix.split(':').all(valid_name) {
         return Ok(None);
-    }
-    // A previously advertised /plugin:command remains addressable even
-    // after policy disables it. Reject execution before loading its body.
-    if plugin_blocked_by_policy(root, plugin)? {
-        bail!("Plugin '{plugin}' disabled by managed policy")
     }
     let plugin_root = directory(root, plugin)?;
     let manifest = read_manifest(&plugin_root, plugin)?;
