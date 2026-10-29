@@ -1698,7 +1698,10 @@ impl Agent {
         // from the summarization request, never from saved conversation data.
         let mut history = self.session.messages.clone();
         for message in &mut history {
-            if message.role != "user" {
+            // In Rust, tool results are stored as role="tool" messages,
+            // while the original TS stream represents them as user blocks.
+            // Sanitize both roles before invoking the summarization model.
+            if message.role != "user" && message.role != "tool" {
                 continue;
             }
             if let Some(blocks) = message.content_blocks.as_mut() {
