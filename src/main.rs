@@ -14,6 +14,7 @@ mod cost;
 mod deep_link;
 mod deep_link_banner;
 mod deep_link_protocol;
+mod deep_link_register;
 mod detect_repository;
 mod diagnostics;
 mod env_validation;
@@ -271,6 +272,11 @@ enum Commands {
     },
     /// Parse an OS-invoked deep link and open the current binary in a terminal
     HandleUri { uri: String },
+    /// Register atlas-cli:// links on this device, or inspect current registration
+    RegisterProtocol {
+        #[arg(long)]
+        check: bool,
+    },
     /// Parse a provider-neutral deep link without opening a terminal
     ParseDeepLink { uri: String },
     /// Encode an atlas-cli://open link for a reviewable prompt/workspace
@@ -593,6 +599,16 @@ async fn main() -> Result<()> {
                 last_fetch,
             };
             println!("{}", deep_link_banner::build_deep_link_banner(&info));
+            return Ok(());
+        }
+        Commands::RegisterProtocol { check } => {
+            let executable = std::env::current_exe()?;
+            if *check {
+                println!("{}", deep_link_register::is_protocol_handler_current(&executable));
+            } else {
+                let changed = deep_link_register::ensure_protocol_handler_current(&executable)?;
+                println!("{}", if changed { "Registered atlas-cli://" } else { "Already registered" });
+            }
             return Ok(());
         }
         Commands::HandleUri { uri } => {
