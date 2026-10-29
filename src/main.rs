@@ -15,6 +15,7 @@ mod compat_helpers;
 mod config;
 mod control_message_compat;
 mod conversation_context;
+mod context_usage;
 mod cost;
 mod deep_link;
 mod deep_link_banner;
@@ -1565,6 +1566,7 @@ async fn chat(
                 println!("Resume: atlas-agent chat --resume SESSION_ID");
                 println!("/usage                   show provider-reported token totals");
                 println!("/cost                    show model costs and unknown pricing");
+                println!("/context                 show live model context usage by category");
                 println!("/version                 show version of this running binary");
                 println!("/tasks                   list background shell tasks");
                 println!(
@@ -1625,6 +1627,10 @@ async fn chat(
             }
             "/files" => {
                 println!("{}", agent.files_in_context());
+                continue;
+            }
+            "/context" => {
+                println!("{}", agent.context_usage_text()?);
                 continue;
             }
 
@@ -2180,6 +2186,15 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         "ok":true,"message":message,"revision":agent.transient_revision()}));
                     continue;
                 }
+                if action == "context_usage" || action == "get_context_usage" {
+                    match agent.context_usage() {
+                        Ok(value) => send_control!(json!({"type":"control_response",
+                            "action":action,"ok":true,"result":value})),
+                        Err(error) => send_control!(json!({"type":"control_response",
+                            "action":action,"ok":false,"error":format!("{error:#}")})),
+                    }
+                    continue;
+                }
                 if action == "cost" {
                     send_control!(json!({"type":"control_response","action":action,
                         "ok":true,"cost":agent.cost_ledger()}));
@@ -2300,6 +2315,7 @@ async fn sdk_nested_control(
                     "account":{},"pid":std::process::id()}))
             }
             "mcp_status" => Ok(json!({"mcpServers":agent.mcp_statuses()?})),
+            "get_context_usage" => agent.context_usage(),
             "mcp_prompt_commands" => agent.list_mcp_prompt_commands().await,
             "mcp_resources"
             | "mcp_prompts"
