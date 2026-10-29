@@ -164,6 +164,94 @@ fn install_local_with_origin(
     Ok(name)
 }
 
+/// The original dependency resolver always materializes the requested root,
+/// even when it is already enabled. Stage a replacement before touching the
+/// installed copy, then retain the previous directory until settings commit.
+fn replace_local_with_origin(
+    root: &Path, location: &Path, marketplace_id: Option<&str>,
+) -> Result<PathBuf> {
+    let source = location.canonicalize()
+        .with_context(|| format!("Cannot access plugin source {}", location.display()))?;
+    if !source.is_dir() { bail!("Plugin source must be a directory"); }
+    let name = manifest_name(&source)?;
+    let home = checked_installed_root(root, false)?;
+    let target = home.join(&name);
+    let metadata = fs::symlink_metadata(&target)
+        .with_context(|| format!("Plugin '{name}' is not installed"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        bail!("Installed plugin '{name}' is redirected or invalid");
+    }
+    let origin_file = target.join(".atlas-plugin-origin.json");
+    let existing_origin = match fs::symlink_metadata(&origin_file) {
+        Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
+            let value: Value = serde_json::from_slice(&fs::read(&origin_file)?)?;
+            Some(value["pluginId"].as_str()
+                .context("Installed plugin has invalid marketplace identity")?.to_owned())
+        }
+        Ok(_) => bail!("Installed plugin marketplace identity is redirected or invalid"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+    if existing_origin.as_deref() != marketplace_id {
+        bail!("Cannot replace plugin '{name}' from a different marketplace or source");
+    }
+    if crate::plugins::plugin_blocked_by_policy(root, &name)?
+        || marketplace_id.is_some_and(|id|
+            crate::plugins::plugin_blocked_by_policy(root, id).unwrap_or(true)) {
+        bail!("Plugin '{name}' is disabled by managed policy");
+    }
+    let stage = home.join(format!(".update-{}", Uuid::new_v4()));
+    let backup = home.join(format!(".previous-{}", Uuid::new_v4()));
+    let staged = (|| -> Result<()> {
+        copy_local_tree(&source, &stage)?;
+        crate::plugins::validate_local(&stage)?;
+        let origin = stage.join(".atlas-plugin-origin.json");
+        if origin.exists() {
+            bail!("Plugin source contains reserved installation metadata");
+        }
+        if let Some(id) = marketplace_id {
+            fs::write(&origin, serde_json::to_vec(&json!({"pluginId":id}))?)?;
+        }
+        Ok(())
+    })();
+    if let Err(error) = staged {
+        if stage.exists() {
+            fs::remove_dir_all(&stage).context("Cannot clean failed plugin update")?;
+        }
+        return Err(error);
+    }
+    fs::rename(&target, &backup)
+        .with_context(|| format!("Cannot stage previous installation of '{name}'"))?;
+    if let Err(error) = fs::rename(&stage, &target) {
+        let restore = fs::rename(&backup, &target);
+        if let Err(restore_error) = restore {
+            bail!("Cannot activate plugin update: {error}; restoring previous installation failed: {restore_error}");
+        }
+        fs::remove_dir_all(&stage).context("Cannot clean failed plugin update")?;
+        return Err(error.into());
+    }
+    Ok(backup)
+}
+
+fn restore_replaced_installation(
+    root: &Path, name: &str, backup: &Path,
+) -> Result<()> {
+    let home = checked_installed_root(root, false)?;
+    let target = home.join(name);
+    let failed = home.join(format!(".failed-update-{}", Uuid::new_v4()));
+    fs::rename(&target, &failed)
+        .with_context(|| format!("Cannot stage failed update of '{name}'"))?;
+    if let Err(error) = fs::rename(backup, &target) {
+        let recovery = fs::rename(&failed, &target);
+        if let Err(recovery_error) = recovery {
+            bail!("Cannot restore previous plugin '{name}': {error}; current version recovery failed: {recovery_error}");
+        }
+        return Err(error.into());
+    }
+    fs::remove_dir_all(failed).context("Cannot clean rolled-back plugin update")?;
+    Ok(())
+}
+
 /// Match the source uninstall UI: persistent plugin data must be disclosed
 /// before the last installation is removed. Symlinks are never followed.
 fn persistent_plugin_data_size(root: &Path, name: &str) -> Result<Option<u64>> {
@@ -393,7 +481,6 @@ fn dependency_install_plan(
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
             Err(error) => return Err(error.into()),
         };
-        if is_root && existing { bail!("Plugin '{name}' is already installed"); }
         if existing {
             let origin_file = target.join(".atlas-plugin-origin.json");
             let existing_origin = match fs::symlink_metadata(&origin_file) {
@@ -566,20 +653,23 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 &root, &local, marketplace_id.as_deref(), &config.enabled_plugins,
             )?;
             let mut newly_installed = Vec::<String>::new();
+            let mut replaced_root: Option<PathBuf> = None;
             let mut installed_names = Vec::<String>::new();
             for (name, location, origin, already_installed) in &plan {
-                if !already_installed {
-                    if let Err(error) = install_local_with_origin(
-                        &root, location, origin.as_deref(),
-                    ) {
-                        // Restore the original installation set if any
-                        // dependency or the root fails to materialize.
-                        if let Err(cleanup) = rollback_new_installations(&root, &newly_installed) {
-                            bail!("Plugin installation failed: {error:#}; rollback also failed: {cleanup:#}");
-                        }
-                        return Err(error);
+                let operation = if *already_installed && name == &actual_name {
+                    replace_local_with_origin(&root, location, origin.as_deref())
+                        .map(|backup| replaced_root = Some(backup))
+                } else if !already_installed {
+                    install_local_with_origin(&root, location, origin.as_deref())
+                        .map(|_| newly_installed.push(name.clone()))
+                } else {
+                    Ok(())
+                };
+                if let Err(error) = operation {
+                    if let Err(cleanup) = rollback_new_installations(&root, &newly_installed) {
+                        bail!("Plugin installation failed: {error:#}; rollback also failed: {cleanup:#}");
                     }
-                    newly_installed.push(name.clone());
+                    return Err(error);
                 }
                 installed_names.push(name.clone());
             }
@@ -589,14 +679,26 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 }
             }
             if let Err(error) = config.save() {
-                if let Err(cleanup) = rollback_new_installations(&root, &newly_installed) {
-                    bail!("Cannot save plugin settings: {error:#}; rollback also failed: {cleanup:#}");
+                let restore = replaced_root.as_ref().map(|backup|
+                    restore_replaced_installation(&root, &actual_name, backup));
+                let cleanup = rollback_new_installations(&root, &newly_installed);
+                if let Some(Err(restore_error)) = restore {
+                    bail!("Cannot save plugin settings: {error:#}; previous installation restore failed: {restore_error:#}");
+                }
+                if let Err(cleanup_error) = cleanup {
+                    bail!("Cannot save plugin settings: {error:#}; dependency rollback failed: {cleanup_error:#}");
                 }
                 return Err(error);
             }
+            let mut warnings = Vec::<String>::new();
+            if let Some(backup) = replaced_root {
+                if let Err(error) = fs::remove_dir_all(&backup) {
+                    warnings.push(format!("Previous plugin version could not be cleaned: {error}"));
+                }
+            }
             let dependencies = installed_names.into_iter()
                 .filter(|name| name != &actual_name).collect::<Vec<_>>();
-            Ok(json!({"installed":actual_name,"dependencies":dependencies}))
+            Ok(json!({"installed":actual_name,"dependencies":dependencies,"warnings":warnings}))
         }
         PluginCommand::Enable { plugin } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
