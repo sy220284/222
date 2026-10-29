@@ -3409,12 +3409,30 @@ done"#;
         async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
             self.seen.lock().unwrap().push(request.messages.clone());
             let step = self.next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            if step == 0 && self.send {
-                assert!(request
-                    .tools
-                    .iter()
-                    .any(|tool| tool["function"]["name"] == "SendMessage"));
-                let call = crate::protocol::ToolCall {
+            let call = if self.send && step == 0 {
+                assert!(request.tools.iter().any(|tool| {
+                    tool["function"]["name"] == "ToolSearch"
+                }));
+                assert!(!request.tools.iter().any(|tool| {
+                    tool["function"]["name"] == "SendMessage"
+                }));
+                Some(crate::protocol::ToolCall {
+                    id: "search-1".into(),
+                    kind: "function".into(),
+                    function: crate::protocol::FunctionCall {
+                        name: "ToolSearch".into(),
+                        arguments: json!({"query":"select:SendMessage"}).to_string(),
+                    },
+                })
+            } else if self.send && step == 1 {
+                assert!(request.tools.iter().any(|tool| {
+                    tool["function"]["name"] == "SendMessage"
+                }));
+                assert!(request.messages.iter().any(|message| {
+                    message.role == "tool"
+                        && message.content.as_deref().unwrap_or("").contains("SendMessage")
+                }));
+                Some(crate::protocol::ToolCall {
                     id: "send-1".into(),
                     kind: "function".into(),
                     function: crate::protocol::FunctionCall {
@@ -3423,7 +3441,11 @@ done"#;
                             "message":"Please review src/lib.rs"})
                         .to_string(),
                     },
-                };
+                })
+            } else {
+                None
+            };
+            if let Some(call) = call {
                 return Ok(crate::protocol::ModelResponse {
                     message: Message {
                         role: "assistant".into(),
