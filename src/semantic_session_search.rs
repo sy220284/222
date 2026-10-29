@@ -13,8 +13,8 @@ use std::{collections::HashSet, path::Path};
 const MAX_SESSIONS: usize = 100;
 const MAX_TRANSCRIPT: usize = 2_000;
 const SYSTEM: &str = r#"Find relevant conversation sessions by title, tag, summary, first message and transcript.
-Rank exact tag matches first, followed by partial tags, title, summary, transcript and
-semantic similarity. Be inclusive, but do not invent sessions. Return only JSON
+Rank exact tag matches first, followed by partial tags, title, Git branch,
+summary, transcript and semantic similarity. Be inclusive, but do not invent sessions. Return only JSON
 with an array of zero-based candidate indices: {"relevant_indices":[2,5,0]}."#;
 
 fn excerpt(messages: &[Message]) -> String {
@@ -54,6 +54,9 @@ fn prompt(query: &str, candidates: &[(SessionItem, Option<Session>)]) -> String 
             let mut fields = vec![format!("{index}: {}", item.title)];
             if let Some(tag) = item.tag.as_deref() {
                 fields.push(format!("[tag: {tag}]"));
+            }
+            if let Some(branch) = item.git_branch.as_deref() {
+                fields.push(format!("[branch: {branch}]"));
             }
             if let Some(session) = loaded {
                 // The original search includes the custom title separately
