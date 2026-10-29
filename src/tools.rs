@@ -135,9 +135,10 @@ impl ToolExecutor {
         if modified_millis(&after)? != disk_ms || after.len() != before.len() {
             return Ok(());
         }
+        let key = path.canonicalize()?;
         let mut reads = self.file_reads.lock().unwrap();
-        if reads.get(&path).is_none_or(|existing| existing.timestamp_ms < disk_ms) {
-            reads.insert(path, FileReadState {
+        if reads.get(&key).is_none_or(|existing| existing.timestamp_ms < disk_ms) {
+            reads.insert(key, FileReadState {
                 content,
                 timestamp_ms: disk_ms,
                 full: true,
@@ -777,7 +778,7 @@ impl ToolExecutor {
         self.reads
             .lock()
             .unwrap()
-            .insert(path.clone(), notebook::revision(&content));
+            .insert(path.canonicalize()?, notebook::revision(&content));
         let start = args
             .get("start_line")
             .and_then(Value::as_u64)
@@ -799,7 +800,7 @@ impl ToolExecutor {
         let after = fs::metadata(&path)?;
         let before_ms = modified_millis(&metadata)?;
         let unchanged = modified_millis(&after)? == before_ms && after.len() == metadata.len();
-        self.file_reads.lock().unwrap().insert(path, FileReadState {
+        self.file_reads.lock().unwrap().insert(path.canonicalize()?, FileReadState {
             full: unchanged && start == 1
                 && content.lines().count() <= count
                 && result.chars().count() <= MAX_OUTPUT_CHARS,
@@ -812,9 +813,10 @@ impl ToolExecutor {
     fn notebook_edit(&self, args: &Value) -> Result<String> {
         let raw = required(args, "notebook_path")?;
         let path = self.checked_path(raw)?;
-        let known = self.reads.lock().unwrap().get(&path).copied();
+        let key = path.canonicalize()?;
+        let known = self.reads.lock().unwrap().get(&key).copied();
         let (result, revision) = notebook::edit(&path, args, known)?;
-        self.reads.lock().unwrap().insert(path, revision);
+        self.reads.lock().unwrap().insert(key, revision);
         Ok(result)
     }
 
@@ -1063,7 +1065,8 @@ impl ToolExecutor {
         }
         let before = if existed {
             let original = fs::read_to_string(&path)?;
-            let prior = self.file_reads.lock().unwrap().get(&path).cloned()
+            let key = path.canonicalize()?;
+            let prior = self.file_reads.lock().unwrap().get(&key).cloned()
                 .context("File has not been read yet. Read it first before writing to it.")?;
             if !prior.full {
                 bail!("File was only partially read. Read the complete file before writing");
@@ -1093,7 +1096,7 @@ impl ToolExecutor {
             self.metrics.record_change(before.as_deref(), content);
         }
         let metadata = fs::metadata(&path)?;
-        self.file_reads.lock().unwrap().insert(path.clone(), FileReadState {
+        self.file_reads.lock().unwrap().insert(path.canonicalize()?, FileReadState {
             content: content.to_owned(),
             timestamp_ms: modified_millis(&metadata)?,
             full: true,
@@ -1121,7 +1124,8 @@ impl ToolExecutor {
         // Validate against the complete content previously shown to the
         // model, including reads made in earlier turns of this session.
         let content = fs::read_to_string(&path)?;
-        let prior = self.file_reads.lock().unwrap().get(&path).cloned()
+        let key = path.canonicalize()?;
+        let prior = self.file_reads.lock().unwrap().get(&key).cloned()
             .context("File has not been read yet. Read it first before writing to it.")?;
         if !prior.full {
             bail!("File was only partially read. Read the complete file before editing");
@@ -1148,7 +1152,7 @@ impl ToolExecutor {
         fs::write(&path, &updated)?;
         self.metrics.record_change(Some(&content), &updated);
         let metadata = fs::metadata(&path)?;
-        self.file_reads.lock().unwrap().insert(path.clone(), FileReadState {
+        self.file_reads.lock().unwrap().insert(key, FileReadState {
             content: updated,
             timestamp_ms: modified_millis(&metadata)?,
             full: true,
