@@ -1,5 +1,19 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：搜索与交互工具源码补强（本轮四项，待行为验收）
+
+基准：用户资料库完整 `claude-code-2.1.88-main(1).zip` 的 `source/src/`，逐项读取对应原始 TS/TSX 与 Rust 真实 Agent/工具调用入口。以下按**四个独立用户可感知功能**计数；同一功能内部的多个修正合并计一次。全部只提交至 `feat/full-rust-parity` / Draft PR #2。
+
+| 功能 | 原版代码及行为 | Rust 真实入口、补齐内容 | 提交 | 剩余差异 |
+|---|---|---|---|---|
+| WebSearch 网页搜索 | `src/tools/WebSearchTool/WebSearchTool.ts::validateInput/call`：允许域名与屏蔽域名不能同时指定，输出包含搜索耗时 | `src/websearch.rs::execute`：在任何网络请求前拒绝双域名列表，响应加入 `durationSeconds` | `74dd928c` | 原版服务器侧搜索/引用分组、进度事件、模型摘要及厂商中立适配仍待完整核对 |
+| ToolSearch 工具发现 | `src/tools/ToolSearchTool/prompt.ts::isDeferredTool`、`ToolSearchTool.ts::searchToolsWithKeywords`：MCP 及交互/任务/网络等工具延迟加载，关键词只检索延迟工具，精确名称可选已加载工具 | `src/tool_search.rs::is_deferred/visible_catalog/execute`：延迟目录接入真实 Agent 的 `visible_catalog` 与下一轮模型工具清单，按原版过滤关键词候选 | `c478582f` | MCP `alwaysLoad` 元数据贯通、待连接服务器提示、原版所有条件性延迟策略 |
+| Grep 文件内容搜索 | `src/tools/GrepTool/GrepTool.ts::call`：`rg -l` 按行匹配锚点、`--type` 使用文件类型别名，默认排除隐藏文件 | `src/search.rs::grep_files/type_matches`：修复 `^/ 在非首行的文件匹配，过滤隐藏后代，扩充常用 ripgrep 文件类型别名 | `233f1361` | 完整 ripgrep 类型数据库、所有 .ignore/gitignore 规则、复杂正则及文件竞态 |
+| AskUserQuestion 交互问答 | `src/components/permissions/AskUserQuestionPermissionRequest/AskUserQuestionPermissionRequest.tsx`：用户自填 Other 文本同时作为回答及 `annotations.notes` 传递 | `src/ask_user_question.rs::execute`：终端真实用户选择的自定义内容保留为答案和备注，进入下一轮模型可见结果 | `9ec6f725` | 原版终端选项 UI、SDK 问答确认、图片附件、完整取消/重启状态 |
+
+**本轮源码修改并成功推送：4/100；本轮达到原版完整等价验收：0；剩余目标：96。** 按现行开发流程未运行 cargo、单元/集成/端到端测试或 CI；四项均为“源码已提交、待行为验收”，不得升级为“已验收”。未先完成 100 条逐项证实且去重的问题清单，故本轮数量目标明确未完成。Issue #3 原冻结 362 条保持全部开放，动态迁移矩阵不得替代固定范围。下次先对比最新 HEAD 与上述四次提交，只续接新差异，优先补原版 ToolSearch 待连接提示、Grep 忽略规则、AskUserQuestion 取消/SDK 交互、WebSearch 引用/进度；其他主链按最新矩阵继续查缺。
+
+
 ## 2026-10-29：复制回复与上下文窗口统计的原版业务补齐（源码已提交，待验收）
 
 原始源码依据：完整 2.1.88 源码包的 `source/src/commands/copy/copy.tsx::collectRecentAssistantTexts/extractCodeBlocks/copyOrWriteToFile`、`source/src/utils/analyzeContext.ts::processAssistantMessage/approximateMessageTokens`；Rust 可达入口 `src/copy_response.rs::copy/recent_assistant_texts`、`src/context_usage.rs::Snapshot::from_request/count_messages`。
