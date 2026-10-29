@@ -995,7 +995,11 @@ mod tests {
         assert!(g
             .create(&json!({"subject":"x","description":"ok","unknown":true}))
             .is_err());
-        assert!(g.get(&json!({"taskId":"../outside"})).is_err());
+        assert_eq!(
+            g.get(&json!({"taskId":"../outside"})).unwrap(),
+            "Task not found"
+        );
+        assert!(g.peek("../outside").unwrap().is_none());
         assert!(TaskGraph::new(root.path(), "../n").is_ok());
         assert!(g.update(&json!({"taskId":"1","status":"blocked"})).is_err());
         assert_eq!(g.get(&json!({"taskId":"999"})).unwrap(), "Task not found");
