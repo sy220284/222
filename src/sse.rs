@@ -150,6 +150,12 @@ pub async fn complete(
     if !buffered.is_empty() && !finished{
         consume_frame(&buffered,&mut assembler,&deltas)?;
     }
+    // A dropped HTTP connection is not a completed assistant turn. In
+    // particular, never dispatch a syntactically complete tool call from a
+    // truncated SSE response unless the provider supplied a terminal marker.
+    if !finished && assembler.finish_reason.is_none() {
+        bail!("Model SSE connection closed before completion marker");
+    }
     assembler.finish()
 }
 
