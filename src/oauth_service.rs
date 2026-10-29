@@ -65,6 +65,7 @@ impl OAuthService {
         options: &AuthorizationOptions,
         success_redirect_url: &str,
         error_redirect_url: &str,
+        credentials_path: &Path,
         publish: F,
     ) -> Result<OAuthTokens>
     where
@@ -93,7 +94,11 @@ impl OAuthService {
                 &provider.automatic_redirect_uri(listener.port()),
                 None,
             )
-            .await;
+            .await
+            .and_then(|tokens| {
+                save_oauth_tokens(credentials_path, &tokens)?;
+                Ok(tokens)
+            });
         if automatic {
             let redirect = match &result {
                 Ok(_) => listener.handle_success_redirect(success_redirect_url).await,
