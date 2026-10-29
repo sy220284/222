@@ -1731,9 +1731,18 @@ impl Agent {
                     .map(|blocks| blocks.iter().map(estimate_block).sum::<usize>());
                 let text_tokens = block_tokens
                     .unwrap_or_else(|| message.content.as_deref().map(estimate).unwrap_or(0));
+                // Some SDK providers populate both a tool_use block and
+                // the normalized ToolCall. The API serializes one call;
+                // counting both triggers premature auto-compaction.
+                let embedded_tool_calls = message.content_blocks.as_ref().is_some_and(|blocks| {
+                    blocks.iter().any(|block| {
+                        block.get("type").and_then(serde_json::Value::as_str) == Some("tool_use")
+                    })
+                });
                 let calls = message
                     .tool_calls
                     .as_ref()
+                    .filter(|_| !embedded_tool_calls)
                     .map(|calls| {
                         calls
                             .iter()
