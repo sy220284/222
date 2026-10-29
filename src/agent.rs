@@ -3531,7 +3531,7 @@ impl Agent {
                 available_tools.retain(|tool| {
                     tool.pointer("/function/name").or_else(|| tool.get("name"))
                         .and_then(serde_json::Value::as_str)
-                        .is_some_and(|name| allowed.contains(name)
+                        .is_some_and(|name| allowed.contains("*") || allowed.contains(name)
                             || allowed.contains(crate::tool_names::canonical_name(name)))
                 });
             }
@@ -3683,7 +3683,7 @@ impl Agent {
                     && self.prompt_role.as_deref().is_some_and(|role| {
                         !crate::prompt_runtime::tool_allowed_for_role(role, &call.function.name)
                     })) || self.sdk_allowed_tools.as_ref().is_some_and(|allowed| {
-                        !allowed.contains(&call.function.name)
+                        !allowed.contains("*") && !allowed.contains(&call.function.name)
                             && !allowed.contains(crate::tool_names::canonical_name(&call.function.name))
                     }) || self.sdk_disallowed_tools.contains(&call.function.name)
                         || self.sdk_disallowed_tools.contains(crate::tool_names::canonical_name(&call.function.name));
