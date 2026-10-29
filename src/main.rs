@@ -2697,14 +2697,16 @@ async fn sdk_nested_control(
                 // Reload from disk: the SDK may have updated enabled plugins
                 // after initialization. Preserve the live model and session.
                 let refreshed = Config::load()?;
-                agent.reload_plugins(&refreshed).await?;
+                let reload = agent.reload_plugins(&refreshed).await?;
                 let commands = sdk_visible_commands(agent, &refreshed)?;
                 let agents = agent.sdk_agent_descriptors()?;
                 let mcp_servers = agent.mcp_statuses()?;
-                let error_count = mcp_servers.iter()
-                    .filter(|server| server.get("status").and_then(Value::as_str)
-                        == Some("failed"))
-                    .count();
+                let error_count = reload.get("plugin_error_count")
+                    .and_then(Value::as_u64).unwrap_or(0) as usize
+                    + mcp_servers.iter()
+                        .filter(|server| server.get("status").and_then(Value::as_str)
+                            == Some("failed"))
+                        .count();
                 let plugins = refreshed.enabled_plugins.iter()
                     .map(|name| json!({
                         "name":name,
