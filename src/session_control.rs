@@ -14,6 +14,7 @@ pub struct SessionItem {
     pub id: Uuid,
     pub title: String,
     pub tag: Option<String>,
+    pub git_branch: Option<String>,
     pub messages: usize,
     pub modified_ms: u128,
 }
@@ -148,6 +149,7 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             id,
             title,
             tag: session.tag,
+            git_branch: session.git_branch,
             messages: session.messages.len(),
             modified_ms,
         });
@@ -214,8 +216,10 @@ pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
             Some(1)
         } else if item.title.to_lowercase().contains(&query) {
             Some(2)
-        } else if item.id.to_string().contains(&query) {
+        } else if item.git_branch.as_deref().is_some_and(|branch| branch.to_lowercase().contains(&query)) {
             Some(3)
+        } else if item.id.to_string().contains(&query) {
+            Some(4)
         } else {
             // The original searches the summary and the first/last transcript
             // excerpts as well as the title and user tag.
@@ -227,12 +231,12 @@ pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
                         .as_deref()
                         .is_some_and(|s| s.to_lowercase().contains(&query))
                     {
-                        Some(4)
+                        Some(5)
                     } else if searchable_transcript(&session.messages)
                         .to_lowercase()
                         .contains(&query)
                     {
-                        Some(5)
+                        Some(6)
                     } else {
                         None
                     }
