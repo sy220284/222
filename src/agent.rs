@@ -149,6 +149,7 @@ struct SdkAgentDefinition {
     max_turns: Option<usize>,
     isolation: Option<String>,
     initial_prompt: Option<String>,
+    permission_mode: Option<permission_mode::Mode>,
 }
 
 pub struct Agent {
@@ -458,7 +459,7 @@ impl Agent {
             let definition = value.as_object()
                 .with_context(|| format!("SDK agent {name} must be an object"))?;
             for field in definition.keys() {
-                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt") {
+                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt" | "permissionMode") {
                     bail!("SDK agent {name} field {field} is not yet supported");
                 }
             }
@@ -545,6 +546,18 @@ impl Agent {
                 Some(serde_json::Value::String(value)) => Some(value.clone()),
                 Some(_) => bail!("SDK agent {name} initialPrompt must be a string"),
             };
+            let permission_mode = match definition.get("permissionMode") {
+                None => None,
+                Some(serde_json::Value::String(value)) => {
+                    let mode = permission_mode::Mode::parse(value)
+                        .with_context(|| format!("SDK agent {name} permissionMode is invalid"))?;
+                    if mode == permission_mode::Mode::Auto {
+                        bail!("SDK agent {name} automatic permission mode requires a classifier");
+                    }
+                    Some(mode)
+                }
+                Some(_) => bail!("SDK agent {name} permissionMode must be a string"),
+            };
             parsed.insert(name.clone(), SdkAgentDefinition {
                 description: description.to_owned(),
                 prompt: prompt.to_owned(),
@@ -554,6 +567,7 @@ impl Agent {
                 max_turns,
                 isolation,
                 initial_prompt,
+                permission_mode,
             });
         }
         self.sdk_agent_definitions = parsed;
@@ -1586,6 +1600,26 @@ impl Agent {
             child.sdk_disallowed_tools = definition.disallowed_tools;
             if let Some(limit) = definition.max_turns {
                 child.max_steps = child.max_steps.min(limit);
+            }
+            if let Some(mode) = definition.permission_mode {
+                // A definition cannot grant a child more authority than its
+                // parent, regardless of the process-level approval ceiling.
+                let parent = self.permission_mode;
+                let allowed = match mode {
+                    permission_mode::Mode::Plan | permission_mode::Mode::DontAsk => true,
+                    permission_mode::Mode::Default => matches!(parent,
+                        permission_mode::Mode::Default | permission_mode::Mode::AcceptEdits
+                        | permission_mode::Mode::BypassPermissions),
+                    permission_mode::Mode::AcceptEdits => matches!(parent,
+                        permission_mode::Mode::AcceptEdits | permission_mode::Mode::BypassPermissions),
+                    permission_mode::Mode::BypassPermissions => parent == permission_mode::Mode::BypassPermissions
+                        && self.approval == Approval::Full,
+                    permission_mode::Mode::Auto => false,
+                };
+                if !allowed {
+                    bail!("SDK agent permissionMode would exceed the parent permission ceiling");
+                }
+                child.permission_mode = mode;
             }
         }
         let result = async {
