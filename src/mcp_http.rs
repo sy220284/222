@@ -220,7 +220,9 @@ impl HttpClient {
         // RFC 6750: a 403 insufficient_scope requires renewed user
         // authorization. Refreshing the same credential cannot add scope.
         if reply.status() == reqwest::StatusCode::FORBIDDEN
-            && reply.headers().get("www-authenticate")
+            && reply
+                .headers()
+                .get("www-authenticate")
                 .and_then(|header| header.to_str().ok())
                 .is_some_and(|header| header.contains("insufficient_scope"))
         {
