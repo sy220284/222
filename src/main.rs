@@ -229,7 +229,7 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
                 continue;
             }
             "/mode" => {
-                println!("Permission mode: {}",agent.cycle_permission_mode());
+                println!("Permission mode: {}",agent.cycle_permission_mode()?);
                 continue;
             }
             "/tasks" => {
