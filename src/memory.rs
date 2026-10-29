@@ -165,7 +165,7 @@ fn read_topic_preview(path: &Path) -> Result<(String, usize)> {
         Ok(_) => capped.len(),
         // A cut in the middle of a UTF-8 scalar is expected only when
         // the byte budget truncated an otherwise valid memory file.
-        Err(error) if byte_truncated && error.error_len().is_none() => error.valid_up_to(),
+        Err(error) if truncated_by_bytes && error.error_len().is_none() => error.valid_up_to(),
         Err(error) => return Err(error.into()),
     };
     let content = std::str::from_utf8(&capped[..valid_end])?;
