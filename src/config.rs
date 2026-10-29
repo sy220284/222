@@ -73,9 +73,9 @@ pub struct Config {
     /// Per-source instruction switches: user, project and local (default enabled).
     #[serde(default, rename = "instructionSources", alias = "instruction_sources")]
     pub instruction_sources: std::collections::HashMap<String, bool>,
-    /// Explicit user approval for instruction @includes outside the workspace.
+    /// Per-project approval, keyed by canonical workspace path, for external @includes.
     #[serde(default, rename = "approvedExternalInstructionIncludes", alias = "approved_external_instruction_includes")]
-    pub approved_external_instruction_includes: bool,
+    pub approved_external_instruction_includes: std::collections::HashMap<String, bool>,
     /// Administrator-provided global instructions, independent of user/project switches.
     #[serde(default, rename = "managedInstructionFile", alias = "managed_instruction_file")]
     pub managed_instruction_file: Option<String>,
@@ -116,7 +116,7 @@ impl Default for Config {
             additional_directories: Vec::new(),
             instruction_excludes: Vec::new(),
             instruction_sources: std::collections::HashMap::new(),
-            approved_external_instruction_includes: false,
+            approved_external_instruction_includes: std::collections::HashMap::new(),
             managed_instruction_file: None,
             managed_rules_directory: None,
             default_shell: None,
