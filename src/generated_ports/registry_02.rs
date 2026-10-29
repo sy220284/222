@@ -206,6 +206,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/FilePathLink.tsx" => match export {
+            "view" => serde_json::to_value(super::p_c042b904bc313::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/FullscreenLayout.tsx" => match export {
@@ -426,7 +430,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/FileEditToolDiff.tsx", vec![]),
         ("src/components/FileEditToolUpdatedMessage.tsx", vec![]),
         ("src/components/FileEditToolUseRejectedMessage.tsx", vec![]),
-        ("src/components/FilePathLink.tsx", vec![]),
+        ("src/components/FilePathLink.tsx", vec!["view"]),
         ("src/components/FullscreenLayout.tsx", vec![]),
         ("src/components/GlobalSearchDialog.tsx", vec![]),
         ("src/components/HelpV2/Commands.tsx", vec![]),
