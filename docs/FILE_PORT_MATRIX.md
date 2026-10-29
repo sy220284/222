@@ -1123,7 +1123,7 @@
 | `src/skills/bundled/verify.ts` | 31 | 893 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/verifyContent.ts` | 14 | 414 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundledSkills.ts` | 221 | 7497 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
-| `src/skills/loadSkillsDir.ts` | 1087 | 34415 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现：插件清单自定义/嵌套技能经 src/plugins.rs::resolve_skill_path 接入 ToolExecutor::list_skills/read_skill，真实 Read 权限及技能路径/会话变量已接通，源码已提交待验收；disable-model-invocation 已在模型工具目录和读取入口阻断（cb2e0ac），已提交待验收；技能模型/effort、动态刷新和完整交互仍缺 |
+| `src/skills/loadSkillsDir.ts` | 1087 | 34415 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现：插件清单自定义/嵌套技能经 src/plugins.rs::resolve_skill_path 接入 ToolExecutor::list_skills/read_skill，真实 Read 权限及技能路径/会话变量已接通，源码已提交待验收；disable-model-invocation 已在模型工具目录和读取入口阻断（cb2e0ac），已提交待验收；本地技能 /name 交互执行及 /skills 用户权限目录已接通（b3b63dc、be77ed4），源码待验收；技能模型/effort、动态刷新和完整交互仍缺 |
 | `src/skills/mcpSkillBuilders.ts` | 45 | 1627 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/state/AppState.tsx` | 200 | 23480 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/state/AppStateStore.ts` | 570 | 21847 | 重写：保持通用行为 | `src/generated_ports/p_4160de63cf190.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -1278,7 +1278,7 @@
 | `src/tools/SendMessageTool/UI.tsx` | 31 | 4679 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/SendMessageTool/constants.ts` | 2 | 52 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/SendMessageTool/prompt.ts` | 50 | 2356 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/SkillTool/SkillTool.ts` | 1109 | 38175 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现：模型工具 list_skills/read_skill 使用插件真实清单路径及 Read 权限检查，修复自定义/嵌套技能不可执行；原版技能/插件根路径及会话变量展开，已提交待验收；模型调用禁用标志已在真实 read_skill/list_skills 双重生效（cb2e0ac），待验收；完整 SkillTool UI/其他权限/异步模型元数据仍缺 |
+| `src/tools/SkillTool/SkillTool.ts` | 1109 | 38175 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现：模型工具 list_skills/read_skill 使用插件真实清单路径及 Read 权限检查，修复自定义/嵌套技能不可执行；原版技能/插件根路径及会话变量展开，已提交待验收；模型调用禁用标志已在真实 read_skill/list_skills 双重生效（cb2e0ac），待验收；用户与模型技能权限双通道已在 ToolExecutor::render_skill/list_skills_filtered 接线，源码待验收；完整 SkillTool UI/其他权限/异步模型元数据仍缺 |
 | `src/tools/SkillTool/UI.tsx` | 128 | 19189 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/SkillTool/constants.ts` | 2 | 39 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/SkillTool/prompt.ts` | 242 | 8221 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
