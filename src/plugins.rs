@@ -416,11 +416,11 @@ pub struct PluginSet {
     pub errors: Vec<String>,
 }
 fn valid_name(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 64
-        && value
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+    // Keep plugin discovery aligned with installation and the source
+    // marketplace identifier schema; long and dotted names are valid.
+    let mut bytes = value.bytes();
+    matches!(bytes.next(), Some(c) if c.is_ascii_alphanumeric())
+        && bytes.all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.'))
 }
 fn directory(root: &Path, name: &str) -> Result<PathBuf> {
     if !valid_name(name) {
