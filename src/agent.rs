@@ -72,6 +72,8 @@ pub struct Agent {
     interactive: bool,
     max_steps: usize,
     session: Session,
+    /// Captured before new sessions can be saved by teammate setup.
+    session_start_source: &'static str,
     mcp: Option<McpManager>,
     lsp: Option<LspManager>,
     hooks: HookRunner,
@@ -128,6 +130,12 @@ impl Agent {
         if session.git_branch.is_none() && session.messages.is_empty() {
             session.git_branch = ConversationContext::branch_at_start(&root);
         }
+        let session_start_source = if root.join(".atlas").join("sessions")
+            .join(format!("{}.json", session.id)).exists() {
+            "resume"
+        } else {
+            "startup"
+        };
         let provider = provider::create(&profile)?;
         let background = Arc::new(BackgroundTasks::for_session(&root, session.id)?);
         let list_id = task_list_id(session.id, session.team_name.as_deref());
@@ -171,6 +179,7 @@ impl Agent {
             interactive,
             max_steps,
             session,
+            session_start_source,
             mcp: None,
             lsp: None,
             hooks: HookRunner::default(),
@@ -220,7 +229,15 @@ impl Agent {
             .run(
                 HookEvent::SessionStart,
                 None,
-                json!({"session_id":self.session.id,"workspace":self.root}),
+                {
+                    let mut input = self.base_hook_input();
+                    input["source"] = json!(self.session_start_source);
+                    input["model"] = json!(self.profile.model);
+                    if let Some(agent_type) = self.prompt_role.as_deref() {
+                        input["agent_type"] = json!(agent_type);
+                    }
+                    input
+                },
             )
             .await?;
         for warning in &result.non_blocking_errors {
@@ -2293,7 +2310,12 @@ impl Agent {
             .run(
                 HookEvent::SessionStart,
                 None,
-                json!({"session_id":self.session.id,"workspace":self.root,"source":"clear"}),
+                {
+                    let mut input = self.base_hook_input();
+                    input["source"] = json!("clear");
+                    input["model"] = json!(self.profile.model);
+                    input
+                },
             )
             .await?;
         self.session_context = start.additional_context.join("\n");
