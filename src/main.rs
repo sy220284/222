@@ -1303,14 +1303,14 @@ async fn run_cli() -> Result<()> {
 /// Resolve a real user-invocable skill or plugin command. Shared by the
 /// interactive CLI and SDK so the same frontmatter restrictions apply.
 pub(crate) fn expand_user_skill_prompt(
-    agent: &Agent, config: &Config, command: &str, args: &str, is_mcp: bool,
+    agent: &Agent, _config: &Config, command: &str, args: &str, is_mcp: bool,
 ) -> Result<Option<String>> {
     if is_mcp {
         return Ok(None);
     }
     if command.contains(':') {
         return plugins::command_prompt_with_session(
-            agent.workspace_root(), &config.enabled_plugins,
+            agent.workspace_root(), agent.enabled_plugins(),
             command, args, Some(&agent.session_id()),
         );
     }
@@ -2560,7 +2560,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     Ok(())
 }
 
-fn sdk_visible_commands(agent: &Agent, config: &Config) -> Result<Vec<Value>> {
+fn sdk_visible_commands(agent: &Agent, _config: &Config) -> Result<Vec<Value>> {
     let implemented = [
         "agents", "clear", "compact", "context", "copy", "cost",
         "diff", "doctor", "files", "hooks", "mcp", "permissions",
@@ -2583,7 +2583,7 @@ fn sdk_visible_commands(agent: &Agent, config: &Config) -> Result<Vec<Value>> {
         .map(str::to_owned)
         .collect::<std::collections::HashSet<_>>();
     for command in plugins::command_descriptors(
-        agent.workspace_root(), &config.enabled_plugins,
+        agent.workspace_root(), agent.enabled_plugins(),
     )? {
         let name = command.get("name").and_then(Value::as_str)
             .ok_or_else(|| anyhow::anyhow!("Plugin command descriptor missing name"))?;
