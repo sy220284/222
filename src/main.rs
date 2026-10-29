@@ -391,7 +391,12 @@ async fn main() -> Result<()> {
         match &cli.command {
             Commands::Sessions { query } => {
                 for item in session_control::search(&root, query.as_deref().unwrap_or(""))? {
-                    println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
+                    println!(
+                        "{}  {}  ({} messages)",
+                        item.id,
+                        item.display_title(),
+                        item.messages
+                    );
                 }
                 return Ok(());
             }
@@ -705,7 +710,9 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 continue;
             }
             "/tag" => {
-                println!("Usage: /tag <tag-name> — add a searchable session tag; repeat to remove.");
+                println!(
+                    "Usage: /tag <tag-name> — add a searchable session tag; repeat to remove."
+                );
                 continue;
             }
 
@@ -726,7 +733,12 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             }
             "/sessions" => {
                 for item in agent.list_sessions()? {
-                    println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
+                    println!(
+                        "{}  {}  ({} messages)",
+                        item.id,
+                        item.display_title(),
+                        item.messages
+                    );
                 }
                 continue;
             }
@@ -779,7 +791,12 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
         }
         if input.starts_with("/sessions ") {
             for item in agent.search_sessions(input.trim_start_matches("/sessions").trim())? {
-                println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
+                println!(
+                    "{}  {}  ({} messages)",
+                    item.id,
+                    item.display_title(),
+                    item.messages
+                );
             }
             continue;
         }
