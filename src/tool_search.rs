@@ -10,7 +10,7 @@ pub fn definition() -> Value {
         "description":"Find tools by name, server, capability or description. Use select:tool_name[,tool_name] to select exact tools, or +required terms.",
         "parameters":{"type":"object","properties":{
             "query":{"type":"string","description":"Tool name, select: names, or search keywords"},
-            "max_results":{"type":"integer","minimum":1,"maximum":100,"default":5}
+            "max_results":{"type":"integer","minimum":1,"default":5}
         },"required":["query"]}
     }})
 }
@@ -133,8 +133,8 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
     let max = match args.get("max_results") {
         None => 5,
         Some(v) => match v.as_u64() {
-            Some(n @ 1..=100) => n as usize,
-            _ => bail!("max_results must be an integer between 1 and 100"),
+            Some(n) if n > 0 => usize::try_from(n).unwrap_or(usize::MAX),
+            _ => bail!("max_results must be a positive integer"),
         },
     };
     let catalog: Vec<(&str, &str, &str)> = tools

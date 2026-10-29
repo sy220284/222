@@ -60,7 +60,16 @@ impl Onboarding {
         // workspace invites project instructions. Provider branding is removed.
         let mut entries = fs::read_dir(&self.root)?;
         let empty = entries.next().is_none();
-        let has_instructions = ["AGENTS.md", ".atlas/instructions.md"]
+        // The Agent loads all these provider-neutral project instruction
+        // paths. An existing valid instruction file must satisfy onboarding,
+        // or /init would prompt the user to create a redundant file.
+        let has_instructions = [
+            "AGENTS.md",
+            "AGENTS.local.md",
+            ".atlas/AGENTS.md",
+            ".atlas/instructions.md",
+            ".atlas/instructions.local.md",
+        ]
             .iter()
             .any(|name| self.root.join(name).is_file());
         Ok(vec![

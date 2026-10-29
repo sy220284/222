@@ -1,3 +1,10 @@
+## 2026-10-29：工具搜索大量结果与项目引导识别已有指令（源码已提交，待验收）
+
+1. **ToolSearch 大量工具结果**：原版 `source/src/tools/ToolSearchTool/ToolSearchTool.ts:21–34,297–301,328–329` 的 `max_results` 是可选数字，关键词搜索直接按请求数量截取，没有 100 的固定上限。Rust `src/tool_search.rs::definition/execute` 原先拒绝 `max_results > 100`，模型在拥有大量 MCP 工具时无法一次获取所需候选。现去掉人为 100 上限，仍拒绝零、负数、非整数；以可用整数范围限制内存索引，保留原版关键词排名与选择逻辑。
+2. **项目引导识别现有指令**：原版 `source/src/projectOnboardingState.ts:19–47` 在工程已有指令文件时完成引导；Rust `src/conversation_context.rs` 已支持 `AGENTS.local.md`、`.atlas/AGENTS.md` 等，但 `src/project_onboarding.rs::steps` 只检查两种路径，造成已配置指令的项目仍要求运行 /init。现将引导检查与真实 Agent 可加载的主要指令文件路径对齐，避免重复生成指令文件。
+
+两项均为用户可感知的独立业务功能，**源码已提交、待行为验收**。未运行 Cargo/测试/CI。ToolSearch 原版浮点/负数特殊行为、全部延迟加载条件和项目引导完整 UI/并发配置写入仍待核对；Issue #3 冻结 362 条继续开放，完整验收新增 0。
+
 ## 2026-10-29：指令继承与附加目录补齐（源码已提交、待验收）
 
 原版依据：`source/src/utils/claudemd.ts::getMemoryFiles` 第859–975行，`source/src/context.ts::getUserContext`。Rust 真实调用链：`Agent::run/context_usage_snapshot` → `system_prompt_with_dirs` → `project_instructions_with_dirs`。
