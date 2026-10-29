@@ -5904,3 +5904,38 @@ fn files_command_tracks_real_model_writes_and_restores_them_after_restart() {
     );
     assert!(String::from_utf8_lossy(&output.stdout).contains("Files in context:\ncreated.rs"));
 }
+
+#[test]
+fn doctor_reads_real_git_remote_but_never_displays_embedded_credentials() {
+    let root = tempfile::tempdir().unwrap();
+    let git = |args: &[&str]| {
+        let result = Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    };
+    git(&["init", "-q"]);
+    git(&[
+        "remote",
+        "add",
+        "origin",
+        "https://internal-user:DOCTOR_SECRET@github.com/acme/real-project.git",
+    ]);
+    let result = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "doctor"])
+        .env("ATLAS_CONFIG", root.path().join("missing-config.json"))
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    let out = String::from_utf8_lossy(&result.stdout);
+    assert!(out.contains("Repository: github.com/acme/real-project"), "{out}");
+    assert!(!out.contains("DOCTOR_SECRET"));
+    assert!(!out.contains("internal-user"));
+}
