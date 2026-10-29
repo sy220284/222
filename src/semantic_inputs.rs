@@ -57,6 +57,70 @@ pub fn number(value: Value) -> Value {
     js_number_value(n)
 }
 
+/// Adapt the original strict Read/Edit/Write argument schemas at the
+/// tool boundary, before the provider-neutral Rust execution path.
+pub fn normalize_source_file_tool(name: &str, args: &mut Value) -> Result<()> {
+    let Some(map) = args.as_object_mut() else { return Ok(()); };
+    let allowed: &[&str] = match name {
+        "Read" => &["file_path", "offset", "limit", "pages"],
+        "Edit" => &["file_path", "old_string", "new_string", "replace_all"],
+        "Write" => &["file_path", "content"],
+        _ => return Ok(()),
+    };
+    for key in map.keys() {
+        if !allowed.contains(&key.as_str()) {
+            bail!("{name} unknown input field: {key}");
+        }
+    }
+    let Some(path) = map.remove("file_path") else {
+        bail!("{name} requires file_path");
+    };
+    if !path.is_string() {
+        bail!("{name}.file_path must be a string");
+    }
+    map.insert("path".to_owned(), path);
+    match name {
+        "Read" => {
+            if map.remove("pages").is_some() {
+                bail!("Read PDF page extraction is not yet available in this Rust runtime");
+            }
+            for (from, to, positive) in [
+                ("offset", "start_line", false),
+                ("limit", "line_count", true),
+            ] {
+                if let Some(raw) = map.remove(from) {
+                    let converted = number(raw);
+                    let Some(n) = converted.as_u64() else {
+                        bail!("Read.{from} must be a nonnegative integer");
+                    };
+                    if positive && n == 0 {
+                        bail!("Read.limit must be positive");
+                    }
+                    map.insert(to.to_owned(), Value::Number(n.into()));
+                }
+            }
+        }
+        "Edit" => {
+            for (from, to) in [("old_string", "old"), ("new_string", "new")] {
+                let Some(value) = map.remove(from) else {
+                    bail!("Edit requires {from}");
+                };
+                if !value.is_string() {
+                    bail!("Edit.{from} must be a string");
+                }
+                map.insert(to.to_owned(), value);
+            }
+        }
+        "Write" => {
+            if !map.get("content").is_some_and(Value::is_string) {
+                bail!("Write.content must be a string");
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 /// Applies the two source preprocessors only to declared built-in tool fields.
 /// Number fields here are integer-typed; fractional/negative values are rejected
 /// by the field's actual schema instead of falling back to default values.
