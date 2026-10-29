@@ -179,8 +179,6 @@ pub fn project_instructions_with_dirs(
     use anyhow::{bail, Context};
     use std::{collections::HashSet, fs, path::PathBuf};
 
-    const MAX_FILE_BYTES: u64 = 50_000;
-    const MAX_FILES: usize = 200;
     const MAX_RULE_DEPTH: usize = 8;
 
     fn enabled() -> bool {
@@ -592,19 +590,12 @@ pub fn project_instructions_with_dirs(
         if seen.contains(&canonical) {
             return Ok(());
         }
-        if seen.len() >= MAX_FILES {
-            bail!("Too many project instruction files (limit {MAX_FILES})");
-        }
-        if metadata.len() > MAX_FILE_BYTES {
-            bail!("Project instruction file too large: {}", path.display());
-        }
+        // Source safelyReadMemoryFileAsync uses readFile('utf-8') without a
+        // hard byte/file-count cap. Decode invalid sequences with U+FFFD as
+        // Node does, rather than dropping otherwise valid user instructions.
         let bytes = fs::read(&canonical)
             .with_context(|| format!("Read project instructions: {}", path.display()))?;
-        if bytes.len() as u64 > MAX_FILE_BYTES {
-            bail!("Project instruction file too large: {}", path.display());
-        }
-        let content = String::from_utf8(bytes)
-            .with_context(|| format!("Project instructions must be UTF-8: {}", path.display()))?;
+        let content = String::from_utf8_lossy(&bytes).into_owned();
         let content = strip_memory_comments(&content);
         let body = if is_rule {
             rule_body(&content)
