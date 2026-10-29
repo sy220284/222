@@ -221,8 +221,8 @@ fn reverse_dependents(root: &Path, config: &Config, target: &str) -> (Vec<String
             continue;
         }
         let directory = home.join(name);
-        let metadata = match fs::symlink_metadata(&directory) {
-            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => metadata,
+        match fs::symlink_metadata(&directory) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
             Ok(_) => {
                 warnings.push(format!("Cannot inspect redirected plugin '{name}'"));
                 continue;
@@ -232,8 +232,7 @@ fn reverse_dependents(root: &Path, config: &Config, target: &str) -> (Vec<String
                 warnings.push(format!("Cannot inspect plugin '{name}': {error}"));
                 continue;
             }
-        };
-        let _ = metadata;
+        }
         let manifest = [directory.join(".claude-plugin/plugin.json"), directory.join("plugin.json")]
             .into_iter().find(|path| path.exists());
         let Some(manifest) = manifest else { continue };
