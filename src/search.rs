@@ -320,7 +320,7 @@ fn ripgrep_ignore_rules(
     };
     let mut rules = Vec::new();
     for (line_number, raw) in content.lines().enumerate() {
-        let raw = raw.trim_end_matches('\\r');
+        let raw = raw.trim_end_matches('\r');
         if raw.is_empty() || raw.starts_with('#') {
             continue;
         }
@@ -1025,6 +1025,38 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn grep_respects_nested_ripgrep_ignore_files_and_override_priority() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("sub")).unwrap();
+        fs::write(root.path().join(".ignore"), "*.tmp\n!allowed.tmp\n").unwrap();
+        fs::write(root.path().join(".rgignore"), "!special.tmp\n").unwrap();
+        fs::write(root.path().join("one.tmp"), "needle").unwrap();
+        fs::write(root.path().join("allowed.tmp"), "needle").unwrap();
+        fs::write(root.path().join("special.tmp"), "needle").unwrap();
+        fs::write(root.path().join("sub/.rgignore"), "*.txt\n").unwrap();
+        fs::write(root.path().join("sub/hidden.txt"), "needle").unwrap();
+        fs::write(root.path().join("sub/visible.rs"), "needle").unwrap();
+        let result: Value = serde_json::from_str(
+            &grep_files(root.path(), root.path(),
+                &json!({"pattern":"needle","output_mode":"files_with_matches"})).unwrap()
+        ).unwrap();
+        let files = result["filenames"].as_array().unwrap();
+        let names: Vec<&str> = files.iter().filter_map(Value::as_str).collect();
+        assert!(names.iter().any(|name| name.ends_with("allowed.tmp")));
+        assert!(names.iter().any(|name| name.ends_with("special.tmp")));
+        assert!(names.iter().any(|name| name.ends_with("visible.rs")));
+        assert!(!names.iter().any(|name| name.ends_with("one.tmp")));
+        assert!(!names.iter().any(|name| name.ends_with("hidden.txt")));
+        // A user-supplied positive glob overrides an ignore exclusion.
+        let included: Value = serde_json::from_str(
+            &grep_files(root.path(), root.path(),
+                &json!({"pattern":"needle","glob":"one.tmp",
+                    "output_mode":"files_with_matches"})).unwrap()
+        ).unwrap();
+        assert!(included["filenames"].as_array().unwrap().iter()
+            .filter_map(Value::as_str).any(|name| name.ends_with("one.tmp")));
+    }
     #[test]
     fn glob_and_grep_modes_pagination_and_filters() {
         let root = tempfile::tempdir().unwrap();
