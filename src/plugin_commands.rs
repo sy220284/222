@@ -17,6 +17,9 @@ pub enum PluginCommand {
     Uninstall {
         #[serde(skip_serializing_if = "Option::is_none")]
         plugin: Option<String>,
+        /// None requests confirmation when persistent data is present.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        delete_data: Option<bool>,
     },
     Enable {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,7 +82,14 @@ pub fn parse_plugin_args(args: Option<&str>) -> PluginCommand {
             }
         }
         Some("manage") => PluginCommand::Manage,
-        Some("uninstall") => PluginCommand::Uninstall { plugin: target },
+        Some("uninstall") => {
+            let delete_data = match parts.get(2).copied() {
+                Some("--delete-data") => Some(true),
+                Some("--keep-data") => Some(false),
+                _ => None,
+            };
+            PluginCommand::Uninstall { plugin: target, delete_data }
+        },
         Some("enable") => PluginCommand::Enable { plugin: target },
         Some("disable") => PluginCommand::Disable { plugin: target },
         Some("validate") => {
