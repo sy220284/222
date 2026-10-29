@@ -309,6 +309,11 @@ enum Commands {
         #[arg(long)]
         check: bool,
     },
+    /// Persist the macOS terminal used when a browser opens an external link
+    TerminalPreference {
+        /// iTerm, Ghostty, kitty, Alacritty, WezTerm, Terminal, or auto
+        terminal: Option<String>,
+    },
     /// Parse a provider-neutral deep link without opening a terminal
     ParseDeepLink { uri: String },
     /// Encode an atlas-cli://open link for a reviewable prompt/workspace
@@ -458,6 +463,31 @@ async fn main() -> Result<()> {
             let command = plugin_commands::parse_plugin_args(Some(&args.join(" ")));
             let output = plugin_manager::execute(&root, &command)?;
             println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
+        Commands::TerminalPreference { terminal } => {
+            let mut config = Config::load()?;
+            if let Some(value) = terminal {
+                let normalized = value.trim().trim_end_matches(".app").to_ascii_lowercase();
+                let preferred = match normalized.as_str() {
+                    "auto" => None,
+                    "iterm" | "iterm2" => Some("iTerm"),
+                    "ghostty" => Some("Ghostty"),
+                    "kitty" => Some("kitty"),
+                    "alacritty" => Some("Alacritty"),
+                    "wezterm" => Some("WezTerm"),
+                    "terminal" => Some("Terminal"),
+                    _ => bail!(
+                        "Terminal must be iTerm, Ghostty, kitty, Alacritty, WezTerm, Terminal or auto"
+                    ),
+                };
+                config.deep_link_terminal = preferred.map(str::to_owned);
+                config.save()?;
+            }
+            println!(
+                "Deep-link terminal: {}",
+                config.deep_link_terminal.as_deref().unwrap_or("auto")
+            );
             return Ok(());
         }
         Commands::OpenBrowser { url } => {
