@@ -272,7 +272,8 @@ mod tests{
         pastes.insert(2,PastedContent{id:2,kind:"image".into(),content:"image".into(),
             media_type:None,filename:None});
         history.add("[Pasted text #1] [Image #2]",pastes).unwrap();
-        let entry=&history.get_history().unwrap()[0];
+        let entries=history.get_history().unwrap();
+        let entry=&entries[0];
         assert_eq!(entry.pasted_contents.len(),1);
         assert_eq!(entry.pasted_contents[&1].content,large);
         assert_eq!(expand_pasted_text_refs(&entry.display,&entry.pasted_contents),
