@@ -1588,6 +1588,7 @@ async fn chat(
                 println!("/commands                list migrated command registration metadata");
                 println!("@teammate MESSAGE        send directly to active team mailbox");
                 println!("/shell-spec [name]       show registered shell command specs");
+                println!("/mcp [status|reconnect]  inspect or recover MCP connections");
                 println!("/mcp-prompts             list available MCP prompt commands");
                 println!("/server:prompt (MCP) ARGS  execute an MCP prompt");
                 println!("/exit                    quit");
@@ -1713,6 +1714,24 @@ async fn chat(
             }
             "/tasks" => {
                 println!("{}", agent.background_tasks()?);
+                continue;
+            }
+            "/mcp" | "/mcp status" => {
+                for status in agent.mcp_statuses()? {
+                    println!("{}", serde_json::to_string_pretty(&status)?);
+                }
+                continue;
+            }
+            "/mcp reconnect" => {
+                let failures = agent.reconnect_failed_mcp().await?;
+                if failures.is_empty() {
+                    println!("All recoverable MCP connections are available.");
+                } else {
+                    eprintln!("{} MCP connections still failed.", failures.len());
+                }
+                for status in agent.mcp_statuses()? {
+                    println!("{}", serde_json::to_string_pretty(&status)?);
+                }
                 continue;
             }
             "/mcp-prompts" => {
