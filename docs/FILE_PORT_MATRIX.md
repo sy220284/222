@@ -1505,7 +1505,7 @@
 | `src/utils/filePersistence/outputsScanner.ts` | 127 | 3682 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/fileRead.ts` | 103 | 3168 | 重写：保持通用行为 | `src/generated_ports/p_b11d1e054e4a3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/fileReadCache.ts` | 97 | 2432 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
-| `src/utils/fileStateCache.ts` | 143 | 4175 | 重写：保持通用行为 | `src/generated_ports/p_199ff998619e9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/fileStateCache.ts` | 143 | 4175 | 重写：保持通用行为 | `src/tools.rs::FileReadCache`（实际执行） / `src/generated_ports/p_199ff998619e9.rs`（静态生成不计数） | 部分实现：实际工具读取缓存已实现 100 项/25MiB LRU；修复大于 25MiB 的新读取被拒绝缓存时旧同路径完整读取仍残留、可能错误授权后续 Edit/Write 的问题，现删除旧缓存并同步回收容量及 LRU 位置（b28fbb44），已提交待行为验收；原版克隆/合并缓存、恢复序列化及所有状态时序仍待核对 |
 | `src/utils/findExecutable.ts` | 18 | 553 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/fingerprint.ts` | 77 | 2248 | 重写：保持通用行为 | `src/generated_ports/p_2cc5445fbf7a6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/forkedAgent.ts` | 690 | 24635 | 重写：保持通用行为 | `src/generated_ports/p_c67576a3324b2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
