@@ -705,3 +705,8 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 3. 旧 SDK/工具调用的 `AgentOutputTool`、`BashOutputTool` 与 `TaskOutput` 统一映射至现有 `task_output` 执行链，保留参数标准化、后台任务查询与返回格式；别名集中在 `tool_names::canonical_name`，避免各调用点重复适配。源码提交 `6356d785f0a97dd66790489af2700bdb7fb91540`、`898c72887b77915060d24478dee08739aea53e0d`。
 
 **未实现/待核对**：原版其他任务类型（local_agent、remote_agent、teammate、workflow、monitor、dream）的 ID 与状态机、按会话隔离的输出目录、跨进程运行任务感知、取消/恢复/通知完整时序、输出驱逐及全部工具别名的行为验收。以上三项只计本轮新增源码补齐、待验证；不升级任何冻结 Issue #3 条目。遵循用户最新指令，本轮未运行 Cargo、测试或 CI。
+
+
+## 2026-10-29：TaskList 隐藏任务标记语义补齐（源码已提交、待验收）
+
+对照原版 `src/tools/TaskListTool/TaskListTool.ts:65–83` 的 `!t.metadata?._internal` 过滤，修复 Rust `src/task_graph.rs::TaskGraph::list` 只用 `as_bool()` 判断内部标记的问题。原版 JavaScript 将非空字符串、非零数字、数组、对象也视为真，Rust 此前会把这些带有内部标记的任务显示给用户。现统一按原版 JSON 值真值语义过滤，保留对 false、0、空字符串和 null 的公开行为。提交 `69f5d83abac70bde16a3b87ebeba014d332d2524`。仍需核对任务列表全部 UI/SDK、Hook、团队与并发状态链；本项已提交待验收，不勾选冻结项。
