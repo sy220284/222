@@ -104,7 +104,7 @@ impl HookRunner {
                     }
                 }
             } else {
-                data["input"] = input;
+                data["input"] = input.clone();
             }
             let response = run_command(rule, &data).await?;
             if response.blocking_reason.is_some() {
