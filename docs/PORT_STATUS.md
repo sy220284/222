@@ -13,7 +13,7 @@
 
 ### 同轮续补：插件自定义技能目录与读取
 
-原版 `source/src/utils/plugins/pluginLoader.ts::createPluginFromPath`（1557–1583 行）在清单声明 `skills` 时读取自定义路径，未声明时扫描默认 `skills/`。Rust `src/plugins.rs::skill_roots/skill_files/list_skills/read_skill` 现支持相对目录或数组、直接技能目录与目录下多个技能，列表和读取共用同一解析与插件根目录安全边界，安装前 `validate_local` 也检查路径。实际可达入口为 Agent 的技能列表及读取工具。提交 `687d8850684cd2bb1ada1b1028a289344541a530`、`0b146e44253d56286f0f8c8ef9337ef0adbc4436`。**另计 1 条用户可感知业务功能，累计 6/100，剩余 94**；源码已提交、待验收。嵌套技能命名空间、全部技能元数据与 SDK/插件动态刷新仍缺；冻结 362 项不勾选。未运行 Cargo、测试或 CI。
+原版 `source/src/utils/plugins/pluginLoader.ts::createPluginFromPath`（1557–1583 行）在清单声明 `skills` 时读取自定义路径，未声明时扫描默认 `skills/`。Rust `src/plugins.rs::skill_roots/skill_files/list_skills/read_skill` 现支持相对目录或数组、直接技能目录与目录下多个技能，列表和读取共用同一解析与插件根目录安全边界，安装前 `validate_local` 也检查路径。实际可达入口为 Agent 的技能列表及读取工具。提交 `687d8850684cd2bb1ada1b1028a289344541a530`、`0b146e44253d56286f0f8c8ef9337ef0adbc4436`。 续补 `2075fb59c84abfbfeb9f2bc692e08b22caf52351`：按原版 `loadPluginCommands.ts::getCommandNameFromFile` 的层级规则递归发现嵌套 `SKILL.md`，生成冒号分隔命名空间并在 `read_skill` 复用，属于同一技能路径功能完善，**不重复计数**。**另计 1 条用户可感知业务功能，累计 6/100，剩余 94**；源码已提交、待验收。嵌套技能命名空间、全部技能元数据与 SDK/插件动态刷新仍缺；冻结 362 项不勾选。未运行 Cargo、测试或 CI。
 
 ## 2026-10-29：SDK 动态 MCP 服务配置更新进入真实执行链（源码已提交、待验收）
 
