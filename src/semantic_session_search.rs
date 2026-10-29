@@ -12,10 +12,13 @@ use std::{collections::HashSet, path::Path};
 
 const MAX_SESSIONS: usize = 100;
 const MAX_TRANSCRIPT: usize = 2_000;
-const SYSTEM: &str = r#"Find relevant conversation sessions by title, tag, summary, first message and transcript.
-Rank exact tag matches first, followed by partial tags, title, Git branch,
-summary, transcript and semantic similarity. Be inclusive, but do not invent sessions. Return only JSON
-with an array of zero-based candidate indices: {"relevant_indices":[2,5,0]}."#;
+const SYSTEM: &str = r#"Your goal is to find relevant sessions based on a user's search query.
+You will receive session titles, user-assigned tags, Git branches, summaries, first messages and transcript excerpts.
+Prioritize exact tag matches, then partial tag matches, title, Git branch, summary and transcript matches, and semantic similarity.
+Be very inclusive: include sessions that contain the query anywhere, use related terms, or discuss the concept even in passing.
+When uncertain, include the session so the user can decide. Order the matches by relevance.
+If no session has any connection to the query, return an empty array.
+Respond with ONLY a JSON object, no markdown: {"relevant_indices":[2,5,0]}."#;
 
 fn excerpt(messages: &[Message]) -> String {
     let selected: Vec<_> = if messages.len() <= 100 {
@@ -44,6 +47,19 @@ fn excerpt(messages: &[Message]) -> String {
         units += ch.len_utf16();
     }
     normalized
+}
+
+/// The original agenticSessionSearch.ts uses JavaScript String.slice(0, 300)
+/// for the first message preview; use UTF-16 units and valid Rust boundaries.
+fn first_message_preview(text: &str) -> &str {
+    let mut units = 0usize;
+    for (offset, ch) in text.char_indices() {
+        if units + ch.len_utf16() > 300 {
+            return &text[..offset];
+        }
+        units += ch.len_utf16();
+    }
+    text
 }
 
 fn prompt(query: &str, candidates: &[(SessionItem, Option<Session>)]) -> String {
@@ -78,7 +94,7 @@ fn prompt(query: &str, candidates: &[(SessionItem, Option<Session>)]) -> String 
                     if !text.is_empty() {
                         fields.push(format!(
                             "- First message: {}",
-                            text.chars().take(300).collect::<String>()
+                            first_message_preview(&text)
                         ));
                     }
                 }
