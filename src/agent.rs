@@ -1679,6 +1679,10 @@ impl Agent {
     /// Replace previous turns with a model-generated, persistent compact summary.
     /// Do not modify the live transcript until the new session is durable.
     pub async fn compact_history(&mut self) -> Result<()> {
+        self.compact_history_with_trigger(false).await
+    }
+
+    async fn compact_history_with_trigger(&mut self, automatic: bool) -> Result<()> {
         if self.session.messages.is_empty() {
             bail!("No history to compact")
         }
@@ -1688,7 +1692,9 @@ impl Agent {
             .run(
                 HookEvent::PreCompact,
                 None,
-                json!({"session_id":self.session.id, "message_count":self.session.messages.len()}),
+                json!({"session_id":self.session.id, "message_count":self.session.messages.len(),
+                    "trigger":if automatic {"auto"} else {"manual"},
+                    "custom_instructions":null}),
             )
             .await?;
         if let Some(reason) = before.blocking_reason {
@@ -1806,7 +1812,9 @@ impl Agent {
             .run(
                 HookEvent::PostCompact,
                 None,
-                json!({"session_id":self.session.id,"summary":summary}),
+                json!({"session_id":self.session.id,"summary":summary,
+                    "trigger":if automatic {"auto"} else {"manual"},
+                    "compact_summary":summary}),
             )
             .await?;
         if let Some(reason) = after.blocking_reason {
@@ -1914,7 +1922,7 @@ impl Agent {
         // per-session circuit breaker after three consecutive failures.
         // A failed summarizer must not discard the user's new prompt.
         if history_chars > 100_000 && self.auto_compact_failures < 3 {
-            match self.compact_history().await {
+            match self.compact_history_with_trigger(true).await {
                 Ok(()) => self.auto_compact_failures = 0,
                 Err(error) => {
                     self.auto_compact_failures =
