@@ -220,6 +220,9 @@ impl HookMatcher {
 pub struct HookRunner {
     rules: Vec<(HookRule, HookMatcher)>,
     workspace: Option<PathBuf>,
+    /// Captured before a delegated worktree can be removed. SessionEnd hooks
+    /// still need a valid cwd after their temporary workspace disappears.
+    original_cwd: Option<PathBuf>,
 }
 
 impl HookRunner {
@@ -245,6 +248,7 @@ impl HookRunner {
         Ok(Self {
             rules: compiled,
             workspace: None,
+            original_cwd: Some(std::env::current_dir().context("Capturing original hook cwd")?),
         })
     }
 
@@ -276,6 +280,7 @@ impl HookRunner {
         let mut pending = Vec::new();
         let shutdown_cap = (event.name() == "SessionEnd").then(session_end_timeout);
         let workspace = self.workspace.as_deref();
+        let original_cwd = self.original_cwd.as_deref();
         let event_name = event.name();
         // The source chooses the matcher input from the event's own field.
         // Passing a synthetic tool name for compact or subagent hooks must
@@ -347,12 +352,12 @@ impl HookRunner {
             }
             pending.push(async move {
                 let result = if let Some(cap) = shutdown_cap {
-                    match timeout(cap, run_command(rule, &data, workspace)).await {
+                    match timeout(cap, run_command(rule, &data, workspace, original_cwd)).await {
                         Ok(result) => result,
                         Err(_) => Err(anyhow::anyhow!("SessionEnd hook exceeded shutdown timeout")),
                     }
                 } else {
-                    run_command(rule, &data, workspace).await
+                    run_command(rule, &data, workspace, original_cwd).await
                 };
                 (rule, result)
             });
@@ -650,6 +655,7 @@ async fn run_command(
     rule: &HookRule,
     payload: &Value,
     workspace: Option<&Path>,
+    original_cwd: Option<&Path>,
 ) -> Result<HookOutcome> {
     let mut proc = match rule.shell.unwrap_or_default() {
         crate::shell_runtime::ShellKind::Powershell => {
@@ -686,9 +692,17 @@ async fn run_command(
         .kill_on_drop(true);
     crate::subprocess_env::apply(&mut proc);
     if let Some(root) = workspace {
-        // Original hooks.ts runs in safeCwd and exposes the project root
-        // to scripts. Use the provider-neutral environment variable.
-        proc.current_dir(root);
+        // hooks.ts::execCommandHook uses the original cwd when a worktree has
+        // already been removed. Keep the stable project-root environment value
+        // while launching the cleanup hook from a directory that still exists.
+        let safe_cwd = if root.is_dir() {
+            root
+        } else {
+            original_cwd
+                .filter(|path| path.is_dir())
+                .context("Hook workspace was removed and original cwd is unavailable")?
+        };
+        proc.current_dir(safe_cwd);
         #[cfg(windows)]
         {
             let project_dir = if rule.shell.unwrap_or_default()
