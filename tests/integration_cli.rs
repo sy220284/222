@@ -6225,7 +6225,6 @@ fn chat_semantic_session_search_is_routed_through_model_and_records_usage() {
     assert!(saved.iter().any(|item| item.contains("\"total_tokens\": 6") || item.contains("\"total_tokens\":6")), "{saved:?}");
 }
 
-
 #[test]
 fn failed_auto_rename_preserves_api_usage_and_existing_conversation() {
     let root = tempfile::tempdir().unwrap();
@@ -6233,10 +6232,15 @@ fn failed_auto_rename_preserves_api_usage_and_existing_conversation() {
     let sessions = root.path().join(".atlas/sessions");
     fs::create_dir_all(&sessions).unwrap();
     let path = sessions.join(format!("{id}.json"));
-    fs::write(&path, json!({
-        "id": id,
-        "messages":[{"role":"user","content":"Prepare reliable release notes"}]
-    }).to_string()).unwrap();
+    fs::write(
+        &path,
+        json!({
+            "id": id,
+            "messages":[{"role":"user","content":"Prepare reliable release notes"}]
+        })
+        .to_string(),
+    )
+    .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
@@ -6245,7 +6249,8 @@ fn failed_auto_rename_preserves_api_usage_and_existing_conversation() {
         let body = json!({"choices":[{
             "message":{"role":"assistant","content":"invalid JSON"},
             "finish_reason":"stop"
-        }],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}).to_string();
+        }],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}})
+        .to_string();
         write!(stream,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()).unwrap();
@@ -6253,23 +6258,44 @@ fn failed_auto_rename_preserves_api_usage_and_existing_conversation() {
         request
     });
     let config = root.path().join("config.json");
-    fs::write(&config, json!({"default_provider":"local","providers":[{
-        "id":"local","kind":"openai-compatible","model":"local-model",
-        "base_url":format!("http://{addr}/v1")
-    }]}).to_string()).unwrap();
-    let mut child = binary().args([
-        "--workspace", root.path().to_str().unwrap(), "chat", "--resume", &id.to_string()
-    ]).env("ATLAS_CONFIG", &config)
-    .stdin(std::process::Stdio::piped())
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::piped())
-    .spawn().unwrap();
-    child.stdin.take().unwrap().write_all(b"/rename\n/exit\n").unwrap();
+    fs::write(
+        &config,
+        json!({"default_provider":"local","providers":[{
+            "id":"local","kind":"openai-compatible","model":"local-model",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "chat",
+            "--resume",
+            &id.to_string(),
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"/rename\n/exit\n")
+        .unwrap();
     let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid model JSON"));
     assert!(server.join().unwrap().contains("reliable release notes"));
-    let session:Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    let session: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
     assert!(session["custom_title"].is_null());
     assert_eq!(session["messages"].as_array().unwrap().len(), 1);
     assert_eq!(session["usage"]["total_tokens"], 11);
