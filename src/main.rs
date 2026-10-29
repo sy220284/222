@@ -2623,9 +2623,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     // A producer may close stdin immediately after issuing a side question.
     // Give already accepted independent replies a bounded chance to flush
     // before the SDK process exits.
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     for task in side_question_tasks {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
         if remaining.is_zero() {
             break;
         }
