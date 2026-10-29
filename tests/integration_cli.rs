@@ -2786,3 +2786,31 @@ fn cli_session_list_rename_export_and_workspace_safety(){
     assert!(!bad.status.success());
     assert!(!external.path().join("out.txt").exists());
 }
+
+#[test]
+fn resume_by_unambiguous_title_uses_real_persisted_session_without_network(){
+    use std::process::Stdio;
+    let root=tempfile::tempdir().unwrap();
+    let config=root.path().join("config.json");
+    let init=binary().arg("init").env("ATLAS_CONFIG",&config).output().unwrap();
+    assert!(init.status.success(),"{}",String::from_utf8_lossy(&init.stderr));
+    let id=uuid::Uuid::new_v4();
+    let sessions=root.path().join(".atlas/sessions");
+    fs::create_dir_all(&sessions).unwrap();
+    fs::write(sessions.join(format!("{id}.json")),json!({
+        "id":id,"custom_title":"Unique Continuation Topic",
+        "messages":[{"role":"user","content":"Continue verified Rust migration"}]
+    }).to_string()).unwrap();
+    let mut child=binary().args(["--workspace",root.path().to_str().unwrap(),
+        "chat","--resume","continuation topic"])
+        .env("ATLAS_CONFIG",&config)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    {
+        let mut input=child.stdin.take().unwrap();
+        writeln!(input,"/session\n/exit").unwrap();
+    }
+    let output=child.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains(&id.to_string()));
+}

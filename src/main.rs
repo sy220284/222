@@ -140,7 +140,7 @@ enum Commands {
         resume: Option<String>,
     },
     /// List saved conversations in the current workspace
-    Sessions,
+    Sessions { query:Option<String> },
     /// Give an existing conversation a persisted custom title
     Rename { session_id:String, title:String },
     /// Export a saved conversation, including tool activity
@@ -171,8 +171,8 @@ async fn main() -> Result<()> {
     if cli.max_steps == 0 { bail!("--max-steps must be at least 1") }
     let root = canonical_workspace(&cli.workspace)?;
     match &cli.command{
-        Commands::Sessions=>{
-            for item in session_control::list(&root)?{
+        Commands::Sessions{query}=>{
+            for item in session_control::search(&root,query.as_deref().unwrap_or(""))?{
                 println!("{}  {}  ({} messages)",item.id,item.title,item.messages);
             }
             return Ok(())
@@ -192,7 +192,8 @@ async fn main() -> Result<()> {
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. });
     let session = match &cli.command {
-        Commands::Chat { resume: Some(id) } | Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
+        Commands::Chat { resume: Some(id) } => session_control::resolve(&root,id)?,
+        Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
         _ => Session::fresh(),
     };
     let mut agent = Agent::new(
@@ -256,7 +257,8 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             "/help" => {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
-                println!("/sessions                list saved conversations");
+                println!("/sessions [query]        search saved conversation titles");
+                println!("/resume TERM             find session, show restart command");
                 println!("/rename NAME             rename current conversation");
                 println!("/export [filename]       save full conversation to a local text file");
                 println!("Resume: atlas-agent chat --resume SESSION_ID");
@@ -323,6 +325,23 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 continue;
             }
             _ => {}
+        }
+        if input.starts_with("/sessions ") {
+            for item in agent.search_sessions(input.trim_start_matches("/sessions").trim())? {
+                println!("{}  {}  ({} messages)",item.id,item.title,item.messages);
+            }
+            continue;
+        }
+        if input == "/resume" || input.starts_with("/resume ") {
+            let query=input.trim_start_matches("/resume").trim();
+            match session_control::resolve(
+                agent.workspace_root(),query
+            ){
+                Ok(session)=>println!("To resume: atlas-agent --workspace . chat --resume {}",
+                    session.id),
+                Err(err)=>eprintln!("{err:#}"),
+            }
+            continue;
         }
         if input == "/rename" || input.starts_with("/rename ") {
             match agent.rename_session(input.trim_start_matches("/rename").trim()){

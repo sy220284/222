@@ -275,3 +275,5 @@ SDK `type=user` 的 `content` 接受文本或内容块数组；图片块格式�
 ### 历史会话
 
 `atlas-agent --workspace DIR sessions` 列出已保存会话，`rename UUID NAME` 将标题持久化，`export UUID [FILENAME]` 导出包含助手、用户、工具调用及结果的 UTF-8 文本。聊天支持 `/sessions`、`/rename NAME`、`/export [FILENAME]`，恢复仍使用 `chat --resume UUID`。原版 React 导出面板、剪贴板与跨项目搜索尚未实现。
+
+历史会话支持 `sessions [query]` 和 `chat --resume '唯一标题关键词'`；若匹配多条，必须改用 UUID。聊天 `/resume QUERY` 提供可执行的恢复命令，但不会不安全地热切换已运行的 Agent。

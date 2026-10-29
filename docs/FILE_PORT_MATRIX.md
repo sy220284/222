@@ -244,7 +244,7 @@
 | `src/commands/rename/rename.ts` | 88 | 2759 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/resume/index.ts` | 13 | 303 | 重写：保持通用行为 | `src/main.rs / src/session.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
-| `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
 | `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/review/reviewRemote.ts` | 317 | 11926 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 重写：保持通用行为 | 待定 | 未迁移 |

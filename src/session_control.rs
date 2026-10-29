@@ -44,6 +44,36 @@ pub fn list(root:&Path)->Result<Vec<SessionItem>>{
     entries.sort_by(|a,b|b.modified_ms.cmp(&a.modified_ms).then(a.id.cmp(&b.id)));
     Ok(entries)
 }
+pub fn search(root:&Path,query:&str)->Result<Vec<SessionItem>>{
+    let matches=list(root)?;
+    let query=query.trim().to_lowercase();
+    if query.is_empty(){return Ok(matches)}
+    Ok(matches.into_iter().filter(|item|
+        item.id.to_string().contains(&query)||item.title.to_lowercase().contains(&query)
+    ).collect())
+}
+
+/// Resolve a UUID, exact title, or unambiguous title/UUID substring. Do not
+/// silently resume the wrong conversation when several titles match.
+pub fn resolve(root:&Path,selector:&str)->Result<Session>{
+    let selector=selector.trim();
+    if let Ok(id)=Uuid::parse_str(selector){
+        return Session::load(root,&id.to_string());
+    }
+    let matches=search(root,selector)?;
+    if matches.is_empty(){bail!("Session {selector} was not found")}
+    let exact=matches.iter().filter(|item|item.title.eq_ignore_ascii_case(selector))
+        .collect::<Vec<_>>();
+    let selected=if exact.len()==1{
+        exact[0]
+    }else if matches.len()==1{
+        &matches[0]
+    }else{
+        bail!("Found {} sessions matching '{}'. Please choose a specific UUID.",
+            matches.len(),selector);
+    };
+    Session::load(root,&selected.id.to_string())
+}
 pub fn rename(session:&mut Session,root:&Path,title:&str)->Result<String>{
     let title=title.trim();
     if title.is_empty(){bail!("Usage: /rename <name>")}
@@ -183,6 +213,21 @@ mod tests{
         session.team_name=Some("team".into());
         session.agent_name=Some("worker".into());
         assert!(rename(&mut session,root,"not allowed").is_err());
+    }
+    #[test]
+    fn session_search_is_case_insensitive_and_ambiguous_queries_fail(){
+        let root=tempfile::tempdir().unwrap();
+        let mut first=Session::fresh();
+        first.messages.push(Message::text("user","Fix parser behavior"));
+        first.save(root.path()).unwrap();
+        let mut second=Session::fresh();
+        second.messages.push(Message::text("user","Fix agent logic"));
+        second.save(root.path()).unwrap();
+        assert_eq!(search(root.path(),"PARSER").unwrap().len(),1);
+        assert!(resolve(root.path(),"Fix").is_err());
+        assert_eq!(resolve(root.path(),"Fix parser behavior").unwrap().id,first.id);
+        assert_eq!(resolve(root.path(),&second.id.to_string()).unwrap().id,second.id);
+        assert!(resolve(root.path(),"nonexistent").is_err());
     }
     #[cfg(unix)]
     #[test]
