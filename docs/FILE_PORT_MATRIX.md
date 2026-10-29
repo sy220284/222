@@ -1739,7 +1739,7 @@
 | `src/utils/secureStorage/macOsKeychainStorage.ts` | 232 | 8271 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/plainTextStorage.ts` | 85 | 2430 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/semanticBoolean.ts` | 30 | 1167 | 重写：严格布尔字符串转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：仅精确 true/false 字符串归一化并接入工具参数；Zod 可选/默认 schema 泛型组合待核对 |
-| `src/utils/semanticNumber.ts` | 37 | 1486 | 重写：严格十进制数字转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：十进制词法、非有限拒绝及工具整数参数转换；Zod 泛型输出与全部调用方待核对 |
+| `src/utils/semanticNumber.ts` | 37 | 1486 | 重写：严格十进制数字转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：十进制词法、非有限拒绝、IEEE-754 数字精度与负零、工具整数参数及 JSON 数值字面量对齐；Zod 泛型输出与全部调用方待核对 |
 | `src/utils/semver.ts` | 60 | 1713 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sequential.ts` | 57 | 1641 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionActivity.ts` | 134 | 4081 | 重写：保持通用行为 | 待定 | 未迁移 |
