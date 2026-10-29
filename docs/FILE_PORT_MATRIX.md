@@ -9,7 +9,7 @@
 | 原路径 | 原行数 | 原字节数 | 处理方式 | Rust 目标 | 当前验证状态 |
 |---|---:|---:|---|---|---|
 | `src/QueryEngine.ts` | 1296 | 46630 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/Task.ts` | 126 | 3152 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
+| `src/Task.ts` | 126 | 3152 | 重写：任务调度 | `src/background.rs / src/task.rs` | 部分实现：local_bash 任务使用原版 b+8 位小写数字字母 ID，查询/停止/增量读取兼容旧 UUID；其他任务类型、统一生命周期和任务依赖仍未等价 |
 | `src/Tool.ts` | 793 | 29516 | 重写：保持通用行为 | `src/generated_ports/p_2980dcfa0210a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands.ts` | 755 | 25185 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context.ts` | 190 | 6446 | 重写：保持通用行为 | `src/conversation_context.rs / src/agent.rs / src/main.rs` | 部分实现：会话首次启动的真实 Git 状态/分支/最近提交快照与本地日期进入模型 system，后续轮次不刷新；原版复杂记忆文件发现、注入过滤及更多配置合并尚未等价 |
@@ -1840,7 +1840,7 @@
 | `src/utils/systemTheme.ts` | 120 | 4231 | 重写：保持通用行为 | `src/generated_ports/p_ffaf2e1bb158c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/taggedId.ts` | 55 | 1573 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/task/TaskOutput.ts` | 391 | 12474 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/task/diskOutput.ts` | 452 | 13568 | 重写：保持通用行为 | `src/background.rs` | 部分实现：磁盘日志上限、任务 ID 关联和输出读取；原版输出驱逐策略未等价 |
+| `src/utils/task/diskOutput.ts` | 452 | 13568 | 重写：保持通用行为 | `src/background.rs` | 部分实现：磁盘日志上限、原版 b 前缀短 ID 与旧 UUID 输出路径兼容、输出缺失时仍返回任务状态及空日志；原版会话隔离、输出驱逐策略与完整异步生命周期仍未等价 |
 | `src/utils/task/framework.ts` | 309 | 9869 | 重写：保持通用行为 | `src/background.rs / src/task.rs` | 部分实现：任务状态与后台状态持久化；通知队列及通用生命周期未等价 |
 | `src/utils/task/outputFormatting.ts` | 39 | 1188 | 重写：保持通用行为 | `src/task_output_format.rs` | 部分实现：长度上限、UTF-16 计数、尾部截断和日志路径；代理项边界与任务目录待核对 |
 | `src/utils/task/sdkProgress.ts` | 37 | 1153 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
