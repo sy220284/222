@@ -73,7 +73,10 @@ fn permitted_redirect(from: &Url, to: &Url) -> bool {
         && from.port_or_known_default() == to.port_or_known_default()
         && to.username().is_empty()
         && to.password().is_none()
-        && from.host_str().zip(to.host_str()).is_some_and(|(a, b)| strip_www(a) == strip_www(b))
+        && from
+            .host_str()
+            .zip(to.host_str())
+            .is_some_and(|(a, b)| strip_www(a) == strip_www(b))
 }
 
 fn sanitize_html(body: &str) -> String {

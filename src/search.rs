@@ -103,7 +103,11 @@ fn git_ignored_paths(base: &Path, paths: &[PathBuf]) -> std::collections::HashSe
         if !output.status.success() {
             continue;
         }
-        for name in output.stdout.split(|byte| *byte == 0).filter(|name| !name.is_empty()) {
+        for name in output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|name| !name.is_empty())
+        {
             if let Ok(name) = std::str::from_utf8(name) {
                 ignored.insert(base.join(name));
             }
@@ -175,18 +179,27 @@ pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         .ok()
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "true".to_owned());
-    let include_hidden = matches!(hidden.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on");
+    let include_hidden = matches!(
+        hidden.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    );
     let no_ignore = std::env::var("ATLAS_GLOB_NO_IGNORE")
         .ok()
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "true".to_owned());
-    let skip_gitignore = matches!(no_ignore.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on");
+    let skip_gitignore = matches!(
+        no_ignore.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    );
     let mut matches = files(base)?
         .into_iter()
         .filter(|p| {
             p.strip_prefix(base).is_ok_and(|rel| {
                 matching(&compiled, rel)
-                    && (include_hidden || !rel.components().any(|part| part.as_os_str().to_string_lossy().starts_with('.')))
+                    && (include_hidden
+                        || !rel
+                            .components()
+                            .any(|part| part.as_os_str().to_string_lossy().starts_with('.')))
             })
         })
         .collect::<Vec<_>>();
@@ -227,9 +240,13 @@ fn matching_lines(content: &str, regex: &regex::Regex, multiline: bool) -> Vec<b
         if lines.is_empty() {
             break;
         }
-        let first = starts.partition_point(|&offset| offset <= found.start()).saturating_sub(1);
+        let first = starts
+            .partition_point(|&offset| offset <= found.start())
+            .saturating_sub(1);
         let last_byte = found.end().saturating_sub(1).max(found.start());
-        let last = starts.partition_point(|&offset| offset <= last_byte).saturating_sub(1);
+        let last = starts
+            .partition_point(|&offset| offset <= last_byte)
+            .saturating_sub(1);
         for index in first..=last.min(lines.len() - 1) {
             matched[index] = true;
         }
@@ -255,8 +272,7 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         .multi_line(multiline)
         .dot_matches_new_line(multiline)
         .build()?;
-    let (include_globs, exclude_globs) =
-        grep_globs(args.get("glob").and_then(Value::as_str))?;
+    let (include_globs, exclude_globs) = grep_globs(args.get("glob").and_then(Value::as_str))?;
     let kind = args.get("type").and_then(Value::as_str);
     let mode = args
         .get("output_mode")
@@ -373,7 +389,10 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
     };
     let num_matches = if mode == "count" {
         page.iter()
-            .filter_map(|line| line.rsplit_once(':').and_then(|(_, n)| n.parse::<usize>().ok()))
+            .filter_map(|line| {
+                line.rsplit_once(':')
+                    .and_then(|(_, n)| n.parse::<usize>().ok())
+            })
             .sum()
     } else {
         0

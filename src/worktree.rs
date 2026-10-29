@@ -56,7 +56,12 @@ impl Worktree {
             &["worktree", "add", "-b", &branch, &rendered, "HEAD"],
         )
         .await?;
-        Ok(Self { repo, base_head, path, branch })
+        Ok(Self {
+            repo,
+            base_head,
+            path,
+            branch,
+        })
     }
 
     /// Keep a changed worktree for review; remove a clean worktree and branch.

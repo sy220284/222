@@ -760,21 +760,41 @@ async fn main() -> Result<()> {
         _ => {}
     }
 
-    if let Commands::Keybindings { check, action, context, no_edit } = &cli.command {
+    if let Commands::Keybindings {
+        check,
+        action,
+        context,
+        no_edit,
+    } = &cli.command
+    {
         let path = keybindings::keybindings_path(&keybindings::config_home()?);
         if let Some(action) = action {
-            println!("{}",keybindings::inspect(action,context)?);
+            println!("{}", keybindings::inspect(action, context)?);
         } else if *check {
-            let loaded=keybindings::load_from(&path);
-            println!("{} bindings; {} warnings",loaded.bindings.len(),loaded.warnings.len());
-            for warning in loaded.warnings { println!("{}: {}",warning.severity,warning.message); }
+            let loaded = keybindings::load_from(&path);
+            println!(
+                "{} bindings; {} warnings",
+                loaded.bindings.len(),
+                loaded.warnings.len()
+            );
+            for warning in loaded.warnings {
+                println!("{}: {}", warning.severity, warning.message);
+            }
         } else {
-            let created=keybindings::create_template(&path)?;
-            println!("{} {}",if created {"Created"} else {"Existing"},path.display());
+            let created = keybindings::create_template(&path)?;
+            println!(
+                "{} {}",
+                if created { "Created" } else { "Existing" },
+                path.display()
+            );
             if !*no_edit {
-                if let Some(editor) = std::env::var_os("VISUAL").or_else(||std::env::var_os("EDITOR")) {
-                    let status=std::process::Command::new(editor).arg(&path).status()?;
-                    if !status.success() { bail!("Editor exited with {status}"); }
+                if let Some(editor) =
+                    std::env::var_os("VISUAL").or_else(|| std::env::var_os("EDITOR"))
+                {
+                    let status = std::process::Command::new(editor).arg(&path).status()?;
+                    if !status.success() {
+                        bail!("Editor exited with {status}");
+                    }
                 }
             }
         }
@@ -1209,21 +1229,35 @@ async fn chat(
         });
         let input = normalized.as_deref().unwrap_or(input);
         if input == "/keybindings" || input.starts_with("/keybindings ") {
-            let arg=input.strip_prefix("/keybindings").unwrap_or("").trim();
-            let path=keybindings::keybindings_path(&keybindings::config_home()?);
+            let arg = input.strip_prefix("/keybindings").unwrap_or("").trim();
+            let path = keybindings::keybindings_path(&keybindings::config_home()?);
             if arg == "check" {
-                let loaded=keybindings::load_from(&path);
-                println!("{} bindings; {} warnings",loaded.bindings.len(),loaded.warnings.len());
-                for w in loaded.warnings { println!("{}: {}",w.severity,w.message); }
+                let loaded = keybindings::load_from(&path);
+                println!(
+                    "{} bindings; {} warnings",
+                    loaded.bindings.len(),
+                    loaded.warnings.len()
+                );
+                for w in loaded.warnings {
+                    println!("{}: {}", w.severity, w.message);
+                }
             } else if arg.is_empty() {
-                let created=keybindings::create_template(&path)?;
-                println!("{} {}",if created {"Created"} else {"Existing"},path.display());
-                if let Some(editor)=std::env::var_os("VISUAL").or_else(||std::env::var_os("EDITOR")) {
-                    let status=std::process::Command::new(editor).arg(&path).status()?;
-                    if !status.success() { eprintln!("Editor exited with {status}"); }
+                let created = keybindings::create_template(&path)?;
+                println!(
+                    "{} {}",
+                    if created { "Created" } else { "Existing" },
+                    path.display()
+                );
+                if let Some(editor) =
+                    std::env::var_os("VISUAL").or_else(|| std::env::var_os("EDITOR"))
+                {
+                    let status = std::process::Command::new(editor).arg(&path).status()?;
+                    if !status.success() {
+                        eprintln!("Editor exited with {status}");
+                    }
                 }
             } else {
-                println!("{}",keybindings::inspect(arg,"Chat")?);
+                println!("{}", keybindings::inspect(arg, "Chat")?);
             }
             continue;
         }

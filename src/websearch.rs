@@ -21,15 +21,24 @@ fn domain_filter(args: &Value, key: &str) -> Result<Vec<String>> {
     let Some(raw) = args.get(key) else {
         return Ok(Vec::new());
     };
-    let domains = raw.as_array().with_context(|| format!("{key} must be an array"))?;
-    domains.iter().map(|item| {
-        let domain = item.as_str().with_context(|| format!("{key} entries must be strings"))?
-            .trim().trim_end_matches('.').to_ascii_lowercase();
-        if domain.is_empty() || domain.chars().any(|c| matches!(c, '/' | ':' | '@' | ' ')) {
-            bail!("{key} must contain hostnames without schemes or paths");
-        }
-        Ok(domain)
-    }).collect()
+    let domains = raw
+        .as_array()
+        .with_context(|| format!("{key} must be an array"))?;
+    domains
+        .iter()
+        .map(|item| {
+            let domain = item
+                .as_str()
+                .with_context(|| format!("{key} entries must be strings"))?
+                .trim()
+                .trim_end_matches('.')
+                .to_ascii_lowercase();
+            if domain.is_empty() || domain.chars().any(|c| matches!(c, '/' | ':' | '@' | ' ')) {
+                bail!("{key} must contain hostnames without schemes or paths");
+            }
+            Ok(domain)
+        })
+        .collect()
 }
 
 fn domain_allowed(url: &str, allowed: &[String], blocked: &[String]) -> bool {
@@ -111,7 +120,9 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
     let results = rows
         .iter()
         .filter(|result| {
-            result.get("url").and_then(Value::as_str)
+            result
+                .get("url")
+                .and_then(Value::as_str)
                 .is_some_and(|url| domain_allowed(url, &allowed, &blocked))
         })
         .take(limit as usize)
