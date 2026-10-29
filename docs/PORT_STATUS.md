@@ -5,7 +5,10 @@
 - **Grep 搜索主链**：对照原版 `src/tools/GrepTool/GrepTool.ts:104–126, 314–570`，修复 Rust `src/search.rs` 的跨行正则匹配、匹配行数统计（同一行多次出现不重复计数）、`context/-C` 对 `-A/-B` 的优先级、`-n` 行号开关、`head_limit=0` 不限量及分页后计数。真实模型工具定义同步公开 `-n`。提交 `19073b725e1eb942a2829ca52daad215e2d6764e`。仍缺原版 ripgrep 忽略规则、超长行、取消及全部匹配边界。
 - **网页抓取跨域跳转**：对照原版 `src/tools/WebFetchTool/WebFetchTool.ts:214–249`、`utils.ts:205–243`，Rust `src/webfetch.rs` 现在对非同来源（含协议/端口变化）跳转返回目标 URL 而非自动抓取，要求 Agent 新一轮工具调用重新授权；保留显式拒绝优先，并把经过公网检查的 DNS 地址绑定到实际请求，避免解析后重绑定。提交 `0d70b71c3e44e569ba980ba2a05da794a497bdf6`、`eeac41f1338d6a5dc185a2f833e429c9e6ba4e21`。仍缺原版 Markdown 提取、缓存和完整网页摘要链。
 - **工作树退出保护**：对照原版 `src/tools/ExitWorktreeTool/ExitWorktreeTool.ts:79–112, 190–225`、`src/components/WorktreeExitDialog.tsx:39–79`，Rust `src/worktree.rs` 保存创建时 HEAD 基线，在退出时统计新提交；即使目录没有未提交文件，只要分支存在新提交也保留工作树，避免自动删除用户成果。提交 `f8d8840fb9aca6dfffda78be47cd80d9e77e946a`。仍缺原版保留/删除交互、命名复用、恢复和沙箱/Hook。
-- **严格计数**：本轮完成上述 3 条独立用户业务主链的真实源码修改与提交，**3/100**，其余 97 条未完成；未运行 Cargo、单元/集成测试或 CI，均仅“已提交待验收”，不新增已验收源路径，Issue #3 冻结 362 项保持开放。原始源码 ZIP 可用；本轮尚未完成 100 条独立用户业务缺口的全部源码级确认和实施方案，不能用路径候选替代。
+- **工具发现与关键词检索**：对照 `src/tools/ToolSearchTool/ToolSearchTool.ts:129–160, 218–300`，Rust `src/tool_search.rs` 接入原版完整名称回退评分及 searchHint 高优先级匹配，使名称分词不完整但提示明确的工具可被发现。提交 `d974b491b2bbd59c6c6e90ec91b7c23c901819d0`。仍缺完整原版 deferred/tool_reference 协议。
+- **PowerShell 模型输入兼容**：对照 `src/tools/PowerShellTool/PowerShellTool.tsx:230–233`、`src/utils/semanticNumber.ts` 与 `semanticBoolean.ts`，Rust `src/semantic_inputs.rs` 将 PowerShell 的字符串毫秒超时及后台执行布尔值转换为实际执行器可读类型；同次补齐 Grep 数字/布尔参数的源语义输入。提交 `a7db37058dfe1262907afa0e5d80b5e319000b45`。完整 PowerShell AST/沙箱和后台任务生命周期仍缺。
+- **Grep 后续补齐（不重复计数）**：`src/search.rs` 增加多模式通配和排除过滤、Git 原生忽略规则、原版 `numLines` 回执；`src/tools.rs` 修正跨域网页跳转只检查显式拒绝，避免提前触发两次授权。提交 `e47a87bb31f85b113e17b1b848ae918537813ea3`、`6f55049701cd5ab17710e5b2cdf09e766fb9afe7`、`50b8cbe16b51633f6c69b237678f578cd8ef280f`、`876474e449123dd9f9bc7adea5cf88fe6b6a9f98`。
+- **严格计数**：本轮完成 5 条互不重复的用户业务主链的真实源码修改与提交，**5/100**，其余 95 条未完成；未运行 Cargo、单元/集成测试或 CI，均仅“已提交待验收”，不新增已验收源路径，Issue #3 冻结 362 项保持开放。原始源码 ZIP 可用；本轮尚未完成 100 条独立用户业务缺口的全部源码级确认和实施方案，不能用路径候选替代。
 
 
 ## 2026-10-29：本地原版源码对照——会话上下文与项目引导（代码已验证，非文件级全等价）
