@@ -211,6 +211,19 @@ impl Teams {
                     };
                     (payload,request_id,approve)
                 },
+                "mode_set_request"=>{
+                    if sender!="team-lead" || target=="team-lead"{
+                        bail!("Only the team lead can set a teammate permission mode")
+                    }
+                    let mode=input.get("mode").and_then(Value::as_str)
+                        .context("mode is required")?;
+                    if crate::permission_mode::Mode::parse(mode).is_none(){
+                        bail!("Unknown teammate permission mode")
+                    }
+                    let request_id=format!("mode-{}",uuid::Uuid::new_v4().simple());
+                    (json!({"type":"mode_set_request","mode":mode,
+                        "from":"team-lead"}),request_id,false)
+                },
                 "plan_approval_request"=>{
                     if sender=="team-lead" || target!="team-lead" {
                         bail!("Only a teammate can request plan approval from team-lead")
@@ -428,6 +441,9 @@ pub fn definitions(leader:bool,team_active:bool)->Vec<Value>{
                         "request_id":{"type":"string"},"approve":{"type":"boolean"},
                         "reason":{"type":"string"}
                     },"required":["type","request_id","approve"]},
+                    {"type":"object","properties":{
+                        "type":{"const":"mode_set_request"},"mode":{"type":"string"}
+                    },"required":["type","mode"]},
                     {"type":"object","properties":{
                         "type":{"const":"plan_approval_request"},
                         "request_id":{"type":"string"},
@@ -712,6 +728,26 @@ mod plan_approval_lifecycle_tests {
         assert_eq!(Teams::new(root.path()).unwrap()
             .approve_pending_plans("team","default").unwrap(),1);
         assert_eq!(inbox.unread("worker").unwrap().len(),1);
+    }
+    #[test]
+    fn mode_change_requires_active_leader_and_valid_source_mode(){
+        let root=tempfile::tempdir().unwrap();
+        let teams=Teams::new(root.path()).unwrap();
+        teams.create("team",None,"leader").unwrap();
+        teams.member("team",Member{
+            name:"worker".into(),id:"worker@team".into(),active:true}).unwrap();
+        let request=json!({"type":"mode_set_request","mode":"acceptEdits"});
+        assert!(teams.send_structured("team","team-lead","worker",&request).is_err());
+        assert!(teams.send_structured("team","worker","team-lead",
+            &json!({"type":"mode_set_request","mode":"admin"})).is_err());
+        teams.send_structured("team","worker","team-lead",&request).unwrap();
+        let inbox=Mailbox::new(root.path(),"team").unwrap();
+        let item=inbox.unread("worker").unwrap();
+        assert_eq!(item.len(),1);
+        let payload:Value=serde_json::from_str(&item[0].text).unwrap();
+        assert_eq!(payload["type"],"mode_set_request");
+        assert_eq!(payload["mode"],"acceptEdits");
+        assert_eq!(payload["from"],"team-lead");
     }
     #[test]
     fn plan_request_cannot_be_spoofed_or_sent_to_another_worker() {
