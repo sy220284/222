@@ -6630,3 +6630,41 @@ fn sdk_remote_attachment_download_and_model_request_share_session() {
         b"reference attachment data"
     );
 }
+
+#[test]
+fn local_marketplace_cli_add_install_list_and_remove_are_durable() {
+    let project = tempfile::tempdir().unwrap();
+    let source = tempfile::tempdir().unwrap();
+    let config = project.path().join("config.json");
+    fs::create_dir_all(source.path().join(".claude-plugin")).unwrap();
+    fs::create_dir_all(source.path().join("plugins/reviewer")).unwrap();
+    fs::write(
+        source.path().join(".claude-plugin/marketplace.json"),
+        r#"{"name":"team-repo","owner":{"name":"Team"},"plugins":[{"name":"reviewer","source":"./plugins/reviewer"}]}"#,
+    )
+    .unwrap();
+    fs::write(
+        source.path().join("plugins/reviewer/plugin.json"),
+        r#"{"name":"reviewer","version":"1.0","hooks":[],"mcp_servers":[]}"#,
+    )
+    .unwrap();
+    let invoke = |arguments: &[&str]| {
+        let result = binary()
+            .args(["--workspace", project.path().to_str().unwrap(), "plugin"])
+            .args(arguments)
+            .env("ATLAS_CONFIG", &config)
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+        serde_json::from_slice::<Value>(&result.stdout).unwrap()
+    };
+    assert_eq!(
+        invoke(&["marketplace", "add", source.path().to_str().unwrap()])["name"],
+        "team-repo"
+    );
+    assert_eq!(invoke(&["marketplace", "list"])["marketplaces"][0]["name"], "team-repo");
+    assert_eq!(invoke(&["install", "reviewer@team-repo"])["installed"], "reviewer");
+    assert!(project.path().join(".atlas/plugins/reviewer/plugin.json").is_file());
+    assert_eq!(invoke(&["marketplace", "remove", "team-repo"])["removed"], "team-repo");
+    assert!(project.path().join(".atlas/plugins/reviewer/plugin.json").is_file());
+}

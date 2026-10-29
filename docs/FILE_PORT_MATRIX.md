@@ -1683,7 +1683,7 @@
 | `src/utils/plugins/officialMarketplaceGcs.ts` | 217 | 9338 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/officialMarketplaceStartupCheck.ts` | 440 | 15192 | 重写：保持通用行为 | `src/generated_ports/p_bbc95ae0a3971.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/orphanedPluginFilter.ts` | 115 | 3980 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/parseMarketplaceInput.ts` | 163 | 6075 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/parseMarketplaceInput.ts` | 163 | 6075 | 重写：保持通用行为 | `src/marketplace_source.rs / src/marketplace_registry.rs / src/plugin_manager.rs` | 部分实现：解析 Git SSH、GitHub 简写、HTTP(S)、Azure DevOps 与本地文件/目录；本地市场登记、持久管理、刷新及插件安装已接入 CLI，远程下载、信任验证与完整错误边界待验收 |
 | `src/utils/plugins/performStartupChecks.tsx` | 70 | 9597 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginAutoupdate.ts` | 285 | 9473 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginBlocklist.ts` | 128 | 4361 | 重写：保持通用行为 | 待定 | 未迁移 |

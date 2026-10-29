@@ -46,6 +46,8 @@ mod json_read;
 mod json_runtime;
 mod keybindings;
 mod lsp;
+mod marketplace_registry;
+mod marketplace_source;
 mod mcp;
 mod mcp_http;
 mod mcp_prompt;

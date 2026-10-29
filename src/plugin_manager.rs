@@ -127,8 +127,10 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
         } => {
             let path = marketplace
                 .as_deref()
-                .context("Local plugin install requires a directory path")?;
-            let local = if let Some(uri) = path.strip_prefix("file://") {
+                .context("Local plugin install requires a directory path or registered marketplace")?;
+            let local = if let Some(plugin_name) = plugin {
+                crate::marketplace_registry::resolve_local_plugin(&root, path, plugin_name)?
+            } else if let Some(uri) = path.strip_prefix("file://") {
                 let uri = reqwest::Url::parse(&format!("file://{uri}"))?;
                 uri.to_file_path()
                     .map_err(|_| anyhow::anyhow!("Invalid file URL"))?
@@ -206,11 +208,8 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             let name = manifest_name(&location)?;
             Ok(json!({"name":name,"valid_manifest":true}))
         }
-        PluginCommand::Marketplace { action, .. } => {
-            bail!(
-                "Marketplace command '{}' requires a trusted registry integration",
-                action.as_deref().unwrap_or("menu")
-            )
+        PluginCommand::Marketplace { action, target } => {
+            crate::marketplace_registry::execute(&root, action.as_deref(), target.as_deref())
         }
     }
 }
