@@ -264,7 +264,11 @@ impl Agent {
             .run(
                 HookEvent::SessionEnd,
                 None,
-                json!({"session_id":self.session.id,"workspace":self.root}),
+                {
+                    let mut input = self.base_hook_input();
+                    input["reason"] = json!("other");
+                    input
+                },
             )
             .await?;
         for warning in &outcome.non_blocking_errors {
@@ -2276,7 +2280,11 @@ impl Agent {
             .run(
                 HookEvent::SessionEnd,
                 None,
-                json!({"session_id":self.session.id,"workspace":self.root,"reason":"clear"}),
+                {
+                    let mut input = self.base_hook_input();
+                    input["reason"] = json!("clear");
+                    input
+                },
             )
             .await?;
 
