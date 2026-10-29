@@ -225,7 +225,7 @@ pub fn destructive_command_warning(command: &str) -> Option<&'static str> {
             }
         }
         if pattern.is_match(command) {
-            return Some(warning);
+            return Some(*warning);
         }
     }
     None
