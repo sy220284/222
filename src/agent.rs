@@ -1999,6 +1999,57 @@ impl Agent {
             .as_mut()
             .map_or_else(|| Ok(Vec::new()), |mcp| mcp.statuses())
     }
+    /// SDK setMcpServers is a desired-state update for session-owned servers.
+    /// Validate each server and managed policy before any process/network
+    /// side effect; rejected entries are returned as per-server errors.
+    pub async fn set_dynamic_mcp_servers(
+        &mut self,
+        requested: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<serde_json::Value> {
+        let settings = permission_settings::SettingsPaths::for_workspace(&self.root)?
+            .settings_snapshot(&self.profile.model)?;
+        let mut accepted = Vec::new();
+        let mut rejected = serde_json::Map::new();
+        for (name, raw) in requested {
+            let outcome: Result<McpServerConfig> = (|| {
+                let mut config = raw.as_object().cloned()
+                    .context("MCP server configuration must be an object")?;
+                config.insert("id".to_owned(), json!(name));
+                let server: McpServerConfig = serde_json::from_value(
+                    serde_json::Value::Object(config))?;
+                if self.mcp_configs.iter().any(|fixed| fixed.id == server.id) {
+                    bail!("SDK dynamic server name conflicts with a fixed MCP server");
+                }
+                if server.transport.as_deref() == Some("sdk") {
+                    bail!("SDK-managed in-process MCP transport is not available");
+                }
+                let mut validation = crate::config::Config::default();
+                validation.mcp_servers.push(server.clone());
+                validation.validate()?;
+                if !crate::mcp_policy::allows(&settings, &server)? {
+                    bail!("Blocked by MCP allow/deny policy");
+                }
+                Ok(server)
+            })();
+            match outcome {
+                Ok(server) => accepted.push(server),
+                Err(error) => {
+                    rejected.insert(name.clone(), json!(format!("{error:#}")));
+                }
+            }
+        }
+        if self.mcp.is_none() {
+            self.mcp = Some(McpManager::connect_with_root(&[], &self.root).await?);
+        }
+        let mut result = self.mcp.as_mut().context("MCP manager missing")?
+            .reconcile_dynamic(accepted).await?;
+        if let Some(errors) = result.get_mut("errors").and_then(serde_json::Value::as_object_mut) {
+            errors.extend(rejected);
+        }
+        self.last_context_usage = None;
+        Ok(result)
+    }
+
     /// Persist the user's MCP toggle before changing the live transport.
     /// A failed enable remains enabled in settings and visible as a failed
     /// connection, so a later reconnect can recover without reconfiguration.
@@ -2008,7 +2059,7 @@ impl Agent {
         if self.mcp.is_none() {
             bail!("No MCP servers configured");
         }
-        if !self.mcp_configs.iter().any(|server| server.id == name) {
+        if !self.mcp.as_ref().is_some_and(|manager| manager.configured(name)) {
             bail!("MCP server {name:?} not found");
         }
         let mut disabled = load_disabled_mcp_servers()?;
