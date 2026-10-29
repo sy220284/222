@@ -1750,10 +1750,17 @@ impl Agent {
                 Ok(response) => {
                     let visible = response.message.visible_text();
                     if Self::compact_context_limit(&visible) {
+                        // A provider may return context-length failures as
+                        // ordinary responses with billable usage. Retain that
+                        // usage even if another request is attempted.
+                        if let Some(usage) = response.usage {
+                            self.record_usage(usage);
+                        }
                         if retries < 3 && Self::truncate_compact_rounds(&mut history) {
                             retries += 1;
                             continue;
                         }
+                        self.session.save(&self.root)?;
                         bail!("Compaction exceeded model context after {retries} retries");
                     }
                     break response;
@@ -1781,10 +1788,12 @@ impl Agent {
             .as_ref()
             .is_some_and(|calls| !calls.is_empty())
         {
+            self.session.save(&self.root)?;
             bail!("Compaction model unexpectedly requested tools");
         }
         let summary = response.message.visible_text();
         if summary.trim().is_empty() {
+            self.session.save(&self.root)?;
             bail!("Compaction returned empty text")
         }
 
