@@ -38,6 +38,7 @@ mod message_queue;
 mod multimodal;
 mod ndjson;
 mod notebook;
+mod oauth_callback_listener;
 mod oauth_crypto;
 mod permission_mode;
 mod permission_rules;
@@ -175,6 +176,17 @@ enum Commands {
     Version,
     /// Create a secure OAuth PKCE verifier/challenge and state
     OauthPkce,
+    /// Receive a browser authorization-code redirect on localhost
+    OauthListen {
+        #[arg(long)]
+        state: String,
+        #[arg(long)]
+        success_url: String,
+        #[arg(long, default_value = "/callback")]
+        callback_path: String,
+        #[arg(long)]
+        port: Option<u16>,
+    },
     /// Create a user-owned JSON config file with example providers
     Init,
     /// Inspect local installation, settings, Git and MCP availability offline
@@ -270,6 +282,44 @@ async fn main() -> Result<()> {
     match &cli.command {
         Commands::Version => {
             println!("{}", version::running_version());
+            return Ok(());
+        }
+        Commands::OauthListen {
+            state,
+            success_url,
+            callback_path,
+            port,
+        } => {
+            let mut listener = oauth_callback_listener::AuthCodeListener::start(
+                callback_path,
+                *port,
+            )
+            .await?;
+            println!(
+                "OAuth callback listening on http://127.0.0.1:{}{}",
+                listener.port(),
+                callback_path
+            );
+            io::stdout().flush()?;
+            let authorization = listener
+                .wait_for_authorization(state, || async { Ok(()) })
+                .await;
+            match authorization {
+                Ok(code) => {
+                    listener.handle_success_redirect(success_url).await?;
+                    listener.close().await?;
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&json!({
+                            "authorization_code":code
+                        }))?
+                    );
+                }
+                Err(error) => {
+                    listener.close().await?;
+                    return Err(error);
+                }
+            }
             return Ok(());
         }
         Commands::OauthPkce => {
