@@ -153,6 +153,53 @@ fn bounded_num(args: &Value, name: &str, default: u64, max: u64) -> Result<usize
     };
     Ok(number.min(max) as usize)
 }
+/// Validate original strict GlobTool/GrepTool inputs before permissions or
+/// PreToolUse hooks. Schema-hidden semantic strings are normalized first,
+/// so malformed requests cannot trigger read approval side effects.
+pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
+    let mut normalized = args.clone();
+    crate::semantic_inputs::normalize_tool_fields(name, &mut normalized)?;
+    let object = normalized.as_object().context("Search arguments must be an object")?;
+    let fields: &[&str] = match name {
+        "glob_files" => &["pattern", "path"],
+        "grep_files" => &[
+            "pattern", "path", "glob", "output_mode", "-B", "-A", "-C",
+            "context", "-n", "-i", "type", "head_limit", "offset", "multiline",
+        ],
+        _ => bail!("Unknown search tool: {name}"),
+    };
+    for (key, value) in object {
+        if !fields.contains(&key.as_str()) {
+            bail!("{name} unknown input field: {key}");
+        }
+        if matches!(key.as_str(), "pattern" | "path" | "glob" | "type" | "output_mode")
+            && !value.is_string()
+        {
+            bail!("{name}.{key} must be a string");
+        }
+        if matches!(key.as_str(), "-i" | "-n" | "multiline") && !value.is_boolean() {
+            bail!("{name}.{key} must be a boolean");
+        }
+        if matches!(
+            key.as_str(), "-A" | "-B" | "-C" | "context" | "head_limit" | "offset"
+        ) && value.as_u64().is_none()
+        {
+            bail!("{name}.{key} must be a nonnegative integer");
+        }
+    }
+    if !object.get("pattern").is_some_and(Value::is_string) {
+        bail!("{name} requires pattern");
+    }
+    if name == "grep_files" {
+        if let Some(mode) = object.get("output_mode").and_then(Value::as_str) {
+            if !matches!(mode, "content" | "files_with_matches" | "count") {
+                bail!("Invalid output_mode: {mode}");
+            }
+        }
+    }
+    Ok(())
+}
+
 fn type_matches(path: &Path, kind: &str) -> bool {
     let extension = path.extension().and_then(|v| v.to_str()).unwrap_or("");
     match kind {
@@ -195,6 +242,7 @@ fn type_matches(path: &Path, kind: &str) -> bool {
 }
 
 pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
+    validate_tool_input("glob_files", args)?;
     if !base.is_dir() {
         bail!("Glob search path must be a directory")
     }
@@ -294,6 +342,7 @@ fn matching_lines(content: &str, regex: &regex::Regex, multiline: bool) -> Vec<b
 }
 
 pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
+    validate_tool_input("grep_files", args)?;
     if !base.exists() {
         bail!("Search path does not exist")
     }
