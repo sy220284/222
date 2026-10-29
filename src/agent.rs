@@ -2015,6 +2015,16 @@ impl Agent {
         executor.list_user_skills()
     }
 
+    pub fn invoke_user_skill(&self, name: &str, arguments: &str) -> Result<String> {
+        let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+            .with_plugins(self.enabled_plugins.clone())
+            .with_permission_rules(self.permission_rules.clone())
+            .with_extra_roots(self.additional_dirs.clone())
+            .with_permission_mode(self.permission_mode)
+            .with_session_id(self.session.id.to_string());
+        executor.invoke_user_skill(name, arguments)
+    }
+
     pub fn files_in_context(&self) -> String {
         crate::files_context::render(&self.session.messages, &self.root)
     }
