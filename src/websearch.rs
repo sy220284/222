@@ -46,8 +46,8 @@ fn domain_allowed(url: &str, allowed: &[String], blocked: &[String]) -> bool {
     let matches_domain = |domain: &String| {
         host.as_str() == domain.as_str() || host.ends_with(format!(".{domain}").as_str())
     };
-    !blocked.iter().any(&matches_domain)
-        && (allowed.is_empty() || allowed.iter().any(matches_domain))
+    !blocked.iter().any(|domain| matches_domain(domain))
+        && (allowed.is_empty() || allowed.iter().any(|domain| matches_domain(domain)))
 }
 
 pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
