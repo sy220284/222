@@ -998,7 +998,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
                 println!("/sessions [query]        search saved conversation titles");
                 println!("/sessions --semantic QUERY use model-ranked session search");
-                println!("Offline/one-shot: atlas-agent semantic-sessions QUERY");
+                println!("One-shot model search: atlas-agent semantic-sessions QUERY");
                 println!("/resume TERM             find session, show restart command");
                 println!("/rename [NAME]           rename conversation or generate a name using active model");
                 println!("/export [filename]       save full conversation to a local text file");
@@ -1161,8 +1161,13 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             }
             _ => {}
         }
-        if let Some(query) = input.strip_prefix("/sessions --semantic ") {
-            match agent.semantic_search_sessions(query.trim()).await {
+        if input == "/sessions --semantic" || input.starts_with("/sessions --semantic ") {
+            let query = input.trim_start_matches("/sessions --semantic").trim();
+            if query.is_empty() {
+                eprintln!("Usage: /sessions --semantic QUERY");
+                continue;
+            }
+            match agent.semantic_search_sessions(query).await {
                 Ok(matches) => {
                     for item in matches {
                         println!("{}  {}  ({} messages)", item.id, item.display_title(), item.messages);
