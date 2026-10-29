@@ -21,6 +21,7 @@ pub struct HttpClient {
     id: u64,
     pub server_info: Option<Value>,
     pub capabilities: Option<Value>,
+    pub instructions: Option<String>,
     pub tools_changed: bool,
     pub resource_updates: Vec<Value>,
     root: PathBuf,
@@ -141,6 +142,7 @@ impl HttpClient {
             id: 1,
             server_info: None,
             capabilities: None,
+            instructions: None,
             tools_changed: false,
             resource_updates: Vec::new(),
             root: root.to_path_buf(),
@@ -157,6 +159,7 @@ impl HttpClient {
             .await?;
         http.server_info = initial.get("serverInfo").cloned();
         http.capabilities = initial.get("capabilities").cloned();
+        http.instructions = initial.get("instructions").and_then(Value::as_str).filter(|text| !text.trim().is_empty()).map(str::to_owned);
         http.notify("notifications/initialized", json!({})).await?;
         Ok(http)
     }
