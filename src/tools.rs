@@ -122,7 +122,7 @@ impl ToolExecutor {
                     MAX_OUTPUT_CHARS
                 },
             ),
-            Err(err) => format!("ERROR: {err:#}"),
+            Err(err) => format!("ERROR: {}", crate::tool_errors::format_error_text(&format!("{err:#}"))),
         };
         if shell {
             crate::command_lifecycle::notify_command_lifecycle(
