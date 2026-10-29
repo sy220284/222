@@ -2855,11 +2855,10 @@ fn system_prompt(root: &Path) -> Result<String> {
         prompt.push_str(&format!("\nProject instructions from {name}:\n{content}\n"));
     }
     if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
-        if let Some(instructions) = crate::prompt_runtime::output_style_label(&style) {
-            prompt.push_str("\nOutput style: ");
-            prompt.push_str(instructions);
-            prompt.push('\n');
-        }
+        let instructions = crate::prompt_runtime::output_style_instructions(root, &style)?;
+        prompt.push_str("\nOutput style:\n");
+        prompt.push_str(&instructions);
+        prompt.push('\n');
     }
     Ok(prompt)
 }
