@@ -1822,8 +1822,13 @@ impl Agent {
         let instructions = instructions.trim();
         self.compact_history_with_trigger(
             false,
-            if instructions.is_empty() { None } else { Some(instructions) },
-        ).await
+            if instructions.is_empty() {
+                None
+            } else {
+                Some(instructions)
+            },
+        )
+        .await
     }
 
     async fn compact_history_with_trigger(
