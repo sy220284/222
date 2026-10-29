@@ -1425,6 +1425,7 @@ done"#;
             transport: None,
             url: None,
             headers: std::collections::HashMap::new(),
+            headers_helper: None,
         }];
         let mut manager = McpManager::connect(&servers).await.unwrap();
         assert_eq!(manager.definitions().len(), 1);
