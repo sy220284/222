@@ -1115,6 +1115,19 @@ mod tests {
         }
     }
     #[test]
+    fn legacy_hook_matchers_resolve_current_task_tools() {
+        for (old, current) in [
+            ("Task", "Agent"),
+            ("KillShell", "task_stop"),
+            ("AgentOutputTool", "task_output"),
+            ("BashOutputTool", "task_output"),
+        ] {
+            assert!(HookMatcher::compile(Some(old)).matches(Some(current)));
+            let regex = format!("^{old}$");
+            assert!(HookMatcher::compile(Some(&regex)).matches(Some(current)));
+        }
+    }
+    #[test]
     fn validates_hook_configuration() {
         let invalid = HookRunner::new(&[HookRule {
             event: HookEvent::PreToolUse,
