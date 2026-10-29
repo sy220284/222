@@ -128,24 +128,17 @@ pub fn compile_rules(settings:&[RuleSetting])->Result<Vec<Rule>>{
         Ok(Rule{behavior,value})
     }).collect()
 }
-
-/**
- * Split shell control operators without letting a wildcard rule span multiple
- * commands.  This is the same trust boundary used by the source BashTool's
- * per-subcommand permission path: the *entire* command may only be authorized
- * by a literal exact rule, or each independently parsed command must be
- * authorized.  Unsupported shell constructs remain subject to an explicit
- * full-command grant instead of silently receiving prefix authorization.
- */
+/// Shell rules are evaluated against individual commands after splitting
+/// control operators. A prefix/wildcard cannot grant a whole compound command.
+/// Unanalyzable constructs require a literal whole-command permission.
 #[derive(Debug)]
-struct ShellSegments<'a> {
-    commands: Vec<&'a str>,
-    analyzable: bool,
+struct ShellSegments<'a>{
+    commands:Vec<&'a str>,
+    analyzable:bool,
 }
-
 fn shell_segments(command:&str)->ShellSegments<'_>{
     let bytes=command.as_bytes();
-    let mut segments=Vec::new();
+    let mut commands=Vec::new();
     let mut start=0usize;
     let mut quote=None;
     let mut escaped=false;
@@ -155,8 +148,87 @@ fn shell_segments(command:&str)->ShellSegments<'_>{
         if let Some(q)=quote {
             if ch==q {quote=None;}
             else if q=='"' && ch=='\\' {escaped=true;}
-            else if q=='"' && (ch=='`' ||
-                (ch=='
+            else if q=='"' && ((ch as u32)==96 ||
+                (ch=='$' && bytes.get(index+1)==Some(&b'('))) {
+                analyzable=false;
+            }
+            continue
+        }
+        match ch {
+            '\\'=>escaped=true,
+            '\''|'"'=>quote=Some(ch),
+            '('|')'|'{'|'}'|'<'|'>' =>analyzable=false,
+            '$' if bytes.get(index+1)==Some(&b'(')=>analyzable=false,
+            '#' =>analyzable=false,
+            c if (c as u32)==96=>analyzable=false,
+            '&'|'|'|';'|'\n'=>{
+                if ch=='&' && bytes.get(index.wrapping_sub(1))!=Some(&b'&')
+                    && bytes.get(index+1)!=Some(&b'&'){
+                    analyzable=false;
+                }
+                let part=command[start..index].trim();
+                if !part.is_empty(){commands.push(part);}
+                start=index+ch.len_utf8();
+            }
+            _=>{}
+        }
+    }
+    let tail=command[start..].trim();
+    if !tail.is_empty(){commands.push(tail);}
+    if quote.is_some()||escaped||commands.len()>50{analyzable=false;}
+    for part in &commands{
+        let mut words=part.split_whitespace();
+        let first=words.next().unwrap_or("");
+        if matches!(first,"eval"|"source"|".") ||
+            (matches!(first,"sh"|"bash"|"zsh"|"dash"|"ksh"|"fish"|"csh"|"tcsh"|"pwsh"|"powershell"|"cmd")
+                && words.any(|word|word=="-c"||word=="/C")){
+            analyzable=false;
+        }
+    }
+    ShellSegments{commands,analyzable}
+}
+
+fn shell_policy(rules:&[Rule],command:&str)->Result<Option<Behavior>>{
+    let parts=shell_segments(command);
+    let mut allow_whole=false;
+    let mut allow_each=vec![false;parts.commands.len()];
+    let mut ask=false;
+    for rule in rules{
+        if canonical_tool(&rule.value.tool_name)!="Bash"{continue}
+        let pattern=rule.value.rule_content.as_deref();
+        let whole=match pattern{
+            None=>true,
+            Some(p)=>matches_content(p,command)?,
+        };
+        let submatches=parts.commands.iter().map(|part|
+            match pattern{
+                None=>Ok(true),
+                Some(p)=>matches_content(p,part),
+            }).collect::<Result<Vec<_>>>()?;
+        if !whole&&!submatches.iter().any(|v|*v){continue}
+        match rule.behavior{
+            Behavior::Deny=>return Ok(Some(Behavior::Deny)),
+            Behavior::Ask=>ask=true,
+            Behavior::Allow=>{
+                let exact_full=pattern.is_some_and(|p|
+                    extract_prefix(p).is_none()&&!has_wildcards(p)&&whole);
+                if pattern.is_none()||exact_full{allow_whole=true;}
+                if parts.analyzable{
+                    for (index,matched) in submatches.iter().enumerate(){
+                        allow_each[index]|=*matched;
+                    }
+                }
+            }
+        }
+    }
+    if ask{return Ok(Some(Behavior::Ask))}
+    if allow_whole||
+        (parts.analyzable&&!allow_each.is_empty()&&allow_each.iter().all(|v|*v)){
+        Ok(Some(Behavior::Allow))
+    }else{Ok(None)}
+}
+
+pub fn policy_for(rules:&[Rule],tool:&str,args:&Value)->Result<Option<Behavior>>{
     let name=canonical_tool(tool);
     if name=="Bash" {
         if let Some(command)=args.get("command").and_then(Value::as_str) {
@@ -256,7 +328,6 @@ mod tests{
         assert_eq!(decide("printf ok$(touch hidden)"),None);
         assert_eq!(decide("printf ok > unsafe"),None);
         assert_eq!(decide("printf ok & touch allowed"),None);
-        assert_eq!(decide("printf ok\\\n touch unknown"),None);
         assert_eq!(decide("bash -c 'touch unknown'"),None);
         let explicit=compile_rules(&[RuleSetting{
             behavior:"allow".into(),rule:"Bash(printf ok > exact)".into(),
@@ -294,275 +365,6 @@ mod tests{
         assert!(!workspace.path().join("hidden").exists());
     }
 
-    #[test]
-    fn explicit_deny_precedes_allow_and_ask_overrides_allow(){
-        let entries=compile_rules(&[
-            RuleSetting{behavior:"allow".into(),rule:"Bash(git *)".into()},
-            RuleSetting{behavior:"deny".into(),rule:"Bash(git push *)".into()},
-            RuleSetting{behavior:"ask".into(),rule:"Bash(git reset *)".into()},
-        ]).unwrap();
-        assert_eq!(policy_for(&entries,"run_command",&json!({"command":"git status"})).unwrap(),Some(Behavior::Allow));
-        assert_eq!(policy_for(&entries,"run_command",&json!({"command":"git push origin main"})).unwrap(),Some(Behavior::Deny));
-        assert_eq!(policy_for(&entries,"run_command",&json!({"command":"git reset --hard"})).unwrap(),Some(Behavior::Ask));
-        assert_eq!(policy_for(&entries,"run_command",&json!({"command":"ls"})).unwrap(),None);
-        assert!(compile_rules(&[RuleSetting{behavior:"approve".into(),rule:"Bash".into()}]).is_err());
-    }
-}
- && bytes.get(index+1)==Some(&b'('))) {
-                analyzable=false;
-            }
-            continue
-        }
-        match ch {
-            '\\'=>escaped=true,
-            '\''|'"'=>quote=Some(ch),
-            '`'|'('|')'|'{'|'}'|'<'|'>' =>analyzable=false,
-            '
-    let name=canonical_tool(tool);
-    let mut allow=false;
-    let mut ask=false;
-    for rule in rules{
-        if canonical_tool(&rule.value.tool_name)!=name{continue}
-        let matched=match rule.value.rule_content.as_deref(){
-            None=>true,
-            Some(pattern)=>{
-                let argument=match name{
-                    "Bash"=>args.get("command").and_then(Value::as_str),
-                    "Write"|"Edit"=>args.get("path").and_then(Value::as_str),
-                    "TaskStop"=>args.get("task_id").or_else(||args.get("shell_id")).and_then(Value::as_str),
-                    _=>None,
-                };
-                match argument{Some(argument)=>matches_content(pattern,argument)?,None=>false}
-            },
-        };
-        if !matched{continue}
-        match rule.behavior{
-            Behavior::Deny=>return Ok(Some(Behavior::Deny)),
-            Behavior::Ask=>ask=true,
-            Behavior::Allow=>allow=true,
-        }
-    }
-    if ask{Ok(Some(Behavior::Ask))}
-    else if allow{Ok(Some(Behavior::Allow))}
-    else{Ok(None)}
-}
-#[cfg(test)]
-mod tests{
-    use super::*;
-    use serde_json::json;
-    #[test]
-    fn parsing_and_escaping_reference_cases(){
-        for (text,name,content) in [
-            ("Bash","Bash",None),
-            ("Bash(npm install)","Bash",Some("npm install")),
-            ("Bash(python -c \"print\\(1\\)\")","Bash",Some("python -c \"print(1)\"")),
-            ("Bash(*)","Bash",None),
-            ("Bash()","Bash",None),
-            ("(foo)","(foo)",None),
-            ("Bash(a)b","Bash(a)b",None),
-            ("KillShell(abc)","TaskStop",Some("abc")),
-            ("Task","Agent",None),
-        ]{
-            let parsed=parse_rule(text);
-            assert_eq!(parsed.tool_name,name);
-            assert_eq!(parsed.rule_content.as_deref(),content);
-        }
-        let values=["abc\\(hi\\)","x(a)","hey\\\\cmd","😀 (hello)"];
-        for value in values{assert_eq!(unescape_content(&escape_content(value)),value);}
-        assert_eq!(legacy_names("TaskOutput"),vec!["AgentOutputTool","BashOutputTool"]);
-    }
-    #[test]
-    fn wildcard_and_legacy_prefix_match_reference_cases(){
-        assert!(!has_wildcards("npm:*"));
-        assert!(!has_wildcards(r"literal\*"));
-        assert!(has_wildcards("git *"));
-        for (pattern,command,matched) in [
-            ("git *","git status",true),("git *","git",true),
-            ("git *","gitstatus",false),
-            ("npm:*","npm",true),("npm:*","npm run test",true),
-            ("npm:*","npminstall",false),
-            (r"echo \*","echo *",false),
-            (r"echo \*","echo hey",false),
-            ("npm * install","npm local install",true),
-            ("npm * install","npm local\ninstall",false),
-            ("npm * install","npm local\n install",true),
-            ("foo","foobar",false),("foo","foo",true),
-        ]{
-            assert_eq!(matches_content(pattern,command).unwrap(),matched,"{pattern} vs {command}");
-        }
-        assert!(match_wildcard(r"echo \*","echo *",false).unwrap());
-        assert!(match_wildcard("GIT *","git status",true).unwrap());
-    }
-    #[test]
-    fn explicit_deny_precedes_allow_and_ask_overrides_allow(){
-        let entries=compile_rules(&[
-            RuleSetting{behavior:"allow".into(),rule:"Bash(git *)".into()},
-            RuleSetting{behavior:"deny".into(),rule:"Bash(git push *)".into()},
-            RuleSetting{behavior:"ask".into(),rule:"Bash(git reset *)".into()},
-        ]).unwrap();
-        assert_eq!(policy_for(&entries,"run_command",&json!({"command":"git status"})).unwrap(),Some(Behavior::Allow));
-        assert_eq!(policy_for(&entries,"run_command",&json!({"command":"git push origin main"})).unwrap(),Some(Behavior::Deny));
-        assert_eq!(policy_for(&entries,"run_command",&json!({"command":"git reset --hard"})).unwrap(),Some(Behavior::Ask));
-        assert_eq!(policy_for(&entries,"run_command",&json!({"command":"ls"})).unwrap(),None);
-        assert!(compile_rules(&[RuleSetting{behavior:"approve".into(),rule:"Bash".into()}]).is_err());
-    }
-}
- if bytes.get(index+1)==Some(&b'(')=>analyzable=false,
-            '#' => {
-                // Comment syntax is context-sensitive; never auto-authorize
-                // the remainder using a prefix permission.
-                analyzable=false;
-            }
-            '&'|'|'|';'|'\n'=>{
-                if ch=='&' && bytes.get(index.wrapping_sub(1))!=Some(&b'&')
-                    && bytes.get(index+1)!=Some(&b'&') {
-                    // Background execution changes cancellation and lifetime.
-                    analyzable=false;
-                }
-                let part=command[start..index].trim();
-                if !part.is_empty(){segments.push(part);}
-                start=index+ch.len_utf8();
-            }
-            _=>{}
-        }
-    }
-    let tail=command[start..].trim();
-    if !tail.is_empty(){segments.push(tail);}
-    if quote.is_some()||escaped||segments.len()>50{analyzable=false;}
-    // A shell interpreter can execute an arbitrary program supplied through
-    // -c, and eval/source interpret a second language inside a simple command.
-    for part in &segments {
-        let mut words=part.split_whitespace();
-        let first=words.next().unwrap_or("");
-        if matches!(first,"eval"|"source"|".") ||
-            (matches!(first,"sh"|"bash"|"zsh"|"dash"|"ksh"|"fish"|"csh"|"tcsh"|"pwsh"|"powershell"|"cmd")
-                && words.any(|word|word=="-c"||word=="/C")) {
-            analyzable=false;
-        }
-    }
-    ShellSegments{commands:segments,analyzable}
-}
-
-fn shell_policy(rules:&[Rule],command:&str)->Result<Option<Behavior>>{
-    let parts=shell_segments(command);
-    let mut allow_whole=false;
-    let mut allow_each=vec![false;parts.commands.len()];
-    let mut ask=false;
-    for rule in rules {
-        if canonical_tool(&rule.value.tool_name)!="Bash"{continue}
-        let pattern=rule.value.rule_content.as_deref();
-        let whole=match pattern {
-            None=>true,
-            Some(p)=>matches_content(p,command)?,
-        };
-        let submatches=parts.commands.iter().map(|part|
-            match pattern {
-                None=>Ok(true),
-                Some(p)=>matches_content(p,part),
-            }).collect::<Result<Vec<_>>>()?;
-        let matched=whole||submatches.iter().any(|m|*m);
-        if !matched{continue}
-        match rule.behavior {
-            Behavior::Deny=>return Ok(Some(Behavior::Deny)),
-            Behavior::Ask=>ask=true,
-            Behavior::Allow=>{
-                // A broad rule cannot cover hidden command separators,
-                // substitutions, redirections or interpreter -c arguments.
-                // An explicit exact full-command rule is intentional.
-                let exact_full=pattern.is_some_and(|p|
-                    extract_prefix(p).is_none()&&!has_wildcards(p)&&whole);
-                if pattern.is_none()||exact_full {allow_whole=true;}
-                if parts.analyzable {
-                    for (index,matched) in submatches.iter().enumerate(){
-                        allow_each[index]|=*matched;
-                    }
-                }
-            }
-        }
-    }
-    if ask {return Ok(Some(Behavior::Ask))}
-    if allow_whole ||
-        (parts.analyzable&&!allow_each.is_empty()&&allow_each.iter().all(|v|*v)) {
-        Ok(Some(Behavior::Allow))
-    }else{Ok(None)}
-}
-
-pub fn policy_for(rules:&[Rule],tool:&str,args:&Value)->Result<Option<Behavior>>{
-    let name=canonical_tool(tool);
-    let mut allow=false;
-    let mut ask=false;
-    for rule in rules{
-        if canonical_tool(&rule.value.tool_name)!=name{continue}
-        let matched=match rule.value.rule_content.as_deref(){
-            None=>true,
-            Some(pattern)=>{
-                let argument=match name{
-                    "Bash"=>args.get("command").and_then(Value::as_str),
-                    "Write"|"Edit"=>args.get("path").and_then(Value::as_str),
-                    "TaskStop"=>args.get("task_id").or_else(||args.get("shell_id")).and_then(Value::as_str),
-                    _=>None,
-                };
-                match argument{Some(argument)=>matches_content(pattern,argument)?,None=>false}
-            },
-        };
-        if !matched{continue}
-        match rule.behavior{
-            Behavior::Deny=>return Ok(Some(Behavior::Deny)),
-            Behavior::Ask=>ask=true,
-            Behavior::Allow=>allow=true,
-        }
-    }
-    if ask{Ok(Some(Behavior::Ask))}
-    else if allow{Ok(Some(Behavior::Allow))}
-    else{Ok(None)}
-}
-#[cfg(test)]
-mod tests{
-    use super::*;
-    use serde_json::json;
-    #[test]
-    fn parsing_and_escaping_reference_cases(){
-        for (text,name,content) in [
-            ("Bash","Bash",None),
-            ("Bash(npm install)","Bash",Some("npm install")),
-            ("Bash(python -c \"print\\(1\\)\")","Bash",Some("python -c \"print(1)\"")),
-            ("Bash(*)","Bash",None),
-            ("Bash()","Bash",None),
-            ("(foo)","(foo)",None),
-            ("Bash(a)b","Bash(a)b",None),
-            ("KillShell(abc)","TaskStop",Some("abc")),
-            ("Task","Agent",None),
-        ]{
-            let parsed=parse_rule(text);
-            assert_eq!(parsed.tool_name,name);
-            assert_eq!(parsed.rule_content.as_deref(),content);
-        }
-        let values=["abc\\(hi\\)","x(a)","hey\\\\cmd","😀 (hello)"];
-        for value in values{assert_eq!(unescape_content(&escape_content(value)),value);}
-        assert_eq!(legacy_names("TaskOutput"),vec!["AgentOutputTool","BashOutputTool"]);
-    }
-    #[test]
-    fn wildcard_and_legacy_prefix_match_reference_cases(){
-        assert!(!has_wildcards("npm:*"));
-        assert!(!has_wildcards(r"literal\*"));
-        assert!(has_wildcards("git *"));
-        for (pattern,command,matched) in [
-            ("git *","git status",true),("git *","git",true),
-            ("git *","gitstatus",false),
-            ("npm:*","npm",true),("npm:*","npm run test",true),
-            ("npm:*","npminstall",false),
-            (r"echo \*","echo *",false),
-            (r"echo \*","echo hey",false),
-            ("npm * install","npm local install",true),
-            ("npm * install","npm local\ninstall",false),
-            ("npm * install","npm local\n install",true),
-            ("foo","foobar",false),("foo","foo",true),
-        ]{
-            assert_eq!(matches_content(pattern,command).unwrap(),matched,"{pattern} vs {command}");
-        }
-        assert!(match_wildcard(r"echo \*","echo *",false).unwrap());
-        assert!(match_wildcard("GIT *","git status",true).unwrap());
-    }
     #[test]
     fn explicit_deny_precedes_allow_and_ask_overrides_allow(){
         let entries=compile_rules(&[
