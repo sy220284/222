@@ -514,7 +514,39 @@ impl TaskGraph {
         }
         Ok(true)
     }
+    /// Validate the complete TaskUpdate input before any PreToolUse or
+    /// TaskCompleted hook can run. The source Zod strict schema rejects
+    /// malformed fields before invoking the tool's call method.
+    pub fn validate_update_input(args: &Value) -> Result<()> {
+        Self::strict(
+            args,
+            &[
+                "taskId", "subject", "description", "activeForm", "status",
+                "owner", "addBlocks", "addBlockedBy", "metadata",
+            ],
+        )?;
+        Self::required(args, "taskId")?;
+        for field in ["subject", "description", "activeForm", "owner"] {
+            Self::optional_string(args, field)?;
+        }
+        if let Some(status) = Self::optional_string(args, "status")? {
+            if !matches!(
+                status.as_str(),
+                "pending" | "in_progress" | "completed" | "deleted"
+            ) {
+                bail!("Invalid task status")
+            }
+        }
+        Self::ids(args, "addBlocks")?;
+        Self::ids(args, "addBlockedBy")?;
+        if args.get("metadata").is_some_and(|value| !value.is_object()) {
+            bail!("metadata must be an object")
+        }
+        Ok(())
+    }
+
     pub fn update(&self, args: &Value) -> Result<String> {
+        Self::validate_update_input(args)?;
         Self::strict(
             args,
             &[

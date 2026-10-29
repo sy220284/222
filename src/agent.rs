@@ -400,6 +400,7 @@ impl Agent {
                 Ok(created)
             }
             "TaskUpdate" => {
+                task_graph::TaskGraph::validate_update_input(&args)?;
                 // The source auto-claims unowned in-progress tasks for the
                 // teammate performing the update when no owner was supplied.
                 if args.get("status").and_then(serde_json::Value::as_str) == Some("in_progress")
@@ -2974,7 +2975,15 @@ impl Agent {
                 } else {
                     match serde_json::from_str::<serde_json::Value>(&call.function.arguments) {
                         Err(error) => Some(format!("Invalid tool arguments JSON: {error}")),
-                        Ok(serde_json::Value::Object(_)) => None,
+                        Ok(value @ serde_json::Value::Object(_)) => {
+                            if call.function.name == "TaskUpdate" {
+                                task_graph::TaskGraph::validate_update_input(&value)
+                                    .err()
+                                    .map(|error| format!("Invalid TaskUpdate arguments: {error:#}"))
+                            } else {
+                                None
+                            }
+                        },
                         Ok(_) => Some("Tool arguments must be a JSON object".to_owned()),
                     }
                 };
