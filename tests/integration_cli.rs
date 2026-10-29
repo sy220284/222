@@ -1645,8 +1645,8 @@ fn sdk_unsupported_content_blocks_are_preserved_until_explicitly_removed() {
     let output=sdk.wait_with_output().unwrap();
     let request=server.join().unwrap();
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
-    assert!(request.contains("\\\"text\\\":\\\"first\\\""),"{request}");
-    assert!(request.contains("\\\"text\\\":\\\"second\\\""),"{request}");
+    assert!(request.contains("\"text\":\"first\""),"{request}");
+    assert!(request.contains("\"text\":\"second\""),"{request}");
     assert!(!request.contains("MUST_NOT_DROP"));
     let events=String::from_utf8(output.stdout).unwrap().lines()
         .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
@@ -1699,8 +1699,8 @@ fn sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http(
     let output=sdk.wait_with_output().unwrap();
     let request=server.join().unwrap();
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
-    assert!(request.contains("\\\"text\\\":\\\"first\\\""),"{request}");
-    assert!(request.contains("\\\"text\\\":\\\"second\\\""),"{request}");
+    assert!(request.contains("\"text\":\"first\""),"{request}");
+    assert!(request.contains("\"text\":\"second\""),"{request}");
     assert!(!request.contains("PRIVATE"));
     let events=String::from_utf8(output.stdout).unwrap().lines()
         .map(|line|serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
