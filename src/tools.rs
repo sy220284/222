@@ -322,39 +322,12 @@ impl ToolExecutor {
                 manager.list()
             }
             "task_output" => {
-                // TaskOutputTool.tsx declares a strict input object, a
-                // semanticBoolean block flag and a z.number() timeout in
-                // [0, 600000]. Reject malformed values before waiting.
-                let fields = args.as_object().context("Invalid task output arguments")?;
-                if let Some(key) = fields
-                    .keys()
-                    .find(|key| !matches!(key.as_str(), "task_id" | "block" | "timeout"))
-                {
-                    bail!("Unrecognized task output parameter {key}");
-                }
-                let block = match args.get("block") {
-                    None => true,
-                    Some(Value::Bool(value)) => *value,
-                    _ => bail!("task_output.block must be a boolean"),
-                };
-                let timeout_ms = match args.get("timeout") {
-                    None => 30_000,
-                    Some(Value::Number(value)) => {
-                        let number = value.as_f64().context("Invalid task output timeout")?;
-                        if !(0.0..=600_000.0).contains(&number) {
-                            bail!("task_output.timeout must be between 0 and 600000 ms");
-                        }
-                        number as u64
-                    }
-                    _ => bail!("task_output.timeout must be a number"),
-                };
+                let (id, block, timeout_ms) = Self::validate_task_output(&args)?;
                 let manager = self
                     .background
                     .as_ref()
                     .context("Background tasks unavailable")?;
-                manager
-                    .output(required(&args, "task_id")?, block, timeout_ms)
-                    .await
+                manager.output(&id, block, timeout_ms).await
             }
             "task_output_delta" => {
                 let manager = self
@@ -383,6 +356,39 @@ impl ToolExecutor {
             }
             other => bail!("Unknown tool: {other}"),
         }
+    }
+
+    /// TaskOutputTool uses strict arguments, semanticBoolean for block and
+    /// an ordinary numeric timeout. Validate before PreToolUse so malformed
+    /// output requests do not trigger hooks or background waiting.
+    pub fn validate_task_output(args: &Value) -> Result<(String, bool, u64)> {
+        let mut args = args.clone();
+        crate::semantic_inputs::normalize_tool_fields("task_output", &mut args)?;
+        let fields = args.as_object().context("Invalid task output arguments")?;
+        if let Some(key) = fields
+            .keys()
+            .find(|key| !matches!(key.as_str(), "task_id" | "block" | "timeout"))
+        {
+            bail!("Unrecognized task output parameter {key}");
+        }
+        let id = required(&args, "task_id")?.to_owned();
+        let block = match args.get("block") {
+            None => true,
+            Some(Value::Bool(value)) => *value,
+            _ => bail!("task_output.block must be a boolean"),
+        };
+        let timeout_ms = match args.get("timeout") {
+            None => 30_000,
+            Some(Value::Number(value)) => {
+                let number = value.as_f64().context("Invalid task output timeout")?;
+                if !(0.0..=600_000.0).contains(&number) {
+                    bail!("task_output.timeout must be between 0 and 600000 ms");
+                }
+                number as u64
+            }
+            _ => bail!("task_output.timeout must be a number"),
+        };
+        Ok((id, block, timeout_ms))
     }
 
     /// The original TaskStop schema and validateInput run before PreToolUse.

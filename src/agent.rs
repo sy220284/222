@@ -2988,6 +2988,12 @@ impl Agent {
                                 executor.validate_task_stop(&value)
                                     .err()
                                     .map(|error| format!("Invalid TaskStop arguments: {error:#}"))
+                            } else if crate::tool_names::canonical_name(&call.function.name)
+                                == "task_output"
+                            {
+                                ToolExecutor::validate_task_output(&value)
+                                    .err()
+                                    .map(|error| format!("Invalid TaskOutput arguments: {error:#}"))
                             } else {
                                 None
                             }
