@@ -208,6 +208,22 @@ pub fn inspect(root: &Path, config: Option<&Config>) -> Vec<Finding> {
             }
         }
     }
+    // doctorContextWarnings.ts uses the decoded memory text length (UTF-16
+    // units in JavaScript), not filesystem bytes, and warns above 40k.
+    // Keep the existing size diagnostics while reporting this independent
+    // prompt-context risk for provider-neutral instruction files.
+    for relative in ["AGENTS.md", ".atlas/instructions.md"] {
+        let file = root.join(relative);
+        if let Ok(content) = fs::read_to_string(&file) {
+            let characters = content.encode_utf16().count();
+            if characters > 40_000 {
+                findings.push(Finding::warning(
+                    "Memory",
+                    format!("{relative}: {characters} characters (>40000)"),
+                ));
+            }
+        }
+    }
     findings
 }
 
