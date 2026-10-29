@@ -319,9 +319,26 @@ def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
                 evidence_records=len(proof), excluded=counts['excluded'])
 
 
+def current_counts(rows: dict[str, dict], strict: bool = True) -> dict:
+    """Derive the sole current progress snapshot from FILE_PORT_MATRIX.md."""
+    counts = verify_counts(rows, strict=strict)
+    total = len(rows)
+    excluded = counts['excluded']
+    eligible = total - excluded
+    accepted = counts['verified']
+    partial = counts['partial']
+    unported = counts['unported']
+    remaining = partial + unported
+    if accepted + remaining != eligible:
+        raise AuditError('非排除路径的状态数量不平衡')
+    return dict(total=total, excluded=excluded, eligible=eligible, accepted=accepted,
+                partial=partial, unported=unported, remaining=remaining,
+                accepted_percent=round(accepted * 100 / eligible, 2) if eligible else 0.0)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('scan', 'check', 'freeze-baseline', 'impact'))
+    parser.add_argument('command', choices=('scan', 'check', 'freeze-baseline', 'impact', 'counts'))
     parser.add_argument('--repo', type=Path, default=Path('.'))
     parser.add_argument('--source', type=Path, help='解压后的 2.1.88 原始源码根目录')
     parser.add_argument('--output', type=Path, default=Path('port-audit-output'))
@@ -331,7 +348,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         rows = read_matrix(args.repo)
         counts = verify_counts(rows, strict=not args.allow_fixture)
-        if args.command == 'impact':
+        if args.command == 'counts':
+            result = current_counts(rows, strict=not args.allow_fixture)
+        elif args.command == 'impact':
             if args.source is None or not args.changed:
                 raise AuditError('impact 必须提供 --source 和至少一项 --changed')
             entries, _ = collect(rows, args.repo, args.source)
