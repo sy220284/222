@@ -308,6 +308,140 @@ fn reverse_dependents(root: &Path, config: &Config, target: &str) -> (Vec<String
     (dependents, warnings)
 }
 
+
+/** Resolve the same dependency-first installation order as the source
+ * dependencyResolver.ts::resolveDependencyClosure. Every source and managed
+ * policy is checked before the first plugin is installed. */
+fn dependency_install_plan(
+    root: &Path,
+    source: &Path,
+    root_origin: Option<&str>,
+    enabled: &[String],
+) -> Result<Vec<(String, PathBuf, Option<String>, bool)>> {
+    use std::collections::HashSet;
+
+    fn dependencies(directory: &Path) -> Result<Vec<String>> {
+        let standard = directory.join(".claude-plugin/plugin.json");
+        let legacy = directory.join("plugin.json");
+        let path = if standard.exists() { Some(standard) }
+            else if legacy.exists() { Some(legacy) } else { None };
+        let Some(path) = path else { return Ok(Vec::new()); };
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file()
+            || !path.canonicalize()?.starts_with(directory.canonicalize()?) {
+            bail!("Plugin dependency manifest is redirected or invalid");
+        }
+        let manifest: Value = serde_json::from_slice(&fs::read(path)?)?;
+        match manifest.get("dependencies") {
+            None | Some(Value::Null) => Ok(Vec::new()),
+            Some(Value::Array(items)) => items.iter().map(|item| {
+                let id = item.as_str().context("Plugin dependency must be a string")?;
+                if id.is_empty() { bail!("Plugin dependency is empty"); }
+                Ok(id.to_owned())
+            }).collect(),
+            _ => bail!("Plugin dependencies must be an array"),
+        }
+    }
+
+    fn visit(
+        root: &Path,
+        name: &str,
+        source: PathBuf,
+        origin: Option<String>,
+        root_marketplace: Option<&str>,
+        is_root: bool,
+        enabled: &[String],
+        visited: &mut HashSet<String>,
+        stack: &mut Vec<String>,
+        ordered: &mut Vec<(String, PathBuf, Option<String>, bool)>,
+    ) -> Result<()> {
+        if !valid_name(name) { bail!("Invalid dependency plugin name '{name}'"); }
+        if stack.iter().any(|item| item == name) {
+            bail!("Plugin dependency cycle: {} -> {name}", stack.join(" -> "));
+        }
+        if visited.contains(name) { return Ok(()); }
+        let target = checked_installed_root(root, false)?.join(name);
+        let existing = match fs::symlink_metadata(&target) {
+            Ok(meta) if meta.is_dir() && !meta.file_type().is_symlink() => true,
+            Ok(_) => bail!("Plugin '{name}' installation is redirected or invalid"),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => return Err(error.into()),
+        };
+        if is_root && existing { bail!("Plugin '{name}' is already installed"); }
+        if existing {
+            let origin_file = target.join(".atlas-plugin-origin.json");
+            let existing_origin = match fs::symlink_metadata(&origin_file) {
+                Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
+                    let value: Value = serde_json::from_slice(&fs::read(origin_file)?)?;
+                    Some(value["pluginId"].as_str()
+                        .context("Installed dependency has invalid marketplace identity")?.to_owned())
+                }
+                Ok(_) => bail!("Installed dependency has redirected marketplace identity"),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => return Err(error.into()),
+            };
+            if existing_origin != origin {
+                bail!("Installed plugin '{name}' belongs to a different marketplace");
+            }
+        }
+        if crate::plugins::plugin_blocked_by_policy(root, name)?
+            || origin.as_deref().is_some_and(|id|
+                crate::plugins::plugin_blocked_by_policy(root, id).unwrap_or(true)) {
+            bail!("Plugin '{name}' is disabled by managed policy");
+        }
+        // The original resolver does not traverse dependencies already enabled
+        // in the current scope, but the installed identity must be real.
+        if !is_root && existing && enabled.iter().any(|item| item == name) {
+            visited.insert(name.to_owned());
+            return Ok(());
+        }
+        stack.push(name.to_owned());
+        let dependency_source = if existing { target.clone() } else { source.clone() };
+        for raw in dependencies(&dependency_source)? {
+            let (dep_name, dep_marketplace) = match raw.split_once('@') {
+                Some((plugin, market)) if !plugin.is_empty() && !market.is_empty() =>
+                    (plugin, Some(market)),
+                Some(_) => bail!("Invalid plugin dependency '{raw}'"),
+                None => (raw.as_str(), origin.as_deref().and_then(|id| id.split_once('@').map(|(_, market)| market))),
+            };
+            if !valid_name(dep_name) { bail!("Invalid plugin dependency '{raw}'"); }
+            let dep_origin = dep_marketplace.map(|market| format!("{dep_name}@{market}"));
+            // Trust is inherited only from the root marketplace. An already
+            // installed and enabled cross-market dependency is allowed, but
+            // automatic cross-market installation requires explicit trust.
+            if dep_marketplace != root_marketplace {
+                let installed = checked_installed_root(root, false)?.join(dep_name);
+                if !enabled.iter().any(|item| item == dep_name) || !installed.is_dir() {
+                    bail!("Cross-marketplace dependency '{raw}' requires explicit installation");
+                }
+            }
+            let dep_source = if let Some(market) = dep_marketplace {
+                let installed = checked_installed_root(root, false)?.join(dep_name);
+                if installed.is_dir() { installed }
+                else { crate::marketplace_registry::resolve_local_plugin(root, market, dep_name)? }
+            } else {
+                let installed = checked_installed_root(root, false)?.join(dep_name);
+                if installed.is_dir() { installed }
+                else { bail!("Dependency '{raw}' requires a registered marketplace"); }
+            };
+            visit(root, dep_name, dep_source, dep_origin, root_marketplace,
+                false, enabled, visited, stack, ordered)?;
+        }
+        stack.pop();
+        visited.insert(name.to_owned());
+        ordered.push((name.to_owned(), source, origin, existing));
+        Ok(())
+    }
+
+    let name = manifest_name(source)?;
+    let mut ordered = Vec::new();
+    let mut visited = HashSet::new();
+    visit(root, &name, source.to_owned(), root_origin.map(str::to_owned),
+        root_origin.and_then(|id| id.split_once('@').map(|(_, market)| market)),
+        true, enabled, &mut visited, &mut Vec::new(), &mut ordered)?;
+    Ok(ordered)
+}
+
 pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
     let root = root.canonicalize()?;
     let mut config = Config::load()?;
@@ -376,24 +510,45 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                     bail!("Plugin '{id}' is disabled by managed policy");
                 }
             }
-            let installed_name = install_local_with_origin(
-                &root, &local, marketplace_id.as_deref(),
+            let plan = dependency_install_plan(
+                &root, &local, marketplace_id.as_deref(), &config.enabled_plugins,
             )?;
-            // The original plugin install enables the resolved plugin in the
-            // active settings scope. Installing without enabling leaves its
-            // commands and skills invisible to the next agent session.
-            if !config.enabled_plugins.contains(&installed_name) {
-                config.enabled_plugins.push(installed_name.clone());
-                if let Err(error) = config.save() {
-                    // Keep installation atomic from the user's perspective.
-                    // The installation base was already verified by install_local.
-                    if let Ok(home) = checked_installed_root(&root, true) {
-                        let _ = fs::remove_dir_all(home.join(&installed_name));
+            let mut newly_installed = Vec::<String>::new();
+            let mut installed_names = Vec::<String>::new();
+            for (name, location, origin, already_installed) in &plan {
+                if !already_installed {
+                    if let Err(error) = install_local_with_origin(
+                        &root, location, origin.as_deref(),
+                    ) {
+                        // Restore the original installation set if any
+                        // dependency or the root fails to materialize.
+                        if let Ok(home) = checked_installed_root(&root, false) {
+                            for created in &newly_installed {
+                                let _ = fs::remove_dir_all(home.join(created));
+                            }
+                        }
+                        return Err(error);
                     }
-                    return Err(error);
+                    newly_installed.push(name.clone());
+                }
+                installed_names.push(name.clone());
+            }
+            for name in &installed_names {
+                if !config.enabled_plugins.contains(name) {
+                    config.enabled_plugins.push(name.clone());
                 }
             }
-            Ok(json!({"installed":installed_name}))
+            if let Err(error) = config.save() {
+                if let Ok(home) = checked_installed_root(&root, false) {
+                    for created in &newly_installed {
+                        let _ = fs::remove_dir_all(home.join(created));
+                    }
+                }
+                return Err(error);
+            }
+            let dependencies = installed_names.into_iter()
+                .filter(|name| name != &actual_name).collect::<Vec<_>>();
+            Ok(json!({"installed":actual_name,"dependencies":dependencies}))
         }
         PluginCommand::Enable { plugin } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
