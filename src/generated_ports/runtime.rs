@@ -85,7 +85,13 @@ pub fn negate(v: &Value) -> Value {
 pub fn add(a: &Value, b: &Value) -> Value {
     // JavaScript ToPrimitive converts arrays and plain objects to strings
     // before deciding whether + means concatenation.
-    if a.is_string() || b.is_string() || a.is_array() || b.is_array() || a.is_object() || b.is_object() {
+    if a.is_string()
+        || b.is_string()
+        || a.is_array()
+        || b.is_array()
+        || a.is_object()
+        || b.is_object()
+    {
         json!(format!("{}{}", to_string(a), to_string(b)))
     } else {
         numeric2(a, b, |a, b| a + b)
@@ -191,7 +197,8 @@ pub fn call_method(v: &Value, method: &str, args: &[Value]) -> Value {
                 .position(|x| x == a)
                 .map(|i| i as i64)
                 .unwrap_or(-1)),
-            Value::String(s) => json!(s.find(&to_string(a))
+            Value::String(s) => json!(s
+                .find(&to_string(a))
                 .map(|i| s[..i].encode_utf16().count() as i64)
                 .unwrap_or(-1)),
             _ => json!(-1),
@@ -229,7 +236,9 @@ pub fn call_method(v: &Value, method: &str, args: &[Value]) -> Value {
             }
             match v {
                 Value::Array(xs) => json!(xs[left..right].to_vec()),
-                Value::String(s) => json!(s.chars().skip(left).take(right - left).collect::<String>()),
+                Value::String(s) => {
+                    json!(s.chars().skip(left).take(right - left).collect::<String>())
+                }
                 _ => Value::Null,
             }
         }
@@ -319,7 +328,13 @@ mod tests {
         assert_eq!(lt(&json!("10"), &json!("2")), json!(true));
         assert_eq!(gt(&json!(true), &json!(0)), json!(true));
         assert_eq!(gte(&json!(null), &json!(0)), json!(true));
-        assert_eq!(call_method(&json!([1,2,3]), "slice", &[json!(-2)]), json!([2,3]));
-        assert_eq!(call_method(&json!("😀abc"), "indexOf", &[json!("a")]), json!(2));
+        assert_eq!(
+            call_method(&json!([1, 2, 3]), "slice", &[json!(-2)]),
+            json!([2, 3])
+        );
+        assert_eq!(
+            call_method(&json!("😀abc"), "indexOf", &[json!("a")]),
+            json!(2)
+        );
     }
 }
