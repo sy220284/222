@@ -165,9 +165,17 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/Spinner/TeammateSpinnerLine.tsx" => match export {
+            "view" => serde_json::to_value(super::p_09647f4245ece::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/Spinner/TeammateSpinnerTree.tsx" => match export {
+            "view" => serde_json::to_value(super::p_024038719ca35::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/StatusLine.tsx" => match export {
@@ -408,8 +416,8 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/Spinner/ShimmerChar.tsx", vec![]),
         ("src/components/Spinner/SpinnerAnimationRow.tsx", vec![]),
         ("src/components/Spinner/SpinnerGlyph.tsx", vec![]),
-        ("src/components/Spinner/TeammateSpinnerLine.tsx", vec![]),
-        ("src/components/Spinner/TeammateSpinnerTree.tsx", vec![]),
+        ("src/components/Spinner/TeammateSpinnerLine.tsx", vec!["view"]),
+        ("src/components/Spinner/TeammateSpinnerTree.tsx", vec!["view"]),
         ("src/components/StatusLine.tsx", vec![]),
         ("src/components/StatusNotices.tsx", vec![]),
         ("src/components/StructuredDiff.tsx", vec![]),
@@ -542,5 +550,51 @@ mod source_view_dispatch_tests {
                 "{path} catalog"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod connected_teammate_view_tests {
+    use super::*;
+    use crate::generated_ports::ui::VNode;
+    use serde_json::json;
+
+    #[test]
+    fn registry_dispatches_live_teammate_rows_and_composed_tree() {
+        let tree_path = "src/components/Spinner/TeammateSpinnerTree.tsx";
+        let line_path = "src/components/Spinner/TeammateSpinnerLine.tsx";
+        let entries = catalog();
+        for path in [tree_path, line_path] {
+            assert!(entries
+                .iter()
+                .any(|(source, exports)| *source == path && exports.contains(&"view")));
+        }
+        let props = json!({
+            "tasks":{
+                "worker":{"id":"worker","type":"in_process_teammate","status":"running",
+                    "identity":{"agentName":"worker"},"progress":{"toolUseCount":2,"tokenCount":1200},
+                    "messages":[{"type":"assistant","message":{"content":[{"type":"text","text":"Review ready"}]}}]}
+            },
+            "columns":120,
+            "showTeammateMessagePreview":true
+        });
+        let tree: VNode = serde_json::from_value(
+            inspect(tree_path, "view", &[props]).expect("tree registry must resolve")
+        )
+        .unwrap();
+        assert_eq!(tree.unresolved_node_count(), 0);
+        assert!(tree.text_content().contains("@worker"));
+        assert!(tree.text_content().contains("2 tool uses"));
+        assert!(tree.text_content().contains("Review ready"));
+
+        let single: VNode = serde_json::from_value(
+            inspect(line_path, "view", &[json!({"teammate":{
+                "identity":{"agentName":"worker"}, "progress":{"toolUseCount":2,"tokenCount":1200}
+            },"columns":120})]).expect("row registry must resolve")
+        )
+        .unwrap();
+        assert_eq!(single.unresolved_node_count(), 0);
+        assert!(single.text_content().contains("@worker"));
+        assert!(inspect(tree_path, "missing", &[]).is_none());
     }
 }

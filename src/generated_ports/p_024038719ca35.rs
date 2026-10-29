@@ -84,7 +84,11 @@ pub fn render_source_view(props: &Value) -> VNode {
     let mut leader = vec![
         text(
             if leader_selected { "❯" } else { " " },
-            json!({"bold":leader_highlighted,"color":if leader_selected {Value::String("suggestion".into())} else {Value::Null}}),
+            if leader_selected {
+                json!({"bold":leader_highlighted,"color":"suggestion"})
+            } else {
+                json!({"bold":leader_highlighted})
+            },
         ),
         text(
             if leader_highlighted {
@@ -122,26 +126,34 @@ pub fn render_source_view(props: &Value) -> VNode {
     let viewer = props["viewingAgentTaskId"].as_str();
     for (index, teammate) in teammates.iter().enumerate() {
         let id = teammate["id"].as_str().unwrap_or_default();
-        children.push(element(
-            "TeammateSpinnerLine",
-            json!({
-                "key":id,
-                "teammate":teammate,
-                "isLast":!selecting && index+1==teammates.len(),
-                "isSelected":selecting && selected_index==Some(index as i64),
-                "isForegrounded":viewer==Some(id),
-                "allIdle":props["allIdle"],
-                "showPreview":props["showTeammateMessagePreview"]
-            }),
-            vec![],
-        ));
+        // Resolve the teammate row through its real Rust renderer. A named,
+        // childless JSX placeholder drops activity, status and message previews.
+        let row_props = json!({
+            "teammate":teammate,
+            "isLast":!selecting && index + 1 == teammates.len(),
+            "isSelected":selecting && selected_index == Some(index as i64),
+            "isForegrounded":viewer == Some(id),
+            "allIdle":props["allIdle"].as_bool().unwrap_or(false),
+            "showPreview":props["showTeammateMessagePreview"].as_bool().unwrap_or(false),
+            "columns":props["columns"].as_u64().unwrap_or(80),
+            "nowMs":props["nowMs"],
+            "idleElapsedTime":props["idleElapsedTime"],
+            "idleStartMs":props["idleStartMs"],
+            "frozenDuration":props["frozenDuration"]
+        });
+        let row = super::p_09647f4245ece::render_source_view(&row_props);
+        children.push(element("Box", json!({"key":id}), vec![row]));
     }
     if selecting {
         let is_hide_selected = selected_index == Some(teammates.len() as i64);
         let row = vec![
             text(
                 if is_hide_selected { "❯" } else { " " },
-                json!({"bold":is_hide_selected,"color":if is_hide_selected {Value::String("suggestion".into())} else {Value::Null}}),
+                if is_hide_selected {
+                    json!({"bold":true,"color":"suggestion"})
+                } else {
+                    json!({"bold":false})
+                },
             ),
             text(
                 if is_hide_selected {
@@ -186,14 +198,15 @@ mod tests {
     fn source_ordering_selection_and_live_app_state_reach_child_lines() {
         let tree = render_source_view(&json!({
             "tasks":{
-                "b":{"id":"id-b","type":"in_process_teammate","status":"running","identity":{"agentName":"beta"}},
+                "b":{"id":"id-b","type":"in_process_teammate","status":"running","identity":{"agentName":"beta"},"messages":[{"type":"assistant","message":{"content":[{"type":"text","text":"Review ready"}]}}]},
                 "other":{"id":"unused","type":"local_agent","status":"running"},
                 "a":{"id":"id-a","type":"in_process_teammate","status":"running","identity":{"agentName":"alpha"}}
             },
             "isInSelectionMode":true,"selectedIndex":1,
             "viewingAgentTaskId":"id-b","allIdle":true,"showTeammateMessagePreview":true,
-            "leaderVerb":"thinking","leaderTokenCount":1200
+            "leaderVerb":"thinking","leaderTokenCount":1200,"columns":120
         }));
+        assert_eq!(tree.unresolved_node_count(), 0);
         let VNode::Element {
             children, attrs, ..
         } = tree
@@ -213,9 +226,10 @@ mod tests {
         };
         assert_eq!(alpha.get("key"), Some(&json!("id-a")));
         assert_eq!(beta.get("key"), Some(&json!("id-b")));
-        assert_eq!(beta.get("isSelected"), Some(&json!(true)));
-        assert_eq!(beta.get("isForegrounded"), Some(&json!(true)));
-        assert_eq!(beta.get("showPreview"), Some(&json!(true)));
+        assert!(children[1].text_content().contains("@alpha"));
+        assert!(children[2].text_content().contains("@beta"));
+        assert!(children[2].text_content().contains("❯"));
+        assert!(children[2].text_content().contains("Review ready"));
         assert!(children[3].text_content().contains("hide"));
     }
 }
