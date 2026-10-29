@@ -2,7 +2,7 @@
 
 - **原版依据**：用户完整 ZIP `source/src/utils/sideQuestion.ts::runSideQuestion/extractSideQuestionResponse`、`source/src/cli/print.ts` 的 `side_question` 控制请求；原版使用独立 fork、原会话缓存上下文、单轮模型、无工具、异步回执，主对话不写入独立问答。
 - **Rust 可达执行链**：`src/main.rs::sdk` 识别嵌套 `control_request.request.subtype=side_question`，校验请求 ID/问题，取得 `src/agent.rs::side_question_request` 的最后一次模型上下文（首次调用回退重建），`tokio::spawn` 独立调用 `src/side_question.rs::answer` 的厂商中立模型提供器；只发原版结构的 `control_response`，不写入 Agent 主历史、不给工具目录、不运行 Agent 工具循环。SDK 结束时有界排空已接收的异步答复。交互终端 `/btw QUESTION` 复用同一无工具独立提问，答复不进入主会话。
-- **实质代码提交**：`5b7c58a36b313984b4c43aa05f69188bc1e46ebf`（独立模型调用）、`174c3ed0b9947d1458809a594d7d3d094b798ef0`（上下文快照）、`21d30142c448603648746f3d59ea3a501da5bd41`（SDK 异步接线）、`e1655632bbc2fb00d1265022ec4bcb0b290cdf2f`（退出排空）、`a4198c6ebb98f8ad612291c370dcdad4b7e08c92`（终端 /btw）；追加 `8ba971bb68fdc7797caaf54b2c219b2e887a422a`（纳入主会话最新答复且保留缓存前缀）、`8106c43f6938a87870798f63f27cd11f58afbcbd`（限制退出排空总等待）。以上提交合计保守计 **1 项独立用户业务功能**，不得拆分计数。
+- **实质代码提交**：`5b7c58a36b313984b4c43aa05f69188bc1e46ebf`（独立模型调用）、`174c3ed0b9947d1458809a594d7d3d094b798ef0`（上下文快照）、`21d30142c448603648746f3d59ea3a501da5bd41`（SDK 异步接线）、`e1655632bbc2fb00d1265022ec4bcb0b290cdf2f`（退出排空）、`a4198c6ebb98f8ad612291c370dcdad4b7e08c92`（终端 /btw）；追加 `8ba971bb68fdc7797caaf54b2c219b2e887a422a`（纳入主会话最新答复且保留缓存前缀）、`8106c43f6938a87870798f63f27cd11f58afbcbd`（限制退出排空总等待）、`c183451ee5e63a66b2629cc573deb76a4f91344d`（统一使用标准单调时钟）。以上提交合计保守计 **1 项独立用户业务功能**，不得拆分计数。
 - **精确剩余差异**：SDK 主模型运行期间，当前 stdin 单线程处理仍会延后新的控制请求；终端 /btw 的输入处理仍等待本次独立问答完成；原版完整思考配置/缓存写入策略、取消信号、所有系统上下文来源、usage/费用归集和异常消息格式仍待对照；当前没有行为验收。100 项先行缺口清单未形成，本轮 **1/100、剩余 99**。本轮未运行 Cargo、CI 或行为测试；Issue #3 冻结 362 条继续开放，PR #2 保持 Draft。
 
 ## 2026-10-29：Grep/Glob 搜索超时错误与不完整结果保护（源码已提交、待验收）
