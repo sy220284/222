@@ -34,23 +34,32 @@ pub fn destructive_command_warning(command: &str) -> Option<&'static str> {
         })
         .collect()
     });
-    for (pattern, warning) in patterns {
-        if pattern.is_match(command) {
-            return Some(*warning);
-        }
-    }
-    // Rust regex intentionally has no lookahead. Preserve the original
-    // git-clean dry-run exclusion by inspecting the matched statement.
+    // Rust regex has no lookahead; check git clean's dry-run exclusion
+    // separately at the same precedence position as the original source.
     static GIT_CLEAN: OnceLock<Regex> = OnceLock::new();
     static FORCE: OnceLock<Regex> = OnceLock::new();
     static DRY_RUN: OnceLock<Regex> = OnceLock::new();
-    let clean = GIT_CLEAN.get_or_init(|| Regex::new(r"(?i)\bgit\s+clean\b([^|;&\n]*)").expect("git clean"));
-    let force = FORCE.get_or_init(|| Regex::new(r"(?i)(?:^|\s)-[a-z]*f[a-z]*\b").expect("git force"));
-    let dry = DRY_RUN.get_or_init(|| Regex::new(r"(?i)(?:^|\s)(?:--dry-run|-[a-z]*n[a-z]*)\b").expect("git dry-run"));
-    for matched in clean.captures_iter(command) {
-        let args = matched.get(1).map(|part| part.as_str()).unwrap_or("");
-        if force.is_match(args) && !dry.is_match(args) {
-            return Some("Note: may permanently delete untracked files");
+    let clean = GIT_CLEAN.get_or_init(|| {
+        Regex::new(r"(?i)\bgit\s+clean\b([^|;&\n]*)").expect("git clean")
+    });
+    let force = FORCE.get_or_init(|| {
+        Regex::new(r"(?i)(?:^|\s)-[a-z]*f[a-z]*\b").expect("git force")
+    });
+    let dry = DRY_RUN.get_or_init(|| {
+        Regex::new(r"(?i)(?:^|\s)(?:--dry-run|-[a-z]*n[a-z]*)\b").expect("git dry-run")
+    });
+    for (index, (pattern, warning)) in patterns.iter().enumerate() {
+        // Source order: git clean follows git push and precedes git stash.
+        if index == 9 {
+            for matched in clean.captures_iter(command) {
+                let args = matched.get(1).map(|part| part.as_str()).unwrap_or("");
+                if force.is_match(args) && !dry.is_match(args) {
+                    return Some("Note: may permanently delete untracked files");
+                }
+            }
+        }
+        if pattern.is_match(command) {
+            return Some(*warning);
         }
     }
     None
