@@ -1,5 +1,16 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：压缩生命周期 Hook 原版行为与多模态 Token 计算续接（源码已提交、待验收）
+
+本次从完整 Claude Code 2.1.88 原始 ZIP 对照 `source/src/utils/hooks.ts::executePreCompactHooks/executePostCompactHooks/executeHooksOutsideREPL`、`source/src/services/compact/compact.ts::compactConversation`、`source/src/services/tokenEstimation.ts::roughTokenCountEstimationForMessages`。源码审阅范围为真实 Agent 压缩、Hook 命令执行和 SDK 结构化消息预算，无静态生成文件计数。
+
+- **压缩 Hook 实际执行链**：`src/hooks.rs::plain_hook_context` 对 PreCompact 成功命令输出保留文本，`src/agent.rs::compact_history_with_trigger` 传入 auto/manual 作为 Hook 匹配参数、将回传上下文加入摘要 prompt，并使 PostCompact 按同一触发来源匹配。提交 `2d0584e4`、`dd1a319f`、`eec9a2a3`。
+- **失败与并发次序**：原版 PreCompact/PostCompact 外部命令失败仅显示状态，不阻断有效压缩摘要；Rust 现在给出诊断继续处理。`src/hooks.rs::run` 继续并发启动所有 Hook，改为按配置注册顺序合并结果，符合原版 `executeHooksOutsideREPL` 中 `Promise.all(hookPromises)` 的有序结果。提交 `b241e11b`、`4b6a4a0c`。
+- **多模态工具请求 Token 预算**：`src/agent.rs::compact_round_token_estimate` 对同时提供标准化 `tool_calls` 与 `content_blocks` 内 `tool_use` 的 SDK 消息只计一次调用内容，避免误判上下文耗尽和过早自动压缩。提交 `0bef4b9e`。
+
+以上有效变化按 **2 条用户可感知业务链**（压缩 Hook 及自动压缩预算）计入本轮源码补强；完整等价验收 0 项。尚未闭环：压缩及记忆选择取消信号传递、缺少 Assistant 消息 ID 时的流式 API 轮次精确分组、PreCompact 用户自定义指令 UI、OAuth 交互授权和 MCP 权限完整生命周期。按现行用户约束未运行 cargo、测试或 CI，不勾选冻结 Issue #3 362 条。
+
+
 ## 2026-10-29：后台任务跨会话隔离、启动失败回收与落盘安全（源码已提交、待验收）
 
 原版对照：完整 2.1.88 源码 `source/src/utils/task/diskOutput.ts::getTaskOutputDir` 以首次会话 ID 固定任务输出目录，避免同一工作区的并发会话相互覆盖；`source/src/Task.ts` 的任务生命周期；`source/src/utils/task/TaskOutput.ts` 的输出文件管理。Rust 真实执行入口为 `src/agent.rs::Agent::new` → `src/background.rs::BackgroundTasks::start_with_shell/output/stop/list`。
