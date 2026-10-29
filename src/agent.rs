@@ -967,7 +967,8 @@ impl Agent {
             let approval = self.approval;
             let interactive = self.interactive;
             let steps = self.max_steps;
-            let mcps = self.mcp_configs.clone();
+            let mcps = self.mcp.as_ref().map_or_else(
+                || self.mcp_configs.clone(), McpManager::configured_servers);
             let lsps = self.lsp_configs.clone();
             let hooks = self.hook_rules.clone();
             let plugins = self.enabled_plugins.clone();
@@ -1327,7 +1328,9 @@ impl Agent {
             .to_owned();
         child.prompt_role = Some(agent_type.clone());
         let result = async {
-            child.attach_mcp(&self.mcp_configs).await?;
+            let inherited_mcp = self.mcp.as_ref().map_or_else(
+                || self.mcp_configs.clone(), McpManager::configured_servers);
+            child.attach_mcp(&inherited_mcp).await?;
             child.attach_lsp(&self.lsp_configs).await?;
             child.attach_hooks(&self.hook_rules).await?;
             let start = child
