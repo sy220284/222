@@ -247,7 +247,7 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         result
     }
 
-    // 2.1.88 claudemd.ts extracts @includes from Markdown text nodes, skips
+    // Source project-instruction loader extracts @includes from Markdown text nodes, skips
     // fenced/inline code and HTML comments, and limits recursive expansion.
     // An unapproved include outside the current instruction scope is ignored.
     fn include_paths(content: &str, file: &Path) -> Vec<PathBuf> {
