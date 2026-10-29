@@ -11,6 +11,7 @@ mod shell_quote;
 mod shell_runtime;
 mod subprocess_env;
 mod portable_source_utils;
+mod generated_ports;
 mod portable_ui_runtime;
 mod portable_async_runtime;
 mod portable_platform;
@@ -142,6 +143,14 @@ impl From<ApprovalArg> for Approval {
 enum Commands {
     /// Create a user-owned JSON config file with example providers
     Init,
+    /// Inspect newly implemented Rust source exports without connecting a model
+    InspectSource {
+        source: String,
+        #[arg(long)]
+        export: Option<String>,
+        #[arg(long)]
+        args: Option<String>,
+    },
     /// Show configured providers and active default without connecting to them
     Models,
     /// Execute a single prompt; pass '-' to read the prompt from stdin
@@ -170,6 +179,26 @@ async fn main() -> Result<()> {
     if let Commands::Init = &cli.command {
         let path = Config::init()?;
         println!("Created {}", path.display());
+        return Ok(());
+    }
+    if let Commands::InspectSource {source,export,args} = &cli.command {
+        if let Some(name)=export {
+            let args:Vec<serde_json::Value> = match args {
+                Some(raw)=>serde_json::from_str(raw)
+                    .map_err(|err|anyhow::anyhow!("--args must be a JSON array: {err}"))?,
+                None=>Vec::new(),
+            };
+            match generated_ports::inspect(source,name,&args) {
+                Some(value)=>println!("{}",serde_json::to_string_pretty(&value)?),
+                None=>bail!("Source export unavailable: {source}::{name}"),
+            }
+        } else {
+            let entries=generated_ports::catalog();
+            let exports=entries.into_iter().find(|(s,_)|*s==source)
+                .map(|(_,exports)|exports)
+                .ok_or_else(||anyhow::anyhow!("Unknown migrated source: {source}"))?;
+            for name in exports {println!("{name}")}
+        }
         return Ok(());
     }
     if matches!(&cli.command,Commands::Sessions{..}|Commands::Rename{..}|Commands::Export{..}) {

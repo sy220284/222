@@ -10,7 +10,7 @@
 |---|---:|---:|---|---|---|
 | `src/QueryEngine.ts` | 1296 | 46630 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/Task.ts` | 126 | 3152 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
-| `src/Tool.ts` | 793 | 29516 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/Tool.ts` | 793 | 29516 | 重写：保持通用行为 | `src/generated_ports/p_2980dcfa0210a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands.ts` | 755 | 25185 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context.ts` | 190 | 6446 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` / `src/cost.rs` / `src/agent.rs` / `src/tool_metrics.rs` | 部分实现：多模型/子代理/团队费用汇总、会话恢复、API/工具/墙钟耗时及改动行数；已补充模型请求最终失败时 API/墙钟耗时持久化；重试逐次耗时拆分、退出回调仍待核对 |
@@ -25,8 +25,8 @@
 | `src/replLauncher.tsx` | 23 | 3517 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/setup.ts` | 478 | 20646 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/tasks.ts` | 40 | 1355 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/tools.ts` | 390 | 17294 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/assistant/sessionHistory.ts` | 88 | 2503 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/tools.ts` | 390 | 17294 | 重写：保持通用行为 | `src/generated_ports/p_522c7b52c49b4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/assistant/sessionHistory.ts` | 88 | 2503 | 重写：保持通用行为 | `src/generated_ports/p_3532178887ef5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/bootstrap/state.ts` | 1759 | 56109 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/bridge/bridgeApi.ts` | 540 | 18066 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/bridgeConfig.ts` | 49 | 1695 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
@@ -59,17 +59,17 @@
 | `src/bridge/trustedDevice.ts` | 211 | 7764 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/types.ts` | 263 | 10161 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/workSecret.ts` | 128 | 4672 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/buddy/CompanionSprite.tsx` | 371 | 45922 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/buddy/CompanionSprite.tsx` | 371 | 45922 | 重写：保持通用行为 | `src/generated_ports/p_ab10542ccfa4c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/buddy/companion.ts` | 134 | 3715 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/buddy/prompt.ts` | 37 | 1451 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/buddy/prompt.ts` | 37 | 1451 | 重写：保持通用行为 | `src/generated_ports/p_bf68628a27ff8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/buddy/sprites.ts` | 515 | 9797 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/buddy/types.ts` | 149 | 3805 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/buddy/useBuddyNotification.tsx` | 98 | 9959 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/buddy/types.ts` | 149 | 3805 | 重写：保持通用行为 | `src/generated_ports/p_0e2477efcdf43.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/buddy/useBuddyNotification.tsx` | 98 | 9959 | 重写：保持通用行为 | `src/generated_ports/p_336c8aa7f1741.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/cli/exit.ts` | 32 | 1310 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/agents.ts` | 71 | 2089 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/auth.ts` | 331 | 10756 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/autoMode.ts` | 171 | 5742 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cli/handlers/mcp.tsx` | 362 | 56167 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/cli/handlers/mcp.tsx` | 362 | 56167 | 重写：保持通用行为 | `src/generated_ports/p_f4f160d5e6a79.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/cli/handlers/plugins.ts` | 879 | 31073 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/util.tsx` | 110 | 14501 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/ndjsonSafeStringify.ts` | 33 | 1408 | 重写：保持通用行为 | `src/ndjson.rs / src/main.rs / src/agent.rs` | 部分实现：JS 特殊行分隔符转义、SDK 输出回环与 JSON 值保持；jsonStringify 的非标准对象语义待核对 |
@@ -81,14 +81,14 @@
 | `src/cli/transports/SerialBatchEventUploader.ts` | 276 | 9089 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/transports/WebSocketTransport.ts` | 801 | 28195 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/transports/WorkerStateUploader.ts` | 132 | 3879 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cli/transports/ccrClient.ts` | 999 | 33775 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/cli/transports/ccrClient.ts` | 999 | 33775 | 重写：保持通用行为 | `src/generated_ports/p_03ce73c80da6a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/cli/transports/transportUtils.ts` | 46 | 1767 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/update.ts` | 423 | 14487 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/add-dir/add-dir.tsx` | 126 | 18017 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/add-dir/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/add-dir/validation.ts` | 111 | 3207 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/advisor.ts` | 110 | 3182 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/agents/agents.tsx` | 12 | 2500 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/agents/agents.tsx` | 12 | 2500 | 重写：保持通用行为 | `src/generated_ports/p_c014e56745958.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/agents/index.ts` | 11 | 232 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/ant-trace/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/autofix-pr/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -96,11 +96,11 @@
 | `src/commands/branch/branch.ts` | 297 | 9580 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/branch/index.ts` | 15 | 445 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/break-cache/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/bridge/bridge.tsx` | 509 | 46907 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/bridge/bridge.tsx` | 509 | 46907 | 重写：保持通用行为 | `src/generated_ports/p_c5c7a3a7a86d5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/bridge/index.ts` | 27 | 604 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/bridge-kick.ts` | 201 | 6703 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/brief.ts` | 131 | 5173 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/btw/btw.tsx` | 243 | 30250 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/btw/btw.tsx` | 243 | 30250 | 重写：保持通用行为 | `src/generated_ports/p_45e0c7d37ad4a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/btw/index.ts` | 14 | 314 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/bughunter/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/chrome/chrome.tsx` | 285 | 31974 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -115,70 +115,70 @@
 | `src/commands/commit.ts` | 93 | 3492 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/compact/compact.ts` | 288 | 10079 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/compact/index.ts` | 16 | 530 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/config/config.tsx` | 7 | 1408 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/config/config.tsx` | 7 | 1408 | 重写：保持通用行为 | `src/generated_ports/p_18a7a03aea84b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/config/index.ts` | 12 | 247 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/context/context-noninteractive.ts` | 326 | 10781 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/context/context.tsx` | 64 | 9099 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/context/context.tsx` | 64 | 9099 | 重写：保持通用行为 | `src/generated_ports/p_3225eaf0db243.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/context/index.ts` | 25 | 695 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/copy/copy.tsx` | 371 | 42252 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/copy/copy.tsx` | 371 | 42252 | 重写：保持通用行为 | `src/generated_ports/p_c886837faf980.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/copy/index.ts` | 16 | 393 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/cost/cost.ts` | 25 | 909 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/cost/index.ts` | 24 | 668 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/createMovedToPluginCommand.ts` | 66 | 1789 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/ctx_viz/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/debug-tool-call/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/desktop/desktop.tsx` | 9 | 1645 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/desktop/desktop.tsx` | 9 | 1645 | 重写：保持通用行为 | `src/generated_ports/p_55d1ffc73afa2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/desktop/index.ts` | 27 | 601 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/diff/diff.tsx` | 9 | 1461 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/diff/diff.tsx` | 9 | 1461 | 重写：保持通用行为 | `src/generated_ports/p_8e039596a976f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/diff/index.ts` | 9 | 221 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/doctor/doctor.tsx` | 7 | 1309 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/doctor/doctor.tsx` | 7 | 1309 | 重写：保持通用行为 | `src/generated_ports/p_a47706d627769.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/doctor/index.ts` | 13 | 381 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/effort/effort.tsx` | 183 | 22128 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/effort/effort.tsx` | 183 | 22128 | 重写：保持通用行为 | `src/generated_ports/p_942c3541355e4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/effort/index.ts` | 14 | 428 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/env/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/exit/exit.tsx` | 33 | 5272 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/exit/exit.tsx` | 33 | 5272 | 重写：保持通用行为 | `src/generated_ports/p_8028611d439a8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/exit/index.ts` | 13 | 250 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/export/export.tsx` | 91 | 15104 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/export/index.ts` | 12 | 303 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/extra-usage/extra-usage-core.ts` | 119 | 4000 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/extra-usage/extra-usage-noninteractive.ts` | 17 | 466 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/extra-usage/extra-usage.tsx` | 17 | 3134 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/extra-usage/extra-usage.tsx` | 17 | 3134 | 重写：保持通用行为 | `src/generated_ports/p_fa4cf9bf81ae4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/extra-usage/index.ts` | 32 | 1101 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/fast/fast.tsx` | 269 | 33931 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/fast/fast.tsx` | 269 | 33931 | 重写：保持通用行为 | `src/generated_ports/p_beab21f3c4363.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/fast/index.ts` | 27 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/feedback/feedback.tsx` | 25 | 5095 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/feedback/feedback.tsx` | 25 | 5095 | 重写：保持通用行为 | `src/generated_ports/p_db7aa9242d70e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/feedback/index.ts` | 27 | 931 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/files/files.ts` | 20 | 688 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/files/index.ts` | 13 | 316 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/good-claude/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：原版禁用注册节点 Rust 化，保持不可调用并等待统一验收 |
 | `src/commands/heapdump/heapdump.ts` | 18 | 398 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/heapdump/index.ts` | 13 | 288 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/help/help.tsx` | 11 | 1432 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/help/help.tsx` | 11 | 1432 | 重写：保持通用行为 | `src/generated_ports/p_101b0ecfa9b9b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/help/index.ts` | 11 | 229 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/hooks/hooks.tsx` | 13 | 2679 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/hooks/hooks.tsx` | 13 | 2679 | 重写：保持通用行为 | `src/generated_ports/p_a4ee4bb49da12.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/hooks/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/ide/ide.tsx` | 646 | 77066 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/ide/ide.tsx` | 646 | 77066 | 重写：保持通用行为 | `src/generated_ports/p_d57f9f8b75cd8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/ide/index.ts` | 12 | 258 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/init-verifiers.ts` | 263 | 10315 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/init.ts` | 257 | 20961 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/insights.ts` | 3201 | 115949 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/ApiKeyStep.tsx` | 231 | 23518 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/CheckExistingSecretStep.tsx` | 190 | 18135 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/CheckGitHubStep.tsx` | 15 | 1248 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/ChooseRepoStep.tsx` | 211 | 21279 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/CreatingStep.tsx` | 65 | 9266 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/install-github-app/CheckGitHubStep.tsx` | 15 | 1248 | 重写：保持通用行为 | `src/generated_ports/p_26ba971b8d52d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/install-github-app/ChooseRepoStep.tsx` | 211 | 21279 | 重写：保持通用行为 | `src/generated_ports/p_7c4a2c598240c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/install-github-app/CreatingStep.tsx` | 65 | 9266 | 重写：保持通用行为 | `src/generated_ports/p_7a696c359ec3c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/install-github-app/ErrorStep.tsx` | 85 | 8602 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/ExistingWorkflowStep.tsx` | 103 | 9833 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/InstallAppStep.tsx` | 94 | 9601 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/OAuthFlowStep.tsx` | 276 | 39935 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/install-github-app/OAuthFlowStep.tsx` | 276 | 39935 | 重写：保持通用行为 | `src/generated_ports/p_92dc7da033a9e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/install-github-app/SuccessStep.tsx` | 96 | 10170 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/WarningsStep.tsx` | 73 | 9132 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/install-github-app/WarningsStep.tsx` | 73 | 9132 | 重写：保持通用行为 | `src/generated_ports/p_c4344a216659f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/install-github-app/index.ts` | 14 | 471 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/install-github-app/install-github-app.tsx` | 587 | 87155 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/install-github-app/install-github-app.tsx` | 587 | 87155 | 重写：保持通用行为 | `src/generated_ports/p_a9174729be5dd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/install-github-app/setupGitHubActions.ts` | 326 | 10168 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-slack-app/index.ts` | 13 | 333 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/install-slack-app/install-slack-app.ts` | 31 | 877 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install.tsx` | 300 | 39068 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/install.tsx` | 300 | 39068 | 重写：保持通用行为 | `src/generated_ports/p_3289389e68d82.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/keybindings/index.ts` | 14 | 448 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/keybindings/keybindings.ts` | 54 | 1645 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -188,54 +188,54 @@
 | `src/commands/logout/logout.tsx` | 82 | 10732 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/mcp/addCommand.ts` | 281 | 9848 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/mcp/index.ts` | 13 | 280 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/mcp/mcp.tsx` | 85 | 12126 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/mcp/mcp.tsx` | 85 | 12126 | 重写：保持通用行为 | `src/generated_ports/p_7522da9606aa2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/mcp/xaaIdpCommand.ts` | 267 | 10290 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/memory/index.ts` | 11 | 220 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/memory/memory.tsx` | 90 | 12608 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/mobile/index.ts` | 12 | 282 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/mobile/mobile.tsx` | 274 | 21797 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/mobile/mobile.tsx` | 274 | 21797 | 重写：保持通用行为 | `src/generated_ports/p_ad72c0a43614a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/mock-limits/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/model/index.ts` | 17 | 559 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/model/model.tsx` | 297 | 37569 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/model/model.tsx` | 297 | 37569 | 重写：保持通用行为 | `src/generated_ports/p_8f75dbf7e21af.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/oauth-refresh/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/onboarding/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/output-style/index.ts` | 12 | 291 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/output-style/output-style.tsx` | 7 | 1343 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/passes/index.ts` | 23 | 632 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/passes/passes.tsx` | 24 | 3783 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/passes/passes.tsx` | 24 | 3783 | 重写：保持通用行为 | `src/generated_ports/p_31ab458ab85e0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/perf-issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/permissions/index.ts` | 12 | 296 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/permissions/permissions.tsx` | 10 | 2223 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/permissions/permissions.tsx` | 10 | 2223 | 重写：保持通用行为 | `src/generated_ports/p_f0fb508cfc148.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plan/index.ts` | 12 | 286 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/plan/plan.tsx` | 122 | 13904 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/AddMarketplace.tsx` | 162 | 21821 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/BrowseMarketplace.tsx` | 802 | 119562 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/DiscoverPlugins.tsx` | 781 | 106666 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/ManageMarketplaces.tsx` | 838 | 118912 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/ManagePlugins.tsx` | 2215 | 321775 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plan/plan.tsx` | 122 | 13904 | 重写：保持通用行为 | `src/generated_ports/p_bcae150cd625f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/AddMarketplace.tsx` | 162 | 21821 | 重写：保持通用行为 | `src/generated_ports/p_100ae039b4f18.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/BrowseMarketplace.tsx` | 802 | 119562 | 重写：保持通用行为 | `src/generated_ports/p_aa9a2fff6266e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/DiscoverPlugins.tsx` | 781 | 106666 | 重写：保持通用行为 | `src/generated_ports/p_b2359c395e89f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/ManageMarketplaces.tsx` | 838 | 118912 | 重写：保持通用行为 | `src/generated_ports/p_7337a24f3e0b4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/ManagePlugins.tsx` | 2215 | 321775 | 重写：保持通用行为 | `src/generated_ports/p_9d478e1ba087e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/PluginErrors.tsx` | 124 | 23316 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/PluginOptionsDialog.tsx` | 357 | 34537 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/PluginOptionsFlow.tsx` | 135 | 18702 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/PluginSettings.tsx` | 1072 | 128668 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plugin/PluginOptionsDialog.tsx` | 357 | 34537 | 重写：保持通用行为 | `src/generated_ports/p_24eaf2e46f24a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/PluginOptionsFlow.tsx` | 135 | 18702 | 重写：保持通用行为 | `src/generated_ports/p_8dddb5ec693ee.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/PluginSettings.tsx` | 1072 | 128668 | 重写：保持通用行为 | `src/generated_ports/p_632353e8f57fc.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/PluginTrustWarning.tsx` | 32 | 3919 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/UnifiedInstalledCell.tsx` | 565 | 44441 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/ValidatePlugin.tsx` | 98 | 12369 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plugin/UnifiedInstalledCell.tsx` | 565 | 44441 | 重写：保持通用行为 | `src/generated_ports/p_48aef09fe12b8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/ValidatePlugin.tsx` | 98 | 12369 | 重写：保持通用行为 | `src/generated_ports/p_458eb28ef635b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/index.tsx` | 11 | 1337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/plugin/parseArgs.ts` | 104 | 2818 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/plugin.tsx` | 7 | 1590 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/plugin/pluginDetailsHelpers.tsx` | 117 | 12424 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plugin/plugin.tsx` | 7 | 1590 | 重写：保持通用行为 | `src/generated_ports/p_75e7e879bf2e0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/pluginDetailsHelpers.tsx` | 117 | 12424 | 重写：保持通用行为 | `src/generated_ports/p_6c7ca7c1ed900.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/usePagination.ts` | 172 | 4990 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/pr_comments/index.ts` | 51 | 1848 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/privacy-settings/index.ts` | 15 | 399 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/privacy-settings/privacy-settings.tsx` | 58 | 10043 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/privacy-settings/privacy-settings.tsx` | 58 | 10043 | 重写：保持通用行为 | `src/generated_ports/p_5d2e3ca07cba4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/rate-limit-options/index.ts` | 20 | 511 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/rate-limit-options/rate-limit-options.tsx` | 210 | 23749 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/rate-limit-options/rate-limit-options.tsx` | 210 | 23749 | 重写：保持通用行为 | `src/generated_ports/p_f500b0cca6994.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/release-notes/index.ts` | 12 | 268 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/release-notes/release-notes.ts` | 51 | 1524 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/reload-plugins/index.ts` | 19 | 653 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/reload-plugins/reload-plugins.ts` | 62 | 2598 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/remote-env/index.ts` | 16 | 577 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/remote-env/remote-env.tsx` | 7 | 1454 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/remote-env/remote-env.tsx` | 7 | 1454 | 重写：保持通用行为 | `src/generated_ports/p_1d6be8358d910.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/remote-setup/api.ts` | 183 | 5519 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/remote-setup/index.ts` | 21 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/remote-setup/remote-setup.tsx` | 187 | 21786 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -245,186 +245,186 @@
 | `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/resume/index.ts` | 13 | 303 | 重写：保持通用行为 | `src/main.rs / src/session.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
-| `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | `src/generated_ports/p_8a0b520eb5d3b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/review/reviewRemote.ts` | 317 | 11926 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 重写：保持通用行为 | `src/generated_ports/p_2a0eb439f5a02.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/review.ts` | 58 | 2188 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/rewind/rewind.ts` | 14 | 376 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/sandbox-toggle/index.ts` | 51 | 1520 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/sandbox-toggle/sandbox-toggle.tsx` | 83 | 13157 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/sandbox-toggle/sandbox-toggle.tsx` | 83 | 13157 | 重写：保持通用行为 | `src/generated_ports/p_d71c68a412fbd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/security-review.ts` | 244 | 12531 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/session/index.ts` | 17 | 418 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/session/session.tsx` | 140 | 13009 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/share/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/skills/index.ts` | 11 | 226 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/skills/skills.tsx` | 8 | 1888 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/skills/skills.tsx` | 8 | 1888 | 重写：保持通用行为 | `src/generated_ports/p_d54f470418286.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/stats/index.ts` | 11 | 252 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/stats/stats.tsx` | 7 | 1141 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/stats/stats.tsx` | 7 | 1141 | 重写：保持通用行为 | `src/generated_ports/p_b1cd3e4d8150c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/status/index.ts` | 13 | 322 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/status/status.tsx` | 8 | 1855 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/status/status.tsx` | 8 | 1855 | 重写：保持通用行为 | `src/generated_ports/p_abd6c0adc2f8c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/statusline.tsx` | 24 | 3568 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/stickers/index.ts` | 12 | 268 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/stickers/stickers.ts` | 17 | 476 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/summary/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/tag/index.ts` | 13 | 321 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/tag/tag.tsx` | 215 | 20999 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/tag/tag.tsx` | 215 | 20999 | 重写：保持通用行为 | `src/generated_ports/p_902bb58307f34.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/tasks/index.ts` | 12 | 256 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/tasks/tasks.tsx` | 8 | 1901 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/tasks/tasks.tsx` | 8 | 1901 | 重写：保持通用行为 | `src/generated_ports/p_65123b2aecfbb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/teleport/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/terminalSetup/index.ts` | 24 | 725 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/terminalSetup/terminalSetup.tsx` | 531 | 77528 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/theme/index.ts` | 11 | 217 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/theme/theme.tsx` | 57 | 5180 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/theme/theme.tsx` | 57 | 5180 | 重写：保持通用行为 | `src/generated_ports/p_cb6d3fa44994c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/thinkback/index.ts` | 14 | 442 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/thinkback/thinkback.tsx` | 554 | 61993 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/thinkback-play/index.ts` | 18 | 608 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/thinkback-play/thinkback-play.ts` | 44 | 1430 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/ultraplan.tsx` | 471 | 66629 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/upgrade/index.ts` | 17 | 523 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 重写：保持通用行为 | `src/generated_ports/p_ee2b485a76e48.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/usage/index.ts` | 10 | 233 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/usage/usage.tsx` | 7 | 1403 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/usage/usage.tsx` | 7 | 1403 | 重写：保持通用行为 | `src/generated_ports/p_4c1965fccb05b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/vim/index.ts` | 12 | 273 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/vim/vim.ts` | 39 | 1139 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/voice/index.ts` | 21 | 482 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/voice/voice.ts` | 151 | 5264 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/components/AgentProgressLine.tsx` | 136 | 14238 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/App.tsx` | 56 | 5204 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ApproveApiKey.tsx` | 123 | 10621 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/AgentProgressLine.tsx` | 136 | 14238 | 重写：终端 UI／交互 | `src/generated_ports/p_6df1d1f49fc09.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/App.tsx` | 56 | 5204 | 重写：终端 UI／交互 | `src/generated_ports/p_e55bdaf86a903.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ApproveApiKey.tsx` | 123 | 10621 | 重写：终端 UI／交互 | `src/generated_ports/p_aacc3f689f27c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/AutoModeOptInDialog.tsx` | 142 | 13302 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/AutoUpdater.tsx` | 198 | 30788 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/AutoUpdaterWrapper.tsx` | 91 | 11972 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/AwsAuthStatusBox.tsx` | 82 | 9707 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/BaseTextInput.tsx` | 136 | 19313 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/BashModeProgress.tsx` | 56 | 5675 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/BridgeDialog.tsx` | 401 | 34418 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/AutoUpdater.tsx` | 198 | 30788 | 重写：终端 UI／交互 | `src/generated_ports/p_33630f62d996d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/AutoUpdaterWrapper.tsx` | 91 | 11972 | 重写：终端 UI／交互 | `src/generated_ports/p_f96c082aa2c27.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/AwsAuthStatusBox.tsx` | 82 | 9707 | 重写：终端 UI／交互 | `src/generated_ports/p_dde39deb9414b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/BaseTextInput.tsx` | 136 | 19313 | 重写：终端 UI／交互 | `src/generated_ports/p_3949a8e5bc4d2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/BashModeProgress.tsx` | 56 | 5675 | 重写：终端 UI／交互 | `src/generated_ports/p_0b29474a0ccd4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/BridgeDialog.tsx` | 401 | 34418 | 重写：终端 UI／交互 | `src/generated_ports/p_21443fd0f496d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/BypassPermissionsModeDialog.tsx` | 87 | 9136 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ChannelDowngradeDialog.tsx` | 102 | 8253 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/ChannelDowngradeDialog.tsx` | 102 | 8253 | 重写：终端 UI／交互 | `src/generated_ports/p_e842880c14f05.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ClaudeCodeHint/PluginHintMenu.tsx` | 78 | 9341 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/ClaudeInChromeOnboarding.tsx` | 121 | 12151 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/ClaudeMdExternalIncludesDialog.tsx` | 137 | 13532 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ClickableImageRef.tsx` | 73 | 7495 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CompactSummary.tsx` | 118 | 14437 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ConfigurableShortcutHint.tsx` | 57 | 5436 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/ClickableImageRef.tsx` | 73 | 7495 | 重写：终端 UI／交互 | `src/generated_ports/p_25c626561a30d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/CompactSummary.tsx` | 118 | 14437 | 重写：终端 UI／交互 | `src/generated_ports/p_4ef6869f716c2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ConfigurableShortcutHint.tsx` | 57 | 5436 | 重写：终端 UI／交互 | `src/generated_ports/p_b0d8db582e8fb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ConsoleOAuthFlow.tsx` | 631 | 79968 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ContextSuggestions.tsx` | 47 | 5952 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ContextVisualization.tsx` | 489 | 76073 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CoordinatorAgentStatus.tsx` | 273 | 36038 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/ContextSuggestions.tsx` | 47 | 5952 | 重写：终端 UI／交互 | `src/generated_ports/p_68ce9b76726b6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ContextVisualization.tsx` | 489 | 76073 | 重写：终端 UI／交互 | `src/generated_ports/p_40acc6bc55581.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/CoordinatorAgentStatus.tsx` | 273 | 36038 | 重写：终端 UI／交互 | `src/generated_ports/p_f1c50b7cfd309.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CostThresholdDialog.tsx` | 50 | 4336 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CtrlOToExpand.tsx` | 51 | 6062 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CustomSelect/SelectMulti.tsx` | 213 | 29884 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/CtrlOToExpand.tsx` | 51 | 6062 | 重写：终端 UI／交互 | `src/generated_ports/p_7fa135c73cbe6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/CustomSelect/SelectMulti.tsx` | 213 | 29884 | 重写：终端 UI／交互 | `src/generated_ports/p_1006dc067830f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CustomSelect/index.ts` | 4 | 118 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/CustomSelect/option-map.ts` | 51 | 1189 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CustomSelect/select-input-option.tsx` | 488 | 58172 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CustomSelect/select-option.tsx` | 68 | 5793 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CustomSelect/select.tsx` | 690 | 115187 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/CustomSelect/select-input-option.tsx` | 488 | 58172 | 重写：终端 UI／交互 | `src/generated_ports/p_917c310662d72.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/CustomSelect/select-option.tsx` | 68 | 5793 | 重写：终端 UI／交互 | `src/generated_ports/p_5937f7d9e3063.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/CustomSelect/select.tsx` | 690 | 115187 | 重写：终端 UI／交互 | `src/generated_ports/p_0fde04c6a0116.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CustomSelect/use-multi-select-state.ts` | 415 | 10952 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/CustomSelect/use-select-input.ts` | 288 | 8770 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/CustomSelect/use-select-navigation.ts` | 654 | 16388 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/CustomSelect/use-select-state.ts` | 158 | 2859 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/DesktopHandoff.tsx` | 193 | 19335 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/DesktopHandoff.tsx` | 193 | 19335 | 重写：终端 UI／交互 | `src/generated_ports/p_d3509722b2b3c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/DesktopUpsell/DesktopUpsellStartup.tsx` | 171 | 15520 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/DevBar.tsx` | 49 | 5040 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/DevChannelsDialog.tsx` | 105 | 9113 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/DevBar.tsx` | 49 | 5040 | 重写：终端 UI／交互 | `src/generated_ports/p_0e01a1adf25b5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/DevChannelsDialog.tsx` | 105 | 9113 | 重写：终端 UI／交互 | `src/generated_ports/p_b476dbe9d3b70.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/DiagnosticsDisplay.tsx` | 95 | 13220 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/EffortCallout.tsx` | 265 | 24778 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/EffortCallout.tsx` | 265 | 24778 | 重写：终端 UI／交互 | `src/generated_ports/p_e8590503524b9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/EffortIndicator.ts` | 43 | 1128 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ExitFlow.tsx` | 48 | 4364 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ExportDialog.tsx` | 128 | 19333 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FallbackToolUseErrorMessage.tsx` | 116 | 12623 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FallbackToolUseRejectedMessage.tsx` | 16 | 1754 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FastIcon.tsx` | 46 | 4627 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Feedback.tsx` | 592 | 87696 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FeedbackSurvey/FeedbackSurvey.tsx` | 174 | 19393 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FeedbackSurvey/FeedbackSurveyView.tsx` | 108 | 10660 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FeedbackSurvey/TranscriptSharePrompt.tsx` | 88 | 9933 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FeedbackSurvey/submitTranscriptShare.ts` | 113 | 3251 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/ExitFlow.tsx` | 48 | 4364 | 重写：终端 UI／交互 | `src/generated_ports/p_96e0a274d18c4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ExportDialog.tsx` | 128 | 19333 | 重写：终端 UI／交互 | `src/generated_ports/p_26e43c0a828cf.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FallbackToolUseErrorMessage.tsx` | 116 | 12623 | 重写：终端 UI／交互 | `src/generated_ports/p_5b716827434fa.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FallbackToolUseRejectedMessage.tsx` | 16 | 1754 | 重写：终端 UI／交互 | `src/generated_ports/p_0660c482ad072.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FastIcon.tsx` | 46 | 4627 | 重写：终端 UI／交互 | `src/generated_ports/p_c6fbf2ff82c98.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Feedback.tsx` | 592 | 87696 | 重写：终端 UI／交互 | `src/generated_ports/p_58fbc53b1f78a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FeedbackSurvey/FeedbackSurvey.tsx` | 174 | 19393 | 重写：终端 UI／交互 | `src/generated_ports/p_cacc692b263f9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FeedbackSurvey/FeedbackSurveyView.tsx` | 108 | 10660 | 重写：终端 UI／交互 | `src/generated_ports/p_31d30d3206690.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FeedbackSurvey/TranscriptSharePrompt.tsx` | 88 | 9933 | 重写：终端 UI／交互 | `src/generated_ports/p_d283d404b97e8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FeedbackSurvey/submitTranscriptShare.ts` | 113 | 3251 | 重写：终端 UI／交互 | `src/generated_ports/p_9274e52fe3673.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/FeedbackSurvey/useDebouncedDigitInput.ts` | 83 | 2722 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/FeedbackSurvey/useFeedbackSurvey.tsx` | 296 | 48187 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/FeedbackSurvey/useMemorySurvey.tsx` | 213 | 30418 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/FeedbackSurvey/usePostCompactSurvey.tsx` | 206 | 24071 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/FeedbackSurvey/useSurveyState.tsx` | 100 | 14800 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FileEditToolDiff.tsx` | 181 | 21900 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FileEditToolUpdatedMessage.tsx` | 124 | 12097 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FileEditToolUseRejectedMessage.tsx` | 170 | 15126 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FilePathLink.tsx` | 43 | 3242 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/FullscreenLayout.tsx` | 637 | 84913 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/GlobalSearchDialog.tsx` | 343 | 43997 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/HelpV2/Commands.tsx` | 82 | 9738 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/HelpV2/General.tsx` | 23 | 3101 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/HelpV2/HelpV2.tsx` | 184 | 20986 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/HighlightedCode/Fallback.tsx` | 193 | 16263 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/HighlightedCode.tsx` | 190 | 17579 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/HistorySearchDialog.tsx` | 118 | 19923 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/IdeAutoConnectDialog.tsx` | 154 | 13271 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/IdeOnboardingDialog.tsx` | 167 | 16399 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/IdeStatusIndicator.tsx` | 58 | 6430 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/IdleReturnDialog.tsx` | 118 | 9861 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/InterruptedByUser.tsx` | 15 | 1962 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/InvalidConfigDialog.tsx` | 156 | 15252 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/InvalidSettingsDialog.tsx` | 89 | 7063 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/KeybindingWarnings.tsx` | 55 | 9534 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LanguagePicker.tsx` | 86 | 8664 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogSelector.tsx` | 1575 | 200487 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/AnimatedAsterisk.tsx` | 50 | 7562 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/AnimatedClawd.tsx` | 124 | 14054 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/FileEditToolDiff.tsx` | 181 | 21900 | 重写：终端 UI／交互 | `src/generated_ports/p_74a5887cc8c7d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FileEditToolUpdatedMessage.tsx` | 124 | 12097 | 重写：终端 UI／交互 | `src/generated_ports/p_63b6a6c13e478.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FileEditToolUseRejectedMessage.tsx` | 170 | 15126 | 重写：终端 UI／交互 | `src/generated_ports/p_79aee3a3a9f2c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FilePathLink.tsx` | 43 | 3242 | 重写：终端 UI／交互 | `src/generated_ports/p_c042b904bc313.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FullscreenLayout.tsx` | 637 | 84913 | 重写：终端 UI／交互 | `src/generated_ports/p_9ffbccf7a7015.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/GlobalSearchDialog.tsx` | 343 | 43997 | 重写：终端 UI／交互 | `src/generated_ports/p_57123442b4dd6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/HelpV2/Commands.tsx` | 82 | 9738 | 重写：终端 UI／交互 | `src/generated_ports/p_febdb24a5a4d0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/HelpV2/General.tsx` | 23 | 3101 | 重写：终端 UI／交互 | `src/generated_ports/p_c02d27a4b4b47.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/HelpV2/HelpV2.tsx` | 184 | 20986 | 重写：终端 UI／交互 | `src/generated_ports/p_ad25a57c00fc4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/HighlightedCode/Fallback.tsx` | 193 | 16263 | 重写：终端 UI／交互 | `src/generated_ports/p_ce20cba9c18c8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/HighlightedCode.tsx` | 190 | 17579 | 重写：终端 UI／交互 | `src/generated_ports/p_a72db0598ed11.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/HistorySearchDialog.tsx` | 118 | 19923 | 重写：终端 UI／交互 | `src/generated_ports/p_808a4f8e2054f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/IdeAutoConnectDialog.tsx` | 154 | 13271 | 重写：终端 UI／交互 | `src/generated_ports/p_01742ba7da80d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/IdeOnboardingDialog.tsx` | 167 | 16399 | 重写：终端 UI／交互 | `src/generated_ports/p_403601f46d449.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/IdeStatusIndicator.tsx` | 58 | 6430 | 重写：终端 UI／交互 | `src/generated_ports/p_efeefe8aa34bc.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/IdleReturnDialog.tsx` | 118 | 9861 | 重写：终端 UI／交互 | `src/generated_ports/p_3ab35d9de2f94.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/InterruptedByUser.tsx` | 15 | 1962 | 重写：终端 UI／交互 | `src/generated_ports/p_67aa03093e173.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/InvalidConfigDialog.tsx` | 156 | 15252 | 重写：终端 UI／交互 | `src/generated_ports/p_c89223875c3fc.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/InvalidSettingsDialog.tsx` | 89 | 7063 | 重写：终端 UI／交互 | `src/generated_ports/p_7433840558392.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/KeybindingWarnings.tsx` | 55 | 9534 | 重写：终端 UI／交互 | `src/generated_ports/p_239f0550e25c5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LanguagePicker.tsx` | 86 | 8664 | 重写：终端 UI／交互 | `src/generated_ports/p_baa83b625cf4b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LogSelector.tsx` | 1575 | 200487 | 重写：终端 UI／交互 | `src/generated_ports/p_6ed34733fbcc3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LogoV2/AnimatedAsterisk.tsx` | 50 | 7562 | 重写：终端 UI／交互 | `src/generated_ports/p_0465d9076d4a5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LogoV2/AnimatedClawd.tsx` | 124 | 14054 | 重写：终端 UI／交互 | `src/generated_ports/p_3efd291fe36da.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/ChannelsNotice.tsx` | 266 | 29503 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/Clawd.tsx` | 240 | 18574 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/CondensedLogo.tsx` | 161 | 19395 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/EmergencyTip.tsx` | 58 | 6707 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/Feed.tsx` | 112 | 13804 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/FeedColumn.tsx` | 59 | 5379 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/LogoV2/Clawd.tsx` | 240 | 18574 | 重写：终端 UI／交互 | `src/generated_ports/p_086673d16adbb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LogoV2/CondensedLogo.tsx` | 161 | 19395 | 重写：终端 UI／交互 | `src/generated_ports/p_912880da11cd9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LogoV2/EmergencyTip.tsx` | 58 | 6707 | 重写：终端 UI／交互 | `src/generated_ports/p_eb6ebe3e9e07d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LogoV2/Feed.tsx` | 112 | 13804 | 重写：终端 UI／交互 | `src/generated_ports/p_146d6a79b5789.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LogoV2/FeedColumn.tsx` | 59 | 5379 | 重写：终端 UI／交互 | `src/generated_ports/p_2e288793aaf3b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/GuestPassesUpsell.tsx` | 70 | 9122 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/LogoV2/LogoV2.tsx` | 543 | 75183 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/Opus1mMergeNotice.tsx` | 55 | 5812 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/LogoV2/Opus1mMergeNotice.tsx` | 55 | 5812 | 重写：终端 UI／交互 | `src/generated_ports/p_92ccc82ba7039.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/OverageCreditUpsell.tsx` | 166 | 18347 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/VoiceModeNotice.tsx` | 68 | 7668 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/WelcomeV2.tsx` | 433 | 57864 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/LogoV2/VoiceModeNotice.tsx` | 68 | 7668 | 重写：终端 UI／交互 | `src/generated_ports/p_9eba1e482615d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LogoV2/WelcomeV2.tsx` | 433 | 57864 | 重写：终端 UI／交互 | `src/generated_ports/p_ea10c11eb3bed.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/feedConfigs.tsx` | 92 | 12205 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LspRecommendation/LspRecommendationMenu.tsx` | 88 | 10247 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MCPServerApprovalDialog.tsx` | 115 | 11563 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MCPServerDesktopImportDialog.tsx` | 203 | 21016 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/LspRecommendation/LspRecommendationMenu.tsx` | 88 | 10247 | 重写：终端 UI／交互 | `src/generated_ports/p_d3216b1df5fb4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MCPServerApprovalDialog.tsx` | 115 | 11563 | 重写：终端 UI／交互 | `src/generated_ports/p_28b59eec0efcf.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MCPServerDesktopImportDialog.tsx` | 203 | 21016 | 重写：终端 UI／交互 | `src/generated_ports/p_9d6b2f5def3de.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/MCPServerDialogCopy.tsx` | 15 | 1829 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MCPServerMultiselectDialog.tsx` | 133 | 16029 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ManagedSettingsSecurityDialog/ManagedSettingsSecurityDialog.tsx` | 149 | 14484 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/MCPServerMultiselectDialog.tsx` | 133 | 16029 | 重写：终端 UI／交互 | `src/generated_ports/p_498bc5257103e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ManagedSettingsSecurityDialog/ManagedSettingsSecurityDialog.tsx` | 149 | 14484 | 重写：终端 UI／交互 | `src/generated_ports/p_b4669dd7c2988.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ManagedSettingsSecurityDialog/utils.ts` | 145 | 3979 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Markdown.tsx` | 236 | 28160 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MarkdownTable.tsx` | 322 | 47567 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MemoryUsageIndicator.tsx` | 37 | 4377 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Message.tsx` | 627 | 79113 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MessageModel.tsx` | 43 | 4110 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MessageResponse.tsx` | 78 | 6933 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MessageRow.tsx` | 383 | 48342 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MessageSelector.tsx` | 831 | 115618 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/MessageTimestamp.tsx` | 63 | 5448 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Messages.tsx` | 834 | 147457 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ModelPicker.tsx` | 448 | 54246 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/NativeAutoUpdater.tsx` | 193 | 26514 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/NotebookEditToolUseRejectedMessage.tsx` | 92 | 8447 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/OffscreenFreeze.tsx` | 44 | 5664 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/Markdown.tsx` | 236 | 28160 | 重写：终端 UI／交互 | `src/generated_ports/p_67d9d2b82e9b7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MarkdownTable.tsx` | 322 | 47567 | 重写：终端 UI／交互 | `src/generated_ports/p_1f8d93c1c6b27.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MemoryUsageIndicator.tsx` | 37 | 4377 | 重写：终端 UI／交互 | `src/generated_ports/p_4501df2866732.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Message.tsx` | 627 | 79113 | 重写：终端 UI／交互 | `src/generated_ports/p_9f44ff177a927.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MessageModel.tsx` | 43 | 4110 | 重写：终端 UI／交互 | `src/generated_ports/p_0ae9a8bbc4878.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MessageResponse.tsx` | 78 | 6933 | 重写：终端 UI／交互 | `src/generated_ports/p_df8523c974296.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MessageRow.tsx` | 383 | 48342 | 重写：终端 UI／交互 | `src/generated_ports/p_b8e758d1581c8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MessageSelector.tsx` | 831 | 115618 | 重写：终端 UI／交互 | `src/generated_ports/p_62d3536bfc7ba.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MessageTimestamp.tsx` | 63 | 5448 | 重写：终端 UI／交互 | `src/generated_ports/p_ce48428997d07.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Messages.tsx` | 834 | 147457 | 重写：终端 UI／交互 | `src/generated_ports/p_5c70f2e61245e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ModelPicker.tsx` | 448 | 54246 | 重写：终端 UI／交互 | `src/generated_ports/p_3553102a913de.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/NativeAutoUpdater.tsx` | 193 | 26514 | 重写：终端 UI／交互 | `src/generated_ports/p_6d672a8f7d5df.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/NotebookEditToolUseRejectedMessage.tsx` | 92 | 8447 | 重写：终端 UI／交互 | `src/generated_ports/p_969c9d9b904d0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/OffscreenFreeze.tsx` | 44 | 5664 | 重写：终端 UI／交互 | `src/generated_ports/p_6f565c2c13b92.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Onboarding.tsx` | 244 | 31528 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/OutputStylePicker.tsx` | 112 | 13233 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PackageManagerAutoUpdater.tsx` | 104 | 13907 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/OutputStylePicker.tsx` | 112 | 13233 | 重写：终端 UI／交互 | `src/generated_ports/p_f8adfbabecf36.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PackageManagerAutoUpdater.tsx` | 104 | 13907 | 重写：终端 UI／交互 | `src/generated_ports/p_3869eb9c14573.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Passes/Passes.tsx` | 184 | 27380 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PrBadge.tsx` | 97 | 7703 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PressEnterToContinue.tsx` | 15 | 1526 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/HistorySearchInput.tsx` | 51 | 5005 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/IssueFlagBanner.tsx` | 12 | 1914 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/Notifications.tsx` | 332 | 48104 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/PromptInput.tsx` | 2339 | 355032 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/PromptInputFooter.tsx` | 191 | 33176 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/PromptInputFooterLeftSide.tsx` | 517 | 87315 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/PromptInputFooterSuggestions.tsx` | 293 | 34158 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/PromptInputHelpMenu.tsx` | 358 | 32811 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/PromptInputModeIndicator.tsx` | 93 | 11127 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/PromptInputQueuedCommands.tsx` | 117 | 19587 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/PromptInputStashNotice.tsx` | 25 | 2291 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/SandboxPromptFooterHint.tsx` | 64 | 8031 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/ShimmeredInput.tsx` | 143 | 16680 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/PromptInput/VoiceIndicator.tsx` | 137 | 10810 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/PrBadge.tsx` | 97 | 7703 | 重写：终端 UI／交互 | `src/generated_ports/p_6da763d87b5ad.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PressEnterToContinue.tsx` | 15 | 1526 | 重写：终端 UI／交互 | `src/generated_ports/p_806f37fa5888a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/HistorySearchInput.tsx` | 51 | 5005 | 重写：终端 UI／交互 | `src/generated_ports/p_3ed42dc8aa879.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/IssueFlagBanner.tsx` | 12 | 1914 | 重写：终端 UI／交互 | `src/generated_ports/p_5ca89f5b33dd6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/Notifications.tsx` | 332 | 48104 | 重写：终端 UI／交互 | `src/generated_ports/p_4375034f382f7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/PromptInput.tsx` | 2339 | 355032 | 重写：终端 UI／交互 | `src/generated_ports/p_ee2a843014c61.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/PromptInputFooter.tsx` | 191 | 33176 | 重写：终端 UI／交互 | `src/generated_ports/p_c39f8f63b92a4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/PromptInputFooterLeftSide.tsx` | 517 | 87315 | 重写：终端 UI／交互 | `src/generated_ports/p_100d28512b001.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/PromptInputFooterSuggestions.tsx` | 293 | 34158 | 重写：终端 UI／交互 | `src/generated_ports/p_a680bef86b91f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/PromptInputHelpMenu.tsx` | 358 | 32811 | 重写：终端 UI／交互 | `src/generated_ports/p_ed2482259a075.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/PromptInputModeIndicator.tsx` | 93 | 11127 | 重写：终端 UI／交互 | `src/generated_ports/p_4ae3f27ee4b20.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/PromptInputQueuedCommands.tsx` | 117 | 19587 | 重写：终端 UI／交互 | `src/generated_ports/p_9b6293319d85b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/PromptInputStashNotice.tsx` | 25 | 2291 | 重写：终端 UI／交互 | `src/generated_ports/p_f6470f6cbfbdc.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/SandboxPromptFooterHint.tsx` | 64 | 8031 | 重写：终端 UI／交互 | `src/generated_ports/p_90f4b2e173492.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/ShimmeredInput.tsx` | 143 | 16680 | 重写：终端 UI／交互 | `src/generated_ports/p_2f84f9e35605c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/VoiceIndicator.tsx` | 137 | 10810 | 重写：终端 UI／交互 | `src/generated_ports/p_92d31b9e1cfc8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/PromptInput/inputModes.ts` | 34 | 731 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/components/PromptInput/inputPaste.ts` | 91 | 2693 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PromptInput/useMaybeTruncateInput.ts` | 59 | 1468 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -432,97 +432,97 @@
 | `src/components/PromptInput/useShowFastIconHint.ts` | 32 | 696 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PromptInput/useSwarmBanner.ts` | 156 | 5344 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PromptInput/utils.ts` | 61 | 1744 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/QuickOpenDialog.tsx` | 244 | 28556 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/QuickOpenDialog.tsx` | 244 | 28556 | 重写：终端 UI／交互 | `src/generated_ports/p_72b601fb5bd8f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/RemoteCallout.tsx` | 76 | 9978 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/RemoteEnvironmentDialog.tsx` | 340 | 33519 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ResumeTask.tsx` | 268 | 38550 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/SandboxViolationExpandedView.tsx` | 99 | 11401 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ScrollKeybindingHandler.tsx` | 1012 | 149202 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/SearchBox.tsx` | 72 | 9421 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/RemoteEnvironmentDialog.tsx` | 340 | 33519 | 重写：终端 UI／交互 | `src/generated_ports/p_6945c8538facb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ResumeTask.tsx` | 268 | 38550 | 重写：终端 UI／交互 | `src/generated_ports/p_0b6fa0f37f0d7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/SandboxViolationExpandedView.tsx` | 99 | 11401 | 重写：终端 UI／交互 | `src/generated_ports/p_d899e6008e2c6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ScrollKeybindingHandler.tsx` | 1012 | 149202 | 重写：终端 UI／交互 | `src/generated_ports/p_875b44513014b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/SearchBox.tsx` | 72 | 9421 | 重写：终端 UI／交互 | `src/generated_ports/p_b99a90b93dfe8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/SentryErrorBoundary.ts` | 29 | 487 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/SessionBackgroundHint.tsx` | 108 | 13154 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/SessionPreview.tsx` | 194 | 19227 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Settings/Config.tsx` | 1822 | 271407 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Settings/Settings.tsx` | 137 | 18641 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Settings/Status.tsx` | 241 | 25871 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Settings/Usage.tsx` | 377 | 39524 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ShowInIDEPrompt.tsx` | 170 | 17230 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/SkillImprovementSurvey.tsx` | 152 | 15172 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner/FlashingChar.tsx` | 61 | 6310 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner/GlimmerMessage.tsx` | 328 | 26955 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner/ShimmerChar.tsx` | 36 | 3357 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner/SpinnerAnimationRow.tsx` | 265 | 42767 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner/SpinnerGlyph.tsx` | 80 | 10291 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner/TeammateSpinnerLine.tsx` | 233 | 38859 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner/TeammateSpinnerTree.tsx` | 272 | 28052 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/SessionBackgroundHint.tsx` | 108 | 13154 | 重写：终端 UI／交互 | `src/generated_ports/p_67610e3e6c4b3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/SessionPreview.tsx` | 194 | 19227 | 重写：终端 UI／交互 | `src/generated_ports/p_d5494fca23881.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Settings/Config.tsx` | 1822 | 271407 | 重写：终端 UI／交互 | `src/generated_ports/p_304f6b94b4985.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Settings/Settings.tsx` | 137 | 18641 | 重写：终端 UI／交互 | `src/generated_ports/p_cd5dd5eb5b5b8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Settings/Status.tsx` | 241 | 25871 | 重写：终端 UI／交互 | `src/generated_ports/p_cbf04f614d757.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Settings/Usage.tsx` | 377 | 39524 | 重写：终端 UI／交互 | `src/generated_ports/p_52c6c162180e4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ShowInIDEPrompt.tsx` | 170 | 17230 | 重写：终端 UI／交互 | `src/generated_ports/p_489fa54bdb60f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/SkillImprovementSurvey.tsx` | 152 | 15172 | 重写：终端 UI／交互 | `src/generated_ports/p_d7e7ec5a41e23.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner/FlashingChar.tsx` | 61 | 6310 | 重写：终端 UI／交互 | `src/generated_ports/p_48b72004b31de.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner/GlimmerMessage.tsx` | 328 | 26955 | 重写：终端 UI／交互 | `src/generated_ports/p_50bf5166734f7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner/ShimmerChar.tsx` | 36 | 3357 | 重写：终端 UI／交互 | `src/generated_ports/p_ec706ec57f4b9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner/SpinnerAnimationRow.tsx` | 265 | 42767 | 重写：终端 UI／交互 | `src/generated_ports/p_210fb85258179.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner/SpinnerGlyph.tsx` | 80 | 10291 | 重写：终端 UI／交互 | `src/generated_ports/p_3d04352c988c3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner/TeammateSpinnerLine.tsx` | 233 | 38859 | 重写：终端 UI／交互 | `src/generated_ports/p_09647f4245ece.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner/TeammateSpinnerTree.tsx` | 272 | 28052 | 重写：终端 UI／交互 | `src/generated_ports/p_024038719ca35.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/index.ts` | 11 | 602 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner/teammateSelectHint.ts` | 2 | 64 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/Spinner/teammateSelectHint.ts` | 2 | 64 | 重写：终端 UI／交互 | `src/generated_ports/p_9cdb888d4eefe.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/useShimmerAnimation.ts` | 32 | 1236 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/Spinner/useStalledAnimation.ts` | 76 | 2500 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner/utils.ts` | 85 | 2261 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/Spinner.tsx` | 562 | 87940 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/Spinner/utils.ts` | 85 | 2261 | 重写：终端 UI／交互 | `src/generated_ports/p_43185acc13130.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner.tsx` | 562 | 87940 | 重写：终端 UI／交互 | `src/generated_ports/p_752a76791bf16.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Stats.tsx` | 1228 | 152782 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/StatusLine.tsx` | 324 | 49465 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/StatusNotices.tsx` | 55 | 5694 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/StructuredDiff/Fallback.tsx` | 487 | 56579 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/StatusLine.tsx` | 324 | 49465 | 重写：终端 UI／交互 | `src/generated_ports/p_b297abdcbeb6f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/StatusNotices.tsx` | 55 | 5694 | 重写：终端 UI／交互 | `src/generated_ports/p_1f9cbcf671874.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/StructuredDiff/Fallback.tsx` | 487 | 56579 | 重写：终端 UI／交互 | `src/generated_ports/p_d32fceeb42c6c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/StructuredDiff/colorDiff.ts` | 38 | 1137 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
-| `src/components/StructuredDiff.tsx` | 190 | 25007 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/StructuredDiffList.tsx` | 30 | 4252 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TagTabs.tsx` | 139 | 20853 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TaskListV2.tsx` | 378 | 50200 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TeammateViewHeader.tsx` | 82 | 7415 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TeleportError.tsx` | 189 | 18824 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TeleportProgress.tsx` | 140 | 16142 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/StructuredDiff.tsx` | 190 | 25007 | 重写：终端 UI／交互 | `src/generated_ports/p_5b170911b9f28.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/StructuredDiffList.tsx` | 30 | 4252 | 重写：终端 UI／交互 | `src/generated_ports/p_ea89f1ce49f9d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TagTabs.tsx` | 139 | 20853 | 重写：终端 UI／交互 | `src/generated_ports/p_fdf5a5900b02b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TaskListV2.tsx` | 378 | 50200 | 重写：终端 UI／交互 | `src/generated_ports/p_8f8e588ccdcf6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TeammateViewHeader.tsx` | 82 | 7415 | 重写：终端 UI／交互 | `src/generated_ports/p_00d240667df39.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TeleportError.tsx` | 189 | 18824 | 重写：终端 UI／交互 | `src/generated_ports/p_841962979051b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TeleportProgress.tsx` | 140 | 16142 | 重写：终端 UI／交互 | `src/generated_ports/p_af902ff34c817.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/TeleportRepoMismatchDialog.tsx` | 104 | 13046 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TeleportResumeWrapper.tsx` | 167 | 15381 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TeleportStash.tsx` | 116 | 15582 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TextInput.tsx` | 124 | 20998 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ThemePicker.tsx` | 333 | 35662 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ThinkingToggle.tsx` | 153 | 18209 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TokenWarning.tsx` | 179 | 21485 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ToolUseLoader.tsx` | 42 | 4843 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TrustDialog/TrustDialog.tsx` | 290 | 32481 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/TeleportResumeWrapper.tsx` | 167 | 15381 | 重写：终端 UI／交互 | `src/generated_ports/p_145c13866144f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TeleportStash.tsx` | 116 | 15582 | 重写：终端 UI／交互 | `src/generated_ports/p_a3657ca61fd5e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TextInput.tsx` | 124 | 20998 | 重写：终端 UI／交互 | `src/generated_ports/p_d47fe9c9aae64.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ThemePicker.tsx` | 333 | 35662 | 重写：终端 UI／交互 | `src/generated_ports/p_b8623882ef24c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ThinkingToggle.tsx` | 153 | 18209 | 重写：终端 UI／交互 | `src/generated_ports/p_e827f2867375a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TokenWarning.tsx` | 179 | 21485 | 重写：终端 UI／交互 | `src/generated_ports/p_236973c85ed82.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/ToolUseLoader.tsx` | 42 | 4843 | 重写：终端 UI／交互 | `src/generated_ports/p_02c961fae3b16.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TrustDialog/TrustDialog.tsx` | 290 | 32481 | 重写：终端 UI／交互 | `src/generated_ports/p_0c75706230e07.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/TrustDialog/utils.ts` | 246 | 7005 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ValidationErrorsList.tsx` | 148 | 19567 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/VimTextInput.tsx` | 140 | 16170 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/VirtualMessageList.tsx` | 1082 | 148516 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/WorkflowMultiselectDialog.tsx` | 128 | 14276 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/WorktreeExitDialog.tsx` | 231 | 35484 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/AgentDetail.tsx` | 220 | 23566 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/AgentEditor.tsx` | 178 | 26437 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/AgentNavigationFooter.tsx` | 26 | 3067 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/AgentsList.tsx` | 440 | 52257 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/AgentsMenu.tsx` | 800 | 70586 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/ColorPicker.tsx` | 112 | 14204 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/ModelSelector.tsx` | 68 | 6927 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/ToolSelector.tsx` | 562 | 64871 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/ValidationErrorsList.tsx` | 148 | 19567 | 重写：终端 UI／交互 | `src/generated_ports/p_5d92d9ccbc122.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/VimTextInput.tsx` | 140 | 16170 | 重写：终端 UI／交互 | `src/generated_ports/p_bfd0c9b4cdfac.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/VirtualMessageList.tsx` | 1082 | 148516 | 重写：终端 UI／交互 | `src/generated_ports/p_4e97f317c2f21.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/WorkflowMultiselectDialog.tsx` | 128 | 14276 | 重写：终端 UI／交互 | `src/generated_ports/p_11a1cccd83ccb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/WorktreeExitDialog.tsx` | 231 | 35484 | 重写：终端 UI／交互 | `src/generated_ports/p_1bacff6173180.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/AgentDetail.tsx` | 220 | 23566 | 重写：终端 UI／交互 | `src/generated_ports/p_0b420be1b193b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/AgentEditor.tsx` | 178 | 26437 | 重写：终端 UI／交互 | `src/generated_ports/p_31b29ef90def3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/AgentNavigationFooter.tsx` | 26 | 3067 | 重写：终端 UI／交互 | `src/generated_ports/p_880d83dc9c810.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/AgentsList.tsx` | 440 | 52257 | 重写：终端 UI／交互 | `src/generated_ports/p_65895b818e969.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/AgentsMenu.tsx` | 800 | 70586 | 重写：终端 UI／交互 | `src/generated_ports/p_584ab0ab3562d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/ColorPicker.tsx` | 112 | 14204 | 重写：终端 UI／交互 | `src/generated_ports/p_b91406e37fdf3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/ModelSelector.tsx` | 68 | 6927 | 重写：终端 UI／交互 | `src/generated_ports/p_2757935ec52a4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/ToolSelector.tsx` | 562 | 64871 | 重写：终端 UI／交互 | `src/generated_ports/p_4f1f5ef1057ac.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/agentFileUtils.ts` | 273 | 7487 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/agents/generateAgent.ts` | 198 | 10151 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/CreateAgentWizard.tsx` | 97 | 10427 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/ColorStep.tsx` | 84 | 10430 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/ConfirmStep.tsx` | 378 | 35034 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/ConfirmStepWrapper.tsx` | 74 | 14450 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/DescriptionStep.tsx` | 123 | 14331 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/GenerateStep.tsx` | 143 | 22113 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/LocationStep.tsx` | 80 | 8280 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/MemoryStep.tsx` | 113 | 14084 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/MethodStep.tsx` | 80 | 8516 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/ModelStep.tsx` | 52 | 6321 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/PromptStep.tsx` | 128 | 14831 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/ToolsStep.tsx` | 61 | 7220 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/agents/new-agent-creation/wizard-steps/TypeStep.tsx` | 103 | 12474 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/agents/new-agent-creation/CreateAgentWizard.tsx` | 97 | 10427 | 重写：终端 UI／交互 | `src/generated_ports/p_5df7355c6cbdd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/ColorStep.tsx` | 84 | 10430 | 重写：终端 UI／交互 | `src/generated_ports/p_ec56e2d844582.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/ConfirmStep.tsx` | 378 | 35034 | 重写：终端 UI／交互 | `src/generated_ports/p_317c3c95bd58f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/ConfirmStepWrapper.tsx` | 74 | 14450 | 重写：终端 UI／交互 | `src/generated_ports/p_686b4d7de99f9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/DescriptionStep.tsx` | 123 | 14331 | 重写：终端 UI／交互 | `src/generated_ports/p_afafd1aeec08f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/GenerateStep.tsx` | 143 | 22113 | 重写：终端 UI／交互 | `src/generated_ports/p_cce865c493883.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/LocationStep.tsx` | 80 | 8280 | 重写：终端 UI／交互 | `src/generated_ports/p_639c60e23091f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/MemoryStep.tsx` | 113 | 14084 | 重写：终端 UI／交互 | `src/generated_ports/p_b53eb6713e37d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/MethodStep.tsx` | 80 | 8516 | 重写：终端 UI／交互 | `src/generated_ports/p_b9891a496c986.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/ModelStep.tsx` | 52 | 6321 | 重写：终端 UI／交互 | `src/generated_ports/p_70d76a64a3322.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/PromptStep.tsx` | 128 | 14831 | 重写：终端 UI／交互 | `src/generated_ports/p_6c70a25431244.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/ToolsStep.tsx` | 61 | 7220 | 重写：终端 UI／交互 | `src/generated_ports/p_d64688e260f00.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/new-agent-creation/wizard-steps/TypeStep.tsx` | 103 | 12474 | 重写：终端 UI／交互 | `src/generated_ports/p_9d5de99c90d12.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/types.ts` | 28 | 915 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/agents/utils.ts` | 19 | 528 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/components/agents/validateAgent.ts` | 110 | 3150 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/Byline.tsx` | 77 | 6493 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/Dialog.tsx` | 138 | 14112 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/Divider.tsx` | 149 | 11094 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/FuzzyPicker.tsx` | 312 | 40862 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/KeyboardShortcutHint.tsx` | 81 | 6847 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/ListItem.tsx` | 244 | 19535 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/LoadingState.tsx` | 94 | 6448 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/Pane.tsx` | 77 | 6907 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/ProgressBar.tsx` | 86 | 7170 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/design-system/Byline.tsx` | 77 | 6493 | 重写：终端 UI／交互 | `src/generated_ports/p_d78b4b20e79ce.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/design-system/Dialog.tsx` | 138 | 14112 | 重写：终端 UI／交互 | `src/generated_ports/p_5bbc621df3eba.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/design-system/Divider.tsx` | 149 | 11094 | 重写：终端 UI／交互 | `src/generated_ports/p_24c4306aaf4fa.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/design-system/FuzzyPicker.tsx` | 312 | 40862 | 重写：终端 UI／交互 | `src/generated_ports/p_c78fd261d2dd8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/design-system/KeyboardShortcutHint.tsx` | 81 | 6847 | 重写：终端 UI／交互 | `src/generated_ports/p_c67bd922d31e8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/design-system/ListItem.tsx` | 244 | 19535 | 重写：终端 UI／交互 | `src/generated_ports/p_90f7490644747.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/design-system/LoadingState.tsx` | 94 | 6448 | 重写：终端 UI／交互 | `src/generated_ports/p_17e756c76b4c5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/design-system/Pane.tsx` | 77 | 6907 | 重写：终端 UI／交互 | `src/generated_ports/p_739e7c996602c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/design-system/ProgressBar.tsx` | 86 | 7170 | 重写：终端 UI／交互 | `src/generated_ports/p_a9eb5b2575d7c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/design-system/Ratchet.tsx` | 80 | 7166 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/design-system/StatusIcon.tsx` | 95 | 7568 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/design-system/Tabs.tsx` | 340 | 41447 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -533,7 +533,7 @@
 | `src/components/diff/DiffDetailView.tsx` | 281 | 22615 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/diff/DiffDialog.tsx` | 383 | 43407 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/diff/DiffFileList.tsx` | 292 | 25342 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/grove/Grove.tsx` | 463 | 49525 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/grove/Grove.tsx` | 463 | 49525 | 重写：终端 UI／交互 | `src/generated_ports/p_dad974e93dda6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/hooks/HooksConfigMenu.tsx` | 578 | 54469 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/hooks/PromptDialog.tsx` | 90 | 7482 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/hooks/SelectEventMode.tsx` | 127 | 13555 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -552,7 +552,7 @@
 | `src/components/mcp/MCPToolListView.tsx` | 141 | 16252 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/McpParsingWarnings.tsx` | 213 | 22079 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/index.ts` | 10 | 523 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/mcp/utils/reconnectHelpers.tsx` | 49 | 5292 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/mcp/utils/reconnectHelpers.tsx` | 49 | 5292 | 重写：终端 UI／交互 | `src/generated_ports/p_962b63a53cf13.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/memory/MemoryFileSelector.tsx` | 438 | 48121 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/memory/MemoryUpdateNotification.tsx` | 45 | 5100 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messageActions.tsx` | 450 | 54948 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -595,7 +595,7 @@
 | `src/components/messages/UserToolResultMessage/UserToolSuccessMessage.tsx` | 104 | 16409 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserToolResultMessage/utils.tsx` | 44 | 3938 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/nullRenderingAttachments.ts` | 71 | 2257 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/teamMemCollapsed.tsx` | 140 | 13711 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/teamMemCollapsed.tsx` | 140 | 13711 | 重写：终端 UI／交互 | `src/generated_ports/p_7ea337b79dc53.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/messages/teamMemSaved.ts` | 20 | 711 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/AskUserQuestionPermissionRequest/AskUserQuestionPermissionRequest.tsx` | 645 | 82469 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/AskUserQuestionPermissionRequest/PreviewBox.tsx` | 229 | 25959 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -605,15 +605,15 @@
 | `src/components/permissions/AskUserQuestionPermissionRequest/SubmitQuestionsView.tsx` | 144 | 16641 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/AskUserQuestionPermissionRequest/use-multiple-choice-state.ts` | 180 | 4142 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/BashPermissionRequest/BashPermissionRequest.tsx` | 482 | 75744 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/permissions/BashPermissionRequest/bashToolUseOptions.tsx` | 147 | 21446 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/permissions/BashPermissionRequest/bashToolUseOptions.tsx` | 147 | 21446 | 重写：终端 UI／交互 | `src/generated_ports/p_aa15b3a617dd6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/permissions/ComputerUseApproval/ComputerUseApproval.tsx` | 441 | 44745 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/EnterPlanModePermissionRequest/EnterPlanModePermissionRequest.tsx` | 122 | 13340 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/ExitPlanModePermissionRequest/ExitPlanModePermissionRequest.tsx` | 768 | 121607 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/FallbackPermissionRequest.tsx` | 333 | 30677 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/FileEditPermissionRequest/FileEditPermissionRequest.tsx` | 182 | 16257 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/FilePermissionDialog/FilePermissionDialog.tsx` | 204 | 30317 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/permissions/FilePermissionDialog/ideDiffConfig.ts` | 43 | 858 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/permissions/FilePermissionDialog/permissionOptions.tsx` | 177 | 22367 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/permissions/FilePermissionDialog/ideDiffConfig.ts` | 43 | 858 | 重写：终端 UI／交互 | `src/generated_ports/p_ffb259d974835.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/permissions/FilePermissionDialog/permissionOptions.tsx` | 177 | 22367 | 重写：终端 UI／交互 | `src/generated_ports/p_998a62fbd6f32.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/permissions/FilePermissionDialog/useFilePermissionDialog.ts` | 213 | 6809 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/FilePermissionDialog/usePermissionHandler.ts` | 186 | 5105 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/FileWritePermissionRequest/FileWritePermissionRequest.tsx` | 161 | 16526 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -624,12 +624,12 @@
 | `src/components/permissions/PermissionDecisionDebugInfo.tsx` | 460 | 52533 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/PermissionDialog.tsx` | 72 | 7317 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/PermissionExplanation.tsx` | 272 | 23700 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/permissions/PermissionPrompt.tsx` | 336 | 37391 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/permissions/PermissionPrompt.tsx` | 336 | 37391 | 重写：终端 UI／交互 | `src/generated_ports/p_da009de33c5ba.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/permissions/PermissionRequest.tsx` | 217 | 33579 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/PermissionRequestTitle.tsx` | 66 | 5781 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/PermissionRuleExplanation.tsx` | 121 | 14921 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/PowerShellPermissionRequest/PowerShellPermissionRequest.tsx` | 235 | 38696 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/permissions/PowerShellPermissionRequest/powershellToolUseOptions.tsx` | 91 | 11950 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/permissions/PowerShellPermissionRequest/powershellToolUseOptions.tsx` | 91 | 11950 | 重写：终端 UI／交互 | `src/generated_ports/p_ec381b97899e3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/permissions/SandboxPermissionRequest.tsx` | 163 | 14272 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/SedEditPermissionRequest/SedEditPermissionRequest.tsx` | 230 | 20862 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/SkillPermissionRequest/SkillPermissionRequest.tsx` | 369 | 36531 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -669,7 +669,7 @@
 | `src/components/tasks/ShellDetailDialog.tsx` | 404 | 39167 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/tasks/ShellProgress.tsx` | 87 | 7004 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/tasks/renderToolActivity.tsx` | 33 | 4414 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/tasks/taskStatusUtils.tsx` | 107 | 13548 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/tasks/taskStatusUtils.tsx` | 107 | 13548 | 重写：终端 UI／交互 | `src/generated_ports/p_75dd35b9b8459.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/teams/TeamStatus.tsx` | 80 | 6897 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/teams/TeamsDialog.tsx` | 715 | 94680 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/ui/OrderedList.tsx` | 71 | 7294 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -681,20 +681,20 @@
 | `src/components/wizard/index.ts` | 10 | 328 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/wizard/useWizard.ts` | 14 | 447 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/constants/apiLimits.ts` | 95 | 3443 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/constants/betas.ts` | 53 | 2218 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/constants/betas.ts` | 53 | 2218 | 重写：保持通用行为 | `src/generated_ports/p_fa5438ef3e848.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/constants/common.ts` | 34 | 1516 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/constants/cyberRiskInstruction.ts` | 25 | 1525 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/constants/cyberRiskInstruction.ts` | 25 | 1525 | 重写：保持通用行为 | `src/generated_ports/p_96fa9b93b1ef7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/constants/errorIds.ts` | 16 | 476 | 重写：保持通用行为 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
-| `src/constants/figures.ts` | 46 | 2063 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/constants/figures.ts` | 46 | 2063 | 重写：保持通用行为 | `src/generated_ports/p_7e4e3f10886b7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/constants/files.ts` | 157 | 2625 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/github-app.ts` | 145 | 5347 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/keys.ts` | 12 | 444 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/messages.ts` | 2 | 49 | 重写：保持通用行为 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/constants/oauth.ts` | 235 | 8970 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/constants/outputStyles.ts` | 217 | 9886 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/constants/product.ts` | 77 | 2563 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/constants/prompts.ts` | 915 | 54320 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/constants/spinnerVerbs.ts` | 205 | 3453 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/constants/outputStyles.ts` | 217 | 9886 | 重写：保持通用行为 | `src/generated_ports/p_630eea798f5af.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/constants/product.ts` | 77 | 2563 | 重写：保持通用行为 | `src/generated_ports/p_9ae508cd79a96.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/constants/prompts.ts` | 915 | 54320 | 重写：保持通用行为 | `src/generated_ports/p_4573ed881a545.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/constants/spinnerVerbs.ts` | 205 | 3453 | 重写：保持通用行为 | `src/generated_ports/p_7763c000d96fd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/constants/system.ts` | 96 | 3859 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/systemPromptSections.ts` | 69 | 1794 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/constants/toolLimits.ts` | 57 | 2169 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
@@ -744,7 +744,7 @@
 | `src/hooks/toolPermission/permissionLogging.ts` | 239 | 7286 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/unifiedSuggestions.ts` | 203 | 5837 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useAfterFirstRender.ts` | 18 | 485 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useApiKeyVerification.ts` | 85 | 2678 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useApiKeyVerification.ts` | 85 | 2678 | 重写：终端 UI／交互 | `src/generated_ports/p_f59e00a9dbb7d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useArrowKeyHistory.tsx` | 229 | 34135 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useAssistantHistory.ts` | 251 | 9228 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useAwaySummary.ts` | 126 | 3835 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -762,7 +762,7 @@
 | `src/hooks/useDiffData.ts` | 111 | 2839 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useDiffInIDE.ts` | 380 | 9867 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useDirectConnect.ts` | 230 | 7504 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useDoublePress.ts` | 63 | 1651 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useDoublePress.ts` | 63 | 1651 | 重写：终端 UI／交互 | `src/generated_ports/p_74bc565d88e8d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useDynamicConfig.ts` | 23 | 703 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useElapsedTime.ts` | 38 | 1226 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useExitOnCtrlCD.ts` | 96 | 3226 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -783,12 +783,12 @@
 | `src/hooks/useMailboxBridge.ts` | 22 | 716 | 重写：终端 UI／交互 | `src/in_memory_mailbox.rs / src/main.rs` | 部分实现：空闲仅消费一条并提交、加载时不消费；React 外部 Store 与 effect 调度未等价 |
 | `src/hooks/useMainLoopModel.ts` | 35 | 1509 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useManagePlugins.ts` | 305 | 11888 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useMemoryUsage.ts` | 40 | 1293 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useMemoryUsage.ts` | 40 | 1293 | 重写：终端 UI／交互 | `src/generated_ports/p_3ec18e2d10ecb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useMergedClients.ts` | 24 | 745 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useMergedCommands.ts` | 16 | 423 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useMergedTools.ts` | 45 | 1645 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useMinDisplayTime.ts` | 36 | 1010 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useNotifyAfterTimeout.ts` | 66 | 2471 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useNotifyAfterTimeout.ts` | 66 | 2471 | 重写：终端 UI／交互 | `src/generated_ports/p_a0553423b570f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useOfficialMarketplaceNotification.tsx` | 48 | 7299 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/usePasteHandler.ts` | 286 | 10146 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/usePluginRecommendationBase.tsx` | 105 | 11418 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -797,7 +797,7 @@
 | `src/hooks/usePromptsFromClaudeInChrome.tsx` | 71 | 11623 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useQueueProcessor.ts` | 69 | 2547 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useRemoteSession.ts` | 606 | 23010 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useReplBridge.tsx` | 723 | 115652 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useReplBridge.tsx` | 723 | 115652 | 重写：终端 UI／交互 | `src/generated_ports/p_c84de04e0085c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useSSHSession.ts` | 242 | 8316 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useScheduledTasks.ts` | 140 | 5975 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useSearchInput.ts` | 365 | 10327 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -811,7 +811,7 @@
 | `src/hooks/useTaskListWatcher.ts` | 222 | 6822 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTasksV2.ts` | 251 | 8808 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTeammateViewAutoExit.ts` | 64 | 2189 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useTeleportResume.tsx` | 85 | 9840 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useTeleportResume.tsx` | 85 | 9840 | 重写：终端 UI／交互 | `src/generated_ports/p_17ee0f10fb33b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useTerminalSize.ts` | 16 | 354 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTextInput.ts` | 530 | 17027 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTimeout.ts` | 15 | 362 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -820,13 +820,13 @@
 | `src/hooks/useUpdateNotification.ts` | 35 | 982 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useVimInput.ts` | 317 | 9741 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useVirtualScroll.ts` | 722 | 35122 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useVoice.ts` | 1145 | 45802 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useVoice.ts` | 1145 | 45802 | 重写：终端 UI／交互 | `src/generated_ports/p_5a4cf6e30ce08.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useVoiceEnabled.ts` | 26 | 1134 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useVoiceIntegration.tsx` | 677 | 99464 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/Ansi.tsx` | 292 | 33264 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/bidi.ts` | 140 | 4290 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/clearTerminal.ts` | 75 | 1901 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/colorize.ts` | 232 | 7647 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/colorize.ts` | 232 | 7647 | 重写：终端 UI／交互 | `src/generated_ports/p_36ccb582d72f4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/components/AlternateScreen.tsx` | 80 | 10377 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/App.tsx` | 658 | 98330 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/AppContext.ts` | 22 | 523 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -846,11 +846,11 @@
 | `src/ink/components/TerminalSizeContext.tsx` | 7 | 983 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/Text.tsx` | 254 | 16811 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/constants.ts` | 3 | 107 | 重写：终端 UI／交互 | `src/ink_constants.rs` | 已验收：原始唯一帧间隔常量数值 16ms；证据 ink_constants::tests::original_render_frame_interval |
-| `src/ink/dom.ts` | 485 | 15126 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/dom.ts` | 485 | 15126 | 重写：终端 UI／交互 | `src/generated_ports/p_08d9d21613c39.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/events/click-event.ts` | 39 | 1332 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/events/dispatcher.ts` | 234 | 6004 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/events/emitter.ts` | 40 | 1125 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
-| `src/ink/events/event-handlers.ts` | 74 | 2202 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/events/event-handlers.ts` | 74 | 2202 | 重写：终端 UI／交互 | `src/generated_ports/p_9066c9e862a6f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/events/event.ts` | 12 | 250 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/events/focus-event.ts` | 22 | 687 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/events/input-event.ts` | 206 | 7306 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -858,7 +858,7 @@
 | `src/ink/events/terminal-event.ts` | 108 | 2526 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust DOM 事件传播/键盘事件及 Unicode 宽度路径已编写，完整 TUI 与分割符号待验 |
 | `src/ink/events/terminal-focus-event.ts` | 20 | 512 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/focus.ts` | 182 | 5142 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/frame.ts` | 125 | 4209 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/frame.ts` | 125 | 4209 | 重写：终端 UI／交互 | `src/generated_ports/p_f1c981d6e64b5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/get-max-width.ts` | 28 | 1149 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/hit-test.ts` | 131 | 4228 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-animation-frame.ts` | 58 | 1933 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -869,15 +869,15 @@
 | `src/ink/hooks/use-search-highlight.ts` | 54 | 2158 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-selection.ts` | 105 | 4421 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-stdin.ts` | 9 | 232 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/hooks/use-tab-status.ts` | 73 | 2175 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/hooks/use-tab-status.ts` | 73 | 2175 | 重写：终端 UI／交互 | `src/generated_ports/p_7ec0d98f5f3f7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/hooks/use-terminal-focus.ts` | 17 | 556 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/hooks/use-terminal-title.ts` | 32 | 1020 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/hooks/use-terminal-viewport.ts` | 97 | 3977 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/ink.tsx` | 1723 | 251886 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/instances.ts` | 11 | 410 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/layout/engine.ts` | 7 | 177 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/layout/geometry.ts` | 98 | 2471 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/layout/node.ts` | 153 | 4346 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/layout/geometry.ts` | 98 | 2471 | 重写：终端 UI／交互 | `src/generated_ports/p_bab2fac86d685.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/ink/layout/node.ts` | 153 | 4346 | 重写：终端 UI／交互 | `src/generated_ports/p_dbe6d69b9cec8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/layout/yoga.ts` | 309 | 7400 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/line-width-cache.ts` | 25 | 734 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/log-update.ts` | 774 | 27210 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -886,33 +886,33 @@
 | `src/ink/node-cache.ts` | 55 | 1654 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/optimizer.ts` | 94 | 2588 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/output.ts` | 798 | 26183 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/parse-keypress.ts` | 802 | 23458 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/parse-keypress.ts` | 802 | 23458 | 重写：终端 UI／交互 | `src/generated_ports/p_22f64b3a15765.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/reconciler.ts` | 513 | 14594 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/render-border.ts` | 232 | 6642 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/render-border.ts` | 232 | 6642 | 重写：终端 UI／交互 | `src/generated_ports/p_8fdccc85c5cbd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/render-node-to-output.ts` | 1463 | 63281 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/render-to-screen.ts` | 232 | 8570 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/renderer.ts` | 179 | 7665 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/root.ts` | 185 | 4600 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/screen.ts` | 1487 | 49323 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/searchHighlight.ts` | 94 | 3325 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/selection.ts` | 918 | 34933 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/selection.ts` | 918 | 34933 | 重写：终端 UI／交互 | `src/generated_ports/p_9b038cbf2e98a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/squash-text-nodes.ts` | 93 | 2293 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/stringWidth.ts` | 223 | 7156 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust DOM 事件传播/键盘事件及 Unicode 宽度路径已编写，完整 TUI 与分割符号待验 |
-| `src/ink/styles.ts` | 772 | 20889 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/supports-hyperlinks.ts` | 58 | 1596 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/styles.ts` | 772 | 20889 | 重写：终端 UI／交互 | `src/generated_ports/p_7f9729523576c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/ink/supports-hyperlinks.ts` | 58 | 1596 | 重写：终端 UI／交互 | `src/generated_ports/p_95ad2edddae92.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/tabstops.ts` | 47 | 1113 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/terminal-focus-state.ts` | 48 | 1305 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/terminal-focus-state.ts` | 48 | 1305 | 重写：终端 UI／交互 | `src/generated_ports/p_22e7f7a29d693.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/terminal-querier.ts` | 213 | 7843 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/terminal.ts` | 249 | 8190 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/termio/ansi.ts` | 76 | 1490 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/termio/csi.ts` | 320 | 8677 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/termio/dec.ts` | 61 | 1935 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/termio/ansi.ts` | 76 | 1490 | 重写：终端 UI／交互 | `src/generated_ports/p_1f1e68eb35633.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/ink/termio/csi.ts` | 320 | 8677 | 重写：终端 UI／交互 | `src/generated_ports/p_bc5aed2cde71b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/ink/termio/dec.ts` | 61 | 1935 | 重写：终端 UI／交互 | `src/generated_ports/p_5753cc2fee99d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/termio/esc.ts` | 68 | 1444 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/termio/osc.ts` | 494 | 16842 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/termio/osc.ts` | 494 | 16842 | 重写：终端 UI／交互 | `src/generated_ports/p_95d00ece00cfd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/termio/parser.ts` | 395 | 11546 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/termio/sgr.ts` | 309 | 6400 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/termio/tokenize.ts` | 320 | 9284 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/termio/types.ts` | 237 | 7076 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/termio/types.ts` | 237 | 7076 | 重写：终端 UI／交互 | `src/generated_ports/p_506f1ba0cbb2f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/termio.ts` | 43 | 1036 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/useTerminalNotification.ts` | 127 | 3857 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/warn.ts` | 10 | 295 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
@@ -925,14 +925,14 @@
 | `src/keybindings/loadUserBindings.ts` | 473 | 14551 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/match.ts` | 121 | 3797 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/parser.ts` | 204 | 4972 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/reservedShortcuts.ts` | 128 | 3610 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/resolver.ts` | 245 | 7087 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/schema.ts` | 237 | 6269 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/keybindings/reservedShortcuts.ts` | 128 | 3610 | 重写：保持通用行为 | `src/generated_ports/p_d338e19c29574.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/keybindings/resolver.ts` | 245 | 7087 | 重写：保持通用行为 | `src/generated_ports/p_c7d9aa37cc1b1.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/keybindings/schema.ts` | 237 | 6269 | 重写：保持通用行为 | `src/generated_ports/p_212ef30d7fd2c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/keybindings/shortcutFormat.ts` | 64 | 2575 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/template.ts` | 53 | 1721 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/useKeybinding.ts` | 197 | 6862 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/keybindings/useShortcutDisplay.ts` | 60 | 2510 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/keybindings/validate.ts` | 499 | 13667 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/keybindings/validate.ts` | 499 | 13667 | 重写：保持通用行为 | `src/generated_ports/p_f8e473fd2917d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/memdir/findRelevantMemories.ts` | 142 | 5305 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：选用当前配置模型检索最多 5 条相关 Markdown 记忆；原版工具上下文和异常处理仍待核对 |
 | `src/memdir/memdir.ts` | 508 | 21174 | 重写：压缩与记忆 | `src/memory.rs` | 部分实现：MEMORY.md 200 行/25 KB 索引及截断提示；路径和团队记忆未等价 |
 | `src/memdir/memoryAge.ts` | 54 | 1931 | 重写：压缩与记忆 | `src/memory_age.rs` | 已验收：全部 4 个导出函数的日期边界、未来时间、特殊数值与原始提示文本对照；证据 memory_age::tests |
@@ -955,10 +955,10 @@
 | `src/moreright/useMoreRight.tsx` | 26 | 3535 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/native-ts/color-diff/index.ts` | 1000 | 30042 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/native-ts/file-index/index.ts` | 371 | 12006 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/native-ts/yoga-layout/enums.ts` | 135 | 2823 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/native-ts/yoga-layout/enums.ts` | 135 | 2823 | 重写：保持通用行为 | `src/generated_ports/p_166b646bc508b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/native-ts/yoga-layout/index.ts` | 2579 | 83377 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/outputStyles/loadOutputStylesDir.ts` | 99 | 3438 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/plugins/builtinPlugins.ts` | 160 | 4980 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/plugins/builtinPlugins.ts` | 160 | 4980 | 重写：保持通用行为 | `src/generated_ports/p_2f9a1e26806ee.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/plugins/bundled/index.ts` | 24 | 843 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/query/config.ts` | 47 | 1808 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/query/deps.ts` | 41 | 1445 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -970,15 +970,15 @@
 | `src/remote/sdkMessageAdapter.ts` | 303 | 9060 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/schemas/hooks.ts` | 223 | 7884 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/screens/Doctor.tsx` | 575 | 73277 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/screens/REPL.tsx` | 5006 | 895850 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/screens/REPL.tsx` | 5006 | 895850 | 重写：终端 UI／交互 | `src/generated_ports/p_fe5e0a874b3c2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/screens/ResumeConversation.tsx` | 399 | 59682 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/server/createDirectConnectSession.ts` | 89 | 2193 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/server/directConnectManager.ts` | 214 | 5898 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/server/types.ts` | 58 | 1466 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/server/types.ts` | 58 | 1466 | 重写：保持通用行为 | `src/generated_ports/p_0409a449c853a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/services/AgentSummary/agentSummary.ts` | 180 | 6407 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/MagicDocs/magicDocs.ts` | 255 | 7683 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/MagicDocs/prompts.ts` | 128 | 5595 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/PromptSuggestion/promptSuggestion.ts` | 524 | 17065 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/PromptSuggestion/promptSuggestion.ts` | 524 | 17065 | 重写：保持通用行为 | `src/generated_ports/p_ac92628c81197.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/services/PromptSuggestion/speculation.ts` | 992 | 30680 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/SessionMemory/prompts.ts` | 325 | 12629 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/SessionMemory/sessionMemory.ts` | 496 | 16561 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
@@ -1065,7 +1065,7 @@
 | `src/services/mcp/xaa.ts` | 512 | 18286 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/xaaIdpLogin.ts` | 488 | 16271 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcpServerApproval.tsx` | 41 | 6400 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/mockRateLimits.ts` | 883 | 29698 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/mockRateLimits.ts` | 883 | 29698 | 重写：保持通用行为 | `src/generated_ports/p_0f036bc7045d6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/services/notifier.ts` | 157 | 4256 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/oauth/auth-code-listener.ts` | 212 | 6650 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/oauth/client.ts` | 567 | 18254 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1074,14 +1074,14 @@
 | `src/services/oauth/index.ts` | 199 | 6554 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/plugins/PluginInstallationManager.ts` | 185 | 6017 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/plugins/pluginCliCommands.ts` | 345 | 10894 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/plugins/pluginOperations.ts` | 1089 | 35619 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/plugins/pluginOperations.ts` | 1089 | 35619 | 重写：保持通用行为 | `src/generated_ports/p_d37d4b8c26098.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/services/policyLimits/index.ts` | 664 | 18064 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/policyLimits/types.ts` | 28 | 792 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/preventSleep.ts` | 166 | 4586 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/rateLimitMessages.ts` | 345 | 10858 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/services/rateLimitMocking.ts` | 145 | 4420 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/services/remoteManagedSettings/index.ts` | 639 | 20911 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/remoteManagedSettings/securityCheck.tsx` | 74 | 10513 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/remoteManagedSettings/securityCheck.tsx` | 74 | 10513 | 重写：保持通用行为 | `src/generated_ports/p_8985ba0623d61.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/services/remoteManagedSettings/syncCache.ts` | 113 | 4229 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/remoteManagedSettings/syncCacheState.ts` | 97 | 4004 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/remoteManagedSettings/types.ts` | 32 | 1060 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1104,7 +1104,7 @@
 | `src/services/vcr.ts` | 407 | 12166 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/voice.ts` | 526 | 17116 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/voiceKeyterms.ts` | 107 | 3462 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/voiceStreamSTT.ts` | 545 | 21375 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/voiceStreamSTT.ts` | 545 | 21375 | 重写：保持通用行为 | `src/generated_ports/p_5bf6ce115b634.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/skills/bundled/batch.ts` | 125 | 7177 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/claudeApi.ts` | 197 | 6323 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/claudeApiContent.ts` | 76 | 4280 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
@@ -1126,7 +1126,7 @@
 | `src/skills/loadSkillsDir.ts` | 1087 | 34415 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/mcpSkillBuilders.ts` | 45 | 1627 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/state/AppState.tsx` | 200 | 23480 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/state/AppStateStore.ts` | 570 | 21847 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/state/AppStateStore.ts` | 570 | 21847 | 重写：保持通用行为 | `src/generated_ports/p_4160de63cf190.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/state/onChangeAppState.ts` | 172 | 6197 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/state/selectors.ts` | 77 | 2240 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/state/store.ts` | 35 | 836 | 重写：保持通用行为 | `src/reactive_store.rs` | 部分实现：状态/清理注册、顺序和订阅基础测试；JS Object.is 与 Promise 异常传播仍需等价验证 |
@@ -1329,17 +1329,17 @@
 | `src/tools/utils.ts` | 41 | 1105 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/types/command.ts` | 217 | 7736 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/types/generated/events_mono/claude_code/v1/claude_code_internal_event.ts` | 866 | 30728 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/generated/events_mono/common/v1/auth.ts` | 101 | 2822 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts` | 224 | 7591 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/generated/google/protobuf/timestamp.ts` | 188 | 6565 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/types/generated/events_mono/common/v1/auth.ts` | 101 | 2822 | 重写：保持通用行为 | `src/generated_ports/p_90bb0f65ccd4f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts` | 224 | 7591 | 重写：保持通用行为 | `src/generated_ports/p_461ec04c9ec8b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/types/generated/google/protobuf/timestamp.ts` | 188 | 6565 | 重写：保持通用行为 | `src/generated_ports/p_5144380e07c74.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/types/hooks.ts` | 291 | 9138 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/ids.ts` | 45 | 1295 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/types/ids.ts` | 45 | 1295 | 重写：保持通用行为 | `src/generated_ports/p_87d79f34fe49a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/types/logs.ts` | 331 | 11291 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/permissions.ts` | 442 | 13145 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/plugin.ts` | 364 | 11308 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/textInputTypes.ts` | 388 | 11628 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/types/permissions.ts` | 442 | 13145 | 重写：保持通用行为 | `src/generated_ports/p_cf19f3fcff0bf.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/types/plugin.ts` | 364 | 11308 | 重写：保持通用行为 | `src/generated_ports/p_cc2135ed93bfb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/types/textInputTypes.ts` | 388 | 11628 | 重写：保持通用行为 | `src/generated_ports/p_1b3d61a277808.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/upstreamproxy/relay.ts` | 456 | 14937 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/upstreamproxy/upstreamproxy.ts` | 286 | 9812 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/upstreamproxy/upstreamproxy.ts` | 286 | 9812 | 重写：保持通用行为 | `src/generated_ports/p_456bc58f2042a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/CircularBuffer.ts` | 85 | 1888 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/Cursor.ts` | 1531 | 46663 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/QueryGuard.ts` | 122 | 3597 | 重写：查询排队、预约、运行、取消与代次状态机 | `src/query_guard.rs` / `src/sdk_queue.rs` | 部分实现：同步预约、运行、取消和代次保护有测试；原始信号订阅动态增删、React UI 生命周期及跨模块取消时序未验收；证据 query_guard::tests / integration_cli::sdk_queue_drain_honors_priority_fifo_and_worker_isolation |
@@ -1347,44 +1347,44 @@
 | `src/utils/ShellCommand.ts` | 466 | 14138 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/abortController.ts` | 100 | 3364 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/activityManager.ts` | 165 | 4973 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/advisor.ts` | 146 | 5585 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/agentContext.ts` | 179 | 6660 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/advisor.ts` | 146 | 5585 | 重写：保持通用行为 | `src/generated_ports/p_f90f0871a04d8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/agentContext.ts` | 179 | 6660 | 重写：保持通用行为 | `src/generated_ports/p_9029c5407283f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/agentId.ts` | 100 | 2805 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/agentSwarmsEnabled.ts` | 45 | 1417 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/agenticSessionSearch.ts` | 308 | 10067 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/analyzeContext.ts` | 1383 | 42931 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/analyzeContext.ts` | 1383 | 42931 | 重写：保持通用行为 | `src/generated_ports/p_a127d290c8efb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/ansiToPng.ts` | 335 | 214955 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/ansiToSvg.ts` | 273 | 8212 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/api.ts` | 719 | 26078 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/ansiToSvg.ts` | 273 | 8212 | 重写：保持通用行为 | `src/generated_ports/p_a9e775f18b3e2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/api.ts` | 719 | 26078 | 重写：保持通用行为 | `src/generated_ports/p_e7319660e090e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/apiPreconnect.ts` | 72 | 2843 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/appleTerminalBackup.ts` | 125 | 2798 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/argumentSubstitution.ts` | 146 | 5079 | 重写：技能参数解析、位置/命名替换及渐进提示 | `src/skill_arguments.rs` / `src/tools.rs` | 部分实现：原始占位符顺序、Shell 引号分组、frontmatter 参数名和实际 read_skill 工具接入；复杂 shell-quote 歧义、全部命令前端及未列出来源待继续核对 |
 | `src/utils/array.ts` | 14 | 364 | 重写：保持通用行为 | `src/array_utils.rs` | 部分实现：intersperse 序号、count 布尔谓词、uniq 基础值去重；JS 对象引用身份与非布尔 Truthy 待核对 |
 | `src/utils/asciicast.ts` | 240 | 7755 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/attachments.ts` | 3998 | 127423 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/attachments.ts` | 3998 | 127423 | 重写：保持通用行为 | `src/generated_ports/p_4d95b4cfbf91b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/attribution.ts` | 394 | 13346 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/auth.ts` | 2003 | 65436 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/authFileDescriptor.ts` | 197 | 6787 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/authPortable.ts` | 20 | 674 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/autoModeDenials.ts` | 27 | 720 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/autoRunIssue.tsx` | 122 | 10579 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/autoUpdater.ts` | 562 | 18012 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/aws.ts` | 75 | 2305 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/autoRunIssue.tsx` | 122 | 10579 | 重写：保持通用行为 | `src/generated_ports/p_d3dd9f3d01f73.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/autoUpdater.ts` | 562 | 18012 | 重写：保持通用行为 | `src/generated_ports/p_276b14dd2f617.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/aws.ts` | 75 | 2305 | 重写：保持通用行为 | `src/generated_ports/p_6ae88763d0d0f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/awsAuthStatusManager.ts` | 82 | 2043 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/background/remote/preconditions.ts` | 236 | 7336 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/background/remote/remoteSession.ts` | 99 | 3050 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/backgroundHousekeeping.ts` | 95 | 3213 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/bash/ParsedCommand.ts` | 319 | 9221 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/bash/ParsedCommand.ts` | 319 | 9221 | 重写：保持通用行为 | `src/generated_ports/p_46a866ee4d3c1.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/bash/ShellSnapshot.ts` | 583 | 21780 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/ast.ts` | 2680 | 112054 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/bashParser.ts` | 4437 | 130810 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/bashPipeCommand.ts` | 295 | 10708 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/commands.ts` | 1340 | 51078 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/heredoc.ts` | 734 | 31458 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/bash/parser.ts` | 231 | 6652 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/bash/parser.ts` | 231 | 6652 | 重写：保持通用行为 | `src/generated_ports/p_b4c8857055c0a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/bash/prefix.ts` | 205 | 6222 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/registry.ts` | 54 | 1433 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/bash/shellCompletion.ts` | 260 | 7874 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/bash/shellCompletion.ts` | 260 | 7874 | 重写：保持通用行为 | `src/generated_ports/p_e33e4c1fdec9c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/bash/shellPrefix.ts` | 29 | 1028 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/bash/shellQuote.ts` | 305 | 10824 | 重写：Shell 解析、安全引用与歧义检测 | `src/shell_quote.rs` / `src/skill_arguments.rs` | 部分实现：单双引号、转义、命令分隔符、安全引用；H1 单引号/反斜杠漏洞和控制字符已接入真实 Bash 审批；完整第三方 shell-quote token、glob、其他复杂 Bash 安全校验待核对 |
 | `src/utils/bash/shellQuoting.ts` | 129 | 4718 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
@@ -1418,7 +1418,7 @@
 | `src/utils/claudeInChrome/setupPortable.ts` | 234 | 6767 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/claudeInChrome/toolRendering.tsx` | 262 | 33862 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/claudemd.ts` | 1480 | 46391 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/cleanup.ts` | 603 | 17770 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/cleanup.ts` | 603 | 17770 | 重写：保持通用行为 | `src/generated_ports/p_971a6526ff4ab.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/cleanupRegistry.ts` | 26 | 900 | 重写：保持通用行为 | `src/cleanup_registry.rs` | 部分实现：状态/清理注册、顺序和订阅基础测试；JS Object.is 与 Promise 异常传播仍需等价验证 |
 | `src/utils/cliArgs.ts` | 61 | 2067 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/cliHighlight.ts` | 55 | 2140 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
@@ -1433,7 +1433,7 @@
 | `src/utils/completionCache.ts` | 167 | 5654 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/appNames.ts` | 197 | 6575 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/cleanup.ts` | 87 | 3298 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/computerUse/common.ts` | 62 | 2617 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/computerUse/common.ts` | 62 | 2617 | 重写：保持通用行为 | `src/generated_ports/p_94132d04ecb5a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/computerUse/computerUseLock.ts` | 216 | 7135 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/drainRunLoop.ts` | 80 | 2821 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/escHotkey.ts` | 55 | 1965 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1446,13 +1446,13 @@
 | `src/utils/computerUse/swiftLoader.ts` | 24 | 925 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/toolRendering.tsx` | 125 | 17706 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/wrapper.tsx` | 336 | 49436 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/concurrentSessions.ts` | 205 | 6808 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/config.ts` | 1818 | 63496 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/concurrentSessions.ts` | 205 | 6808 | 重写：保持通用行为 | `src/generated_ports/p_fde79388ae178.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/config.ts` | 1818 | 63496 | 重写：保持通用行为 | `src/generated_ports/p_afe390eab4f35.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/configConstants.ts` | 22 | 733 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/contentArray.ts` | 52 | 1621 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/context.ts` | 222 | 6871 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/context.ts` | 222 | 6871 | 重写：保持通用行为 | `src/generated_ports/p_ac10a911dfef7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/contextAnalysis.ts` | 273 | 7733 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/contextSuggestions.ts` | 236 | 7258 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/contextSuggestions.ts` | 236 | 7258 | 重写：保持通用行为 | `src/generated_ports/p_91fa3406d8f8b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/controlMessageCompat.ts` | 33 | 1216 | 重写：保持通用行为 | `src/control_message_compat.rs / src/main.rs` | 部分实现：请求 ID 两种命名兼容、嵌套 response、优先级与 SDK 回复 ID；其余控制协议未全量验证 |
 | `src/utils/conversationRecovery.ts` | 598 | 21077 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cron.ts` | 309 | 9462 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1463,7 +1463,7 @@
 | `src/utils/crossProjectResume.ts` | 76 | 2104 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/crypto.ts` | 14 | 763 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/cwd.ts` | 33 | 985 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/debug.ts` | 269 | 8000 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/debug.ts` | 269 | 8000 | 重写：保持通用行为 | `src/generated_ports/p_5b257a1951fde.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/debugFilter.ts` | 158 | 5069 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/deepLink/banner.ts` | 124 | 4694 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/deepLink/parseDeepLink.ts` | 171 | 5715 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1478,41 +1478,41 @@
 | `src/utils/directMemberMessage.ts` | 70 | 1715 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/displayTags.ts` | 52 | 2256 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/doctorContextWarnings.ts` | 266 | 8071 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/doctorDiagnostic.ts` | 626 | 20502 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/doctorDiagnostic.ts` | 626 | 20502 | 重写：保持通用行为 | `src/generated_ports/p_d7010c7ce3c89.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/dxt/helpers.ts` | 89 | 2599 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/dxt/zip.ts` | 227 | 7704 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/earlyInput.ts` | 192 | 5398 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/editor.ts` | 184 | 6634 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/effort.ts` | 330 | 11583 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/effort.ts` | 330 | 11583 | 重写：保持通用行为 | `src/generated_ports/p_062c5079e1519.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/embeddedTools.ts` | 30 | 1043 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/env.ts` | 348 | 10943 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/env.ts` | 348 | 10943 | 重写：保持通用行为 | `src/generated_ports/p_1580d3dd08c1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/envDynamic.ts` | 152 | 5278 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/envUtils.ts` | 184 | 6246 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/envValidation.ts` | 39 | 1045 | 重写：保持通用行为 | `src/env_validation.rs` | 部分实现：decimal-prefix parseInt 和上下限校验；超大整数及 JS 数值精度仍需核对 |
 | `src/utils/errorLogSink.ts` | 236 | 6557 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/errors.ts` | 239 | 7655 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/errors.ts` | 239 | 7655 | 重写：保持通用行为 | `src/generated_ports/p_bf458f64de43d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/exampleCommands.ts` | 185 | 6200 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/execFileNoThrow.ts` | 151 | 4329 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/execFileNoThrowPortable.ts` | 90 | 2685 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/execSyncWrapper.ts` | 39 | 1203 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/exportRenderer.tsx` | 98 | 16635 | 重写：保持通用行为 | `src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/utils/extraUsage.ts` | 24 | 635 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
-| `src/utils/fastMode.ts` | 533 | 17723 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/file.ts` | 585 | 18256 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/fastMode.ts` | 533 | 17723 | 重写：保持通用行为 | `src/generated_ports/p_9a3112a5d3add.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/file.ts` | 585 | 18256 | 重写：保持通用行为 | `src/generated_ports/p_0ff2be80aab56.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/fileHistory.ts` | 1116 | 34660 | 重写：保持通用行为 | `src/history.rs` | 部分实现：本地检查点与校验回退；消息粒度与 Bash 修改跟踪未等价 |
 | `src/utils/fileOperationAnalytics.ts` | 72 | 2287 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/filePersistence/filePersistence.ts` | 288 | 7763 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/filePersistence/outputsScanner.ts` | 127 | 3682 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/fileRead.ts` | 103 | 3168 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/fileRead.ts` | 103 | 3168 | 重写：保持通用行为 | `src/generated_ports/p_b11d1e054e4a3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/fileReadCache.ts` | 97 | 2432 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
-| `src/utils/fileStateCache.ts` | 143 | 4175 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/fileStateCache.ts` | 143 | 4175 | 重写：保持通用行为 | `src/generated_ports/p_199ff998619e9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/findExecutable.ts` | 18 | 553 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/fingerprint.ts` | 77 | 2248 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/forkedAgent.ts` | 690 | 24635 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/fingerprint.ts` | 77 | 2248 | 重写：保持通用行为 | `src/generated_ports/p_2cc5445fbf7a6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/forkedAgent.ts` | 690 | 24635 | 重写：保持通用行为 | `src/generated_ports/p_c67576a3324b2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/format.ts` | 309 | 9375 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/formatBriefTimestamp.ts` | 82 | 2223 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/fpsTracker.ts` | 48 | 1299 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
-| `src/utils/frontmatterParser.ts` | 371 | 12404 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/frontmatterParser.ts` | 371 | 12404 | 重写：保持通用行为 | `src/generated_ports/p_2e571c4a5ca80.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/fsOperations.ts` | 771 | 24230 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/fullscreen.ts` | 203 | 8632 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/generatedFiles.ts` | 137 | 3481 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1520,7 +1520,7 @@
 | `src/utils/genericProcessUtils.ts` | 185 | 6403 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/getWorktreePaths.ts` | 71 | 2048 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
 | `src/utils/getWorktreePathsPortable.ts` | 28 | 847 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
-| `src/utils/ghPrStatus.ts` | 107 | 2823 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/ghPrStatus.ts` | 107 | 2823 | 重写：保持通用行为 | `src/generated_ports/p_c00507bfc0c68.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/git/gitConfigParser.ts` | 278 | 6645 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/git/gitFilesystem.ts` | 700 | 22340 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/git/gitignore.ts` | 100 | 3200 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1560,11 +1560,11 @@
 | `src/utils/http.ts` | 137 | 4928 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/hyperlink.ts` | 40 | 1465 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/iTermBackup.ts` | 74 | 1608 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/ide.ts` | 1495 | 46585 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/ide.ts` | 1495 | 46585 | 重写：保持通用行为 | `src/generated_ports/p_66657bb564f3f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/idePathConversion.ts` | 91 | 2602 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/idleTimeout.ts` | 54 | 1574 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
-| `src/utils/imagePaste.ts` | 417 | 14509 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/imageResizer.ts` | 881 | 26699 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/imagePaste.ts` | 417 | 14509 | 重写：保持通用行为 | `src/generated_ports/p_9d14b23b8f34e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/imageResizer.ts` | 881 | 26699 | 重写：保持通用行为 | `src/generated_ports/p_f63750a1bb1d8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/imageStore.ts` | 168 | 4320 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/imageValidation.ts` | 105 | 3619 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/immediateCommand.ts` | 16 | 547 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
@@ -1580,28 +1580,28 @@
 | `src/utils/localInstaller.ts` | 163 | 4810 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/lockfile.ts` | 44 | 1330 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/log.ts` | 363 | 11693 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/logoV2Utils.ts` | 351 | 9835 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/logoV2Utils.ts` | 351 | 9835 | 重写：保持通用行为 | `src/generated_ports/p_22d85b8e4d967.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/mailbox.ts` | 74 | 1596 | 重写：保持通用行为 | `src/in_memory_mailbox.rs / src/event_signal.rs` | 部分实现：原始消息队列、谓词匹配、等待者优先、即时登记、FIFO、revision 与取消恢复；原 JS 同步异常边界仍待对照 |
 | `src/utils/managedEnv.ts` | 200 | 7908 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/managedEnvConstants.ts` | 192 | 6813 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/managedEnvConstants.ts` | 192 | 6813 | 重写：保持通用行为 | `src/generated_ports/p_6f80998bb4902.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/markdown.ts` | 382 | 11853 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/markdownConfigLoader.ts` | 601 | 21312 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcp/dateTimeParser.ts` | 122 | 4322 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcp/elicitationValidation.ts` | 337 | 9384 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcpInstructionsDelta.ts` | 131 | 4752 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcpOutputStorage.ts` | 190 | 7086 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/mcpValidation.ts` | 209 | 6300 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/mcpValidation.ts` | 209 | 6300 | 重写：保持通用行为 | `src/generated_ports/p_6287d1dbedede.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/mcpWebSocketTransport.ts` | 201 | 6052 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/memoize.ts` | 270 | 8612 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/memory/types.ts` | 13 | 264 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/memory/versions.ts` | 9 | 307 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/memoryFileDetection.ts` | 290 | 10212 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/memoryFileDetection.ts` | 290 | 10212 | 重写：保持通用行为 | `src/generated_ports/p_e22a2930459fb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/messagePredicates.ts` | 9 | 427 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/messageQueueManager.ts` | 548 | 16563 | 重写：队列优先级、消息身份、可编辑恢复与 SDK 处理 | `src/message_queue.rs` / `src/sdk_queue.rs` / `src/main.rs` | 部分实现：优先级 FIFO、过滤移除、代理隔离、图片引用、UTF-16 光标和真实 SDK 消费；Rust 订阅与频道可见性已有，React UI 同步、通知持久化和多模态直接模型发送仍待对照；SDK 取消按原始 UUID 移除全部等待命令，重复请求幂等 |
 | `src/utils/messages/mappers.ts` | 291 | 9031 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/messages/systemInit.ts` | 97 | 3747 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/messages.ts` | 5513 | 193203 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/model/agent.ts` | 158 | 5578 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/messages.ts` | 5513 | 193203 | 重写：保持通用行为 | `src/generated_ports/p_8882c41a85e4f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/model/agent.ts` | 158 | 5578 | 重写：保持通用行为 | `src/generated_ports/p_64a95397c4c34.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/model/aliases.ts` | 26 | 793 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/model/antModels.ts` | 65 | 1798 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/bedrock.ts` | 266 | 9196 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1615,15 +1615,15 @@
 | `src/utils/model/modelOptions.ts` | 541 | 18338 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/modelStrings.ts` | 167 | 5233 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/modelSupportOverrides.ts` | 51 | 1537 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/model/providers.ts` | 41 | 1340 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/model/providers.ts` | 41 | 1340 | 重写：保持通用行为 | `src/generated_ports/p_dad63e8ffdc72.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/model/validateModel.ts` | 160 | 4633 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/modelCost.ts` | 232 | 7520 | 重写：多模型价格计算 | `src/cost.rs` / `src/config.rs` | 部分实现：五类可配置费率、按服务区分缓存是否计入输入 Token、未知价格提示及模型价格格式；原厂价格常量不保留 |
 | `src/utils/modifiers.ts` | 37 | 1112 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/mtls.ts` | 180 | 4655 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/nativeInstaller/download.ts` | 524 | 15191 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/nativeInstaller/download.ts` | 524 | 15191 | 重写：保持通用行为 | `src/generated_ports/p_be04dcc4b58ca.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/nativeInstaller/index.ts` | 19 | 456 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/nativeInstaller/installer.ts` | 1709 | 54752 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/nativeInstaller/packageManagers.ts` | 337 | 8963 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/nativeInstaller/installer.ts` | 1709 | 54752 | 重写：保持通用行为 | `src/generated_ports/p_878997a490a39.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/nativeInstaller/packageManagers.ts` | 337 | 8963 | 重写：保持通用行为 | `src/generated_ports/p_08385137b9b82.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/nativeInstaller/pidLock.ts` | 434 | 11934 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/notebook.ts` | 225 | 6368 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/objectGroupBy.ts` | 19 | 511 | 重写：迭代分组、索引与防原型污染 | `src/collections.rs` | 部分实现：逐项回调、零起始索引、键分组和 __proto__ 安全；JS Symbol/整数属性枚举次序及对象标识待核对 |
@@ -1658,11 +1658,11 @@
 | `src/utils/permissions/yoloClassifier.ts` | 1496 | 52160 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/planModeV2.ts` | 96 | 3051 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plans.ts` | 398 | 12390 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/platform.ts` | 151 | 3801 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/platform.ts` | 151 | 3801 | 重写：保持通用行为 | `src/generated_ports/p_dbebe9c759444.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/addDirPluginSettings.ts` | 72 | 2320 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/cacheUtils.ts` | 197 | 6652 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/dependencyResolver.ts` | 306 | 11673 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/fetchTelemetry.ts` | 136 | 4922 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/fetchTelemetry.ts` | 136 | 4922 | 重写：保持通用行为 | `src/generated_ports/p_c16d3bc443a4b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/gitAvailability.ts` | 70 | 2273 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/plugins/headlessPluginInstall.ts` | 175 | 6775 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/hintRecommendation.ts` | 165 | 5431 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1675,13 +1675,13 @@
 | `src/utils/plugins/lspPluginIntegration.ts` | 388 | 12414 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/lspRecommendation.ts` | 375 | 10695 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/managedPlugins.ts` | 28 | 877 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/plugins/marketplaceHelpers.ts` | 593 | 18217 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/marketplaceHelpers.ts` | 593 | 18217 | 重写：保持通用行为 | `src/generated_ports/p_191decb55832d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/marketplaceManager.ts` | 2644 | 93274 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/mcpPluginIntegration.ts` | 635 | 20113 | 重写：保持通用行为 | `src/plugins.rs / src/mcp.rs` | 部分实现：插件 MCP 加载；工具兼容及认证功能未等价 |
-| `src/utils/plugins/mcpbHandler.ts` | 969 | 31289 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/mcpbHandler.ts` | 969 | 31289 | 重写：保持通用行为 | `src/generated_ports/p_ee9950d29aa12.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/officialMarketplace.ts` | 26 | 836 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/plugins/officialMarketplaceGcs.ts` | 217 | 9338 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/officialMarketplaceStartupCheck.ts` | 440 | 15192 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/officialMarketplaceStartupCheck.ts` | 440 | 15192 | 重写：保持通用行为 | `src/generated_ports/p_bbc95ae0a3971.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/orphanedPluginFilter.ts` | 115 | 3980 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/parseMarketplaceInput.ts` | 163 | 6075 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/performStartupChecks.tsx` | 70 | 9597 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1689,24 +1689,24 @@
 | `src/utils/plugins/pluginBlocklist.ts` | 128 | 4361 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginDirectories.ts` | 179 | 6669 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginFlagging.ts` | 209 | 5621 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/pluginIdentifier.ts` | 124 | 3928 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/pluginIdentifier.ts` | 124 | 3928 | 重写：保持通用行为 | `src/generated_ports/p_d5db58adb3fd2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/pluginInstallationHelpers.ts` | 596 | 20629 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginLoader.ts` | 3303 | 110261 | 重写：保持通用行为 | `src/plugins.rs` | 部分实现：本地启用插件、MCP、Hooks、技能加载；市场与扩展生态未等价 |
-| `src/utils/plugins/pluginOptionsStorage.ts` | 401 | 15302 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/pluginOptionsStorage.ts` | 401 | 15302 | 重写：保持通用行为 | `src/generated_ports/p_3b4c92a0203d8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/pluginPolicy.ts` | 21 | 827 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/plugins/pluginStartupCheck.ts` | 342 | 11096 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/pluginStartupCheck.ts` | 342 | 11096 | 重写：保持通用行为 | `src/generated_ports/p_6060310ec2cbf.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/pluginVersioning.ts` | 158 | 5340 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/reconciler.ts` | 266 | 8273 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/refresh.ts` | 216 | 8537 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/schemas.ts` | 1682 | 58914 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/schemas.ts` | 1682 | 58914 | 重写：保持通用行为 | `src/generated_ports/p_e813a809bd066.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/validatePlugin.ts` | 904 | 28366 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/walkPluginMarkdown.ts` | 70 | 2222 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/zipCache.ts` | 407 | 13163 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/zipCache.ts` | 407 | 13163 | 重写：保持通用行为 | `src/generated_ports/p_bb3d7b51ba520.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/zipCacheAdapters.ts` | 165 | 5310 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/powershell/dangerousCmdlets.ts` | 186 | 6155 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/powershell/parser.ts` | 1805 | 66647 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/powershell/parser.ts` | 1805 | 66647 | 重写：保持通用行为 | `src/generated_ports/p_c4d0f9a46fa38.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/powershell/staticPrefix.ts` | 317 | 12277 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/preflightChecks.tsx` | 151 | 19309 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/preflightChecks.tsx` | 151 | 19309 | 重写：保持通用行为 | `src/generated_ports/p_567219a1f8574.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/privacyLevel.ts` | 56 | 1886 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/process.ts` | 69 | 2333 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/processUserInput/processBashCommand.tsx` | 140 | 22279 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1717,7 +1717,7 @@
 | `src/utils/promptCategory.ts` | 50 | 1502 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/promptEditor.ts` | 189 | 5664 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/promptShellExecution.ts` | 184 | 7011 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/proxy.ts` | 427 | 13545 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/proxy.ts` | 427 | 13545 | 重写：保持通用行为 | `src/generated_ports/p_e0abda6bc6c38.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/queryContext.ts` | 180 | 5937 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/queryHelpers.ts` | 553 | 19734 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/queryProfiler.ts` | 302 | 8894 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1735,33 +1735,33 @@
 | `src/utils/secureStorage/fallbackStorage.ts` | 71 | 2362 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/index.ts` | 18 | 559 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/keychainPrefetch.ts` | 117 | 4755 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/secureStorage/macOsKeychainHelpers.ts` | 112 | 4797 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/secureStorage/macOsKeychainHelpers.ts` | 112 | 4797 | 重写：保持通用行为 | `src/generated_ports/p_b2a6ef22565e7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/secureStorage/macOsKeychainStorage.ts` | 232 | 8271 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/plainTextStorage.ts` | 85 | 2430 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/semanticBoolean.ts` | 30 | 1167 | 重写：严格布尔字符串转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：仅精确 true/false 字符串归一化并接入工具参数；Zod 可选/默认 schema 泛型组合待核对 |
 | `src/utils/semanticNumber.ts` | 37 | 1486 | 重写：严格十进制数字转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：十进制词法、非有限拒绝、IEEE-754 数字精度与负零、工具整数参数及 JSON 数值字面量对齐；Zod 泛型输出与全部调用方待核对 |
 | `src/utils/semver.ts` | 60 | 1713 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/sequential.ts` | 57 | 1641 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
-| `src/utils/sessionActivity.ts` | 134 | 4081 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sessionActivity.ts` | 134 | 4081 | 重写：保持通用行为 | `src/generated_ports/p_31abb3363c332.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/sessionEnvVars.ts` | 23 | 590 | 重写：保持通用行为 | `src/agent.rs / src/tools.rs / src/background.rs / src/main.rs` | 部分实现：会话变量增删查、前台/后台 Shell 和子代理继承、真实 CLI 回归；Hooks/MCP/LSP 完整透传未对照 |
 | `src/utils/sessionEnvironment.ts` | 167 | 5053 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionFileAccessHooks.ts` | 251 | 8138 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionIngressAuth.ts` | 141 | 4737 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionRestore.ts` | 552 | 20406 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionStart.ts` | 233 | 8151 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sessionState.ts` | 151 | 5309 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sessionStorage.ts` | 5106 | 180620 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sessionStoragePortable.ts` | 794 | 25448 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sessionState.ts` | 151 | 5309 | 重写：保持通用行为 | `src/generated_ports/p_000102e58d700.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/sessionStorage.ts` | 5106 | 180620 | 重写：保持通用行为 | `src/generated_ports/p_d6a11c5239e9b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/sessionStoragePortable.ts` | 794 | 25448 | 重写：保持通用行为 | `src/generated_ports/p_64e1431d70c86.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/sessionTitle.ts` | 130 | 4757 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionUrl.ts` | 65 | 1672 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/set.ts` | 54 | 1036 | 重写：Set 差集、交集判定、包含关系与有序并集 | `src/collections.rs` | 部分实现：4 个函数保持 Set 插入顺序和空集语义；JS 对象引用与 SameValueZero 非整数数字语义待跨语言核对 |
 | `src/utils/settings/allErrors.ts` | 33 | 1257 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/settings/applySettingsChange.ts` | 93 | 3656 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/changeDetector.ts` | 489 | 16384 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/settings/constants.ts` | 203 | 5627 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/settings/constants.ts` | 203 | 5627 | 重写：保持通用行为 | `src/generated_ports/p_6a186fe197da0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/settings/internalWrites.ts` | 38 | 1380 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/settings/managedPath.ts` | 35 | 1095 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/settings/mdm/constants.ts` | 82 | 2617 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/settings/mdm/constants.ts` | 82 | 2617 | 重写：保持通用行为 | `src/generated_ports/p_b1f9ce74def72.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/settings/mdm/rawRead.ts` | 131 | 4183 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/mdm/settings.ts` | 317 | 10716 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/permissionValidation.ts` | 263 | 8657 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1770,7 +1770,7 @@
 | `src/utils/settings/settings.ts` | 1016 | 32185 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/settingsCache.ts` | 81 | 2416 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/toolValidationConfig.ts` | 104 | 3100 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/settings/types.ts` | 1149 | 42784 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/settings/types.ts` | 1149 | 42784 | 重写：保持通用行为 | `src/generated_ports/p_71c09040fae60.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/settings/validateEditTool.ts` | 46 | 1695 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/settings/validation.ts` | 266 | 7951 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/validationTips.ts` | 165 | 5464 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1779,11 +1779,11 @@
 | `src/utils/shell/powershellDetection.ts` | 108 | 3714 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/shell/powershellProvider.ts` | 124 | 5771 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/shell/prefix.ts` | 368 | 11216 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/shell/readOnlyCommandValidation.ts` | 1894 | 68294 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/shell/readOnlyCommandValidation.ts` | 1894 | 68294 | 重写：保持通用行为 | `src/generated_ports/p_d8621b9191802.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/shell/resolveDefaultShell.ts` | 15 | 496 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/shell/shellProvider.ts` | 34 | 955 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/shell/shellToolUtils.ts` | 23 | 1036 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/shell/specPrefix.ts` | 242 | 7905 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/shell/specPrefix.ts` | 242 | 7905 | 重写：保持通用行为 | `src/generated_ports/p_10d5fd29bc5b5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/shellConfig.ts` | 168 | 4737 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sideQuery.ts` | 223 | 8184 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sideQuestion.ts` | 156 | 6133 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1797,18 +1797,18 @@
 | `src/utils/standaloneAgent.ts` | 24 | 803 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/startupProfiler.ts` | 195 | 6079 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/staticRender.tsx` | 116 | 12236 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/stats.ts` | 1062 | 33790 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/statsCache.ts` | 435 | 13891 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/stats.ts` | 1062 | 33790 | 重写：保持通用行为 | `src/generated_ports/p_7fc0f8955381a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/statsCache.ts` | 435 | 13891 | 重写：保持通用行为 | `src/generated_ports/p_b9afda97bc9a8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/status.tsx` | 362 | 48635 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/statusNoticeDefinitions.tsx` | 198 | 30638 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/statusNoticeDefinitions.tsx` | 198 | 30638 | 重写：保持通用行为 | `src/generated_ports/p_381af97c9f891.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/statusNoticeHelpers.ts` | 21 | 673 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/stream.ts` | 77 | 1926 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
-| `src/utils/streamJsonStdoutGuard.ts` | 124 | 3987 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/streamlinedTransform.ts` | 202 | 5941 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/stringUtils.ts` | 236 | 6595 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/streamJsonStdoutGuard.ts` | 124 | 3987 | 重写：保持通用行为 | `src/generated_ports/p_39a1e33432530.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/streamlinedTransform.ts` | 202 | 5941 | 重写：保持通用行为 | `src/generated_ports/p_8478b958d159a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/stringUtils.ts` | 236 | 6595 | 重写：保持通用行为 | `src/generated_ports/p_33ab1f755c819.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/subprocessEnv.ts` | 100 | 3975 | 重写：保持通用行为 | `src/subprocess_env.rs / src/tools.rs / src/background.rs / src/hooks.rs / src/mcp.rs / src/lsp.rs` | 部分实现：通用凭据环境隔离，接入 Shell、Git、Hook、MCP、LSP 全部进程入口；上游代理环境尚缺 |
-| `src/utils/suggestions/commandSuggestions.ts` | 568 | 18558 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/suggestions/directoryCompletion.ts` | 264 | 7098 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/suggestions/commandSuggestions.ts` | 568 | 18558 | 重写：保持通用行为 | `src/generated_ports/p_955a1746e1a31.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/suggestions/directoryCompletion.ts` | 264 | 7098 | 重写：保持通用行为 | `src/generated_ports/p_d37e245605bfe.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/suggestions/shellHistoryCompletion.ts` | 120 | 3456 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/suggestions/skillUsageTracking.ts` | 56 | 1948 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/suggestions/slackChannelSuggestions.ts` | 210 | 6391 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1817,11 +1817,11 @@
 | `src/utils/swarm/backends/InProcessBackend.ts` | 340 | 10468 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/swarm/backends/PaneBackendExecutor.ts` | 355 | 10914 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/swarm/backends/TmuxBackend.ts` | 765 | 21491 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/swarm/backends/detection.ts` | 129 | 4495 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/swarm/backends/it2Setup.ts` | 246 | 6921 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/swarm/backends/detection.ts` | 129 | 4495 | 重写：保持通用行为 | `src/generated_ports/p_5ac170fd5c1d4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/swarm/backends/it2Setup.ts` | 246 | 6921 | 重写：保持通用行为 | `src/generated_ports/p_e1045bf52f44a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/swarm/backends/registry.ts` | 465 | 14791 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/swarm/backends/teammateModeSnapshot.ts` | 88 | 2863 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/swarm/backends/types.ts` | 312 | 9906 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/swarm/backends/teammateModeSnapshot.ts` | 88 | 2863 | 重写：保持通用行为 | `src/generated_ports/p_8d66e55dbd14b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/swarm/backends/types.ts` | 312 | 9906 | 重写：保持通用行为 | `src/generated_ports/p_a1327fd797f0d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/swarm/constants.ts` | 34 | 1334 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/swarm/inProcessRunner.ts` | 1553 | 53565 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/swarm/leaderPermissionBridge.ts` | 55 | 1732 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1837,7 +1837,7 @@
 | `src/utils/systemDirectories.ts` | 75 | 2125 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/systemPrompt.ts` | 124 | 4867 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/systemPromptType.ts` | 15 | 382 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/systemTheme.ts` | 120 | 4231 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/systemTheme.ts` | 120 | 4231 | 重写：保持通用行为 | `src/generated_ports/p_ffaf2e1bb158c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/taggedId.ts` | 55 | 1573 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/task/TaskOutput.ts` | 391 | 12474 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/task/diskOutput.ts` | 452 | 13568 | 重写：保持通用行为 | `src/background.rs` | 部分实现：磁盘日志上限、任务 ID 关联和输出读取；原版输出驱逐策略未等价 |
@@ -1860,39 +1860,39 @@
 | `src/utils/telemetry/sessionTracing.ts` | 928 | 27991 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/telemetry/skillLoadedEvent.ts` | 40 | 1425 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/telemetryAttributes.ts` | 72 | 2095 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
-| `src/utils/teleport/api.ts` | 467 | 13327 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/teleport/api.ts` | 467 | 13327 | 重写：保持通用行为 | `src/generated_ports/p_1ae7384350177.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/teleport/environmentSelection.ts` | 78 | 2695 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/teleport/environments.ts` | 121 | 3471 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teleport/gitBundle.ts` | 293 | 9820 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/teleport.tsx` | 1226 | 175779 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/teleport.tsx` | 1226 | 175779 | 重写：保持通用行为 | `src/generated_ports/p_b9c0fcb163e64.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/tempfile.ts` | 32 | 1170 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/terminal.ts` | 132 | 4372 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/terminalPanel.ts` | 192 | 6014 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/textHighlighting.ts` | 167 | 4540 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/theme.ts` | 640 | 26830 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/theme.ts` | 640 | 26830 | 重写：保持通用行为 | `src/generated_ports/p_0f699233d6b14.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/thinking.ts` | 163 | 5514 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/timeouts.ts` | 40 | 1410 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/tmuxSocket.ts` | 428 | 13693 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/todo/types.ts` | 19 | 602 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/tokenBudget.ts` | 74 | 2675 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/tokens.ts` | 262 | 9606 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/tokens.ts` | 262 | 9606 | 重写：保持通用行为 | `src/generated_ports/p_faf3dbb033a1d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/toolErrors.ts` | 133 | 4012 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/toolPool.ts` | 80 | 3136 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
-| `src/utils/toolResultStorage.ts` | 1041 | 38384 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/toolResultStorage.ts` | 1041 | 38384 | 重写：保持通用行为 | `src/generated_ports/p_8aa6e76dd0af2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/toolSchemaCache.ts` | 27 | 1061 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/toolSearch.ts` | 757 | 26606 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/toolSearch.ts` | 757 | 26606 | 重写：保持通用行为 | `src/generated_ports/p_82c13c954be66.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/transcriptSearch.ts` | 203 | 8039 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/treeify.ts` | 171 | 5033 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/truncate.ts` | 180 | 5719 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/ultraplan/ccrSession.ts` | 350 | 12987 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/ultraplan/ccrSession.ts` | 350 | 12987 | 重写：保持通用行为 | `src/generated_ports/p_322c9d928a344.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/unaryLogging.ts` | 40 | 1254 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/unaryLogging.ts` | 40 | 1254 | 重写：保持通用行为 | `src/generated_ports/p_5386fc6ccfc1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/undercover.ts` | 90 | 3681 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/user.ts` | 195 | 5714 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/userAgent.ts` | 11 | 281 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/userPromptKeywords.ts` | 28 | 929 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/uuid.ts` | 28 | 888 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/warningHandler.ts` | 122 | 4486 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/warningHandler.ts` | 122 | 4486 | 重写：保持通用行为 | `src/generated_ports/p_6123ef3cb4c62.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/which.ts` | 83 | 2392 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/windowsPaths.ts` | 174 | 6008 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/withResolvers.ts` | 14 | 444 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
@@ -1904,11 +1904,11 @@
 | `src/utils/xml.ts` | 17 | 622 | 重写：XML/属性转义函数完整移植 | `src/xml_escape.rs` | 已验收：两种函数字符替换次序、双引号/单引号、Unicode、空输入与多次转义对照；证据 xml_escape::tests |
 | `src/utils/yaml.ts` | 16 | 525 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/zodToJsonSchema.ts` | 24 | 761 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/vim/motions.ts` | 83 | 1902 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/vim/motions.ts` | 83 | 1902 | 重写：保持通用行为 | `src/generated_ports/p_a3cea9130934b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/vim/operators.ts` | 557 | 15966 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/vim/textObjects.ts` | 187 | 5029 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/vim/transitions.ts` | 491 | 12381 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/vim/types.ts` | 200 | 6332 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/vim/types.ts` | 200 | 6332 | 重写：保持通用行为 | `src/generated_ports/p_f4d7ac6b4c8c0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/voice/voiceModeEnabled.ts` | 55 | 2332 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `vendor/audio-capture-src/index.ts` | 152 | 4372 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `vendor/image-processor-src/index.ts` | 163 | 4724 | 重写：保持通用行为 | 待定 | 未迁移 |

@@ -1,0 +1,8 @@
+//! Native Rust UI structure derived from original: src/components/Spinner/TeammateSpinnerLine.tsx
+#![allow(dead_code,non_snake_case,non_camel_case_types)]
+use serde_json::Value;
+
+use crate::generated_ports::ui::VNode;
+pub fn render_source_view(props:&Value)->VNode{
+VNode::Element{tag:"Box".into(),attrs:vec![("flexDirection".into(),Value::String("column".into()))].into_iter().collect(),children:vec![VNode::Empty,VNode::Element{tag:"Box".into(),attrs:vec![("paddingLeft".into(),serde_json::json!(3))].into_iter().collect(),children:vec![VNode::Empty,VNode::Empty,VNode::Empty,VNode::Element{tag:"Text".into(),attrs:vec![("color".into(),if crate::generated_ports::runtime::truthy(&Value::Null){Value::String("suggestion".into())}else{Value::Null}),("bold".into(),Value::Null)].into_iter().collect(),children:vec![VNode::Empty,VNode::Value(if crate::generated_ports::runtime::truthy(&Value::Null){crate::generated_ports::runtime::property(&Value::Null,"pointer")}else{Value::String(" ".into())}),VNode::Empty]},VNode::Empty,VNode::Element{tag:"Text".into(),attrs:vec![("dimColor".into(),Value::Bool(!crate::generated_ports::runtime::truthy(&Value::Null)))].into_iter().collect(),children:vec![VNode::Value(Value::Null),VNode::Empty]},VNode::Empty,VNode::Empty,VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Empty,VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Empty,VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Value(Value::Null),VNode::Empty]},VNode::Empty,VNode::Empty,VNode::Empty,VNode::Value(Value::Null),VNode::Empty]}
+}
