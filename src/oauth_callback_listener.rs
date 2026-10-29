@@ -173,9 +173,10 @@ async fn send_response(
     let location = redirect
         .map(|url| format!("Location: {url}\r\n"))
         .unwrap_or_default();
+    let payload = if redirect.is_some() { "" } else { body };
     let response = format!(
-        "HTTP/1.1 {status} {body}\r\n{location}Content-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n{body}",
-        if redirect.is_some() { 0 } else { body.len() }
+        "HTTP/1.1 {status} {body}\r\n{location}Content-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n{payload}",
+        payload.len()
     );
     stream.write_all(response.as_bytes()).await?;
     stream.shutdown().await?;
