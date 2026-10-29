@@ -425,7 +425,11 @@ mod tests {
             "Get-ChildItem .\nRemove-Item secret.txt",
             "Get-ChildItem .; Get-Content foo; rm secret.txt",
         ] {
-            assert_eq!(policy_for(&rules, command).unwrap(), Some(Behavior::Deny), "{command}");
+            assert_eq!(
+                policy_for(&rules, command).unwrap(),
+                Some(Behavior::Deny),
+                "{command}"
+            );
         }
         assert_eq!(
             policy_for(&rules, "Get-ChildItem .; Invoke-Expression 'oops'").unwrap(),
@@ -462,12 +466,15 @@ mod tests {
             "Get-ChildItem \"$(Remove-Item secret)\"",
             "Get-ChildItem 'unterminated",
         ] {
-            assert_eq!(policy_for(&rules, command).unwrap(), Some(Behavior::Ask), "{command}");
+            assert_eq!(
+                policy_for(&rules, command).unwrap(),
+                Some(Behavior::Ask),
+                "{command}"
+            );
         }
         assert_eq!(
             policy_for(&rules, "Get-ChildItem . # comment\nrm secret").unwrap(),
             Some(Behavior::Deny)
         );
     }
-
 }
