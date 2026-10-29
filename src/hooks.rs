@@ -1106,7 +1106,7 @@ mod tests {
             timeout_seconds: 20,
         }])
         .unwrap();
-        assert!(matches!(invalid.rules[0].1, HookMatcher::Invalid));
+        assert!(matches!(&invalid.rules[0].1, HookMatcher::Invalid));
         assert!(!invalid.rules[0].1.matches(Some("Bash")));
         assert!(HookRunner::new(&[HookRule {
             event: HookEvent::Stop,
