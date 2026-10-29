@@ -329,7 +329,15 @@ pub fn policy_for(rules: &[Rule], command: &str) -> Result<Option<Behavior>> {
     }
     // Preserve exact, alias and wildcard behavior for ordinary commands.
     if statements.len() == 1 && !opaque {
-        return policy_for_single(rules, command);
+        let decision = policy_for_single(rules, command)?;
+        // The original PowerShell AST treats a qualified executable/script
+        // as an application, even when its basename resembles an allowed
+        // cmdlet. With no matching rule this must still force a prompt:
+        // returning None would let --approval full execute it silently.
+        if decision != Some(Behavior::Deny) && looks_like_application(command) {
+            return Ok(Some(Behavior::Ask));
+        }
+        return Ok(decision);
     }
 
     // A whole-script deny/ask still takes precedence, but a broad allow
