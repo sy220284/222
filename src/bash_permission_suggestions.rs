@@ -168,6 +168,69 @@ pub fn powershell_exact_suggestions(command: &str) -> Value {
     suggestion_for_exact_command("PowerShell", command)
 }
 
+
+/// Informational warning for the interactive Bash permission dialog.
+/// Mirrors BashTool/destructiveCommandWarning.ts; this never grants or
+/// denies permission, and it does not bypass the existing security review.
+pub fn destructive_command_warning(command: &str) -> Option<&'static str> {
+    use std::sync::OnceLock;
+    static PATTERNS: OnceLock<Vec<(regex::Regex, &'static str)>> = OnceLock::new();
+    let patterns = PATTERNS.get_or_init(|| {
+        [
+            (r"\bgit\s+reset\s+--hard\b", "Note: may discard uncommitted changes"),
+            (r"\bgit\s+push\b[^;&|\n]*[ \t](--force|--force-with-lease|-f)\b", "Note: may overwrite remote history"),
+            (r"\bgit\s+checkout\s+(--\s+)?\.[ \t]*($|[;&|\n])", "Note: may discard all working tree changes"),
+            (r"\bgit\s+restore\s+(--\s+)?\.[ \t]*($|[;&|\n])", "Note: may discard all working tree changes"),
+            (r"\bgit\s+stash[ \t]+(drop|clear)\b", "Note: may permanently remove stashed changes"),
+            (r"\bgit\s+branch\s+(-D[ \t]|--delete\s+--force|--force\s+--delete)\b", "Note: may force-delete a branch"),
+            (r"\bgit\s+(commit|push|merge)\b[^;&|\n]*--no-verify\b", "Note: may skip safety hooks"),
+            (r"\bgit\s+commit\b[^;&|\n]*--amend\b", "Note: may rewrite the last commit"),
+            (r"(^|[;&|\n]\s*)rm\s+-[a-zA-Z]*[rR][a-zA-Z]*f|(^|[;&|\n]\s*)rm\s+-[a-zA-Z]*f[a-zA-Z]*[rR]", "Note: may recursively force-remove files"),
+            (r"(^|[;&|\n]\s*)rm\s+-[a-zA-Z]*[rR]", "Note: may recursively remove files"),
+            (r"(^|[;&|\n]\s*)rm\s+-[a-zA-Z]*f", "Note: may force-remove files"),
+            (r"(?i)\b(DROP|TRUNCATE)\s+(TABLE|DATABASE|SCHEMA)\b", "Note: may drop or truncate database objects"),
+            (r#"(?i)\bDELETE\s+FROM\s+\w+[ \t]*(;|"|'|\n|$)"#, "Note: may delete all rows from a database table"),
+            (r"\bkubectl\s+delete\b", "Note: may delete Kubernetes resources"),
+            (r"\bterraform\s+destroy\b", "Note: may destroy Terraform infrastructure"),
+        ]
+        .into_iter()
+        .map(|(pattern, warning)| {
+            (
+                regex::Regex::new(pattern).expect("fixed destructive warning pattern"),
+                warning,
+            )
+        })
+        .collect()
+    });
+    // Preserve source ordering: git clean is checked after reset/push but
+    // before checkout. Its -n/--dry-run form is intentionally not warned.
+    for (index, (pattern, warning)) in patterns.iter().enumerate() {
+        if index == 2 {
+            static GIT_CLEAN: OnceLock<regex::Regex> = OnceLock::new();
+            static DRY_RUN: OnceLock<regex::Regex> = OnceLock::new();
+            let git_clean = GIT_CLEAN.get_or_init(|| {
+                regex::Regex::new(r"\bgit\s+clean\b[^;&|\n]*-[a-zA-Z]*f")
+                    .expect("fixed git clean pattern")
+            });
+            let dry_run = DRY_RUN.get_or_init(|| {
+                regex::Regex::new(r"(^|\s)-[a-zA-Z]*n|--dry-run")
+                    .expect("fixed dry-run pattern")
+            });
+            for found in git_clean.find_iter(command) {
+                let suffix = &command[found.start()..];
+                let end = suffix.find([';', '&', '|', '\n']).unwrap_or(suffix.len());
+                if !dry_run.is_match(&suffix[..end]) {
+                    return Some("Note: may permanently delete untracked files");
+                }
+            }
+        }
+        if pattern.is_match(command) {
+            return Some(warning);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
