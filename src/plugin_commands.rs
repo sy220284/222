@@ -49,7 +49,10 @@ pub fn parse_plugin_args(args: Option<&str>) -> PluginCommand {
         Some("help" | "--help" | "-h") => PluginCommand::Help,
         Some("install" | "i") => {
             let Some(target) = target else {
-                return PluginCommand::Install { marketplace: None, plugin: None };
+                return PluginCommand::Install {
+                    marketplace: None,
+                    plugin: None,
+                };
             };
             if target.contains('@') {
                 let mut pair = target.split('@');
@@ -64,9 +67,15 @@ pub fn parse_plugin_args(args: Option<&str>) -> PluginCommand {
                 || target.contains('/')
                 || target.contains('\\');
             if marketplace {
-                PluginCommand::Install { marketplace: Some(target), plugin: None }
+                PluginCommand::Install {
+                    marketplace: Some(target),
+                    plugin: None,
+                }
             } else {
-                PluginCommand::Install { marketplace: None, plugin: Some(target) }
+                PluginCommand::Install {
+                    marketplace: None,
+                    plugin: Some(target),
+                }
             }
         }
         Some("manage") => PluginCommand::Manage,
@@ -93,7 +102,10 @@ pub fn parse_plugin_args(args: Option<&str>) -> PluginCommand {
                         target: Some(parts.iter().skip(2).copied().collect::<Vec<_>>().join(" ")),
                     }
                 }
-                _ => PluginCommand::Marketplace { action: None, target: None },
+                _ => PluginCommand::Marketplace {
+                    action: None,
+                    target: None,
+                },
             }
         }
         _ => PluginCommand::Menu,
@@ -138,7 +150,9 @@ mod tests {
     fn marketplace_and_validation_preserve_multiword_arguments() {
         assert_eq!(
             parse_plugin_args(Some("validate /home/me/my plugin")),
-            PluginCommand::Validate { path: Some("/home/me/my plugin".into()) }
+            PluginCommand::Validate {
+                path: Some("/home/me/my plugin".into())
+            }
         );
         assert_eq!(
             parse_plugin_args(Some("market rm old marketplace")),
@@ -156,11 +170,16 @@ mod tests {
         );
         assert_eq!(
             parse_plugin_args(Some("marketplace mystery")),
-            PluginCommand::Marketplace { action: None, target: None }
+            PluginCommand::Marketplace {
+                action: None,
+                target: None
+            }
         );
         assert_eq!(
             parse_plugin_args(Some("enable myplugin")),
-            PluginCommand::Enable { plugin: Some("myplugin".into()) }
+            PluginCommand::Enable {
+                plugin: Some("myplugin".into())
+            }
         );
     }
 }
