@@ -482,8 +482,9 @@ impl ToolExecutor {
                 self.require_approval("notebook_edit", &args)?;
                 let path = self.checked_path(required(&args, "notebook_path")?)?;
                 let previous = history::snapshot(&path)?;
+                let previous_mode = history::snapshot_mode(&path)?;
                 let result = self.notebook_edit(&args)?;
-                let checkpoint = history::record(&self.root, &path, previous)?;
+                let checkpoint = history::record(&self.root, &path, previous, previous_mode)?;
                 Ok(format!(
                     "{result}{}",
                     checkpoint
@@ -555,8 +556,9 @@ impl ToolExecutor {
                 self.require_approval("write_file", &args)?;
                 let path = self.checked_path(required(&args, "path")?)?;
                 let before = history::snapshot(&path)?;
+                let before_mode = history::snapshot_mode(&path)?;
                 let result = self.write_file(&args).await?;
-                let checkpoint = history::record(&self.root, &path, before)?;
+                let checkpoint = history::record(&self.root, &path, before, before_mode)?;
                 Ok(format!(
                     "{result}{}",
                     checkpoint
@@ -568,8 +570,9 @@ impl ToolExecutor {
                 self.require_approval("edit_file", &args)?;
                 let path = self.checked_path(required(&args, "path")?)?;
                 let before = history::snapshot(&path)?;
+                let before_mode = history::snapshot_mode(&path)?;
                 let result = self.edit_file(&args).await?;
-                let checkpoint = history::record(&self.root, &path, before)?;
+                let checkpoint = history::record(&self.root, &path, before, before_mode)?;
                 Ok(format!(
                     "{result}{}",
                     checkpoint
