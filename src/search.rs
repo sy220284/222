@@ -72,6 +72,46 @@ fn files(base: &Path) -> Result<Vec<PathBuf>> {
     }
     Ok(result)
 }
+/// GrepTool uses ripgrep with gitignore enabled. Delegate nested/global
+/// ignore precedence to Git rather than reimplementing it incompletely.
+fn git_ignored_paths(base: &Path, paths: &[PathBuf]) -> std::collections::HashSet<PathBuf> {
+    use std::process::{Command, Stdio};
+    let mut ignored = std::collections::HashSet::new();
+    let repo = Command::new("git")
+        .arg("-C")
+        .arg(base)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .stdin(Stdio::null())
+        .output();
+    if !repo.is_ok_and(|output| output.status.success() && output.stdout.starts_with(b"true")) {
+        return ignored;
+    }
+    for chunk in paths.chunks(128) {
+        let mut cmd = Command::new("git");
+        cmd.arg("-C")
+            .arg(base)
+            .args(["check-ignore", "-z", "--"])
+            .stdin(Stdio::null());
+        for path in chunk {
+            if let Ok(relative) = path.strip_prefix(base) {
+                cmd.arg(relative);
+            }
+        }
+        let Ok(output) = cmd.output() else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        for name in output.stdout.split(|byte| *byte == 0).filter(|name| !name.is_empty()) {
+            if let Ok(name) = std::str::from_utf8(name) {
+                ignored.insert(base.join(name));
+            }
+        }
+    }
+    ignored
+}
+
 fn sort_newest(items: &mut [PathBuf]) {
     items.sort_by(|a, b| {
         let modified = |p: &Path| {
@@ -226,6 +266,8 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
     let show_line_numbers = args.get("-n").and_then(Value::as_bool).unwrap_or(true);
     let mut matches = Vec::new();
     let mut candidates = files(base)?;
+    let ignored = git_ignored_paths(base, &candidates);
+    candidates.retain(|path| !ignored.contains(path));
     sort_newest(&mut candidates);
     for path in candidates {
         if fs::metadata(&path)?.len() > 2_000_000 {
