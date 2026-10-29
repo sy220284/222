@@ -110,11 +110,30 @@ impl Agent {
         let restored_root=restored_team.as_ref().map(|_|root.clone());
         let file_metrics=Arc::new(ToolMetrics::with_totals(
             session.cost.total_lines_added,session.cost.total_lines_removed));
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), permission_mode:match approval {
-        Approval::Ask=>permission_mode::Mode::Default,
-        Approval::ReadOnly=>permission_mode::Mode::DontAsk,
-        Approval::Full=>permission_mode::Mode::BypassPermissions,
-    }, hook_rules: Vec::new(), model_prices: Vec::new(), file_metrics })
+        let mode=if let Some(saved)=session.permission_mode.as_deref(){
+            let restored=permission_mode::Mode::parse(saved)
+                .with_context(||format!("Invalid restored permission mode: {saved}"))?;
+            if restored==permission_mode::Mode::BypassPermissions
+                && approval!=Approval::Full{
+                bail!("Restored bypass permissions exceeds CLI approval ceiling")
+            }
+            if restored==permission_mode::Mode::AcceptEdits
+                && approval==Approval::ReadOnly{
+                bail!("Restored edit permission exceeds CLI read-only ceiling")
+            }
+            if restored==permission_mode::Mode::Auto{
+                bail!("Restored automatic permission mode requires a classifier")
+            }
+            restored
+        }else{
+            match approval{
+                Approval::Ask=>permission_mode::Mode::Default,
+                Approval::ReadOnly=>permission_mode::Mode::DontAsk,
+                Approval::Full=>permission_mode::Mode::BypassPermissions,
+            }
+        };
+        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), permission_mode:mode,
+        hook_rules: Vec::new(), model_prices: Vec::new(), file_metrics })
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -775,6 +794,8 @@ impl Agent {
             bail!("Automatic permission mode requires an enabled classifier")
         }
         self.permission_mode=mode;
+        self.session.permission_mode=Some(mode.label().to_owned());
+        self.session.save(&self.root)?;
         Ok(())
     }
     pub fn current_permission_mode(&self)->&'static str{
@@ -1718,6 +1739,24 @@ mod tests {
         assert!(!worker.absorb_team_messages().unwrap());
     }
 
+    #[tokio::test]
+    async fn resumed_teammate_restores_permission_mode_without_escalation(){
+        let root=tempfile::tempdir().unwrap();
+        let profile=ProviderProfile{id:"mock".into(),kind:"openai-compatible".into(),
+            base_url:"http://127.0.0.1:1/v1".into(),model:"mock".into(),
+            api_key_env:None,stream:false};
+        let mut agent=Agent::new(profile.clone(),root.path().to_path_buf(),
+            Approval::Full,false,5,Session::fresh()).unwrap();
+        let id=agent.session_id();
+        agent.set_sdk_permission_mode("acceptEdits").unwrap();
+        let restored=Session::load(root.path(),&id).unwrap();
+        assert_eq!(restored.permission_mode.as_deref(),Some("acceptEdits"));
+        let resumed=Agent::new(profile.clone(),root.path().to_path_buf(),
+            Approval::Full,false,5,restored.clone()).unwrap();
+        assert_eq!(resumed.current_permission_mode(),"acceptEdits");
+        assert!(Agent::new(profile,root.path().to_path_buf(),
+            Approval::ReadOnly,false,5,restored).is_err());
+    }
     #[tokio::test]
     async fn team_mode_change_is_durable_and_applied_only_by_target_member(){
         let root=tempfile::tempdir().unwrap();
