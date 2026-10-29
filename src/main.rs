@@ -1732,6 +1732,11 @@ async fn chat(
             }
             _ => {}
         }
+        if let Some(instructions) = input.strip_prefix("/compact ") {
+            agent.compact_history_custom(instructions).await?;
+            println!("Session context compacted.");
+            continue;
+        }
         if input == "/sessions --semantic" || input.starts_with("/sessions --semantic ") {
             let query = input.trim_start_matches("/sessions --semantic").trim();
             if query.is_empty() {
@@ -2200,7 +2205,12 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 }
                 let result = match action {
                     "clear" => agent.clear_history().await,
-                    "compact" => agent.compact_history().await,
+                    "compact" => agent.compact_history_custom(
+                        event.get("instructions")
+                            .or_else(|| event.get("customInstructions"))
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                    ).await,
                     "model" => {
                         let provider = event.get("provider").and_then(Value::as_str);
                         let model = event.get("model").and_then(Value::as_str);
