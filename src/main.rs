@@ -47,6 +47,8 @@ mod permission_mode;
 mod permission_rules;
 mod permission_settings;
 mod plugins;
+mod plugin_commands;
+mod plugin_manager;
 mod portable_async_runtime;
 mod portable_configuration;
 mod portable_ink_core;
@@ -285,6 +287,11 @@ enum Commands {
         #[arg(long)]
         options: Option<String>,
     },
+    /// Manage installed local plugins and parse the original plugin commands
+    Plugin {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Show configured providers and active default without connecting to them
     Models,
     /// Execute a single prompt; pass '-' to read the prompt from stdin
@@ -318,6 +325,13 @@ enum Commands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
+        Commands::Plugin { args } => {
+            let root = canonical_workspace(&cli.workspace)?;
+            let command = plugin_commands::parse_plugin_args(Some(&args.join(" ")));
+            let output = plugin_manager::execute(&root, &command)?;
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
         Commands::Version => {
             println!("{}", version::running_version());
             return Ok(());
