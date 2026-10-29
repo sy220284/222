@@ -113,11 +113,13 @@ impl ToolExecutor {
             "list_files" => self.list_files(&args),
             "glob_files" => {
                 let path = self.checked_path(args.get("path").and_then(Value::as_str).unwrap_or("."))?;
-                search::glob_files(&self.root, &path, &args)
+                search::glob_files_filtered(&self.root, &path, &args,
+                    &|candidate|self.search_read_allowed(candidate))
             },
             "grep_files" => {
                 let path = self.checked_path(args.get("path").and_then(Value::as_str).unwrap_or("."))?;
-                search::grep_files(&self.root, &path, &args)
+                search::grep_files_filtered(&self.root, &path, &args,
+                    &|candidate|self.search_read_allowed(candidate))
             },
             "search_text" => self.search_text(&args),
             "list_skills" => self.list_skills(),
@@ -298,7 +300,8 @@ impl ToolExecutor {
     /// deny and ask rules must be checked before opening the file. The source
     /// filesystem permission engine checks both the requested path and the
     /// symlink-resolved target; matching only the alias leaks denied content.
-    fn require_read_rules(&self,requested:&str,path:&Path)->Result<()> {
+    fn read_rule_decision(&self,requested:&str,path:&Path)
+        ->Result<Option<permission_rules::Behavior>> {
         let resolved=path.canonicalize().unwrap_or_else(|_|path.to_path_buf());
         let mut paths=vec![requested.to_owned(),path.to_string_lossy().into_owned(),
             resolved.to_string_lossy().into_owned()];
@@ -309,8 +312,17 @@ impl ToolExecutor {
                 }
             }
         }
-        let args=json!({"path":requested,"paths":paths});
-        match permission_rules::policy_for(&self.permission_rules,"read_file",&args)?{
+        permission_rules::policy_for(&self.permission_rules,"read_file",
+            &json!({"path":requested,"paths":paths}))
+    }
+
+    fn search_read_allowed(&self,path:&Path)->Result<bool>{
+        Ok(!matches!(self.read_rule_decision(&path.to_string_lossy(),path)?,
+            Some(permission_rules::Behavior::Deny|permission_rules::Behavior::Ask)))
+    }
+
+    fn require_read_rules(&self,requested:&str,path:&Path)->Result<()> {
+        match self.read_rule_decision(requested,path)?{
             Some(permission_rules::Behavior::Deny)=>
                 bail!("Read denied by explicit permission rule: {requested}"),
             Some(permission_rules::Behavior::Ask)=>{
@@ -369,6 +381,7 @@ impl ToolExecutor {
         for entry in WalkDir::new(&path).max_depth(depth).into_iter().filter_entry(in_scope) {
             let entry = entry?;
             if entry.path() == path { continue; }
+            if !self.search_read_allowed(entry.path())? { continue }
             entries.push(entry.path().strip_prefix(&self.root).unwrap_or(entry.path()).display().to_string());
             if entries.len() >= limit { break; }
         }
@@ -384,6 +397,7 @@ impl ToolExecutor {
         for entry in WalkDir::new(path).into_iter().filter_entry(in_scope) {
             let entry = entry?;
             if !entry.file_type().is_file() { continue; }
+            if !self.search_read_allowed(entry.path())? { continue }
             if entry.metadata()?.len() > MAX_FILE_BYTES { continue; }
             let Ok(data) = fs::read_to_string(entry.path()) else { continue };
             for (line_no, line) in data.lines().enumerate() {
@@ -420,7 +434,9 @@ impl ToolExecutor {
             plugins::read_skill(&self.root,&self.enabled_plugins,name)?
         }else{
             if !valid_skill_name(name) { bail!("Invalid skill name") }
-            let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
+            let raw=format!(".atlas/skills/{name}/SKILL.md");
+            let path = self.checked_path(&raw)?;
+            self.require_read_rules(&raw,&path)?;
             if fs::metadata(&path)?.len() > 64_000 { bail!("Skill file too large") }
             fs::read_to_string(path)?
         };
@@ -699,6 +715,36 @@ mod tests {
             assert!(result.contains("explicit permission rule"),"{result}");
             assert!(!result.contains("do-not-leak"));
         }
+    }
+    #[tokio::test]
+    async fn read_deny_cannot_be_bypassed_through_search_or_listing(){
+        let root=tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("secrets")).unwrap();
+        fs::write(root.path().join("secrets/key.txt"),"secret-marker").unwrap();
+        fs::write(root.path().join("public.txt"),"public-marker").unwrap();
+        let rules=permission_rules::compile_rules(&[
+            permission_rules::RuleSetting{behavior:"deny".into(),
+                rule:"Read(secrets/**)".into()},
+        ]).unwrap();
+        let tool=executor(root.path(),Approval::Full).with_permission_rules(rules);
+        let call=|name:&str,args:Value|ToolCall{
+            id:"search".into(),kind:"function".into(),
+            function:FunctionCall{name:name.into(),arguments:args.to_string()},
+        };
+        let search=tool.execute(&call("search_text",json!({"pattern":"marker"}))).await;
+        assert!(search.contains("public-marker"),"{search}");
+        assert!(!search.contains("secret-marker"),"{search}");
+        let grep=tool.execute(&call("grep_files",json!({
+            "pattern":"marker","output_mode":"content"
+        }))).await;
+        assert!(grep.contains("public-marker"),"{grep}");
+        assert!(!grep.contains("secret-marker"),"{grep}");
+        let glob=tool.execute(&call("glob_files",json!({"pattern":"**/*.txt"}))).await;
+        assert!(glob.contains("public.txt"),"{glob}");
+        assert!(!glob.contains("key.txt"),"{glob}");
+        let listed=tool.execute(&call("list_files",json!({}))).await;
+        assert!(listed.contains("public.txt"),"{listed}");
+        assert!(!listed.contains("key.txt"),"{listed}");
     }
     #[test]
     fn webfetch_domain_deny_is_enforced_before_network_even_in_full_mode(){
