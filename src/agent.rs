@@ -1117,17 +1117,29 @@ impl Agent {
     /// Fork the live conversation and switch the active run to the new session.
     /// The original session remains unchanged and resumable.
     pub fn branch_session(&mut self, title: Option<&str>) -> Result<String> {
-        let first = self.session.messages.iter().find(|m| {
-            m.role == "user" && m.content.as_deref().is_some_and(|s| !s.trim().is_empty())
-        });
-        if first.is_none() {
+        if self.session.messages.is_empty() {
             bail!("No conversation to branch");
         }
+        let first = self.session.messages.iter().find(|m| m.role == "user");
         let requested = title
             .map(crate::unicode_sanitization::partially_sanitize_unicode)
             .unwrap_or_default();
         let requested = requested.trim();
-        let source = first.and_then(|m| m.content.as_deref()).unwrap_or("");
+        // Original deriveFirstPrompt reads the first text block when the
+        // first user message contains multimodal content.
+        let source = first
+            .and_then(|m| {
+                m.content.as_deref().filter(|s| !s.is_empty()).or_else(|| {
+                    m.content_blocks.as_ref()?.iter().find_map(|block| {
+                        if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
+                            block.get("text").and_then(serde_json::Value::as_str)
+                        } else {
+                            None
+                        }
+                    })
+                })
+            })
+            .unwrap_or("");
         let derived = source.split_whitespace().collect::<Vec<_>>().join(" ");
         let derived = derived.chars().take(100).collect::<String>();
         let base = if !requested.is_empty() {
@@ -1166,7 +1178,10 @@ impl Agent {
         // A personal task graph belongs to its session, not to the parent.
         // Team graphs retain the shared team identity across the fork.
         let graph = if child.team_name.is_none() {
-            Some(task_graph::TaskGraph::new(&self.root, &child.id.to_string())?)
+            Some(task_graph::TaskGraph::new(
+                &self.root,
+                &child.id.to_string(),
+            )?)
         } else {
             None
         };
@@ -2126,6 +2141,46 @@ fn system_prompt(root: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn branch_uses_first_multimodal_text_block_and_switches_active_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let profile = ProviderProfile {
+            id: "mock".into(),
+            kind: "openai-compatible".into(),
+            base_url: "http://127.0.0.1:1/v1".into(),
+            model: "mock".into(),
+            api_key_env: None,
+            stream: false,
+        };
+        let mut original = Session::fresh();
+        let parent_id = original.id;
+        let mut user = Message::text("user", "");
+        user.content = None;
+        user.content_blocks = Some(vec![
+            json!({"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA=="}}),
+            json!({"type":"text","text":"  Investigate\n  this screenshot  "}),
+        ]);
+        original.messages.push(user);
+        let mut agent = Agent::new(
+            profile,
+            root.clone(),
+            Approval::Ask,
+            true,
+            5,
+            original.clone(),
+        )
+        .unwrap();
+        let result = agent.branch_session(None).unwrap();
+        assert!(result.contains("Investigate this screenshot (Branch)"));
+        assert_ne!(agent.session.id, parent_id);
+        assert_eq!(agent.session.forked_from, Some(parent_id));
+        assert_eq!(agent.session.messages, original.messages);
+        let stored = Session::load(&root, &agent.session_id()).unwrap();
+        assert_eq!(stored.messages, original.messages);
+        assert_eq!(stored.forked_from, Some(parent_id));
+    }
 
     #[cfg(unix)]
     #[tokio::test]
