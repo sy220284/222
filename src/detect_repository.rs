@@ -103,18 +103,23 @@ pub fn detect_current_repository_with_host(root: &Path) -> Option<ParsedReposito
     {
         return value.clone();
     }
-    let output = Command::new("git")
+    let from_command = Command::new("git")
         .arg("-C")
         .arg(&root)
         .args(["remote", "get-url", "origin"])
         .output()
-        .ok()?;
-    let value = output
-        .status
-        .success()
-        .then(|| String::from_utf8(output.stdout).ok())
-        .flatten()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
         .and_then(|remote| parse_git_remote(&remote));
+    // The original Git filesystem utility reads origin from the config when
+    // spawning Git is unavailable. Local reads do not access the network.
+    let value = from_command.or_else(|| {
+        let git_directory = root.join(".git");
+        crate::git_config_parser::parse_git_config_value(
+            &git_directory, "remote", Some("origin"), "url"
+        ).and_then(|remote| parse_git_remote(&remote))
+    });
     repository_cache()
         .lock()
         .expect("repository cache poisoned")
@@ -181,6 +186,23 @@ mod tests {
             Some("owner/cc.kurs.web".into())
         );
         assert!(parse_github_repository("https://ghe.example.com/team/repo").is_none());
+    }
+
+    #[test]
+    fn existing_git_config_value_can_detect_remote_without_network() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        std::fs::write(
+            dir.path().join(".git/config"),
+            "[remote \"origin\"]\n URL = git@github.com:team/repo.git\n"
+        ).unwrap();
+        assert_eq!(
+            crate::git_config_parser::parse_git_config_value(
+                &dir.path().join(".git"), "remote", Some("origin"), "url"
+            ).and_then(|raw| parse_git_remote(&raw))
+                .map(|remote| format!("{}/{}", remote.owner, remote.name)),
+            Some("team/repo".into())
+        );
     }
 
     #[test]

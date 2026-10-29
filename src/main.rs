@@ -18,6 +18,8 @@ mod env_validation;
 mod event_signal;
 mod files_context;
 mod gemini_sse;
+mod git_ignore;
+mod git_config_parser;
 mod generated_ports;
 mod history;
 mod hooks;
@@ -173,6 +175,21 @@ enum Commands {
     ProjectInit,
     /// Report actual local session and model usage statistics
     Stats,
+    /// Read a value from an existing Git configuration without invoking Git
+    GitConfig {
+        section: String,
+        key: String,
+        #[arg(long)]
+        subsection: Option<String>,
+        #[arg(long)]
+        git_dir: Option<PathBuf>,
+    },
+    /// Check Git ignore status, or explicitly append a global ignore rule
+    GitIgnore {
+        pattern: String,
+        #[arg(long)]
+        add_global: bool,
+    },
     /// Parse a provider-neutral deep link without opening a terminal
     ParseDeepLink { uri: String },
     /// Encode an atlas-cli://open link for a reviewable prompt/workspace
@@ -232,6 +249,28 @@ enum Commands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
+        Commands::GitConfig { section, key, subsection, git_dir } => {
+            let root = canonical_workspace(&cli.workspace)?;
+            let directory = git_dir.clone().unwrap_or_else(|| root.join(".git"));
+            let result = git_config_parser::parse_git_config_value(
+                &directory, section, subsection.as_deref(), key
+            );
+            match result {
+                Some(value) => println!("{value}"),
+                None => println!("(not found)"),
+            }
+            return Ok(());
+        }
+        Commands::GitIgnore { pattern, add_global } => {
+            let root = canonical_workspace(&cli.workspace)?;
+            if *add_global {
+                let changed = git_ignore::add_file_glob_rule_to_gitignore(pattern, &root)?;
+                println!("{}", if changed { "Global ignore rule added" } else { "No change" });
+            } else {
+                println!("{}", git_ignore::is_path_gitignored(pattern, &root));
+            }
+            return Ok(());
+        }
         Commands::ParseDeepLink { uri } => {
             let action = deep_link::parse_deep_link(uri)?;
             println!(
