@@ -217,7 +217,7 @@ impl Config {
         Ok(path)
     }
 
-    fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         crate::shell_runtime::from_config(self.default_shell.as_deref())?;
         if self.providers.is_empty() {
             bail!("At least one provider is required")
