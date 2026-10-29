@@ -177,7 +177,8 @@ pub fn agent_source_label(source:&str)->String{
         "all"=>"Agents","built-in"=>"Built-in agents",
         "plugin"=>"Plugin agents",
         "user"=>"User","project"=>"Project","local"=>"Local",
-        "policySettings"=>"Managed policy","managed"=>"Managed"
+        "policySettings"=>"Managed policy","managed"=>"Managed",
+        other=>return other.to_owned()
     }.into()
 }
 // src/components/design-system/color.ts
