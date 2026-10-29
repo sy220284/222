@@ -238,7 +238,7 @@ async fn fetch_with_redirect_policy_in_workspace(
 ) -> Result<Value> {
     // Cache successful results under the requested URL, scoped to workspace
     // because a binary attachment path is only valid in its own workspace.
-    let cache_key = workspace.map(|root| format!("{}\\0{url}", root.display()));
+    let cache_key = workspace.map(|root| format!("{}\0{url}", root.display()));
     if let Some(value) = cache_key.as_deref().and_then(cached_page) {
         return Ok(value);
     }
@@ -342,7 +342,7 @@ async fn fetch_with_redirect_policy_in_workspace(
         let mut content = truncate_source_markdown(&text);
         if let Some(path) = persisted.as_ref() {
             content.push_str(&format!(
-                "\\n\\n[Binary content ({}, {} bytes) also saved to {}]",
+                "\n\n[Binary content ({}, {} bytes) also saved to {}]",
                 kind, bytes.len(), path.display()
             ));
         }
