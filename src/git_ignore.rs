@@ -85,11 +85,15 @@ fn add_file_glob_rule_to_gitignore_at(
     let result = (|| -> Result<bool> {
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-        if contents.contains(&entry) {
+        // Git patterns are line-oriented: **/foo must not match **/foobar.
+        if contents
+            .lines()
+            .any(|line| line.trim_end_matches('\r') == entry)
+        {
             return Ok(false);
         }
         file.seek(std::io::SeekFrom::End(0))?;
-        if !contents.is_empty() {
+        if !contents.is_empty() && !contents.ends_with('\n') {
             file.write_all(b"\n")?;
         }
         file.write_all(entry.as_bytes())?;
@@ -135,6 +139,35 @@ mod tests {
     }
 
     #[test]
+    fn global_rule_addition_matches_exact_lines_and_is_effective_in_git() {
+        let dir = tempfile::tempdir().unwrap();
+        initialize(dir.path());
+        let global = dir.path().join("global-ignore");
+        fs::write(&global, "**/foobar\n").unwrap();
+        let configured = Command::new("git")
+            .args(["config", "core.excludesFile"])
+            .arg(&global)
+            .current_dir(dir.path())
+            .status()
+            .unwrap();
+        assert!(configured.success());
+
+        // A shorter pattern is not a duplicate of an existing longer pattern.
+        assert!(add_file_glob_rule_to_gitignore_at("foo", dir.path(), &global).unwrap());
+        assert_eq!(
+            fs::read_to_string(&global).unwrap(),
+            "**/foobar\n**/foo\n"
+        );
+        assert!(is_path_gitignored("foo", dir.path()));
+        assert!(is_path_gitignored("foobar", dir.path()));
+        assert!(!add_file_glob_rule_to_gitignore_at("foo", dir.path(), &global).unwrap());
+        assert_eq!(
+            fs::read_to_string(&global).unwrap(),
+            "**/foobar\n**/foo\n"
+        );
+    }
+
+    #[test]
     fn global_file_is_created_once_and_directory_rules_use_probe_path() {
         let dir = tempfile::tempdir().unwrap();
         initialize(dir.path());
@@ -145,7 +178,7 @@ mod tests {
         assert!(add_file_glob_rule_to_gitignore_at("other.txt", dir.path(), &global).unwrap());
         assert_eq!(
             fs::read_to_string(&global).unwrap(),
-            "**/private/\n\n**/other.txt\n"
+            "**/private/\n**/other.txt\n"
         );
         assert!(add_file_glob_rule_to_gitignore_at("line\nbad", dir.path(), &global).is_err());
     }
