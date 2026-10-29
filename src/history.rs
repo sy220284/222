@@ -15,7 +15,13 @@ pub struct Record {
     pub id: Uuid,
     pub path: String,
     pub previous: Option<String>,
+    /// File mode before the edit, preserved by the original file-history backup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_mode: Option<u32>,
     pub updated_hash: String,
+    /// Mode immediately after the edit; changes since the checkpoint invalidate rewind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_mode: Option<u32>,
 }
 fn fingerprint(content: &[u8]) -> String {
     format!("{:x}", Sha256::digest(content))
@@ -42,7 +48,32 @@ pub fn snapshot(path: &Path) -> Result<Option<String>> {
         Err(error) => Err(error.into()),
     }
 }
-pub fn record(root: &Path, path: &Path, previous: Option<String>) -> Result<Option<Uuid>> {
+/// Capture the original Unix file permissions before a Write/Edit/NotebookEdit.
+pub fn snapshot_mode(path: &Path) -> Result<Option<u32>> {
+    match fs::metadata(path) {
+        Ok(metadata) => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                Ok(Some(metadata.permissions().mode()))
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = metadata;
+                Ok(None)
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+pub fn record(
+    root: &Path,
+    path: &Path,
+    previous: Option<String>,
+    previous_mode: Option<u32>,
+) -> Result<Option<Uuid>> {
     let now = fs::read(path)?;
     if now.len() as u64 > MAX_SNAPSHOT_BYTES {
         bail!("Modified file exceeds history size limit")
@@ -56,7 +87,9 @@ pub fn record(root: &Path, path: &Path, previous: Option<String>) -> Result<Opti
         id,
         path: relative.to_string_lossy().to_string(),
         previous,
+        previous_mode,
         updated_hash: fingerprint(&now),
+        updated_mode: snapshot_mode(path)?,
     };
     let folder = storage(root)?;
     let final_path = folder.join(format!("{id}.json"));
@@ -79,8 +112,18 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
     if fingerprint(&current) != record.updated_hash {
         bail!("File changed since checkpoint; refusing to overwrite later edits")
     }
+    if let Some(expected_mode) = record.updated_mode {
+        if snapshot_mode(path)? != Some(expected_mode) {
+            bail!("File permissions changed since checkpoint; refusing to overwrite later edits")
+        }
+    }
     if let Some(previous) = &record.previous {
         fs::write(path, previous)?;
+        #[cfg(unix)]
+        if let Some(mode) = record.previous_mode {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
+        }
         Ok(format!("Restored {} to previous version", record.path))
     } else {
         fs::remove_file(path)?;
@@ -124,7 +167,7 @@ mod tests {
         fs::write(&source, "old").unwrap();
         let before = snapshot(&source).unwrap();
         fs::write(&source, "new").unwrap();
-        let id = record(root.path(), &source, before).unwrap().unwrap();
+        let id = record(root.path(), &source, before, None).unwrap().unwrap();
         assert!(list(root.path()).unwrap().contains(&id.to_string()));
         let entry = load(root.path(), &id.to_string()).unwrap();
         fs::write(&source, "external change").unwrap();
@@ -137,7 +180,7 @@ mod tests {
         let before = snapshot(&created).unwrap();
         assert!(before.is_none());
         fs::write(&created, "hello").unwrap();
-        let id = record(root.path(), &created, before).unwrap().unwrap();
+        let id = record(root.path(), &created, before, None).unwrap().unwrap();
         restore(&load(root.path(), &id.to_string()).unwrap(), &created).unwrap();
         assert!(!created.exists());
     }
