@@ -314,6 +314,7 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         "filenames":if mode == "files_with_matches" {page.clone()} else {vec![]},
         "content":page.join("\n"),
         "numFiles":num_files,
+        "numLines":if mode == "content" {Some(page.len())} else {None},
         "numMatches":num_matches,
         "appliedOffset":offset,
         "appliedLimit":if truncated {Some(requested_limit)} else {None},
