@@ -239,7 +239,7 @@
 | `src/commands/remote-setup/api.ts` | 183 | 5519 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/remote-setup/index.ts` | 21 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/remote-setup/remote-setup.tsx` | 187 | 21786 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/rename/generateSessionName.ts` | 68 | 2297 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：通过当前选定模型生成 JSON kebab-case 名称、验证输入并持久保存、不污染历史会话且计入模型用量；原厂专用模型与超时/中断策略按通用化要求调整 |
+| `src/commands/rename/generateSessionName.ts` | 68 | 2297 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：通过当前选定模型生成 JSON kebab-case 名称、验证输入并持久保存、不污染历史会话且计入模型用量；近期上下文与多模态文本已按原版补齐；原厂专用模型与超时/中断策略按通用化要求调整 |
 | `src/commands/rename/index.ts` | 13 | 281 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/rename/rename.ts` | 88 | 2759 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -1752,7 +1752,7 @@
 | `src/utils/sessionState.ts` | 151 | 5309 | 重写：保持通用行为 | `src/generated_ports/p_000102e58d700.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/sessionStorage.ts` | 5106 | 180620 | 重写：保持通用行为 | `src/generated_ports/p_d6a11c5239e9b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/sessionStoragePortable.ts` | 794 | 25448 | 重写：保持通用行为 | `src/generated_ports/p_64e1431d70c86.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/sessionTitle.ts` | 130 | 4757 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sessionTitle.ts` | 130 | 4757 | 重写：保持通用行为 | `src/session_control.rs / src/agent.rs` | 部分实现：extractConversationText 已按原版最近 1000 UTF-16 单元提取用户/助手文本和多模态 text 块并接入 /rename；独立 generateSessionTitle、meta/origin 过滤及取消等仍未实现 |
 | `src/utils/sessionUrl.ts` | 65 | 1672 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/set.ts` | 54 | 1036 | 重写：Set 差集、交集判定、包含关系与有序并集 | `src/collections.rs` | 部分实现：4 个函数保持 Set 插入顺序和空集语义；JS 对象引用与 SameValueZero 非整数数字语义待跨语言核对 |
 | `src/utils/settings/allErrors.ts` | 33 | 1257 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
