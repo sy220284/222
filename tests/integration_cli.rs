@@ -4969,8 +4969,11 @@ fn tool_search_model_roundtrip_uses_registered_catalog() {
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
     assert!(String::from_utf8_lossy(&output.stdout).contains("Search completed."));
     assert!(requests[0].contains("ToolSearch"),"ToolSearch is not registered");
-    assert!(requests[1].contains("read_file"),"actual search result not returned");
-    assert!(requests[1].contains("total_deferred_tools"),"search result schema missing");
+    let second: Value=serde_json::from_str(requests[1].split_once("\r\n\r\n").unwrap().1).unwrap();
+    let returned=second["messages"].as_array().unwrap().iter()
+        .find(|msg|msg["role"]=="tool").unwrap()["content"].as_str().unwrap();
+    assert!(returned.contains("read_file"),"actual search result not returned");
+    assert!(returned.contains("total_deferred_tools"),"search result schema missing");
     assert!(!requests[1].contains("Unknown tool: ToolSearch"));
     let session_file = fs::read_dir(root.path().join(".atlas/sessions")).unwrap()
         .next().unwrap().unwrap().path();
@@ -5025,7 +5028,10 @@ fn ask_user_question_chat_uses_actual_terminal_selection() {
     let requests=server.join().unwrap();
     assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
     assert!(requests[0].contains("AskUserQuestion"));
-    assert!(requests[1].contains("Postgres"),"terminal answer not returned to model");
-    assert!(!requests[1].contains("Spoofed\"}"),"model-provided answer accepted");
+    let second: Value=serde_json::from_str(requests[1].split_once("\r\n\r\n").unwrap().1).unwrap();
+    let returned=second["messages"].as_array().unwrap().iter()
+        .find(|msg|msg["role"]=="tool").unwrap()["content"].as_str().unwrap();
+    assert!(returned.contains("Postgres"),"terminal answer not returned to model");
+    assert!(!returned.contains("Spoofed"),"model-provided answer accepted");
     assert!(String::from_utf8_lossy(&output.stderr).contains("Which database?"));
 }
