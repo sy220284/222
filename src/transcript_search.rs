@@ -225,7 +225,9 @@ pub fn stored_message_search_text(message: &Message) -> String {
             // SDK messages may store the same text both flattened and as
             // native text blocks. Index it once, preserving the block order.
             let has_structured_text = message.content_blocks.as_ref().is_some_and(|blocks| {
-                blocks.iter().any(|block| block.get("type").and_then(Value::as_str) == Some("text"))
+                blocks
+                    .iter()
+                    .any(|block| block.get("type").and_then(Value::as_str) == Some("text"))
             });
             if !has_structured_text {
                 if let Some(content) = &message.content {
@@ -288,7 +290,9 @@ pub fn stored_message_search_text(message: &Message) -> String {
                             }
                         } else {
                             let text = tool_result_search_text(content);
-                            if !text.is_empty() { parts.push(text); }
+                            if !text.is_empty() {
+                                parts.push(text);
+                            }
                         }
                     }
                 }
