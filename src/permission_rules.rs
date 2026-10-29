@@ -535,6 +535,12 @@ pub fn policy_for(rules: &[Rule], tool: &str, args: &Value) -> Result<Option<Beh
                         .get("task_id")
                         .or_else(|| args.get("shell_id"))
                         .and_then(Value::as_str),
+                    "Agent" if tool == "spawn_agent" || tool == "Agent" => Some(
+                        args.get("subagent_type")
+                            .or_else(|| args.get("agent_type"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("general"),
+                    ),
                     _ => None,
                 };
                 if matches!(name, "Read" | "Write" | "Edit" | "notebook_edit") {
@@ -551,6 +557,10 @@ pub fn policy_for(rules: &[Rule], tool: &str, args: &Value) -> Result<Option<Beh
                         Some(host) => pattern == format!("domain:{host}"),
                         None => false,
                     }
+                } else if name == "Agent" {
+                    // permissions.ts::getDenyRuleForAgent matches agent type
+                    // exactly; shell wildcard/prefix syntax is not used.
+                    argument == Some(pattern)
                 } else {
                     match argument {
                         Some(argument) => matches_content(pattern, argument)?,
@@ -580,6 +590,46 @@ pub fn policy_for(rules: &[Rule], tool: &str, args: &Value) -> Result<Option<Beh
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn agent_type_rules_are_exact_and_do_not_match_unrelated_team_calls() {
+        // permissions.ts::getDenyRuleForAgent compares ruleContent with
+        // agentType; the generic Agent tool-wide rule remains independent.
+        let rules = compile_rules(&[RuleSetting {
+            behavior: "deny".into(),
+            rule: "Agent(Explore)".into(),
+        }]).unwrap();
+        assert_eq!(
+            policy_for(&rules, "spawn_agent", &json!({
+                "prompt":"inspect", "subagent_type":"Explore"
+            })).unwrap(),
+            Some(Behavior::Deny)
+        );
+        assert_eq!(
+            policy_for(&rules, "spawn_agent", &json!({
+                "prompt":"inspect", "subagent_type":"Explorer"
+            })).unwrap(),
+            None
+        );
+        assert_eq!(
+            policy_for(&rules, "spawn_agent", &json!({"prompt":"inspect"})).unwrap(),
+            None
+        );
+        assert_eq!(
+            policy_for(&rules, "spawn_team", &json!({
+                "tasks":[{"name":"Explore","prompt":"inspect"}]
+            })).unwrap(),
+            None
+        );
+        let defaults = compile_rules(&[RuleSetting {
+            behavior: "deny".into(),
+            rule: "Agent(general)".into(),
+        }]).unwrap();
+        assert_eq!(
+            policy_for(&defaults, "spawn_agent", &json!({"prompt":"inspect"})).unwrap(),
+            Some(Behavior::Deny)
+        );
+    }
 
     #[test]
     fn edit_path_rules_cover_write_and_resolved_targets() {
