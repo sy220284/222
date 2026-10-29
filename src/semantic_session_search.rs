@@ -50,13 +50,16 @@ fn excerpt(messages: &[Message]) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut chars = normalized.chars();
-    let prefix = chars.by_ref().take(MAX_TRANSCRIPT).collect::<String>();
-    if chars.next().is_some() {
-        format!("{prefix}…")
-    } else {
-        prefix
+    // JS String.slice measures UTF-16 code units, not Unicode scalar values.
+    // Preserve the original 2,000-unit limit without splitting a surrogate pair.
+    let mut units = 0usize;
+    for (offset, ch) in normalized.char_indices() {
+        if units + ch.len_utf16() > MAX_TRANSCRIPT {
+            return format!("{}…", &normalized[..offset]);
+        }
+        units += ch.len_utf16();
     }
+    normalized
 }
 
 fn prompt(query: &str, candidates: &[(SessionItem, Option<Session>)]) -> String {
@@ -148,14 +151,23 @@ pub async fn search(
             (item, loaded)
         })
         .collect::<Vec<_>>();
-    let result = provider
+    // The original agenticSessionSearch catches provider failures and returns
+    // an empty result rather than aborting the session/CLI command.
+    let result = match provider
         .complete(&ModelRequest {
             model: model.to_owned(),
             system: SYSTEM.into(),
             messages: vec![Message::text("user", prompt(query, &candidates))],
             tools: Vec::new(),
         })
-        .await?;
+        .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            eprintln!("Semantic session search failed: {error:#}");
+            return Ok((Vec::new(), None));
+        }
+    };
     let ranked = result
         .message
         .content
