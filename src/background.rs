@@ -25,6 +25,36 @@ const DEFAULT_DELTA_READ_BYTES: u64 = 8 * 1024 * 1024;
 const OUTPUT_CAPPED_NOTICE: &str = "\n[output truncated: exceeded 5GB disk cap]\n";
 const DISPLAY_CAP: usize = 8 * 1024 * 1024;
 
+// Task.ts::generateTaskId uses a task-type prefix and eight lowercase
+// alphanumeric characters. Continue accepting UUID IDs created by earlier
+// Rust builds so saved task output remains accessible after upgrading.
+fn canonical_shell_task_id(id: &str) -> Result<String> {
+    if let Ok(uuid) = Uuid::parse_str(id) {
+        return Ok(uuid.to_string());
+    }
+    let bytes = id.as_bytes();
+    if bytes.len() == 9
+        && bytes[0] == b'b'
+        && bytes[1..]
+            .iter()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+    {
+        return Ok(id.to_owned());
+    }
+    bail!("Invalid background task ID")
+}
+
+fn new_shell_task_id() -> String {
+    const ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    let random = Uuid::new_v4();
+    let mut id = String::with_capacity(9);
+    id.push('b');
+    for byte in random.as_bytes().iter().take(8) {
+        id.push(ALPHABET[(*byte as usize) % ALPHABET.len()] as char);
+    }
+    id
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRecord {
     pub id: String,
@@ -73,8 +103,8 @@ impl BackgroundTasks {
         *self.shell_kind.lock().unwrap() = kind;
     }
     fn metadata_path(&self, id: &str) -> Result<PathBuf> {
-        let uuid = Uuid::parse_str(id).context("Invalid task ID")?;
-        Ok(self.directory.join(format!("{uuid}.json")))
+        let id = canonical_shell_task_id(id)?;
+        Ok(self.directory.join(format!("{id}.json")))
     }
 
     fn save(directory: &Path, record: &TaskRecord) -> Result<()> {
@@ -119,7 +149,14 @@ impl BackgroundTasks {
         if command.len() > 100_000 {
             bail!("Background shell command too large")
         }
-        let id = Uuid::new_v4().to_string();
+        let id = (0..32)
+            .map(|_| new_shell_task_id())
+            .find(|candidate| {
+                !self.directory.join(format!("{candidate}.json")).exists()
+                    && !self.directory.join(format!("{candidate}.stdout")).exists()
+                    && !self.directory.join(format!("{candidate}.stderr")).exists()
+            })
+            .context("Could not allocate a unique background task ID")?;
         let stdout_path = self.directory.join(format!("{id}.stdout"));
         let stderr_path = self.directory.join(format!("{id}.stderr"));
         // Hold the descriptors from exclusive creation through spooling: never
@@ -239,9 +276,9 @@ impl BackgroundTasks {
         };
         // Do not trust paths in persisted task metadata: a workspace file
         // must never redirect output reads to a private host file.
-        let task_uuid = Uuid::parse_str(id).context("Invalid task ID")?;
-        let safe_stdout = self.directory.join(format!("{task_uuid}.stdout"));
-        let safe_stderr = self.directory.join(format!("{task_uuid}.stderr"));
+        let task_id = canonical_shell_task_id(id)?;
+        let safe_stdout = self.directory.join(format!("{task_id}.stdout"));
+        let safe_stderr = self.directory.join(format!("{task_id}.stderr"));
         let stdout = tail(safe_stdout.to_str().context("Invalid stdout path")?)?;
         let stderr = tail(safe_stderr.to_str().context("Invalid stderr path")?)?;
         let text = [stdout, stderr]
@@ -280,7 +317,7 @@ impl BackgroundTasks {
     /// framework's offset/delta contract. A stopped task's file remains
     /// readable across agent restarts. Never trust persisted path metadata.
     pub fn output_delta(&self, id: &str, from_offset: u64, max_bytes: u64) -> Result<String> {
-        let id = Uuid::parse_str(id).context("Invalid task ID")?.to_string();
+        let id = canonical_shell_task_id(id)?;
         let path = self.directory.join(format!("{id}.stdout"));
         // Explicit zero is a zero-byte read, not an implicit default.
         let max_bytes = max_bytes.min(DEFAULT_DELTA_READ_BYTES);
@@ -311,7 +348,7 @@ impl BackgroundTasks {
             let Some(id) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            if Uuid::parse_str(id).is_err() {
+            if canonical_shell_task_id(id).is_err() {
                 continue;
             }
             let record = if let Some(running) = live.get(id) {
