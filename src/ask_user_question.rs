@@ -193,7 +193,7 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
             }
         }
         writeln!(writer, "  0) Other (enter a custom answer)")?;
-        let (answer, selected_indices) = loop {
+        let (answer, selected_indices, custom_note) = loop {
             let raw = read_selection(reader, writer)?;
             let selections: Vec<&str> = raw.split(',').map(str::trim).collect();
             if selections.len() > 1 && !multiple {
@@ -234,14 +234,15 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
                     writeln!(writer, "Answer cannot be empty.")?;
                     continue;
                 }
-                break (custom.trim().to_string(), Vec::new());
+                let custom = custom.trim().to_owned();
+                break (custom.clone(), Vec::new(), Some(custom));
             }
             let answer = selected
                 .iter()
                 .map(|n| opts[n - 1]["label"].as_str().expect("validated"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            break (answer, selected);
+            break (answer, selected, None);
         };
         // The original AskUserQuestion result carries the selected preview and
         // user-authored notes as per-question annotations. Never trust the
@@ -252,19 +253,25 @@ pub fn execute(input: &Value, reader: &mut impl BufRead, writer: &mut impl Write
             .filter_map(|index| opts[index - 1].get("preview").and_then(Value::as_str))
             .filter(|preview| !preview.is_empty())
             .collect::<Vec<_>>();
-        if !previews.is_empty() {
+        if !previews.is_empty() || custom_note.is_some() {
             let mut annotation = Map::new();
-            annotation.insert("preview".to_owned(), Value::String(previews.join("\n\n")));
-            write!(
-                writer,
-                "Optional notes for this selection (Enter to skip): "
-            )?;
-            writer.flush()?;
-            let mut note = String::new();
-            // A closed input stream means there are no additional notes;
-            // the user's already-confirmed choice must not be discarded.
-            if reader.read_line(&mut note)? > 0 && !note.trim().is_empty() {
-                annotation.insert("notes".to_owned(), Value::String(note.trim().to_owned()));
+            if !previews.is_empty() {
+                annotation.insert("preview".to_owned(), Value::String(previews.join("\n\n")));
+                write!(
+                    writer,
+                    "Optional notes for this selection (Enter to skip): "
+                )?;
+                writer.flush()?;
+                let mut note = String::new();
+                // Closed input must not discard the already confirmed choice.
+                if reader.read_line(&mut note)? > 0 && !note.trim().is_empty() {
+                    annotation.insert("notes".to_owned(), Value::String(note.trim().to_owned()));
+                }
+            }
+            // The original permission dialog carries custom "Other" text
+            // in annotations.notes as well as in the answer map.
+            if let Some(note) = custom_note {
+                annotation.insert("notes".to_owned(), Value::String(note));
             }
             annotations.insert(question.to_owned(), Value::Object(annotation));
         }
