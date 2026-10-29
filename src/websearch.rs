@@ -25,7 +25,7 @@ fn domain_filter(args: &Value, key: &str) -> Result<Vec<String>> {
     domains.iter().map(|item| {
         let domain = item.as_str().with_context(|| format!("{key} entries must be strings"))?
             .trim().trim_end_matches('.').to_ascii_lowercase();
-        if domain.is_empty() || domain.contains(['/', ':', '@', ' ']) {
+        if domain.is_empty() || domain.chars().any(|c| matches!(c, '/' | ':' | '@' | ' ')) {
             bail!("{key} must contain hostnames without schemes or paths");
         }
         Ok(domain)
@@ -43,8 +43,10 @@ fn domain_allowed(url: &str, allowed: &[String], blocked: &[String]) -> bool {
         return false;
     };
     let host = host.trim_end_matches('.').to_ascii_lowercase();
-    let matches_domain = |domain: &String| host == *domain || host.ends_with(&format!(".{domain}"));
-    !blocked.iter().any(matches_domain)
+    let matches_domain = |domain: &String| {
+        host.as_str() == domain.as_str() || host.ends_with(format!(".{domain}").as_str())
+    };
+    !blocked.iter().any(&matches_domain)
         && (allowed.is_empty() || allowed.iter().any(matches_domain))
 }
 
