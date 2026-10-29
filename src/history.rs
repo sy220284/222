@@ -101,7 +101,21 @@ fn migrate_workspace_history(source: &Path, target: &Path, direct_files_only: bo
     }
     if files.is_empty() { return Ok(()); }
     if target.exists() && fs::read_dir(target)?.next().is_some() {
-        bail!("Both private and workspace-local history contain checkpoints; refusing to overwrite either")
+        // A previous migration may have published the private copy before
+        // being interrupted while deleting old files. Only remove old files
+        // when every remaining byte matches the private checkpoint exactly.
+        for item in &files {
+            let private = target.join(item.file_name());
+            let old = fs::read(item.path())?;
+            let copied = fs::read(&private)
+                .with_context(|| format!("History migration conflict: {}", private.display()))?;
+            if old != copied {
+                bail!("History migration conflict: workspace and private checkpoints differ")
+            }
+        }
+        for item in &files { fs::remove_file(item.path())?; }
+        if !direct_files_only { fs::remove_dir(source)?; }
+        return Ok(());
     }
     let parent = target.parent().context("History destination has no parent")?;
     let staged = parent.join(format!(".migrate-{}", Uuid::new_v4()));
@@ -142,7 +156,8 @@ fn storage(root: &Path, session_id: Option<&str>) -> Result<PathBuf> {
     let root = root.canonicalize().context("History workspace unavailable")?;
     let config_path = crate::config::Config::path()?;
     let config_parent = config_path.parent()
-        .context("History config path has no parent")?;
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(config_parent)?;
     let config_parent = config_parent.canonicalize()?;
     let base = private_history_dir(&config_parent.join("file-history"))?;
@@ -159,6 +174,16 @@ fn storage(root: &Path, session_id: Option<&str>) -> Result<PathBuf> {
         legacy_base.clone()
     };
     // An existing .atlas symlink must not be used as a migration source.
+    for ancestor in [root.join(".atlas"), legacy_base.clone()] {
+        match fs::symlink_metadata(&ancestor) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                bail!("Previous history storage is redirected: {}", ancestor.display())
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
     if legacy_base.exists() {
         let real = legacy_base.canonicalize()?;
         if !real.starts_with(&root) {
