@@ -11,7 +11,29 @@ const MAX_LOOKBACK: usize = 20;
 pub fn recent_assistant_texts(messages: &[Message]) -> Vec<String> {
     messages.iter().rev()
         .filter(|message| message.role == "assistant")
-        .map(Message::visible_text)
+        .map(|message| {
+            // Original collectRecentAssistantTexts joins distinct text blocks
+            // with two newlines and skips tool-use-only assistant turns.
+            if let Some(blocks) = &message.content_blocks {
+                let parts = blocks.iter().filter_map(|block| {
+                    if let Some(text) = block.as_str() {
+                        return Some(text.to_owned());
+                    }
+                    if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
+                        block.get("text")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_owned)
+                    } else {
+                        None
+                    }
+                }).collect::<Vec<_>>();
+                if !parts.is_empty() {
+                    return parts.join("\n\n");
+                }
+                return String::new();
+            }
+            message.content.clone().unwrap_or_default()
+        })
         .filter(|text| !text.trim().is_empty())
         .take(MAX_LOOKBACK)
         .collect()
@@ -58,6 +80,15 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
                 fence = Some((marker, run, language.to_owned(), Vec::new()));
             }
         }
+    }
+    // marked.lexer returns an unfinished fenced code block at EOF too.
+    // Previously /copy --code silently omitted the last block if the
+    // assistant response was interrupted before the closing fence.
+    if let Some((_, _, language, lines)) = fence {
+        blocks.push(CodeBlock {
+            code: lines.join("\n"),
+            language,
+        });
     }
     blocks
 }
@@ -136,5 +167,5 @@ pub fn copy(messages: &[Message], age: usize, code: Option<usize>) -> Result<Str
         "No interactive clipboard; file fallback available"
     };
     Ok(format!("{clipboard}. {} characters, {} lines. Saved: {}",
-        text.chars().count(), text.lines().count().max(1), path.display()))
+        text.encode_utf16().count(), text.bytes().filter(|b| *b == b'\n').count() + 1, path.display()))
 }
