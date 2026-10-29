@@ -140,6 +140,30 @@ fn git_status_at_start(root: &Path) -> Option<String> {
     ))
 }
 
+/// Return the nested worktree root and its main checkout when a worktree lives
+/// inside the main repository. Git's common directory identifies the original
+/// checkout; a normal repository or an external worktree needs no filtering.
+fn nested_worktree_main_checkout(root: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    let worktree_root = std::path::PathBuf::from(git(root, &["rev-parse", "--show-toplevel"])?);
+    let worktree_root = worktree_root.canonicalize().ok()?;
+    let common_dir = git(root, &["rev-parse", "--git-common-dir"])?;
+    let common_dir = Path::new(&common_dir);
+    let common_dir = if common_dir.is_absolute() {
+        common_dir.to_path_buf()
+    } else {
+        root.join(common_dir)
+    };
+    let common_dir = common_dir.canonicalize().ok()?;
+    if common_dir.file_name()? != ".git" {
+        return None;
+    }
+    let main_root = common_dir.parent()?.canonicalize().ok()?;
+    if worktree_root == main_root || !worktree_root.starts_with(&main_root) {
+        return None;
+    }
+    Some((worktree_root, main_root))
+}
+
 /// Load user and project instructions in the outer-to-inner order of the
 /// original project-context and instruction-discovery modules, using AGENTS.md and
 /// .atlas paths. File-conditional rules never enter the global system prompt.
@@ -636,31 +660,40 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         }
     }
 
+    let nested_worktree = nested_worktree_main_checkout(&root);
     let mut scopes = root
         .ancestors()
         .filter(|directory| directory.parent().is_some())
         .collect::<Vec<_>>();
     scopes.reverse();
     for directory in scopes {
-        for relative in ["AGENTS.md", ".atlas/AGENTS.md", ".atlas/instructions.md"] {
-            add_file(
-                &directory.join(relative),
+        // A nested worktree already contains the checked-in project instructions.
+        // Reading those from the enclosing main checkout duplicates/conflicts with
+        // the worktree's own version. Local ignored instructions still inherit.
+        let skip_project = nested_worktree.as_ref().is_some_and(|(worktree, main)| {
+            directory.starts_with(main) && !directory.starts_with(worktree)
+        });
+        if !skip_project {
+            for relative in ["AGENTS.md", ".atlas/AGENTS.md", ".atlas/instructions.md"] {
+                add_file(
+                    &directory.join(relative),
+                    directory,
+                    &root,
+                    false,
+                    &mut seen,
+                    &mut output,
+                )?;
+            }
+            add_rules(
+                &directory.join(".atlas/rules"),
                 directory,
                 &root,
-                false,
+                0,
+                &mut visited,
                 &mut seen,
                 &mut output,
             )?;
         }
-        add_rules(
-            &directory.join(".atlas/rules"),
-            directory,
-            &root,
-            0,
-            &mut visited,
-            &mut seen,
-            &mut output,
-        )?;
         for relative in ["AGENTS.local.md", ".atlas/instructions.local.md"] {
             add_file(
                 &directory.join(relative),
