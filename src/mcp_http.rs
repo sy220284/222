@@ -211,6 +211,12 @@ impl HttpClient {
         if reply.status() == reqwest::StatusCode::NOT_FOUND && self.session.is_some() {
             bail!("MCP session expired; reconnect required");
         }
+        // A rejected authorization must invalidate this transport. The
+        // manager creates a new connection using the configured dynamic
+        // headers helper on the next turn, without replaying the tool call.
+        if reply.status() == reqwest::StatusCode::UNAUTHORIZED {
+            bail!("MCP authentication expired; reconnect required");
+        }
         if !reply.status().is_success() {
             bail!("MCP {} server responded {}", self.name, reply.status())
         }
@@ -319,6 +325,9 @@ impl HttpClient {
         }
         if response.status() == reqwest::StatusCode::NOT_FOUND && self.session.is_some() {
             bail!("MCP session expired; reconnect required")
+        }
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            bail!("MCP authentication expired; reconnect required")
         }
         if !response.status().is_success() {
             bail!("MCP GET notification request failed: {}", response.status());
