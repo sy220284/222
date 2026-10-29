@@ -188,11 +188,21 @@ fn merge_server_specs(
             result?;
         }
         Value::Array(specs) => {
+            // The source loader resolves each manifest entry independently,
+            // then merges successful entries in declaration order. An invalid
+            // entry must neither discard earlier servers nor leave a partial
+            // merge that changes the meaning of later overrides.
             for spec in specs {
-                if let Some(id) = spec.get("id").and_then(Value::as_str) {
-                    servers.insert(id.to_owned(), spec.clone());
+                let mut candidate = servers.clone();
+                let mut candidate_visiting = visiting.clone();
+                let result = if let Some(id) = spec.get("id").and_then(Value::as_str) {
+                    candidate.insert(id.to_owned(), spec.clone());
+                    Ok(())
                 } else {
-                    merge_server_specs(root, spec, servers, visiting)?;
+                    merge_server_specs(root, spec, &mut candidate, &mut candidate_visiting)
+                };
+                if result.is_ok() {
+                    *servers = candidate;
                 }
             }
         }
