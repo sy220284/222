@@ -2120,11 +2120,12 @@ async fn chat(
         // substitution before invoking the normal Agent execution loop.
         if let Some(parsed) = slash_command::parse_slash_command(input) {
             if parsed.command_name.contains(':') && !parsed.is_mcp {
-                match plugins::command_prompt(
+                match plugins::command_prompt_with_session(
                     agent.workspace_root(),
                     &config.enabled_plugins,
                     &parsed.command_name,
                     &parsed.args,
+                    Some(&agent.session_id()),
                 ) {
                     Ok(Some(prompt)) => {
                         onboarding.maybe_mark_complete()?;
