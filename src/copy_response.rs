@@ -3,7 +3,7 @@
 use crate::protocol::Message;
 use anyhow::{bail, Context, Result};
 use base64::Engine;
-use std::{fs, io::{self, Write}, path::PathBuf};
+use std::{fs, io::{self, IsTerminal, Write}, path::PathBuf};
 use uuid::Uuid;
 
 const MAX_LOOKBACK: usize = 20;
@@ -61,6 +61,24 @@ fn extension(language: &str) -> String {
     } else {
         safe
     }
+}
+
+pub fn parse_selection(args: &str) -> Result<(usize, Option<usize>)> {
+    let parts = args.split_whitespace().collect::<Vec<_>>();
+    let (age, code) = match parts.as_slice() {
+        [] => (1, None),
+        ["--code", index] => (1, Some(index.parse::<usize>().context("Invalid code block number")?)),
+        [age] => (age.parse::<usize>().context("Invalid response number")?, None),
+        [age, "--code", index] => (
+            age.parse::<usize>().context("Invalid response number")?,
+            Some(index.parse::<usize>().context("Invalid code block number")?),
+        ),
+        _ => bail!("Usage: /copy [N] [--code K]"),
+    };
+    if age == 0 || age > MAX_LOOKBACK || code == Some(0) {
+        bail!("Copy selection indices must be positive (response N <= {MAX_LOOKBACK})");
+    }
+    Ok((age, code))
 }
 
 /// `/copy`, `/copy N`, `/copy N --code K` (N is 1-based newest first).
