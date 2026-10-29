@@ -83,7 +83,11 @@ impl Mailbox {
         {
             bail!("Unsafe mailbox lock")
         }
-        let mutex = OpenOptions::new().write(true).create(true).truncate(false).open(&lock)?;
+        let mutex = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock)?;
         mutex.lock_exclusive()?;
         let result = f(&path);
         let _ = FileExt::unlock(&mutex);

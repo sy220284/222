@@ -472,13 +472,21 @@ pub struct FileLock {
 impl FileLock {
     pub fn exclusive(path: &Path) -> Result<Self> {
         use fs2::FileExt;
-        let file = OpenOptions::new().create(true).write(true).truncate(false).open(path)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(path)?;
         file.lock_exclusive()?;
         Ok(Self { file })
     }
     pub fn checked(path: &Path) -> Result<bool> {
         use fs2::FileExt;
-        let file = OpenOptions::new().create(true).write(true).truncate(false).open(path)?;
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(path)?;
         match file.try_lock_exclusive() {
             Ok(()) => {
                 FileExt::unlock(&file)?;
