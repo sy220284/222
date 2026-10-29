@@ -589,7 +589,11 @@ pub fn command_prompt_with_session(
             } else {
                 bail!("Plugin command requires source or content")
             };
-            return Ok(plugin_command_body(&content, args, &plugin_root, session_id));
+            let prompt = plugin_command_body(&content, args, &plugin_root, session_id);
+            if prompt.is_none() && session_id.is_some() {
+                bail!("Plugin command is not user invocable")
+            }
+            return Ok(prompt);
         }
         return Ok(None);
     }
@@ -658,7 +662,11 @@ pub fn command_prompt_with_session(
                 continue;
             }
             let content = fs::read_to_string(&path)?;
-            return Ok(plugin_command_body(&content, args, &plugin_root, session_id));
+            let prompt = plugin_command_body(&content, args, &plugin_root, session_id);
+            if prompt.is_none() && session_id.is_some() {
+                bail!("Plugin command is not user invocable")
+            }
+            return Ok(prompt);
         }
     }
     Ok(None)
