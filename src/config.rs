@@ -76,6 +76,11 @@ pub struct Config {
     /// Explicit user approval for instruction @includes outside the workspace.
     #[serde(default, rename = "approvedExternalInstructionIncludes", alias = "approved_external_instruction_includes")]
     pub approved_external_instruction_includes: bool,
+    /// Administrator-provided global instructions, independent of user/project switches.
+    #[serde(default, rename = "managedInstructionFile", alias = "managed_instruction_file")]
+    pub managed_instruction_file: Option<String>,
+    #[serde(default, rename = "managedRulesDirectory", alias = "managed_rules_directory")]
+    pub managed_rules_directory: Option<String>,
     #[serde(default)]
     pub default_shell: Option<String>,
     /// Preferred terminal for browser deep links, retained across headless launches.
@@ -112,6 +117,8 @@ impl Default for Config {
             instruction_excludes: Vec::new(),
             instruction_sources: std::collections::HashMap::new(),
             approved_external_instruction_includes: false,
+            managed_instruction_file: None,
+            managed_rules_directory: None,
             default_shell: None,
             deep_link_terminal: None,
             providers: vec![
