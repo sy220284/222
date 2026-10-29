@@ -1731,7 +1731,7 @@ async fn chat(
                 continue;
             }
             "/skills" => {
-                match agent.list_skills() {
+                match agent.list_user_skills() {
                     Ok(skills) if skills.is_empty() => println!("No accessible skills."),
                     Ok(skills) => println!("{skills}"),
                     Err(error) => eprintln!("Cannot list skills: {error:#}"),
