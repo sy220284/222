@@ -9,15 +9,16 @@ use std::{
 };
 use walkdir::{DirEntry, WalkDir};
 
-fn allowed(entry: &DirEntry) -> bool {
-    if entry.depth() == 0 {
+// GrepTool.ts passes explicit VCS exclusions to ripgrep, whereas GlobTool
+// delegates exclusions to its own glob/ignore options. Do not globally hide
+// .atlas, target, node_modules or VCS files from both tools.
+fn allowed(entry: &DirEntry, exclude_vcs: bool) -> bool {
+    if !exclude_vcs || entry.depth() == 0 {
         return true;
     }
     !matches!(
         entry.file_name().to_str(),
-        Some(
-            ".git" | ".hg" | ".svn" | ".jj" | ".bzr" | ".sl" | ".atlas" | "target" | "node_modules"
-        )
+        Some(".git" | ".hg" | ".svn" | ".jj" | ".bzr" | ".sl")
     )
 }
 fn matcher(pattern: &str) -> Result<GlobMatcher> {
@@ -55,7 +56,7 @@ fn grep_globs(raw: Option<&str>) -> Result<(Vec<GlobMatcher>, Vec<GlobMatcher>)>
     Ok((include, exclude))
 }
 
-fn files(base: &Path) -> Result<Vec<PathBuf>> {
+fn files(base: &Path, exclude_vcs: bool) -> Result<Vec<PathBuf>> {
     if base.is_file() {
         return Ok(vec![base.to_path_buf()]);
     }
@@ -63,7 +64,7 @@ fn files(base: &Path) -> Result<Vec<PathBuf>> {
     for item in WalkDir::new(base)
         .follow_links(false)
         .into_iter()
-        .filter_entry(allowed)
+        .filter_entry(|entry| allowed(entry, exclude_vcs))
     {
         let item = item?;
         if item.file_type().is_file() {
@@ -216,7 +217,7 @@ pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         no_ignore.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
     );
-    let mut matches = files(base)?
+    let mut matches = files(base, false)?
         .into_iter()
         .filter(|p| {
             p.strip_prefix(base).is_ok_and(|rel| {
@@ -333,28 +334,17 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
     };
     let show_line_numbers = args.get("-n").and_then(Value::as_bool).unwrap_or(true);
     let mut matches = Vec::new();
-    let mut candidates = files(base)?;
-    // GrepTool.ts dispatches ripgrep without --hidden. Match its default:
-    // skip hidden descendants, but allow an explicitly selected hidden file.
-    candidates.retain(|path| {
-        if base.is_file() {
-            return true;
-        }
-        path.strip_prefix(base).is_ok_and(|relative| {
-            !relative.components().any(|part| {
-                part.as_os_str()
-                    .to_str()
-                    .is_some_and(|name| name.starts_with('.'))
-            })
-        })
-    });
+    // GrepTool.ts explicitly passes --hidden. Hidden project files and
+    // directories must be searchable; only the six VCS directories above
+    // are excluded. GlobTool uses a separate --hidden configuration.
+    let mut candidates = files(base, true)?;
     let ignored = git_ignored_paths(base, &candidates);
     candidates.retain(|path| !ignored.contains(path));
     sort_newest(&mut candidates);
     for path in candidates {
-        if fs::metadata(&path)?.len() > 2_000_000 {
-            continue;
-        }
+        // Source GrepTool.ts applies --max-columns=500 to output lines,
+        // not a whole-file size cap. Large log/source files still need
+        // to be searched for matches.
         if let Some(kind) = kind {
             if !type_matches(&path, kind) {
                 continue;
