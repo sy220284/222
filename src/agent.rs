@@ -3188,6 +3188,16 @@ impl Agent {
                                 .err()
                                 .map(|error| format!(
                                     "Invalid {} arguments: {error:#}", call.function.name))
+                            } else if matches!(
+                                crate::tool_names::canonical_name(&call.function.name),
+                                "grep_files" | "glob_files"
+                            ) {
+                                crate::search::validate_tool_input(
+                                    crate::tool_names::canonical_name(&call.function.name),
+                                    &value,
+                                )
+                                .err()
+                                .map(|error| format!("Invalid search arguments: {error:#}"))
                             } else if task_graph::handles(&call.function.name) {
                                 task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
                                     .err()
