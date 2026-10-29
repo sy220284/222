@@ -120,6 +120,34 @@ pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
     .to_string())
 }
 
+/// Return the line numbers covered by a regex match. In multiline mode a
+/// single match can cover several lines, all of which ripgrep displays.
+fn matching_lines(content: &str, regex: &regex::Regex, multiline: bool) -> Vec<bool> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut matched = vec![false; lines.len()];
+    if !multiline {
+        for (index, line) in lines.iter().enumerate() {
+            matched[index] = regex.is_match(line);
+        }
+        return matched;
+    }
+    let starts: Vec<usize> = std::iter::once(0)
+        .chain(content.match_indices('\n').map(|(offset, _)| offset + 1))
+        .collect();
+    for found in regex.find_iter(content) {
+        if lines.is_empty() {
+            break;
+        }
+        let first = starts.partition_point(|&offset| offset <= found.start()).saturating_sub(1);
+        let last_byte = found.end().saturating_sub(1).max(found.start());
+        let last = starts.partition_point(|&offset| offset <= last_byte).saturating_sub(1);
+        for index in first..=last.min(lines.len() - 1) {
+            matched[index] = true;
+        }
+    }
+    matched
+}
+
 pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
     if !base.exists() {
         bail!("Search path does not exist")
@@ -129,14 +157,14 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         .and_then(Value::as_str)
         .context("grep_files requires pattern")?;
     let case_insensitive = args.get("-i").and_then(Value::as_bool).unwrap_or(false);
-    let multi = args
+    let multiline = args
         .get("multiline")
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let regex = RegexBuilder::new(pattern)
         .case_insensitive(case_insensitive)
-        .multi_line(multi)
-        .dot_matches_new_line(multi)
+        .multi_line(multiline)
+        .dot_matches_new_line(multiline)
         .build()?;
     let file_pattern = args
         .get("glob")
@@ -152,16 +180,32 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         bail!("Invalid output_mode: {mode}")
     }
     let offset = bounded_num(args, "offset", 0, 100_000)?;
-    let limit = bounded_num(args, "head_limit", 250, 10_000)?;
-    let before = bounded_num(args, "-B", 0, 100)?
-        .max(bounded_num(args, "-C", 0, 100)?)
-        .max(bounded_num(args, "context", 0, 100)?);
-    let after = bounded_num(args, "-A", 0, 100)?
-        .max(bounded_num(args, "-C", 0, 100)?)
-        .max(bounded_num(args, "context", 0, 100)?);
+    let requested_limit = bounded_num(args, "head_limit", 250, 100_000)?;
+    // GrepTool.ts: explicit head_limit=0 disables pagination, not "show 10000".
+    let limit = if requested_limit == 0 {
+        usize::MAX
+    } else {
+        requested_limit
+    };
+    // The original -C/context option overrides -A and -B, rather than
+    // taking their maximum. Explicit 0 must override other context flags.
+    let around = if args.get("context").is_some() {
+        Some(bounded_num(args, "context", 0, 100)?)
+    } else if args.get("-C").is_some() {
+        Some(bounded_num(args, "-C", 0, 100)?)
+    } else {
+        None
+    };
+    let (before, after) = if let Some(context) = around {
+        (context, context)
+    } else {
+        (
+            bounded_num(args, "-B", 0, 100)?,
+            bounded_num(args, "-A", 0, 100)?,
+        )
+    };
+    let show_line_numbers = args.get("-n").and_then(Value::as_bool).unwrap_or(true);
     let mut matches = Vec::new();
-    let mut matched_files = 0usize;
-    let mut matched_lines = 0usize;
     let mut candidates = files(base)?;
     sort_newest(&mut candidates);
     for path in candidates {
@@ -185,65 +229,73 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         let filename = relative(root, &path)?.to_string_lossy().to_string();
         if mode == "files_with_matches" {
             if regex.is_match(&content) {
-                matched_files += 1;
                 matches.push(filename);
             }
-        } else if mode == "count" {
-            let hits = regex.find_iter(&content).count();
+            continue;
+        }
+        let lines: Vec<&str> = content.lines().collect();
+        let matched = matching_lines(&content, &regex, multiline);
+        if mode == "count" {
+            // ripgrep -c counts matching lines, not every occurrence on a line.
+            let hits = matched.iter().filter(|m| **m).count();
             if hits > 0 {
-                matched_files += 1;
-                matched_lines += hits;
                 matches.push(format!("{filename}:{hits}"));
             }
-        } else {
-            let lines: Vec<_> = content.lines().collect();
-            let mut selected = vec![false; lines.len()];
-            let mut matched = vec![false; lines.len()];
-            for (index, line) in lines.iter().enumerate() {
-                if regex.is_match(line) {
-                    matched[index] = true;
-                    for at in index.saturating_sub(before)..=(index + after).min(lines.len() - 1) {
-                        selected[at] = true;
-                    }
-                }
-            }
-            if matched.iter().any(|m| *m) {
-                matched_files += 1;
-                for (i, line) in lines.iter().enumerate() {
-                    if !selected[i] {
-                        continue;
-                    }
-                    if matched[i] {
-                        matched_lines += 1;
-                    }
-                    let marker = if matched[i] { ":" } else { "-" };
-                    matches.push(format!("{filename}{marker}{}{marker}{line}", i + 1));
-                    if matches.len() > 20_000 {
-                        break;
-                    }
+            continue;
+        }
+        if !matched.iter().any(|m| *m) {
+            continue;
+        }
+        let mut selected = vec![false; lines.len()];
+        for (index, is_match) in matched.iter().enumerate() {
+            if *is_match {
+                for at in index.saturating_sub(before)..=(index + after).min(lines.len() - 1) {
+                    selected[at] = true;
                 }
             }
         }
-        if matches.len() > 20_000 {
-            break;
+        for (index, line) in lines.iter().enumerate() {
+            if !selected[index] {
+                continue;
+            }
+            let marker = if matched[index] { ":" } else { "-" };
+            let location = if show_line_numbers {
+                format!("{}{marker}", index + 1)
+            } else {
+                String::new()
+            };
+            matches.push(format!("{filename}{marker}{location}{line}"));
         }
     }
     let total = matches.len();
-    let limit = if limit == 0 { 10_000 } else { limit };
     let page = matches
         .into_iter()
         .skip(offset)
         .take(limit)
         .collect::<Vec<_>>();
     let truncated = total > offset.saturating_add(limit);
+    let num_files = if mode == "files_with_matches" {
+        page.len()
+    } else if mode == "count" {
+        page.len()
+    } else {
+        0
+    };
+    let num_matches = if mode == "count" {
+        page.iter()
+            .filter_map(|line| line.rsplit_once(':').and_then(|(_, n)| n.parse::<usize>().ok()))
+            .sum()
+    } else {
+        0
+    };
     Ok(json!({
         "mode":mode,
         "filenames":if mode == "files_with_matches" {page.clone()} else {vec![]},
         "content":page.join("\n"),
-        "numFiles":matched_files,
-        "numMatches":matched_lines,
+        "numFiles":num_files,
+        "numMatches":num_matches,
         "appliedOffset":offset,
-        "appliedLimit":if truncated {Some(limit)} else {None},
+        "appliedLimit":if truncated {Some(requested_limit)} else {None},
         "truncated":truncated,
     })
     .to_string())
@@ -261,7 +313,7 @@ pub fn definitions() -> Vec<Value> {
             "parameters":{"type":"object","properties":{
                 "pattern":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"},
                 "type":{"type":"string"},"output_mode":{"type":"string","enum":["content","files_with_matches","count"]},
-                "-i":{"type":"boolean"},"-A":{"type":"integer"},"-B":{"type":"integer"},
+                "-i":{"type":"boolean"},"-n":{"type":"boolean"},"-A":{"type":"integer"},"-B":{"type":"integer"},
                 "-C":{"type":"integer"},"context":{"type":"integer"},
                 "head_limit":{"type":"integer"},"offset":{"type":"integer"},
                 "multiline":{"type":"boolean"}
