@@ -1551,6 +1551,13 @@ impl Agent {
             .as_mut()
             .map_or_else(|| Ok(Vec::new()), |mcp| mcp.statuses())
     }
+    pub async fn reconnect_failed_mcp(&mut self) -> Result<Vec<String>> {
+        let manager = self.mcp.as_mut().context("No MCP servers configured")?;
+        let failures = manager.reconnect_failed().await;
+        self.last_context_usage = None;
+        Ok(failures)
+    }
+
     pub async fn mcp_catalog(&mut self, kind: &str) -> Result<serde_json::Value> {
         match self.mcp.as_mut() {
             Some(mcp) => mcp.catalog(kind).await,
