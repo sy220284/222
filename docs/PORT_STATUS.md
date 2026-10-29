@@ -1,5 +1,16 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：MCP 提示词二进制资源实际落盘（源码已提交、待行为验收）
+
+对照完整原始 2.1.88 ZIP 的 `source/src/services/mcp/client.ts::transformResultContent/persistBlobToTextBlock`（音频和非图片资源分支）及 `source/src/utils/mcpOutputStorage.ts::persistBinaryContent/extensionForMimeType`。Rust 原 `src/mcp_prompt.rs::render_content` 对音频直接报不支持、对非图片资源 blob 明确报缺少落盘路径；实际入口为 `src/agent.rs` 的 MCP slash prompt → `McpManager::get_prompt` → `mcp_prompt::render_content` → 模型输入。
+
+- **功能 1：MCP 提示词音频附件**。增加音频 base64 解码、按 MIME 扩展名保存原始字节、向模型传入保存路径与失败原因，供后续 Read/Shell 使用。
+- **功能 2：MCP 提示词非图片资源附件**。将原先拒绝的 `resource.blob`（PDF/ZIP/Office/音视频等）接入同一真实文件保存路径，保留资源 URI 文本前缀和原有图像多模态处理；失败显式反馈。
+- **实际接线**：`src/agent.rs` 传入当前 Agent 工作区 `self.root`；`src/mcp_prompt.rs` 在 `.atlas/tool-results/` 使用随机独占文件名、路径规范化/符号链接边界检查、同步落盘、失败时清理不完整文件，并保持提示词内容长度约束。涉及代码提交 `e5413535`、`cbbd0156`、`6798f28c`、`fb3150b2`、`57c02132`。
+- **仍缺**：原版图像压缩缩放、MCP 二进制附件跨会话恢复/清理、全部 MIME 和特殊 base64 容错、磁盘写入故障实测、并发/取消/重启、完整 MCP 资源协议和最终等价验收。
+- **本轮计数**：2 个不同用户可感知业务功能发生源码补齐并已提交，均为**待行为验收**；新增完整等价验收 0。按本开发任务现行要求未运行 Cargo、测试或 CI。100 项数量目标仍差 98，冻结 Issue #3 的 362 条保持开放。
+
+
 ## 2026-10-29：队友状态树与单行渲染真实接线（部分实现）
 
 - `src/components/Spinner/TeammateSpinnerTree.tsx` 对应 `src/generated_ports/p_024038719ca35.rs`：现已将真实任务筛选、排序、选中状态、终端列宽和消息预览传给 `p_09647f4245ece.rs::render_source_view`，替代原先无子节点的静态 `TeammateSpinnerLine`。
