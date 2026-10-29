@@ -737,12 +737,12 @@ mod tests {
     #[test]
     fn plugin_command_respects_user_invocable_and_expands_root() {
         let root = std::path::Path::new("/tmp/plugin-root");
-        let hidden = "---\\nuser-invocable: false\\n---\\nDo not expose";
+        let hidden = "---\nuser-invocable: false\n---\nDo not expose";
         assert_eq!(plugin_command_body(hidden, "", root), None);
-        let visible = "---\\nuser-invocable: true\\n---\\nRead ${CLAUDE_PLUGIN_ROOT}/README.md for $ARGUMENTS";
+        let visible = "---\nuser-invocable: true\n---\nRead ${CLAUDE_PLUGIN_ROOT}/README.md for $ARGUMENTS";
         assert_eq!(plugin_command_body(visible, "notes", root).as_deref(),
             Some("Read /tmp/plugin-root/README.md for notes"));
-        let nested = "---\\nmetadata:\\n  user-invocable: false\\n---\\nVisible";
+        let nested = "---\nmetadata:\n  user-invocable: false\n---\nVisible";
         assert_eq!(plugin_command_body(nested, "", root).as_deref(), Some("Visible"));
     }
     #[test]
