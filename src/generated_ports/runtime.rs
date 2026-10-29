@@ -8,6 +8,7 @@ pub fn property(value: &Value, key: &str) -> Value {
         return match value {
             Value::Array(a) => json!(a.len()),
             Value::String(s) => json!(s.encode_utf16().count()),
+            Value::Object(map) => map.get(key).cloned().unwrap_or(Value::Null),
             _ => Value::Null,
         };
     }
@@ -63,26 +64,24 @@ pub fn to_number(v: &Value) -> Value {
         Value::Number(_) => v.clone(),
         Value::Null => json!(0),
         Value::Bool(b) => json!(if *b { 1 } else { 0 }),
-        Value::String(s) => s
-            .trim()
-            .parse::<f64>()
-            .ok()
-            .filter(|x| x.is_finite())
-            .map_or(Value::Null, |x| json!(x)),
+        Value::String(s) => {
+            let s=s.trim();
+            if s.is_empty(){json!(0)}
+            else{s.parse::<f64>().ok().filter(|x|x.is_finite())
+                .map_or(Value::Null,|x|json!(x))}
+        },
+        Value::Array(_) => to_number(&json!(to_string(v))),
         _ => Value::Null,
     }
 }
 pub fn negate(v: &Value) -> Value {
-    v.as_f64().map_or(Value::Null, |x| json!(-x))
+    to_number(v).as_f64().map_or(Value::Null, |x| json!(-x))
 }
 pub fn add(a: &Value, b: &Value) -> Value {
     if a.is_string() || b.is_string() {
         json!(format!("{}{}", to_string(a), to_string(b)))
     } else {
-        match (a.as_f64(), b.as_f64()) {
-            (Some(a), Some(b)) => json!(a + b),
-            _ => Value::Null,
-        }
+        numeric2(a,b,|a,b|a+b)
     }
 }
 pub fn subtract(a: &Value, b: &Value) -> Value {
@@ -95,7 +94,7 @@ pub fn divide(a: &Value, b: &Value) -> Value {
     numeric2(a, b, |a, b| a / b)
 }
 fn numeric2(a: &Value, b: &Value, fun: impl FnOnce(f64, f64) -> f64) -> Value {
-    match (a.as_f64(), b.as_f64()) {
+    match (to_number(a).as_f64(), to_number(b).as_f64()) {
         (Some(a), Some(b)) => {
             let n = fun(a, b);
             if n.is_finite() {
@@ -277,5 +276,10 @@ mod tests {
             json!("bc")
         );
         assert_eq!(property(&json!([1, 2]), "length"), json!(2));
+        assert_eq!(property(&json!({"length":7}),"length"),json!(7));
+        assert_eq!(to_number(&json!("")),json!(0));
+        assert_eq!(to_number(&json!(["7"])),json!(7.0));
+        assert_eq!(add(&json!(null),&json!(4)),json!(4.0));
+        assert_eq!(negate(&json!("2")),json!(-2.0));
     }
 }

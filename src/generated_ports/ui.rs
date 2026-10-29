@@ -31,6 +31,20 @@ impl VNode {
             Self::Element { children, .. } => children.iter().map(Self::text_content).collect(),
         }
     }
+    /// Count unresolved expressions which the old AST-only JSX converter
+    /// substituted with JSON null. These must not be presented as finished UI.
+    pub fn unresolved_node_count(&self)->usize{
+        match self {
+            Self::Empty|Self::Text(_)=>0,
+            Self::Value(Value::Null)=>1,
+            Self::Value(_)=>0,
+            Self::Group(children)=>children.iter().map(Self::unresolved_node_count).sum(),
+            Self::Element{attrs,children,..}=>{
+                attrs.values().filter(|v|v.is_null()).count()
+                    +children.iter().map(Self::unresolved_node_count).sum::<usize>()
+            }
+        }
+    }
     pub fn node_count(&self) -> usize {
         match self {
             Self::Empty => 0,
@@ -40,5 +54,21 @@ impl VNode {
                 1 + children.iter().map(Self::node_count).sum::<usize>()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod conversion_audit_tests{
+    use super::*;
+    #[test]
+    fn unresolved_jsx_does_not_silently_look_complete(){
+        let node=VNode::Group(vec![
+            VNode::Value(Value::Null),
+            VNode::Element{tag:"Text".into(),
+                attrs:BTreeMap::from([("color".into(),Value::Null)]),
+                children:vec![VNode::Text("Hello".into())]},
+        ]);
+        assert_eq!(node.unresolved_node_count(),2);
+        assert_eq!(node.text_content(),"Hello");
     }
 }

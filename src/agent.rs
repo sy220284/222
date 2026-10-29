@@ -1097,6 +1097,12 @@ impl Agent {
     pub fn session_id(&self) -> String {
         self.session.id.to_string()
     }
+    /// Route a direct @teammate user message through the active team mailbox.
+    /// Never fall back to sending an unrecognized recipient to a model.
+    pub fn send_direct_user_message(&self,recipient:&str,message:&str)->Result<serde_json::Value>{
+        crate::portable_missing_utilities::send_direct_member_message(
+            &self.root,self.team_name.as_deref(),recipient,message)
+    }
     pub fn workspace_root(&self) -> &std::path::Path {
         &self.root
     }
