@@ -6061,3 +6061,60 @@ fn chat_clear_rebinds_prompt_history_to_new_session_and_preserves_old() {
     assert!(before.is_file());
     assert!(after.is_file());
 }
+
+
+#[test]
+fn semantic_sessions_http_model_reorders_real_history_without_leaking_via_offline_listing() {
+    let root = tempfile::tempdir().unwrap();
+    let sessions = root.path().join(".atlas/sessions");
+    fs::create_dir_all(&sessions).unwrap();
+    let id_a = "1213ffce-b7f2-49cd-9bbf-5d356942eef0";
+    let id_b = "2324ffce-b7f2-49cd-9bbf-5d356942eef0";
+    fs::write(sessions.join(format!("{id_a}.json")), json!({
+        "id":id_a,"custom_title":"Release checklist","tag":"release",
+        "summary":"Shipped binaries","messages":[{"role":"user","content":"Publish release files"}]
+    }).to_string()).unwrap();
+    fs::write(sessions.join(format!("{id_b}.json")), json!({
+        "id":id_b,"custom_title":"Authentication tests",
+        "messages":[{"role":"user","content":"Fix login issue"}]
+    }).to_string()).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        let request = read_request(&mut socket);
+        let response = json!({"choices":[{
+            "message":{"role":"assistant","content":"{\"relevant_indices\":[1,0,1,901]}"},
+            "finish_reason":"stop"
+        }],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}).to_string();
+        write!(socket,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            response.len(), response).unwrap();
+        socket.flush().unwrap();
+        request
+    });
+    let config = root.path().join("config.json");
+    fs::write(&config, json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"local",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let local = binary().args(["--workspace",root.path().to_str().unwrap(),"sessions","release"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    assert!(local.status.success());
+    let local_text = String::from_utf8_lossy(&local.stdout);
+    assert!(local_text.contains(id_a));
+    assert!(!local_text.contains(id_b));
+    let ranked = binary().args([
+        "--workspace",root.path().to_str().unwrap(),"semantic-sessions","release"
+    ]).env("ATLAS_CONFIG",&config).output().unwrap();
+    assert!(ranked.status.success(),"{}",String::from_utf8_lossy(&ranked.stderr));
+    let ranked_text = String::from_utf8_lossy(&ranked.stdout);
+    let lines:Vec<_> = ranked_text.lines().collect();
+    assert_eq!(lines.len(),2,"{ranked_text}");
+    assert!(lines[0].contains(id_b));
+    assert!(lines[1].contains(id_a));
+    let request = server.join().unwrap();
+    assert!(request.contains("Publish release files"));
+    assert!(request.contains("[tag: release]"));
+    assert!(request.contains("Fix login issue"));
+}
