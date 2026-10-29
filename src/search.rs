@@ -150,7 +150,22 @@ fn type_matches(path: &Path, kind: &str) -> bool {
         "md" => matches!(extension, "md" | "mdx"),
         "go" => extension == "go",
         "java" => extension == "java",
-        "cpp" => matches!(extension, "cpp" | "cc" | "hpp" | "h"),
+        "cpp" | "c++" => matches!(
+            extension,
+            "cpp" | "cc" | "cxx" | "c++" | "hpp" | "hh" | "hxx" | "h"
+        ),
+        "c" => matches!(extension, "c" | "h"),
+        "yaml" => matches!(extension, "yaml" | "yml"),
+        "html" => matches!(extension, "html" | "htm"),
+        "css" => matches!(extension, "css" | "scss" | "sass" | "less"),
+        "sh" | "shell" => matches!(extension, "sh" | "bash" | "zsh" | "fish"),
+        "toml" => extension == "toml",
+        "xml" => matches!(extension, "xml" | "xsl" | "xslt" | "svg"),
+        "web" => matches!(
+            extension,
+            "html" | "htm" | "css" | "scss" | "sass" | "less"
+                | "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx"
+        ),
         other => extension == other,
     }
 }
@@ -309,6 +324,20 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
     let show_line_numbers = args.get("-n").and_then(Value::as_bool).unwrap_or(true);
     let mut matches = Vec::new();
     let mut candidates = files(base)?;
+    // GrepTool.ts dispatches ripgrep without --hidden. Match its default:
+    // skip hidden descendants, but allow an explicitly selected hidden file.
+    candidates.retain(|path| {
+        if base.is_file() {
+            return true;
+        }
+        path.strip_prefix(base).is_ok_and(|relative| {
+            !relative.components().any(|part| {
+                part.as_os_str()
+                    .to_str()
+                    .is_some_and(|name| name.starts_with('.'))
+            })
+        })
+    });
     let ignored = git_ignored_paths(base, &candidates);
     candidates.retain(|path| !ignored.contains(path));
     sort_newest(&mut candidates);
@@ -334,7 +363,13 @@ pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         };
         let filename = relative(root, &path)?.to_string_lossy().to_string();
         if mode == "files_with_matches" {
-            if regex.is_match(&content) {
+            // rg -l matches line-by-line unless -U is enabled. Checking the
+            // whole file with a non-multiline regex incorrectly makes ^/$
+            // anchors refer only to the beginning/end of the entire file.
+            if matching_lines(&content, &regex, multiline)
+                .into_iter()
+                .any(|matched| matched)
+            {
                 matches.push(filename);
             }
             continue;
