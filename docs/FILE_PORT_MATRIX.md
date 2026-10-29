@@ -1209,18 +1209,18 @@
 | `src/tools/ExitWorktreeTool/UI.tsx` | 25 | 4044 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ExitWorktreeTool/constants.ts` | 2 | 54 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/ExitWorktreeTool/prompt.ts` | 33 | 2021 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/FileEditTool/FileEditTool.ts` | 626 | 20502 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Edit 现检查会话已读完整内容及外部修改，成功写入后更新状态（ae165e76），待验收；；Edit 弯引号容错及排版保真接入真实文件修改链（9eed00be），源码已提交待验收； |
+| `src/tools/FileEditTool/FileEditTool.ts` | 626 | 20502 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Edit 现检查会话已读完整内容及外部修改，成功写入后更新状态（ae165e76），待验收；；Edit 弯引号容错及排版保真接入真实文件修改链（9eed00be），源码已提交待验收；；原版 Edit(file_path,old_string,new_string,replace_all) 经原版输入门禁进入跨轮读后编辑与 Hook 链（41404581、d061352e、7959a531），待验收； |
 | `src/tools/FileEditTool/UI.tsx` | 289 | 34832 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileEditTool/constants.ts` | 12 | 538 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileEditTool/prompt.ts` | 29 | 1895 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/FileEditTool/types.ts` | 86 | 2612 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/FileEditTool/types.ts` | 86 | 2612 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Edit 原版严格参数名和语义布尔已接入运行时（d061352e），仍缺完整输出结构，待验收； |
 | `src/tools/FileEditTool/utils.ts` | 776 | 22516 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；弯引号文本匹配、替换时保留引号排版和非 Markdown 行尾空白归一化（9eed00be、645510ed、f17bb1c9），源码已提交待验收； |
-| `src/tools/FileReadTool/FileReadTool.ts` | 1184 | 39073 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；读取状态在 Agent 跨轮共享，区分完整/部分读取与输出截断（ae165e76、2206e0f9），待验收； |
+| `src/tools/FileReadTool/FileReadTool.ts` | 1184 | 39073 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；读取状态在 Agent 跨轮共享，区分完整/部分读取与输出截断（ae165e76、2206e0f9），待验收；；原版 Read(file_path,offset,limit) 严格参数转换、256KiB 文件上限及不受通用16K截断的真实执行入口（41404581、d061352e、223c5e08），待验收； |
 | `src/tools/FileReadTool/UI.tsx` | 185 | 22540 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileReadTool/imageProcessor.ts` | 95 | 2881 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileReadTool/limits.ts` | 93 | 3219 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/FileReadTool/prompt.ts` | 50 | 2868 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/FileWriteTool/FileWriteTool.ts` | 435 | 14927 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；覆盖已有文件前要求已读完整内容且无外部修改，新文件成功写入后记录状态（af2534e9），待验收； |
+| `src/tools/FileReadTool/prompt.ts` | 50 | 2868 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Read 原版参数名和全范围读取入口已接通（223c5e08），其他媒体和完整提示仍缺，待验收； |
+| `src/tools/FileWriteTool/FileWriteTool.ts` | 435 | 14927 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；覆盖已有文件前要求已读完整内容且无外部修改，新文件成功写入后记录状态（af2534e9），待验收；；原版 Write(file_path,content) 经严格输入门禁进入读后覆盖和文件新建执行链（41404581、d061352e、7959a531），待验收； |
 | `src/tools/FileWriteTool/UI.tsx` | 405 | 43788 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileWriteTool/prompt.ts` | 19 | 969 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/GlobTool/GlobTool.ts` | 199 | 6064 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：通配符、结果排序与 100 项上限；原版全部边界待核对；本轮按原版补齐绝对路径通配、隐藏文件开关和可选 Git 忽略过滤，完整插件缓存排除和动态限制仍缺 |
