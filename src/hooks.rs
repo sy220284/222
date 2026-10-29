@@ -642,9 +642,10 @@ async fn run_command(
 ) -> Result<HookOutcome> {
     #[cfg(windows)]
     let mut proc = {
-        let mut cmd = Command::new("cmd");
-        cmd.arg("/C").arg(&rule.command);
-        cmd
+        // hooks.ts::execCommandHook uses Git Bash for default hooks on
+        // Windows. cmd.exe changes quoting, pipelines and POSIX script
+        // behavior, so use the same Bash execution path as the tool runtime.
+        crate::shell_runtime::ShellKind::Bash.build_command(&rule.command)?
     };
     #[cfg(not(windows))]
     let mut proc = {
