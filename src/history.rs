@@ -159,6 +159,46 @@ pub fn record(
     outcome?;
     Ok(Some(id))
 }
+/// A failed pre-edit backup must not block the actual file edit. Keep the
+/// failure distinct from an absent file: treating a failed read as None would
+/// create a false "new file" checkpoint and could delete an existing file.
+pub struct PendingCheckpoint {
+    previous: Option<Vec<u8>>,
+    previous_mode: Option<u32>,
+    warning: Option<String>,
+}
+
+pub fn capture_before_edit(path: &Path) -> PendingCheckpoint {
+    match snapshot(path).and_then(|previous| {
+        snapshot_mode(path).map(|previous_mode| (previous, previous_mode))
+    }) {
+        Ok((previous, previous_mode)) => PendingCheckpoint {
+            previous,
+            previous_mode,
+            warning: None,
+        },
+        Err(error) => PendingCheckpoint {
+            previous: None,
+            previous_mode: None,
+            warning: Some(format!(
+                "\\nWarning: file edit may proceed, but its history backup could not be captured: {error:#}"
+            )),
+        },
+    }
+}
+
+pub fn finish_after_edit(
+    root: &Path,
+    session_id: Option<&str>,
+    path: &Path,
+    pending: PendingCheckpoint,
+) -> String {
+    if let Some(warning) = pending.warning {
+        return warning;
+    }
+    record_notice(root, session_id, path, pending.previous, pending.previous_mode)
+}
+
 /// FileHistoryTrackEdit logs a failed backup without converting an already
 /// successful edit into a failed tool call. Surface the failure as a warning
 /// so the user does not retry a write that has already reached disk.
