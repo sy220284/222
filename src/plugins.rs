@@ -530,7 +530,7 @@ fn user_invocable_command(content: &str) -> bool {
 
 /// Expand the plugin root after argument substitution, as the original
 /// getPromptForCommand does. Never treat the expanded text as a shell command.
-fn plugin_command_body(content: &str, args: &str, root: &Path) -> Option<String> {
+fn plugin_command_body(content: &str, args: &str, root: &Path, session_id: Option<&str>) -> Option<String> {
     if !user_invocable_command(content) {
         return None;
     }
@@ -541,7 +541,11 @@ fn plugin_command_body(content: &str, args: &str, root: &Path) -> Option<String>
     let root = root.to_string_lossy();
     #[cfg(windows)]
     let root = root.replace('\\', "/");
-    Some(prompt.replace("${CLAUDE_PLUGIN_ROOT}", root.as_ref()))
+    let prompt = prompt.replace("${CLAUDE_PLUGIN_ROOT}", root.as_ref());
+    Some(match session_id {
+        Some(id) => prompt.replace("${CLAUDE_SESSION_ID}", id),
+        None => prompt,
+    })
 }
 
 /// Resolve an original plugin Markdown slash command to its model-visible
@@ -550,6 +554,15 @@ fn plugin_command_body(content: &str, args: &str, root: &Path) -> Option<String>
 /// as unrecognized literal text.
 pub fn command_prompt(
     root: &Path, enabled: &[String], command: &str, args: &str,
+) -> Result<Option<String>> {
+    command_prompt_with_session(root, enabled, command, args, None)
+}
+
+/// Interactive invocation additionally exposes the current session identifier,
+/// as the original getPromptForCommand substitutes getSessionId() at call time.
+pub fn command_prompt_with_session(
+    root: &Path, enabled: &[String], command: &str, args: &str,
+    session_id: Option<&str>,
 ) -> Result<Option<String>> {
     let Some((plugin, suffix)) = command.split_once(':') else {
         return Ok(None);
@@ -576,7 +589,7 @@ pub fn command_prompt(
             } else {
                 bail!("Plugin command requires source or content")
             };
-            return Ok(plugin_command_body(&content, args, &plugin_root));
+            return Ok(plugin_command_body(&content, args, &plugin_root, session_id));
         }
         return Ok(None);
     }
@@ -645,7 +658,7 @@ pub fn command_prompt(
                 continue;
             }
             let content = fs::read_to_string(&path)?;
-            return Ok(plugin_command_body(&content, args, &plugin_root));
+            return Ok(plugin_command_body(&content, args, &plugin_root, session_id));
         }
     }
     Ok(None)
@@ -738,12 +751,15 @@ mod tests {
     fn plugin_command_respects_user_invocable_and_expands_root() {
         let root = std::path::Path::new("/tmp/plugin-root");
         let hidden = "---\nuser-invocable: false\n---\nDo not expose";
-        assert_eq!(plugin_command_body(hidden, "", root), None);
+        assert_eq!(plugin_command_body(hidden, "", root, None), None);
         let visible = "---\nuser-invocable: true\n---\nRead ${CLAUDE_PLUGIN_ROOT}/README.md for $ARGUMENTS";
-        assert_eq!(plugin_command_body(visible, "notes", root).as_deref(),
+        assert_eq!(plugin_command_body(visible, "notes", root, None).as_deref(),
             Some("Read /tmp/plugin-root/README.md for notes"));
         let nested = "---\nmetadata:\n  user-invocable: false\n---\nVisible";
-        assert_eq!(plugin_command_body(nested, "", root).as_deref(), Some("Visible"));
+        assert_eq!(plugin_command_body(nested, "", root, None).as_deref(), Some("Visible"));
+        let session = "Session ${CLAUDE_SESSION_ID}";
+        assert_eq!(plugin_command_body(session, "", root, Some("session-123")).as_deref(),
+            Some("Session session-123"));
     }
     #[test]
     fn loads_only_explicitly_enabled_plugins() {
