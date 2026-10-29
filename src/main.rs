@@ -38,6 +38,7 @@ mod search;
 mod lsp;
 mod webfetch;
 mod history;
+mod prompt_history;
 mod plugins;
 mod websearch;
 mod sse;
@@ -250,6 +251,7 @@ async fn main() -> Result<()> {
 }
 
 async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
+    let mut prompt_history = prompt_history::PromptHistory::new(agent.workspace_root(), &agent.session_id())?;
     println!("Atlas Agent. /help lists commands; /exit quits.");
     loop {
         print!("atlas> ");
@@ -258,11 +260,22 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
         if io::stdin().read_line(&mut line)? == 0 { break; }
         let input = line.trim();
         if input.is_empty() { continue; }
+        if input == "/history" || input.starts_with("/history ") {
+            let query = input.strip_prefix("/history").unwrap_or("").trim().to_lowercase();
+            for item in prompt_history.get_timestamped_history()?.into_iter()
+                .filter(|entry| entry.display.to_lowercase().contains(&query)).take(20) {
+                println!("{}  {}", item.timestamp, item.display.replace('\n', "\\n"));
+            }
+            continue;
+        }
+        // Record submissions before model execution, including failed requests.
+        prompt_history.add(input, std::collections::BTreeMap::new())?;
         match input {
             "/exit" | "/quit" => break,
             "/help" => {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
+                println!("/history [query]         search saved prompt history");
                 println!("/sessions [query]        search saved conversation titles");
                 println!("/resume TERM             find session, show restart command");
                 println!("/rename [NAME]           rename conversation or generate a name using active model");

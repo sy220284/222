@@ -16,7 +16,7 @@
 | `src/cost-tracker.ts` | 324 | 10706 | 重写：用量与成本统计 | `src/protocol.rs` / `src/session.rs` / `src/cost.rs` / `src/agent.rs` / `src/tool_metrics.rs` | 部分实现：多模型/子代理/团队费用汇总、会话恢复、API/工具/墙钟耗时及改动行数；异常调用计时、重试时长与退出回调待核对 |
 | `src/costHook.ts` | 23 | 617 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/dialogLaunchers.tsx` | 133 | 22948 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/history.ts` | 465 | 14081 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/history.ts` | 465 | 14081 | 重写：保持通用行为 | `src/prompt_history.rs` | 部分实现：全局 JSONL 历史、会话优先、去重检索、撤销与粘贴引用；原版 React 上下键和异步写入时序仍待验证 |
 | `src/ink.ts` | 86 | 3887 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/interactiveHelpers.tsx` | 366 | 57424 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/main.tsx` | 4684 | 803924 | 重写：CLI／SDK 入口 | `src/main.rs` | 部分实现，多模式与 SDK 未等价 |
@@ -1627,7 +1627,7 @@
 | `src/utils/nativeInstaller/pidLock.ts` | 434 | 11934 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/notebook.ts` | 225 | 6368 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/objectGroupBy.ts` | 19 | 511 | 重写：迭代分组、索引与防原型污染 | `src/collections.rs` | 部分实现：逐项回调、零起始索引、键分组和 __proto__ 安全；JS Symbol/整数属性枚举次序及对象标识待核对 |
-| `src/utils/pasteStore.ts` | 105 | 2950 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/pasteStore.ts` | 105 | 2950 | 重写：保持通用行为 | `src/prompt_history.rs` | 部分实现：SHA-256 内容寻址、长粘贴持久化/恢复与过期清理；图像缓存及 UI 生命周期仍待验证 |
 | `src/utils/path.ts` | 156 | 5700 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/pdf.ts` | 301 | 8148 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/pdfUtils.ts` | 71 | 2190 | 重写：保持通用行为 | 待定 | 未迁移 |
