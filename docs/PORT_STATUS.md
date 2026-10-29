@@ -1,3 +1,10 @@
+## 2026-10-29：Windows 绝对 Glob 混合分隔符解析（已提交、待验收）
+
+- **原版源码**：完整 2.1.88 ZIP 的 `source/src/utils/glob.ts::extractGlobBaseDirectory` 第 17–63 行同时识别 `/` 与平台目录分隔符；`glob` 第 76–84 行将绝对通配符拆成真实搜索根和相对模式。
+- **Rust 实际差异与修复**：`src/search.rs::absolute_glob_base` 以前仅按 `MAIN_SEPARATOR` 截取静态路径，在 Windows 上遇到 `C:/project/**/*.rs` 这类正斜杠路径会错误得不到搜索根，后续附加目录授权与 Glob 执行链无法按原版处理。现同时识别 Windows 反斜杠和正斜杠，保留 Unix 平台原有规则；调用方继续执行工作区/Read 授权检查。
+- **实际提交**：`b7a54b760df16d313904f55d4930fbace8472198`，本轮新增 **1 项独立用户可感知 Glob 路径行为补齐**；本轮与搜索超时业务链合计 **2/100 项**。未运行 Cargo、测试或 CI，均为源码已提交、待行为验收。
+- **剩余差异**：Windows UNC/驱动器相对路径、符号链接与跨平台 globset 解释差异仍需原版全链验证；Issue #3 冻结 362 项继续开放。100 项逐函数缺口清单与实施方案仍未完成，余 98 项。
+
 ## 2026-10-29：Grep/Glob Git 忽略检查超时与错误传播（已提交、待验收）
 
 - **原版依据**：用户完整 2.1.88 ZIP 中 `source/src/utils/ripgrep.ts::ripGrep` 第 128–133、169–229 行：搜索子进程受整体超时约束，超时终止进程；返回非正常退出错误。GrepTool/GlobTool 均调用这一执行链。
