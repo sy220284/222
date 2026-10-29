@@ -396,16 +396,38 @@ impl McpManager {
             }
         }
     }
-    fn failed_status(&mut self, server: &McpServerConfig, message: String) {
-        let mut error = message;
+    /// Transport diagnostics may contain expanded HTTP URLs or credentials.
+    /// Neither original nor resolved secrets may leave the server status API.
+    fn redact_connection_error(server: &McpServerConfig, mut message: String) -> String {
+        let mut secrets = Vec::new();
         if let Some(url) = &server.url {
-            error = error.replace(url, "[redacted MCP endpoint]");
-        }
-        for value in server.headers.values() {
-            if !value.is_empty() {
-                error = error.replace(value, "[redacted]");
+            secrets.push(url.clone());
+            let expanded = compat_helpers::expand_env_vars_in_string(url).expanded;
+            secrets.push(expanded.clone());
+            if let Ok(parsed) = reqwest::Url::parse(&expanded) {
+                secrets.push(parsed.to_string());
+                for (_, value) in parsed.query_pairs() {
+                    if value.len() >= 4 {
+                        secrets.push(value.into_owned());
+                    }
+                }
             }
         }
+        for value in server.headers.values() {
+            secrets.push(value.clone());
+            secrets.push(compat_helpers::expand_env_vars_in_string(value).expanded);
+        }
+        secrets.sort_by_key(|secret| std::cmp::Reverse(secret.len()));
+        secrets.dedup();
+        for secret in secrets {
+            if secret.len() >= 4 {
+                message = message.replace(&secret, "[redacted]");
+            }
+        }
+        message
+    }
+    fn failed_status(&mut self, server: &McpServerConfig, message: String) {
+        let error = Self::redact_connection_error(server, message);
         self.server_statuses
             .push(json!({"name":server.id,"status":"failed",
             "config":Self::public_config(server),"error":error}));
@@ -932,6 +954,36 @@ impl McpManager {
 mod tests {
     use super::*;
     use crate::protocol::FunctionCall;
+
+    #[tokio::test]
+    async fn failed_remote_server_status_redacts_resolved_url_and_header_token() {
+        let key = "ATLAS_TEST_MCP_REDACT_TOKEN_95137";
+        let secret = "unpublishable_mcp_token_95137";
+        std::env::set_var(key, secret);
+        let config = McpServerConfig {
+            id: "failing-remote".into(),
+            command: String::new(),
+            args: vec![],
+            env: HashMap::new(),
+            transport: Some("http".into()),
+            url: Some(format!("http://127.0.0.1:9/mcp?token=${{{key}}}")),
+            headers: HashMap::from([(
+                "Authorization".into(), format!("Bearer ${{{key}}}")
+            )]),
+            headers_helper: None,
+        };
+        let resolved = format!("http://127.0.0.1:9/mcp?token={secret}");
+        let diagnostic = format!("connection failed: {resolved}; Authorization: Bearer {secret}");
+        let redacted = McpManager::redact_connection_error(&config, diagnostic);
+        assert!(!redacted.contains(secret));
+        assert!(!redacted.contains(key));
+        let mut manager = McpManager::connect(&[config]).await.unwrap();
+        let status = manager.statuses().unwrap();
+        assert_eq!(status[0]["status"], "failed");
+        assert!(!status[0].to_string().contains(secret));
+        assert!(!status[0].to_string().contains("Bearer "));
+        std::env::remove_var(key);
+    }
 
     #[tokio::test]
     async fn stdio_server_requests_do_not_block_tool_discovery() {
