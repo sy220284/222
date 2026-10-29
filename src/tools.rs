@@ -513,9 +513,7 @@ impl ToolExecutor {
         if !self.interactive {
             bail!("Tool {tool} needs approval; noninteractive mode requires an explicit allow rule or --approval full")
         }
-        if crate::tool_names::canonical_name(tool) == "run_command"
-            || tool == "PowerShell"
-        {
+        if crate::tool_names::canonical_name(tool) == "run_command" || tool == "PowerShell" {
             if let Some(command) = args.get("command").and_then(Value::as_str) {
                 let warning = if tool == "PowerShell"
                     || self.shell_kind == crate::shell_runtime::ShellKind::Powershell
