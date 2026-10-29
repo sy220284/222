@@ -991,24 +991,25 @@ impl Agent {
                                         prevented = Some((
                                             "TaskCompleted",
                                             outcome.stop_reason.clone().unwrap_or_else(|| {
-                                                "TaskCompleted hook prevented continuation".to_owned()
+                                                "TaskCompleted hook prevented continuation"
+                                                    .to_owned()
                                             }),
                                         ));
                                     }
-                                    feedback.extend(outcome.blocking_reasons.into_iter().map(
-                                        |reason| {
-                                            format!(
-                                                "TaskCompleted hook feedback for task {}:\n{reason}",
-                                                task.id
-                                            )
-                                        },
-                                    ));
+                                    feedback
+                                        .extend(outcome.blocking_reasons.into_iter().map(|reason| {
+                                        format!(
+                                            "TaskCompleted hook feedback for task {}:\n{reason}",
+                                            task.id
+                                        )
+                                    }));
                                 }
                                 let idle = child
                                     .hooks
                                     .run(HookEvent::TeammateIdle, None, {
                                         let mut input = child.base_hook_input();
-                                        input["permission_mode"] = json!(child.permission_mode.label());
+                                        input["permission_mode"] =
+                                            json!(child.permission_mode.label());
                                         input["teammate_name"] = json!(name);
                                         input["team_name"] = json!(child.team_name);
                                         input
@@ -1023,11 +1024,9 @@ impl Agent {
                                         }),
                                     ));
                                 }
-                                feedback.extend(
-                                    idle.blocking_reasons
-                                        .into_iter()
-                                        .map(|reason| format!("TeammateIdle hook feedback:\n{reason}")),
-                                );
+                                feedback.extend(idle.blocking_reasons.into_iter().map(|reason| {
+                                    format!("TeammateIdle hook feedback:\n{reason}")
+                                }));
                                 // Original stopHooks.ts completes every pending
                                 // task hook and the idle hook before honoring a
                                 // preventContinuation request.
