@@ -917,10 +917,16 @@ impl Agent {
                             // fails; only a successful run proceeds to idle.
                             let answer = output?;
                             if stop.prevent_continuation {
-                                bail!(
-                                    "SubagentStop hook stopped continuation: {}",
-                                    stop.stop_reason.as_deref().unwrap_or("no reason provided")
-                                )
+                                let reason = stop
+                                    .stop_reason
+                                    .as_deref()
+                                    .unwrap_or("SubagentStop hook prevented continuation");
+                                child.emit(json!({
+                                    "type":"hook_stopped_continuation",
+                                    "hook_event":"SubagentStop",
+                                    "message":reason,
+                                }));
+                                bail!("SubagentStop hook stopped continuation: {reason}")
                             }
                             let mut feedback = stop
                                 .blocking_reasons
@@ -930,6 +936,7 @@ impl Agent {
                             if !feedback.is_empty() {
                                 subagent_stop_active = true;
                             } else if child.team_name.is_some() {
+                                let mut prevented = None::<(&'static str, String)>;
                                 // Each task is checked independently, including
                                 // tasks the worker left in progress at turn end.
                                 for task in child.graph.in_progress_owned_by(&name)? {
@@ -946,14 +953,12 @@ impl Agent {
                                         )
                                         .await?;
                                     if outcome.prevent_continuation {
-                                        bail!(
-                                            "TaskCompleted hook stopped continuation for task {}: {}",
-                                            task.id,
-                                            outcome
-                                                .stop_reason
-                                                .as_deref()
-                                                .unwrap_or("no reason provided")
-                                        )
+                                        prevented = Some((
+                                            "TaskCompleted",
+                                            outcome.stop_reason.clone().unwrap_or_else(|| {
+                                                "TaskCompleted hook prevented continuation".to_owned()
+                                            }),
+                                        ));
                                     }
                                     feedback.extend(outcome.blocking_reasons.into_iter().map(
                                         |reason| {
@@ -975,16 +980,29 @@ impl Agent {
                                     })
                                     .await?;
                                 if idle.prevent_continuation {
-                                    bail!(
-                                        "TeammateIdle hook stopped continuation: {}",
-                                        idle.stop_reason.as_deref().unwrap_or("no reason provided")
-                                    )
+                                    prevented = Some((
+                                        "TeammateIdle",
+                                        idle.stop_reason.clone().unwrap_or_else(|| {
+                                            "TeammateIdle hook prevented continuation".to_owned()
+                                        }),
+                                    ));
                                 }
                                 feedback.extend(
                                     idle.blocking_reasons
                                         .into_iter()
                                         .map(|reason| format!("TeammateIdle hook feedback:\n{reason}")),
                                 );
+                                // Original stopHooks.ts completes every pending
+                                // task hook and the idle hook before honoring a
+                                // preventContinuation request.
+                                if let Some((event, reason)) = prevented {
+                                    child.emit(json!({
+                                        "type":"hook_stopped_continuation",
+                                        "hook_event":event,
+                                        "message":reason,
+                                    }));
+                                    bail!("{event} hook stopped continuation: {reason}")
+                                }
                             }
                             if feedback.is_empty() {
                                 break answer;
