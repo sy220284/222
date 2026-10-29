@@ -92,6 +92,18 @@ fn grep_glob_allows(patterns: &[(bool, GlobMatcher)], path: &Path) -> bool {
     allowed
 }
 
+/// Explicit positive ripgrep --glob rules override .gitignore exclusions.
+/// A default inclusion (no positive glob supplied) does not override them.
+fn grep_glob_explicitly_includes(patterns: &[(bool, GlobMatcher)], path: &Path) -> bool {
+    let mut decision = None;
+    for (include, pattern) in patterns {
+        if matching(pattern, path) {
+            decision = Some(*include);
+        }
+    }
+    decision == Some(true)
+}
+
 /// Prune denied directories before traversing them. Checking only the
 /// returned files would still enter unreadable/denied subtrees and could
 /// turn an otherwise valid search into an unexpected traversal error.
@@ -627,7 +639,14 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
     check_search_deadline(Some(deadline))?;
     let ignored = git_ignored_paths(base, &candidates, deadline)?;
     check_search_deadline(Some(deadline))?;
-    candidates.retain(|path| !ignored.contains(path));
+    candidates.retain(|path| {
+        if !ignored.contains(path) {
+            return true;
+        }
+        path.strip_prefix(base).is_ok_and(|relative| {
+            grep_glob_explicitly_includes(&glob_patterns, relative)
+        })
+    });
     sort_newest(&mut candidates);
     for path in candidates {
         check_search_deadline(Some(deadline))?;
