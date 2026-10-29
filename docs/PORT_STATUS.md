@@ -1299,5 +1299,6 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **实际 Rust 调用链**：`src/main.rs::sdk_nested_control(seed_read_state)` → `src/agent.rs::Agent::seed_read_state` → `src/tools.rs::ToolExecutor::seed_read_state`；`Agent` 共享文件和 Notebook 已读缓存 → 每轮 `ToolExecutor::read_file/edit_file/write_file/notebook_edit`。新文件写入后也登记可继续编辑的状态；文件内容与此前读取不符、读取范围不完整或显示结果被截断时拒绝直接编辑/覆盖，避免模型误写已变化文件。
 - **代码提交**：`ae165e76207a653aa7510a39df903f1b258dff87`、`2206e0f9a8b0f22feea4bf02dff486e5c019df26`、`9743d9bcff011836b5239f6a0d077cb3ef15d90c`、`af2534e9ec3b38cf43a9bd1070275f766d058474`。已在原 Draft PR #2 的 `feat/full-rust-parity` 分支提交。
 - **计数**：保守计为 3 条独立用户业务链：①完整读后安全编辑及跨轮保持，②已有文件覆盖前的读后写防误覆盖，③ SDK `seed_read_state` 外部已读状态恢复。Notebook 跨轮读取作为①的相邻状态修复，不额外拆分凑数。**3/100 已提交、待行为验收，剩余 97 项；新增完整等价验收 0**。
+- **后续源码复查补强**：压缩或 `/clear` 切换会话后清除旧读取授权（`babac698`）；统一符号链接、相对路径别名的真实文件身份，避免同一文件读取后因不同拼写错误拒绝编辑（`0d8acb61`）；修复手工 Agent 构造的字段初始化（`893dffdc`）。这些均属于上述同一业务链，不另计完成项。
 - **剩余差异**：恢复历史会话时从完整对话重建读取状态、原版更细的部分读取/缓存合并时序、文件编码和换行完整保真、原子替换与并发文件竞争、SDK 动态 MCP/插件重载等仍未实现；本轮未预先逐项确认全部 100 个独立业务缺口，不能宣称完成该流程。
 - 按本任务现行要求，**没有运行 Cargo、测试或 CI**；仅作源代码接线与提交差异静态核对。Issue #3 冻结 362 项全部保持开放，未改变已验收数量。
