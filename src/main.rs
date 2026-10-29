@@ -717,7 +717,8 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             "/status" => {
                 println!("{}", agent.status_report()?);
                 continue;
-            }\n            "/stats" => {
+            }
+            "/stats" => {
                 println!("{}", stats::collect(agent.workspace_root())?.render());
                 continue;
             }
