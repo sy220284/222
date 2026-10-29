@@ -1606,7 +1606,8 @@ impl Agent {
                 // parent, regardless of the process-level approval ceiling.
                 let parent = self.permission_mode;
                 let allowed = match mode {
-                    permission_mode::Mode::Plan | permission_mode::Mode::DontAsk => true,
+                    permission_mode::Mode::Plan => true,
+                    permission_mode::Mode::DontAsk => parent != permission_mode::Mode::Plan,
                     permission_mode::Mode::Default => matches!(parent,
                         permission_mode::Mode::Default | permission_mode::Mode::AcceptEdits
                         | permission_mode::Mode::BypassPermissions),
