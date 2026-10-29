@@ -207,6 +207,11 @@ impl BackgroundTasks {
                     && !self.directory.join(format!("{candidate}.stderr")).exists()
             })
             .context("Could not allocate a unique background task ID")?;
+        // Validate the shell command before reserving output files: a
+        // command-construction failure must not leave stale task artifacts.
+        let mut proc = kind.build_command(command)?;
+        proc.envs(self.session_env.lock().unwrap().iter());
+        crate::subprocess_env::apply(&mut proc);
         let stdout_path = self.directory.join(format!("{id}.stdout"));
         let stderr_path = self.directory.join(format!("{id}.stderr"));
         // Hold the descriptors from exclusive creation through spooling: never
@@ -219,9 +224,6 @@ impl BackgroundTasks {
                 return Err(error);
             }
         };
-        let mut proc = kind.build_command(command)?;
-        proc.envs(self.session_env.lock().unwrap().iter());
-        crate::subprocess_env::apply(&mut proc);
         // Output directories are session-scoped; shell execution must still
         // run in the actual project root, never inside .atlas/background.
         let workspace = &self.workspace;
