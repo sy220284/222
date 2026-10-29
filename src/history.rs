@@ -381,6 +381,84 @@ pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
         &results.into_iter().map(|(_, _, record)| record).collect::<Vec<_>>()
     )?)
 }
+/// Original fileHistory.ts::copyFileHistoryForResume migrates the complete
+/// saved backup set when a conversation branches or resumes under a new ID.
+/// A hard link avoids copying large files; cross-device storage falls back
+/// to copying bytes. The source session is never modified.
+pub fn copy_for_resume(root: &Path, previous_session: &str, next_session: &str) -> Result<usize> {
+    if previous_session == next_session {
+        bail!("History source and destination sessions must differ")
+    }
+    let source = storage(root, Some(previous_session))?;
+    let destination = storage(root, Some(next_session))?;
+    if fs::read_dir(&destination)?.next().is_some() {
+        bail!("Destination session already contains history checkpoints")
+    }
+    let operation = (|| -> Result<usize> {
+        let mut entries = Vec::new();
+        for item in fs::read_dir(&source)? {
+            let item = item?;
+            let path = item.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+            let metadata = fs::symlink_metadata(&path)?;
+            if !metadata.file_type().is_file() {
+                bail!("History snapshot must be a regular file: {}", path.display())
+            }
+            let id = path.file_stem().and_then(|name| name.to_str())
+                .context("History snapshot filename is not valid UTF-8")?;
+            let id = Uuid::parse_str(id).context("History snapshot filename must be a UUID")?;
+            entries.push((metadata.modified()?, id));
+        }
+        // Preserve original checkpoint display order after the copy.
+        entries.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+        for (_, id) in &entries {
+            let record = load(root, Some(previous_session), &id.to_string())?;
+            if let Some(backup) = record.backup_path.as_ref() {
+                let target = destination.join(format!("{id}.bak"));
+                match fs::hard_link(backup, &target) {
+                    Ok(()) => {},
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                        return Err(error).context("History destination backup already exists")
+                    }
+                    Err(_) => {
+                        let mut source_file = fs::File::open(backup)?;
+                        let mut target_file = fs::OpenOptions::new()
+                            .write(true).create_new(true).open(&target)?;
+                        std::io::copy(&mut source_file, &mut target_file)?;
+                        target_file.sync_all()?;
+                    }
+                }
+            }
+            let source_record = source.join(format!("{id}.json"));
+            let target_record = destination.join(format!("{id}.json"));
+            let mut input = fs::File::open(&source_record)?;
+            let mut output = fs::OpenOptions::new()
+                .write(true).create_new(true).open(&target_record)?;
+            std::io::copy(&mut input, &mut output)?;
+            output.sync_all()?;
+        }
+        Ok(entries.len())
+    })();
+    if operation.is_err() {
+        // The destination ID is new and unpublished. Never leave a partially
+        // migrated history that could later claim to be complete.
+        if let Err(cleanup) = fs::remove_dir_all(&destination) {
+            bail!("History copy failed: {:#}; cleanup failed: {cleanup}", operation.unwrap_err())
+        }
+    }
+    operation
+}
+
+/// Called only if persisting a newly branched conversation fails after its
+/// checkpoint copy. The parent session's backup directory remains untouched.
+pub fn discard_copied_session(root: &Path, new_session: &str) -> Result<()> {
+    let destination = storage(root, Some(new_session))?;
+    fs::remove_dir_all(destination)?;
+    Ok(())
+}
+
 pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"file_history",
