@@ -241,15 +241,15 @@ pub fn render_content_in_workspace(
                             let rendered = binary_result_text(data, Some(mime), &prefix, workspace);
                             text.push_str(&rendered);
                             blocks.push(serde_json::json!({"type":"text","text":rendered}));
-                            continue;
+                        } else {
+                            text.push_str(&prefix);
+                            text.push_str(&format!("[image: {mime}]"));
+                            blocks.push(serde_json::json!({"type":"text","text":prefix}));
+                            blocks.push(serde_json::json!({"type":"image","source":{
+                                "type":"base64","media_type":mime,"data":data
+                            }}));
+                            images = true;
                         }
-                        text.push_str(&prefix);
-                        text.push_str(&format!("[image: {mime}]"));
-                        blocks.push(serde_json::json!({"type":"text","text":prefix}));
-                        blocks.push(serde_json::json!({"type":"image","source":{
-                            "type":"base64","media_type":mime,"data":data
-                        }}));
-                        images = true;
                     } else {
                         bail!("MCP prompt resource has neither text nor blob");
                     }
