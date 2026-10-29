@@ -1,3 +1,9 @@
+## 2026-10-29：Grep 请求上下文与分页不再被隐式缩小（源码已提交、待验收）
+
+- **原版源码依据**：`source/src/tools/GrepTool/GrepTool.ts::call/applyHeadLimit` 直接向 ripgrep 传递用户指定的 `-A/-B/-C/context` 行数，`head_limit=0` 不限制输出，`offset` 按请求偏移；没有 Rust 旧实现的 100 行上下文和 100000 项偏移/上限的静默裁剪。
+- **实际 Rust 代码**：`src/search.rs::grep_files_filtered` 使用 `nonnegative_num` 完整解析可表示的非负整数，删除人为 `min(max)` 裁剪，前后上下文计算改为饱和加法防止极大参数溢出；经 `src/tools.rs` 的 Grep 入口和 Agent 工具链可达。提交 `60ef12875d2b744e08bb217b83e826763b927c63`。
+- **剩余差异**：ripgrep 完整忽略规则、取消/超时、插件缓存排除、全部语言类型及跨平台行为仍待对照。本项保守计 **1 条用户可感知业务功能**；本轮合计 **3/100，剩余97项**，未运行 Cargo/测试/CI，均为已提交、待行为验收。
+
 ## 2026-10-29：文件历史无损备份与失败语义补齐（已提交、待验收）
 
 - **原版完整源码**：`source/src/utils/fileHistory.ts::fileHistoryTrackEdit/createBackup/restoreBackup` 使用文件复制保存原始字节和权限，不对文件施加 8MiB 文本上限；`fileHistoryMakeSnapshot` 按消息顺序保存快照；`FileWriteTool/FileEditTool/NotebookEditTool` 在文件修改前记录备份，备份错误由文件历史模块处理。
