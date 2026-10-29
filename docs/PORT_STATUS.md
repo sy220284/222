@@ -18,7 +18,7 @@
 
 ### 同轮续补：插件 Markdown 斜杠命令真正进入模型执行链
 
-原版 `source/src/utils/plugins/loadPluginCommands.ts::collectMarkdownFiles/getCommandNameFromFile/createPluginCommand`（50–213 行）与 `source/src/utils/argumentSubstitution.ts::substituteArguments`（94–144 行）。Rust `src/plugins.rs::command_prompt` 从默认 `commands/` 或清单自定义路径、内联命令/文件元数据中读取 Markdown，解析命名空间、去除 YAML 头、使用现有 `skill_arguments` 的命名/索引/`$ARGUMENTS` 参数替换；`src/main.rs` 的交互式 `/plugin:command` 或 `/plugin:namespace:command` 入口实际调用 `Agent::ask`。提交 `7e2c295fa1ec19b27d5eeb09d5d15134143285be`、`a6e148a31ef70e33f61766e6e9affbe7e06866fe`。**另计 1 项用户可感知业务功能，累计 7/100，剩余 93**；源码已提交、待验收。原版完整 frontmatter 元数据、Shell 内嵌命令执行、动态命令发现、SDK 命令列表、插件变量与命令禁用策略仍未等价；Issue #3 冻结 362 项不勾选。未运行 Cargo、测试或 CI。
+原版 `source/src/utils/plugins/loadPluginCommands.ts::collectMarkdownFiles/getCommandNameFromFile/createPluginCommand`（50–213 行）与 `source/src/utils/argumentSubstitution.ts::substituteArguments`（94–144 行）。Rust `src/plugins.rs::command_prompt` 从默认 `commands/` 或清单自定义路径、内联命令/文件元数据中读取 Markdown，解析命名空间、去除 YAML 头、使用现有 `skill_arguments` 的命名/索引/`$ARGUMENTS` 参数替换；`src/main.rs` 的交互式 `/plugin:command` 或 `/plugin:namespace:command` 入口实际调用 `Agent::ask`。提交 `7e2c295fa1ec19b27d5eeb09d5d15134143285be`、`a6e148a31ef70e33f61766e6e9affbe7e06866fe`。 继续提交 `848b90da`、`dfc0dca9`、`3f3f10ec`：`plugins::list_commands` 与交互式 `/commands` 列表接线，逐条复用 `command_prompt` 确认可实际执行，目录错误显式反馈；属于同一插件命令功能链的发现与展示补全，**不重复计数**。**另计 1 项用户可感知业务功能，累计 7/100，剩余 93**；源码已提交、待验收。原版完整 frontmatter 元数据、Shell 内嵌命令执行、动态命令发现、SDK 命令列表、插件变量与命令禁用策略仍未等价；Issue #3 冻结 362 项不勾选。未运行 Cargo、测试或 CI。
 
 ## 2026-10-29：SDK 动态 MCP 服务配置更新进入真实执行链（源码已提交、待验收）
 
