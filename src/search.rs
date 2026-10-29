@@ -128,6 +128,19 @@ fn sort_newest(items: &mut [PathBuf]) {
         modified(b).cmp(&modified(a)).then_with(|| a.cmp(b))
     });
 }
+// utils/glob.ts calls ripgrep --sort=modified (oldest first).
+// GrepTool files_with_matches instead sorts newest first.
+fn sort_oldest(items: &mut [PathBuf]) {
+    items.sort_by(|a, b| {
+        let modified = |p: &Path| {
+            fs::metadata(p)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .unwrap_or(SystemTime::UNIX_EPOCH)
+        };
+        modified(a).cmp(&modified(b)).then_with(|| a.cmp(b))
+    });
+}
 fn relative<'a>(root: &'a Path, path: &'a Path) -> Result<&'a Path> {
     Ok(path.strip_prefix(root).unwrap_or(path))
 }
@@ -233,7 +246,7 @@ pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
         let ignored = git_ignored_paths(base, &matches);
         matches.retain(|path| !ignored.contains(path));
     }
-    sort_newest(&mut matches);
+    sort_oldest(&mut matches);
     let truncated = matches.len() > 100;
     let paths = matches
         .iter()
