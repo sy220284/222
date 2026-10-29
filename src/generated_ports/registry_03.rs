@@ -416,8 +416,14 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/Spinner/ShimmerChar.tsx", vec![]),
         ("src/components/Spinner/SpinnerAnimationRow.tsx", vec![]),
         ("src/components/Spinner/SpinnerGlyph.tsx", vec![]),
-        ("src/components/Spinner/TeammateSpinnerLine.tsx", vec!["view"]),
-        ("src/components/Spinner/TeammateSpinnerTree.tsx", vec!["view"]),
+        (
+            "src/components/Spinner/TeammateSpinnerLine.tsx",
+            vec!["view"],
+        ),
+        (
+            "src/components/Spinner/TeammateSpinnerTree.tsx",
+            vec!["view"],
+        ),
         ("src/components/StatusLine.tsx", vec![]),
         ("src/components/StatusNotices.tsx", vec![]),
         ("src/components/StructuredDiff.tsx", vec![]),
@@ -579,7 +585,7 @@ mod connected_teammate_view_tests {
             "showTeammateMessagePreview":true
         });
         let tree: VNode = serde_json::from_value(
-            inspect(tree_path, "view", &[props]).expect("tree registry must resolve")
+            inspect(tree_path, "view", &[props]).expect("tree registry must resolve"),
         )
         .unwrap();
         assert_eq!(tree.unresolved_node_count(), 0);
@@ -588,9 +594,14 @@ mod connected_teammate_view_tests {
         assert!(tree.text_content().contains("Review ready"));
 
         let single: VNode = serde_json::from_value(
-            inspect(line_path, "view", &[json!({"teammate":{
+            inspect(
+                line_path,
+                "view",
+                &[json!({"teammate":{
                 "identity":{"agentName":"worker"}, "progress":{"toolUseCount":2,"tokenCount":1200}
-            },"columns":120})]).expect("row registry must resolve")
+            },"columns":120})],
+            )
+            .expect("row registry must resolve"),
         )
         .unwrap();
         assert_eq!(single.unresolved_node_count(), 0);
