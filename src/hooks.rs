@@ -1151,6 +1151,32 @@ mod tests {
         }
     }
     #[test]
+    fn hook_shell_configuration_preserves_explicit_powershell_and_legacy_bash() {
+        let ps: HookRule = serde_json::from_value(json!({
+            "event": "PreToolUse",
+            "command": "Write-Output ready",
+            "shell": "powershell",
+            "timeout_seconds": 3
+        }))
+        .unwrap();
+        assert_eq!(
+            ps.shell,
+            Some(crate::shell_runtime::ShellKind::Powershell)
+        );
+        let legacy: HookRule = serde_json::from_value(json!({
+            "event": "PreToolUse",
+            "command": "echo ready"
+        }))
+        .unwrap();
+        assert_eq!(legacy.shell, None);
+        assert_eq!(legacy.shell.unwrap_or_default().label(), "bash");
+        assert_eq!(legacy.timeout_seconds, 600);
+        assert!(serde_json::to_value(&legacy)
+            .unwrap()
+            .get("shell")
+            .is_none());
+    }
+    #[test]
     fn validates_hook_configuration() {
         let invalid = HookRunner::new(&[HookRule {
             event: HookEvent::PreToolUse,
