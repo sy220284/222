@@ -1241,7 +1241,11 @@ async fn chat(
             continue;
         }
         // Record submissions before model execution, including failed requests.
-        prompt_history.add(input, std::collections::BTreeMap::new())?;
+        // History persistence is best-effort in 2.1.88: a locked or full
+        // history file must not discard the user's actual chat submission.
+        if let Err(error) = prompt_history.add(input, std::collections::BTreeMap::new()) {
+            eprintln!("Prompt history could not be saved: {error:#}");
+        }
         if let Some(direct) = portable_missing_utilities::parse_direct_member_message(input) {
             let result = agent.send_direct_user_message(&direct.recipient, &direct.message)?;
             println!("{}", serde_json::to_string(&result)?);
