@@ -142,7 +142,7 @@ pub fn copy(messages: &[Message], age: usize, code: Option<usize>) -> Result<Str
     // OSC 52 is a best-effort terminal clipboard operation in copy.tsx.
     // Attempt it before the fallback file: an unavailable temp directory
     // must not prevent copying text to a working interactive terminal.
-    let clipboard_sent = false;
+    let mut clipboard_sent = false;
     if io::stdout().is_terminal() {
         let encoded = base64::engine::general_purpose::STANDARD.encode(text.as_bytes());
         let mut stdout = io::stdout().lock();
