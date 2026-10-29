@@ -8,6 +8,34 @@ use tokio::{
     time::timeout,
 };
 
+/// Handle server-initiated requests before comparing JSON-RPC IDs with
+/// outstanding client calls; both sides have independent ID namespaces.
+pub(crate) fn server_request_reply(message:&Value)->Result<Option<Value>>{
+    let Some(method)=message.get("method").and_then(Value::as_str) else{
+        return Ok(None)
+    };
+    let Some(id)=message.get("id") else{return Ok(None)};
+    if message.get("jsonrpc").and_then(Value::as_str)!=Some("2.0"){
+        bail!("MCP server request has invalid JSON-RPC version");
+    }
+    let result=match method{
+        "ping"=>json!({}),
+        "roots/list"=>{
+            let root=std::env::current_dir()
+                .context("MCP workspace directory unavailable")?
+                .canonicalize().context("MCP workspace directory invalid")?;
+            let uri=reqwest::Url::from_directory_path(&root)
+                .map_err(|_|anyhow::anyhow!("MCP workspace has no file URI"))?;
+            json!({"roots":[{"uri":uri.as_str()}]})
+        },
+        // Never grant elicitation without an interactive permission callback.
+        "elicitation/create"=>json!({"action":"cancel"}),
+        _=>return Ok(Some(json!({"jsonrpc":"2.0","id":id,
+            "error":{"code":-32601,"message":"Unsupported client method"}}))),
+    };
+    Ok(Some(json!({"jsonrpc":"2.0","id":id,"result":result})))
+}
+
 const RPC_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct Client {
@@ -47,7 +75,7 @@ impl Client {
             tools_changed: false, resource_updates: Vec::new() };
         let initialized=timeout(RPC_TIMEOUT, client.request("initialize", json!({
             "protocolVersion":"2025-03-26",
-            "capabilities":{},
+            "capabilities":{"roots":{"listChanged":false}},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
         }))).await.context("MCP initialize timed out")??;
         client.server_info=initialized.get("serverInfo").cloned();
@@ -75,6 +103,10 @@ impl Client {
             }
             let message: Value = serde_json::from_str(&line)
                 .with_context(|| format!("MCP server {} returned non-JSON data", self.name))?;
+            if let Some(response)=server_request_reply(&message)?{
+                self.send(&response).await?;
+                continue;
+            }
             if message.get("id").and_then(Value::as_u64) == Some(id) {
                 if let Some(error) = message.get("error") {
                     bail!("MCP server {} error: {}", self.name, error);
@@ -88,15 +120,6 @@ impl Client {
             if matches!(method,Some("notifications/resources/updated"|
                 "notifications/resources/list_changed")) && self.resource_updates.len()<1024{
                 self.resource_updates.push(message.clone());
-            }
-            if message.get("id").is_some() && method.is_some(){
-                if method==Some("ping"){
-                    self.send(&json!({"jsonrpc":"2.0","id":message["id"],
-                        "result":{}})).await?;
-                }else{
-                    self.send(&json!({"jsonrpc":"2.0","id":message["id"],
-                        "error":{"code":-32601,"message":"Unsupported client method"}})).await?;
-                }
             }
         }
     }
@@ -606,6 +629,49 @@ impl McpManager {
 mod tests {
     use super::*;
     use crate::protocol::FunctionCall;
+
+    #[tokio::test]
+    async fn stdio_server_requests_do_not_block_tool_discovery(){
+        let script=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*)
+    echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
+  *'"method":"tools/list"'*)
+    echo '{"jsonrpc":"2.0","id":2,"method":"roots/list"}' ;;
+  *'"id":2'*'"roots"'*)
+    echo '{"jsonrpc":"2.0","id":91,"method":"elicitation/create"}' ;;
+  *'"id":91'*'"cancel"'*)
+    echo '{"jsonrpc":"2.0","id":92,"method":"ping"}' ;;
+  *'"id":92'*'"result":{}'*)
+    echo '{"jsonrpc":"2.0","id":93,"method":"unsupported/request"}' ;;
+  *'"id":93'*'"code":-32601'*)
+    echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"ready"}]}}' ;;
+esac
+done"#;
+        let config=McpServerConfig{id:"requests".into(),command:"sh".into(),
+            args:vec!["-c".into(),script.into()],env:HashMap::new(),
+            transport:None,url:None,headers:HashMap::new()};
+        let manager=tokio::time::timeout(Duration::from_secs(4),
+            McpManager::connect(&[config])).await.unwrap().unwrap();
+        assert!(manager.handles("mcp__requests__ready"));
+        assert_eq!(manager.statuses().unwrap()[0]["status"],"connected");
+    }
+
+    #[test]
+    fn server_request_response_preserves_ids_and_denies_unhandled_methods(){
+        let root=server_request_reply(&json!({"jsonrpc":"2.0","id":"root",
+            "method":"roots/list"})).unwrap().unwrap();
+        assert_eq!(root["id"],"root");
+        assert!(root["result"]["roots"][0]["uri"].as_str().unwrap().starts_with("file://"));
+        let cancel=server_request_reply(&json!({"jsonrpc":"2.0","id":3,
+            "method":"elicitation/create"})).unwrap().unwrap();
+        assert_eq!(cancel["result"]["action"],"cancel");
+        let unknown=server_request_reply(&json!({"jsonrpc":"2.0","id":4,
+            "method":"tools/call"})).unwrap().unwrap();
+        assert_eq!(unknown["error"]["code"],-32601);
+        assert!(server_request_reply(&json!({"jsonrpc":"2.0",
+            "method":"notifications/tools/list_changed"})).unwrap().is_none());
+    }
 
     #[tokio::test]
     async fn live_tool_list_changed_notification_refreshes_model_tool_registry(){

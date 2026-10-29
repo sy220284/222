@@ -46,7 +46,7 @@ impl HttpClient{
             session:None,id:1,server_info:None,capabilities:None,
             tools_changed:false,resource_updates:Vec::new()};
         let initial=http.request("initialize",json!({
-            "protocolVersion":"2025-03-26","capabilities":{},
+            "protocolVersion":"2025-03-26","capabilities":{"roots":{"listChanged":false}},
             "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
         })).await?;
         http.server_info=initial.get("serverInfo").cloned();
@@ -54,7 +54,7 @@ impl HttpClient{
         http.notify("notifications/initialized",json!({})).await?;
         Ok(http)
     }
-    async fn post(&mut self,request:&Value,expect_response:bool)->Result<Option<Value>>{
+    fn request_headers(&self)->HeaderMap{
         let mut headers=self.headers.clone();
         headers.insert(CONTENT_TYPE,HeaderValue::from_static("application/json"));
         headers.insert(ACCEPT,HeaderValue::from_static("application/json, text/event-stream"));
@@ -63,6 +63,20 @@ impl HttpClient{
         if let Some(session)=&self.session{
             headers.insert(HeaderName::from_static("mcp-session-id"),session.clone());
         }
+        headers
+    }
+    async fn reply_to_server(&self,response:&Value)->Result<()>{
+        // Keep the SSE response stream open while replying via a separate POST.
+        let reply=self.client.post(self.url.clone()).headers(self.request_headers())
+            .json(response).send().await.with_context(||
+                format!("HTTP MCP {} server-request reply failed",self.name))?;
+        if !reply.status().is_success(){
+            bail!("HTTP MCP {} server-request reply rejected: {}",self.name,reply.status());
+        }
+        Ok(())
+    }
+    async fn post(&mut self,request:&Value,expect_response:bool)->Result<Option<Value>>{
+        let headers=self.request_headers();
         let mut reply=self.client.post(self.url.clone()).headers(headers)
             .json(request).send().await.with_context(||
                 format!("HTTP MCP {} request failed",self.name))?;
@@ -103,6 +117,10 @@ impl HttpClient{
                     let frame=std::str::from_utf8(&pending[..end])
                         .context("Invalid MCP SSE UTF-8")?;
                     for event in parse_sse(frame)?{
+                        if let Some(response)=crate::mcp::server_request_reply(&event)?{
+                            self.reply_to_server(&response).await?;
+                            continue;
+                        }
                         let kind=event.get("method").and_then(Value::as_str);
                         if kind==Some("notifications/tools/list_changed"){
                             self.tools_changed=true;
@@ -183,6 +201,96 @@ mod tests{
             env:HashMap::new(),transport:Some("http".into()),url:Some(url),
             headers:HashMap::new()}
     }
+    #[tokio::test]
+    async fn http_server_requests_complete_before_sse_stream_closes(){
+        use tokio::{io::{AsyncReadExt,AsyncWriteExt},net::{TcpListener,TcpStream},
+            sync::oneshot,time::timeout};
+        async fn read_request(socket:&mut TcpStream)->String{
+            let mut input=Vec::new();
+            loop{
+                let mut buffer=[0u8;4096];
+                let count=socket.read(&mut buffer).await.unwrap();
+                assert!(count>0,"client closed before request body");
+                input.extend_from_slice(&buffer[..count]);
+                let Some(end)=input.windows(4).position(|w|w==b"\r\n\r\n") else{continue};
+                let header=String::from_utf8_lossy(&input[..end]);
+                let length=header.lines().find_map(|line|{
+                    let (key,value)=line.split_once(':')?;
+                    if key.eq_ignore_ascii_case("content-length"){
+                        value.trim().parse::<usize>().ok()
+                    }else{None}
+                }).unwrap_or(0);
+                if input.len()>=end+4+length{
+                    return String::from_utf8_lossy(&input).into_owned()
+                }
+            }
+        }
+        async fn frame(socket:&mut TcpStream,event:Value){
+            let data=format!("event: message\r\ndata: {event}\r\n\r\n");
+            socket.write_all(format!("{:X}\r\n{data}\r\n",data.len()).as_bytes())
+                .await.unwrap();
+        }
+        let listener=TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let (release,finish)=oneshot::channel::<()>();
+        let server=tokio::spawn(async move{
+            let mut sse:Option<TcpStream>=None;
+            for step in 0..5{
+                let (mut socket,_)=listener.accept().await.unwrap();
+                let raw=read_request(&mut socket).await;
+                let (_,body)=raw.split_once("\r\n\r\n").unwrap();
+                let value:Value=serde_json::from_str(body).unwrap();
+                let accepted=b"HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+                match step{
+                    0=>{
+                        assert_eq!(value["method"],"initialize");
+                        assert_eq!(value["params"]["capabilities"]["roots"]["listChanged"],false);
+                        let result=json!({"jsonrpc":"2.0","id":1,"result":{
+                            "capabilities":{"tools":{}}}}).to_string();
+                        socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nMcp-Session-Id: test-session\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{result}",result.len()).as_bytes()).await.unwrap();
+                    },
+                    1=>{
+                        assert_eq!(value["method"],"notifications/initialized");
+                        socket.write_all(accepted).await.unwrap();
+                    },
+                    2=>{
+                        assert_eq!(value["method"],"tools/list");
+                        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n").await.unwrap();
+                        frame(&mut socket,json!({"jsonrpc":"2.0","id":91,
+                            "method":"roots/list"})).await;
+                        sse=Some(socket);
+                    },
+                    3=>{
+                        assert!(raw.to_ascii_lowercase().contains("mcp-session-id: test-session"));
+                        assert_eq!(value["id"],91);
+                        assert!(value["result"]["roots"][0]["uri"].as_str().unwrap().starts_with("file://"));
+                        socket.write_all(accepted).await.unwrap();
+                        frame(sse.as_mut().unwrap(),json!({"jsonrpc":"2.0","id":92,
+                            "method":"ping"})).await;
+                    },
+                    4=>{
+                        assert_eq!(value["id"],92);
+                        assert_eq!(value["result"],json!({}));
+                        socket.write_all(accepted).await.unwrap();
+                        frame(sse.as_mut().unwrap(),json!({"jsonrpc":"2.0","id":2,
+                            "result":{"tools":[{"name":"ready"}]}})).await;
+                    },
+                    _=>unreachable!(),
+                }
+            }
+            // Keep the original SSE connection open until the client returns.
+            let _=finish.await;
+        });
+        let mut client=timeout(Duration::from_secs(4),
+            HttpClient::connect(&config(format!("http://{address}/mcp"))))
+            .await.unwrap().unwrap();
+        let result=timeout(Duration::from_secs(4),
+            client.request("tools/list",json!({}))).await.unwrap().unwrap();
+        assert_eq!(result["tools"][0]["name"],"ready");
+        release.send(()).unwrap();
+        server.await.unwrap();
+    }
+
     #[tokio::test]
     async fn http_sse_resource_update_before_rpc_response_survives_and_does_not_wait_for_eof(){
         use tokio::{io::{AsyncReadExt,AsyncWriteExt},net::TcpListener};
