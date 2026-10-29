@@ -1123,7 +1123,7 @@
 | `src/skills/bundled/verify.ts` | 31 | 893 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/verifyContent.ts` | 14 | 414 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundledSkills.ts` | 221 | 7497 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
-| `src/skills/loadSkillsDir.ts` | 1087 | 34415 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现：插件清单自定义/嵌套技能经 src/plugins.rs::resolve_skill_path 接入 ToolExecutor::list_skills/read_skill，真实 Read 权限及技能路径/会话变量已接通，源码已提交待验收；disable-model-invocation 已在模型工具目录和读取入口阻断（cb2e0ac），已提交待验收；本地技能 /name 交互执行及 /skills 用户权限目录已接通（b3b63dc、be77ed4），源码待验收；技能模型/effort、动态刷新和完整交互仍缺；SDK 本地技能目录补齐真实 Markdown 描述和参数提示（48e34f9、94f217d、ffd1056），源码已提交待验收；复杂 YAML、模型/effort 元数据和热刷新仍缺 |
+| `src/skills/loadSkillsDir.ts` | 1087 | 34415 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现：插件清单自定义/嵌套技能经 src/plugins.rs::resolve_skill_path 接入 ToolExecutor::list_skills/read_skill，真实 Read 权限及技能路径/会话变量已接通，源码已提交待验收；disable-model-invocation 已在模型工具目录和读取入口阻断（cb2e0ac），已提交待验收；本地技能 /name 交互执行及 /skills 用户权限目录已接通（b3b63dc、be77ed4），源码待验收；技能模型/effort、动态刷新和完整交互仍缺；SDK 本地技能目录补齐真实 Markdown 描述和参数提示（48e34f9、94f217d、ffd1056），源码已提交待验收；复杂 YAML、模型/effort 元数据和热刷新仍缺；交互式 /skills 现展示可调用本地/插件技能说明和参数提示（68d8545），源码待验收 |
 | `src/skills/mcpSkillBuilders.ts` | 45 | 1627 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/state/AppState.tsx` | 200 | 23480 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/state/AppStateStore.ts` | 570 | 21847 | 重写：保持通用行为 | `src/generated_ports/p_4160de63cf190.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -1669,7 +1669,7 @@
 | `src/utils/plugins/installCounts.ts` | 293 | 8315 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/installedPluginsManager.ts` | 1269 | 41410 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/loadPluginAgents.ts` | 349 | 12485 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/loadPluginCommands.ts` | 947 | 30541 | 重写：保持通用行为 | `src/plugins.rs / src/main.rs / src/skill_arguments.rs` | 部分实现：插件 Markdown 斜杠命令目录/命名空间/参数替换经 src/plugins.rs → src/main.rs → Agent::ask 实际接线（7e2c295、a6e148a），frontmatter、内嵌 Shell、SDK 纯文本非排队命令已接线（3476d97），SDK 排队/图文混合及动态刷新仍缺，待验收；可执行插件命令同步显示于交互式 /commands，复用真实命令解析入口（848b90d、dfc0dca、3f3f10e），同功能不重复计数，待验收；新增用户可调用前置限制、插件根路径及交互会话 ID 变量展开，已提交待验收；插件 DATA 持久目录按需创建已接线；插件技能 SKILL.md 已接入交互斜杠命令与 /commands（545e01c、e4043c4），隐藏技能过滤，源码待验收；用户配置变量、内嵌 Shell/权限、SDK 与动态刷新仍缺；SDK 插件命令和嵌套技能的 description/argument-hint 从真实 Markdown 读取（2da7e57、ffd1056），待行为验收；用户配置敏感值、内嵌 Shell、动态刷新与完整 SDK 仍缺 |
+| `src/utils/plugins/loadPluginCommands.ts` | 947 | 30541 | 重写：保持通用行为 | `src/plugins.rs / src/main.rs / src/skill_arguments.rs` | 部分实现：插件 Markdown 斜杠命令目录/命名空间/参数替换经 src/plugins.rs → src/main.rs → Agent::ask 实际接线（7e2c295、a6e148a），frontmatter、内嵌 Shell、SDK 纯文本非排队命令已接线（3476d97），SDK 排队/图文混合及动态刷新仍缺，待验收；可执行插件命令同步显示于交互式 /commands，复用真实命令解析入口（848b90d、dfc0dca、3f3f10e），同功能不重复计数，待验收；新增用户可调用前置限制、插件根路径及交互会话 ID 变量展开，已提交待验收；插件 DATA 持久目录按需创建已接线；插件技能 SKILL.md 已接入交互斜杠命令与 /commands（545e01c、e4043c4），隐藏技能过滤，源码待验收；用户配置变量、内嵌 Shell/权限、SDK 与动态刷新仍缺；SDK 插件命令和嵌套技能的 description/argument-hint 从真实 Markdown 读取（2da7e57、ffd1056），待行为验收；用户配置敏感值、内嵌 Shell、动态刷新与完整 SDK 仍缺；交互式 /commands 现展示插件命令原始描述和参数提示（629f319），源码待验收 |
 | `src/utils/plugins/loadPluginHooks.ts` | 288 | 10066 | 重写：保持通用行为 | `src/plugins.rs / src/hooks.rs` | 部分实现：显式启用插件 Hook；全部原版事件待核对 |
 | `src/utils/plugins/loadPluginOutputStyles.ts` | 179 | 5672 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/lspPluginIntegration.ts` | 388 | 12414 | 重写：保持通用行为 | 待定 | 未迁移 |
