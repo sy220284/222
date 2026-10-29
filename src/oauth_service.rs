@@ -116,7 +116,9 @@ impl OAuthService {
 /// Explicitly user-selected credential file; never store in the source tree
 /// by default. Create with restrictive permissions and rename atomically.
 pub fn save_oauth_tokens(path: &Path, tokens: &OAuthTokens) -> Result<()> {
-    let parent = path.parent().context("Credential path needs parent directory")?;
+    let parent = path
+        .parent()
+        .context("Credential path needs parent directory")?;
     fs::create_dir_all(parent)?;
     if let Ok(metadata) = fs::symlink_metadata(path) {
         if metadata.file_type().is_symlink() {
@@ -164,7 +166,10 @@ pub fn load_oauth_tokens(path: &Path) -> Result<OAuthTokens> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpListener};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
 
     #[tokio::test]
     async fn manual_authorization_preserves_verifier_and_redirect_uri() {
@@ -176,11 +181,12 @@ mod tests {
             "client-123",
             vec!["openid".into(), "profile".into()],
             "https://example.org/manual",
-        ).unwrap();
+        )
+        .unwrap();
         let flow = OAuthService::new().unwrap();
         let auth = flow.manual_authorization_url(&provider, &AuthorizationOptions::default());
         let url = reqwest::Url::parse(&auth).unwrap();
-        let values: std::collections::HashMap<_,_> = url.query_pairs().into_owned().collect();
+        let values: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
         assert_eq!(values["state"], flow.pkce.state);
         assert_eq!(values["code_challenge"], flow.pkce.challenge);
         assert_eq!(values["redirect_uri"], "https://example.org/manual");
@@ -230,7 +236,10 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
             fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
             assert!(load_oauth_tokens(&path).is_err());
         }
