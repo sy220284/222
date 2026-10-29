@@ -1,3 +1,9 @@
+## 2026-10-29：插件市场注册表与锁文件路径安全（源码已提交、待验收）
+
+对照原版 `source/src/utils/plugins/pluginInstallationHelpers.ts::checkPathTraversal` 及 `source/src/utils/plugins/marketplaceManager.ts` 的市场存储/注册行为，复核 Rust `src/marketplace_registry.rs::exclusive_lock/load/save/execute/resolve_local_plugin`。原实现直接打开 `.atlas/marketplaces.lock` 和 `.atlas/marketplaces.json`，当工作区存储目录或文件被符号链接重定向时可能读取或写入外部位置。现拒绝 `.atlas`、锁文件和注册表的符号链接，确认规范化存储目录位于工作区内，锁文件保持非截断打开，所有现有市场操作继续共用同一安全门禁。代码 `b9027b6d25c95fe5cddde0f0925334725fd9905c`、`80e3be9439ba001a619df08c7cb0e6ee4c99bd1d`。
+
+本项保守计 **1 条用户可感知业务链：本地市场注册与更新的存储安全**；本轮累计 **9/100**。该源路径只标记部分实现，远程下载、版本与依赖处理、跨进程一致性和完整市场管理仍未等价。按要求未运行 Cargo、测试或 CI，源码已提交、待行为验收；Issue #3 冻结 362 项不勾选，新增完整等价验收 0。
+
 ## 2026-10-29：本地插件安装存储边界修复（源码已提交、待验收）
 
 原版依据：`source/src/utils/plugins/pluginInstallationHelpers.ts:79–106` 的安装路径越界检查。Rust `src/plugin_manager.rs::install_local/installed/execute(Uninstall)` 原先可能在插件加载校验前跟随 `.atlas` 或 `.atlas/plugins` 符号链接写出工作区。新增 `checked_installed_root`，安装、卸载、列举前拒绝重定向存储根并检查规范化路径；插件列表保持只读，不额外创建目录。代码 `2dd6c0b0a7ba279b125610926f6b5118b02133bd`、`14b097fe988661ac442bb390028e51c26ca32563`。

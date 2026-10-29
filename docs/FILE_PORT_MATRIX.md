@@ -1676,7 +1676,7 @@
 | `src/utils/plugins/lspRecommendation.ts` | 375 | 10695 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/managedPlugins.ts` | 28 | 877 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/plugins/marketplaceHelpers.ts` | 593 | 18217 | 重写：保持通用行为 | `src/generated_ports/p_191decb55832d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/plugins/marketplaceManager.ts` | 2644 | 93274 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/marketplaceManager.ts` | 2644 | 93274 | 重写：保持通用行为 | `src/marketplace_registry.rs` | 部分实现：本地市场注册/列表/移除/刷新和持久化已接线；市场注册表与锁文件拒绝符号链接重定向（b9027b6、80e3be9），源码待验收；远程市场下载、版本解析、插件依赖闭包及完整原版管理流程仍未迁移 |
 | `src/utils/plugins/mcpPluginIntegration.ts` | 635 | 20113 | 重写：保持通用行为 | `src/plugins.rs / src/mcp.rs` | 部分实现：插件 MCP 加载；工具兼容及认证功能未等价 |
 | `src/utils/plugins/mcpbHandler.ts` | 969 | 31289 | 重写：保持通用行为 | `src/generated_ports/p_ee9950d29aa12.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/officialMarketplace.ts` | 26 | 836 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
