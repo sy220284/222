@@ -1128,16 +1128,15 @@ impl Agent {
         // Original deriveFirstPrompt reads the first text block when the
         // first user message contains multimodal content.
         let source = first
-            .and_then(|m| {
-                m.content.as_deref().filter(|s| !s.is_empty()).or_else(|| {
-                    m.content_blocks.as_ref()?.iter().find_map(|block| {
-                        if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
-                            block.get("text").and_then(serde_json::Value::as_str)
-                        } else {
-                            None
-                        }
-                    })
-                })
+            .and_then(|m| match m.content_blocks.as_ref() {
+                Some(blocks) => blocks.iter().find_map(|block| {
+                    if block.get("type").and_then(serde_json::Value::as_str) == Some("text") {
+                        block.get("text").and_then(serde_json::Value::as_str)
+                    } else {
+                        None
+                    }
+                }),
+                None => m.content.as_deref(),
             })
             .unwrap_or("");
         let derived = source.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -2157,7 +2156,7 @@ mod tests {
         let mut original = Session::fresh();
         let parent_id = original.id;
         let mut user = Message::text("user", "");
-        user.content = None;
+        user.content = Some("not the first text block".into());
         user.content_blocks = Some(vec![
             json!({"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA=="}}),
             json!({"type":"text","text":"  Investigate\n  this screenshot  "}),
