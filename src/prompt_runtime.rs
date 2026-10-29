@@ -66,7 +66,7 @@ pub fn role_instructions(role: &str, is_teammate: bool) -> &'static str {
     if is_teammate {
         return WORKER;
     }
-    match role.to_ascii_lowercase().replace(['-', '_'], "").as_str() {
+    match role.to_ascii_lowercase().replace('-', "").replace('_', "").as_str() {
         "verification" | "verify" | "verificationagent" | "reviewer" => VERIFICATION,
         "explore" | "exploration" | "exploreagent" => EXPLORATION,
         "plan" | "planner" | "planagent" => PLANNING,
