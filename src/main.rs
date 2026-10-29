@@ -418,6 +418,20 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Run process-wide cleanup even when a command returns early or fails.
+    // Session-specific cleanup still runs through Agent::finish().
+    let result = run_cli().await;
+    let cleanup = cleanup_registry::run_cleanup_functions().await;
+    match (result, cleanup) {
+        (Err(error), Err(cleanup_error)) => Err(error.context(format!(
+            "Process cleanup also failed: {cleanup_error:#}"
+        ))),
+        (Err(error), _) => Err(error),
+        (Ok(()), result) => result,
+    }
+}
+
+async fn run_cli() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
         Commands::ReleaseNotes => {
