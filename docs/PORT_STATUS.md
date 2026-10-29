@@ -1,5 +1,11 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：MCP HTTP 动态请求头、凭据助手及远程地址变量展开（源码已提交，待验证）
+
+- **原版依据**：`source/src/services/mcp/headersHelper.ts:30–138`、`envExpansion.ts:7–35`、`config.ts:556–615`、`client.ts:800–805`。原版在远程 MCP 连接时合并静态请求头与脚本生成的动态请求头，动态值覆盖静态值；脚本有 10 秒超时，输出必须为字符串键值 JSON 对象，失败不阻断静态连接；远程 URL 与请求头均支持环境变量替换。
+- **Rust 实际补齐**：`src/config.rs` 新增 `headersHelper` 可选配置和远程 URL 环境变量校验；`src/mcp_http.rs` 在真实 HTTP MCP 握手前执行工作区内的动态凭据助手，注入中立的 `ATLAS_MCP_SERVER_NAME`/`ATLAS_MCP_SERVER_URL` 上下文、设置 10 秒限时和退出时终止子进程，校验 JSON 字符串字典，失败退回静态请求头；按 HTTP 大小写不敏感规则让动态头覆盖静态头，并展开 URL/头字段中的环境变量。`src/mcp.rs` 同步实际 MCP 配置构造字段。
+- **状态与剩余差异**：代码已提交，按本轮要求未运行 Cargo、CI 或行为测试，故不登记等价验收。当前仅有用户级配置路径，原版 project/local 来源的工作区信任门禁、SSE/WS 传输、完整 OAuth 刷新、全部连接重试及动态认证生命周期仍缺。Issue #3 冻结项目不勾选，相关源文件保持部分实现。
+
 ## 2026-10-29：OAuth 浏览器回调异步时序与非法 HTTP 请求恢复（源码已修复，文件未验收）
 
 - **原版源码对照**：用户上传 `claude-code-2.1.88-main(1).zip` 中 `source/src/services/oauth/auth-code-listener.ts` 的 `startLocalListener`（先安装请求监听、`void onReady()`，不等待浏览器启动结束）、`handleRedirect`、`validateAndRespond`、`close`；关联 Rust 实际入口 `src/main.rs` 的 `oauth-listen` 命令。
