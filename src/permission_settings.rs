@@ -115,6 +115,78 @@ impl SettingsPaths {
         }
     }
 
+    /// Original settings.ts::loadManagedFileSettings: load the managed base
+    /// first, then alphabetically ordered managed-settings.d/*.json fragments.
+    /// Permission arrays concatenate without duplicates; later scalar values
+    /// override earlier ones. An invalid fragment cannot discard valid policy.
+    fn load_policy(&self) -> Result<Option<Value>> {
+        let Some(base) = self.policy.as_ref() else {
+            return Ok(None);
+        };
+        let mut merged = Value::Object(Map::new());
+        if let Some(settings) = Self::read_json_for_execution(base)? {
+            merge_policy_values(&mut merged, settings);
+        }
+        let dropin_dir = std::env::var_os("ATLAS_POLICY_DROPIN_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                base.parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join("managed-settings.d")
+            });
+        let entries = match fs::read_dir(&dropin_dir) {
+            Ok(entries) => entries,
+            Err(error) if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+            ) => {
+                return Ok((merged != Value::Object(Map::new())).then_some(merged));
+            }
+            Err(error) => {
+                eprintln!(
+                    "Unable to read managed permission drop-ins {}: {error}",
+                    dropin_dir.display()
+                );
+                return Ok((merged != Value::Object(Map::new())).then_some(merged));
+            }
+        };
+        let mut paths = Vec::new();
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    eprintln!("Unable to inspect managed permission drop-in: {error}");
+                    continue;
+                }
+            };
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if name.starts_with('.') || !name.ends_with(".json") {
+                continue;
+            }
+            match entry.file_type() {
+                Ok(kind) if kind.is_file() || kind.is_symlink() => paths.push(entry.path()),
+                Ok(_) => {}
+                Err(error) => eprintln!(
+                    "Unable to inspect managed permission drop-in {}: {error}",
+                    entry.path().display()
+                ),
+            }
+        }
+        paths.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+        for path in paths {
+            match Self::read_json_for_execution(&path) {
+                Ok(Some(settings)) => merge_policy_values(&mut merged, settings),
+                Ok(None) => {}
+                Err(error) => eprintln!(
+                    "Ignoring unreadable managed permission drop-in {}: {error:#}",
+                    path.display()
+                ),
+            }
+        }
+        Ok((merged != Value::Object(Map::new())).then_some(merged))
+    }
+
     fn managed_only(policy: Option<&Value>) -> bool {
         policy
             .and_then(|value| value.get("allowManagedPermissionRulesOnly"))
@@ -167,10 +239,7 @@ impl SettingsPaths {
     /// Load user, project, local, config/flag and managed rules. Managed-only
     /// excludes every non-policy source, including existing config rules.
     pub fn load(&self, configured: &[RuleSetting]) -> Result<Vec<RuleSetting>> {
-        let policy = match &self.policy {
-            Some(path) => Self::read_json_for_execution(path)?,
-            None => None,
-        };
+        let policy = self.load_policy()?;
         let mut result = Vec::new();
         if Self::managed_only(policy.as_ref()) {
             Self::append_rules(policy.as_ref(), &mut result)?;
@@ -241,10 +310,7 @@ impl SettingsPaths {
     where
         F: FnOnce(&mut Map<String, Value>) -> Result<bool>,
     {
-        let policy = match &self.policy {
-            Some(path) => Self::read_json(path)?,
-            None => None,
-        };
+        let policy = self.load_policy()?;
         if Self::managed_only(policy.as_ref()) {
             return Ok(None);
         }
@@ -342,6 +408,26 @@ impl SettingsPaths {
             Ok(values.len() != old_len)
         })
         .map(|changed| changed.unwrap_or(false))
+    }
+}
+
+/// Lodash mergeWith + settingsMergeCustomizer equivalent for managed policy:
+/// merge nested objects and concatenate/deduplicate arrays in source order.
+fn merge_policy_values(target: &mut Value, source: Value) {
+    match (target, source) {
+        (Value::Object(existing), Value::Object(incoming)) => {
+            for (key, value) in incoming {
+                merge_policy_values(existing.entry(key).or_insert(Value::Null), value);
+            }
+        }
+        (Value::Array(existing), Value::Array(incoming)) => {
+            for value in incoming {
+                if !existing.contains(&value) {
+                    existing.push(value);
+                }
+            }
+        }
+        (target, incoming) => *target = incoming,
     }
 }
 
