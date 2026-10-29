@@ -12,11 +12,12 @@ use uuid::Uuid;
 use walkdir::WalkDir;
 
 fn valid_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 64
-        && name
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+    // Marketplace plugin identifiers allow dotted names and have no
+    // arbitrary 64-byte limit. Requiring an ASCII alphanumeric first
+    // component keeps "."/".." and path separators out of storage paths.
+    let mut bytes = name.bytes();
+    matches!(bytes.next(), Some(c) if c.is_ascii_alphanumeric())
+        && bytes.all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.'))
 }
 
 fn installed_root(root: &Path) -> PathBuf {
