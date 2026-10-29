@@ -407,6 +407,7 @@ impl ToolExecutor {
             }
             "list_files" => self.list_files(&args),
             "glob_files" => {
+                search::validate_tool_input("glob_files", &args)?;
                 let raw = args.get("path").and_then(Value::as_str).unwrap_or(".");
                 let path = self.checked_path(raw)?;
                 // Original GlobTool checks read permission on its search root.
@@ -414,6 +415,7 @@ impl ToolExecutor {
                 search::glob_files(&self.root, &path, &args)
             }
             "grep_files" => {
+                search::validate_tool_input("grep_files", &args)?;
                 let raw = args.get("path").and_then(Value::as_str).unwrap_or(".");
                 let path = self.checked_path(raw)?;
                 // Original GrepTool checks read permission on its search root.
