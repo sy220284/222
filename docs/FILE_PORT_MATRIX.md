@@ -1226,7 +1226,7 @@
 | `src/tools/GlobTool/GlobTool.ts` | 199 | 6064 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：通配符、结果排序与 100 项上限；原版全部边界待核对 |
 | `src/tools/GlobTool/UI.tsx` | 63 | 8040 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/GlobTool/prompt.ts` | 8 | 439 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/GrepTool/GrepTool.ts` | 578 | 20087 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：内容/路径/计数/分页/上下文；原版 ripgrep 语义待对照 |
+| `src/tools/GrepTool/GrepTool.ts` | 578 | 20087 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：内容/路径/计数/分页/上下文；原版 ripgrep 语义待对照；本轮按原版补齐跨行正则、逐行计数、-C/context 优先级、-n 行号及 head_limit=0 不限量，仍缺完整 ripgrep 忽略规则/列宽/中断语义 |
 | `src/tools/GrepTool/UI.tsx` | 201 | 21784 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/GrepTool/prompt.ts` | 19 | 1150 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/LSPTool/LSPTool.ts` | 861 | 25710 | 重写：工具行为、参数和权限 | `src/lsp.rs` | 部分实现：9 类请求与真实模拟服务器回环；LSP 管理行为未全等 |
@@ -1316,7 +1316,7 @@
 | `src/tools/ToolSearchTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/ToolSearchTool/prompt.ts` | 122 | 5227 | 重写：工具行为、参数和权限 | `src/tool_search.rs` | 部分实现：可按真实工具表检索；原版 deferred 动态加载提示协议尚未等价 |
 | `src/tools/WebFetchTool/UI.tsx` | 72 | 8083 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/WebFetchTool/WebFetchTool.ts` | 319 | 9324 | 重写：工具行为、参数和权限 | `src/webfetch.rs` | 部分实现：公网文本抓取/权限/跳转；原版网页摘要算法未等价 ；原版 domain:<hostname> 的精确域名权限 allow/ask/deny 已连通 web_fetch 权限检查 ；跨主机 3xx 跳转前重新按目标域名复核权限，禁止借已批准来源绕过 deny |
+| `src/tools/WebFetchTool/WebFetchTool.ts` | 319 | 9324 | 重写：工具行为、参数和权限 | `src/webfetch.rs` | 部分实现：公网文本抓取/权限/跳转；原版网页摘要算法未等价 ；原版 domain:<hostname> 的精确域名权限 allow/ask/deny 已连通 web_fetch 权限检查 ；跨主机 3xx 跳转前重新按目标域名复核权限，禁止借已批准来源绕过 deny；本轮修复跨来源重定向返回新 URL 供重新授权，禁止继承来源审批自动抓取，仍缺完整原版网页摘要 |
 | `src/tools/WebFetchTool/preapproved.ts` | 167 | 5248 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/WebFetchTool/prompt.ts` | 47 | 2200 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/WebFetchTool/utils.ts` | 531 | 16761 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1898,7 +1898,7 @@
 | `src/utils/withResolvers.ts` | 14 | 444 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/words.ts` | 801 | 10960 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/workloadContext.ts` | 58 | 2337 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
-| `src/utils/worktree.ts` | 1520 | 49995 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
+| `src/utils/worktree.ts` | 1520 | 49995 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过；本轮增加工作树创建时 HEAD 基线，退出前检测已提交但无未提交改动的分支，保留提交防止误删；命名工作树、交互选择和恢复仍缺 |
 | `src/utils/worktreeModeEnabled.ts` | 12 | 415 | 重写：Git 工作树隔离 | `src/compat_helpers.rs` | 已验收：原始无条件 true 开关纯函数语义对照；证据 compat_helpers::tests::worktree_feature_is_enabled |
 | `src/utils/xdg.ts` | 66 | 1876 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/xml.ts` | 17 | 622 | 重写：XML/属性转义函数完整移植 | `src/xml_escape.rs` | 已验收：两种函数字符替换次序、双引号/单引号、Unicode、空输入与多次转义对照；证据 xml_escape::tests |
