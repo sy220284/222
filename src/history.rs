@@ -57,6 +57,9 @@ fn storage(root: &Path, session_id: Option<&str>) -> Result<PathBuf> {
     let session = Uuid::parse_str(session_id).context("History session id must be a UUID")?;
     let folder = base.join(session.to_string());
     fs::create_dir_all(&folder)?;
+    if folder.symlink_metadata()?.file_type().is_symlink() {
+        bail!("History session directory must not be a symbolic link")
+    }
     let folder = folder.canonicalize()?;
     if !folder.starts_with(&base) {
         bail!("History session directory escapes workspace")
