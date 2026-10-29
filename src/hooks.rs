@@ -242,12 +242,22 @@ fn hook_if_matches(condition: &str, event: &str, tool_name: Option<&str>, input:
     let Some(arguments) = input.get("tool_input").filter(|v| v.is_object()) else {
         return false;
     };
+    // The hook receives original Read/Edit/Write parameter names such as
+    // file_path, while the shared Rust permission matcher expects path.
+    // Normalize a copy only for matching; preserve original hook stdin.
+    let mut matching_arguments = arguments.clone();
+    if matches!(name, "Read" | "Edit" | "Write")
+        && crate::semantic_inputs::normalize_source_file_tool(name, &mut matching_arguments)
+            .is_err()
+    {
+        return false;
+    }
     let condition_rule = crate::permission_rules::Rule {
         behavior: crate::permission_rules::Behavior::Allow,
         value: parsed,
     };
     matches!(
-        crate::permission_rules::policy_for(&[condition_rule], name, arguments),
+        crate::permission_rules::policy_for(&[condition_rule], name, &matching_arguments),
         Ok(Some(crate::permission_rules::Behavior::Allow))
     )
 }
