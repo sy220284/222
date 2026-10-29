@@ -271,9 +271,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "formatIdleDuration" => args.first().and_then(Value::as_f64).map(|minutes| {
                 Value::String(super::p_3ab35d9de2f94::format_idle_duration(minutes))
             }),
-            "formatTokens" => args.first().and_then(Value::as_f64).map(|tokens| {
-                Value::String(super::p_3ab35d9de2f94::format_token_count(tokens))
-            }),
+            "formatTokens" => args
+                .first()
+                .and_then(Value::as_f64)
+                .map(|tokens| Value::String(super::p_3ab35d9de2f94::format_token_count(tokens))),
             _ => None,
         },
         "src/components/InterruptedByUser.tsx" => match export {

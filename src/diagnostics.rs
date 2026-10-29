@@ -74,8 +74,8 @@ fn executable_path(program: &str) -> Option<PathBuf> {
             // where.exe honors PATHEXT, including .COM and user-configured
             // executable suffixes. Prefer its ordering after the exact name.
             if input.extension().is_none() {
-                let extensions = std::env::var("PATHEXT")
-                    .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned());
+                let extensions =
+                    std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned());
                 for suffix in extensions.split(';').filter(|s| !s.is_empty()) {
                     let candidate = dir.join(format!("{program}{suffix}"));
                     if is_executable(&candidate) {

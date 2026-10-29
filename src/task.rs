@@ -102,11 +102,15 @@ fn dispatch(session: &mut Session, call: &ToolCall) -> Result<String> {
     }
     match call.function.name.as_str() {
         "TodoWrite" | "todo_write" => {
-            let object = args.as_object().context("TodoWrite arguments must be an object")?;
+            let object = args
+                .as_object()
+                .context("TodoWrite arguments must be an object")?;
             if object.len() != 1 || !object.contains_key("todos") {
                 bail!("TodoWrite accepts only the todos field")
             }
-            let input = object["todos"].as_array().context("todos must be an array")?;
+            let input = object["todos"]
+                .as_array()
+                .context("todos must be an array")?;
             let mut todos = Vec::with_capacity(input.len());
             for (index, value) in input.iter().enumerate() {
                 let item: TodoItem = serde_json::from_value(value.clone())
@@ -114,7 +118,10 @@ fn dispatch(session: &mut Session, call: &ToolCall) -> Result<String> {
                 if item.content.is_empty() || item.active_form.is_empty() {
                     bail!("Todo content and activeForm must not be empty")
                 }
-                if !matches!(item.status.as_str(), "pending" | "in_progress" | "completed") {
+                if !matches!(
+                    item.status.as_str(),
+                    "pending" | "in_progress" | "completed"
+                ) {
                     bail!("Invalid todo status at index {index}")
                 }
                 todos.push(item);
