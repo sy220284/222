@@ -437,6 +437,7 @@ fn plain_hook_context(payload: &Value, output: &[u8]) -> Vec<String> {
         event,
         Some(
             "SessionStart"
+                | "PreCompact"
                 | "UserPromptSubmit"
                 | "PreToolUse"
                 | "PostToolUse"
