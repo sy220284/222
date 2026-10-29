@@ -2006,7 +2006,7 @@ impl Agent {
         &mut self,
         requested: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<serde_json::Value> {
-        let settings = permission_settings::SettingsPaths::for_workspace(&self.root)?
+        let settings = crate::permission_settings::SettingsPaths::for_workspace(&self.root)?
             .settings_snapshot(&self.profile.model)?;
         let mut accepted = Vec::new();
         let mut rejected = serde_json::Map::new();
