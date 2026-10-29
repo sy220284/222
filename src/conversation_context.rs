@@ -193,6 +193,104 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         }
     }
 
+    // 2.1.88 claudemd.ts extracts @includes from Markdown text nodes, skips
+    // fenced/inline code and HTML comments, and limits recursive expansion.
+    // An unapproved include outside the current instruction scope is ignored.
+    fn include_paths(content: &str, file: &Path) -> Vec<PathBuf> {
+        let mut plain = String::new();
+        let mut fence: Option<char> = None;
+        let mut html_comment = false;
+        for line in content.lines() {
+            let trimmed = line.trim_start();
+            if let Some(marker) = trimmed.chars().next().filter(|c| *c == '`' || *c == '~') {
+                if trimmed.chars().take_while(|c| *c == marker).count() >= 3 {
+                    if fence == Some(marker) {
+                        fence = None;
+                    } else if fence.is_none() {
+                        fence = Some(marker);
+                    }
+                    continue;
+                }
+            }
+            if fence.is_some() {
+                continue;
+            }
+            let mut inline_code = false;
+            let mut cursor = 0;
+            while cursor < line.len() {
+                let remaining = &line[cursor..];
+                if html_comment {
+                    if let Some(end) = remaining.find("-->") {
+                        cursor += end + 3;
+                        html_comment = false;
+                    } else {
+                        break;
+                    }
+                    continue;
+                }
+                if remaining.starts_with("<!--") {
+                    html_comment = true;
+                    cursor += 4;
+                    continue;
+                }
+                let ch = remaining.chars().next().expect("cursor is inside line");
+                if ch == '`' {
+                    inline_code = !inline_code;
+                } else if !inline_code {
+                    plain.push(ch);
+                }
+                cursor += ch.len_utf8();
+            }
+            plain.push('\n');
+        }
+
+        let include_pattern = regex::Regex::new(r"(?:^|\s)@((?:[^\s\\]|\\ )+)")
+            .expect("valid source include expression");
+        let mut paths = Vec::new();
+        let mut unique = HashSet::new();
+        for found in include_pattern.captures_iter(&plain) {
+            let raw = found.get(1).expect("include capture").as_str();
+            let raw = raw
+                .split('#')
+                .next()
+                .unwrap_or("")
+                .trim_end_matches(|ch: char| ",.;:!?)]}".contains(ch))
+                .replace("\\ ", " ");
+            if raw.is_empty()
+                || !raw.chars().next().is_some_and(|ch| {
+                    ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/' | '~')
+                })
+            {
+                continue;
+            }
+            let candidate = if let Some(relative) = raw.strip_prefix("~/") {
+                match std::env::var_os("HOME") {
+                    Some(home) => PathBuf::from(home).join(relative),
+                    None => continue,
+                }
+            } else if raw.starts_with('/') {
+                PathBuf::from(&raw)
+            } else {
+                file.parent().unwrap_or(Path::new(".")).join(&raw)
+            };
+            if let Some(extension) = candidate.extension().and_then(|ext| ext.to_str()) {
+                if !matches!(
+                    extension.to_ascii_lowercase().as_str(),
+                    "md" | "txt" | "text" | "json" | "yaml" | "yml" | "toml"
+                        | "xml" | "csv" | "html" | "htm" | "css" | "scss"
+                        | "sass" | "less" | "js" | "ts" | "tsx" | "jsx"
+                        | "mjs" | "cjs" | "py" | "sh" | "rs"
+                ) {
+                    continue;
+                }
+            }
+            if unique.insert(candidate.clone()) {
+                paths.push(candidate);
+            }
+        }
+        paths
+    }
+
     fn add_file(
         path: &Path,
         scope: &Path,
@@ -200,6 +298,20 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
     ) -> anyhow::Result<()> {
+        add_file_inner(path, scope, is_rule, seen, output, 0)
+    }
+
+    fn add_file_inner(
+        path: &Path,
+        scope: &Path,
+        is_rule: bool,
+        seen: &mut HashSet<PathBuf>,
+        output: &mut String,
+        depth: usize,
+    ) -> anyhow::Result<()> {
+        if depth >= 5 {
+            return Ok(());
+        }
         let metadata = match fs::metadata(path) {
             Ok(metadata) => metadata,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -239,8 +351,25 @@ pub fn project_instructions(root: &Path) -> anyhow::Result<String> {
         } else {
             Some(content.as_str())
         };
-        seen.insert(canonical);
+        // Mark the parent before expansion to break circular references.
+        // Included instructions are placed before the referring file so the
+        // referring file retains the last-word precedence in the model prompt.
+        seen.insert(canonical.clone());
         if let Some(body) = body.filter(|body| !body.trim().is_empty()) {
+            for include in include_paths(body, &canonical) {
+                let resolved = match include.canonicalize() {
+                    Ok(resolved) => resolved,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(error) => {
+                        return Err(error).with_context(|| {
+                            format!("Resolve instruction include: {}", include.display())
+                        })
+                    }
+                };
+                if resolved.starts_with(scope) {
+                    add_file_inner(&resolved, scope, false, seen, output, depth + 1)?;
+                }
+            }
             output.push_str(&format!(
                 "\nProject instructions from {}:\n{}\n",
                 path.display(),
