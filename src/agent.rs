@@ -1669,6 +1669,9 @@ impl Agent {
         self.session.summary = Some(summary);
         runtime_contracts::suppress_compact_warning();
         self.session.messages.clear();
+        // Compaction removes earlier memory attachments from the context.
+        self.session.surfaced_memories.clear();
+        self.session.surfaced_memory_units = 0;
         self.session.save(&self.root)?;
         let after = self
             .hooks
@@ -1833,12 +1836,22 @@ impl Agent {
             }
         }
         recent_tools.truncate(10);
-        match memory::context_with_recent_tools(
+        // FileStateCache excludes memories already opened through successful
+        // file tools, even when the session was resumed from disk.
+        let mut excluded_memories = self.session.surfaced_memories.clone();
+        for path in files_context::paths(&self.session.messages, &self.root) {
+            if let Some(relative) = path.strip_prefix(".atlas/memory/") {
+                excluded_memories.push(relative.to_owned());
+            }
+        }
+        match memory::context_with_recent_tools_excluding(
             &self.root,
             &prompt,
             self.provider.as_ref(),
             &self.profile,
             &recent_tools,
+            &excluded_memories,
+            self.session.surfaced_memory_units,
         )
         .await
         {
@@ -1849,6 +1862,14 @@ impl Agent {
                 if !relevant.text.is_empty() {
                     system.push_str("\nRelevant project memory:\n");
                     system.push_str(&relevant.text);
+                }
+                // Only successfully surfaced memories consume the budget.
+                if !relevant.surfaced.is_empty() {
+                    self.session.surfaced_memories.extend(relevant.surfaced);
+                    self.session.surfaced_memory_units = self.session
+                        .surfaced_memory_units
+                        .saturating_add(relevant.surfaced_units);
+                    self.session.save(&self.root)?;
                 }
             }
             Err(error) => {
