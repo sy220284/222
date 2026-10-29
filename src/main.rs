@@ -37,6 +37,7 @@ mod message_queue;
 mod multimodal;
 mod ndjson;
 mod notebook;
+mod oauth_crypto;
 mod permission_mode;
 mod permission_rules;
 mod permission_settings;
@@ -88,6 +89,7 @@ mod tool_search;
 mod tools;
 mod transcript_search;
 mod unicode_sanitization;
+mod version;
 mod webfetch;
 mod websearch;
 mod workspace_dirs;
@@ -168,6 +170,10 @@ impl From<ApprovalArg> for Approval {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Display the version of this running binary
+    Version,
+    /// Create a secure OAuth PKCE verifier/challenge and state
+    OauthPkce,
     /// Create a user-owned JSON config file with example providers
     Init,
     /// Inspect local installation, settings, Git and MCP availability offline
@@ -252,6 +258,23 @@ enum Commands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
+        Commands::Version => {
+            println!("{}", version::running_version());
+            return Ok(());
+        }
+        Commands::OauthPkce => {
+            let request = oauth_crypto::PkceRequest::create()?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "verifier":request.verifier,
+                    "challenge":request.challenge,
+                    "challenge_method":"S256",
+                    "state":request.state
+                }))?
+            );
+            return Ok(());
+        }
         Commands::GitConfig {
             section,
             key,
@@ -763,6 +786,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 println!("Resume: atlas-agent chat --resume SESSION_ID");
                 println!("/usage                   show provider-reported token totals");
                 println!("/cost                    show model costs and unknown pricing");
+                println!("/version                 show version of this running binary");
                 println!("/tasks                   list background shell tasks");
                 println!(
                     "/mode                    cycle permission mode (default/accept edits/plan)"
@@ -882,6 +906,10 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                         cmd["description"].as_str().unwrap_or("")
                     );
                 }
+                continue;
+            }
+            "/version" => {
+                println!("{}", version::running_version());
                 continue;
             }
             "/cost" => {
