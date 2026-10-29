@@ -268,7 +268,10 @@ impl Agent {
     /// Source TaskCreated/TaskCompleted hooks receive task, session and team
     /// context; optional teammate fields are omitted for standalone sessions.
     fn base_hook_input(&self) -> serde_json::Value {
-        let transcript = self.root.join(".atlas").join("sessions")
+        let transcript = self
+            .root
+            .join(".atlas")
+            .join("sessions")
             .join(format!("{}.json", self.session.id));
         json!({
             "session_id": self.session.id,
@@ -309,7 +312,9 @@ impl Agent {
                         self.task_hook_input(
                             id,
                             args["subject"].as_str().context("Missing task subject")?,
-                            args["description"].as_str().context("Missing task description")?,
+                            args["description"]
+                                .as_str()
+                                .context("Missing task description")?,
                         ),
                     )
                     .await;
@@ -317,7 +322,9 @@ impl Agent {
                     Ok(result) => {
                         if !result.blocking_reasons.is_empty() {
                             self.graph.delete_for_blocking_hook(id)?;
-                            let feedback = result.blocking_reasons.iter()
+                            let feedback = result
+                                .blocking_reasons
+                                .iter()
                                 .map(|reason| format!("TaskCreated hook feedback:\n{reason}"))
                                 .collect::<Vec<_>>()
                                 .join("\n");
@@ -372,7 +379,9 @@ impl Agent {
                             if !outcome.blocking_reasons.is_empty() {
                                 // A denied completion is ordinary tool feedback in 2.1.88.
                                 // Preserve every blocking hook without cancelling sibling tools.
-                                return Ok(outcome.blocking_reasons.iter()
+                                return Ok(outcome
+                                    .blocking_reasons
+                                    .iter()
                                     .map(|reason| format!("TaskCompleted hook feedback:\n{reason}"))
                                     .collect::<Vec<_>>()
                                     .join("\n"));
@@ -1532,7 +1541,10 @@ impl Agent {
             messages: self.session.messages.clone(),
             tools: definitions,
         };
-        Ok((crate::context_usage::Snapshot::from_request(&request), false))
+        Ok((
+            crate::context_usage::Snapshot::from_request(&request),
+            false,
+        ))
     }
 
     pub fn context_usage(&self) -> Result<serde_json::Value> {
@@ -1555,13 +1567,12 @@ impl Agent {
         let root = self.root.canonicalize()?;
         for (source, user) in [("project", false), ("user", true)] {
             let directory = crate::agent_definition::directory(&root, user)?;
-            if !user && directory.exists()
-                && !directory.canonicalize()?.starts_with(&root)
-            {
+            if !user && directory.exists() && !directory.canonicalize()?.starts_with(&root) {
                 bail!("Project agent definitions escape workspace");
             }
             let mut agents = crate::agent_definition::existing_agent_types(&directory)?
-                .into_iter().collect::<Vec<_>>();
+                .into_iter()
+                .collect::<Vec<_>>();
             agents.sort();
             for name in agents {
                 output.push(format!("{source}: {name}"));
