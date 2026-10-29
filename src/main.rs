@@ -975,21 +975,32 @@ async fn main() -> Result<()> {
     let permission_paths = permission_settings::SettingsPaths::for_workspace(&root)?;
     let active_permission_rules = permission_paths.load(&config.permission_rules)?;
     let configured_default_mode = permission_paths.default_mode()?;
+    let bypass_disabled = permission_paths.bypass_disabled()?;
     let plugins = PluginSet::load(&root, &config.enabled_plugins)?;
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. } | Commands::ProjectInit);
-    let session = match &cli.command {
+    let mut session = match &cli.command {
         Commands::Chat {
             resume: Some(id), ..
         } => session_control::resolve(&root, id)?,
         Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
         _ => Session::fresh(),
     };
+    // A managed/user disable flag is stronger than a CLI bypass request and
+    // also prevents a previously saved bypass mode from being restored.
+    if bypass_disabled && session.permission_mode.as_deref() == Some("bypassPermissions") {
+        session.permission_mode = Some("default".to_owned());
+    }
     let has_restored_mode = session.permission_mode.is_some();
+    let effective_approval = if bypass_disabled && matches!(cli.approval, ApprovalArg::Full) {
+        Approval::Ask
+    } else {
+        cli.approval.into()
+    };
     let mut agent = Agent::new(
         profile,
         root,
-        cli.approval.into(),
+        effective_approval,
         interactive,
         cli.max_steps,
         session,

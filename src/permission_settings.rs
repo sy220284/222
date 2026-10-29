@@ -251,6 +251,33 @@ impl SettingsPaths {
         Ok(mode)
     }
 
+    /// Source permissionSetup.ts: settings may disable bypass mode even
+    /// when the CLI requested unrestricted execution. Only the explicit
+    /// "disable" setting is recognized by the original schema.
+    pub fn bypass_disabled(&self) -> Result<bool> {
+        let policy = self.load_policy()?;
+        let has_disable = |value: &Value| {
+            value
+                .pointer("/permissions/disableBypassPermissionsMode")
+                .and_then(Value::as_str)
+                == Some("disable")
+        };
+        if policy.as_ref().is_some_and(&has_disable) {
+            return Ok(true);
+        }
+        if !Self::managed_only(policy.as_ref()) {
+            for path in [&self.user, &self.project, &self.local] {
+                if Self::read_json_for_execution(path)?
+                    .as_ref()
+                    .is_some_and(&has_disable)
+                {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+
     fn managed_only(policy: Option<&Value>) -> bool {
         policy
             .and_then(|value| value.get("allowManagedPermissionRulesOnly"))

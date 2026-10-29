@@ -612,3 +612,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ### 新会话采用设置中的默认权限模式（源码已提交，待验证）
 
 原版 `source/src/utils/permissions/permissionSetup.ts:721–799` 在 CLI 指定模式之后读取 `settings.permissions.defaultMode`，并按设置来源及组织策略限制选择启动模式。Rust `SettingsPaths::default_mode` 现按用户→项目→本地→托管策略顺序提取有效模式，托管-only 时不采用低优先级来源；`src/main.rs` 的真实 Agent 新会话入口在 `--approval ask` 上限内应用 `default/acceptEdits/plan/dontAsk`，已有会话恢复优先保留原持久化模式。原版 `auto` 需要分类器、`bypassPermissions` 不可绕过 CLI 授权上限。**源码已提交、未执行测试/CI**；完整原版模式切换、远程限制及 UI 仍待验证，冻结 Issue #3 不勾选。
+
+### 组织策略禁用绕过审批模式进入真实启动/恢复链（源码已提交，待验证）
+
+对照原版 `source/src/utils/permissions/permissionSetup.ts:704–710,775–799` 和 `source/src/utils/settings/types.ts:67–70`：`permissions.disableBypassPermissionsMode: "disable"` 应阻止进入 `bypassPermissions`。Rust `SettingsPaths::bypass_disabled` 现读取用户、项目、本地与托管来源，尊重托管-only 限制；`src/main.rs` 启动时即使显式 `--approval full` 也将执行上限降至 Ask，已有会话中持久化的绕过模式安全回退 default，后续 `/mode` 和 SDK 切换也受 Agent 授权上限限制。**代码已提交，未运行测试/CI**；原版动态配置重载、远程托管、所有 UI 提示仍待验证，冻结清单不勾选。
