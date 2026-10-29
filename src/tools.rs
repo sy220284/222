@@ -973,8 +973,8 @@ impl ToolExecutor {
                 && (source_read || result.chars().count() <= MAX_OUTPUT_CHARS),
             content,
             timestamp_ms: before_ms,
-            read_offset: if source_read { Some(requested_offset) } else { None },
-            read_limit: if source_read { requested_limit } else { None },
+            read_offset: if source_read && unchanged { Some(requested_offset) } else { None },
+            read_limit: if source_read && unchanged { requested_limit } else { None },
         });
         Ok(result)
     }
