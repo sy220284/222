@@ -32,7 +32,7 @@ pub fn initWheelAccel(args: &[Value]) -> Value {
         map.insert("dir".into(), json!(0));
         map.insert(
             "xtermJs".into(),
-            args.get(0).cloned().unwrap_or(Value::Null),
+            args.first().cloned().unwrap_or(Value::Null),
         );
         map.insert("frac".into(), json!(0));
         map.insert("base".into(), args.get(1).cloned().unwrap_or(Value::Null));

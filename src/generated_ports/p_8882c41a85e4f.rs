@@ -1,6 +1,5 @@
 //! Rust exports derived from original: src/utils/messages.ts
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub fn INTERRUPT_MESSAGE() -> Value {
     serde_json::from_str(r#""[Request interrupted by user]""#).expect("Valid source constant")
@@ -52,19 +51,17 @@ pub fn PLAN_PHASE4_CONTROL() -> Value {
     serde_json::from_str(r####""### Phase 4: Final Plan\nGoal: Write your final plan to the plan file (the only file you can edit).\n- Begin with a **Context** section: explain why this change is being made — the problem or need it addresses, what prompted it, and the intended outcome\n- Include only your recommended approach, not all alternatives\n- Ensure that the plan file is concise enough to scan quickly, but detailed enough to execute effectively\n- Include the paths of critical files to be modified\n- Reference existing functions and utilities you found that should be reused, with their file paths\n- Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)""####).expect("Valid source constant")
 }
 
-use serde_json::json;
-
 pub fn buildClassifierUnavailableMessage(args: &[Value]) -> Value {
-    super::runtime::add(&super::runtime::add(&super::runtime::add(&super::runtime::concat(&[Value::String("".into()),args.get(1).cloned().unwrap_or(Value::Null),Value::String(" is temporarily unavailable, so auto mode cannot determine the safety of ".into()),args.get(0).cloned().unwrap_or(Value::Null),Value::String(" right now. ".into())]),&Value::String("Wait briefly and then try this action again. ".into())),&Value::String("If it keeps failing, continue with other tasks that don't require this action and come back to it later. ".into())),&Value::String("Note: reading files, searching code, and other read-only operations do not require the classifier and can still be used.".into()))
+    super::runtime::add(&super::runtime::add(&super::runtime::add(&super::runtime::concat(&[Value::String("".into()),args.get(1).cloned().unwrap_or(Value::Null),Value::String(" is temporarily unavailable, so auto mode cannot determine the safety of ".into()),args.first().cloned().unwrap_or(Value::Null),Value::String(" right now. ".into())]),&Value::String("Wait briefly and then try this action again. ".into())),&Value::String("If it keeps failing, continue with other tasks that don't require this action and come back to it later. ".into())),&Value::String("Note: reading files, searching code, and other read-only operations do not require the classifier and can still be used.".into()))
 }
 pub fn isSystemLocalCommandMessage(args: &[Value]) -> Value {
     super::runtime::and(
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "type"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "type"),
             &Value::String("system".into()),
         ),
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "subtype"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "subtype"),
             &Value::String("local_command".into()),
         ),
     )
@@ -72,18 +69,18 @@ pub fn isSystemLocalCommandMessage(args: &[Value]) -> Value {
 pub fn wrapInSystemReminder(args: &[Value]) -> Value {
     super::runtime::concat(&[
         Value::String("<system-reminder>\n".into()),
-        args.get(0).cloned().unwrap_or(Value::Null),
+        args.first().cloned().unwrap_or(Value::Null),
         Value::String("\n</system-reminder>".into()),
     ])
 }
 pub fn isCompactBoundaryMessage(args: &[Value]) -> Value {
     super::runtime::and(
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "type"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "type"),
             &Value::String("system".into()),
         ),
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "subtype"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "subtype"),
             &Value::String("compact_boundary".into()),
         ),
     )

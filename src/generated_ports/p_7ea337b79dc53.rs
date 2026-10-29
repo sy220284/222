@@ -8,7 +8,7 @@ pub fn checkHasTeamMemOps(args: &[Value]) -> Value {
             &super::runtime::gt(
                 &super::runtime::nullish(
                     &super::runtime::property(
-                        &args.get(0).cloned().unwrap_or(Value::Null),
+                        &args.first().cloned().unwrap_or(Value::Null),
                         "teamMemorySearchCount",
                     ),
                     &json!(0),
@@ -18,7 +18,7 @@ pub fn checkHasTeamMemOps(args: &[Value]) -> Value {
             &super::runtime::gt(
                 &super::runtime::nullish(
                     &super::runtime::property(
-                        &args.get(0).cloned().unwrap_or(Value::Null),
+                        &args.first().cloned().unwrap_or(Value::Null),
                         "teamMemoryReadCount",
                     ),
                     &json!(0),
@@ -29,7 +29,7 @@ pub fn checkHasTeamMemOps(args: &[Value]) -> Value {
         &super::runtime::gt(
             &super::runtime::nullish(
                 &super::runtime::property(
-                    &args.get(0).cloned().unwrap_or(Value::Null),
+                    &args.first().cloned().unwrap_or(Value::Null),
                     "teamMemoryWriteCount",
                 ),
                 &json!(0),

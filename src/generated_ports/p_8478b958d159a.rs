@@ -5,11 +5,11 @@ use serde_json::{json, Value};
 pub fn shouldIncludeInStreamlined(args: &[Value]) -> Value {
     super::runtime::or(
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "type"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "type"),
             &Value::String("assistant".into()),
         ),
         &super::runtime::strict_equal(
-            &super::runtime::property(&args.get(0).cloned().unwrap_or(Value::Null), "type"),
+            &super::runtime::property(&args.first().cloned().unwrap_or(Value::Null), "type"),
             &Value::String("result".into()),
         ),
     )

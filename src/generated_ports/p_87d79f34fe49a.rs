@@ -3,8 +3,8 @@
 use serde_json::{json, Value};
 
 pub fn asSessionId(args: &[Value]) -> Value {
-    args.get(0).cloned().unwrap_or(Value::Null)
+    args.first().cloned().unwrap_or(Value::Null)
 }
 pub fn asAgentId(args: &[Value]) -> Value {
-    args.get(0).cloned().unwrap_or(Value::Null)
+    args.first().cloned().unwrap_or(Value::Null)
 }
