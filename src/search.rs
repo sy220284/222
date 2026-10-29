@@ -163,8 +163,18 @@ fn type_matches(path: &Path, kind: &str) -> bool {
         "xml" => matches!(extension, "xml" | "xsl" | "xslt" | "svg"),
         "web" => matches!(
             extension,
-            "html" | "htm" | "css" | "scss" | "sass" | "less"
-                | "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx"
+            "html"
+                | "htm"
+                | "css"
+                | "scss"
+                | "sass"
+                | "less"
+                | "js"
+                | "jsx"
+                | "mjs"
+                | "cjs"
+                | "ts"
+                | "tsx"
         ),
         other => extension == other,
     }
