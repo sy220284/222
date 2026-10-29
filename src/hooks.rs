@@ -278,10 +278,23 @@ impl HookRunner {
                 .and_then(|name| name.to_str()),
             _ => None,
         };
+        // hooks.ts::getMatchingHooks deduplicates command hooks before
+        // launching them. Preserve first-registration order while retaining
+        // the last matching definition for an identical command.
+        let mut unique_rules: Vec<&HookRule> = Vec::new();
+        let mut positions = std::collections::HashMap::<&str, usize>::new();
         for (rule, matcher) in &self.rules {
             if rule.event.name() != event_name || !matcher.matches(match_query) {
                 continue;
             }
+            if let Some(&position) = positions.get(rule.command.as_str()) {
+                unique_rules[position] = rule;
+            } else {
+                positions.insert(rule.command.as_str(), unique_rules.len());
+                unique_rules.push(rule);
+            }
+        }
+        for rule in unique_rules {
             let mut data = json!({"hook_event_name": event_name});
             if matches!(event_name, "PreToolUse" | "PostToolUse" | "PostToolUseFailure"
                 | "PermissionRequest" | "PermissionDenied") {
