@@ -488,17 +488,14 @@ impl ToolExecutor {
                 let previous = if track { history::snapshot(&path)? } else { None };
                 let previous_mode = if track { history::snapshot_mode(&path)? } else { None };
                 let result = self.notebook_edit(&args)?;
-                let checkpoint = if track {
-                    history::record(&self.root, self.session_id.as_deref(), &path, previous, previous_mode)?
+                let checkpoint_notice = if track {
+                    history::record_notice(
+                        &self.root, self.session_id.as_deref(), &path, previous, previous_mode,
+                    )
                 } else {
-                    None
+                    String::new()
                 };
-                Ok(format!(
-                    "{result}{}",
-                    checkpoint
-                        .map(|id| format!("\nCheckpoint: {id}"))
-                        .unwrap_or_default()
-                ))
+                Ok(format!("{result}{checkpoint_notice}"))
             }
             "list_files" => self.list_files(&args),
             "glob_files" => {
@@ -567,17 +564,14 @@ impl ToolExecutor {
                 let before = if track { history::snapshot(&path)? } else { None };
                 let before_mode = if track { history::snapshot_mode(&path)? } else { None };
                 let result = self.write_file(&args).await?;
-                let checkpoint = if track {
-                    history::record(&self.root, self.session_id.as_deref(), &path, before, before_mode)?
+                let checkpoint_notice = if track {
+                    history::record_notice(
+                        &self.root, self.session_id.as_deref(), &path, before, before_mode,
+                    )
                 } else {
-                    None
+                    String::new()
                 };
-                Ok(format!(
-                    "{result}{}",
-                    checkpoint
-                        .map(|id| format!("\nCheckpoint: {id}"))
-                        .unwrap_or_default()
-                ))
+                Ok(format!("{result}{checkpoint_notice}"))
             }
             "edit_file" => {
                 self.require_approval("edit_file", &args)?;
@@ -586,17 +580,14 @@ impl ToolExecutor {
                 let before = if track { history::snapshot(&path)? } else { None };
                 let before_mode = if track { history::snapshot_mode(&path)? } else { None };
                 let result = self.edit_file(&args).await?;
-                let checkpoint = if track {
-                    history::record(&self.root, self.session_id.as_deref(), &path, before, before_mode)?
+                let checkpoint_notice = if track {
+                    history::record_notice(
+                        &self.root, self.session_id.as_deref(), &path, before, before_mode,
+                    )
                 } else {
-                    None
+                    String::new()
                 };
-                Ok(format!(
-                    "{result}{}",
-                    checkpoint
-                        .map(|id| format!("\nCheckpoint: {id}"))
-                        .unwrap_or_default()
-                ))
+                Ok(format!("{result}{checkpoint_notice}"))
             }
             "file_history" => {
                 if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
