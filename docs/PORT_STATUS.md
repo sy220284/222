@@ -447,3 +447,7 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 在 `src/generated_ports/` 增加 400 个原始路径独立 Rust 模块，源码来自用户提供的 2.1.88 TypeScript/JSX 语法树，转换为 serde 类型、常量、可执行简单表达式函数和基础 JSX 视图节点。增加原生 Rust `runtime.rs` 值运算、`ui.rs` 虚拟节点，以及分组导出注册表。`atlas-agent inspect-source <原路径> [--export 名称] [--args JSON数组]` 可从 CLI 调用导出和获取 JSX 视图结构，不依赖原厂服务。每条映射单独登记于 `FILE_PORT_MATRIX.md`。
 
 这些文件只完成**首轮代码转写**。JSX 事件/Hooks、复杂异步状态、副作用、未覆盖的函数和复杂类型尚不能视作完整重写；Rust 简单表达式及静态布局的语义与原版仍有差异。因此本次 **400 条仅升级为部分实现，已验收保持原值**；合并前最终逐文件等价验收仍不可省略。
+
+### 冻结 Issue #3 的 Bash/PowerShell 授权建议源码补齐
+
+直接核对 2.1.88 `src/tools/BashTool/bashPermissions.ts` 161–354 行以及 `src/tools/PowerShellTool/powershellPermissions.ts` 143–159 行，移植安全环境前缀、2 词建议、heredoc 和多行分支、危险首词 UI 过滤、PowerShell 星号/换行拒绝，以及共享权限规则 JSON 对象。源码依据与回归见 `src/bash_permission_suggestions.rs`。现阶段功能函数尚未完整接通交互式权限决策 UI，也未实现完整 Shell AST 和 PowerShell 执行器，冻结条目继续保持部分实现、不得验收关闭。

@@ -68,6 +68,7 @@ mod ink_constants;
 mod command_lifecycle;
 mod control_message_compat;
 mod permission_rules;
+mod bash_permission_suggestions;
 mod permission_mode;
 mod reactive_store;
 mod cleanup_registry;
