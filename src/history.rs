@@ -110,6 +110,9 @@ pub fn record(
     if previous.as_ref().is_some_and(|p| p.as_slice() == now.as_slice()) {
         return Ok(None);
     }
+    // Validate the updated file metadata before creating any backup artifact.
+    // A failed stat must not leave a dangling backup in session storage.
+    let updated_mode = snapshot_mode(path)?;
     let relative = path.strip_prefix(root).unwrap_or(path);
     let id = Uuid::new_v4();
     let folder = storage(root, session_id)?;
@@ -135,7 +138,7 @@ pub fn record(
         backup_path: backup_path.clone(),
         previous_mode,
         updated_hash: fingerprint(&now),
-        updated_mode: snapshot_mode(path)?,
+        updated_mode,
     };
     let final_path = folder.join(format!("{id}.json"));
     let temporary = folder.join(format!("{id}.tmp"));
