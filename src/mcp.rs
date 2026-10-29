@@ -413,7 +413,10 @@ impl McpManager {
             let mut seen_aliases = std::collections::HashSet::new();
             let mut cursor: Option<String> = None;
             let mut seen_cursors = std::collections::HashSet::new();
-            let discovery: Result<()> = async {
+            // Resource-only and prompt-only MCP servers are valid: do not
+            // require tools/list when the server did not advertise tools.
+            let discovery: Result<()> = if client.capabilities().and_then(|caps| caps.get("tools")).is_some() {
+                async {
                 loop {
                     let params = cursor.as_ref().map_or(json!({}), |c| json!({"cursor":c}));
                     let page = timeout(RPC_TIMEOUT, client.request("tools/list", params))
@@ -457,8 +460,10 @@ impl McpManager {
                     }
                 }
                 Ok(())
-            }
-            .await;
+                }.await
+            } else {
+                Ok(())
+            };
             if let Err(error) = discovery {
                 out.failed_status(server, format!("Tool discovery failed: {error:#}"));
                 continue;
