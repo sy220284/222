@@ -309,6 +309,19 @@ impl Agent {
         input
     }
 
+    /// Preserve non-blocking hook errors as visible terminal/SDK feedback
+    /// without treating them as permission denial or discarding other hooks.
+    fn report_hook_warnings(&self, event: HookEvent, outcome: &crate::hooks::HookOutcome) {
+        for warning in &outcome.non_blocking_errors {
+            eprintln!("{} hook warning: {warning}", event.name());
+            self.emit(json!({
+                "type":"hook_warning",
+                "hook_event_name":event.name(),
+                "message":warning,
+            }));
+        }
+    }
+
     fn task_hook_input(&self, id: &str, subject: &str, description: &str) -> serde_json::Value {
         let mut input = self.base_hook_input();
         input["task_id"] = json!(id);
@@ -350,6 +363,7 @@ impl Agent {
                     .await;
                 match outcome {
                     Ok(result) => {
+                        self.report_hook_warnings(HookEvent::TaskCreated, &result);
                         if !result.blocking_reasons.is_empty() {
                             self.graph.delete_for_blocking_hook(id)?;
                             let feedback = result
@@ -406,6 +420,7 @@ impl Agent {
                                     ),
                                 )
                                 .await?;
+                            self.report_hook_warnings(HookEvent::TaskCompleted, &outcome);
                             if !outcome.blocking_reasons.is_empty() {
                                 // A denied completion is ordinary tool feedback in 2.1.88.
                                 // Preserve every blocking hook without cancelling sibling tools.
@@ -880,6 +895,7 @@ impl Agent {
                                 input
                             })
                             .await?;
+                        child.report_hook_warnings(HookEvent::SubagentStart, &start);
                         if let Some(reason) = start.blocking_reason {
                             bail!("SubagentStart hook blocked: {reason}")
                         }
@@ -913,6 +929,7 @@ impl Agent {
                                     input
                                 })
                                 .await?;
+                            child.report_hook_warnings(HookEvent::SubagentStop, &stop);
                             // SubagentStop must still fire when the model run
                             // fails; only a successful run proceeds to idle.
                             let answer = output?;
@@ -952,6 +969,7 @@ impl Agent {
                                             ),
                                         )
                                         .await?;
+                                    child.report_hook_warnings(HookEvent::TaskCompleted, &outcome);
                                     if outcome.prevent_continuation {
                                         prevented = Some((
                                             "TaskCompleted",
@@ -979,6 +997,7 @@ impl Agent {
                                         input
                                     })
                                     .await?;
+                                child.report_hook_warnings(HookEvent::TeammateIdle, &idle);
                                 if idle.prevent_continuation {
                                     prevented = Some((
                                         "TeammateIdle",
