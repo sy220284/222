@@ -255,7 +255,7 @@ impl PluginSet {
                 hook.plugin_root = Some(location.clone());
                 set.hooks.push(hook);
             }
-            for mut server in manifest_servers(&manifest.mcp_servers)? {
+            for mut server in manifest_servers(&location, &manifest.mcp_servers)? {
                 server.id = format!("{}_{}", name, server.id);
                 if server.id.len() > 64 {
                     bail!("Plugin MCP tool prefix too long")
