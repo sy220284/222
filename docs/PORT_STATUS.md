@@ -928,3 +928,10 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 
 ## 2026-10-29：远程入站图像消息兼容（部分实现）
 对照 `src/bridge/inboundMessages.ts` 与 `src/utils/imageResizer.ts`，补齐 SDK 用户消息/UUID 提取、缺失媒体类型的图像签名检测及 camelCase `mediaType` 兼容；显式 snake_case 优先，非法格式保留拒绝。直接 SDK 与排队控制入口共用多模态解析，不建立第二状态源。本地新测：4/4 Rust 单测及 1/1 真实 SDK 子进程 + 模拟 HTTP 模型测试通过，JPEG/WebP 图片 URL 进入模型请求。远程网络传输、附件及恢复仍未等价。
+
+
+## 2026-10-29：远程入站文件附件处理（保持部分实现）
+- 代码：`src/bridge_inbound_attachments.rs`、`src/main.rs` 和 `tests/integration_cli.rs`，提交 `66da6baee5d984dd4dbcef022d38f432f8c25a82`。
+- 原版对照 `src/bridge/inboundAttachments.ts`：字段整组校验、附件下载、文件名清洗、当前会话目录、文本及混合内容的末尾文本块 @引用插入、无 token/失败时保留用户原文。用户明确配置 `ATLAS_BRIDGE_ATTACHMENT_BASE_URL` 和 `ATLAS_BRIDGE_ATTACHMENT_TOKEN`；不调用厂商专属服务。与原版相比加入单文件 16MiB、最多 8 个附件及 create_new 隔离机制。
+- 本地验证：新增 3 项附件模块测试（含真实 HTTP 下载、授权头及目录、异常输入）；新增 1 项真实 SDK 子进程+两台 HTTP 服务（文件服务和模型请求）测试。合并后的本地快照 `cargo test --offline --locked --all-targets` 共 576 项通过，`cargo check --offline --locked --all-targets`、`cargo fmt --all -- --check` 通过。
+- 当前仅标记部分实现：远端完整桥接协议、身份刷新、断线重连、取消传播及真实多会话并发未达等价；新的 GitHub HEAD 必须单独核验。
