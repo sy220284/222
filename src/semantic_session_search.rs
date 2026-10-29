@@ -78,7 +78,7 @@ fn prompt(query: &str, candidates: &[(SessionItem, Option<Session>)]) -> String 
                 if let Some(custom_title) = session
                     .custom_title
                     .as_deref()
-                    .filter(|title| *title != item.title)
+                    .filter(|title| *title != item.title.as_str())
                 {
                     fields.push(format!("[custom title: {custom_title}]"));
                 }
