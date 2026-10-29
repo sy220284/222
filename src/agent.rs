@@ -187,6 +187,10 @@ pub struct Agent {
     /// Exact last model request prefix for isolated SDK side questions.
     last_side_question_request: Option<ModelRequest>,
     last_model_usage: Option<TokenUsage>,
+    /// SDK initialize custom prompt replaces the default agent instructions.
+    sdk_system_prompt: Option<String>,
+    /// SDK initialize append prompt is layered after the base prompt.
+    sdk_append_system_prompt: Option<String>,
 }
 
 /// Match the source getTaskListId priority, with a provider-neutral explicit
@@ -305,7 +309,40 @@ impl Agent {
             last_context_usage: None,
             last_side_question_request: None,
             last_model_usage: None,
+            sdk_system_prompt: None,
+            sdk_append_system_prompt: None,
         })
+    }
+
+    /// Source cli/print.ts::handleInitializeRequest applies SDK prompt overrides
+    /// before QueryEngine builds its next model request. Keep these settings
+    /// session-local and invalidate derived context and side-question prefixes.
+    pub fn set_sdk_system_prompts(
+        &mut self,
+        system_prompt: Option<&str>,
+        append_system_prompt: Option<&str>,
+    ) {
+        self.sdk_system_prompt = system_prompt.map(str::to_owned);
+        self.sdk_append_system_prompt = append_system_prompt.map(str::to_owned);
+        self.last_context_usage = None;
+        self.last_side_question_request = None;
+    }
+
+    fn effective_system_prompt(&self) -> Result<String> {
+        let mut prompt = system_prompt_with_dirs(&self.root, &self.additional_dirs)?;
+        if let Some(custom) = &self.sdk_system_prompt {
+            // QueryEngine.ts:321-325 replaces the default system instructions
+            // while keeping workspace/project context and independent rules.
+            if !prompt.starts_with(DEFAULT_SYSTEM) {
+                bail!("SDK system prompt cannot replace unexpected base prompt");
+            }
+            prompt.replace_range(..DEFAULT_SYSTEM.len(), custom);
+        }
+        if let Some(append) = &self.sdk_append_system_prompt {
+            prompt.push_str("\\n");
+            prompt.push_str(append);
+        }
+        Ok(prompt)
     }
 
     pub async fn attach_mcp(&mut self, servers: &[McpServerConfig]) -> Result<()> {
@@ -1910,7 +1947,7 @@ impl Agent {
         if let Some(snapshot) = &self.last_context_usage {
             return Ok((snapshot.with_messages(&self.session.messages), true));
         }
-        let mut system = system_prompt_with_dirs(&self.root, &self.additional_dirs)?;
+        let mut system = self.effective_system_prompt()?;
         self.conversation_context.append_to(&mut system);
         if let Some(summary) = &self.session.summary {
             system.push_str("\nVerified session continuity summary:\n");
@@ -1978,7 +2015,7 @@ impl Agent {
             }
             fork
         } else {
-            let mut system = system_prompt_with_dirs(&self.root, &self.additional_dirs)?;
+            let mut system = self.effective_system_prompt()?;
             self.conversation_context.append_to(&mut system);
             if let Some(summary) = &self.session.summary {
                 system.push_str("\nVerified session continuity summary:\n");
@@ -3066,7 +3103,7 @@ impl Agent {
         user_message.content_blocks = blocks;
         self.session.messages.push(user_message);
         self.session.save(&self.root)?;
-        let mut system = system_prompt_with_dirs(&self.root, &self.additional_dirs)?;
+        let mut system = self.effective_system_prompt()?;
         let resumed_team_worker = self.team_name.is_some()
             && self
                 .agent_name
