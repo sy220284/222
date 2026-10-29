@@ -139,6 +139,7 @@ fn merge_server_specs(
     root: &Path,
     value: &Value,
     servers: &mut std::collections::BTreeMap<String, Value>,
+    visiting: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<()> {
     match value {
         Value::Null => {}
@@ -146,14 +147,20 @@ fn merge_server_specs(
             if relative.ends_with(".mcpb") {
                 bail!("MCPB plugin bundles require an installed bundle handler")
             }
-            merge_server_specs(root, &mcp_file(root, relative)?, servers)?;
+            let file = checked_component(root, &root.join(relative))?;
+            if !visiting.insert(file.clone()) {
+                bail!("Plugin MCP configuration contains a file reference cycle")
+            }
+            let result = merge_server_specs(root, &mcp_file(root, relative)?, servers, visiting);
+            visiting.remove(&file);
+            result?;
         }
         Value::Array(specs) => {
             for spec in specs {
                 if let Some(id) = spec.get("id").and_then(Value::as_str) {
                     servers.insert(id.to_owned(), spec.clone());
                 } else {
-                    merge_server_specs(root, spec, servers)?;
+                    merge_server_specs(root, spec, servers, visiting)?;
                 }
             }
         }
@@ -169,11 +176,12 @@ fn merge_server_specs(
 
 fn manifest_servers(root: &Path, value: &Value) -> Result<Vec<McpServerConfig>> {
     let mut entries = std::collections::BTreeMap::new();
+    let mut visiting = std::collections::HashSet::new();
     let standard = root.join(".mcp.json");
     if standard.exists() {
-        merge_server_specs(root, &mcp_file(root, ".mcp.json")?, &mut entries)?;
+        merge_server_specs(root, &mcp_file(root, ".mcp.json")?, &mut entries, &mut visiting)?;
     }
-    merge_server_specs(root, value, &mut entries)?;
+    merge_server_specs(root, value, &mut entries, &mut visiting)?;
     let mut servers = Vec::new();
     for (name, config) in entries {
         let mut config = config;
