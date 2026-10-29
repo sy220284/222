@@ -1560,7 +1560,7 @@ impl Agent {
         if context.trim().is_empty() {
             bail!("Could not generate a name: no conversation context yet. Usage: /rename <name>");
         }
-        if self.session.team_name.is_some() && self.session.agent_name.is_some() {
+        if crate::session_control::is_teammate_session(&self.session) {
             bail!("Cannot rename: This session is a swarm teammate. Teammate names are set by the team leader.");
         }
         let started = Instant::now();
