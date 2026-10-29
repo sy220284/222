@@ -1485,6 +1485,18 @@ async fn chat(
             }
             continue;
         }
+        if let Some(name) = input.strip_prefix("/mcp reconnect ") {
+            let name = name.trim();
+            if name.is_empty() {
+                eprintln!("Usage: /mcp reconnect SERVER_NAME");
+            } else {
+                match agent.reconnect_named_mcp(name).await {
+                    Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
+                    Err(error) => eprintln!("MCP reconnect failed: {error:#}"),
+                }
+            }
+            continue;
+        }
         if let Some(raw) = input.strip_prefix("/mode set ") {
             let raw = raw.trim();
             let remember = raw.ends_with(" --remember");
@@ -1614,6 +1626,7 @@ async fn chat(
                 println!("@teammate MESSAGE        send directly to active team mailbox");
                 println!("/shell-spec [name]       show registered shell command specs");
                 println!("/mcp [status|reconnect]  inspect or recover MCP connections");
+                println!("/mcp reconnect SERVER_NAME  reconnect only the named MCP server");
                 println!("/mcp-prompts             list available MCP prompt commands");
                 println!("/server:prompt (MCP) ARGS  execute an MCP prompt");
                 println!("/exit                    quit");
