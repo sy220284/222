@@ -1,0 +1,35 @@
+name: 规范 Rust 代码格式（临时）
+on:
+  push:
+    branches: [feat/full-rust-parity]
+permissions:
+  contents: write
+concurrency:
+  group: rust-ci-format
+  cancel-in-progress: false
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/full-rust-parity
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+          components: rustfmt
+      - name: 将全部 Rust 文件规范化并提交
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          git add src tests
+          if git diff --cached --quiet; then
+            echo "格式检查已满足"
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "规范 Clippy 修复后的 Rust 源码格式"
+          git fetch origin feat/full-rust-parity
+          git rebase origin/feat/full-rust-parity
+          git push origin HEAD:feat/full-rust-parity
