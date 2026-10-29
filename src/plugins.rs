@@ -536,11 +536,36 @@ fn user_invocable_command(content: &str) -> bool {
     if closed { declared.unwrap_or(true) } else { true }
 }
 
+/// Provider-neutral, per-plugin persistent data storage. The source lazily
+/// creates a plugin data directory only when its prompt references the token.
+fn plugin_data_directory(plugin_root: &Path) -> Result<String> {
+    let name = plugin_root.file_name().and_then(|part| part.to_str())
+        .context("Invalid plugin directory name")?;
+    if !valid_name(name) {
+        bail!("Invalid plugin directory name")
+    }
+    let atlas = plugin_root.parent().and_then(Path::parent)
+        .context("Plugin installation is outside the configured plugin tree")?;
+    let base = atlas.join("plugin-data");
+    fs::create_dir_all(&base)?;
+    let base = base.canonicalize()?;
+    if !base.starts_with(atlas) {
+        bail!("Plugin data directory leaves the workspace")
+    }
+    let data = base.join(name);
+    fs::create_dir_all(&data)?;
+    let data = data.canonicalize()?;
+    if !data.starts_with(&base) {
+        bail!("Plugin data directory leaves the plugin data root")
+    }
+    Ok(data.to_string_lossy().replace('\\', "/"))
+}
+
 /// Expand the plugin root after argument substitution, as the original
 /// getPromptForCommand does. Never treat the expanded text as a shell command.
-fn plugin_command_body(content: &str, args: &str, root: &Path, session_id: Option<&str>) -> Option<String> {
+fn plugin_command_body(content: &str, args: &str, root: &Path, session_id: Option<&str>) -> Result<Option<String>> {
     if !user_invocable_command(content) {
-        return None;
+        return Ok(None);
     }
     let names = crate::skill_arguments::frontmatter_argument_names(content);
     let prompt = crate::skill_arguments::substitute_arguments(
@@ -550,10 +575,16 @@ fn plugin_command_body(content: &str, args: &str, root: &Path, session_id: Optio
     #[cfg(windows)]
     let root = root.replace('\\', "/");
     let prompt = prompt.replace("${CLAUDE_PLUGIN_ROOT}", root.as_ref());
-    Some(match session_id {
+    let prompt = match session_id {
         Some(id) => prompt.replace("${CLAUDE_SESSION_ID}", id),
         None => prompt,
-    })
+    };
+    let prompt = if session_id.is_some() && prompt.contains("${CLAUDE_PLUGIN_DATA}") {
+        prompt.replace("${CLAUDE_PLUGIN_DATA}", &plugin_data_directory(root)?)
+    } else {
+        prompt
+    };
+    Ok(Some(prompt))
 }
 
 /// Resolve an original plugin Markdown slash command to its model-visible
@@ -597,7 +628,7 @@ pub fn command_prompt_with_session(
             } else {
                 bail!("Plugin command requires source or content")
             };
-            let prompt = plugin_command_body(&content, args, &plugin_root, session_id);
+            let prompt = plugin_command_body(&content, args, &plugin_root, session_id)?;
             if prompt.is_none() && session_id.is_some() {
                 bail!("Plugin command is not user invocable")
             }
@@ -670,7 +701,7 @@ pub fn command_prompt_with_session(
                 continue;
             }
             let content = fs::read_to_string(&path)?;
-            let prompt = plugin_command_body(&content, args, &plugin_root, session_id);
+            let prompt = plugin_command_body(&content, args, &plugin_root, session_id)?;
             if prompt.is_none() && session_id.is_some() {
                 bail!("Plugin command is not user invocable")
             }
@@ -767,15 +798,23 @@ mod tests {
     fn plugin_command_respects_user_invocable_and_expands_root() {
         let root = std::path::Path::new("/tmp/plugin-root");
         let hidden = "---\nuser-invocable: false\n---\nDo not expose";
-        assert_eq!(plugin_command_body(hidden, "", root, None), None);
+        assert_eq!(plugin_command_body(hidden, "", root, None).unwrap(), None);
         let visible = "---\nuser-invocable: true\n---\nRead ${CLAUDE_PLUGIN_ROOT}/README.md for $ARGUMENTS";
-        assert_eq!(plugin_command_body(visible, "notes", root, None).as_deref(),
+        assert_eq!(plugin_command_body(visible, "notes", root, None).unwrap().as_deref(),
             Some("Read /tmp/plugin-root/README.md for notes"));
         let nested = "---\nmetadata:\n  user-invocable: false\n---\nVisible";
-        assert_eq!(plugin_command_body(nested, "", root, None).as_deref(), Some("Visible"));
+        assert_eq!(plugin_command_body(nested, "", root, None).unwrap().as_deref(), Some("Visible"));
         let session = "Session ${CLAUDE_SESSION_ID}";
-        assert_eq!(plugin_command_body(session, "", root, Some("session-123")).as_deref(),
+        assert_eq!(plugin_command_body(session, "", root, Some("session-123")).unwrap().as_deref(),
             Some("Session session-123"));
+        let temporary = tempfile::tempdir().unwrap();
+        let installed = temporary.path().join(".atlas/plugins/demo");
+        fs::create_dir_all(&installed).unwrap();
+        let data_prompt = plugin_command_body(
+            "Persistent: ${CLAUDE_PLUGIN_DATA}", "", &installed, Some("s"),
+        ).unwrap().unwrap();
+        assert!(data_prompt.contains(".atlas/plugin-data/demo"), "{data_prompt}");
+        assert!(temporary.path().join(".atlas/plugin-data/demo").is_dir());
     }
     #[test]
     fn loads_only_explicitly_enabled_plugins() {
