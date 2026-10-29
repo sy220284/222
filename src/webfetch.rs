@@ -397,9 +397,9 @@ async fn fetch_with_redirect_policy_in_workspace(
             .set_scheme("https")
             .map_err(|_| anyhow::anyhow!("Cannot upgrade WebFetch URL to HTTPS"))?;
     }
-    for _ in 0..5 {
+    for _ in 0..=10 {
         let mut builder = Client::builder()
-            .timeout(Duration::from_secs(25))
+            .timeout(Duration::from_secs(60))
             .redirect(reqwest::redirect::Policy::none())
             .user_agent("AtlasAgent/0.1 (+user-requested-web-fetch)");
         if !allow_private_for_test {
@@ -411,10 +411,11 @@ async fn fetch_with_redirect_policy_in_workspace(
         let client = builder.build()?;
         let mut response = client
             .get(current.clone())
+            .header(reqwest::header::ACCEPT, "text/markdown, text/html, */*")
             .send()
             .await
             .with_context(|| format!("GET {current}"))?;
-        if response.status().is_redirection() {
+        if matches!(response.status().as_u16(), 301 | 302 | 307 | 308) {
             let location = response
                 .headers()
                 .get("location")
@@ -505,7 +506,7 @@ async fn fetch_with_redirect_policy_in_workspace(
         }
         return Ok(output);
     }
-    bail!("Web redirect limit exceeded")
+    bail!("Too many redirects (exceeded 10)")
 }
 
 async fn fetch_with_redirect_policy(
