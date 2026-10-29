@@ -1560,6 +1560,7 @@ async fn chat(
                 println!("/diff                    view staged, unstaged and untracked Git changes");
                 println!("/skills                  list accessible project and plugin skills");
                 println!("/agents                  list project and user custom agent definitions");
+                println!("/hooks                   list active hook events, matchers and timeouts");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
                 println!("/permission add|delete user|project|local allow|deny|ask RULE");
@@ -1666,6 +1667,10 @@ async fn chat(
                     Ok(agents) => println!("{agents}"),
                     Err(error) => eprintln!("Cannot list agents: {error:#}"),
                 }
+                continue;
+            }
+            "/hooks" => {
+                println!("{}", agent.hooks_report());
                 continue;
             }
 
