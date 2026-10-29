@@ -656,7 +656,7 @@ fn stop_hook_block_causes_one_additional_model_round() {
             "default_provider":"mock",
             "providers":[{"id":"mock","kind":"openai-compatible",
                 "base_url":format!("http://{address}/v1"),"model":"mock"}],
-            "hooks":[{"event":"Stop","command":"echo 'Confirm tests' >&2; exit 2",
+            "hooks":[{"event":"Stop","command":"if [ ! -e .atlas-stop-once ]; then touch .atlas-stop-once; echo 'Confirm tests' >&2; exit 2; fi",
                 "timeout_seconds":5}]
         })
         .to_string(),

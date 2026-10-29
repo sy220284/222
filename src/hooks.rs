@@ -218,7 +218,10 @@ impl HookRunner {
             }
             let matcher = HookMatcher::compile(rule.matcher.as_deref());
             if matches!(matcher, HookMatcher::Invalid) {
-                bail!("Invalid hook matcher regex: {}", rule.matcher.as_deref().unwrap_or_default());
+                bail!(
+                    "Invalid hook matcher regex: {}",
+                    rule.matcher.as_deref().unwrap_or_default()
+                );
             }
             compiled.push((rule.clone(), matcher));
         }
