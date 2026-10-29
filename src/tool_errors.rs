@@ -1,4 +1,5 @@
 //! Source-aligned tool error formatting: src/utils/toolErrors.ts.
+#![allow(dead_code)]
 use serde_json::Value;
 
 pub fn format_error_text(message: &str) -> String {
