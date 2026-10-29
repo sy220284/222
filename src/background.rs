@@ -400,7 +400,9 @@ fn create_output_file(path: &Path) -> Result<tokio::fs::File> {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_NOFOLLOW);
     }
-    let file = options.open(path).with_context(|| format!("Securely creating background output {}", path.display()))?;
+    let file = options
+        .open(path)
+        .with_context(|| format!("Securely creating background output {}", path.display()))?;
     Ok(tokio::fs::File::from_std(file))
 }
 
