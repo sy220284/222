@@ -1,3 +1,9 @@
+## 2026-10-29：远程会话上传附件的完整批量接收与工作区边界（源码已提交，待验收）
+
+原版 `source/src/bridge/inboundAttachments.ts:31–48,64–116,123–174` 使用数组 schema、逐个下载、独立失败隔离并将成功文件的引用附加到用户消息；原版未设置 8 个附件或 16 MiB 单文件的固定上限。Rust `src/bridge_inbound_attachments.rs::extract/download_one/resolve_and_prepend` 原先对超过 8 个附件整批丢弃，对超过 16 MiB 的合法附件丢弃；现移除这两个额外限制及字符串任意长度限制，保留原版逐附件失败隔离与真实文件保存。上传目录按工作区逐级规范化验证，拒绝 `.atlas` / `uploads` / 会话目录的符号链接越界，避免网络文件写出当前工作区。原始来源的厂商账号/API 绑定仍由中立可配置桥接替代。
+
+本次按**一个独立用户可感知功能：远程消息附件接收**计数，涉及同一链路的数量、大小和目录安全不拆项。已提交、待行为验收；按本开发任务要求未运行 Cargo、测试或 CI。仍需对照原版网络失败、流式内存占用、下载取消、重启清理和多平台路径处理；Issue #3 冻结 362 条保持开放，完整验收新增 0。
+
 ## 2026-10-29：MCP 工具直载与搜索提示元数据贯通（源码已提交，待验收）
 
 依据完整原始 2.1.88 源码 `source/src/services/mcp/client.ts:1765–1785` 与 `source/src/tools/ToolSearchTool/prompt.ts:53–108`、`ToolSearchTool.ts:235–290`，对照 Rust `src/mcp.rs::McpManager::connect_with_root/refresh_changed_tools`、`src/tool_search.rs::visible_catalog/execute`：

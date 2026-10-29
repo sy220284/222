@@ -9,8 +9,6 @@ use std::{
 };
 use tokio::{fs, io::AsyncWriteExt};
 
-const MAX_FILES: usize = 8;
-const MAX_FILE_BYTES: usize = 16 * 1024 * 1024;
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,9 +25,6 @@ pub fn extract(event: &Value) -> Vec<Attachment> {
     let Some(array) = raw.as_array() else {
         return Vec::new();
     };
-    if array.len() > MAX_FILES {
-        return Vec::new();
-    }
     let mut parsed = Vec::with_capacity(array.len());
     for value in array {
         let (Some(uuid), Some(name)) = (
@@ -38,9 +33,6 @@ pub fn extract(event: &Value) -> Vec<Attachment> {
         ) else {
             return Vec::new();
         };
-        if uuid.is_empty() || uuid.len() > 256 || name.len() > 1024 {
-            return Vec::new();
-        }
         parsed.push(Attachment {
             file_uuid: uuid.to_owned(),
             file_name: name.to_owned(),
@@ -110,27 +102,37 @@ async fn download_one(
         .send()
         .await
         .ok()?;
-    if response.status() != reqwest::StatusCode::OK
-        || response
-            .content_length()
-            .is_some_and(|size| size > MAX_FILE_BYTES as u64)
-    {
+    if response.status() != reqwest::StatusCode::OK {
         return None;
     }
     let mut data = Vec::new();
     let mut chunks = response.bytes_stream();
     while let Some(piece) = chunks.next().await {
         let chunk = piece.ok()?;
-        if data.len().saturating_add(chunk.len()) > MAX_FILE_BYTES {
-            return None;
-        }
         data.extend_from_slice(&chunk);
     }
-    let folder = root
-        .join(".atlas")
-        .join("uploads")
-        .join(safe_session_id(session));
+    // The remote bridge cannot use an upload-directory symlink to write
+    // outside the current workspace. Validate each parent before creating
+    // the next one, so an external .atlas symlink has no side effects.
+    let root = fs::canonicalize(root).await.ok()?;
+    let config = root.join(".atlas");
+    fs::create_dir_all(&config).await.ok()?;
+    let config = fs::canonicalize(&config).await.ok()?;
+    if !config.starts_with(&root) {
+        return None;
+    }
+    let uploads = config.join("uploads");
+    fs::create_dir_all(&uploads).await.ok()?;
+    let uploads = fs::canonicalize(&uploads).await.ok()?;
+    if !uploads.starts_with(&root) {
+        return None;
+    }
+    let folder = uploads.join(safe_session_id(session));
     fs::create_dir_all(&folder).await.ok()?;
+    let folder = fs::canonicalize(&folder).await.ok()?;
+    if !folder.starts_with(&root) {
+        return None;
+    }
     let prefix: String = attachment
         .file_uuid
         .chars()
