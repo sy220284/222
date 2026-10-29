@@ -1158,6 +1158,9 @@ impl Agent {
         let mut child = self.session.clone();
         child.id = uuid::Uuid::new_v4();
         child.forked_from = Some(original_id);
+        child.fork_baseline_usage = Some(self.session.usage);
+        child.fork_baseline_cost = Some(self.session.cost.clone());
+        child.fork_baseline_messages = Some(self.session.messages.len());
         child.custom_title = Some(name.clone());
         child.tag = None;
         // A personal task graph belongs to its session, not to the parent.
