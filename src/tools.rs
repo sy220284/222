@@ -783,11 +783,12 @@ impl ToolExecutor {
 
     fn read_skill(&self, args: &Value) -> Result<String> {
         let name = required(args, "name")?;
-        let content = if let Some((plugin, skill)) = name.split_once(':') {
+        let (content, skill_dir) = if let Some((plugin, skill)) = name.split_once(':') {
             let raw = format!(".atlas/plugins/{plugin}/skills/{skill}/SKILL.md");
             let path = self.checked_path(&raw)?;
             self.require_read_rules(&raw, &path)?;
-            plugins::read_skill(&self.root, &self.enabled_plugins, name)?
+            let dir = path.parent().context("Skill has no parent directory")?.to_path_buf();
+            (plugins::read_skill(&self.root, &self.enabled_plugins, name)?, dir)
         } else {
             if !valid_skill_name(name) {
                 bail!("Invalid skill name")
@@ -798,7 +799,8 @@ impl ToolExecutor {
             if fs::metadata(&path)?.len() > 64_000 {
                 bail!("Skill file too large")
             }
-            fs::read_to_string(path)?
+            let dir = path.parent().context("Skill has no parent directory")?.to_path_buf();
+            (fs::read_to_string(path)?, dir)
         };
         let raw = args.get("arguments");
         let arguments = raw
@@ -809,14 +811,21 @@ impl ToolExecutor {
         } else {
             crate::skill_arguments::frontmatter_argument_names(&content)
         };
-        Ok(crate::skill_arguments::substitute_arguments(
-            &content,
+        // Source loadSkillsDir.ts::getPromptForCommand supplies the
+        // Markdown body and skill-local base directory, never YAML metadata.
+        let dir = skill_dir.to_string_lossy().replace('\\', "/");
+        let body = crate::skill_arguments::markdown_body(&content);
+        let prompt = format!("Base directory for this skill: {dir}\\n\\n{body}");
+        let rendered = crate::skill_arguments::substitute_arguments(
+            &prompt,
             arguments,
             args.get("append_if_no_placeholder")
                 .and_then(Value::as_bool)
                 .unwrap_or(true),
             &names,
-        ))
+        );
+        // Provider-neutral equivalent of the original skill directory macro.
+        Ok(rendered.replace("${SKILL_DIR}", &dir))
     }
 
     async fn git_read(&self, arguments: Vec<String>) -> Result<String> {
