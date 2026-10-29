@@ -370,16 +370,32 @@ impl ToolExecutor {
                 )
             }
             "task_stop" | "KillShell" => {
-                self.require_approval("task_stop", &args)?;
-                let manager = self
-                    .background
-                    .as_ref()
-                    .context("Background tasks unavailable")?;
+                // The original TaskStop strict schema and validateInput run
+                // before approval. A nonexistent or completed task must not
+                // request an unnecessary permission grant.
+                let fields = args.as_object().context("Invalid TaskStop arguments")?;
+                if let Some(key) = fields
+                    .keys()
+                    .find(|key| !matches!(key.as_str(), "task_id" | "shell_id"))
+                {
+                    bail!("Unrecognized TaskStop parameter {key}");
+                }
+                for field in ["task_id", "shell_id"] {
+                    if args.get(field).is_some_and(|value| !value.is_string()) {
+                        bail!("{field} must be a string");
+                    }
+                }
                 let id = args
                     .get("task_id")
                     .and_then(Value::as_str)
                     .or_else(|| args.get("shell_id").and_then(Value::as_str))
                     .context("Missing required parameter: task_id")?;
+                let manager = self
+                    .background
+                    .as_ref()
+                    .context("Background tasks unavailable")?;
+                manager.validate_stop(id)?;
+                self.require_approval("task_stop", &args)?;
                 manager.stop(id).await
             }
             other => bail!("Unknown tool: {other}"),

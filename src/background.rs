@@ -477,6 +477,23 @@ impl BackgroundTasks {
         Ok(serde_json::to_string_pretty(&records)?)
     }
 
+    /// TaskStopTool validates the target before asking for permission. This
+    /// is a read-only preflight; stop() rechecks after approval to handle races.
+    pub fn validate_stop(&self, id: &str) -> Result<()> {
+        let id = canonical_shell_task_id(id)?;
+        if let Some(task) = self.entries.lock().unwrap().get(&id).cloned() {
+            let status = task.record.lock().unwrap().status.clone();
+            if status == "running" {
+                return Ok(());
+            }
+            bail!("Task {id} is not running (status: {status})");
+        }
+        match self.load(&id) {
+            Ok(record) => bail!("Task {id} is not running (status: {})", record.status),
+            Err(_) => bail!("No task found with ID: {id}"),
+        }
+    }
+
     pub async fn stop(&self, id: &str) -> Result<String> {
         let task = match self.entries.lock().unwrap().get(id).cloned() {
             Some(task) => task,
