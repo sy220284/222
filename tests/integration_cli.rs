@@ -5943,7 +5943,6 @@ fn doctor_reads_real_git_remote_but_never_displays_embedded_credentials() {
     assert!(!out.contains("internal-user"));
 }
 
-
 #[test]
 fn chat_clear_rebinds_prompt_history_to_new_session_and_preserves_old() {
     let root = tempfile::tempdir().unwrap();
