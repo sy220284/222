@@ -439,10 +439,8 @@ mod tests {
         assert!(text.encode_utf16().count() <= 1_000);
         assert!(!text.starts_with("old context old context old context old context old context"));
 
-        let unicode = conversation_text_for_name(&[Message::text(
-            "user",
-            format!("{}🦀", "x".repeat(999)),
-        )]);
+        let unicode =
+            conversation_text_for_name(&[Message::text("user", format!("{}🦀", "x".repeat(999)))]);
         assert_eq!(unicode.encode_utf16().count(), 1_000);
         assert!(unicode.ends_with("🦀"));
     }
