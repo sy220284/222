@@ -7,7 +7,7 @@ use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fs,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -28,6 +28,51 @@ pub struct FileReadState {
     pub content: String,
     pub timestamp_ms: u64,
     pub full: bool,
+}
+
+/// Match the source FileStateCache's 100-entry / 25 MiB LRU limits.
+/// A cache hit refreshes recency; removed entries never authorize writes.
+#[derive(Default, Debug)]
+pub struct FileReadCache {
+    entries: HashMap<PathBuf, FileReadState>,
+    recency: VecDeque<PathBuf>,
+    bytes: usize,
+}
+
+impl FileReadCache {
+    pub fn get(&mut self, path: &Path) -> Option<FileReadState> {
+        let state = self.entries.get(path).cloned()?;
+        self.recency.retain(|entry| entry.as_path() != path);
+        self.recency.push_back(path.to_path_buf());
+        Some(state)
+    }
+
+    pub fn insert(&mut self, path: PathBuf, state: FileReadState) {
+        const MAX_ENTRIES: usize = 100;
+        const MAX_BYTES: usize = 25 * 1024 * 1024;
+        if state.content.len() > MAX_BYTES {
+            return;
+        }
+        if let Some(old) = self.entries.remove(&path) {
+            self.bytes = self.bytes.saturating_sub(old.content.len().max(1));
+        }
+        self.recency.retain(|entry| entry != &path);
+        self.bytes = self.bytes.saturating_add(state.content.len().max(1));
+        self.entries.insert(path.clone(), state);
+        self.recency.push_back(path);
+        while self.entries.len() > MAX_ENTRIES || self.bytes > MAX_BYTES {
+            let Some(oldest) = self.recency.pop_front() else { break; };
+            if let Some(removed) = self.entries.remove(&oldest) {
+                self.bytes = self.bytes.saturating_sub(removed.content.len().max(1));
+            }
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.recency.clear();
+        self.bytes = 0;
+    }
 }
 
 fn modified_millis(metadata: &fs::Metadata) -> Result<u64> {
@@ -54,7 +99,7 @@ pub struct ToolExecutor {
     approval: Approval,
     interactive: bool,
     reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
-    file_reads: Arc<Mutex<HashMap<PathBuf, FileReadState>>>,
+    file_reads: Arc<Mutex<FileReadCache>>,
     enabled_plugins: Vec<String>,
     search_backend: Option<SearchBackend>,
     background: Option<Arc<BackgroundTasks>>,
@@ -74,7 +119,7 @@ impl ToolExecutor {
             approval,
             interactive,
             reads: Arc::new(Mutex::new(HashMap::new())),
-            file_reads: Arc::new(Mutex::new(HashMap::new())),
+            file_reads: Arc::new(Mutex::new(FileReadCache::default())),
             enabled_plugins: Vec::new(),
             search_backend: None,
             background: None,
@@ -108,7 +153,7 @@ impl ToolExecutor {
     pub fn with_shared_reads(
         mut self,
         notebook_reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
-        file_reads: Arc<Mutex<HashMap<PathBuf, FileReadState>>>,
+        file_reads: Arc<Mutex<FileReadCache>>,
     ) -> Self {
         self.reads = notebook_reads;
         self.file_reads = file_reads;
@@ -1066,7 +1111,7 @@ impl ToolExecutor {
         let before = if existed {
             let original = fs::read_to_string(&path)?;
             let key = path.canonicalize()?;
-            let prior = self.file_reads.lock().unwrap().get(&key).cloned()
+            let prior = self.file_reads.lock().unwrap().get(&key)
                 .context("File has not been read yet. Read it first before writing to it.")?;
             if !prior.full {
                 bail!("File was only partially read. Read the complete file before writing");
@@ -1125,7 +1170,7 @@ impl ToolExecutor {
         // model, including reads made in earlier turns of this session.
         let content = fs::read_to_string(&path)?;
         let key = path.canonicalize()?;
-        let prior = self.file_reads.lock().unwrap().get(&key).cloned()
+        let prior = self.file_reads.lock().unwrap().get(&key)
             .context("File has not been read yet. Read it first before writing to it.")?;
         if !prior.full {
             bail!("File was only partially read. Read the complete file before editing");
