@@ -837,7 +837,12 @@ impl Agent {
                             .run(
                                 HookEvent::SubagentStart,
                                 Some(&name),
-                                json!({"agent_id":session_id,"agent_type":name}),
+                                {
+                                    let mut input = child.base_hook_input();
+                                    input["agent_id"] = json!(session_id);
+                                    input["agent_type"] = json!(name);
+                                    input
+                                },
                             )
                             .await?;
                         if let Some(reason) = start.blocking_reason {
@@ -856,9 +861,17 @@ impl Agent {
                             .run(
                                 HookEvent::SubagentStop,
                                 Some(&name),
-                                json!({"agent_id":session_id,"agent_type":name,
-                                "agent_transcript_path":transcript,
-                                "last_assistant_message":output.as_ref().ok()}),
+                                {
+                                    let mut input = child.base_hook_input();
+                                    input["stop_hook_active"] = json!(false);
+                                    input["agent_id"] = json!(session_id);
+                                    input["agent_type"] = json!(name);
+                                    input["agent_transcript_path"] = json!(transcript);
+                                    if let Ok(answer) = &output {
+                                        input["last_assistant_message"] = json!(answer);
+                                    }
+                                    input
+                                },
                             )
                             .await;
                         let idle = child
@@ -866,8 +879,12 @@ impl Agent {
                             .run(
                                 HookEvent::TeammateIdle,
                                 None,
-                                json!({"teammate_name":name,"team_name":child.team_name,
-                                "agent_id":session_id}),
+                                {
+                                    let mut input = child.base_hook_input();
+                                    input["teammate_name"] = json!(name);
+                                    input["team_name"] = json!(child.team_name);
+                                    input
+                                },
                             )
                             .await;
                         let answer = output?;
