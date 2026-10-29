@@ -89,7 +89,19 @@ pub struct HookRule {
 }
 
 fn default_timeout() -> u64 {
-    30
+    // 2.1.88 hooks.ts uses a 10-minute default for ordinary command hooks.
+    600
+}
+
+/// SessionEnd is a shutdown path: the original gives all teardown hooks
+/// a separate 1.5-second bound, configurable for slow user cleanup scripts.
+fn session_end_timeout() -> Duration {
+    let millis = std::env::var("ATLAS_SESSIONEND_HOOKS_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(1_500);
+    Duration::from_millis(millis)
 }
 
 #[derive(Default, Debug, Clone)]
@@ -144,6 +156,7 @@ impl HookRunner {
         // same original hookInput. A rewrite is applied to the tool only
         // after the hook results have been collected.
         let mut pending = FuturesUnordered::new();
+        let shutdown_cap = (event.name() == "SessionEnd").then(session_end_timeout);
         for (rule, matcher) in &self.rules {
             if rule.event.name() != event.name() {
                 continue;
@@ -166,7 +179,16 @@ impl HookRunner {
             } else {
                 data["input"] = input.clone();
             }
-            pending.push(async move { (rule, run_command(rule, &data).await) });
+            pending.push(async move {
+                let result = if let Some(cap) = shutdown_cap {
+                    timeout(cap, run_command(rule, &data))
+                        .await
+                        .map_err(|_| anyhow::anyhow!("SessionEnd hook exceeded shutdown timeout"))?
+                } else {
+                    run_command(rule, &data).await
+                };
+                (rule, result)
+            });
         }
 
         let mut outcome = HookOutcome::default();
@@ -389,6 +411,26 @@ fn validate_hook_json(value: &Value, expected: &str) -> Result<()> {
     Ok(())
 }
 
+/// Plain successful command output is a visible hook attachment in 2.1.88.
+/// The provider-neutral CLI delivers it to the model as local hook context
+/// for the events whose results enter the ongoing conversation.
+fn plain_hook_context(payload: &Value, output: &[u8]) -> Vec<String> {
+    let event = payload.get("hook_event_name").and_then(Value::as_str);
+    if !matches!(
+        event,
+        Some("SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "PostToolUseFailure")
+    ) {
+        return Vec::new();
+    }
+    let text = String::from_utf8_lossy(output);
+    let text = text.trim();
+    if text.is_empty() {
+        Vec::new()
+    } else {
+        vec![text.to_owned()]
+    }
+}
+
 async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
     #[cfg(windows)]
     let mut proc = {
@@ -413,7 +455,10 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
     let mut stdin = child.stdin.take().context("Hook stdin unavailable")?;
     let mut stdout = child.stdout.take().context("Hook stdout unavailable")?;
     let mut stderr = child.stderr.take().context("Hook stderr unavailable")?;
-    let input = serde_json::to_vec(payload)?;
+    // The original writes JSON followed by a newline. Shell hooks using
+    // `read -r line` must see a complete line before stdin is closed.
+    let mut input = serde_json::to_vec(payload)?;
+    input.push(b'\n');
     if input.len() > 256_000 {
         bail!("Hook input exceeds 256 KB")
     }
@@ -471,7 +516,10 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
                 ..Default::default()
             });
         }
-        return Ok(HookOutcome::default());
+        return Ok(HookOutcome {
+            additional_context: plain_hook_context(payload, &out),
+            ..Default::default()
+        });
     }
     let value: Value = match serde_json::from_slice(&out) {
         Ok(value) => value,
@@ -490,7 +538,10 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
                 });
             }
             if status.success() {
-                return Ok(HookOutcome::default());
+                return Ok(HookOutcome {
+                    additional_context: plain_hook_context(payload, &out),
+                    ..Default::default()
+                });
             }
             return Ok(HookOutcome {
                 non_blocking_errors: vec![format!(
@@ -516,6 +567,13 @@ async fn run_command(rule: &HookRule, payload: &Value) -> Result<HookOutcome> {
         });
     }
     let mut result = HookOutcome::default();
+    // 2.1.88 emits systemMessage as a model-visible hook attachment.
+    // Preserve it through the existing Agent hook-context delivery path.
+    if let Some(message) = value.get("systemMessage").and_then(Value::as_str) {
+        if !message.is_empty() {
+            result.additional_context.push(message.to_owned());
+        }
+    }
     let decision = value.get("decision").and_then(Value::as_str);
     let hook_output = value.get("hookSpecificOutput");
     // Original 2.1.88 hooks.ts:581-589 rejects outputs whose
