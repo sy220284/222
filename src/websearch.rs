@@ -141,7 +141,10 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
             })
         })
         .collect::<Vec<_>>();
-    Ok(json!({"query":query,"results":results,"durationSeconds":started.elapsed().as_secs_f64()}).to_string())
+    Ok(
+        json!({"query":query,"results":results,"durationSeconds":started.elapsed().as_secs_f64()})
+            .to_string(),
+    )
 }
 
 #[cfg(test)]

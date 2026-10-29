@@ -107,8 +107,7 @@ impl Session {
         let id = Uuid::parse_str(id).context("Session id must be a UUID")?;
         let file = Self::checked_path(root, id)?;
         let data = fs::read(&file).with_context(|| format!("Cannot resume {}", file.display()))?;
-        let session: Self =
-            crate::json_runtime::parse_json(std::str::from_utf8(&data)?)?;
+        let session: Self = crate::json_runtime::parse_json(std::str::from_utf8(&data)?)?;
         if session.id != id {
             anyhow::bail!("Session id mismatch")
         }
