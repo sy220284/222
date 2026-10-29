@@ -538,10 +538,7 @@ mod tests {
                 .run(HookEvent::PreToolUse, None, json!({}))
                 .await
                 .unwrap_err();
-            assert!(
-                error.to_string().contains("Unknown hook"),
-                "{error:#}"
-            );
+            assert!(error.to_string().contains("Unknown hook"), "{error:#}");
         }
     }
     #[test]
