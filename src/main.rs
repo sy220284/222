@@ -1160,6 +1160,11 @@ async fn run_cli() -> Result<()> {
     let bypass_disabled = permission_paths.bypass_disabled()?;
     let permission_directories = permission_paths.additional_directories()?;
     let plugins = PluginSet::load(&root, &config.enabled_plugins)?;
+    // Keep source-style per-plugin diagnostics visible. A broken plugin is
+    // isolated from healthy ones, but its failure must never be silent.
+    for warning in &plugins.errors {
+        eprintln!("Plugin load warning: {warning}");
+    }
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. } | Commands::ProjectInit);
     let mut session = match &cli.command {
