@@ -691,9 +691,9 @@
 | `src/constants/keys.ts` | 12 | 444 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/messages.ts` | 2 | 49 | 重写：保持通用行为 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/constants/oauth.ts` | 235 | 8970 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/constants/outputStyles.ts` | 217 | 9886 | 重写：保持通用行为 | `src/generated_ports/p_630eea798f5af.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/constants/outputStyles.ts` | 217 | 9886 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_630eea798f5af.rs` | 部分实现：3 种内置输出风格及本地自定义 Markdown 风格已接入真实系统提示词；原版设置界面、完整格式与全局范围优先级未等价 |
 | `src/constants/product.ts` | 77 | 2563 | 重写：保持通用行为 | `src/generated_ports/p_9ae508cd79a96.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/constants/prompts.ts` | 915 | 54320 | 重写：保持通用行为 | `src/generated_ports/p_4573ed881a545.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/constants/prompts.ts` | 915 | 54320 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_4573ed881a545.rs` | 部分实现：运行时主 system、来源边界与持续执行原则已实际发给模型；动态条件段落与原版完整指令仍待逐项对照，AST 常量仅供核查 |
 | `src/constants/spinnerVerbs.ts` | 205 | 3453 | 重写：保持通用行为 | `src/generated_ports/p_7763c000d96fd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/constants/system.ts` | 96 | 3859 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/systemPromptSections.ts` | 69 | 1794 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
@@ -1027,7 +1027,7 @@
 | `src/services/compact/grouping.ts` | 64 | 2794 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/microCompact.ts` | 531 | 19544 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/postCompactCleanup.ts` | 78 | 3778 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
+| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：用户约束及真实证据保留摘要模板已接入工具关闭的实际模型请求；原版部分压缩和历史分组仍未完全等价 |
 | `src/services/compact/sessionMemoryCompact.ts` | 631 | 21058 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/timeBasedMCConfig.ts` | 44 | 1766 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/diagnosticTracking.ts` | 398 | 12315 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
@@ -1151,11 +1151,11 @@
 | `src/tools/AgentTool/agentMemorySnapshot.ts` | 198 | 5633 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/agentToolUtils.ts` | 687 | 22739 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/built-in/claudeCodeGuideAgent.ts` | 206 | 8959 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/built-in/exploreAgent.ts` | 84 | 4686 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/AgentTool/built-in/exploreAgent.ts` | 84 | 4686 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：探索角色 system 和只读工具约束已进入真实执行链；原版最小搜索策略与边界待完整验收 |
 | `src/tools/AgentTool/built-in/generalPurposeAgent.ts` | 35 | 2185 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/built-in/planAgent.ts` | 93 | 4318 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/AgentTool/built-in/planAgent.ts` | 93 | 4318 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：规划角色 system 和只读工具约束已进入真实执行链；原版完整计划流程仍待逐项验收 |
 | `src/tools/AgentTool/built-in/statuslineSetup.ts` | 145 | 7477 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/built-in/verificationAgent.ts` | 153 | 11410 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/AgentTool/built-in/verificationAgent.ts` | 153 | 11410 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：独立验收 system 和只读工具隔离已接入模型请求；原版完整验收规范及所有权限分支待核对 |
 | `src/tools/AgentTool/builtInAgents.ts` | 73 | 2756 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/constants.ts` | 13 | 547 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/forkSubagent.ts` | 211 | 8678 | 重写：工具行为、参数和权限 | `src/agent.rs` / `src/worktree.rs` | 部分实现：独立子任务和隔离，团队及远程不等价 |
@@ -1835,7 +1835,7 @@
 | `src/utils/swarm/teammateModel.ts` | 11 | 467 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/swarm/teammatePromptAddendum.ts` | 19 | 771 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/systemDirectories.ts` | 75 | 2125 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/systemPrompt.ts` | 124 | 4867 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/systemPrompt.ts` | 124 | 4867 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs` | 部分实现：主 system、团队和内置子 Agent 角色动态拼装及自定义 Agent 提示词已接入真实模型请求；原版全量优先级/缓存/门控尚缺 |
 | `src/utils/systemPromptType.ts` | 15 | 382 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/systemTheme.ts` | 120 | 4231 | 重写：保持通用行为 | `src/generated_ports/p_ffaf2e1bb158c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/taggedId.ts` | 55 | 1573 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
