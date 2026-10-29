@@ -1184,3 +1184,12 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **Windows 默认命令 Hook 的 Bash 语义**：原版 `source/src/utils/hooks.ts::execCommandHook` 在 Windows 默认使用 Git Bash，必要时给 `.sh` 脚本补 `bash` 前缀；Rust 原先通过 cmd.exe 执行，导致 POSIX Hook 语法失效。现改用现有 `ShellKind::Bash.build_command` 并接入 `.sh` 检测。提交 `a9b475a2dd12f932ed61f52e08d59fc0c9c6b5c5`、`7293a44c5da668108b5247b6afc2fcfdd4ec5424`、字符串转义修复 `8125f74d158efc34cd7eeb4de0ae28cf326360c5`。
 - 与前段 2 项合计本次 **6 项不同用户业务行为的源码补齐，均已提交、待行为验收**；其余 94 项未完成。本轮未形成经逐项证实的 100 项预先缺口清单，不能据此宣称流程 A 或 100 项目标达标。未运行 Cargo、CI 或测试。Issue #3 固定 362 条继续开放，0 项最终等价验收。
 - **剩余**：原版 Hook 的独立 `shell:powershell`、插件来源去重、动态/异步/HTTP/SDK 回调、权限请求与取消传播仍缺；Windows Bash 运行及全部改动尚未做行为测试，均保持待验收。
+
+### 2026-10-29：Hook 独立 Shell、Windows Bash 定位与路径注入（待验收）
+
+- **每条 Hook 独立 Shell**：原版 `source/src/utils/hooks.ts::execCommandHook/getMatchingHooks` 允许 `shell:'bash'|'powershell'`，且同一 command 的两种 Shell 必须独立执行。Rust `src/hooks.rs::HookRule` 新增可反序列化的可选 `shell`；未配置默认 Bash，PowerShell 使用 `ShellKind::Powershell.build_command` 的 `-NoProfile -NonInteractive -Command`，去重键加入 Shell 身份。保留现有 34 处 HookRule 代码初始化及源兼容序列化。提交 `4d0774db0a764b833df96fe8c956d1cf12c1a9b5`、`c12995583878385b0a93974db9acbd550448d1df`、`76870c577c582f8bfe3d59685d265bef34159785`、`19f87ab7f72c6b922dd3ff54a56204d298a8aed3`。
+- **Windows Git Bash 自动定位**：原版 `source/src/utils/windowsPaths.ts::findGitBashPath` 会发现 Git Bash 并拒绝错误的显式路径。Rust `src/shell_runtime.rs::ShellKind::build_command` 现使用已有 `src/portable_platform.rs::find_git_bash_path` 查找标准安装目录，支持厂商中立 `ATLAS_GIT_BASH_PATH` 严格覆盖，供实际 Bash 工具及命令 Hook 共用。提交 `da7b8a8965968b33c9b8060e7afda56d9b88bbe5`。
+- **Windows Hook 项目路径注入**：原版 `windowsPathToPosixPath/toHookPath` 给 Git Bash Hook 传入 `/c/...` 和 `//server/share` 路径，PowerShell 保留 Windows 原生路径。Rust `src/portable_platform.rs::windows_path_to_posix_path` 已接入 `src/hooks.rs::run_command` 的 `ATLAS_PROJECT_DIR` 环境变量，工作目录仍使用本地原生路径。提交 `834d655e4ad3e24ed3d4e344dadbe8dd5a359f79`、`74eced9b82ed9b1864e2f3e8726ec39806683ac5`。
+- 队友无历史时自动重命名的权限提示顺序已与原版对齐，提交 `c2010a41556055d13c45658bda7c66dfd26d0a3f`，属于本轮已计入的队长/队友改名业务链，不另计。
+- 本轮目前保守计 **9 项独立用户业务功能已提交、待验收**；其余 91 项尚未完成。100 项预先缺口清单与覆盖全数的执行方案尚未完成，禁止视为本轮达标；Issue #3 固定 362 条保持原状。未运行 Cargo、CI 或测试。
+- **剩余**：插件/技能 Hook 的来源级隔离与变量替换、异步/HTTP/agent/prompt/callback Hook、Windows 脚本参数细节与完整跨平台行为验证、权限请求及取消传播仍未等价；Windows Git Bash 探测仍有从 Git 可执行路径推导安装位置的差异。
