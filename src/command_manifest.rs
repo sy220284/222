@@ -97,10 +97,15 @@ static REGISTRY:OnceLock<Vec<CommandDefinition>>=OnceLock::new();
 pub fn commands()->&'static [CommandDefinition]{
     REGISTRY.get_or_init(|| {
         SOURCE_INDEX.lines().map(|line| {
-            let fields=line.split('|').collect::<Vec<_>>();
-            assert_eq!(fields.len(),6,"Invalid source index entry");
-            let (directory,name,kind,aliases,hint,description)=
-                (fields[0],fields[1],fields[2],fields[3],fields[4],fields[5]);
+            // Argument hints can themselves contain literal pipes.
+            let mut fields=line.splitn(5,'|');
+            let directory=fields.next().expect("Command source directory");
+            let name=fields.next().expect("Command name");
+            let kind=fields.next().expect("Command kind");
+            let aliases=fields.next().expect("Command aliases");
+            let tail=fields.next().expect("Command hint and description");
+            let (hint,description)=tail.rsplit_once('|')
+                .expect("Command metadata description");
             let disabled=kind=="disabled";
             let hidden=disabled||matches!(name,
                 "heapdump"|"output-style"|"rate-limit-options"|"thinkback-play");
