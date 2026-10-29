@@ -1699,10 +1699,19 @@ async fn chat(
                     };
                     println!("/{}{}  {}", entry.name, alias, entry.description);
                 }
-                match plugins::list_commands(agent.workspace_root(), &config.enabled_plugins) {
+                match plugins::command_descriptors(
+                    agent.workspace_root(), &config.enabled_plugins,
+                ) {
                     Ok(commands) => {
                         for command in commands {
-                            println!("/{command}  plugin Markdown command");
+                            let name = command["name"].as_str().unwrap_or("");
+                            let description = command["description"].as_str().unwrap_or("");
+                            let hint = command["argumentHint"].as_str().unwrap_or("");
+                            if hint.is_empty() {
+                                println!("/{name}  {description}");
+                            } else {
+                                println!("/{name} {hint}  {description}");
+                            }
                         }
                     }
                     Err(error) => eprintln!("Plugin command discovery failed: {error:#}"),
