@@ -1273,6 +1273,11 @@ impl ToolExecutor {
     pub fn invoke_user_skill(&self, name: &str, arguments: &str) -> Result<String> {
         self.render_skill(&json!({"name":name,"arguments":arguments}), false)
     }
+    /// Agent frontmatter preloading uses model-invocable skill semantics,
+    /// independently of whether a skill is user-invocable via a slash command.
+    pub fn preload_agent_skill(&self, name: &str) -> Result<String> {
+        self.render_skill(&json!({"name":name,"arguments":""}), true)
+    }
 
     fn render_skill(&self, args: &Value, for_model: bool) -> Result<String> {
         let name = required(args, "name")?;
