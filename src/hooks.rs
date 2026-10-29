@@ -165,12 +165,15 @@ impl HookRunner {
         tool_name: Option<&str>,
         input: Value,
     ) -> Result<HookOutcome> {
-        use futures::{stream::FuturesUnordered, StreamExt};
+        use futures::future::join_all;
 
         // 2.1.88 hooks.ts executes all matching hooks concurrently with the
         // same original hookInput. A rewrite is applied to the tool only
         // after the hook results have been collected.
-        let mut pending = FuturesUnordered::new();
+        // Execute concurrently but merge in registration order, as the original
+        // Promise.all hook dispatcher does. Completion-time order would make
+        // multiple PreCompact instructions nondeterministic.
+        let mut pending = Vec::new();
         let shutdown_cap = (event.name() == "SessionEnd").then(session_end_timeout);
         let workspace = self.workspace.as_deref();
         for (rule, matcher) in &self.rules {
@@ -209,7 +212,7 @@ impl HookRunner {
         }
 
         let mut outcome = HookOutcome::default();
-        while let Some((rule, result)) = pending.next().await {
+        for (rule, result) in join_all(pending).await {
             let response = match result {
                 Ok(result) => result,
                 Err(error) => {
