@@ -187,6 +187,120 @@ fn persistent_plugin_data_size(root: &Path, name: &str) -> Result<Option<u64>> {
     Ok((bytes > 0).then_some(bytes))
 }
 
+/// dependencyResolver.ts::findReverseDependents: disabling or uninstalling
+/// a plugin warns about other enabled plugins whose declared dependencies
+/// will become unsatisfied. A bare dependency inherits its declaring
+/// marketplace; inline plugins match bare names across marketplaces.
+fn reverse_dependents(root: &Path, config: &Config, target: &str) -> (Vec<String>, Vec<String>) {
+    let home = installed_root(root);
+    let mut dependents = Vec::new();
+    let mut warnings = Vec::new();
+    let read_origin = |name: &str| -> Result<Option<String>> {
+        let origin = home.join(name).join(".atlas-plugin-origin.json");
+        let metadata = match fs::symlink_metadata(&origin) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+        };
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            bail!("Invalid plugin marketplace identity");
+        }
+        let value: Value = serde_json::from_slice(&fs::read(origin)?)?;
+        Ok(Some(value["pluginId"].as_str()
+            .context("Plugin marketplace identity must be a string")?.to_owned()))
+    };
+    let target_marketplace = match read_origin(target) {
+        Ok(origin) => origin.and_then(|id| id.rsplit_once('@').map(|(_, market)| market.to_owned())),
+        Err(error) => {
+            warnings.push(format!("Cannot inspect plugin '{target}' origin: {error:#}"));
+            None
+        }
+    };
+    for name in &config.enabled_plugins {
+        if name == target || !valid_name(name) {
+            continue;
+        }
+        let directory = home.join(name);
+        let metadata = match fs::symlink_metadata(&directory) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => metadata,
+            Ok(_) => {
+                warnings.push(format!("Cannot inspect redirected plugin '{name}'"));
+                continue;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                warnings.push(format!("Cannot inspect plugin '{name}': {error}"));
+                continue;
+            }
+        };
+        let _ = metadata;
+        let manifest = [directory.join(".claude-plugin/plugin.json"), directory.join("plugin.json")]
+            .into_iter().find(|path| path.exists());
+        let Some(manifest) = manifest else { continue };
+        let parsed = (|| -> Result<Value> {
+            let metadata = fs::symlink_metadata(&manifest)?;
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                bail!("Plugin manifest is redirected or invalid");
+            }
+            Ok(serde_json::from_slice(&fs::read(manifest)?)?)
+        })();
+        let value = match parsed {
+            Ok(value) => value,
+            Err(error) => {
+                warnings.push(format!("Cannot inspect dependencies of '{name}': {error:#}"));
+                continue;
+            }
+        };
+        let Some(dependencies) = value.get("dependencies") else { continue };
+        let Some(dependencies) = dependencies.as_array() else {
+            warnings.push(format!("Plugin '{name}' dependencies must be an array"));
+            continue;
+        };
+        let declaring_marketplace = match read_origin(name) {
+            Ok(origin) => origin.and_then(|id| id.rsplit_once('@').map(|(_, market)| market.to_owned())),
+            Err(error) => {
+                warnings.push(format!("Cannot inspect plugin '{name}' origin: {error:#}"));
+                continue;
+            }
+        };
+        let mut required = false;
+        for dependency in dependencies {
+            let (dependency_name, explicit_marketplace) = if let Some(raw) = dependency.as_str() {
+                let normalized = raw.split("@^").next().unwrap_or(raw);
+                match normalized.split_once('@') {
+                    Some((plugin, marketplace)) => (plugin, Some(marketplace)),
+                    None => (normalized, None),
+                }
+            } else if let Some(object) = dependency.as_object() {
+                let Some(plugin) = object.get("name").and_then(Value::as_str) else {
+                    warnings.push(format!("Plugin '{name}' has a dependency without a name"));
+                    continue;
+                };
+                (plugin, object.get("marketplace").and_then(Value::as_str))
+            } else {
+                warnings.push(format!("Plugin '{name}' has an invalid dependency"));
+                continue;
+            };
+            if dependency_name != target {
+                continue;
+            }
+            let required_marketplace = explicit_marketplace.or(declaring_marketplace.as_deref());
+            if required_marketplace.is_none()
+                || required_marketplace == target_marketplace.as_deref()
+            {
+                required = true;
+                break;
+            }
+        }
+        if required {
+            dependents.push(name.clone());
+        }
+    }
+    dependents.sort();
+    dependents.dedup();
+    (dependents, warnings)
+}
+
 pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
     let root = root.canonicalize()?;
     let mut config = Config::load()?;
@@ -302,9 +416,10 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             if !config.enabled_plugins.contains(name) {
                 bail!("Plugin '{name}' is already disabled");
             }
+            let (reverse_dependents, warnings) = reverse_dependents(&root, &config, name);
             config.enabled_plugins.retain(|value| value != name);
             config.save()?;
-            Ok(json!({"disabled":name}))
+            Ok(json!({"disabled":name,"reverseDependents":reverse_dependents,"warnings":warnings}))
         }
         PluginCommand::Uninstall { plugin, delete_data } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
@@ -316,13 +431,17 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             if !installed.is_dir() || installed.is_symlink() {
                 bail!("Plugin is not installed");
             }
+            let (reverse_dependents, dependency_warnings) =
+                reverse_dependents(&root, &config, name);
             if delete_data.is_none() {
                 if let Some(size) = persistent_plugin_data_size(&root, name)? {
                     return Ok(json!({
                         "confirmationRequired":true,
                         "plugin":name,
                         "dataBytes":size,
-                        "choices":["--delete-data","--keep-data"]
+                        "choices":["--delete-data","--keep-data"],
+                        "reverseDependents":reverse_dependents,
+                        "warnings":dependency_warnings
                     }));
                 }
             }
@@ -338,7 +457,7 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             // one local scope, so uninstall always releases that data.
             // Cleanup failures are visible but must not misreport a
             // successfully committed uninstall as a failed operation.
-            let mut warnings = Vec::new();
+            let mut warnings = dependency_warnings;
             if let Err(error) = fs::remove_dir_all(&removed) {
                 warnings.push(format!("Could not clean staged plugin files: {error}"));
             }
@@ -385,9 +504,9 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             }
             let preserved = *delete_data == Some(false);
             if warnings.is_empty() {
-                Ok(json!({"uninstalled":name,"dataPreserved":preserved}))
+                Ok(json!({"uninstalled":name,"dataPreserved":preserved,"reverseDependents":reverse_dependents}))
             } else {
-                Ok(json!({"uninstalled":name,"dataPreserved":preserved,"warnings":warnings}))
+                Ok(json!({"uninstalled":name,"dataPreserved":preserved,"reverseDependents":reverse_dependents,"warnings":warnings}))
             }
         }
         PluginCommand::Validate { path } => {
