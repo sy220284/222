@@ -82,6 +82,23 @@ impl SettingsPaths {
         Ok(Some(value))
     }
 
+    /// The source settings loader reports malformed JSON and skips that
+    /// source during normal execution. Editing uses strict read_json so a
+    /// broken file can never be silently replaced by a permission update.
+    fn read_json_for_execution(path: &Path) -> Result<Option<Value>> {
+        match Self::read_json(path) {
+            Ok(settings) => Ok(settings),
+            Err(error) if error.downcast_ref::<serde_json::Error>().is_some() => {
+                eprintln!(
+                    "Ignoring invalid JSON in permission settings {}: {error:#}",
+                    path.display()
+                );
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn managed_only(policy: Option<&Value>) -> bool {
         policy
             .and_then(|value| value.get("allowManagedPermissionRulesOnly"))
@@ -119,7 +136,7 @@ impl SettingsPaths {
     /// excludes every non-policy source, including existing config rules.
     pub fn load(&self, configured: &[RuleSetting]) -> Result<Vec<RuleSetting>> {
         let policy = match &self.policy {
-            Some(path) => Self::read_json(path)?,
+            Some(path) => Self::read_json_for_execution(path)?,
             None => None,
         };
         let mut result = Vec::new();
@@ -135,7 +152,7 @@ impl SettingsPaths {
                     }
                 }
             }
-            let settings = Self::read_json(path)?;
+            let settings = Self::read_json_for_execution(path)?;
             Self::append_rules(settings.as_ref(), &mut result)?;
         }
         result.extend_from_slice(configured);
@@ -384,6 +401,52 @@ mod tests {
             policy_for(&rules, "run_command", &json!({"command":"touch blocked"})).unwrap(),
             Some(Behavior::Deny)
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn malformed_source_json_does_not_abort_other_valid_permission_sources() {
+        use crate::{
+            protocol::{FunctionCall, ToolCall},
+            tools::{Approval, ToolExecutor},
+        };
+        let root = tempfile::tempdir().unwrap();
+        let paths = paths(root.path());
+        write(
+            &paths.user,
+            &json!({"permissions":{"allow":["Bash(touch allowed)"]}}),
+        );
+        fs::create_dir_all(paths.project.parent().unwrap()).unwrap();
+        fs::write(&paths.project, "{invalid json").unwrap();
+        write(
+            &paths.local,
+            &json!({"permissions":{"deny":["Bash(touch forbidden)"]}}),
+        );
+        let rules = compile_rules(&paths.load(&[]).unwrap()).unwrap();
+        let executor = ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Ask, false)
+            .with_permission_rules(rules);
+        let call = |command: &str| ToolCall {
+            id: "source-recovery-test".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":command}).to_string(),
+            },
+        };
+        let allowed = executor.execute(&call("touch allowed")).await;
+        assert!(allowed.contains("Exit: exit status: 0"), "{allowed}");
+        assert!(root.path().join("allowed").exists());
+        let denied = executor.execute(&call("touch forbidden")).await;
+        assert!(denied.starts_with("ERROR:"), "{denied}");
+        assert!(!root.path().join("forbidden").exists());
+        assert!(paths
+            .add(
+                EditableSource::Project,
+                Behavior::Allow,
+                &[parse_rule("Bash(touch unexpected)")]
+            )
+            .is_err());
+        assert_eq!(fs::read_to_string(&paths.project).unwrap(), "{invalid json");
     }
 
     #[test]
