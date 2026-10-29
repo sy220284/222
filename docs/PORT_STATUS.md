@@ -1,5 +1,11 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：WebFetch 大页面与深链终端发现（本任务本轮 2/100，已提交待验收）
+
+- **网页抓取（1 项）**：原版 `source/src/tools/WebFetchTool/utils.ts:112,128,275–279,375–379,492–496` 对普通 HTTP 初始请求先升级 HTTPS，响应上限 10 MiB，模型处理前按 100,000 个 UTF-16 单元截断并附提示。Rust `src/webfetch.rs::fetch_with_redirect_policy` 已补入真实网络执行链：生产请求升级 HTTPS（本地测试专用 override 保持 HTTP）、10 MiB 限制及内容截断提示。提交 `82c280778deb0069057c2f9276451359ee1de79b`。**仍缺**原版 HTML→Markdown、缓存/TTL、二进制附件落盘、模型摘要与完整取消时序；本轮未运行测试或 CI，未验收。
+- **深链打开终端（1 项）**：原版 `source/src/utils/which.ts::which` 与 `source/src/utils/deepLink/terminalLauncher.ts::detectLinuxTerminal` 只选可执行程序；Rust `src/terminal_launcher.rs::which` 原先仅检查 `is_file`，可能把无执行权限的假终端当作首选，导致浏览器深链无法打开。已在真实 `detect_terminal → build_terminal_plan → launch_in_terminal` 链上按 POSIX 可执行位过滤，提交 `f94e5c57bc5a584054dee7c3368d36485e3b051c`。**仍缺**macOS 持久偏好与安装探测、Windows 完整回退；本轮未运行测试或 CI，未验收。
+- **严格计数**：本任务本次可证实的独立用户功能新代码提交 **2/100**；**完整验收 0**，未达到 100 项硬目标。原始 ZIP `claude-code-2.1.88-main(1).zip` 已在运行环境校验完整；未完成 100 个独立可处理业务缺口的完整去重清单与逐项补齐，不能用原始源路径数替代。Issue #3 冻结 362 条继续开放。当前共享分支有其他任务并发提交，提交前均复核 HEAD，未覆盖同期工作。
+
 ## 2026-10-29：Grep、网页重定向与工作树退出的源码级缺口补齐（已提交待验收）
 
 - **Grep 搜索主链**：对照原版 `src/tools/GrepTool/GrepTool.ts:104–126, 314–570`，修复 Rust `src/search.rs` 的跨行正则匹配、匹配行数统计（同一行多次出现不重复计数）、`context/-C` 对 `-A/-B` 的优先级、`-n` 行号开关、`head_limit=0` 不限量及分页后计数。真实模型工具定义同步公开 `-n`。提交 `19073b725e1eb942a2829ca52daad215e2d6764e`。仍缺原版 ripgrep 忽略规则、超长行、取消及全部匹配边界。
