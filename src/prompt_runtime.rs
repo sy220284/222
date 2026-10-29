@@ -170,10 +170,7 @@ pub fn output_style_label(style: &str) -> Option<&'static str> {
 
 /// Select a built-in output style or a user-authored workspace style.
 /// Custom styles are explicit opt-in and remain within the current workspace.
-pub fn output_style_instructions(
-    root: &std::path::Path,
-    name: &str,
-) -> anyhow::Result<String> {
+pub fn output_style_instructions(root: &std::path::Path, name: &str) -> anyhow::Result<String> {
     use anyhow::{bail, Context};
 
     if let Some(style) = output_style_label(name) {
@@ -182,7 +179,10 @@ pub fn output_style_instructions(
     if crate::agent_definition::validate_agent_type(name).is_some() {
         bail!("Invalid output style name");
     }
-    let path = root.join(".atlas").join("output-styles").join(format!("{name}.md"));
+    let path = root
+        .join(".atlas")
+        .join("output-styles")
+        .join(format!("{name}.md"));
     if !path.is_file() {
         bail!("Output style not found: {name}");
     }
@@ -260,20 +260,27 @@ mod tests {
         let workspace = tempfile::tempdir().unwrap();
         let styles = workspace.path().join(".atlas/output-styles");
         std::fs::create_dir_all(&styles).unwrap();
-        std::fs::write(styles.join("technical.md"),
-            "---\nname: technical\n---\nUse concise technical explanations.").unwrap();
+        std::fs::write(
+            styles.join("technical.md"),
+            "---\nname: technical\n---\nUse concise technical explanations.",
+        )
+        .unwrap();
         let text = output_style_instructions(workspace.path(), "technical").unwrap();
         assert_eq!(text, "Use concise technical explanations.");
         assert!(output_style_instructions(workspace.path(), "../escape").is_err());
         assert!(output_style_instructions(workspace.path(), "unknown").is_err());
         assert!(output_style_instructions(workspace.path(), "learning")
-            .unwrap().contains("Explain"));
+            .unwrap()
+            .contains("Explain"));
         #[cfg(unix)]
         {
             let outside = tempfile::tempdir().unwrap();
             std::fs::write(outside.path().join("secret.md"), "secret").unwrap();
-            std::os::unix::fs::symlink(outside.path().join("secret.md"),
-                styles.join("redirect.md")).unwrap();
+            std::os::unix::fs::symlink(
+                outside.path().join("secret.md"),
+                styles.join("redirect.md"),
+            )
+            .unwrap();
             assert!(output_style_instructions(workspace.path(), "redirect").is_err());
         }
     }
