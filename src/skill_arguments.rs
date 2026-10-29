@@ -157,13 +157,26 @@ pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
     if lines.next().map(str::trim) != Some("---") {
         return None;
     }
-    let mut result = None;
+    // YAML block scalars are terminated by indentation, not by the next
+    // arbitrary line. Parse within the complete, closed frontmatter so a
+    // following "argument-hint" or "model" field cannot erase description.
+    let mut header = Vec::new();
     let mut closed = false;
-    while let Some(line) = lines.next() {
+    for line in lines {
         if line.trim() == "---" {
             closed = true;
             break;
         }
+        header.push(line);
+    }
+    if !closed {
+        return None;
+    }
+    let mut found = None;
+    let mut index = 0;
+    while index < header.len() {
+        let line = header[index];
+        index += 1;
         if line.starts_with(' ') || line.starts_with('\t') {
             continue;
         }
@@ -171,38 +184,61 @@ pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
             continue;
         };
         let raw = raw.trim();
-        if raw == "|" || raw == "|-" || raw == ">" || raw == ">-" {
-            let mut block = Vec::new();
-            while let Some(next) = lines.next() {
-                if next.trim() == "---" {
-                    closed = true;
+        let marker = raw.split_whitespace().next().unwrap_or("");
+        let block_marker = marker.chars().next().filter(|ch| matches!(ch, '|' | '>'));
+        if let Some(kind) = block_marker.filter(|_| marker.chars().skip(1)
+            .all(|ch| matches!(ch, '+' | '-' | '1'..='9'))) {
+            let mut raw_lines = Vec::new();
+            while index < header.len() {
+                let next = header[index];
+                if !next.trim().is_empty()
+                    && !next.starts_with(' ') && !next.starts_with('\t') {
                     break;
                 }
-                if next.trim().is_empty()
-                    || next.starts_with(' ') || next.starts_with('\t') {
-                    block.push(next.trim());
+                raw_lines.push(next);
+                index += 1;
+            }
+            let indent = raw_lines.iter()
+                .filter(|line| !line.trim().is_empty())
+                .map(|line| line.len() - line.trim_start_matches([' ', '\t']).len())
+                .min().unwrap_or(0);
+            let block = raw_lines.into_iter().map(|line| {
+                if line.trim().is_empty() {
+                    String::new()
+                } else {
+                    line.get(indent..).unwrap_or(line).to_owned()
                 }
+            }).collect::<Vec<_>>();
+            let mut value = String::new();
+            for (i, line) in block.iter().enumerate() {
+                if i > 0 {
+                    let folded = kind == '>' && !line.is_empty()
+                        && !block[i - 1].is_empty()
+                        && !line.starts_with(' ') && !block[i - 1].starts_with(' ');
+                    value.push(if folded { ' ' } else { '\n' });
+                }
+                value.push_str(line);
             }
-            result = Some(if raw.starts_with('>') {
-                block.join(" ").trim().to_owned()
-            } else {
-                block.join("\n").trim().to_owned()
-            });
-            if closed {
-                break;
+            // YAML clip is the default; strip and keep are explicit.
+            if marker.contains('-') {
+                value = value.trim_end_matches('\n').to_owned();
+            } else if !marker.contains('+') && !value.is_empty() {
+                value = format!("{}\n", value.trim_end_matches('\n'));
             }
-            break;
+            found = Some(value);
+            continue;
         }
         let value = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
-            serde_json::from_str::<String>(raw).unwrap_or_else(|_| raw[1..raw.len()-1].to_owned())
+            serde_json::from_str::<String>(raw)
+                .unwrap_or_else(|_| raw[1..raw.len() - 1].to_owned())
         } else if raw.starts_with('\'') && raw.ends_with('\'') && raw.len() >= 2 {
-            raw[1..raw.len()-1].replace("''", "'")
+            raw[1..raw.len() - 1].replace("''", "'")
         } else {
             raw.split(" #").next().unwrap_or("").trim().to_owned()
         };
-        result = Some(value);
+        found = Some(value);
     }
-    if closed { result } else { None }
+    found
 }
 
 /// SDK metadata comes from the real command/skill Markdown, with the same
