@@ -754,6 +754,20 @@ impl McpManager {
 /// Provider-neutral MCP resources and prompts catalog. Preserve server-defined
 /// metadata and content blocks rather than coercing everything into text.
 impl McpManager {
+    /// Invalidate only the connection that returned an expired session or
+    /// credential. Do not silently replay a possibly side-effecting request.
+    fn mark_expired_client(&mut self, client_index: usize, error: &anyhow::Error) {
+        let detail = format!("{error:#}");
+        if !(detail.contains("session expired") || detail.contains("authentication expired")) {
+            return;
+        }
+        if let Some(position) = self.status_clients.iter().position(|slot| *slot == Some(client_index)) {
+            self.server_statuses[position]["status"] = json!("failed");
+            self.server_statuses[position]["error"] =
+                json!("MCP session or authentication expired; reconnect required");
+        }
+    }
+
     async fn connected_client(&mut self, server: &str) -> Result<usize> {
         let positions = self
             .server_statuses
@@ -850,8 +864,11 @@ impl McpManager {
             .await;
             match listing {
                 Ok(()) => servers.push(json!({"server":name,"ok":true,"items":entries})),
-                Err(error) => servers.push(json!({"server":name,"ok":false,
-                    "error":format!("{error:#}")})),
+                Err(error) => {
+                    self.mark_expired_client(client_index, &error);
+                    servers.push(json!({"server":name,"ok":false,
+                        "error":format!("{error:#}")}));
+                },
             }
         }
         Ok(json!({"kind":kind,"servers":servers}))
@@ -886,12 +903,16 @@ impl McpManager {
         } else {
             "resources/unsubscribe"
         };
-        timeout(
+        let reply = timeout(
             RPC_TIMEOUT,
             self.clients[index].request(method, json!({"uri":uri})),
         )
         .await
-        .context("MCP resource subscription timed out")??;
+        .context("MCP resource subscription timed out")?;
+        if let Err(error) = reply {
+            self.mark_expired_client(index, &error);
+            return Err(error);
+        }
         if subscribe {
             self.resource_subscriptions.insert(key);
         } else {
@@ -956,12 +977,16 @@ impl McpManager {
             bail!("MCP resource URI is empty")
         }
         let index = self.connected_client(server).await?;
-        timeout(
+        let result = timeout(
             RPC_TIMEOUT,
             self.clients[index].request("resources/read", json!({"uri":uri})),
         )
         .await
-        .context("MCP resource read timed out")?
+        .context("MCP resource read timed out")?;
+        if let Err(error) = &result {
+            self.mark_expired_client(index, error);
+        }
+        result
     }
     pub async fn get_prompt(
         &mut self,
@@ -976,7 +1001,7 @@ impl McpManager {
             bail!("MCP prompt arguments must be string values")
         }
         let index = self.connected_client(server).await?;
-        timeout(
+        let result = timeout(
             RPC_TIMEOUT,
             self.clients[index].request(
                 "prompts/get",
@@ -986,7 +1011,11 @@ impl McpManager {
             ),
         )
         .await
-        .context("MCP prompt retrieval timed out")?
+        .context("MCP prompt retrieval timed out")?;
+        if let Err(error) = &result {
+            self.mark_expired_client(index, error);
+        }
+        result
     }
 }
 
