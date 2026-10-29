@@ -502,6 +502,10 @@ impl BackgroundTasks {
         })
         .await
         .context("Timed out waiting for background shell to stop")?;
+        let final_status = task.record.lock().unwrap().status.clone();
+        if final_status != "killed" {
+            bail!("Task {id} finished before stop took effect (status: {final_status})");
+        }
         Ok(json!({"task_id":id,"task_type":"local_bash",
             "command":record.command,
             "message":format!("Successfully stopped task: {id} ({})", record.command)
