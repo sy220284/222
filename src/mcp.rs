@@ -415,7 +415,7 @@ impl McpManager {
             let mut seen_cursors = std::collections::HashSet::new();
             // Resource-only and prompt-only MCP servers are valid: do not
             // require tools/list when the server did not advertise tools.
-            let discovery: Result<()> = if client.capabilities().and_then(|caps| caps.get("tools")).is_some() {
+            let discovery: Result<()> = if client.capabilities().and_then(|caps| caps.get("tools")).is_some_and(Value::is_object) {
                 async {
                 loop {
                     let params = cursor.as_ref().map_or(json!({}), |c| json!({"cursor":c}));
@@ -1014,8 +1014,8 @@ impl McpManager {
                 continue;
             };
             let capability = if kind == "prompts" { "prompts" } else { "resources" };
-            if self.clients[client_index].capabilities()
-                .and_then(|caps| caps.get(capability)).is_none()
+            if !self.clients[client_index].capabilities()
+                .and_then(|caps| caps.get(capability)).is_some_and(Value::is_object)
             {
                 servers.push(json!({"server":name,"ok":true,"items":[]}));
                 continue;
