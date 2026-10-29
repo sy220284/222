@@ -2520,6 +2520,13 @@ async fn sdk_nested_control(
                     "available_output_styles":["default"],"models":models,
                     "account":{},"pid":std::process::id()}))
             }
+            "mcp_set_servers" => {
+                let servers = request.get("servers")
+                    .and_then(Value::as_object)
+                    .ok_or_else(|| anyhow::anyhow!(
+                        "mcp_set_servers requires servers object"))?;
+                agent.set_dynamic_mcp_servers(servers).await
+            }
             "mcp_toggle" => {
                 let server = request.get("serverName")
                     .and_then(Value::as_str)
