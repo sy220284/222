@@ -3,7 +3,11 @@ use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{path::{Path, PathBuf}, process::Stdio, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    process::Stdio,
+    time::Duration,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     process::Command,
@@ -195,9 +199,7 @@ impl HookRunner {
                 let result = if let Some(cap) = shutdown_cap {
                     match timeout(cap, run_command(rule, &data, workspace)).await {
                         Ok(result) => result,
-                        Err(_) => Err(anyhow::anyhow!(
-                            "SessionEnd hook exceeded shutdown timeout"
-                        )),
+                        Err(_) => Err(anyhow::anyhow!("SessionEnd hook exceeded shutdown timeout")),
                     }
                 } else {
                     run_command(rule, &data, workspace).await
@@ -433,7 +435,13 @@ fn plain_hook_context(payload: &Value, output: &[u8]) -> Vec<String> {
     let event = payload.get("hook_event_name").and_then(Value::as_str);
     if !matches!(
         event,
-        Some("SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "PostToolUseFailure")
+        Some(
+            "SessionStart"
+                | "UserPromptSubmit"
+                | "PreToolUse"
+                | "PostToolUse"
+                | "PostToolUseFailure"
+        )
     ) {
         return Vec::new();
     }
