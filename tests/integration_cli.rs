@@ -4929,3 +4929,103 @@ fn interactive_managed_only_policy_blocks_persistent_grants() {
     assert!(String::from_utf8_lossy(&output.stdout).contains("policy-locked"));
     assert!(!root.path().join(".atlas/settings.local.json").exists());
 }
+
+#[test]
+fn tool_search_model_roundtrip_uses_registered_catalog() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for index in 0..2 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let raw = read_request(&mut stream);
+            requests.push(raw);
+            let payload = if index == 0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"find-1","type":"function","function":{
+                        "name":"ToolSearch",
+                        "arguments":json!({"query":"select:read_file,missing,read_file"}).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant","content":"Search completed."},
+                    "finish_reason":"stop"}]})
+            };
+            let body = payload.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let config = root.path().join("model.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"test",
+        "base_url":format!("http://{addr}/v1"),"stream":false
+    }]}).to_string()).unwrap();
+    let output = binary().args(["--workspace",root.path().to_str().unwrap(),
+        "--approval","read-only","run","Find a tool"]).env("ATLAS_CONFIG",&config)
+        .output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Search completed."));
+    assert!(requests[0].contains("ToolSearch"),"ToolSearch is not registered");
+    assert!(requests[1].contains("read_file"),"actual search result not returned");
+    assert!(requests[1].contains("total_deferred_tools"),"search result schema missing");
+    assert!(!requests[1].contains("Unknown tool: ToolSearch"));
+    let session_file = fs::read_dir(root.path().join(".atlas/sessions")).unwrap()
+        .next().unwrap().unwrap().path();
+    let saved=fs::read_to_string(session_file).unwrap();
+    assert!(saved.contains("find-1") && saved.contains("read_file"),
+        "tool response not persisted");
+}
+
+#[test]
+fn ask_user_question_chat_uses_actual_terminal_selection() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for index in 0..2 {
+            let (mut stream,_) = listener.accept().unwrap();
+            let raw=read_request(&mut stream);
+            requests.push(raw);
+            let payload = if index == 0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"question-1","type":"function","function":{
+                        "name":"AskUserQuestion",
+                        "arguments":json!({"questions":[{
+                            "question":"Which database?","header":"Database",
+                            "options":[{"label":"SQLite","description":"Local"},
+                                       {"label":"Postgres","description":"Remote"}]
+                        }],"answers":{"Which database?":"Spoofed"}}).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant","content":"Answer recorded."},
+                    "finish_reason":"stop"}]})
+            };
+            let body=payload.to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            stream.flush().unwrap();
+        }
+        requests
+    });
+    let config=root.path().join("model.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"test",
+        "base_url":format!("http://{addr}/v1"),"stream":false
+    }]}).to_string()).unwrap();
+    let mut child=binary().args(["--workspace",root.path().to_str().unwrap(),"chat"])
+        .env("ATLAS_CONFIG",&config)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped()).spawn().unwrap();
+    child.stdin.take().unwrap().write_all(b"Help me choose\n2\n/exit\n").unwrap();
+    let output=child.wait_with_output().unwrap();
+    let requests=server.join().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    assert!(requests[0].contains("AskUserQuestion"));
+    assert!(requests[1].contains("Postgres"),"terminal answer not returned to model");
+    assert!(!requests[1].contains("Spoofed\"}"),"model-provided answer accepted");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Which database?"));
+}
