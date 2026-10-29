@@ -206,3 +206,10 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 ### 2026-10-29：通用 MCP Streamable HTTP（统一任务 #3）
 
 对照 2.1.88 源码 `src/services/mcp/client.ts` 的 HTTP 2025-03-26 连接、请求超时、JSON/SSE 返回、session ID 和 `headersHelper`/`types.ts` 配置，新建 `src/mcp_http.rs` 并在真实 `McpManager::connect`、工具发现/调用、SDK 状态查询中接入 `type=http`。支持 POST JSON-RPC、SSE 分片消息、会话 Header、协议版本、单请求 60s 超时、安全禁止带账号密码的 URL 与覆盖协议控制 Header、拒绝跨站重定向，不在状态 API 泄露 HTTP Header 密钥。新增本地 TCP 模拟 MCP 服务器全握手、tool discovery、SSE、session header 和工具调用测试；验证是否成功以最新 CI 结果为准。原厂 OAuth/身份登录被要求排除，其厂商无关身份验证机制、SSE 旧式传输、WS、重连、资源/提示、列表更新、OAuth 通用流程仍需要逐源码实现，四条原路径一律保留部分实现。不得将 HTTP 部分验收说成 3,349 行原始客户端已等价。
+
+#### MCP 多服务容错与完整工具结果
+
+原始源码 `services/mcp/client.ts` 的连接失败返回状态而不崩溃其他服务：
+- `McpManager::connect` 现在逐服务捕获启动、握手及 `tools/list` 发现失败；失败标记 `failed`，成功实例继续可调用。拒绝在分页失败中发布一半工具和路由；MCP status 按原服务器配置顺序对应健康或失败的连接，而不是与压缩后的成功客户端错位。
+- `tools/call` 强制输入 JSON 对象，`isError` 转 `ERROR:`；包含结构化内容、图片或资源块时返回完整 JSON，而不是只拼文本丢数据；HTTP 状态将端点查询参数移除以免泄露密钥。
+- 新增本地 stdio mock 的失败连接隔离、无效工具定义回滚、错误与结构化内容保留、非法输入回归。完整断开重连、动态工具发现通知、资源/提示/订阅和 OAuth 仍是本任务 #3 的未闭环范围。

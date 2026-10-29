@@ -121,67 +121,114 @@ pub struct McpManager {
     tools: Vec<Value>,
     routes: HashMap<String, (usize, String)>,
     server_statuses: Vec<Value>,
+    status_clients: Vec<Option<usize>>,
 }
 
 impl McpManager {
-    pub async fn connect(servers: &[McpServerConfig]) -> Result<Self> {
-        if servers.len() > 16 { bail!("Too many MCP servers") }
-        let mut out = Self { clients: Vec::new(), tools: Vec::new(), routes: HashMap::new(), server_statuses: Vec::new() };
-        for server in servers {
-            let mut client = TransportClient::connect(server).await?;
-            let index = out.clients.len();
-            let mut cursor: Option<String> = None;
-            let mut server_tools=Vec::new();
-            for _ in 0..20 {
-                let params = match &cursor {
-                    Some(value) => json!({"cursor":value}),
-                    None => json!({}),
-                };
-                let result = timeout(RPC_TIMEOUT, client.request("tools/list", params))
-                    .await.context("MCP discovery timed out")??;
-                let tools = result.get("tools").and_then(Value::as_array)
-                    .context("MCP tools/list missing tools array")?;
-                for tool in tools {
-                    let name = tool.get("name").and_then(Value::as_str)
-                        .context("MCP tool missing name")?;
-                    let normalized=runtime_contracts::normalize_mcp_name(&server.id);
-                    let alias=format!("mcp_{}_{}",
-                        normalized.chars().take(45).collect::<String>(),out.routes.len());
-                    let description = format!("MCP {}: {}. Requires approval.",
-                        server.id, tool.get("description").and_then(Value::as_str).unwrap_or(name));
-                    let parameters = tool.get("inputSchema").cloned()
-                        .unwrap_or(json!({"type":"object","properties":{}}));
-                    out.tools.push(json!({"type":"function","function":{
-                        "name":alias,"description":description,"parameters":parameters
-                    }}));
-                    out.routes.insert(alias, (index, name.to_owned()));
-                    server_tools.push(json!({"name":name,
-                        "description":tool.get("description").and_then(Value::as_str)
-                            .unwrap_or("")}));
+    pub async fn connect(servers: &[McpServerConfig])->Result<Self>{
+        if servers.len()>16 {bail!("Too many MCP servers")}
+        let mut out=Self{clients:Vec::new(),tools:Vec::new(),
+            routes:HashMap::new(),server_statuses:Vec::new(),status_clients:Vec::new()};
+        for server in servers{
+            // Failed servers are isolated; one broken MCP process must not
+            // prevent the healthy tools from operating.
+            let mut client=match TransportClient::connect(server).await{
+                Ok(client)=>client,
+                Err(error)=>{
+                    out.failed_status(server,format!("Connection failed: {error:#}"));
+                    continue;
                 }
-                cursor = result.get("nextCursor").and_then(Value::as_str).map(str::to_owned);
-                if cursor.is_none() { break; }
+            };
+            let mut discovered=Vec::new();
+            let mut display_tools=Vec::new();
+            let mut cursor:Option<String>=None;
+            let mut seen_cursors=std::collections::HashSet::new();
+            let discovery:Result<()> = async {
+                for _ in 0..20 {
+                    let params=cursor.as_ref().map_or(json!({}),|c|json!({"cursor":c}));
+                    let page=timeout(RPC_TIMEOUT,client.request("tools/list",params))
+                        .await.context("MCP discovery timed out")??;
+                    let tools=page.get("tools").and_then(Value::as_array)
+                        .context("MCP tools/list missing tools array")?;
+                    for tool in tools {
+                        let name=tool.get("name").and_then(Value::as_str)
+                            .context("MCP tool missing name")?;
+                        let alias=format!("mcp_{}_{}",
+                            runtime_contracts::normalize_mcp_name(&server.id)
+                                .chars().take(45).collect::<String>(),
+                            out.routes.len()+discovered.len());
+                        let desc=tool.get("description").and_then(Value::as_str)
+                            .unwrap_or(name);
+                        let params=tool.get("inputSchema").cloned()
+                            .unwrap_or(json!({"type":"object","properties":{}}));
+                        discovered.push((alias,name.to_owned(),desc.to_owned(),params));
+                        display_tools.push(json!({"name":name,"description":desc}));
+                    }
+                    cursor=page.get("nextCursor").and_then(Value::as_str).map(str::to_owned);
+                    match cursor.as_ref(){
+                        None=>break,
+                        Some(c) if !seen_cursors.insert(c.clone())=>
+                            bail!("MCP repeated pagination cursor"),
+                        _=>{}
+                    }
+                }
+                if cursor.is_some(){bail!("MCP exceeded 20 discovery pages")}
+                Ok(())
+            }.await;
+            if let Err(error)=discovery{
+                out.failed_status(server,format!("Tool discovery failed: {error:#}"));
+                continue;
             }
-            if cursor.is_some() { bail!("MCP server {} returned too many pages", server.id) }
+            let client_index=out.clients.len();
+            let server_info=client.server_info();
+            for (alias,name,desc,params) in discovered {
+                out.tools.push(json!({"type":"function","function":{
+                    "name":alias,"description":format!("MCP {}: {desc}. Requires approval.",server.id),
+                    "parameters":params
+                }}));
+                out.routes.insert(alias,(client_index,name));
+            }
             out.server_statuses.push(json!({
-                "name":server.id,"status":"connected","serverInfo":client.server_info(),
-                "config": match server.transport.as_deref().unwrap_or("stdio"){
-                    "stdio"=>json!({"type":"stdio","command":server.command,"args":server.args}),
-                    _=>json!({"type":"http","url":server.url}),
-                },
-                "tools":server_tools
+                "name":server.id,"status":"connected","serverInfo":server_info,
+                "config":Self::public_config(server),"tools":display_tools
             }));
+            out.status_clients.push(Some(client_index));
             out.clients.push(client);
         }
         Ok(out)
+    }
+    fn public_config(server:&McpServerConfig)->Value {
+        match server.transport.as_deref().unwrap_or("stdio"){
+            "stdio"=>json!({"type":"stdio","command":server.command,"args":server.args}),
+            _=>{
+                // URL query parameters can contain access tokens. SDK status
+                // must not reflect secrets even when configured explicitly.
+                let url=server.url.as_deref().and_then(|s|reqwest::Url::parse(s).ok())
+                    .map(|mut u|{u.set_query(None);u.set_fragment(None);u.to_string()});
+                json!({"type":"http","url":url})
+            }
+        }
+    }
+    fn failed_status(&mut self,server:&McpServerConfig,message:String){
+        let mut error=message;
+        if let Some(url)=&server.url {
+            error=error.replace(url,"[redacted MCP endpoint]");
+        }
+        for value in server.headers.values() {
+            if !value.is_empty(){error=error.replace(value,"[redacted]");}
+        }
+        self.server_statuses.push(json!({"name":server.id,"status":"failed",
+            "config":Self::public_config(server),"error":error}));
+        self.status_clients.push(None);
     }
 
     /// SDK status comes from the live managed process, not the configured name.
     /// Do not expose environment variables or secrets in the SDK response.
     pub fn statuses(&mut self)->Result<Vec<Value>>{
         let mut statuses=self.server_statuses.clone();
-        for (status,client) in statuses.iter_mut().zip(self.clients.iter_mut()){
-            if let Some(error)=client.failed_process()? {
+        for (status,index) in statuses.iter_mut().zip(&self.status_clients){
+            let Some(index)=index else{continue};
+            if let Some(error)=self.clients[*index].failed_process()?{
                 status["status"]=json!("failed");
                 status["error"]=json!(error);
                 if let Some(fields)=status.as_object_mut(){fields.remove("tools");}
@@ -203,14 +250,24 @@ impl McpManager {
     async fn call(&mut self, call: &ToolCall) -> Result<String> {
         let (index, real_name) = self.routes.get(&call.function.name)
             .context("Unknown MCP tool")?.clone();
-        let args: Value = serde_json::from_str(&call.function.arguments)?;
+        let args:Value=serde_json::from_str(&call.function.arguments)?;
+        if !args.is_object(){bail!("MCP tool arguments must be an object")}
         let response = timeout(RPC_TIMEOUT, self.clients[index].request("tools/call",
             json!({"name":real_name,"arguments":args})))
             .await.context("MCP tool call timed out")??;
-        let output: Vec<&str> = response.get("content").and_then(Value::as_array)
-            .map(|parts| parts.iter().filter_map(|part| part.get("text").and_then(Value::as_str)).collect())
-            .unwrap_or_default();
-        let result = if output.is_empty() { response.to_string() } else { output.join("\n") };
+        // Keep non-text blocks and structured data intact: silently dropping
+        // image/resource content corrupts the tool response seen by the model.
+        let parts=response.get("content").and_then(Value::as_array);
+        let only_text=parts.is_some_and(|items|items.iter().all(|item|
+            item.get("type").and_then(Value::as_str)==Some("text") &&
+            item.get("text").and_then(Value::as_str).is_some()));
+        let result=if only_text && response.get("structuredContent").is_none(){
+            let texts=parts.unwrap().iter().filter_map(|item|item["text"].as_str())
+                .collect::<Vec<_>>().join("\n");
+            if response["isError"]==true {format!("ERROR: {texts}")} else {texts}
+        }else if response["isError"]==true{
+            format!("ERROR: {}",response)
+        }else{response.to_string()};
         Ok(result.chars().take(16_000).collect())
     }
 }
@@ -220,6 +277,87 @@ mod tests {
     use super::*;
     use crate::protocol::FunctionCall;
 
+    #[tokio::test]
+    async fn failed_stdio_server_cannot_break_healthy_server_and_indexing(){
+        let script=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"healthy"}}}'
+    ;;
+  *'"method":"tools/list"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","inputSchema":{"type":"object"}}]}}'
+    ;;
+  *'"method":"tools/call"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"healthy response"}]}}'
+    ;;
+esac
+done"#;
+        let make=|id:&str,command:&str,args:Vec<String>|McpServerConfig{
+            id:id.into(),command:command.into(),args,env:HashMap::new(),
+            transport:None,url:None,headers:HashMap::new()
+        };
+        let broken=make("broken","nonexistent_mcp_executable_for_test",vec![]);
+        let healthy=make("healthy","sh",vec!["-c".into(),script.into()]);
+        let mut mgr=McpManager::connect(&[broken,healthy]).await.unwrap();
+        assert_eq!(mgr.definitions().len(),1);
+        assert!(mgr.handles("mcp_healthy_0"));
+        let states=mgr.statuses().unwrap();
+        assert_eq!(states.len(),2);
+        assert_eq!(states[0]["status"],"failed");
+        assert_eq!(states[1]["status"],"connected");
+        assert_eq!(states[1]["tools"][0]["name"],"echo");
+        let call=ToolCall{id:"ok".into(),kind:"function".into(),
+            function:FunctionCall{name:"mcp_healthy_0".into(),
+                arguments:"{}".into()}};
+        assert_eq!(mgr.execute(&call).await,"healthy response");
+    }
+    #[tokio::test]
+    async fn failed_discovery_does_not_publish_half_registered_tools(){
+        let script=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"broken"}}}'
+    ;;
+  *'"method":"tools/list"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"first","inputSchema":{"type":"object"}},{"wrong":"missing name"}]}}'
+    ;;
+esac
+done"#;
+        let config=McpServerConfig{id:"partial".into(),command:"sh".into(),
+            args:vec!["-c".into(),script.into()],env:HashMap::new(),
+            transport:None,url:None,headers:HashMap::new()};
+        let mut mgr=McpManager::connect(&[config]).await.unwrap();
+        assert!(mgr.definitions().is_empty());
+        assert!(!mgr.handles("mcp_partial_0"));
+        let states=mgr.statuses().unwrap();
+        assert_eq!(states.len(),1);
+        assert_eq!(states[0]["status"],"failed");
+    }
+    #[tokio::test]
+    async fn mcp_tool_error_and_structured_payload_survive_model_output(){
+        let script=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
+  *'"method":"tools/list"'*) echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo"}]}}' ;;
+  *'"method":"tools/call"'*) echo '{"jsonrpc":"2.0","id":3,"result":{"isError":true,"content":[{"type":"text","text":"permission denied"}],"structuredContent":{"code":"denied"}}}' ;;
+esac
+done"#;
+        let c=McpServerConfig{id:"error".into(),command:"sh".into(),
+            args:vec!["-c".into(),script.into()],env:HashMap::new(),
+            transport:None,url:None,headers:HashMap::new()};
+        let mut mgr=McpManager::connect(&[c]).await.unwrap();
+        let call=ToolCall{id:"bad".into(),kind:"function".into(),
+            function:FunctionCall{name:"mcp_error_0".into(),
+                arguments:"{}".into()}};
+        let result=mgr.execute(&call).await;
+        assert!(result.starts_with("ERROR:"));
+        assert!(result.contains("permission denied"));
+        assert!(result.contains("structuredContent"));
+        let illegal=ToolCall{id:"illegal".into(),kind:"function".into(),
+            function:FunctionCall{name:"mcp_error_0".into(),
+                arguments:"[]".into()}};
+        assert!(mgr.execute(&illegal).await.contains("must be an object"));
+    }
     #[tokio::test]
     async fn discovers_and_calls_stdio_tool() {
         let script = r#"while IFS= read -r line; do
