@@ -39,7 +39,10 @@ pub fn resolve_git_dir(start: &Path) -> Option<PathBuf> {
         };
         target.canonicalize().ok()
     });
-    directory_cache().lock().unwrap().insert(start, result.clone());
+    directory_cache()
+        .lock()
+        .unwrap()
+        .insert(start, result.clone());
     result
 }
 
@@ -60,13 +63,16 @@ pub fn is_safe_ref_name(name: &str) -> bool {
         && !name.starts_with('/')
         && !name.contains("..")
         && name.split('/').all(|part| !part.is_empty() && part != ".")
-        && name.bytes().all(|byte| byte.is_ascii_alphanumeric()
-            || matches!(byte, b'/' | b'.' | b'_' | b'+' | b'-' | b'@'))
+        && name.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'_' | b'+' | b'-' | b'@')
+        })
 }
 
 pub fn is_valid_git_sha(hash: &str) -> bool {
     matches!(hash.len(), 40 | 64)
-        && hash.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        && hash
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,7 +92,9 @@ pub fn read_git_head(git_dir: &Path) -> Option<GitHead> {
         if !is_safe_ref_name(reference) {
             return None;
         }
-        return Some(GitHead::Detached(resolve_ref(git_dir, reference).unwrap_or_default()));
+        return Some(GitHead::Detached(
+            resolve_ref(git_dir, reference).unwrap_or_default(),
+        ));
     }
     is_valid_git_sha(value).then(|| GitHead::Detached(value.to_owned()))
 }
@@ -181,14 +189,17 @@ pub fn read_worktree_head_sha(path: &Path) -> Option<String> {
 
 pub fn get_remote_url_for_dir(cwd: &Path) -> Option<String> {
     let git_dir = resolve_git_dir(cwd)?;
-    crate::git_config_parser::parse_git_config_value(
-        &git_dir, "remote", Some("origin"), "url"
-    ).filter(|value| !value.is_empty()).or_else(|| {
-        let common = get_common_dir(&git_dir)?;
-        crate::git_config_parser::parse_git_config_value(
-            &common, "remote", Some("origin"), "url"
-        )
-    })
+    crate::git_config_parser::parse_git_config_value(&git_dir, "remote", Some("origin"), "url")
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            let common = get_common_dir(&git_dir)?;
+            crate::git_config_parser::parse_git_config_value(
+                &common,
+                "remote",
+                Some("origin"),
+                "url",
+            )
+        })
 }
 
 pub fn get_default_branch_for_dir(cwd: &Path) -> String {
@@ -196,9 +207,9 @@ pub fn get_default_branch_for_dir(cwd: &Path) -> String {
         return "main".into();
     };
     let common = get_common_dir(&git_dir).unwrap_or(git_dir);
-    if let Some(value) = read_raw_symref(
-        &common, "refs/remotes/origin/HEAD", "refs/remotes/origin/"
-    ) {
+    if let Some(value) =
+        read_raw_symref(&common, "refs/remotes/origin/HEAD", "refs/remotes/origin/")
+    {
         return value;
     }
     for name in ["main", "master"] {
@@ -310,7 +321,10 @@ pub fn snapshot(cwd: &Path) -> GitSnapshot {
         }
     }
     let actual = snapshot_uncached(&cwd);
-    snapshot_cache().lock().unwrap().insert(cwd, (stamp, actual.clone()));
+    snapshot_cache()
+        .lock()
+        .unwrap()
+        .insert(cwd, (stamp, actual.clone()));
     actual
 }
 
@@ -322,8 +336,10 @@ mod tests {
     #[test]
     fn rejects_tampered_branch_and_ref_data() {
         assert!(is_safe_ref_name("feature/a+build.1"));
-        for name in ["", ".", "a/./b", "a//b", "-wrong", "a/../b",
-            "a;rm", "a\nb", "a@{one", "中文", "/slash"] {
+        for name in [
+            "", ".", "a/./b", "a//b", "-wrong", "a/../b", "a;rm", "a\nb", "a@{one", "中文",
+            "/slash",
+        ] {
             assert!(!is_safe_ref_name(name), "{name:?}");
         }
         assert!(is_valid_git_sha(&"a".repeat(40)));
@@ -341,11 +357,20 @@ mod tests {
         let sha1 = "a".repeat(40);
         let sha2 = "b".repeat(40);
         fs::create_dir_all(dir.path().join("refs/heads")).unwrap();
-        fs::write(dir.path().join("packed-refs"),
-            format!("# packed\n{sha1} refs/heads/main\n^{sha1}\n")).unwrap();
-        assert_eq!(resolve_ref(dir.path(), "refs/heads/main"), Some(sha1.clone()));
+        fs::write(
+            dir.path().join("packed-refs"),
+            format!("# packed\n{sha1} refs/heads/main\n^{sha1}\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_ref(dir.path(), "refs/heads/main"),
+            Some(sha1.clone())
+        );
         fs::write(dir.path().join("refs/heads/main"), &sha2).unwrap();
-        assert_eq!(resolve_ref(dir.path(), "refs/heads/main"), Some(sha2.clone()));
+        assert_eq!(
+            resolve_ref(dir.path(), "refs/heads/main"),
+            Some(sha2.clone())
+        );
         fs::write(dir.path().join("refs/heads/main"), "ref: refs/heads/alias").unwrap();
         fs::write(dir.path().join("refs/heads/alias"), "ref: refs/heads/main").unwrap();
         assert_eq!(resolve_ref(dir.path(), "refs/heads/main"), None);
@@ -355,15 +380,33 @@ mod tests {
     fn real_git_checkout_branch_and_cache_invalidations() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        assert!(Command::new("git").args(["init", "-q"])
-            .current_dir(root).status().unwrap().success());
+        assert!(Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root)
+            .status()
+            .unwrap()
+            .success());
         fs::write(root.join("file.txt"), "original").unwrap();
-        assert!(Command::new("git").args(["add", "file.txt"])
-            .current_dir(root).status().unwrap().success());
-        assert!(Command::new("git").args([
-            "-c", "user.name=Test", "-c", "user.email=test@example.com",
-            "commit", "-qm", "initial"
-        ]).current_dir(root).status().unwrap().success());
+        assert!(Command::new("git")
+            .args(["add", "file.txt"])
+            .current_dir(root)
+            .status()
+            .unwrap()
+            .success());
+        assert!(Command::new("git")
+            .args([
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-qm",
+                "initial"
+            ])
+            .current_dir(root)
+            .status()
+            .unwrap()
+            .success());
         let first = snapshot(root);
         assert!(is_valid_git_sha(&first.head));
         assert_eq!(first.worktree_count, 1);
@@ -389,7 +432,11 @@ mod tests {
         fs::create_dir_all(&worktree).unwrap();
         fs::write(private.join("HEAD"), "ref: refs/heads/main\n").unwrap();
         fs::write(private.join("commondir"), "../..\n").unwrap();
-        fs::write(worktree.join(".git"), format!("gitdir: {}\n", private.display())).unwrap();
+        fs::write(
+            worktree.join(".git"),
+            format!("gitdir: {}\n", private.display()),
+        )
+        .unwrap();
         assert_eq!(get_head_for_dir(&worktree), Some(sha.clone()));
         assert_eq!(read_worktree_head_sha(&worktree), Some(sha));
         assert_eq!(get_worktree_count_from_fs(&worktree), 2);
