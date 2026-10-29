@@ -195,8 +195,8 @@
 **目标：1906 个原始文件的功能逐项重写、等价验证。**
 
 - 明确归入环境/行为遥测删除项：22 个原始文件路径（仅是第一轮整文件分类；其他混合文件也需排除隐式上报）。
-- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：1053 个原始文件路径。
-- 当前台账仍标注“未迁移”的文件路径：802 个（与部分实现项互斥，按当前状态字段分类）。
+- 现有 Rust 模块覆盖部分行为、但未完成逐文件等价：1058 个原始文件路径。
+- 当前台账仍标注“未迁移”的文件路径：797 个（与部分实现项互斥，按当前状态字段分类）。
 - **达到原始文件纯函数行为/边界等价且有验证证据的路径：29 个（包括独立纯函数、状态模块与固定常量文件；完整调用链仍需逐项验证）；其上下游业务逻辑仍需完整验证。** 其他当前已实现的功能仅在特定测试场景验证，不能把“部分实现”升级为“完成”。
 - 非排除项的原始文件级等价验收仍未闭环：1855 个。
 
@@ -760,3 +760,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 对照原版 `src/components/agents/validateAgent.ts` 和 `src/components/agents/agentFileUtils.ts` 的校验、文件格式及保存/编辑/删除逻辑，新增 `src/agent_definition.rs`。Rust 原生验证名称长度与字符、说明、系统提示词、工具名称、用户与项目重复名称；以 `.atlas/agents/*.md` 存储 YAML frontmatter、转义说明、可选模型/权限字段、只创建不覆盖与显式更新、删除及同步文件数据。
 
 独立 `atlas-agent agent-definition --file SPEC.json [--validate-only] [--user] [--replace]` 真实命令已接通。3 项单元测试通过；本地真实 CLI 进程完成配置验证、创建和重复创建拒绝，Rust 编译和格式检查通过。保留多模型与本地用户所有权，不带原厂账号/API/遥测依赖。Agent UI 编辑器、全设置源、生成器、子 Agent 全链路仍未等价，原路径继续标为部分实现，不增加最终验收数。
+
+
+## 2026-10-29：Git 工作流与更新日志真实 Rust 执行链（仍待原版全链验收）
+
+- `src/git_workflows.rs` 对照 `src/commands/review.ts`、`commit.ts`、`commit-push-pr.ts`：固定 Git 参数读取当前状态、差异和提交历史，按仓库实际配置检测默认分支；`review`、`commit`、`commit-push-pr` 均已从 CLI 及交互式斜杠命令调用真实 Agent、模型和工具权限链。明确要求中文 PR 标题及描述。3 项单元、2 项真实 CLI→模拟 HTTP 模型集成测试通过。
+- `src/release_notes.rs` 对照 `src/utils/releaseNotes.ts`、`src/commands/release-notes/release-notes.ts`：版本解析/排序、最近 5 条过滤、HTTP(S) 500ms 下载、原子缓存写入和 CLI/交互展示。2 项测试包括真实 localhost TCP 响应。固定品牌服务器 URL 已移除。
+- 本地 `cargo check --all-targets`、`cargo fmt --all -- --check`、`cargo test --all-targets` 均通过：12 个测试套件，共 552 通过、0 失败。此前基线中一处厂商品牌注释导致隐私测试失败，现已由并行提交单独修复，不覆盖其改动。
+- 本轮 5 条未迁移原路径调整为**部分实现**，文件级已验收数量保持 29。GitHub 与工具权限原版全面对照、自动版本更新提示、全量 UI/SDK 路径等缺口继续开放。最新 HEAD 的远端 CI 结果须单独核实。

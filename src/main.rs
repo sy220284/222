@@ -28,6 +28,7 @@ mod generated_ports;
 mod git_config_parser;
 mod git_filesystem;
 mod git_ignore;
+mod git_workflows;
 mod github_repo_mapping;
 mod history;
 mod hooks;
@@ -77,6 +78,7 @@ mod query_guard;
 mod queue_journal;
 mod queued_prompt_batch;
 mod reactive_store;
+mod release_notes;
 mod runtime_contracts;
 mod sdk_queue;
 mod search;
@@ -347,6 +349,8 @@ enum Commands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Show cached changelog, optionally refreshing from a configured source
+    ReleaseNotes,
     /// Read, update or delete local credentials using primary/fallback stores
     Credential {
         action: String,
@@ -363,6 +367,12 @@ enum Commands {
     ClearScreen,
     /// Show configured providers and active default without connecting to them
     Models,
+    /// Perform a local PR review through the selected model and GitHub CLI
+    Review { pr_number: Option<u64> },
+    /// Review staged/unstaged changes and create a new Git commit
+    Commit { instructions: Option<String> },
+    /// Commit, push and create/update a Chinese pull request
+    CommitPushPr { instructions: Option<String> },
     /// Execute a single prompt; pass '-' to read the prompt from stdin
     Run { prompt: String },
     /// Start an interactive conversation (optionally resume an earlier UUID)
@@ -402,6 +412,12 @@ enum Commands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
+        Commands::ReleaseNotes => {
+            let home = keybindings::config_home()?;
+            let url = std::env::var("ATLAS_RELEASE_NOTES_URL").ok();
+            println!("{}", release_notes::show(&home, url.as_deref()).await?);
+            return Ok(());
+        }
         Commands::Credential {
             action,
             file,
@@ -1190,6 +1206,30 @@ async fn main() -> Result<()> {
         agent.profile().model
     );
     let result = match &cli.command {
+        Commands::Review { pr_number } => {
+            let prompt = git_workflows::prompt(
+                git_workflows::Action::Review,
+                agent.workspace_root(),
+                &pr_number.map(|n| n.to_string()).unwrap_or_default(),
+            )?;
+            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+        }
+        Commands::Commit { instructions } => {
+            let prompt = git_workflows::prompt(
+                git_workflows::Action::Commit,
+                agent.workspace_root(),
+                instructions.as_deref().unwrap_or(""),
+            )?;
+            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+        }
+        Commands::CommitPushPr { instructions } => {
+            let prompt = git_workflows::prompt(
+                git_workflows::Action::CommitPushPr,
+                agent.workspace_root(),
+                instructions.as_deref().unwrap_or(""),
+            )?;
+            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+        }
         Commands::Run { prompt } => {
             let actual_prompt = if prompt == "-" {
                 let mut input = String::new();
@@ -1502,6 +1542,10 @@ async fn chat(
                 println!("/branch [name]           fork the conversation and resume independently");
                 println!("/init                    set up project instructions, optional skills and hooks");
                 println!("/stats                   report real local session usage and costs");
+                println!("/release-notes           show trusted cached release notes");
+                println!("/review [PR]             review a pull request through the active model");
+                println!("/commit                  review changes and create a Git commit");
+                println!("/commit-push-pr          commit, push and create/update a Chinese PR");
                 println!("/history [query]         search saved prompt history");
                 println!(
                     "/files                   show files read successfully in this conversation"
@@ -1581,6 +1625,15 @@ async fn chat(
                 continue;
             }
 
+            "/release-notes" => {
+                let home = keybindings::config_home()?;
+                let url = std::env::var("ATLAS_RELEASE_NOTES_URL").ok();
+                match release_notes::show(&home, url.as_deref()).await {
+                    Ok(notes) => println!("{notes}"),
+                    Err(error) => eprintln!("Cannot show release notes: {error:#}"),
+                }
+                continue;
+            }
             "/stats" => {
                 println!("{}", stats::collect(agent.workspace_root())?.render());
                 continue;
@@ -1884,6 +1937,27 @@ async fn chat(
             agent.switch_model(profile)?;
             println!("Model: {} / {}", agent.profile().id, agent.profile().model);
             continue;
+        }
+        if let Some((name, args)) = input
+            .strip_prefix('/')
+            .map(|t| t.split_once(' ').unwrap_or((t, "")))
+        {
+            let action = match name {
+                "review" => Some(git_workflows::Action::Review),
+                "commit" => Some(git_workflows::Action::Commit),
+                "commit-push-pr" => Some(git_workflows::Action::CommitPushPr),
+                _ => None,
+            };
+            if let Some(action) = action {
+                match git_workflows::prompt(action, agent.workspace_root(), args) {
+                    Ok(prompt) => match agent.ask(&prompt).await {
+                        Ok(answer) => println!("{answer}"),
+                        Err(error) => eprintln!("Error: {error:#}"),
+                    },
+                    Err(error) => eprintln!("Cannot prepare /{name}: {error:#}"),
+                }
+                continue;
+            }
         }
         // The original marks completion on prompt submission, not on a
         // successful model response; local project instructions may have
