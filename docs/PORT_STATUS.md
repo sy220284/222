@@ -803,3 +803,8 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 ## 2026-10-29：分支会话任务清单隔离（源码已提交，待验收）
 
 对照 `src/commands/branch/branch.ts::createFork` 生成新会话 ID、`src/tools/TodoWriteTool/TodoWriteTool.ts` 以 `getSessionId()` 索引清单、`src/utils/tasks.ts::getTaskListId` 按新会话分配 V2 列表的行为，修复 Rust `src/agent.rs` 创建会话分支时克隆旧 `Session.todos` 和兼容 `Session.tasks` 导致清单串线的问题。保留完整历史消息与原版来源信息，新分支从独立空任务清单开始，团队 V2 任务图仍按团队身份共享。提交 `ad9edbdf291d73105dd5320aded0fb0c58a225ee`。源码已提交，待行为验收；未运行 Cargo/测试/CI。
+
+
+## 2026-10-29：任务文件读取失败隔离（源码已提交，待验收）
+
+对照原版 `src/utils/tasks.ts::getTask` 对任意单条任务读取异常返回 null、`listTasks` 继续展示其余任务的行为，修复 Rust `src/task_graph.rs::TaskGraph::load` 遇到权限拒绝、I/O 异常或超过本地安全上限的单条记录时抛错中断整个 TaskList/任务认领的问题。现单条异常记录视为缺席，其余合法任务仍可查询和处理；已有锁/符号链接安全边界保留。提交 `4924e7769191d30d9be81a4bb35ea5509b21044b`。源码已提交，待行为验收，未运行 Cargo/测试/CI。
