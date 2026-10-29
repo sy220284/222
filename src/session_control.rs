@@ -158,7 +158,7 @@ mod tests{
                 id:"call-1".into(),kind:"function".into(),
                 function:FunctionCall{name:"read_file".into(),
                     arguments:r#"{"path":"main.rs"}"#.into()},
-            }]),tool_call_id:None,
+            }]),tool_call_id:None,content_blocks:None,
         });
         session.messages.push(Message::tool_result(&ToolCall{
             id:"call-1".into(),kind:"function".into(),
