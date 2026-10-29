@@ -125,7 +125,7 @@ impl BackgroundTasks {
     fn save(directory: &Path, record: &TaskRecord) -> Result<()> {
         use std::io::Write;
         let path = directory.join(format!("{}.json", record.id));
-        let temp = directory.join(format!("{}.tmp", record.id));
+        let temp = directory.join(format!("{}.{}.tmp", record.id, Uuid::new_v4()));
         // Never follow an attacker-created temporary-file symlink while
         // persisting task state. The metadata rename is atomic.
         let mut options = fs::OpenOptions::new();
