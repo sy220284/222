@@ -280,7 +280,7 @@ mod tests {
         let server = tokio::spawn(async move {
             let (mut connection, _) = listener.accept().await.unwrap();
             let mut data = [0u8; 4096];
-            connection.read(&mut data).await.unwrap();
+            connection.read_exact(&mut data[..1]).await.unwrap();
             let payload=concat!(
                 "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\n",
                 "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\n\n",
@@ -325,7 +325,7 @@ mod tests {
             for attempt in 0..2 {
                 let (mut socket, _) = listener.accept().await.unwrap();
                 let mut data = [0u8; 4096];
-                socket.read(&mut data).await.unwrap();
+                socket.read_exact(&mut data[..1]).await.unwrap();
                 let (status, body) = if attempt == 0 {
                     (
                         "503 Service Unavailable",
