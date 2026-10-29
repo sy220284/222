@@ -671,6 +671,49 @@ mod plan_approval_lifecycle_tests {
                 "approve":false})).is_err());
     }
     #[test]
+    fn concurrent_leader_pollers_reply_once_to_each_request(){
+        let root=std::sync::Arc::new(tempfile::tempdir().unwrap());
+        let teams=Teams::new(root.path()).unwrap();
+        teams.create("team",None,"leader").unwrap();
+        teams.member("team",Member{
+            name:"worker".into(),id:"worker@team".into(),active:true}).unwrap();
+        teams.send_structured("team","team-lead","worker",
+            &json!({"type":"plan_approval_request","plan_file_path":"plan.md",
+                "plan_content":"Check"})).unwrap();
+        let workers=(0..8).map(|_|{
+            let root=root.clone();
+            std::thread::spawn(move||{
+                Teams::new(root.path()).unwrap().approve_pending_plans("team","default").unwrap()
+            })
+        }).collect::<Vec<_>>();
+        let approvals:usize=workers.into_iter().map(|t|t.join().unwrap()).sum();
+        assert_eq!(approvals,1);
+        let inbox=Mailbox::new(root.path(),"team").unwrap();
+        assert_eq!(inbox.unread("worker").unwrap().len(),1);
+    }
+    #[cfg(unix)]
+    #[test]
+    fn failed_plan_reply_keeps_request_pending_until_storage_recovers(){
+        use std::os::unix::fs::symlink;
+        let root=tempfile::tempdir().unwrap();
+        let teams=Teams::new(root.path()).unwrap();
+        teams.create("team",None,"leader").unwrap();
+        teams.member("team",Member{
+            name:"worker".into(),id:"worker@team".into(),active:true}).unwrap();
+        teams.send_structured("team","team-lead","worker",
+            &json!({"type":"plan_approval_request","plan_file_path":"plan.md",
+                "plan_content":"Check"})).unwrap();
+        let inbox=Mailbox::new(root.path(),"team").unwrap();
+        let worker_path=root.path().join(".atlas/teams/team/inboxes/worker.json");
+        symlink(root.path().join("untrusted"),&worker_path).unwrap();
+        assert!(teams.approve_pending_plans("team","default").is_err());
+        assert_eq!(inbox.unread("team-lead").unwrap().len(),1);
+        fs::remove_file(&worker_path).unwrap();
+        assert_eq!(Teams::new(root.path()).unwrap()
+            .approve_pending_plans("team","default").unwrap(),1);
+        assert_eq!(inbox.unread("worker").unwrap().len(),1);
+    }
+    #[test]
     fn plan_request_cannot_be_spoofed_or_sent_to_another_worker() {
         let root=tempfile::tempdir().unwrap();
         let teams=Teams::new(root.path()).unwrap();
