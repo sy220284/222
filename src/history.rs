@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use std::io::Write as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -7,8 +8,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use uuid::Uuid;
-
-const MAX_SNAPSHOT_BYTES: u64 = 8_000_000;
 
 /// Original fileHistoryEnabled: interactive sessions honor the user setting;
 /// headless/SDK sessions require explicit opt-in. Disable always wins.
@@ -32,7 +31,14 @@ pub fn enabled(interactive: bool, user_enabled: bool) -> bool {
 pub struct Record {
     pub id: Uuid,
     pub path: String,
+    /// Inline text is retained for checkpoints created by earlier versions.
     pub previous: Option<String>,
+    /// New checkpoints keep a byte-for-byte backup on disk. This preserves
+    /// non-UTF-8 content and avoids a hard file-size cap or JSON/base64 bloat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_backup: Option<String>,
+    #[serde(skip)]
+    backup_path: Option<PathBuf>,
     /// File mode before the edit, preserved by the original file-history backup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous_mode: Option<u32>,
@@ -66,16 +72,9 @@ fn storage(root: &Path, session_id: Option<&str>) -> Result<PathBuf> {
     }
     Ok(folder)
 }
-pub fn snapshot(path: &Path) -> Result<Option<String>> {
-    match fs::metadata(path) {
-        Ok(meta) => {
-            if meta.len() > MAX_SNAPSHOT_BYTES {
-                bail!("History target too large")
-            }
-            Ok(Some(
-                fs::read_to_string(path).context("History can only snapshot UTF-8 text files")?,
-            ))
-        }
+pub fn snapshot(path: &Path) -> Result<Option<Vec<u8>>> {
+    match fs::read(path) {
+        Ok(contents) => Ok(Some(contents)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
     }
@@ -104,39 +103,76 @@ pub fn record(
     root: &Path,
     session_id: Option<&str>,
     path: &Path,
-    previous: Option<String>,
+    previous: Option<Vec<u8>>,
     previous_mode: Option<u32>,
 ) -> Result<Option<Uuid>> {
     let now = fs::read(path)?;
-    if now.len() as u64 > MAX_SNAPSHOT_BYTES {
-        bail!("Modified file exceeds history size limit")
-    }
-    if previous.as_ref().is_some_and(|p| p.as_bytes() == now) {
+    if previous.as_ref().is_some_and(|p| p.as_slice() == now.as_slice()) {
         return Ok(None);
     }
     let relative = path.strip_prefix(root).unwrap_or(path);
     let id = Uuid::new_v4();
+    let folder = storage(root, session_id)?;
+    let backup_name = previous.as_ref().map(|_| format!("{id}.bak"));
+    let backup_path = backup_name.as_ref().map(|name| folder.join(name));
+    // A separate binary backup mirrors fileHistory.ts::createBackup: binary
+    // notebooks and large files never have to pass through JSON text fields.
+    if let (Some(contents), Some(backup)) = (previous.as_ref(), backup_path.as_ref()) {
+        let mut file = fs::OpenOptions::new()
+            .write(true).create_new(true).open(backup)
+            .with_context(|| format!("Create history backup {}", backup.display()))?;
+        if let Err(error) = file.write_all(contents).and_then(|_| file.sync_all()) {
+            drop(file);
+            let _ = fs::remove_file(backup);
+            return Err(error.into());
+        }
+    }
     let entry = Record {
         id,
         path: relative.to_string_lossy().to_string(),
-        previous,
+        previous: None,
+        previous_backup: backup_name,
+        backup_path: backup_path.clone(),
         previous_mode,
         updated_hash: fingerprint(&now),
         updated_mode: snapshot_mode(path)?,
     };
-    let folder = storage(root, session_id)?;
     let final_path = folder.join(format!("{id}.json"));
     let temporary = folder.join(format!("{id}.tmp"));
-    fs::write(&temporary, serde_json::to_vec_pretty(&entry)?)?;
-    fs::rename(temporary, final_path)?;
+    let outcome = (|| -> Result<()> {
+        let mut file = fs::OpenOptions::new()
+            .write(true).create_new(true).open(&temporary)?;
+        file.write_all(&serde_json::to_vec_pretty(&entry)?)?;
+        file.sync_all()?;
+        fs::rename(&temporary, &final_path)?;
+        Ok(())
+    })();
+    if outcome.is_err() {
+        let _ = fs::remove_file(&temporary);
+        if let Some(backup) = backup_path {
+            let _ = fs::remove_file(backup);
+        }
+    }
+    outcome?;
     Ok(Some(id))
 }
 pub fn load(root: &Path, session_id: Option<&str>, id: &str) -> Result<Record> {
     let id = Uuid::parse_str(id).context("History id must be a UUID")?;
-    let path = storage(root, session_id)?.join(format!("{id}.json"));
-    let record: Record = serde_json::from_slice(&fs::read(path)?)?;
+    let folder = storage(root, session_id)?;
+    let path = folder.join(format!("{id}.json"));
+    let mut record: Record = serde_json::from_slice(&fs::read(path)?)?;
     if record.id != id {
         bail!("History id mismatch")
+    }
+    if let Some(name) = record.previous_backup.as_deref() {
+        if name != format!("{id}.bak") {
+            bail!("History backup name does not match checkpoint")
+        }
+        let backup = folder.join(name);
+        if fs::symlink_metadata(&backup)?.file_type().is_symlink() {
+            bail!("History backup must not be a symbolic link")
+        }
+        record.backup_path = Some(backup);
     }
     Ok(record)
 }
@@ -158,11 +194,18 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
             }
         }
     }
-    if let Some(previous) = &record.previous {
+    if record.previous_backup.is_some() || record.previous.is_some() {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(path, previous)?;
+        if record.previous_backup.is_some() {
+            let backup = record.backup_path.as_ref()
+                .context("History backup was not loaded from session storage")?;
+            fs::copy(backup, path)
+                .with_context(|| format!("Restore history backup {}", backup.display()))?;
+        } else if let Some(previous) = &record.previous {
+            fs::write(path, previous)?;
+        }
         #[cfg(unix)]
         if let Some(mode) = record.previous_mode {
             use std::os::unix::fs::PermissionsExt;
