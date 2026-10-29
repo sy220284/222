@@ -84,9 +84,15 @@ impl Command {
         self.is_editable()
     }
     pub fn is_slash(&self) -> bool {
-        self.value
-            .as_str()
-            .is_some_and(|s| s.trim().starts_with('/'))
+        // processUserInput.ts takes slash commands from the final text block,
+        // including queued user turns containing earlier image blocks.
+        let text = self.value.as_str().or_else(|| {
+            let last = self.value.as_array()?.last()?;
+            (last.get("type").and_then(Value::as_str) == Some("text"))
+                .then(|| last.get("text").and_then(Value::as_str))
+                .flatten()
+        });
+        text.is_some_and(|value| value.trim().starts_with('/'))
             && !self.skip_slash_commands
     }
     pub fn text(&self) -> Option<String> {

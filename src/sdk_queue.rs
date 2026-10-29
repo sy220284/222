@@ -143,8 +143,13 @@ pub async fn control(
                 // available for inspection instead of disappearing.
                 let slash_expansion = if next.command.mode == Mode::Prompt
                     && next.command.is_slash() {
-                    let parsed = next.command.value.as_str()
-                        .and_then(|value| crate::slash_command::parse_slash_command(value.trim_start()));
+                    let candidate = next.command.value.as_str().or_else(|| {
+                        let last = next.command.value.as_array()?.last()?;
+                        (last.get("type").and_then(Value::as_str) == Some("text"))
+                            .then(|| last.get("text").and_then(Value::as_str))
+                            .flatten()
+                    });
+                    let parsed = candidate.and_then(crate::slash_command::parse_slash_command);
                     match parsed {
                         Some(parsed) => crate::expand_user_skill_prompt(
                             agent, config, &parsed.command_name, &parsed.args, parsed.is_mcp,
@@ -219,7 +224,15 @@ pub async fn control(
                     batch.push(follower);
                 }
                 let joined = if let Some(expanded) = slash_expansion {
-                    Value::String(expanded)
+                    if let Some(blocks) = next.command.value.as_array() {
+                        let mut blocks = blocks.clone();
+                        if let Some(last) = blocks.last_mut() {
+                            last["text"] = Value::String(expanded);
+                        }
+                        Value::Array(blocks)
+                    } else {
+                        Value::String(expanded)
+                    }
                 } else {
                     queued_prompt_batch::join_prompt_values(
                         &batch.iter().map(|i| i.command.value.clone()).collect::<Vec<_>>(),
