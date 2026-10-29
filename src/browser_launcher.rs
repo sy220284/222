@@ -2,7 +2,6 @@
 //! URL validation is performed before spawning an external process and
 //! failed launch commands return false, matching the original API.
 use reqwest::Url;
-use std::process::Stdio;
 use tokio::process::Command;
 
 pub fn validate_browser_url(uri: &str) -> anyhow::Result<Url> {
@@ -14,14 +13,17 @@ pub fn validate_browser_url(uri: &str) -> anyhow::Result<Url> {
 }
 
 async fn launch(command: &str, args: &[&str]) -> bool {
-    Command::new(command)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .await
-        .is_ok_and(|code| code.success())
+    let mut process = Command::new(command);
+    process.args(args);
+    crate::exec_file::execute(
+        process,
+        crate::exec_file::Options {
+            preserve_output_on_error: false,
+            ..Default::default()
+        },
+    )
+    .await
+    .success()
 }
 
 pub async fn open_path(path: &str) -> bool {
@@ -69,6 +71,14 @@ pub async fn open_browser(uri: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn launch_uses_the_real_argv_process_and_reports_exit_failure() {
+        assert!(launch("sh", &["-c", "exit 0"]).await);
+        assert!(!launch("sh", &["-c", "exit 23"]).await);
+        assert!(!launch("/nonexistent/atlas-browser", &[]).await);
+    }
 
     #[test]
     fn accepts_only_http_and_https_without_stripping_uri_parameters() {
