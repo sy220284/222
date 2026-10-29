@@ -1,69 +1,72 @@
 //! Rust exports derived from original: src/types/permissions.ts
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-pub fn EXTERNAL_PERMISSION_MODES()->Value{serde_json::from_str(r#"["acceptEdits","bypassPermissions","default","dontAsk","plan"]"#).expect("Valid source constant")}
+pub fn EXTERNAL_PERMISSION_MODES() -> Value {
+    serde_json::from_str(r#"["acceptEdits","bypassPermissions","default","dontAsk","plan"]"#)
+        .expect("Valid source constant")
+}
 
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum PermissionBehavior{
-    #[serde(rename="allow")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PermissionBehavior {
+    #[serde(rename = "allow")]
     allow,
-    #[serde(rename="deny")]
+    #[serde(rename = "deny")]
     deny,
-    #[serde(rename="ask")]
+    #[serde(rename = "ask")]
     ask,
 }
 
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum PermissionRuleSource{
-    #[serde(rename="userSettings")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PermissionRuleSource {
+    #[serde(rename = "userSettings")]
     userSettings,
-    #[serde(rename="projectSettings")]
+    #[serde(rename = "projectSettings")]
     projectSettings,
-    #[serde(rename="localSettings")]
+    #[serde(rename = "localSettings")]
     localSettings,
-    #[serde(rename="flagSettings")]
+    #[serde(rename = "flagSettings")]
     flagSettings,
-    #[serde(rename="policySettings")]
+    #[serde(rename = "policySettings")]
     policySettings,
-    #[serde(rename="cliArg")]
+    #[serde(rename = "cliArg")]
     cliArg,
-    #[serde(rename="command")]
+    #[serde(rename = "command")]
     command,
-    #[serde(rename="session")]
+    #[serde(rename = "session")]
     session,
 }
 
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum PermissionUpdateDestination{
-    #[serde(rename="userSettings")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PermissionUpdateDestination {
+    #[serde(rename = "userSettings")]
     userSettings,
-    #[serde(rename="projectSettings")]
+    #[serde(rename = "projectSettings")]
     projectSettings,
-    #[serde(rename="localSettings")]
+    #[serde(rename = "localSettings")]
     localSettings,
-    #[serde(rename="session")]
+    #[serde(rename = "session")]
     session,
-    #[serde(rename="cliArg")]
+    #[serde(rename = "cliArg")]
     cliArg,
 }
 
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum ClassifierBehavior{
-    #[serde(rename="deny")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ClassifierBehavior {
+    #[serde(rename = "deny")]
     deny,
-    #[serde(rename="ask")]
+    #[serde(rename = "ask")]
     ask,
-    #[serde(rename="allow")]
+    #[serde(rename = "allow")]
     allow,
 }
 
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum RiskLevel{
-    #[serde(rename="LOW")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RiskLevel {
+    #[serde(rename = "LOW")]
     LOW,
-    #[serde(rename="MEDIUM")]
+    #[serde(rename = "MEDIUM")]
     MEDIUM,
-    #[serde(rename="HIGH")]
+    #[serde(rename = "HIGH")]
     HIGH,
 }

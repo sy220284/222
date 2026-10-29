@@ -1,19 +1,19 @@
 //! Rust exports derived from original: src/utils/doctorDiagnostic.ts
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum InstallationType{
-    #[serde(rename="npm-global")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum InstallationType {
+    #[serde(rename = "npm-global")]
     npm_global,
-    #[serde(rename="npm-local")]
+    #[serde(rename = "npm-local")]
     npm_local,
-    #[serde(rename="native")]
+    #[serde(rename = "native")]
     native,
-    #[serde(rename="package-manager")]
+    #[serde(rename = "package-manager")]
     package_manager,
-    #[serde(rename="development")]
+    #[serde(rename = "development")]
     development,
-    #[serde(rename="unknown")]
+    #[serde(rename = "unknown")]
     unknown,
 }

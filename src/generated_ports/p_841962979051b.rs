@@ -1,11 +1,11 @@
 //! Rust exports derived from original: src/components/TeleportError.tsx
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum TeleportLocalErrorType{
-    #[serde(rename="needsLogin")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TeleportLocalErrorType {
+    #[serde(rename = "needsLogin")]
     needsLogin,
-    #[serde(rename="needsGitStash")]
+    #[serde(rename = "needsGitStash")]
     needsGitStash,
 }

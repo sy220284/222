@@ -1,17 +1,17 @@
 //! Rust exports derived from original: src/types/plugin.ts
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum PluginComponent{
-    #[serde(rename="commands")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PluginComponent {
+    #[serde(rename = "commands")]
     commands,
-    #[serde(rename="agents")]
+    #[serde(rename = "agents")]
     agents,
-    #[serde(rename="skills")]
+    #[serde(rename = "skills")]
     skills,
-    #[serde(rename="hooks")]
+    #[serde(rename = "hooks")]
     hooks,
-    #[serde(rename="output-styles")]
+    #[serde(rename = "output-styles")]
     output_styles,
 }

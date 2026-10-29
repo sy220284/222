@@ -2,7 +2,7 @@
 //! Lazy-loaded handler implementation files have separate migration rows.
 #![allow(dead_code)]
 use std::sync::OnceLock;
-#[derive(Clone,Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommandDefinition {
     pub source: &'static str,
     pub name: &'static str,
@@ -14,7 +14,7 @@ pub struct CommandDefinition {
     pub hidden: bool,
     pub immediate: bool,
 }
-const SOURCE_INDEX:&str = r####"agents|agents|local-jsx||-|Manage agent configurations
+const SOURCE_INDEX: &str = r####"agents|agents|local-jsx||-|Manage agent configurations
 ant-trace|stub|disabled||-|Disabled internal trace
 autofix-pr|stub|disabled||-|Disabled internal PR autofix
 backfill-sessions|stub|disabled||-|Disabled legacy sessions
@@ -93,56 +93,88 @@ upgrade|upgrade|local-jsx||-|Upgrade options
 usage|usage|local-jsx||-|Usage
 vim|vim|local||-|Toggle Vim mode
 voice|voice|local||-|Voice mode"####;
-static REGISTRY:OnceLock<Vec<CommandDefinition>>=OnceLock::new();
-pub fn commands()->&'static [CommandDefinition]{
+static REGISTRY: OnceLock<Vec<CommandDefinition>> = OnceLock::new();
+pub fn commands() -> &'static [CommandDefinition] {
     REGISTRY.get_or_init(|| {
-        SOURCE_INDEX.lines().map(|line| {
-            // Argument hints can themselves contain literal pipes.
-            let mut fields=line.splitn(5,'|');
-            let directory=fields.next().expect("Command source directory");
-            let name=fields.next().expect("Command name");
-            let kind=fields.next().expect("Command kind");
-            let aliases=fields.next().expect("Command aliases");
-            let tail=fields.next().expect("Command hint and description");
-            let (hint,description)=tail.rsplit_once('|')
-                .expect("Command metadata description");
-            let disabled=kind=="disabled";
-            let hidden=disabled||matches!(name,
-                "heapdump"|"output-style"|"rate-limit-options"|"thinkback-play");
-            let immediate=matches!(name,
-                "color"|"mcp"|"config"|"diff"|"context"|"help");
-            let actual_dir=if directory=="good-CODEBRAND"{format!("good-{}{}","clau","de")}else{directory.to_owned()};
-            let source:&'static str=Box::leak(format!("src/commands/{actual_dir}/index.{}",
-                if disabled {"js"}else if directory=="plugin"{"tsx"}else{"ts"})
-                .into_boxed_str());
-            CommandDefinition {
-                source,name,kind,
-                aliases:if aliases.is_empty(){Vec::new()}else{aliases.split(',').collect()},
-                hint:(hint!="-").then_some(hint),
-                description,disabled,hidden,immediate
-            }
-        }).collect()
+        SOURCE_INDEX
+            .lines()
+            .map(|line| {
+                // Argument hints can themselves contain literal pipes.
+                let mut fields = line.splitn(5, '|');
+                let directory = fields.next().expect("Command source directory");
+                let name = fields.next().expect("Command name");
+                let kind = fields.next().expect("Command kind");
+                let aliases = fields.next().expect("Command aliases");
+                let tail = fields.next().expect("Command hint and description");
+                let (hint, description) =
+                    tail.rsplit_once('|').expect("Command metadata description");
+                let disabled = kind == "disabled";
+                let hidden = disabled
+                    || matches!(
+                        name,
+                        "heapdump" | "output-style" | "rate-limit-options" | "thinkback-play"
+                    );
+                let immediate = matches!(
+                    name,
+                    "color" | "mcp" | "config" | "diff" | "context" | "help"
+                );
+                let actual_dir = if directory == "good-CODEBRAND" {
+                    format!("good-{}{}", "clau", "de")
+                } else {
+                    directory.to_owned()
+                };
+                let source: &'static str = Box::leak(
+                    format!(
+                        "src/commands/{actual_dir}/index.{}",
+                        if disabled {
+                            "js"
+                        } else if directory == "plugin" {
+                            "tsx"
+                        } else {
+                            "ts"
+                        }
+                    )
+                    .into_boxed_str(),
+                );
+                CommandDefinition {
+                    source,
+                    name,
+                    kind,
+                    aliases: if aliases.is_empty() {
+                        Vec::new()
+                    } else {
+                        aliases.split(',').collect()
+                    },
+                    hint: (hint != "-").then_some(hint),
+                    description,
+                    disabled,
+                    hidden,
+                    immediate,
+                }
+            })
+            .collect()
     })
 }
-pub fn lookup(name:&str)->Option<&'static CommandDefinition>{
-    commands().iter().find(|c|!c.disabled &&
-        (c.name==name || c.aliases.contains(&name)))
+pub fn lookup(name: &str) -> Option<&'static CommandDefinition> {
+    commands()
+        .iter()
+        .find(|c| !c.disabled && (c.name == name || c.aliases.contains(&name)))
 }
-pub fn visible()->impl Iterator<Item=&'static CommandDefinition>{
-    commands().iter().filter(|c|!c.disabled&&!c.hidden)
+pub fn visible() -> impl Iterator<Item = &'static CommandDefinition> {
+    commands().iter().filter(|c| !c.disabled && !c.hidden)
 }
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn registry_and_alias_resolution(){
-        assert_eq!(commands().len(),79);
-        assert_eq!(commands().iter().filter(|c|c.disabled).count(),18);
-        assert_eq!(lookup("settings").unwrap().name,"config");
-        assert_eq!(lookup("bashes").unwrap().name,"tasks");
-        assert_eq!(lookup("new").unwrap().name,"clear");
-        assert_eq!(lookup("allowed-tools").unwrap().name,"permissions");
+    fn registry_and_alias_resolution() {
+        assert_eq!(commands().len(), 79);
+        assert_eq!(commands().iter().filter(|c| c.disabled).count(), 18);
+        assert_eq!(lookup("settings").unwrap().name, "config");
+        assert_eq!(lookup("bashes").unwrap().name, "tasks");
+        assert_eq!(lookup("new").unwrap().name, "clear");
+        assert_eq!(lookup("allowed-tools").unwrap().name, "permissions");
         assert!(lookup("stub").is_none());
-        assert!(visible().all(|c|!c.disabled));
+        assert!(visible().all(|c| !c.disabled));
     }
 }

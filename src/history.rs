@@ -1,94 +1,110 @@
 use anyhow::{bail, Context, Result};
-use serde::{Deserialize,Serialize};
-use serde_json::{json,Value};
-use sha2::{Sha256,Digest};
-use std::{fs,path::{Path,PathBuf}};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use uuid::Uuid;
 
-const MAX_SNAPSHOT_BYTES:u64=8_000_000;
+const MAX_SNAPSHOT_BYTES: u64 = 8_000_000;
 
-#[derive(Clone,Serialize,Deserialize,Debug)]
-pub struct Record{
-    pub id:Uuid,
-    pub path:String,
-    pub previous:Option<String>,
-    pub updated_hash:String,
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Record {
+    pub id: Uuid,
+    pub path: String,
+    pub previous: Option<String>,
+    pub updated_hash: String,
 }
-fn fingerprint(content:&[u8])->String{
-    format!("{:x}",Sha256::digest(content))
+fn fingerprint(content: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(content))
 }
-fn storage(root:&Path)->Result<PathBuf>{
-    let folder=root.join(".atlas/history");
+fn storage(root: &Path) -> Result<PathBuf> {
+    let folder = root.join(".atlas/history");
     fs::create_dir_all(&folder)?;
-    if !folder.canonicalize()?.starts_with(root){
+    if !folder.canonicalize()?.starts_with(root) {
         bail!("History directory escapes workspace")
     }
     Ok(folder)
 }
-pub fn snapshot(path:&Path)->Result<Option<String>>{
-    match fs::metadata(path){
-        Ok(meta)=>{
-            if meta.len()>MAX_SNAPSHOT_BYTES{bail!("History target too large")}
-            Ok(Some(fs::read_to_string(path)
-                .context("History can only snapshot UTF-8 text files")?))
-        },
-        Err(error) if error.kind()==std::io::ErrorKind::NotFound=>Ok(None),
-        Err(error)=>Err(error.into()),
+pub fn snapshot(path: &Path) -> Result<Option<String>> {
+    match fs::metadata(path) {
+        Ok(meta) => {
+            if meta.len() > MAX_SNAPSHOT_BYTES {
+                bail!("History target too large")
+            }
+            Ok(Some(
+                fs::read_to_string(path).context("History can only snapshot UTF-8 text files")?,
+            ))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
     }
 }
-pub fn record(root:&Path,path:&Path,previous:Option<String>)->Result<Option<Uuid>>{
-    let now=fs::read(path)?;
-    if now.len() as u64>MAX_SNAPSHOT_BYTES{bail!("Modified file exceeds history size limit")}
-    if previous.as_ref().is_some_and(|p|p.as_bytes()==now){
-        return Ok(None)
+pub fn record(root: &Path, path: &Path, previous: Option<String>) -> Result<Option<Uuid>> {
+    let now = fs::read(path)?;
+    if now.len() as u64 > MAX_SNAPSHOT_BYTES {
+        bail!("Modified file exceeds history size limit")
     }
-    let relative=path.strip_prefix(root).unwrap_or(path);
-    let id=Uuid::new_v4();
-    let entry=Record{id,path:relative.to_string_lossy().to_string(),
-        previous,updated_hash:fingerprint(&now)};
-    let folder=storage(root)?;
-    let final_path=folder.join(format!("{id}.json"));
-    let temporary=folder.join(format!("{id}.tmp"));
-    fs::write(&temporary,serde_json::to_vec_pretty(&entry)?)?;
-    fs::rename(temporary,final_path)?;
+    if previous.as_ref().is_some_and(|p| p.as_bytes() == now) {
+        return Ok(None);
+    }
+    let relative = path.strip_prefix(root).unwrap_or(path);
+    let id = Uuid::new_v4();
+    let entry = Record {
+        id,
+        path: relative.to_string_lossy().to_string(),
+        previous,
+        updated_hash: fingerprint(&now),
+    };
+    let folder = storage(root)?;
+    let final_path = folder.join(format!("{id}.json"));
+    let temporary = folder.join(format!("{id}.tmp"));
+    fs::write(&temporary, serde_json::to_vec_pretty(&entry)?)?;
+    fs::rename(temporary, final_path)?;
     Ok(Some(id))
 }
-pub fn load(root:&Path,id:&str)->Result<Record>{
-    let id=Uuid::parse_str(id).context("History id must be a UUID")?;
-    let path=storage(root)?.join(format!("{id}.json"));
-    let record:Record=serde_json::from_slice(&fs::read(path)?)?;
-    if record.id!=id {bail!("History id mismatch")}
+pub fn load(root: &Path, id: &str) -> Result<Record> {
+    let id = Uuid::parse_str(id).context("History id must be a UUID")?;
+    let path = storage(root)?.join(format!("{id}.json"));
+    let record: Record = serde_json::from_slice(&fs::read(path)?)?;
+    if record.id != id {
+        bail!("History id mismatch")
+    }
     Ok(record)
 }
-pub fn restore(record:&Record,path:&Path)->Result<String>{
-    let current=fs::read(path).context("History target disappeared since modification")?;
-    if fingerprint(&current)!=record.updated_hash{
+pub fn restore(record: &Record, path: &Path) -> Result<String> {
+    let current = fs::read(path).context("History target disappeared since modification")?;
+    if fingerprint(&current) != record.updated_hash {
         bail!("File changed since checkpoint; refusing to overwrite later edits")
     }
-    if let Some(previous)=&record.previous {
-        fs::write(path,previous)?;
-        Ok(format!("Restored {} to previous version",record.path))
+    if let Some(previous) = &record.previous {
+        fs::write(path, previous)?;
+        Ok(format!("Restored {} to previous version", record.path))
     } else {
         fs::remove_file(path)?;
-        Ok(format!("Removed newly created {}",record.path))
+        Ok(format!("Removed newly created {}", record.path))
     }
 }
-pub fn list(root:&Path)->Result<String>{
-    let folder=storage(root)?;
-    let mut results=Vec::<Value>::new();
-    for entry in fs::read_dir(folder)?{
-        let entry=entry?;
-        if entry.path().extension().and_then(|x|x.to_str())!=Some("json"){continue}
-        if let Ok(data)=fs::read(entry.path()){
-            if let Ok(record)=serde_json::from_slice::<Record>(&data){
+pub fn list(root: &Path) -> Result<String> {
+    let folder = storage(root)?;
+    let mut results = Vec::<Value>::new();
+    for entry in fs::read_dir(folder)? {
+        let entry = entry?;
+        if entry.path().extension().and_then(|x| x.to_str()) != Some("json") {
+            continue;
+        }
+        if let Ok(data) = fs::read(entry.path()) {
+            if let Ok(record) = serde_json::from_slice::<Record>(&data) {
                 results.push(json!({"id":record.id,"path":record.path}));
             }
         }
     }
-    results.sort_by(|a,b|a["id"].as_str().cmp(&b["id"].as_str()));
+    results.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
     Ok(serde_json::to_string_pretty(&results)?)
 }
-pub fn definitions()->Vec<Value>{
+pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"file_history",
             "description":"List local file checkpoints generated by file write, edit or notebook edits.",
@@ -99,30 +115,30 @@ pub fn definitions()->Vec<Value>{
     ]
 }
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
     #[test]
-    fn checkpoints_restore_changes_and_refuse_stale_revert(){
-        let root=tempfile::tempdir().unwrap();
-        let source=root.path().join("file.txt");
-        fs::write(&source,"old").unwrap();
-        let before=snapshot(&source).unwrap();
-        fs::write(&source,"new").unwrap();
-        let id=record(root.path(),&source,before).unwrap().unwrap();
+    fn checkpoints_restore_changes_and_refuse_stale_revert() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("file.txt");
+        fs::write(&source, "old").unwrap();
+        let before = snapshot(&source).unwrap();
+        fs::write(&source, "new").unwrap();
+        let id = record(root.path(), &source, before).unwrap().unwrap();
         assert!(list(root.path()).unwrap().contains(&id.to_string()));
-        let entry=load(root.path(),&id.to_string()).unwrap();
-        fs::write(&source,"external change").unwrap();
-        assert!(restore(&entry,&source).is_err());
-        fs::write(&source,"new").unwrap();
-        restore(&entry,&source).unwrap();
-        assert_eq!(fs::read_to_string(&source).unwrap(),"old");
+        let entry = load(root.path(), &id.to_string()).unwrap();
+        fs::write(&source, "external change").unwrap();
+        assert!(restore(&entry, &source).is_err());
+        fs::write(&source, "new").unwrap();
+        restore(&entry, &source).unwrap();
+        assert_eq!(fs::read_to_string(&source).unwrap(), "old");
 
-        let created=root.path().join("created.txt");
-        let before=snapshot(&created).unwrap();
+        let created = root.path().join("created.txt");
+        let before = snapshot(&created).unwrap();
         assert!(before.is_none());
-        fs::write(&created,"hello").unwrap();
-        let id=record(root.path(),&created,before).unwrap().unwrap();
-        restore(&load(root.path(),&id.to_string()).unwrap(),&created).unwrap();
+        fs::write(&created, "hello").unwrap();
+        let id = record(root.path(), &created, before).unwrap().unwrap();
+        restore(&load(root.path(), &id.to_string()).unwrap(), &created).unwrap();
         assert!(!created.exists());
     }
 }

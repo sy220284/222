@@ -14,7 +14,11 @@ pub fn now_millis() -> f64 {
 pub fn age_days_at(mtime_ms: f64, now_ms: f64) -> f64 {
     let days = ((now_ms - mtime_ms) / DAY_MS).floor();
     // JavaScript Math.max(0, NaN) returns NaN, unlike Rust f64::max.
-    if days.is_nan() { f64::NAN } else { days.max(0.0) }
+    if days.is_nan() {
+        f64::NAN
+    } else {
+        days.max(0.0)
+    }
 }
 
 pub fn age_days(mtime_ms: f64) -> f64 {
@@ -22,17 +26,26 @@ pub fn age_days(mtime_ms: f64) -> f64 {
 }
 
 fn days_label(days: f64) -> String {
-    if days.is_nan() { "NaN".into() }
-    else if days == f64::INFINITY { "Infinity".into() }
-    else if days == f64::NEG_INFINITY { "-Infinity".into() }
-    else { format!("{days}") }
+    if days.is_nan() {
+        "NaN".into()
+    } else if days == f64::INFINITY {
+        "Infinity".into()
+    } else if days == f64::NEG_INFINITY {
+        "-Infinity".into()
+    } else {
+        format!("{days}")
+    }
 }
 
 pub fn age_at(mtime_ms: f64, now_ms: f64) -> String {
     let days = age_days_at(mtime_ms, now_ms);
-    if days == 0.0 { "today".into() }
-    else if days == 1.0 { "yesterday".into() }
-    else { format!("{} days ago", days_label(days)) }
+    if days == 0.0 {
+        "today".into()
+    } else if days == 1.0 {
+        "yesterday".into()
+    } else {
+        format!("{} days ago", days_label(days))
+    }
 }
 
 pub fn age(mtime_ms: f64) -> String {
@@ -41,7 +54,9 @@ pub fn age(mtime_ms: f64) -> String {
 
 pub fn freshness_text_at(mtime_ms: f64, now_ms: f64) -> String {
     let days = age_days_at(mtime_ms, now_ms);
-    if days <= 1.0 { return String::new() }
+    if days <= 1.0 {
+        return String::new();
+    }
     format!(
         "This memory is {} days old. Memories are point-in-time observations, not live state — claims about code behavior or file:line citations may be outdated. Verify against current code before asserting as fact.",
         days_label(days)
@@ -54,8 +69,11 @@ pub fn freshness_text(mtime_ms: f64) -> String {
 
 pub fn freshness_note_at(mtime_ms: f64, now_ms: f64) -> String {
     let text = freshness_text_at(mtime_ms, now_ms);
-    if text.is_empty() { String::new() }
-    else { format!("<system-reminder>{text}</system-reminder>\n") }
+    if text.is_empty() {
+        String::new()
+    } else {
+        format!("<system-reminder>{text}</system-reminder>\n")
+    }
 }
 
 pub fn freshness_note(mtime_ms: f64) -> String {

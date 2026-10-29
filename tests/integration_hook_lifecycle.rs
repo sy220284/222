@@ -1,21 +1,38 @@
 use serde_json::{json, Value};
-use std::{fs, io::{Read, Write}, net::{TcpListener, TcpStream}, process::Command, thread, time::Duration};
+use std::{
+    fs,
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    process::Command,
+    thread,
+    time::Duration,
+};
 
 fn read_request(stream: &mut TcpStream) -> String {
-    stream.set_read_timeout(Some(Duration::from_secs(15))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(15)))
+        .unwrap();
     let mut data = Vec::new();
     loop {
         let mut chunk = [0u8; 4096];
         let count = stream.read(&mut chunk).unwrap();
-        if count == 0 { break; }
+        if count == 0 {
+            break;
+        }
         data.extend_from_slice(&chunk[..count]);
         if let Some(index) = data.windows(4).position(|v| v == b"\r\n\r\n") {
             let headers = String::from_utf8_lossy(&data[..index]);
-            let length = headers.lines().find_map(|line| {
-                line.to_ascii_lowercase().strip_prefix("content-length:")
-                    .and_then(|v| v.trim().parse::<usize>().ok())
-            }).unwrap_or(0);
-            if data.len() >= index + 4 + length { break; }
+            let length = headers
+                .lines()
+                .find_map(|line| {
+                    line.to_ascii_lowercase()
+                        .strip_prefix("content-length:")
+                        .and_then(|v| v.trim().parse::<usize>().ok())
+                })
+                .unwrap_or(0);
+            if data.len() >= index + 4 + length {
+                break;
+            }
         }
     }
     String::from_utf8(data).unwrap()
@@ -86,25 +103,47 @@ fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
             "timeout_seconds":3}
     ]}).to_string()).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
-        .args(["--workspace", root.path().to_str().unwrap(),
-            "--approval", "full", "run", "Exercise hook lifecycle"])
-        .env("ATLAS_CONFIG", &config).output().unwrap();
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "run",
+            "Exercise hook lifecycle",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
     let requests = server.join().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(String::from_utf8_lossy(&output.stdout).contains("All tool outcomes received"));
     assert_eq!(requests.len(), 2);
     let followup = &requests[1];
-    for id in ["blocked-read","rewritten-write","failed-edit","healthy-sibling"] {
+    for id in [
+        "blocked-read",
+        "rewritten-write",
+        "failed-edit",
+        "healthy-sibling",
+    ] {
         assert!(followup.contains(id), "missing {id}: {followup}");
     }
     assert!(followup.contains("PreToolUse hook blocked"), "{followup}");
     assert!(!followup.contains("PostToolUse hook failed"), "{followup}");
     assert!(!followup.contains("Hook timed out"), "{followup}");
     assert!(!followup.contains("DO_NOT_EXPOSE_PREHOOK"), "{followup}");
-    assert!(!blocked_post.exists(), "a skipped tool ran PostToolUseFailure");
+    assert!(
+        !blocked_post.exists(),
+        "a skipped tool ran PostToolUseFailure"
+    );
     assert!(!root.path().join("original.txt").exists());
-    assert_eq!(fs::read_to_string(root.path().join("rewritten.txt")).unwrap(),
-        "effective content");
+    assert_eq!(
+        fs::read_to_string(root.path().join("rewritten.txt")).unwrap(),
+        "effective content"
+    );
     let pre: Value = serde_json::from_str(&fs::read_to_string(pre_payload).unwrap()).unwrap();
     assert_eq!(pre["hook_event_name"], "PreToolUse");
     assert_eq!(pre["tool_use_id"], "rewritten-write");
@@ -126,12 +165,11 @@ fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
     assert!(failed.get("tool_response").is_none());
 }
 
-
 #[cfg(unix)]
 #[test]
-fn mcp_post_tool_hook_replaces_model_visible_output_end_to_end(){
-    let root=tempfile::tempdir().unwrap();
-    let script=root.path().join("mock-mcp.sh");
+fn mcp_post_tool_hook_replaces_model_visible_output_end_to_end() {
+    let root = tempfile::tempdir().unwrap();
+    let script = root.path().join("mock-mcp.sh");
     fs::write(&script,r#"#!/bin/sh
 while IFS= read -r line; do
     case "$line" in
@@ -141,29 +179,29 @@ while IFS= read -r line; do
     esac
 done
 "#).unwrap();
-    let listener=TcpListener::bind("127.0.0.1:0").unwrap();
-    let address=listener.local_addr().unwrap();
-    let server=thread::spawn(move||{
-        let mut requests=Vec::new();
-        for index in 0..2{
-            let (mut conn,_)=listener.accept().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for index in 0..2 {
+            let (mut conn, _) = listener.accept().unwrap();
             requests.push(read_request(&mut conn));
-            let response=if index==0{
+            let response = if index == 0 {
                 json!({"choices":[{"message":{"role":"assistant","content":null,
                     "tool_calls":[{"id":"mcp-secret","type":"function","function":{
                         "name":"mcp__mock__secret","arguments":"{}"}}]},
                     "finish_reason":"tool_calls"}]})
-            }else{
+            } else {
                 json!({"choices":[{"message":{"role":"assistant","content":"MCP hook result received"},
                     "finish_reason":"stop"}]})
             };
-            let body=response.to_string();
+            let body = response.to_string();
             write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
             conn.flush().unwrap();
         }
         requests
     });
-    let config=root.path().join("config.json");
+    let config = root.path().join("config.json");
     fs::write(&config,json!({"default_provider":"mock","providers":[{
         "id":"mock","kind":"openai-compatible","model":"mock",
         "base_url":format!("http://{address}/v1")
@@ -172,14 +210,34 @@ done
     "hooks":[{"event":"PostToolUse","matcher":"^mcp__mock__secret$",
         "command":"printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"updatedMCPToolOutput\":{\"content\":[{\"type\":\"text\",\"text\":\"REDACTED_MCP_OUTPUT\"}]}}}'"}]
     }).to_string()).unwrap();
-    let output=Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
-        .args(["--workspace",root.path().to_str().unwrap(),
-            "--approval","full","run","Call MCP secret"])
-        .env("ATLAS_CONFIG",&config).output().unwrap();
-    let requests=server.join().unwrap();
-    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let output = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "run",
+            "Call MCP secret",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    let requests = server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(String::from_utf8_lossy(&output.stdout).contains("MCP hook result received"));
-    assert_eq!(requests.len(),2);
-    assert!(requests[1].contains("REDACTED_MCP_OUTPUT"),"{}",requests[1]);
-    assert!(!requests[1].contains("SENSITIVE_MCP_OUTPUT"),"{}",requests[1]);
+    assert_eq!(requests.len(), 2);
+    assert!(
+        requests[1].contains("REDACTED_MCP_OUTPUT"),
+        "{}",
+        requests[1]
+    );
+    assert!(
+        !requests[1].contains("SENSITIVE_MCP_OUTPUT"),
+        "{}",
+        requests[1]
+    );
 }

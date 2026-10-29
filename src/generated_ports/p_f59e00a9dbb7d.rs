@@ -1,17 +1,17 @@
 //! Rust exports derived from original: src/hooks/useApiKeyVerification.ts
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum VerificationStatus{
-    #[serde(rename="loading")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum VerificationStatus {
+    #[serde(rename = "loading")]
     loading,
-    #[serde(rename="valid")]
+    #[serde(rename = "valid")]
     valid,
-    #[serde(rename="invalid")]
+    #[serde(rename = "invalid")]
     invalid,
-    #[serde(rename="missing")]
+    #[serde(rename = "missing")]
     missing,
-    #[serde(rename="error")]
+    #[serde(rename = "error")]
     error,
 }

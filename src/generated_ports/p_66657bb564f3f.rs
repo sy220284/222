@@ -1,55 +1,55 @@
 //! Rust exports derived from original: src/utils/ide.ts
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum IdeType{
-    #[serde(rename="cursor")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum IdeType {
+    #[serde(rename = "cursor")]
     cursor,
-    #[serde(rename="windsurf")]
+    #[serde(rename = "windsurf")]
     windsurf,
-    #[serde(rename="vscode")]
+    #[serde(rename = "vscode")]
     vscode,
-    #[serde(rename="pycharm")]
+    #[serde(rename = "pycharm")]
     pycharm,
-    #[serde(rename="intellij")]
+    #[serde(rename = "intellij")]
     intellij,
-    #[serde(rename="webstorm")]
+    #[serde(rename = "webstorm")]
     webstorm,
-    #[serde(rename="phpstorm")]
+    #[serde(rename = "phpstorm")]
     phpstorm,
-    #[serde(rename="rubymine")]
+    #[serde(rename = "rubymine")]
     rubymine,
-    #[serde(rename="clion")]
+    #[serde(rename = "clion")]
     clion,
-    #[serde(rename="goland")]
+    #[serde(rename = "goland")]
     goland,
-    #[serde(rename="rider")]
+    #[serde(rename = "rider")]
     rider,
-    #[serde(rename="datagrip")]
+    #[serde(rename = "datagrip")]
     datagrip,
-    #[serde(rename="appcode")]
+    #[serde(rename = "appcode")]
     appcode,
-    #[serde(rename="dataspell")]
+    #[serde(rename = "dataspell")]
     dataspell,
-    #[serde(rename="aqua")]
+    #[serde(rename = "aqua")]
     aqua,
-    #[serde(rename="gateway")]
+    #[serde(rename = "gateway")]
     gateway,
-    #[serde(rename="fleet")]
+    #[serde(rename = "fleet")]
     fleet,
-    #[serde(rename="androidstudio")]
+    #[serde(rename = "androidstudio")]
     androidstudio,
 }
 
-#[derive(Debug,Clone,Serialize,Deserialize)]
-pub struct IDEExtensionInstallationStatus{
-    #[serde(rename="installed")]
-    pub installed:bool,
-    #[serde(rename="error")]
-    pub error:Value,
-    #[serde(rename="installedVersion")]
-    pub installedVersion:Value,
-    #[serde(rename="ideType")]
-    pub ideType:Value,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IDEExtensionInstallationStatus {
+    #[serde(rename = "installed")]
+    pub installed: bool,
+    #[serde(rename = "error")]
+    pub error: Value,
+    #[serde(rename = "installedVersion")]
+    pub installedVersion: Value,
+    #[serde(rename = "ideType")]
+    pub ideType: Value,
 }

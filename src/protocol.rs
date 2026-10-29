@@ -21,7 +21,7 @@ pub struct Message {
     pub content: Option<String>,
     /// SDK multimodal content, stored durably in sessions and translated
     /// into each model provider's native content blocks at the wire boundary.
-    #[serde(default,skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_blocks: Option<Vec<serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
@@ -31,14 +31,20 @@ pub struct Message {
 
 impl Message {
     pub fn text(role: &str, content: impl Into<String>) -> Self {
-        Self { role: role.to_owned(), content: Some(content.into()), content_blocks:None, tool_calls: None, tool_call_id: None }
+        Self {
+            role: role.to_owned(),
+            content: Some(content.into()),
+            content_blocks: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
     }
 
     pub fn tool_result(call: &ToolCall, content: String) -> Self {
         Self {
             role: "tool".into(),
             content: Some(content),
-            content_blocks:None,
+            content_blocks: None,
             tool_calls: None,
             tool_call_id: Some(call.id.clone()),
         }
@@ -58,23 +64,31 @@ pub struct TokenUsage {
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub total_tokens: u64,
-    #[serde(default,skip_serializing_if="is_zero")]
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub cache_read_input_tokens: u64,
-    #[serde(default,skip_serializing_if="is_zero")]
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub cache_creation_input_tokens: u64,
-    #[serde(default,skip_serializing_if="is_zero")]
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub web_search_requests: u64,
 }
-fn is_zero(v:&u64)->bool{*v==0}
+fn is_zero(v: &u64) -> bool {
+    *v == 0
+}
 
 impl TokenUsage {
     pub fn accumulate(&mut self, other: Self) {
         self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
         self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
         self.total_tokens = self.total_tokens.saturating_add(other.total_tokens);
-        self.cache_read_input_tokens=self.cache_read_input_tokens.saturating_add(other.cache_read_input_tokens);
-        self.cache_creation_input_tokens=self.cache_creation_input_tokens.saturating_add(other.cache_creation_input_tokens);
-        self.web_search_requests=self.web_search_requests.saturating_add(other.web_search_requests);
+        self.cache_read_input_tokens = self
+            .cache_read_input_tokens
+            .saturating_add(other.cache_read_input_tokens);
+        self.cache_creation_input_tokens = self
+            .cache_creation_input_tokens
+            .saturating_add(other.cache_creation_input_tokens);
+        self.web_search_requests = self
+            .web_search_requests
+            .saturating_add(other.web_search_requests);
     }
 }
 

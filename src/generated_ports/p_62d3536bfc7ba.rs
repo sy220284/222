@@ -1,8 +1,62 @@
 //! Native Rust UI structure derived from original: src/components/MessageSelector.tsx
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
 use serde_json::Value;
 
 use crate::generated_ports::ui::VNode;
-pub fn render_source_view(props:&Value)->VNode{
-VNode::Element{tag:"Box".into(),attrs:vec![("flexDirection".into(),Value::String("column".into())),("width".into(),Value::String("100%".into()))].into_iter().collect(),children:vec![VNode::Empty,VNode::Element{tag:"Divider".into(),attrs:vec![("color".into(),Value::String("suggestion".into()))].into_iter().collect(),children:vec![]},VNode::Empty,VNode::Element{tag:"Box".into(),attrs:vec![("flexDirection".into(),Value::String("column".into())),("marginX".into(),serde_json::json!(1)),("gap".into(),serde_json::json!(1))].into_iter().collect(),children:vec![VNode::Empty,VNode::Element{tag:"Text".into(),attrs:vec![("bold".into(),Value::Bool(true)),("color".into(),Value::String("suggestion".into()))].into_iter().collect(),children:vec![VNode::Text("Rewind\n        ".into())]},VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Value(Value::Null),VNode::Empty]},VNode::Empty]}
+pub fn render_source_view(props: &Value) -> VNode {
+    VNode::Element {
+        tag: "Box".into(),
+        attrs: vec![
+            ("flexDirection".into(), Value::String("column".into())),
+            ("width".into(), Value::String("100%".into())),
+        ]
+        .into_iter()
+        .collect(),
+        children: vec![
+            VNode::Empty,
+            VNode::Element {
+                tag: "Divider".into(),
+                attrs: vec![("color".into(), Value::String("suggestion".into()))]
+                    .into_iter()
+                    .collect(),
+                children: vec![],
+            },
+            VNode::Empty,
+            VNode::Element {
+                tag: "Box".into(),
+                attrs: vec![
+                    ("flexDirection".into(), Value::String("column".into())),
+                    ("marginX".into(), serde_json::json!(1)),
+                    ("gap".into(), serde_json::json!(1)),
+                ]
+                .into_iter()
+                .collect(),
+                children: vec![
+                    VNode::Empty,
+                    VNode::Element {
+                        tag: "Text".into(),
+                        attrs: vec![
+                            ("bold".into(), Value::Bool(true)),
+                            ("color".into(), Value::String("suggestion".into())),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        children: vec![VNode::Text("Rewind\n        ".into())],
+                    },
+                    VNode::Empty,
+                    VNode::Value(Value::Null),
+                    VNode::Empty,
+                    VNode::Value(Value::Null),
+                    VNode::Empty,
+                    VNode::Value(Value::Null),
+                    VNode::Empty,
+                    VNode::Value(Value::Null),
+                    VNode::Empty,
+                    VNode::Value(Value::Null),
+                    VNode::Empty,
+                ],
+            },
+            VNode::Empty,
+        ],
+    }
 }

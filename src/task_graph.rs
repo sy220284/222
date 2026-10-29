@@ -1,278 +1,545 @@
 //! Workspace-local, provider-neutral task-list storage and task tool semantics.
 //! Source references: utils/tasks.ts, TaskCreate/Get/List/UpdateTool.ts.
+use crate::{protocol::ToolCall, task_events};
 use anyhow::{bail, Context, Result};
 use fs2::FileExt;
-use serde::{Deserialize,Serialize};
-use serde_json::{json,Map,Value};
-use std::{collections::HashSet,fs,fs::OpenOptions,path::{Path,PathBuf}};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
+use std::{
+    collections::HashSet,
+    fs,
+    fs::OpenOptions,
+    path::{Path, PathBuf},
+};
 use uuid::Uuid;
-use crate::{protocol::ToolCall, task_events};
 
-#[derive(Clone,Debug,Serialize,Deserialize,PartialEq)]
-#[serde(rename_all="camelCase")]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Item {
-    pub id:String,
-    pub subject:String,
-    pub description:String,
-    #[serde(default,skip_serializing_if="Option::is_none")]
-    pub active_form:Option<String>,
-    #[serde(default,skip_serializing_if="Option::is_none")]
-    pub owner:Option<String>,
-    pub status:String,
+    pub id: String,
+    pub subject: String,
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_form: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    pub status: String,
     #[serde(default)]
-    pub blocks:Vec<String>,
+    pub blocks: Vec<String>,
     #[serde(default)]
-    pub blocked_by:Vec<String>,
-    #[serde(default,skip_serializing_if="Option::is_none")]
-    pub metadata:Option<Map<String,Value>>,
+    pub blocked_by: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Map<String, Value>>,
 }
 
-struct TaskMutationGuard{
-    file:fs::File,
-    deferred:Option<task_events::BatchGuard>,
+struct TaskMutationGuard {
+    file: fs::File,
+    deferred: Option<task_events::BatchGuard>,
 }
-impl Drop for TaskMutationGuard{
-    fn drop(&mut self){
-        let _=FileExt::unlock(&self.file);
+impl Drop for TaskMutationGuard {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
         // Dispatch observers only after the file lock is released.
         self.deferred.take();
     }
 }
 #[derive(Clone)]
-pub struct TaskGraph { directory:PathBuf }
+pub struct TaskGraph {
+    directory: PathBuf,
+}
 impl TaskGraph {
-    pub fn new(root:&Path,list_id:&str)->Result<Self>{
-        if list_id.is_empty() || list_id.len()>128 {bail!("Invalid task list ID")}
-        let safe=list_id.chars().map(|c|if c.is_ascii_alphanumeric()||c=='_'||c=='-' {c}else{'-'}).collect::<String>();
-        let root=root.canonicalize().context("Workspace unavailable")?;
-        let base=root.join(".atlas").join("task-lists");
+    pub fn new(root: &Path, list_id: &str) -> Result<Self> {
+        if list_id.is_empty() || list_id.len() > 128 {
+            bail!("Invalid task list ID")
+        }
+        let safe = list_id
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect::<String>();
+        let root = root.canonicalize().context("Workspace unavailable")?;
+        let base = root.join(".atlas").join("task-lists");
         fs::create_dir_all(&base)?;
-        let base=base.canonicalize()?;
-        if !base.starts_with(&root){bail!("Task storage directory escapes workspace")}
-        let path=base.join(safe);
+        let base = base.canonicalize()?;
+        if !base.starts_with(&root) {
+            bail!("Task storage directory escapes workspace")
+        }
+        let path = base.join(safe);
         fs::create_dir_all(&path)?;
-        let directory=path.canonicalize()?;
-        if !directory.starts_with(&base){bail!("Task list escapes workspace")}
-        Ok(Self{directory})
+        let directory = path.canonicalize()?;
+        if !directory.starts_with(&base) {
+            bail!("Task list escapes workspace")
+        }
+        Ok(Self { directory })
     }
-    fn locked<F,T>(&self, action:F)->Result<T>
-    where F:FnOnce(&Self)->Result<T>{
-        let path=self.directory.join(".lock");
-        if path.symlink_metadata().is_ok_and(|m|m.file_type().is_symlink()){bail!("Unsafe task lock link")}
-        let lock=OpenOptions::new().write(true).create(true).open(path)?;
+    fn locked<F, T>(&self, action: F) -> Result<T>
+    where
+        F: FnOnce(&Self) -> Result<T>,
+    {
+        let path = self.directory.join(".lock");
+        if path
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_symlink())
+        {
+            bail!("Unsafe task lock link")
+        }
+        let lock = OpenOptions::new().write(true).create(true).open(path)?;
         lock.lock_exclusive().context("Task list lock failed")?;
-        let guard=TaskMutationGuard{
-            file:lock,deferred:Some(task_events::defer_notifications())
+        let guard = TaskMutationGuard {
+            file: lock,
+            deferred: Some(task_events::defer_notifications()),
         };
-        let result=action(self);
+        let result = action(self);
         drop(guard);
         result
     }
-    fn path(&self,id:&str)->Result<PathBuf>{
-        if id.is_empty() || !id.bytes().all(|c|c.is_ascii_digit()) || id.len()>20 {bail!("Invalid task ID")}
-        let path=self.directory.join(format!("{id}.json"));
-        if path.symlink_metadata().is_ok_and(|m|m.file_type().is_symlink()){bail!("Unsafe task file link")}
+    fn path(&self, id: &str) -> Result<PathBuf> {
+        if id.is_empty() || !id.bytes().all(|c| c.is_ascii_digit()) || id.len() > 20 {
+            bail!("Invalid task ID")
+        }
+        let path = self.directory.join(format!("{id}.json"));
+        if path
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_symlink())
+        {
+            bail!("Unsafe task file link")
+        }
         Ok(path)
     }
-    fn load(&self,id:&str)->Result<Option<Item>>{
-        let path=self.path(id)?;
-        let bytes=match fs::read(path) {Ok(v)=>v,Err(e)if e.kind()==std::io::ErrorKind::NotFound=>return Ok(None),Err(e)=>return Err(e.into())};
-        if bytes.len()>1_000_000 {bail!("Task record too large")}
+    fn load(&self, id: &str) -> Result<Option<Item>> {
+        let path = self.path(id)?;
+        let bytes = match fs::read(path) {
+            Ok(v) => v,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e.into()),
+        };
+        if bytes.len() > 1_000_000 {
+            bail!("Task record too large")
+        }
         // Like the reference getTask, corrupt/invalid task records are absent,
         // rather than rendering the entire shared task list unusable.
-        let Ok(item)=serde_json::from_slice::<Item>(&bytes) else {return Ok(None)};
-        if item.id!=id || !matches!(item.status.as_str(),"pending"|"in_progress"|"completed"){
-            return Ok(None)
+        let Ok(item) = serde_json::from_slice::<Item>(&bytes) else {
+            return Ok(None);
+        };
+        if item.id != id
+            || !matches!(
+                item.status.as_str(),
+                "pending" | "in_progress" | "completed"
+            )
+        {
+            return Ok(None);
         }
         Ok(Some(item))
     }
-    fn save(&self,item:&Item)->Result<()>{
-        let path=self.path(&item.id)?;
-        let temp=self.directory.join(format!(".{}.tmp",Uuid::new_v4()));
-        let data=serde_json::to_vec_pretty(item)?;
-        if data.len()>1_000_000 {bail!("Task record too large")}
-        let mut file=OpenOptions::new().write(true).create_new(true).open(&temp)?;
+    fn save(&self, item: &Item) -> Result<()> {
+        let path = self.path(&item.id)?;
+        let temp = self.directory.join(format!(".{}.tmp", Uuid::new_v4()));
+        let data = serde_json::to_vec_pretty(item)?;
+        if data.len() > 1_000_000 {
+            bail!("Task record too large")
+        }
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)?;
         use std::io::Write;
-        let result=(||{file.write_all(&data)?;file.sync_all()?;fs::rename(&temp,&path)?;Ok::<_,anyhow::Error>(())})();
-        if result.is_err(){let _=fs::remove_file(&temp);}
-        if result.is_ok(){task_events::notify_tasks_updated();}
+        let result = (|| {
+            file.write_all(&data)?;
+            file.sync_all()?;
+            fs::rename(&temp, &path)?;
+            Ok::<_, anyhow::Error>(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temp);
+        }
+        if result.is_ok() {
+            task_events::notify_tasks_updated();
+        }
         result
     }
-    fn all(&self)->Result<Vec<Item>>{
-        let mut tasks=Vec::new();
-        for ent in fs::read_dir(&self.directory)?{
-            let ent=ent?;
-            if !ent.file_type()?.is_file(){continue}
-            let path=ent.path();
-            if path.extension().and_then(|s|s.to_str())!=Some("json"){continue}
-            let Some(name)=path.file_stem().and_then(|s|s.to_str())else{continue};
-            if !name.bytes().all(|c|c.is_ascii_digit()){continue}
-            if let Some(item)=self.load(name)?{tasks.push(item)}
+    fn all(&self) -> Result<Vec<Item>> {
+        let mut tasks = Vec::new();
+        for ent in fs::read_dir(&self.directory)? {
+            let ent = ent?;
+            if !ent.file_type()?.is_file() {
+                continue;
+            }
+            let path = ent.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(name) = path.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            if !name.bytes().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            if let Some(item) = self.load(name)? {
+                tasks.push(item)
+            }
         }
-        tasks.sort_by(|a,b|a.id.parse::<u64>().unwrap_or(0).cmp(&b.id.parse::<u64>().unwrap_or(0)));
+        tasks.sort_by(|a, b| {
+            a.id.parse::<u64>()
+                .unwrap_or(0)
+                .cmp(&b.id.parse::<u64>().unwrap_or(0))
+        });
         Ok(tasks)
     }
-    fn highest(&self)->Result<u64>{
-        let mut high=fs::read_to_string(self.directory.join(".highwatermark")).ok()
-            .and_then(|s|s.trim().parse::<u64>().ok()).unwrap_or(0);
-        for task in self.all()? {high=high.max(task.id.parse().unwrap_or(0));}
+    fn highest(&self) -> Result<u64> {
+        let mut high = fs::read_to_string(self.directory.join(".highwatermark"))
+            .ok()
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .unwrap_or(0);
+        for task in self.all()? {
+            high = high.max(task.id.parse().unwrap_or(0));
+        }
         Ok(high)
     }
-    fn mark(&self,id:u64)->Result<()>{
-        fs::write(self.directory.join(".highwatermark"),id.to_string())?;
+    fn mark(&self, id: u64) -> Result<()> {
+        fs::write(self.directory.join(".highwatermark"), id.to_string())?;
         Ok(())
     }
-    fn required<'a>(args:&'a Value,key:&str)->Result<&'a str>{
-        args.get(key).and_then(Value::as_str).with_context(||format!("Missing {key}"))
+    fn required<'a>(args: &'a Value, key: &str) -> Result<&'a str> {
+        args.get(key)
+            .and_then(Value::as_str)
+            .with_context(|| format!("Missing {key}"))
     }
-    fn optional_string(args:&Value,key:&str)->Result<Option<String>>{
-        match args.get(key){None=>Ok(None),Some(Value::String(s))=>Ok(Some(s.clone())),_=>bail!("Invalid {key}")}
-    }
-    fn strict(args:&Value,allowed:&[&str])->Result<()>{
-        let map=args.as_object().context("Task parameters must be an object")?;
-        if let Some(key)=map.keys().find(|k|!allowed.contains(&k.as_str())){bail!("Unrecognized task parameter {key}")}
-        Ok(())
-    }
-    fn ids(args:&Value,key:&str)->Result<Vec<String>>{
+    fn optional_string(args: &Value, key: &str) -> Result<Option<String>> {
         match args.get(key) {
-            None=>Ok(vec![]),
-            Some(Value::Array(values))=>values.iter().map(|v|{
-                let id=v.as_str().context("Task IDs must be strings")?;
-                if id.is_empty()||!id.bytes().all(|b|b.is_ascii_digit()){bail!("Invalid dependency ID")}
-                Ok(id.to_owned())
-            }).collect(),
-            _=>bail!("{key} must be an array of IDs")
+            None => Ok(None),
+            Some(Value::String(s)) => Ok(Some(s.clone())),
+            _ => bail!("Invalid {key}"),
         }
     }
-    pub fn create(&self,args:&Value)->Result<String>{
-        Self::strict(args,&["subject","description","activeForm","metadata"])?;
-        let subject=Self::required(args,"subject")?;
-        let description=Self::required(args,"description")?;
-        let active=Self::optional_string(args,"activeForm")?;
-        let metadata=match args.get("metadata"){None=>None,Some(Value::Object(m))=>Some(m.clone()),_=>bail!("metadata must be an object")};
-        if subject.len()>2000||description.len()>200_000 {bail!("Task input too large")}
-        self.locked(|this|{
-            let id=this.highest()?.checked_add(1).context("Task counter exhausted")?;
-            let task=Item{id:id.to_string(),subject:subject.into(),description:description.into(),
-                active_form:active,owner:None,status:"pending".into(),blocks:vec![],blocked_by:vec![],metadata};
+    fn strict(args: &Value, allowed: &[&str]) -> Result<()> {
+        let map = args
+            .as_object()
+            .context("Task parameters must be an object")?;
+        if let Some(key) = map.keys().find(|k| !allowed.contains(&k.as_str())) {
+            bail!("Unrecognized task parameter {key}")
+        }
+        Ok(())
+    }
+    fn ids(args: &Value, key: &str) -> Result<Vec<String>> {
+        match args.get(key) {
+            None => Ok(vec![]),
+            Some(Value::Array(values)) => values
+                .iter()
+                .map(|v| {
+                    let id = v.as_str().context("Task IDs must be strings")?;
+                    if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
+                        bail!("Invalid dependency ID")
+                    }
+                    Ok(id.to_owned())
+                })
+                .collect(),
+            _ => bail!("{key} must be an array of IDs"),
+        }
+    }
+    pub fn create(&self, args: &Value) -> Result<String> {
+        Self::strict(args, &["subject", "description", "activeForm", "metadata"])?;
+        let subject = Self::required(args, "subject")?;
+        let description = Self::required(args, "description")?;
+        let active = Self::optional_string(args, "activeForm")?;
+        let metadata = match args.get("metadata") {
+            None => None,
+            Some(Value::Object(m)) => Some(m.clone()),
+            _ => bail!("metadata must be an object"),
+        };
+        if subject.len() > 2000 || description.len() > 200_000 {
+            bail!("Task input too large")
+        }
+        self.locked(|this| {
+            let id = this
+                .highest()?
+                .checked_add(1)
+                .context("Task counter exhausted")?;
+            let task = Item {
+                id: id.to_string(),
+                subject: subject.into(),
+                description: description.into(),
+                active_form: active,
+                owner: None,
+                status: "pending".into(),
+                blocks: vec![],
+                blocked_by: vec![],
+                metadata,
+            };
             this.save(&task)?;
             this.mark(id)?;
-            Ok(format!("Task #{} created successfully: {}",task.id,task.subject))
+            Ok(format!(
+                "Task #{} created successfully: {}",
+                task.id, task.subject
+            ))
         })
     }
-    pub fn peek(&self,id:&str)->Result<Option<Item>>{self.load(id)}
-    pub fn delete_for_blocking_hook(&self,id:&str)->Result<bool>{
-        self.locked(|this|this.delete(id))
+    pub fn peek(&self, id: &str) -> Result<Option<Item>> {
+        self.load(id)
     }
-    pub fn get(&self,args:&Value)->Result<String>{
-        Self::strict(args,&["taskId"])?;
-        let id=Self::required(args,"taskId")?;
-        match self.load(id)?{
-            None=>Ok("Task not found".into()),
-            Some(task)=>{
-                let mut text=format!("Task #{}: {}\nStatus: {}\nDescription: {}",
-                    task.id,task.subject,task.status,task.description);
-                if !task.blocked_by.is_empty(){text.push_str(&format!("\nBlocked by: {}",task.blocked_by.iter().map(|x|format!("#{x}")).collect::<Vec<_>>().join(", ")));}
-                if !task.blocks.is_empty(){text.push_str(&format!("\nBlocks: {}",task.blocks.iter().map(|x|format!("#{x}")).collect::<Vec<_>>().join(", ")));}
+    pub fn delete_for_blocking_hook(&self, id: &str) -> Result<bool> {
+        self.locked(|this| this.delete(id))
+    }
+    pub fn get(&self, args: &Value) -> Result<String> {
+        Self::strict(args, &["taskId"])?;
+        let id = Self::required(args, "taskId")?;
+        match self.load(id)? {
+            None => Ok("Task not found".into()),
+            Some(task) => {
+                let mut text = format!(
+                    "Task #{}: {}\nStatus: {}\nDescription: {}",
+                    task.id, task.subject, task.status, task.description
+                );
+                if !task.blocked_by.is_empty() {
+                    text.push_str(&format!(
+                        "\nBlocked by: {}",
+                        task.blocked_by
+                            .iter()
+                            .map(|x| format!("#{x}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
+                if !task.blocks.is_empty() {
+                    text.push_str(&format!(
+                        "\nBlocks: {}",
+                        task.blocks
+                            .iter()
+                            .map(|x| format!("#{x}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
                 Ok(text)
             }
         }
     }
-    pub fn list(&self,args:&Value)->Result<String>{
-        Self::strict(args,&[])?;
-        let tasks=self.all()?.into_iter().filter(|t|!t.metadata.as_ref()
-            .and_then(|m|m.get("_internal")).and_then(Value::as_bool).unwrap_or(false)).collect::<Vec<_>>();
-        if tasks.is_empty(){return Ok("No tasks found".into())}
-        let completed=tasks.iter().filter(|t|t.status=="completed").map(|t|t.id.clone()).collect::<HashSet<_>>();
-        Ok(tasks.iter().map(|task|{
-            let owner=task.owner.as_ref().map(|x|format!(" ({x})")).unwrap_or_default();
-            let blockers=task.blocked_by.iter().filter(|id|!completed.contains(*id))
-                .map(|id|format!("#{id}")).collect::<Vec<_>>();
-            let blocked=if blockers.is_empty(){String::new()}else{format!(" [blocked by {}]",blockers.join(", "))};
-            format!("#{} [{}] {}{owner}{blocked}",task.id,task.status,task.subject)
-        }).collect::<Vec<_>>().join("\n"))
-    }
-    fn link(&self,from:&str,to:&str)->Result<bool>{
-        let (Some(mut source),Some(mut target))=(self.load(from)?,self.load(to)?)else{return Ok(false)};
-        if !source.blocks.contains(&to.to_owned()){
-            source.blocks.push(to.to_owned());self.save(&source)?;
+    pub fn list(&self, args: &Value) -> Result<String> {
+        Self::strict(args, &[])?;
+        let tasks = self
+            .all()?
+            .into_iter()
+            .filter(|t| {
+                !t.metadata
+                    .as_ref()
+                    .and_then(|m| m.get("_internal"))
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+            })
+            .collect::<Vec<_>>();
+        if tasks.is_empty() {
+            return Ok("No tasks found".into());
         }
-        if !target.blocked_by.contains(&from.to_owned()){
-            target.blocked_by.push(from.to_owned());self.save(&target)?;
+        let completed = tasks
+            .iter()
+            .filter(|t| t.status == "completed")
+            .map(|t| t.id.clone())
+            .collect::<HashSet<_>>();
+        Ok(tasks
+            .iter()
+            .map(|task| {
+                let owner = task
+                    .owner
+                    .as_ref()
+                    .map(|x| format!(" ({x})"))
+                    .unwrap_or_default();
+                let blockers = task
+                    .blocked_by
+                    .iter()
+                    .filter(|id| !completed.contains(*id))
+                    .map(|id| format!("#{id}"))
+                    .collect::<Vec<_>>();
+                let blocked = if blockers.is_empty() {
+                    String::new()
+                } else {
+                    format!(" [blocked by {}]", blockers.join(", "))
+                };
+                format!(
+                    "#{} [{}] {}{owner}{blocked}",
+                    task.id, task.status, task.subject
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+    fn link(&self, from: &str, to: &str) -> Result<bool> {
+        let (Some(mut source), Some(mut target)) = (self.load(from)?, self.load(to)?) else {
+            return Ok(false);
+        };
+        if !source.blocks.contains(&to.to_owned()) {
+            source.blocks.push(to.to_owned());
+            self.save(&source)?;
+        }
+        if !target.blocked_by.contains(&from.to_owned()) {
+            target.blocked_by.push(from.to_owned());
+            self.save(&target)?;
         }
         Ok(true)
     }
-    fn delete(&self,id:&str)->Result<bool>{
-        let path=self.path(id)?;
-        if self.load(id)?.is_none(){return Ok(false)}
-        let num=id.parse::<u64>()?;
+    fn delete(&self, id: &str) -> Result<bool> {
+        let path = self.path(id)?;
+        if self.load(id)?.is_none() {
+            return Ok(false);
+        }
+        let num = id.parse::<u64>()?;
         self.mark(self.highest()?.max(num))?;
         fs::remove_file(path)?;
         task_events::notify_tasks_updated();
-        for mut task in self.all()?{
-            let a=task.blocks.len();let b=task.blocked_by.len();
-            task.blocks.retain(|x|x!=id);task.blocked_by.retain(|x|x!=id);
-            if a!=task.blocks.len()||b!=task.blocked_by.len(){self.save(&task)?}
+        for mut task in self.all()? {
+            let a = task.blocks.len();
+            let b = task.blocked_by.len();
+            task.blocks.retain(|x| x != id);
+            task.blocked_by.retain(|x| x != id);
+            if a != task.blocks.len() || b != task.blocked_by.len() {
+                self.save(&task)?
+            }
         }
         Ok(true)
     }
-    pub fn update(&self,args:&Value)->Result<String>{
-        Self::strict(args,&["taskId","subject","description","activeForm","status","owner","addBlocks","addBlockedBy","metadata"])?;
-        let id=Self::required(args,"taskId")?;
-        let subject=Self::optional_string(args,"subject")?;
-        let description=Self::optional_string(args,"description")?;
-        let active=Self::optional_string(args,"activeForm")?;
-        let owner=Self::optional_string(args,"owner")?;
-        let status=Self::optional_string(args,"status")?;
-        let blocks=Self::ids(args,"addBlocks")?;
-        let blocked_by=Self::ids(args,"addBlockedBy")?;
-        let meta=match args.get("metadata"){None=>None,Some(Value::Object(m))=>Some(m.clone()),_=>bail!("metadata must be an object")};
-        if let Some(state)=&status{
-            if !matches!(state.as_str(),"pending"|"in_progress"|"completed"|"deleted"){bail!("Invalid task status")}
-        }
-        self.locked(|this|{
-            let Some(mut task)=this.load(id)?else{return Ok("Task not found".into())};
-            if status.as_deref()==Some("deleted"){
-                return if this.delete(id)?{Ok(format!("Updated task #{id} deleted"))}else{Ok("Failed to delete task".into())}
+    pub fn update(&self, args: &Value) -> Result<String> {
+        Self::strict(
+            args,
+            &[
+                "taskId",
+                "subject",
+                "description",
+                "activeForm",
+                "status",
+                "owner",
+                "addBlocks",
+                "addBlockedBy",
+                "metadata",
+            ],
+        )?;
+        let id = Self::required(args, "taskId")?;
+        let subject = Self::optional_string(args, "subject")?;
+        let description = Self::optional_string(args, "description")?;
+        let active = Self::optional_string(args, "activeForm")?;
+        let owner = Self::optional_string(args, "owner")?;
+        let status = Self::optional_string(args, "status")?;
+        let blocks = Self::ids(args, "addBlocks")?;
+        let blocked_by = Self::ids(args, "addBlockedBy")?;
+        let meta = match args.get("metadata") {
+            None => None,
+            Some(Value::Object(m)) => Some(m.clone()),
+            _ => bail!("metadata must be an object"),
+        };
+        if let Some(state) = &status {
+            if !matches!(
+                state.as_str(),
+                "pending" | "in_progress" | "completed" | "deleted"
+            ) {
+                bail!("Invalid task status")
             }
-            let mut fields=Vec::new();
-            if let Some(s)=&subject{if *s!=task.subject{task.subject=s.clone();fields.push("subject")}}
-            if let Some(s)=&description{if *s!=task.description{task.description=s.clone();fields.push("description")}}
-            if let Some(s)=&active{if task.active_form.as_ref()!=Some(s){task.active_form=Some(s.clone());fields.push("activeForm")}}
-            if let Some(s)=&owner{if task.owner.as_ref()!=Some(s){task.owner=Some(s.clone());fields.push("owner")}}
-            if let Some(s)=&status{if *s!=task.status{task.status=s.clone();fields.push("status")}}
-            if let Some(patch)=meta{
-                let m=task.metadata.get_or_insert_with(Map::new);
-                for (key,value) in patch{if value.is_null(){m.remove(&key);}else{m.insert(key,value);}}
+        }
+        self.locked(|this| {
+            let Some(mut task) = this.load(id)? else {
+                return Ok("Task not found".into());
+            };
+            if status.as_deref() == Some("deleted") {
+                return if this.delete(id)? {
+                    Ok(format!("Updated task #{id} deleted"))
+                } else {
+                    Ok("Failed to delete task".into())
+                };
+            }
+            let mut fields = Vec::new();
+            if let Some(s) = &subject {
+                if *s != task.subject {
+                    task.subject = s.clone();
+                    fields.push("subject")
+                }
+            }
+            if let Some(s) = &description {
+                if *s != task.description {
+                    task.description = s.clone();
+                    fields.push("description")
+                }
+            }
+            if let Some(s) = &active {
+                if task.active_form.as_ref() != Some(s) {
+                    task.active_form = Some(s.clone());
+                    fields.push("activeForm")
+                }
+            }
+            if let Some(s) = &owner {
+                if task.owner.as_ref() != Some(s) {
+                    task.owner = Some(s.clone());
+                    fields.push("owner")
+                }
+            }
+            if let Some(s) = &status {
+                if *s != task.status {
+                    task.status = s.clone();
+                    fields.push("status")
+                }
+            }
+            if let Some(patch) = meta {
+                let m = task.metadata.get_or_insert_with(Map::new);
+                for (key, value) in patch {
+                    if value.is_null() {
+                        m.remove(&key);
+                    } else {
+                        m.insert(key, value);
+                    }
+                }
                 fields.push("metadata");
             }
-            if !fields.is_empty(){this.save(&task)?}
-            if !blocks.is_empty(){
-                let existing=task.blocks.clone();
-                let new=blocks.iter().filter(|x|!existing.contains(*x)).collect::<Vec<_>>();
-                for other in &new{this.link(id,other)?;}
-                if !new.is_empty(){fields.push("blocks")}
+            if !fields.is_empty() {
+                this.save(&task)?
             }
-            if !blocked_by.is_empty(){
-                let existing=task.blocked_by.clone();
-                let new=blocked_by.iter().filter(|x|!existing.contains(*x)).collect::<Vec<_>>();
-                for other in &new{this.link(other,id)?;}
-                if !new.is_empty(){fields.push("blockedBy")}
+            if !blocks.is_empty() {
+                let existing = task.blocks.clone();
+                let new = blocks
+                    .iter()
+                    .filter(|x| !existing.contains(*x))
+                    .collect::<Vec<_>>();
+                for other in &new {
+                    this.link(id, other)?;
+                }
+                if !new.is_empty() {
+                    fields.push("blocks")
+                }
             }
-            Ok(format!("Updated task #{id} {}",fields.join(", ")).trim_end().to_owned())
+            if !blocked_by.is_empty() {
+                let existing = task.blocked_by.clone();
+                let new = blocked_by
+                    .iter()
+                    .filter(|x| !existing.contains(*x))
+                    .collect::<Vec<_>>();
+                for other in &new {
+                    this.link(other, id)?;
+                }
+                if !new.is_empty() {
+                    fields.push("blockedBy")
+                }
+            }
+            Ok(format!("Updated task #{id} {}", fields.join(", "))
+                .trim_end()
+                .to_owned())
         })
     }
 
     /// Remove an inactive team's task storage after team cleanup succeeds.
     /// Unlike reset, this also removes the high-water mark and lock file.
-    pub fn remove_storage(&self)->Result<()>{
-        if !self.directory.exists(){return Ok(())}
-        self.locked(|store|{
-            for entry in fs::read_dir(&store.directory)?{
-                let entry=entry?;
-                let kind=entry.file_type()?;
-                if kind.is_symlink(){bail!("Unsafe task storage link")}
-                if kind.is_dir(){bail!("Unexpected nested task directory")}
+    pub fn remove_storage(&self) -> Result<()> {
+        if !self.directory.exists() {
+            return Ok(());
+        }
+        self.locked(|store| {
+            for entry in fs::read_dir(&store.directory)? {
+                let entry = entry?;
+                let kind = entry.file_type()?;
+                if kind.is_symlink() {
+                    bail!("Unsafe task storage link")
+                }
+                if kind.is_dir() {
+                    bail!("Unexpected nested task directory")
+                }
             }
             Ok(())
         })?;
@@ -281,30 +548,44 @@ impl TaskGraph {
         Ok(())
     }
 
-    pub fn reset(&self)->Result<()>{
-        self.locked(|store|{
-            let high=store.highest()?;
-            for item in store.all()? { fs::remove_file(store.path(&item.id)?)?; }
+    pub fn reset(&self) -> Result<()> {
+        self.locked(|store| {
+            let high = store.highest()?;
+            for item in store.all()? {
+                fs::remove_file(store.path(&item.id)?)?;
+            }
             store.mark(high)?;
             task_events::notify_tasks_updated();
             Ok(())
         })
     }
 
-    pub fn member_statuses(&self,members:&[(String,String,Option<String>)])->Result<Vec<Value>>{
-        let tasks=self.all()?;
-        Ok(members.iter().map(|(id,name,kind)|{
-            let owned=tasks.iter().filter(|t|
-                t.status!="completed" &&
-                (t.owner.as_deref()==Some(name)||t.owner.as_deref()==Some(id))
-            ).map(|t|t.id.clone()).collect::<Vec<_>>();
-            json!({"agentId":id,"name":name,"agentType":kind,
+    pub fn member_statuses(
+        &self,
+        members: &[(String, String, Option<String>)],
+    ) -> Result<Vec<Value>> {
+        let tasks = self.all()?;
+        Ok(members
+            .iter()
+            .map(|(id, name, kind)| {
+                let owned = tasks
+                    .iter()
+                    .filter(|t| {
+                        t.status != "completed"
+                            && (t.owner.as_deref() == Some(name) || t.owner.as_deref() == Some(id))
+                    })
+                    .map(|t| t.id.clone())
+                    .collect::<Vec<_>>();
+                json!({"agentId":id,"name":name,"agentType":kind,
                 "status":if owned.is_empty(){"idle"}else{"busy"},"currentTasks":owned})
-        }).collect())
+            })
+            .collect())
     }
 
-    pub fn unassign_teammate(&self,agent_id:&str,name:&str,reason:&str)->Result<Value>{
-        if !matches!(reason,"terminated"|"shutdown"){bail!("Invalid exit reason")}
+    pub fn unassign_teammate(&self, agent_id: &str, name: &str, reason: &str) -> Result<Value> {
+        if !matches!(reason, "terminated" | "shutdown") {
+            bail!("Invalid exit reason")
+        }
         self.locked(|store|{
             let mut removed=Vec::<Value>::new();
             for mut item in store.all()?{
@@ -329,7 +610,7 @@ impl TaskGraph {
         })
     }
 
-    pub fn claim(&self,id:&str,owner:&str,check_busy:bool)->Result<Value>{
+    pub fn claim(&self, id: &str, owner: &str, check_busy: bool) -> Result<Value> {
         self.locked(|this|{
             let Some(mut task)=this.load(id)?else{return Ok(json!({"success":false,"reason":"task_not_found"}))};
             if task.owner.as_deref().is_some_and(|x|x!=owner){return Ok(json!({"success":false,"reason":"already_claimed","task":task}))}
@@ -344,20 +625,28 @@ impl TaskGraph {
             Ok(json!({"success":true,"task":task}))
         })
     }
-    pub fn run(&self,call:&ToolCall)->String{
-        let parsed=serde_json::from_str::<Value>(&call.function.arguments);
-        let result=parsed.and_then(|v|Ok(v)).map_err(anyhow::Error::from).and_then(|v|{
-            match call.function.name.as_str(){
-                "TaskCreate"=>self.create(&v),"TaskGet"=>self.get(&v),
-                "TaskList"=>self.list(&v),"TaskUpdate"=>self.update(&v),
-                _=>bail!("Unknown task action")
-            }
-        });
-        match result{Ok(s)=>s,Err(e)=>format!("ERROR: {e:#}")}
+    pub fn run(&self, call: &ToolCall) -> String {
+        let parsed = serde_json::from_str::<Value>(&call.function.arguments);
+        let result = parsed
+            .and_then(|v| Ok(v))
+            .map_err(anyhow::Error::from)
+            .and_then(|v| match call.function.name.as_str() {
+                "TaskCreate" => self.create(&v),
+                "TaskGet" => self.get(&v),
+                "TaskList" => self.list(&v),
+                "TaskUpdate" => self.update(&v),
+                _ => bail!("Unknown task action"),
+            });
+        match result {
+            Ok(s) => s,
+            Err(e) => format!("ERROR: {e:#}"),
+        }
     }
 }
-pub fn handles(name:&str)->bool{matches!(name,"TaskCreate"|"TaskGet"|"TaskList"|"TaskUpdate")}
-pub fn definitions()->Vec<Value>{
+pub fn handles(name: &str) -> bool {
+    matches!(name, "TaskCreate" | "TaskGet" | "TaskList" | "TaskUpdate")
+}
+pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"TaskCreate","description":"Create a persistent task with subject and description.","parameters":{"type":"object","additionalProperties":false,"properties":{"subject":{"type":"string"},"description":{"type":"string"},"activeForm":{"type":"string"},"metadata":{"type":"object"}},"required":["subject","description"]}}}),
         json!({"type":"function","function":{"name":"TaskGet","description":"Read a persistent task by ID.","parameters":{"type":"object","additionalProperties":false,"properties":{"taskId":{"type":"string"}},"required":["taskId"]}}}),
@@ -366,186 +655,286 @@ pub fn definitions()->Vec<Value>{
     ]
 }
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
-    fn store()->(tempfile::TempDir,TaskGraph){
-        let root=tempfile::tempdir().unwrap();
-        let graph=TaskGraph::new(root.path(),"session-1").unwrap();
-        (root,graph)
+    fn store() -> (tempfile::TempDir, TaskGraph) {
+        let root = tempfile::tempdir().unwrap();
+        let graph = TaskGraph::new(root.path(), "session-1").unwrap();
+        (root, graph)
     }
     #[test]
-    fn full_task_lifecycle_dependency_owner_metadata_and_reload(){
-        let (root,g)=store();
-        assert_eq!(g.create(&json!({"subject":"Build","description":"Build system"})).unwrap(),"Task #1 created successfully: Build");
-        assert_eq!(g.create(&json!({"subject":"Verify","description":"Run tests","activeForm":"Testing"})).unwrap(),"Task #2 created successfully: Verify");
+    fn full_task_lifecycle_dependency_owner_metadata_and_reload() {
+        let (root, g) = store();
+        assert_eq!(
+            g.create(&json!({"subject":"Build","description":"Build system"}))
+                .unwrap(),
+            "Task #1 created successfully: Build"
+        );
+        assert_eq!(
+            g.create(&json!({"subject":"Verify","description":"Run tests","activeForm":"Testing"}))
+                .unwrap(),
+            "Task #2 created successfully: Verify"
+        );
         assert!(g.update(&json!({"taskId":"2","addBlockedBy":["1"],"owner":"agent-A","metadata":{"revision":1,"remove":true}})).unwrap().contains("blockedBy"));
-        assert!(g.get(&json!({"taskId":"1"})).unwrap().contains("Blocks: #2"));
+        assert!(g
+            .get(&json!({"taskId":"1"}))
+            .unwrap()
+            .contains("Blocks: #2"));
         assert!(g.list(&json!({})).unwrap().contains("[blocked by #1]"));
-        let not_claimed=g.claim("2","agent-B",false).unwrap();
-        assert_eq!(not_claimed["reason"],"already_claimed");
-        let blocked=g.claim("2","agent-A",false).unwrap();
-        assert_eq!(blocked["reason"],"blocked");
-        assert!(g.update(&json!({"taskId":"1","status":"completed"})).unwrap().contains("status"));
+        let not_claimed = g.claim("2", "agent-B", false).unwrap();
+        assert_eq!(not_claimed["reason"], "already_claimed");
+        let blocked = g.claim("2", "agent-A", false).unwrap();
+        assert_eq!(blocked["reason"], "blocked");
+        assert!(g
+            .update(&json!({"taskId":"1","status":"completed"}))
+            .unwrap()
+            .contains("status"));
         assert!(!g.list(&json!({})).unwrap().contains("[blocked by #1]"));
-        let claimed=g.claim("2","agent-A",true).unwrap();
-        assert_eq!(claimed["success"],true);
+        let claimed = g.claim("2", "agent-A", true).unwrap();
+        assert_eq!(claimed["success"], true);
         assert!(g.update(&json!({"taskId":"2","metadata":{"remove":null,"revision":2},"status":"in_progress"})).unwrap().contains("metadata"));
-        let task=g.load("2").unwrap().unwrap();
-        assert_eq!(task.metadata.unwrap().get("revision"),Some(&json!(2)));
-        let fresh=TaskGraph::new(root.path(),"session-1").unwrap();
-        assert_eq!(fresh.all().unwrap().len(),2);
-        assert!(fresh.update(&json!({"taskId":"1","status":"deleted"})).unwrap().contains("deleted"));
-        assert!(fresh.get(&json!({"taskId":"2"})).unwrap().contains("Task #2"));
-        assert!(!fresh.get(&json!({"taskId":"2"})).unwrap().contains("Blocked by"));
-        assert!(fresh.create(&json!({"subject":"Followup","description":"Next"})).unwrap().contains("#3"));
+        let task = g.load("2").unwrap().unwrap();
+        assert_eq!(task.metadata.unwrap().get("revision"), Some(&json!(2)));
+        let fresh = TaskGraph::new(root.path(), "session-1").unwrap();
+        assert_eq!(fresh.all().unwrap().len(), 2);
+        assert!(fresh
+            .update(&json!({"taskId":"1","status":"deleted"}))
+            .unwrap()
+            .contains("deleted"));
+        assert!(fresh
+            .get(&json!({"taskId":"2"}))
+            .unwrap()
+            .contains("Task #2"));
+        assert!(!fresh
+            .get(&json!({"taskId":"2"}))
+            .unwrap()
+            .contains("Blocked by"));
+        assert!(fresh
+            .create(&json!({"subject":"Followup","description":"Next"}))
+            .unwrap()
+            .contains("#3"));
     }
     #[test]
-    fn concurrent_creators_get_unique_monotonic_ids(){
-        let (root,_g)=store();
-        let root=std::sync::Arc::new(root);
-        let workers=(0..12).map(|i|{
-            let root=root.clone();
-            std::thread::spawn(move||{
-                let graph=TaskGraph::new(root.path(),"session-1").unwrap();
-                graph.create(&json!({"subject":format!("Worker {i}"),"description":"Parallel"})).unwrap()
+    fn concurrent_creators_get_unique_monotonic_ids() {
+        let (root, _g) = store();
+        let root = std::sync::Arc::new(root);
+        let workers = (0..12)
+            .map(|i| {
+                let root = root.clone();
+                std::thread::spawn(move || {
+                    let graph = TaskGraph::new(root.path(), "session-1").unwrap();
+                    graph
+                        .create(&json!({"subject":format!("Worker {i}"),"description":"Parallel"}))
+                        .unwrap()
+                })
             })
-        }).collect::<Vec<_>>();
-        let mut ids=workers.into_iter().map(|t|t.join().unwrap().split_whitespace()
-            .nth(1).unwrap().trim_start_matches('#').parse::<u64>().unwrap())
+            .collect::<Vec<_>>();
+        let mut ids = workers
+            .into_iter()
+            .map(|t| {
+                t.join()
+                    .unwrap()
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap()
+                    .trim_start_matches('#')
+                    .parse::<u64>()
+                    .unwrap()
+            })
             .collect::<Vec<_>>();
         ids.sort();
-        assert_eq!(ids,(1..=12).collect::<Vec<_>>());
-        let graph=TaskGraph::new(root.path(),"session-1").unwrap();
-        assert_eq!(graph.all().unwrap().len(),12);
+        assert_eq!(ids, (1..=12).collect::<Vec<_>>());
+        let graph = TaskGraph::new(root.path(), "session-1").unwrap();
+        assert_eq!(graph.all().unwrap().len(), 12);
     }
 
     #[test]
-    fn member_statuses_unassign_and_reset_highwatermark(){
-        let (root,store)=store();
-        store.create(&json!({"subject":"First","description":"Do first"})).unwrap();
-        store.create(&json!({"subject":"Second","description":"Do second"})).unwrap();
-        store.update(&json!({"taskId":"1","owner":"alice","status":"in_progress"})).unwrap();
-        store.update(&json!({"taskId":"2","owner":"agent-b","status":"completed"})).unwrap();
-        let members=vec![
-            ("agent-a".into(),"alice".into(),Some("coder".into())),
-            ("agent-b".into(),"bob".into(),None),
+    fn member_statuses_unassign_and_reset_highwatermark() {
+        let (root, store) = store();
+        store
+            .create(&json!({"subject":"First","description":"Do first"}))
+            .unwrap();
+        store
+            .create(&json!({"subject":"Second","description":"Do second"}))
+            .unwrap();
+        store
+            .update(&json!({"taskId":"1","owner":"alice","status":"in_progress"}))
+            .unwrap();
+        store
+            .update(&json!({"taskId":"2","owner":"agent-b","status":"completed"}))
+            .unwrap();
+        let members = vec![
+            ("agent-a".into(), "alice".into(), Some("coder".into())),
+            ("agent-b".into(), "bob".into(), None),
         ];
-        let status=store.member_statuses(&members).unwrap();
-        assert_eq!(status[0]["status"],"busy");
-        assert_eq!(status[0]["currentTasks"],json!(["1"]));
-        assert_eq!(status[1]["status"],"idle");
-        let result=store.unassign_teammate("agent-a","alice","terminated").unwrap();
-        assert_eq!(result["unassignedTasks"][0]["id"],"1");
-        assert!(result["notificationMessage"].as_str().unwrap().contains("1 task(s) were unassigned"));
-        let task=store.peek("1").unwrap().unwrap();
-        assert_eq!(task.owner,None);
-        assert_eq!(task.status,"pending");
-        assert!(store.unassign_teammate("agent-a","alice","invalid").is_err());
+        let status = store.member_statuses(&members).unwrap();
+        assert_eq!(status[0]["status"], "busy");
+        assert_eq!(status[0]["currentTasks"], json!(["1"]));
+        assert_eq!(status[1]["status"], "idle");
+        let result = store
+            .unassign_teammate("agent-a", "alice", "terminated")
+            .unwrap();
+        assert_eq!(result["unassignedTasks"][0]["id"], "1");
+        assert!(result["notificationMessage"]
+            .as_str()
+            .unwrap()
+            .contains("1 task(s) were unassigned"));
+        let task = store.peek("1").unwrap().unwrap();
+        assert_eq!(task.owner, None);
+        assert_eq!(task.status, "pending");
+        assert!(store
+            .unassign_teammate("agent-a", "alice", "invalid")
+            .is_err());
         store.reset().unwrap();
         assert!(store.all().unwrap().is_empty());
-        let restarted=TaskGraph::new(root.path(),"session-1").unwrap();
-        assert!(restarted.create(&json!({"subject":"Third","description":"After reset"}))
-            .unwrap().contains("#3"));
+        let restarted = TaskGraph::new(root.path(), "session-1").unwrap();
+        assert!(restarted
+            .create(&json!({"subject":"Third","description":"After reset"}))
+            .unwrap()
+            .contains("#3"));
     }
 
     #[test]
-    fn corrupt_task_files_are_skipped_without_hiding_valid_tasks(){
-        let (_root,graph)=store();
-        graph.create(&json!({"subject":"Valid","description":"Kept"})).unwrap();
-        fs::write(graph.path("2").unwrap(),"{definitely not json").unwrap();
+    fn corrupt_task_files_are_skipped_without_hiding_valid_tasks() {
+        let (_root, graph) = store();
+        graph
+            .create(&json!({"subject":"Valid","description":"Kept"}))
+            .unwrap();
+        fs::write(graph.path("2").unwrap(), "{definitely not json").unwrap();
         fs::write(graph.path("3").unwrap(),r#"{"id":"3","subject":"Bad","description":"Bad","status":"obsolete","blocks":[],"blockedBy":[]}"#).unwrap();
-        assert_eq!(graph.all().unwrap().len(),1);
-        assert_eq!(graph.get(&json!({"taskId":"2"})).unwrap(),"Task not found");
+        assert_eq!(graph.all().unwrap().len(), 1);
+        assert_eq!(graph.get(&json!({"taskId":"2"})).unwrap(), "Task not found");
         assert!(graph.list(&json!({})).unwrap().contains("Valid"));
     }
     #[test]
-    fn deleting_team_storage_removes_tasks_and_counter(){
-        let (_root,graph)=store();
-        graph.create(&json!({"subject":"A","description":"B"})).unwrap();
-        let directory=graph.directory.clone();
+    fn deleting_team_storage_removes_tasks_and_counter() {
+        let (_root, graph) = store();
+        graph
+            .create(&json!({"subject":"A","description":"B"}))
+            .unwrap();
+        let directory = graph.directory.clone();
         assert!(directory.join("1.json").exists());
         assert!(directory.join(".highwatermark").exists());
         graph.remove_storage().unwrap();
         assert!(!directory.exists());
     }
     #[test]
-    fn subscriber_can_reenter_task_mutation_after_unlock(){
-        use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
-        let (_root,graph)=store();
-        graph.create(&json!({"subject":"Before","description":"Body"})).unwrap();
-        let graph_for_callback=graph.clone();
-        let once=Arc::new(AtomicBool::new(false));
-        let gate=once.clone();
-        let seen=Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
-        let observed=seen.clone();
-        let finished=Arc::new((std::sync::Mutex::new(false),std::sync::Condvar::new()));
-        let completion=finished.clone();
-        let _listener=task_events::on_tasks_updated(Arc::new(move||{
-            let subject=graph_for_callback.peek("1").ok().flatten()
-                .map(|task|task.subject).unwrap_or_else(||"<missing>".into());
+    fn subscriber_can_reenter_task_mutation_after_unlock() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let (_root, graph) = store();
+        graph
+            .create(&json!({"subject":"Before","description":"Body"}))
+            .unwrap();
+        let graph_for_callback = graph.clone();
+        let once = Arc::new(AtomicBool::new(false));
+        let gate = once.clone();
+        let seen = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let observed = seen.clone();
+        let finished = Arc::new((std::sync::Mutex::new(false), std::sync::Condvar::new()));
+        let completion = finished.clone();
+        let _listener = task_events::on_tasks_updated(Arc::new(move || {
+            let subject = graph_for_callback
+                .peek("1")
+                .ok()
+                .flatten()
+                .map(|task| task.subject)
+                .unwrap_or_else(|| "<missing>".into());
             observed.lock().unwrap().push(subject.clone());
-            if subject=="Original" && !gate.swap(true,Ordering::SeqCst){
-                graph_for_callback.update(&json!({
-                    "taskId":"1","subject":"Updated by subscriber"
-                })).unwrap();
-                let (lock,ready)=&*completion;
-                *lock.lock().unwrap()=true;
+            if subject == "Original" && !gate.swap(true, Ordering::SeqCst) {
+                graph_for_callback
+                    .update(&json!({
+                        "taskId":"1","subject":"Updated by subscriber"
+                    }))
+                    .unwrap();
+                let (lock, ready) = &*completion;
+                *lock.lock().unwrap() = true;
                 ready.notify_all();
             }
         }));
-        graph.update(&json!({"taskId":"1","subject":"Original"})).unwrap();
+        graph
+            .update(&json!({"taskId":"1","subject":"Original"}))
+            .unwrap();
         // A process-wide signal may also be emitted by another test thread.
         // Wait for the reentrant mutation to finish, not merely to begin.
-        let (lock,ready)=&*finished;
-        let (done,_)=ready.wait_timeout_while(
-            lock.lock().unwrap(),std::time::Duration::from_secs(2),
-            |done|!*done).unwrap();
-        assert!(*done,"subscriber did not complete: observed={:?}",seen.lock().unwrap());
-        assert_eq!(graph.peek("1").unwrap().unwrap().subject,
-            "Updated by subscriber","observed={:?} gate={}",
-            seen.lock().unwrap(),once.load(Ordering::SeqCst));
+        let (lock, ready) = &*finished;
+        let (done, _) = ready
+            .wait_timeout_while(
+                lock.lock().unwrap(),
+                std::time::Duration::from_secs(2),
+                |done| !*done,
+            )
+            .unwrap();
+        assert!(
+            *done,
+            "subscriber did not complete: observed={:?}",
+            seen.lock().unwrap()
+        );
+        assert_eq!(
+            graph.peek("1").unwrap().unwrap().subject,
+            "Updated by subscriber",
+            "observed={:?} gate={}",
+            seen.lock().unwrap(),
+            once.load(Ordering::SeqCst)
+        );
     }
     #[test]
-    fn task_mutations_emit_observable_events(){
-        use std::sync::{Arc,atomic::{AtomicUsize,Ordering}};
-        let (_root,graph)=store();
-        let hits=Arc::new(AtomicUsize::new(0));
-        let counter=hits.clone();
-        let handle=task_events::on_tasks_updated(Arc::new(move||{
-            counter.fetch_add(1,Ordering::SeqCst);
+    fn task_mutations_emit_observable_events() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        let (_root, graph) = store();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let counter = hits.clone();
+        let handle = task_events::on_tasks_updated(Arc::new(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
         }));
-        graph.create(&json!({"subject":"A","description":"One"})).unwrap();
-        let after_create=hits.load(Ordering::SeqCst);
-        assert!(after_create>0);
-        graph.update(&json!({"taskId":"1","status":"completed"})).unwrap();
-        let after_update=hits.load(Ordering::SeqCst);
-        assert!(after_update>after_create);
-        graph.update(&json!({"taskId":"1","status":"deleted"})).unwrap();
-        assert!(hits.load(Ordering::SeqCst)>after_update);
-        let before_reset=hits.load(Ordering::SeqCst);
+        graph
+            .create(&json!({"subject":"A","description":"One"}))
+            .unwrap();
+        let after_create = hits.load(Ordering::SeqCst);
+        assert!(after_create > 0);
+        graph
+            .update(&json!({"taskId":"1","status":"completed"}))
+            .unwrap();
+        let after_update = hits.load(Ordering::SeqCst);
+        assert!(after_update > after_create);
+        graph
+            .update(&json!({"taskId":"1","status":"deleted"}))
+            .unwrap();
+        assert!(hits.load(Ordering::SeqCst) > after_update);
+        let before_reset = hits.load(Ordering::SeqCst);
         graph.reset().unwrap();
-        assert!(hits.load(Ordering::SeqCst)>before_reset);
+        assert!(hits.load(Ordering::SeqCst) > before_reset);
         drop(handle);
     }
 
     #[test]
-    fn validates_input_and_rejects_path_traversal(){
-        let (root,g)=store();
+    fn validates_input_and_rejects_path_traversal() {
+        let (root, g) = store();
         assert!(g.create(&json!({"subject":"x"})).is_err());
-        assert!(g.create(&json!({"subject":"x","description":"ok","unknown":true})).is_err());
+        assert!(g
+            .create(&json!({"subject":"x","description":"ok","unknown":true}))
+            .is_err());
         assert!(g.get(&json!({"taskId":"../outside"})).is_err());
-        assert!(TaskGraph::new(root.path(),"../n").is_ok());
+        assert!(TaskGraph::new(root.path(), "../n").is_ok());
         assert!(g.update(&json!({"taskId":"1","status":"blocked"})).is_err());
-        assert_eq!(g.get(&json!({"taskId":"999"})).unwrap(),"Task not found");
+        assert_eq!(g.get(&json!({"taskId":"999"})).unwrap(), "Task not found");
     }
     #[test]
-    fn internal_tasks_hidden_and_busy_claim_fails(){
-        let (_root,g)=store();
-        g.create(&json!({"subject":"A","description":"desc"})).unwrap();
-        g.create(&json!({"subject":"B","description":"desc","metadata":{"_internal":true}})).unwrap();
-        g.create(&json!({"subject":"C","description":"desc"})).unwrap();
-        assert_eq!(g.list(&json!({})).unwrap().lines().count(),2);
-        assert_eq!(g.claim("1","agent",true).unwrap()["success"],true);
-        assert_eq!(g.claim("3","agent",true).unwrap()["reason"],"agent_busy");
+    fn internal_tasks_hidden_and_busy_claim_fails() {
+        let (_root, g) = store();
+        g.create(&json!({"subject":"A","description":"desc"}))
+            .unwrap();
+        g.create(&json!({"subject":"B","description":"desc","metadata":{"_internal":true}}))
+            .unwrap();
+        g.create(&json!({"subject":"C","description":"desc"}))
+            .unwrap();
+        assert_eq!(g.list(&json!({})).unwrap().lines().count(), 2);
+        assert_eq!(g.claim("1", "agent", true).unwrap()["success"], true);
+        assert_eq!(g.claim("3", "agent", true).unwrap()["reason"], "agent_busy");
     }
 }

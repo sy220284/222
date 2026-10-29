@@ -53,13 +53,22 @@ pub fn execute(session: &mut Session, call: &ToolCall) -> String {
 
 fn dispatch(session: &mut Session, call: &ToolCall) -> Result<String> {
     let args: Value = serde_json::from_str(&call.function.arguments)?;
-    if !args.is_object() { bail!("Task tool arguments must be an object") }
+    if !args.is_object() {
+        bail!("Task tool arguments must be an object")
+    }
     match call.function.name.as_str() {
         "task_list" => Ok(serde_json::to_string_pretty(&session.tasks)?),
         "task_create" => {
-            let title = args.get("title").and_then(Value::as_str).context("Missing title")?;
-            if title.trim().is_empty() { bail!("Task title cannot be empty") }
-            if title.len() > 500 { bail!("Task title is too long") }
+            let title = args
+                .get("title")
+                .and_then(Value::as_str)
+                .context("Missing title")?;
+            if title.trim().is_empty() {
+                bail!("Task title cannot be empty")
+            }
+            if title.len() > 500 {
+                bail!("Task title is too long")
+            }
             let id = session.tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
             session.tasks.push(Task {
                 id,
@@ -70,16 +79,24 @@ fn dispatch(session: &mut Session, call: &ToolCall) -> Result<String> {
             Ok(format!("Created task {id}: {title}"))
         }
         "task_update" => {
-            let id = args.get("id").and_then(Value::as_u64).context("Missing task id")?;
-            let task = session.tasks.iter_mut().find(|t| t.id == id)
+            let id = args
+                .get("id")
+                .and_then(Value::as_u64)
+                .context("Missing task id")?;
+            let task = session
+                .tasks
+                .iter_mut()
+                .find(|t| t.id == id)
                 .with_context(|| format!("No task with id {id}"))?;
             if let Some(title) = args.get("title").and_then(Value::as_str) {
-                if title.trim().is_empty() || title.len() > 500 { bail!("Invalid task title") }
+                if title.trim().is_empty() || title.len() > 500 {
+                    bail!("Invalid task title")
+                }
                 task.title = title.to_owned();
             }
             if let Some(status) = args.get("status") {
-                task.status = serde_json::from_value(status.clone())
-                    .context("Invalid task status")?;
+                task.status =
+                    serde_json::from_value(status.clone()).context("Invalid task status")?;
             }
             if let Some(notes) = args.get("notes").and_then(Value::as_str) {
                 task.notes = Some(notes.to_owned());
@@ -97,8 +114,12 @@ mod tests {
 
     fn call(name: &str, args: Value) -> ToolCall {
         ToolCall {
-            id: "task".into(), kind: "function".into(),
-            function: FunctionCall {name: name.into(), arguments: args.to_string()},
+            id: "task".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: name.into(),
+                arguments: args.to_string(),
+            },
         }
     }
 
@@ -106,17 +127,24 @@ mod tests {
     fn creates_updates_and_persists_tasks() {
         let root = tempfile::tempdir().unwrap();
         let mut session = Session::fresh();
-        assert!(execute(&mut session, &call("task_create", json!({"title":"Run tests"})))
-            .contains("Created task 1"));
-        assert!(execute(&mut session, &call("task_update",
-            json!({"id":1,"status":"completed","notes":"cargo test passed"})))
-            .contains("Updated task 1"));
+        assert!(execute(
+            &mut session,
+            &call("task_create", json!({"title":"Run tests"}))
+        )
+        .contains("Created task 1"));
+        assert!(execute(
+            &mut session,
+            &call(
+                "task_update",
+                json!({"id":1,"status":"completed","notes":"cargo test passed"})
+            )
+        )
+        .contains("Updated task 1"));
         assert_eq!(session.tasks[0].status, TaskStatus::Completed);
         assert!(execute(&mut session, &call("task_list", json!({}))).contains("cargo test passed"));
         session.save(root.path()).unwrap();
         let restored = Session::load(root.path(), &session.id.to_string()).unwrap();
         assert_eq!(restored.tasks, session.tasks);
-        assert!(execute(&mut session, &call("task_update", json!({"id":999})))
-            .contains("ERROR"));
+        assert!(execute(&mut session, &call("task_update", json!({"id":999}))).contains("ERROR"));
     }
 }

@@ -1,13 +1,13 @@
 //! Rust exports derived from original: src/utils/toolSearch.ts
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum ToolSearchMode{
-    #[serde(rename="tst")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ToolSearchMode {
+    #[serde(rename = "tst")]
     tst,
-    #[serde(rename="tst-auto")]
+    #[serde(rename = "tst-auto")]
     tst_auto,
-    #[serde(rename="standard")]
+    #[serde(rename = "standard")]
     standard,
 }

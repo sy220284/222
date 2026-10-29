@@ -1,25 +1,25 @@
 //! Rust exports derived from original: src/utils/nativeInstaller/packageManagers.ts
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum PackageManager{
-    #[serde(rename="homebrew")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PackageManager {
+    #[serde(rename = "homebrew")]
     homebrew,
-    #[serde(rename="winget")]
+    #[serde(rename = "winget")]
     winget,
-    #[serde(rename="pacman")]
+    #[serde(rename = "pacman")]
     pacman,
-    #[serde(rename="deb")]
+    #[serde(rename = "deb")]
     deb,
-    #[serde(rename="rpm")]
+    #[serde(rename = "rpm")]
     rpm,
-    #[serde(rename="apk")]
+    #[serde(rename = "apk")]
     apk,
-    #[serde(rename="mise")]
+    #[serde(rename = "mise")]
     mise,
-    #[serde(rename="asdf")]
+    #[serde(rename = "asdf")]
     asdf,
-    #[serde(rename="unknown")]
+    #[serde(rename = "unknown")]
     unknown,
 }

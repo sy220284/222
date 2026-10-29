@@ -1,8 +1,109 @@
 //! Native Rust UI structure derived from original: src/components/PromptInput/PromptInput.tsx
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
 use serde_json::Value;
 
 use crate::generated_ports::ui::VNode;
-pub fn render_source_view(props:&Value)->VNode{
-VNode::Element{tag:"Box".into(),attrs:vec![("flexDirection".into(),Value::String("column".into())),("marginTop".into(),if crate::generated_ports::runtime::truthy(&Value::Null){serde_json::json!(0)}else{serde_json::json!(1)})].into_iter().collect(),children:vec![VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Value(Value::Null),VNode::Empty,VNode::Element{tag:"PromptInputStashNotice".into(),attrs:vec![("hasStash".into(),Value::Null)].into_iter().collect(),children:vec![]},VNode::Empty,VNode::Value(if crate::generated_ports::runtime::truthy(&Value::Null){Value::Null}else{Value::Null}),VNode::Empty,VNode::Element{tag:"PromptInputFooter".into(),attrs:vec![("apiKeyStatus".into(),Value::Null),("debug".into(),Value::Null),("exitMessage".into(),Value::Null),("vimMode".into(),if crate::generated_ports::runtime::truthy(&Value::Null){Value::Null}else{Value::Null}),("mode".into(),Value::Null),("autoUpdaterResult".into(),Value::Null),("isAutoUpdating".into(),Value::Null),("verbose".into(),Value::Null),("onAutoUpdaterResult".into(),Value::Null),("onChangeIsUpdating".into(),Value::Null),("suggestions".into(),Value::Null),("selectedSuggestion".into(),Value::Null),("maxColumnWidth".into(),Value::Null),("toolPermissionContext".into(),Value::Null),("helpOpen".into(),Value::Null),("suppressHint".into(),Value::Null),("isLoading".into(),Value::Null),("tasksSelected".into(),Value::Null),("teamsSelected".into(),Value::Null),("bridgeSelected".into(),Value::Null),("tmuxSelected".into(),Value::Null),("teammateFooterIndex".into(),Value::Null),("ideSelection".into(),Value::Null),("mcpClients".into(),Value::Null),("isPasting".into(),Value::Null),("isInputWrapped".into(),Value::Null),("messages".into(),Value::Null),("isSearching".into(),Value::Null),("historyQuery".into(),Value::Null),("setHistoryQuery".into(),Value::Null),("historyFailedMatch".into(),Value::Null),("onOpenTasksDialog".into(),if crate::generated_ports::runtime::truthy(&Value::Null){Value::Null}else{Value::Null})].into_iter().collect(),children:vec![]},VNode::Empty,VNode::Value(if crate::generated_ports::runtime::truthy(&Value::Null){Value::Null}else{Value::Null}),VNode::Empty,VNode::Value(if crate::generated_ports::runtime::truthy(&Value::Null){Value::Null}else{Value::Null}),VNode::Empty]}
+pub fn render_source_view(props: &Value) -> VNode {
+    VNode::Element {
+        tag: "Box".into(),
+        attrs: vec![
+            ("flexDirection".into(), Value::String("column".into())),
+            (
+                "marginTop".into(),
+                if crate::generated_ports::runtime::truthy(&Value::Null) {
+                    serde_json::json!(0)
+                } else {
+                    serde_json::json!(1)
+                },
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        children: vec![
+            VNode::Empty,
+            VNode::Value(Value::Null),
+            VNode::Empty,
+            VNode::Value(Value::Null),
+            VNode::Empty,
+            VNode::Element {
+                tag: "PromptInputStashNotice".into(),
+                attrs: vec![("hasStash".into(), Value::Null)].into_iter().collect(),
+                children: vec![],
+            },
+            VNode::Empty,
+            VNode::Value(if crate::generated_ports::runtime::truthy(&Value::Null) {
+                Value::Null
+            } else {
+                Value::Null
+            }),
+            VNode::Empty,
+            VNode::Element {
+                tag: "PromptInputFooter".into(),
+                attrs: vec![
+                    ("apiKeyStatus".into(), Value::Null),
+                    ("debug".into(), Value::Null),
+                    ("exitMessage".into(), Value::Null),
+                    (
+                        "vimMode".into(),
+                        if crate::generated_ports::runtime::truthy(&Value::Null) {
+                            Value::Null
+                        } else {
+                            Value::Null
+                        },
+                    ),
+                    ("mode".into(), Value::Null),
+                    ("autoUpdaterResult".into(), Value::Null),
+                    ("isAutoUpdating".into(), Value::Null),
+                    ("verbose".into(), Value::Null),
+                    ("onAutoUpdaterResult".into(), Value::Null),
+                    ("onChangeIsUpdating".into(), Value::Null),
+                    ("suggestions".into(), Value::Null),
+                    ("selectedSuggestion".into(), Value::Null),
+                    ("maxColumnWidth".into(), Value::Null),
+                    ("toolPermissionContext".into(), Value::Null),
+                    ("helpOpen".into(), Value::Null),
+                    ("suppressHint".into(), Value::Null),
+                    ("isLoading".into(), Value::Null),
+                    ("tasksSelected".into(), Value::Null),
+                    ("teamsSelected".into(), Value::Null),
+                    ("bridgeSelected".into(), Value::Null),
+                    ("tmuxSelected".into(), Value::Null),
+                    ("teammateFooterIndex".into(), Value::Null),
+                    ("ideSelection".into(), Value::Null),
+                    ("mcpClients".into(), Value::Null),
+                    ("isPasting".into(), Value::Null),
+                    ("isInputWrapped".into(), Value::Null),
+                    ("messages".into(), Value::Null),
+                    ("isSearching".into(), Value::Null),
+                    ("historyQuery".into(), Value::Null),
+                    ("setHistoryQuery".into(), Value::Null),
+                    ("historyFailedMatch".into(), Value::Null),
+                    (
+                        "onOpenTasksDialog".into(),
+                        if crate::generated_ports::runtime::truthy(&Value::Null) {
+                            Value::Null
+                        } else {
+                            Value::Null
+                        },
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+                children: vec![],
+            },
+            VNode::Empty,
+            VNode::Value(if crate::generated_ports::runtime::truthy(&Value::Null) {
+                Value::Null
+            } else {
+                Value::Null
+            }),
+            VNode::Empty,
+            VNode::Value(if crate::generated_ports::runtime::truthy(&Value::Null) {
+                Value::Null
+            } else {
+                Value::Null
+            }),
+            VNode::Empty,
+        ],
+    }
 }

@@ -1,17 +1,17 @@
 //! Rust exports derived from original: src/utils/errors.ts
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum AxiosErrorKind{
-    #[serde(rename="auth")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AxiosErrorKind {
+    #[serde(rename = "auth")]
     auth,
-    #[serde(rename="timeout")]
+    #[serde(rename = "timeout")]
     timeout,
-    #[serde(rename="network")]
+    #[serde(rename = "network")]
     network,
-    #[serde(rename="http")]
+    #[serde(rename = "http")]
     http,
-    #[serde(rename="other")]
+    #[serde(rename = "other")]
     other,
 }

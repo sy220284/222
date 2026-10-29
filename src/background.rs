@@ -1,3 +1,4 @@
+use crate::{task_guards, task_output_format};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -16,7 +17,6 @@ use tokio::{
     time::timeout,
 };
 use uuid::Uuid;
-use crate::{task_guards, task_output_format};
 
 const LOG_CAP: usize = 2_000_000;
 const DISPLAY_CAP: usize = 640_000;
@@ -44,7 +44,7 @@ pub struct BackgroundTasks {
     directory: PathBuf,
     entries: Mutex<HashMap<String, Arc<Running>>>,
     shell_kind: Mutex<crate::shell_runtime::ShellKind>,
-    session_env: Mutex<std::collections::BTreeMap<String,String>>,
+    session_env: Mutex<std::collections::BTreeMap<String, String>>,
 }
 
 impl BackgroundTasks {
@@ -54,16 +54,19 @@ impl BackgroundTasks {
         if !directory.canonicalize()?.starts_with(root) {
             bail!("Background task directory escapes workspace");
         }
-        Ok(Self { directory, entries: Mutex::new(HashMap::new()),
+        Ok(Self {
+            directory,
+            entries: Mutex::new(HashMap::new()),
             shell_kind: Mutex::new(crate::shell_runtime::ShellKind::default()),
-            session_env: Mutex::new(std::collections::BTreeMap::new()) })
+            session_env: Mutex::new(std::collections::BTreeMap::new()),
+        })
     }
 
-    pub fn set_environment(&self, variables:&std::collections::BTreeMap<String,String>) {
-        *self.session_env.lock().unwrap()=variables.clone();
+    pub fn set_environment(&self, variables: &std::collections::BTreeMap<String, String>) {
+        *self.session_env.lock().unwrap() = variables.clone();
     }
-    pub fn set_shell(&self, kind:crate::shell_runtime::ShellKind) {
-        *self.shell_kind.lock().unwrap()=kind;
+    pub fn set_shell(&self, kind: crate::shell_runtime::ShellKind) {
+        *self.shell_kind.lock().unwrap() = kind;
     }
     fn metadata_path(&self, id: &str) -> Result<PathBuf> {
         let uuid = Uuid::parse_str(id).context("Invalid task ID")?;
@@ -81,7 +84,9 @@ impl BackgroundTasks {
     fn load(&self, id: &str) -> Result<TaskRecord> {
         let path = self.metadata_path(id)?;
         let mut record: TaskRecord = serde_json::from_slice(&fs::read(path)?)?;
-        if record.id != id { bail!("Task metadata ID mismatch"); }
+        if record.id != id {
+            bail!("Task metadata ID mismatch");
+        }
         // Spawned processes are bound to their owning agent process.
         // A stale 'running' record must not masquerade as a live task.
         if record.status == "running" {
@@ -92,25 +97,35 @@ impl BackgroundTasks {
     }
 
     pub async fn start(&self, command: &str, description: &str) -> Result<String> {
-        if command.trim().is_empty() { bail!("Background shell command is empty") }
-        if command.len() > 100_000 { bail!("Background shell command too large") }
+        if command.trim().is_empty() {
+            bail!("Background shell command is empty")
+        }
+        if command.len() > 100_000 {
+            bail!("Background shell command too large")
+        }
         let id = Uuid::new_v4().to_string();
         let stdout_path = self.directory.join(format!("{id}.stdout"));
         let stderr_path = self.directory.join(format!("{id}.stderr"));
         tokio::fs::write(&stdout_path, &[]).await?;
         tokio::fs::write(&stderr_path, &[]).await?;
-        let kind=*self.shell_kind.lock().unwrap();
-        let mut proc=kind.build_command(command)?;
+        let kind = *self.shell_kind.lock().unwrap();
+        let mut proc = kind.build_command(command)?;
         proc.envs(self.session_env.lock().unwrap().iter());
         crate::subprocess_env::apply(&mut proc);
-        let workspace = self.directory.parent().and_then(Path::parent)
+        let workspace = self
+            .directory
+            .parent()
+            .and_then(Path::parent)
             .context("Background task workspace missing")?;
         // Place the shell and its descendants into a new process group.
         // Stopping only the shell can otherwise leave children holding pipes.
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(proc.as_std_mut(), 0);
-        proc.current_dir(workspace).stdin(Stdio::null())
-            .stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+        proc.current_dir(workspace)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
         let mut child = proc.spawn().context("Cannot start background command")?;
         let stdout = child.stdout.take().context("No background stdout")?;
         let stderr = child.stderr.take().context("No background stderr")?;
@@ -131,7 +146,10 @@ impl BackgroundTasks {
             stop: Mutex::new(Some(stop)),
             completed: Notify::new(),
         });
-        self.entries.lock().unwrap().insert(id.clone(), running.clone());
+        self.entries
+            .lock()
+            .unwrap()
+            .insert(id.clone(), running.clone());
         let folder = self.directory.clone();
         tokio::spawn(async move {
             let stdout_task = tokio::spawn(spool(stdout, stdout_path));
@@ -165,8 +183,11 @@ impl BackgroundTasks {
             let _ = Self::save(&folder, &updated);
             running.completed.notify_waiters();
         });
-        Ok(json!({"task_id":id,"task_type":"local_bash","status":"running",
-            "output_file":record.output_file,"error_file":record.error_file}).to_string())
+        Ok(
+            json!({"task_id":id,"task_type":"local_bash","status":"running",
+            "output_file":record.output_file,"error_file":record.error_file})
+            .to_string(),
+        )
     }
 
     pub async fn output(&self, id: &str, block: bool, timeout_ms: u64) -> Result<String> {
@@ -176,7 +197,9 @@ impl BackgroundTasks {
                 loop {
                     let notified = task.completed.notified();
                     let current = task.record.lock().unwrap().clone();
-                    if current.status != "running" { return current }
+                    if current.status != "running" {
+                        return current;
+                    }
                     notified.await;
                 }
             };
@@ -198,22 +221,36 @@ impl BackgroundTasks {
         let safe_stderr = self.directory.join(format!("{task_uuid}.stderr"));
         let stdout = tail(safe_stdout.to_str().context("Invalid stdout path")?)?;
         let stderr = tail(safe_stderr.to_str().context("Invalid stderr path")?)?;
-        let text = [stdout, stderr].into_iter()
-            .filter(|x| !x.is_empty()).collect::<Vec<_>>().join("\n");
+        let text = [stdout, stderr]
+            .into_iter()
+            .filter(|x| !x.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
         let displayed = task_output_format::format_task_output(
-            &text, safe_stdout.to_str().context("Invalid task output path")?,
-            task_output_format::max_output_length());
+            &text,
+            safe_stdout.to_str().context("Invalid task output path")?,
+            task_output_format::max_output_length(),
+        );
         let retrieval = if record.status == "running" {
-            if block { "timeout" } else { "not_ready" }
-        } else { "success" };
-        debug_assert!(task_guards::is_local_shell_task(&json!({"type":"local_bash"})));
+            if block {
+                "timeout"
+            } else {
+                "not_ready"
+            }
+        } else {
+            "success"
+        };
+        debug_assert!(task_guards::is_local_shell_task(
+            &json!({"type":"local_bash"})
+        ));
         Ok(json!({"retrieval_status":retrieval,"task":{
             "task_id":record.id,"task_type":"local_bash",
             "status":record.status,"description":record.description,
             "output":displayed.content,"exitCode":record.exit_code,
             "output_file":safe_stdout.to_string_lossy(),
             "truncated":record.truncated || displayed.was_truncated
-        }}).to_string())
+        }})
+        .to_string())
     }
 
     pub fn list(&self) -> Result<String> {
@@ -228,11 +265,16 @@ impl BackgroundTasks {
             let Some(id) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            if Uuid::parse_str(id).is_err() { continue }
+            if Uuid::parse_str(id).is_err() {
+                continue;
+            }
             let record = if let Some(running) = live.get(id) {
                 running.record.lock().unwrap().clone()
             } else {
-                match self.load(id) { Ok(r) => r, Err(_) => continue }
+                match self.load(id) {
+                    Ok(r) => r,
+                    Err(_) => continue,
+                }
             };
             records.push(json!({
                 "task_id":record.id,
@@ -242,38 +284,47 @@ impl BackgroundTasks {
                 "exitCode":record.exit_code
             }));
         }
-        records.sort_by(|a,b| a["task_id"].as_str().cmp(&b["task_id"].as_str()));
+        records.sort_by(|a, b| a["task_id"].as_str().cmp(&b["task_id"].as_str()));
         Ok(serde_json::to_string_pretty(&records)?)
     }
 
     pub async fn stop(&self, id: &str) -> Result<String> {
         let task = match self.entries.lock().unwrap().get(id).cloned() {
             Some(task) => task,
-            None => {
-                match self.load(id) {
-                    Ok(record) => bail!("Task {id} is not running (status: {})", record.status),
-                    Err(_) => bail!("No task found with ID: {id}"),
-                }
-            }
+            None => match self.load(id) {
+                Ok(record) => bail!("Task {id} is not running (status: {})", record.status),
+                Err(_) => bail!("No task found with ID: {id}"),
+            },
         };
         let record = task.record.lock().unwrap().clone();
         if record.status != "running" {
             bail!("Task {id} is not running (status: {})", record.status);
         }
-        let sender = task.stop.lock().unwrap().take()
+        let sender = task
+            .stop
+            .lock()
+            .unwrap()
+            .take()
             .context("Task stop already requested")?;
-        sender.send(()).map_err(|_| anyhow::anyhow!("Task already completed"))?;
+        sender
+            .send(())
+            .map_err(|_| anyhow::anyhow!("Task already completed"))?;
         timeout(Duration::from_secs(5), async {
             loop {
                 let notified = task.completed.notified();
-                if task.record.lock().unwrap().status != "running" { break }
+                if task.record.lock().unwrap().status != "running" {
+                    break;
+                }
                 notified.await;
             }
-        }).await.context("Timed out waiting for background shell to stop")?;
+        })
+        .await
+        .context("Timed out waiting for background shell to stop")?;
         Ok(json!({"task_id":id,"task_type":"local_bash",
             "command":record.command,
             "message":format!("Successfully stopped task: {id} ({})", record.command)
-        }).to_string())
+        })
+        .to_string())
     }
 
     pub async fn stop_all(&self) {
@@ -286,10 +337,13 @@ impl BackgroundTasks {
                 let _ = timeout(Duration::from_secs(3), async {
                     loop {
                         let notified = task.completed.notified();
-                        if task.record.lock().unwrap().status != "running" { break }
+                        if task.record.lock().unwrap().status != "running" {
+                            break;
+                        }
                         notified.await;
                     }
-                }).await;
+                })
+                .await;
             }
         }
     }
@@ -314,13 +368,17 @@ async fn spool<R: AsyncRead + Unpin>(mut stream: R, path: PathBuf) -> Result<boo
     let mut truncated = false;
     loop {
         let n = stream.read(&mut buffer).await?;
-        if n == 0 { break }
+        if n == 0 {
+            break;
+        }
         let writable = n.min(LOG_CAP.saturating_sub(size));
         if writable > 0 {
             file.write_all(&buffer[..writable]).await?;
             size += writable;
         }
-        if writable < n { truncated = true; }
+        if writable < n {
+            truncated = true;
+        }
     }
     file.flush().await?;
     Ok(truncated)
@@ -338,11 +396,11 @@ pub fn definitions() -> Vec<Value> {
                 "timeout":{"type":"integer","minimum":0,"maximum":600000}
             },"required":["task_id"]}}}),
         json!({"type":"function","function":{"name":"task_stop",
-            "description":"Stop a running background shell task by ID. Requires approval.",
-            "parameters":{"type":"object","properties":{
-                "task_id":{"type":"string"},
-                "shell_id":{"type":"string","description":"Legacy alias for task_id"}
-            }}}}),
+        "description":"Stop a running background shell task by ID. Requires approval.",
+        "parameters":{"type":"object","properties":{
+            "task_id":{"type":"string"},
+            "shell_id":{"type":"string","description":"Legacy alias for task_id"}
+        }}}}),
     ]
 }
 
@@ -355,10 +413,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let tasks = BackgroundTasks::new(&dir.path().canonicalize().unwrap()).unwrap();
         let created: Value = serde_json::from_str(
-            &tasks.start("printf 'alpha\\n'", "Print output").await.unwrap()).unwrap();
+            &tasks
+                .start("printf 'alpha\\n'", "Print output")
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         let id = created["task_id"].as_str().unwrap();
-        let output: Value = serde_json::from_str(
-            &tasks.output(id, true, 5000).await.unwrap()).unwrap();
+        let output: Value =
+            serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
         assert_eq!(output["retrieval_status"], "success");
         assert_eq!(output["task"]["status"], "completed");
         assert!(output["task"]["output"].as_str().unwrap().contains("alpha"));
@@ -366,7 +429,9 @@ mod tests {
         let listing: Value = serde_json::from_str(&tasks.list().unwrap()).unwrap();
         assert_eq!(listing.as_array().unwrap().len(), 1);
         assert_eq!(listing[0]["status"], "completed");
-        assert!(created["output_file"].as_str().is_some_and(|p| Path::new(p).exists()));
+        assert!(created["output_file"]
+            .as_str()
+            .is_some_and(|p| Path::new(p).exists()));
     }
     #[cfg(unix)]
     #[tokio::test]
@@ -374,19 +439,23 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().canonicalize().unwrap();
         let tasks = BackgroundTasks::new(&root).unwrap();
-        let created: Value = serde_json::from_str(
-            &tasks.start("sleep 30", "Long job").await.unwrap()).unwrap();
+        let created: Value =
+            serde_json::from_str(&tasks.start("sleep 30", "Long job").await.unwrap()).unwrap();
         let id = created["task_id"].as_str().unwrap();
-        let pending: Value = serde_json::from_str(
-            &tasks.output(id, false, 0).await.unwrap()).unwrap();
+        let pending: Value =
+            serde_json::from_str(&tasks.output(id, false, 0).await.unwrap()).unwrap();
         assert_eq!(pending["retrieval_status"], "not_ready");
-        assert!(tasks.stop(id).await.unwrap().contains("Successfully stopped task"));
-        let result: Value = serde_json::from_str(
-            &tasks.output(id, true, 5000).await.unwrap()).unwrap();
+        assert!(tasks
+            .stop(id)
+            .await
+            .unwrap()
+            .contains("Successfully stopped task"));
+        let result: Value =
+            serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
         assert_eq!(result["task"]["status"], "killed");
         let restarted = BackgroundTasks::new(&root).unwrap();
-        let persisted: Value = serde_json::from_str(
-            &restarted.output(id, false, 0).await.unwrap()).unwrap();
+        let persisted: Value =
+            serde_json::from_str(&restarted.output(id, false, 0).await.unwrap()).unwrap();
         assert_eq!(persisted["task"]["status"], "killed");
     }
     #[test]
@@ -402,14 +471,21 @@ mod tests {
         let private = root.join("private.txt");
         fs::write(&private, "DO_NOT_DISCLOSE").unwrap();
         let forged = TaskRecord {
-            id: id.clone(), description:"Forged record".into(), command:"nothing".into(),
-            status:"completed".into(), exit_code:Some(0),
-            output_file:private.to_string_lossy().to_string(),
-            error_file:safe_err.to_string_lossy().to_string(),truncated:false
+            id: id.clone(),
+            description: "Forged record".into(),
+            command: "nothing".into(),
+            status: "completed".into(),
+            exit_code: Some(0),
+            output_file: private.to_string_lossy().to_string(),
+            error_file: safe_err.to_string_lossy().to_string(),
+            truncated: false,
         };
-        BackgroundTasks::save(&tasks.directory,&forged).unwrap();
-        let output: Value = serde_json::from_str(&tokio_test_output(&tasks,&id)).unwrap();
-        assert!(output["task"]["output"].as_str().unwrap().contains("safe output"));
+        BackgroundTasks::save(&tasks.directory, &forged).unwrap();
+        let output: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
+        assert!(output["task"]["output"]
+            .as_str()
+            .unwrap()
+            .contains("safe output"));
         assert!(!output.to_string().contains("DO_NOT_DISCLOSE"));
     }
 
@@ -424,19 +500,25 @@ mod tests {
         fs::write(&output, "old result").unwrap();
         fs::write(&error, "").unwrap();
         let record = TaskRecord {
-            id: id.clone(), description: "Orphan".into(), command: "old".into(),
-            status: "running".into(), exit_code: None,
+            id: id.clone(),
+            description: "Orphan".into(),
+            command: "old".into(),
+            status: "running".into(),
+            exit_code: None,
             output_file: output.to_string_lossy().to_string(),
             error_file: error.to_string_lossy().to_string(),
             truncated: false,
         };
         BackgroundTasks::save(&tasks.directory, &record).unwrap();
-        let value: Value = serde_json::from_str(
-            &tokio_test_output(&tasks, &id)).unwrap();
+        let value: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
         assert_eq!(value["task"]["status"], "interrupted");
     }
     fn tokio_test_output(tasks: &BackgroundTasks, id: &str) -> String {
-        tokio::runtime::Builder::new_current_thread().enable_all()
-            .build().unwrap().block_on(tasks.output(id, false, 0)).unwrap()
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(tasks.output(id, false, 0))
+            .unwrap()
     }
 }

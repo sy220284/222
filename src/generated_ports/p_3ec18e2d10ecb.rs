@@ -1,13 +1,13 @@
 //! Rust exports derived from original: src/hooks/useMemoryUsage.ts
-#![allow(dead_code,non_snake_case,non_camel_case_types)]
-use serde::{Serialize,Deserialize};
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[derive(Debug,Clone,Serialize,Deserialize,PartialEq,Eq)]
-pub enum MemoryUsageStatus{
-    #[serde(rename="normal")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MemoryUsageStatus {
+    #[serde(rename = "normal")]
     normal,
-    #[serde(rename="high")]
+    #[serde(rename = "high")]
     high,
-    #[serde(rename="critical")]
+    #[serde(rename = "critical")]
     critical,
 }

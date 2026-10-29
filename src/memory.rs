@@ -1,3 +1,4 @@
+use crate::memory_age;
 use crate::{
     config::ProviderProfile,
     protocol::{Message, ModelRequest, TokenUsage},
@@ -11,7 +12,6 @@ use std::{
     time::SystemTime,
 };
 use walkdir::WalkDir;
-use crate::memory_age;
 
 const MAX_INDEX_LINES: usize = 200;
 const MAX_INDEX_BYTES: usize = 25_000;
@@ -33,9 +33,13 @@ pub struct MemoryContext {
 }
 
 fn trim_utf8(input: &str, cap: usize) -> String {
-    if input.len() <= cap { return input.to_string() }
+    if input.len() <= cap {
+        return input.to_string();
+    }
     let mut boundary = cap;
-    while !input.is_char_boundary(boundary) { boundary -= 1; }
+    while !input.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
     input[..boundary].to_string()
 }
 
@@ -43,31 +47,44 @@ fn index_content(content: &str) -> String {
     let trimmed = content.trim();
     let total_lines = trimmed.lines().count();
     let total_bytes = trimmed.len();
-    let lines = trimmed.lines().take(MAX_INDEX_LINES).collect::<Vec<_>>().join("\n");
+    let lines = trimmed
+        .lines()
+        .take(MAX_INDEX_LINES)
+        .collect::<Vec<_>>()
+        .join("\n");
     let capped = if lines.len() > MAX_INDEX_BYTES {
         let start = trim_utf8(&lines, MAX_INDEX_BYTES);
         let cut = start.rfind('\n').unwrap_or(start.len());
         start[..cut].to_string()
-    } else { lines };
+    } else {
+        lines
+    };
     if total_lines > MAX_INDEX_LINES || total_bytes > MAX_INDEX_BYTES {
         format!("{capped}\n\n> WARNING: MEMORY.md truncated ({} lines, {} bytes; limits {} lines/{} bytes).",
             total_lines, total_bytes, MAX_INDEX_LINES, MAX_INDEX_BYTES)
-    } else { capped }
+    } else {
+        capped
+    }
 }
 
 fn parse_header(text: &str) -> (Option<String>, Option<String>) {
     let mut description = None;
     let mut memory_type = None;
     let mut lines = text.lines();
-    if lines.next() != Some("---") { return (description, memory_type) }
+    if lines.next() != Some("---") {
+        return (description, memory_type);
+    }
     for line in lines.take(29) {
-        if line.trim() == "---" { break; }
+        if line.trim() == "---" {
+            break;
+        }
         if let Some((key, value)) = line.split_once(':') {
             let val = value.trim().trim_matches(['"', '\'']).to_string();
             match key.trim() {
                 "description" if !val.is_empty() => description = Some(val),
-                "type" if matches!(val.as_str(), "user" | "feedback" | "project" | "reference") =>
-                    memory_type = Some(val),
+                "type" if matches!(val.as_str(), "user" | "feedback" | "project" | "reference") => {
+                    memory_type = Some(val)
+                }
                 _ => {}
             }
         }
@@ -77,26 +94,39 @@ fn parse_header(text: &str) -> (Option<String>, Option<String>) {
 
 fn scan(root: &Path) -> Result<(String, Vec<Header>)> {
     let dir = root.join(".atlas").join("memory");
-    if !dir.exists() { return Ok((String::new(), Vec::new())) }
+    if !dir.exists() {
+        return Ok((String::new(), Vec::new()));
+    }
     let real = dir.canonicalize()?;
-    if !real.starts_with(root) { bail!("Memory path leaves workspace") }
+    if !real.starts_with(root) {
+        bail!("Memory path leaves workspace")
+    }
     let index_path = real.join("MEMORY.md");
     let index = if index_path.is_file() {
-        if fs::metadata(&index_path)?.len() > 256_000 { bail!("MEMORY.md exceeds safety limit") }
+        if fs::metadata(&index_path)?.len() > 256_000 {
+            bail!("MEMORY.md exceeds safety limit")
+        }
         index_content(&fs::read_to_string(&index_path)?)
-    } else { String::new() };
+    } else {
+        String::new()
+    };
     let mut result = Vec::new();
     for item in WalkDir::new(&real).follow_links(false).max_depth(5) {
         let item = item?;
-        if !item.file_type().is_file() ||
-            item.path().extension().and_then(|e| e.to_str()) != Some("md") ||
-            item.file_name() == "MEMORY.md" {
+        if !item.file_type().is_file()
+            || item.path().extension().and_then(|e| e.to_str()) != Some("md")
+            || item.file_name() == "MEMORY.md"
+        {
             continue;
         }
         let path = item.path().canonicalize()?;
-        if !path.starts_with(&real) { continue }
+        if !path.starts_with(&real) {
+            continue;
+        }
         let meta = fs::metadata(&path)?;
-        if meta.len() > 100_000 { continue }
+        if meta.len() > 100_000 {
+            continue;
+        }
         let content = match fs::read_to_string(&path) {
             Ok(v) => v,
             Err(_) => continue,
@@ -112,15 +142,23 @@ fn scan(root: &Path) -> Result<(String, Vec<Header>)> {
             modified: meta.modified().unwrap_or(SystemTime::UNIX_EPOCH),
         });
     }
-    result.sort_by(|a, b| b.modified.cmp(&a.modified).then(a.filename.cmp(&b.filename)));
+    result.sort_by(|a, b| {
+        b.modified
+            .cmp(&a.modified)
+            .then(a.filename.cmp(&b.filename))
+    });
     result.truncate(MAX_FILES);
     Ok((index, result))
 }
 
 /// Select at most five memory files through the currently selected provider.
 /// No service-specific secondary account or analytics request is made.
-pub async fn context(root: &Path, query: &str, provider: &dyn ModelProvider,
-    profile: &ProviderProfile) -> Result<MemoryContext> {
+pub async fn context(
+    root: &Path,
+    query: &str,
+    provider: &dyn ModelProvider,
+    profile: &ProviderProfile,
+) -> Result<MemoryContext> {
     let (index, files) = scan(root)?;
     let mut text = String::new();
     if !index.is_empty() {
@@ -128,46 +166,88 @@ pub async fn context(root: &Path, query: &str, provider: &dyn ModelProvider,
         text.push_str(&index);
         text.push('\n');
     }
-    if files.is_empty() { return Ok(MemoryContext { text, usage: None }) }
-    let manifest = files.iter().map(|m| {
-        let description = m.description.as_deref().unwrap_or("(no description)");
-        format!("- [{}] {}: {}", m.memory_type.as_deref().unwrap_or("other"),
-            m.filename, description)
-    }).collect::<Vec<_>>().join("\n");
-    let response = provider.complete(&ModelRequest {
-        model: profile.model.clone(),
-        system: "Select up to five filenames of memories clearly relevant to the query. \
+    if files.is_empty() {
+        return Ok(MemoryContext { text, usage: None });
+    }
+    let manifest = files
+        .iter()
+        .map(|m| {
+            let description = m.description.as_deref().unwrap_or("(no description)");
+            format!(
+                "- [{}] {}: {}",
+                m.memory_type.as_deref().unwrap_or("other"),
+                m.filename,
+                description
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let response = provider
+        .complete(&ModelRequest {
+            model: profile.model.clone(),
+            system: "Select up to five filenames of memories clearly relevant to the query. \
             Return only JSON: {\"selected_memories\":[\"filename.md\"]}. \
-            If none are relevant return an empty array. Never invent filenames.".into(),
-        messages: vec![Message::text("user", format!(
-            "Query:\n{query}\n\nMemory file manifest:\n{manifest}"
-        ))],
-        tools: vec![],
-    }).await?;
-    if response.message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
+            If none are relevant return an empty array. Never invent filenames."
+                .into(),
+            messages: vec![Message::text(
+                "user",
+                format!("Query:\n{query}\n\nMemory file manifest:\n{manifest}"),
+            )],
+            tools: vec![],
+        })
+        .await?;
+    if response
+        .message
+        .tool_calls
+        .as_ref()
+        .is_some_and(|calls| !calls.is_empty())
+    {
         bail!("Memory selector attempted to invoke tools")
     }
     let selected = response.message.content.as_deref().unwrap_or("");
     let parsed: Value = match serde_json::from_str(selected) {
         Ok(value) => value,
-        Err(_) => return Ok(MemoryContext { text, usage: response.usage }),
+        Err(_) => {
+            return Ok(MemoryContext {
+                text,
+                usage: response.usage,
+            })
+        }
     };
     let mut seen = std::collections::HashSet::new();
-    for name in parsed.get("selected_memories").and_then(Value::as_array)
-        .into_iter().flatten().filter_map(Value::as_str).take(50) {
-        let Some(file) = files.iter().find(|f| f.filename == name) else { continue };
-        if !seen.insert(name) { continue }
-        if seen.len() > 5 { break }
+    for name in parsed
+        .get("selected_memories")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .take(50)
+    {
+        let Some(file) = files.iter().find(|f| f.filename == name) else {
+            continue;
+        };
+        if !seen.insert(name) {
+            continue;
+        }
+        if seen.len() > 5 {
+            break;
+        }
         let contents = fs::read_to_string(&file.path)?;
         let age_ms = match file.modified.duration_since(SystemTime::UNIX_EPOCH) {
             Ok(t) => t.as_secs_f64() * 1000.0,
             Err(t) => -(t.duration().as_secs_f64() * 1000.0),
         };
         let freshness = memory_age::freshness_note(age_ms);
-        text.push_str(&format!("\nRelevant local memory ({name}):\n{}{}\n",
-            freshness, trim_utf8(&contents, MAX_PER_TOPIC_BYTES)));
+        text.push_str(&format!(
+            "\nRelevant local memory ({name}):\n{}{}\n",
+            freshness,
+            trim_utf8(&contents, MAX_PER_TOPIC_BYTES)
+        ));
     }
-    Ok(MemoryContext { text, usage: response.usage })
+    Ok(MemoryContext {
+        text,
+        usage: response.usage,
+    })
 }
 
 #[cfg(test)]
@@ -183,23 +263,31 @@ mod tests {
         async fn complete(&self, req: &ModelRequest) -> Result<ModelResponse> {
             assert!(req.tools.is_empty());
             Ok(ModelResponse {
-                message: Message::text("assistant",
-                    r#"{"selected_memories":["topic.md","../../private.txt"]}"#),
-                finish_reason: Some("stop".into()), usage: None
+                message: Message::text(
+                    "assistant",
+                    r#"{"selected_memories":["topic.md","../../private.txt"]}"#,
+                ),
+                finish_reason: Some("stop".into()),
+                usage: None,
             })
         }
     }
     fn profile() -> ProviderProfile {
         ProviderProfile {
-            id:"local".into(), kind:"openai-compatible".into(),
-            model:"mock".into(), base_url:"http://127.0.0.1:1/v1".into(),
-            api_key_env:None, stream:false
+            id: "local".into(),
+            kind: "openai-compatible".into(),
+            model: "mock".into(),
+            base_url: "http://127.0.0.1:1/v1".into(),
+            api_key_env: None,
+            stream: false,
         }
     }
     #[test]
     fn respects_index_line_and_byte_caps() {
-        let input = (0..250).map(|i| format!("entry {i}"))
-            .collect::<Vec<_>>().join("\n");
+        let input = (0..250)
+            .map(|i| format!("entry {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         let capped = index_content(&input);
         assert!(capped.contains("entry 199"));
         assert!(!capped.contains("entry 200\n"));
@@ -216,9 +304,15 @@ mod tests {
         let memory = root.join(".atlas/memory");
         fs::create_dir_all(&memory).unwrap();
         fs::write(memory.join("MEMORY.md"), "- [Topic](topic.md) index").unwrap();
-        fs::write(memory.join("topic.md"), "---\ndescription: project choices\ntype: project\n---\nVerified choice").unwrap();
+        fs::write(
+            memory.join("topic.md"),
+            "---\ndescription: project choices\ntype: project\n---\nVerified choice",
+        )
+        .unwrap();
         fs::write(root.join("private.txt"), "SECRET").unwrap();
-        let recalled = context(&root, "project choices", &Selector, &profile()).await.unwrap();
+        let recalled = context(&root, "project choices", &Selector, &profile())
+            .await
+            .unwrap();
         assert!(recalled.text.contains("Verified choice"));
         assert!(!recalled.text.contains("SECRET"));
         assert!(recalled.text.contains("Topic"));
