@@ -2314,22 +2314,47 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         continue;
                     }
                 };
-                // Only plain text, non-queued SDK user messages are eligible
-                // for slash expansion. Internal channels can explicitly skip
-                // it, and mixed image content must remain unchanged.
+                // processUserInput.ts:336-343,531-550 recognizes a slash
+                // command in the LAST text block, keeping earlier image/text
+                // blocks intact. A string-only check lost this SDK behavior.
                 if event.get("skipSlashCommands").and_then(Value::as_bool) != Some(true) {
-                    if let Some(text) = prompt_value.as_str() {
-                        if let Some(parsed) = slash_command::parse_slash_command(text) {
-                            match expand_user_skill_prompt(
-                                agent, config, &parsed.command_name, &parsed.args, parsed.is_mcp,
-                            ) {
-                                Ok(Some(expanded)) => user.preview = expanded,
-                                Ok(None) => {}
-                                Err(error) => {
-                                    print_json!(json!({"type":"error",
-                                        "message":format!("Cannot invoke skill command: {error:#}")}));
-                                    continue;
+                    let candidate = prompt_value.as_str().or_else(|| {
+                        prompt_value.as_array()?.last().and_then(|block| {
+                            if block.get("type").and_then(Value::as_str) == Some("text") {
+                                block.get("text").and_then(Value::as_str)
+                            } else {
+                                None
+                            }
+                        })
+                    });
+                    if let Some(parsed) = candidate
+                        .and_then(slash_command::parse_slash_command) {
+                        match expand_user_skill_prompt(
+                            agent, config, &parsed.command_name, &parsed.args, parsed.is_mcp,
+                        ) {
+                            Ok(Some(expanded)) => {
+                                if let Some(blocks) = user.blocks.as_mut() {
+                                    if let Some(last) = blocks.last_mut() {
+                                        last["text"] = json!(expanded);
+                                    }
+                                    user.preview = blocks.iter().map(|block| {
+                                        match block["type"].as_str() {
+                                            Some("text") => block["text"].as_str()
+                                                .unwrap_or("").to_owned(),
+                                            Some("image") => format!("[image: {}]",
+                                                block["mime_type"].as_str().unwrap_or("unknown")),
+                                            _ => String::new(),
+                                        }
+                                    }).collect::<Vec<_>>().join("\n");
+                                } else {
+                                    user.preview = expanded;
                                 }
+                            }
+                            Ok(None) => {}
+                            Err(error) => {
+                                print_json!(json!({"type":"error",
+                                    "message":format!("Cannot invoke skill command: {error:#}")}));
+                                continue;
                             }
                         }
                     }
