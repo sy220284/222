@@ -1,6 +1,7 @@
 //! Interactive, user-owned answer collection corresponding to 2.1.88
 //! AskUserQuestionTool. Model-supplied "answers" are intentionally ignored.
 use anyhow::{bail, Context, Result};
+use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::HashSet;
 use std::io::{self, BufRead, Write};
@@ -24,6 +25,25 @@ pub fn definition() -> Value {
                 },"required":["question","header","options"]}}
         },"required":["questions"],"additionalProperties":false}
     }})
+}
+
+/// The 2.1.88 HTML-preview mode rejects full documents, executable/style
+/// tags, and non-HTML text. In the provider-neutral terminal runtime this
+/// mode can be selected explicitly without vendor SDK dependencies.
+fn html_preview_error(preview: &str) -> Option<&'static str> {
+    let full_document = Regex::new(r"(?i)<\\s*(html|body|!doctype)\\b").expect("valid regex");
+    if full_document.is_match(preview) {
+        return Some("preview must be an HTML fragment, not a full document (no <html>, <body>, or <!DOCTYPE>)");
+    }
+    let executable = Regex::new(r"(?i)<\\s*(script|style)\\b").expect("valid regex");
+    if executable.is_match(preview) {
+        return Some("preview must not contain <script> or <style> tags. Use inline styles via the style attribute if needed.");
+    }
+    let has_html = Regex::new(r"(?i)<[a-z][^>]*>").expect("valid regex");
+    if !has_html.is_match(preview) {
+        return Some("preview must contain HTML (previewFormat is set to \\"html\\"). Wrap content in a tag like <div> or <pre>.");
+    }
+    None
 }
 
 fn validate(input: &Value) -> Result<&[Value]> {
@@ -100,6 +120,15 @@ fn validate(input: &Value) -> Result<&[Value]> {
                 .context("option description required")?;
             if opt.get("preview").is_some_and(|value| !value.is_string()) {
                 bail!("option preview must be a string");
+            }
+            if std::env::var("ATLAS_QUESTION_PREVIEW_FORMAT")
+                .is_ok_and(|format| format.eq_ignore_ascii_case("html"))
+            {
+                if let Some(preview) = opt.get("preview").and_then(Value::as_str) {
+                    if let Some(error) = html_preview_error(preview) {
+                        bail!("Option \\"{label}\\" in question \\"{question}\\": {error}");
+                    }
+                }
             }
             if label.is_empty() || label.eq_ignore_ascii_case("other") || !labels.insert(label) {
                 bail!("Option labels must be nonempty, unique and cannot be Other");
