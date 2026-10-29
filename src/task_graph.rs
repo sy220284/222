@@ -236,8 +236,25 @@ impl TaskGraph {
         Ok(high)
     }
     fn mark(&self, id: u64) -> Result<()> {
-        fs::write(self.directory.join(".highwatermark"), id.to_string())?;
-        Ok(())
+        // A crash during truncating write could erase the only record of
+        // allocated IDs after reset. Persist the new counter completely
+        // before atomically replacing the old one under the list lock.
+        let target = self.directory.join(".highwatermark");
+        let temp = self
+            .directory
+            .join(format!(".highwatermark-{}.tmp", Uuid::new_v4()));
+        let result = (|| -> Result<()> {
+            use std::io::Write;
+            let mut file = OpenOptions::new().write(true).create_new(true).open(&temp)?;
+            file.write_all(id.to_string().as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&temp, &target)?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temp);
+        }
+        result
     }
     fn required<'a>(args: &'a Value, key: &str) -> Result<&'a str> {
         args.get(key)
