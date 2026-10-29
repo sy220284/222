@@ -1921,7 +1921,11 @@ impl Agent {
         self.session.messages.push(user_message);
         self.session.save(&self.root)?;
         let mut system = system_prompt(&self.root)?;
-        if self.child_depth > 0 {
+        let resumed_team_worker = self.team_name.is_some()
+            && self.agent_name.as_deref().is_some_and(|name| name != "team-lead");
+        if resumed_team_worker {
+            system.push_str(crate::prompt_runtime::WORKER);
+        } else if self.child_depth > 0 {
             let role = self.prompt_role.as_deref().unwrap_or("general");
             if let Some(custom) =
                 crate::prompt_runtime::custom_role_instructions(&self.root, role)?
@@ -1929,10 +1933,7 @@ impl Agent {
                 system.push_str("\n# Custom Agent Instructions\n");
                 system.push_str(&custom);
             } else {
-                system.push_str(crate::prompt_runtime::role_instructions(
-                    role,
-                    self.team_name.is_some(),
-                ));
+                system.push_str(crate::prompt_runtime::role_instructions(role, false));
             }
         } else if self.team_name.is_some() && self.agent_name.as_deref() == Some("team-lead") {
             system.push_str(crate::prompt_runtime::COORDINATOR);
