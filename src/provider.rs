@@ -28,6 +28,51 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
     }
 }
 
+/// Retry only transient failures before a model response starts. The request
+/// body is cloned unchanged: no tool is executed or session turn appended
+/// during a retry. HTTP failures with an explicit no-retry header are final.
+/// Once an SSE response has started, its parser owns the stream and we never
+/// replay a partially delivered completion.
+pub(crate) async fn send_model_request(
+    request: reqwest::RequestBuilder,
+) -> Result<reqwest::Response> {
+    const ATTEMPTS: usize = 4;
+    for attempt in 0..ATTEMPTS {
+        let attempt_request = request.try_clone()
+            .context("Model request body cannot be replayed safely")?;
+        match attempt_request.send().await {
+            Ok(response) => {
+                let status = response.status();
+                let header = response.headers().get("x-should-retry")
+                    .and_then(|v| v.to_str().ok());
+                let retryable = header != Some("false") && (
+                    header == Some("true") ||
+                    matches!(status.as_u16(), 408 | 409 | 429 | 500 | 502 | 503 | 504 | 529)
+                );
+                if retryable && attempt + 1 < ATTEMPTS {
+                    let delay = response.headers().get(reqwest::header::RETRY_AFTER)
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|v| v.trim().parse::<u64>().ok())
+                        .map(|seconds| Duration::from_secs(seconds.min(30)))
+                        .unwrap_or_else(|| Duration::from_millis(200u64 << attempt));
+                    // Drop the failed HTTP response before waiting; do not
+                    // retain a busy connection across capacity retries.
+                    drop(response);
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                return Ok(response);
+            }
+            Err(error) if attempt + 1 < ATTEMPTS &&
+                (error.is_connect() || error.is_timeout()) => {
+                tokio::time::sleep(Duration::from_millis(200u64 << attempt)).await;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    unreachable!("retry loop returns on its final attempt")
+}
+
 /// Serialize session messages to provider-native blocks without leaking the
 /// internal persisted content_blocks attribute to an OpenAI-compatible API.
 pub(crate) fn openai_messages(request:&ModelRequest)->Result<Vec<Value>>{
@@ -64,7 +109,7 @@ impl ModelProvider for OpenAiCompatible {
         if let Some(key) = &self.key {
             post = post.bearer_auth(key);
         }
-        let response = post.send().await.context("Model request failed")?;
+        let response = send_model_request(post).await.context("Model request failed")?;
         let status = response.status();
         let value: Value = read_response(response).await?;
         if !status.is_success() { bail!("Model HTTP {status}: {}", error_summary(&value)); }
@@ -157,7 +202,8 @@ impl ModelProvider for Gemini {
         let url = format!("{}/models/{}:generateContent", self.base_url.trim_end_matches('/'), model);
         let response = self.client.post(url)
             .header("x-goog-api-key", &self.key)
-            .json(&body).send().await.context("Gemini request failed")?;
+            .json(&body);
+        let response = send_model_request(response).await.context("Gemini request failed")?;
         let status = response.status();
         let value = read_response(response).await?;
         if !status.is_success() { bail!("Model HTTP {status}: {}", error_summary(&value)); }
