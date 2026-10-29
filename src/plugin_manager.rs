@@ -147,6 +147,17 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 }
             }
             let installed_name = install_local(&root, &local)?;
+            // The original plugin install enables the resolved plugin in the
+            // active settings scope. Installing without enabling leaves its
+            // commands and skills invisible to the next agent session.
+            if !config.enabled_plugins.contains(&installed_name) {
+                config.enabled_plugins.push(installed_name.clone());
+                if let Err(error) = config.save() {
+                    // Keep installation atomic from the user's perspective.
+                    let _ = fs::remove_dir_all(installed_root(&root).join(&installed_name));
+                    return Err(error);
+                }
+            }
             Ok(json!({"installed":installed_name}))
         }
         PluginCommand::Enable { plugin } => {
