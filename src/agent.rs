@@ -1562,6 +1562,25 @@ impl Agent {
         crate::copy_response::copy(&self.session.messages, age, code)
     }
 
+    /// Source commands/hooks/hooks.tsx: expose the currently active rules.
+    /// Commands can contain credentials; list event/matcher/timeout only.
+    pub fn hooks_report(&self) -> String {
+        if self.hook_rules.is_empty() {
+            return "No command hooks are configured for this session.".into();
+        }
+        let mut output = format!("{} active command hooks:\n", self.hook_rules.len());
+        for (index, rule) in self.hook_rules.iter().enumerate() {
+            output.push_str(&format!(
+                "{}. {}  matcher={}  timeout={}s\n",
+                index + 1,
+                rule.event.name(),
+                rule.matcher.as_deref().unwrap_or("*"),
+                rule.timeout_seconds,
+            ));
+        }
+        output
+    }
+
     pub fn list_agents(&self) -> Result<String> {
         let mut output = Vec::new();
         let root = self.root.canonicalize()?;
