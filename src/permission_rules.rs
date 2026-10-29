@@ -515,7 +515,7 @@ pub fn policy_for(rules: &[Rule], tool: &str, args: &Value) -> Result<Option<Beh
         // Edit(path) is the original shared filesystem edit permission:
         // it also governs Write, but a tool-wide Edit rule is not a
         // blanket grant for every other tool.
-        let shared_edit_path_rule = matches!(name, "Write" | "Edit")
+        let shared_edit_path_rule = matches!(name, "Write" | "Edit" | "notebook_edit")
             && rule_name == "Edit"
             && rule.value.rule_content.is_some();
         if rule_name != name
@@ -537,7 +537,7 @@ pub fn policy_for(rules: &[Rule], tool: &str, args: &Value) -> Result<Option<Beh
                         .and_then(Value::as_str),
                     _ => None,
                 };
-                if matches!(name, "Read" | "Write" | "Edit") {
+                if matches!(name, "Read" | "Write" | "Edit" | "notebook_edit") {
                     file_pattern_matches(pattern, args)?
                 } else if name == "WebFetch" {
                     // WebFetchTool.ts constructs domain:<URL.hostname> and
@@ -624,6 +624,12 @@ mod tests {
                 "path":"secrets/key.txt", "paths":["secrets/key.txt"]
             })).unwrap(),
             None
+        );
+        assert_eq!(
+            policy_for(&rules, "notebook_edit", &json!({
+                "path":"secrets/private.ipynb", "paths":["secrets/private.ipynb"]
+            })).unwrap(),
+            Some(Behavior::Deny)
         );
     }
 
