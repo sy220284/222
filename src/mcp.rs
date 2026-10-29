@@ -17,6 +17,7 @@ struct Client {
     output: BufReader<ChildStdout>,
     id: u64,
     server_info: Option<Value>,
+    tools_changed: bool,
 }
 
 impl Client {
@@ -40,7 +41,7 @@ impl Client {
             .with_context(|| format!("Starting MCP server {}", server.id))?;
         let input = child.stdin.take().context("MCP stdin unavailable")?;
         let output = BufReader::new(child.stdout.take().context("MCP stdout unavailable")?);
-        let mut client = Self { name: server.id.clone(), _child: child, input, output, id: 1, server_info: None };
+        let mut client = Self { name: server.id.clone(), _child: child, input, output, id: 1, server_info: None, tools_changed: false };
         let initialized=timeout(RPC_TIMEOUT, client.request("initialize", json!({
             "protocolVersion":"2025-03-26",
             "capabilities":{},
@@ -76,9 +77,18 @@ impl Client {
                 }
                 return message.get("result").cloned().context("MCP response missing result");
             }
-            if message.get("id").is_some() && message.get("method").is_some() {
-                self.send(&json!({"jsonrpc":"2.0","id":message["id"],
-                    "error":{"code":-32601,"message":"Unsupported client method"}})).await?;
+            let method=message.get("method").and_then(Value::as_str);
+            if method==Some("notifications/tools/list_changed"){
+                self.tools_changed=true;
+            }
+            if message.get("id").is_some() && method.is_some(){
+                if method==Some("ping"){
+                    self.send(&json!({"jsonrpc":"2.0","id":message["id"],
+                        "result":{}})).await?;
+                }else{
+                    self.send(&json!({"jsonrpc":"2.0","id":message["id"],
+                        "error":{"code":-32601,"message":"Unsupported client method"}})).await?;
+                }
             }
         }
     }
@@ -101,6 +111,15 @@ impl TransportClient {
             Self::Stdio(c)=>c.request(method,params).await,
             Self::Http(c)=>c.request(method,params).await,
         }
+    }
+    fn take_tools_changed(&mut self)->bool{
+        match self{
+            Self::Stdio(c)=>std::mem::take(&mut c.tools_changed),
+            Self::Http(_)=>false,
+        }
+    }
+    fn mark_tools_changed(&mut self){
+        if let Self::Stdio(c)=self{c.tools_changed=true}
     }
     fn server_info(&self)->Option<Value>{
         match self{
@@ -222,6 +241,78 @@ impl McpManager {
         self.status_clients.push(None);
     }
 
+    /// Refresh MCP tools only after the server sends the standard
+    /// tools/list_changed notification. Discovery is transactional; failed
+    /// refresh keeps the last working tool routes and is retried later.
+    pub async fn refresh_changed_tools(&mut self)->Result<()>{
+        for client_index in 0..self.clients.len(){
+            if !self.clients[client_index].take_tools_changed(){continue}
+            let status_index=self.status_clients.iter().position(|v|
+                *v==Some(client_index)).context("MCP status index unavailable")?;
+            let server_name=self.server_statuses[status_index]["name"].as_str()
+                .context("MCP server name missing")?.to_owned();
+            let mut cursor:Option<String>=None;
+            let mut seen=std::collections::HashSet::new();
+            let mut discovered=Vec::new();
+            let fetch:Result<()> = async {
+                for _ in 0..20{
+                    let params=cursor.as_ref().map_or(json!({}),|c|json!({"cursor":c}));
+                    let reply=timeout(RPC_TIMEOUT,self.clients[client_index]
+                        .request("tools/list",params))
+                        .await.context("MCP dynamic discovery timed out")??;
+                    let list=reply.get("tools").and_then(Value::as_array)
+                        .context("MCP tools/list missing tools")?;
+                    for tool in list{
+                        let real=tool.get("name").and_then(Value::as_str)
+                            .context("MCP dynamic tool missing name")?.to_owned();
+                        let description=tool.get("description").and_then(Value::as_str)
+                            .unwrap_or(&real).to_owned();
+                        let schema=tool.get("inputSchema").cloned()
+                            .unwrap_or(json!({"type":"object","properties":{}}));
+                        discovered.push((real,description,schema));
+                    }
+                    cursor=reply.get("nextCursor").and_then(Value::as_str).map(str::to_owned);
+                    match &cursor{
+                        None=>break,
+                        Some(c) if !seen.insert(c.clone())=>bail!("MCP pagination cursor repeated"),
+                        _=>{}
+                    }
+                }
+                if cursor.is_some(){bail!("MCP dynamic discovery exceeded 20 pages")}
+                Ok(())
+            }.await;
+            if let Err(error)=fetch{
+                self.clients[client_index].mark_tools_changed();
+                return Err(error);
+            }
+            let removed=self.routes.iter().filter_map(|(alias,(index,_))|
+                (*index==client_index).then_some(alias.clone())).collect::<Vec<_>>();
+            for alias in &removed{self.routes.remove(alias);}
+            self.tools.retain(|tool|!removed.iter().any(|alias|
+                tool.pointer("/function/name").and_then(Value::as_str)==Some(alias.as_str())));
+            let mut listed=Vec::new();
+            for (real,description,schema) in discovered{
+                let normalized=runtime_contracts::normalize_mcp_name(&server_name);
+                let mut n=self.routes.len();
+                let alias=loop{
+                    let candidate=format!("mcp_{}_{}",
+                        normalized.chars().take(45).collect::<String>(),n);
+                    if !self.routes.contains_key(&candidate){break candidate}
+                    n+=1;
+                };
+                self.routes.insert(alias.clone(),(client_index,real.clone()));
+                self.tools.push(json!({"type":"function","function":{
+                    "name":alias,"description":format!(
+                        "MCP {server_name}: {description}. Requires approval."),
+                    "parameters":schema
+                }}));
+                listed.push(json!({"name":real,"description":description}));
+            }
+            self.server_statuses[status_index]["tools"]=json!(listed);
+        }
+        Ok(())
+    }
+
     /// SDK status comes from the live managed process, not the configured name.
     /// Do not expose environment variables or secrets in the SDK response.
     pub fn statuses(&mut self)->Result<Vec<Value>>{
@@ -277,6 +368,42 @@ mod tests {
     use super::*;
     use crate::protocol::FunctionCall;
 
+    #[tokio::test]
+    async fn live_tool_list_changed_notification_refreshes_model_tool_registry(){
+        let script=r#"while IFS= read -r line; do
+case "$line" in
+  *'"method":"initialize"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"name":"swap"}}}'
+    ;;
+  *'"id":2'*'"method":"tools/list"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"before","inputSchema":{"type":"object"}}]}}'
+    ;;
+  *'"id":4'*'"method":"tools/list"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":4,"result":{"tools":[{"name":"after","inputSchema":{"type":"object","properties":{"next":{"type":"string"}}}}]}}'
+    ;;
+  *'"id":3'*'"method":"tools/call"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}'
+    printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"before ok"}]}}'
+    ;;
+  *'"id":5'*'"method":"tools/call"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":5,"result":{"content":[{"type":"text","text":"after ok"}]}}'
+    ;;
+esac
+done"#;
+        let config=McpServerConfig{id:"swap".into(),command:"sh".into(),
+            args:vec!["-c".into(),script.into()],env:HashMap::new(),
+            transport:None,url:None,headers:HashMap::new()};
+        let mut mgr=McpManager::connect(&[config]).await.unwrap();
+        assert_eq!(mgr.statuses().unwrap()[0]["tools"][0]["name"],"before");
+        let call=|name:&str,id:&str|ToolCall{id:id.into(),kind:"function".into(),
+            function:FunctionCall{name:name.into(),arguments:"{}".into()}};
+        assert_eq!(mgr.execute(&call("mcp_swap_0","1")).await,"before ok");
+        mgr.refresh_changed_tools().await.unwrap();
+        assert_eq!(mgr.statuses().unwrap()[0]["tools"][0]["name"],"after");
+        assert_eq!(mgr.definitions().len(),1);
+        assert_eq!(mgr.definitions()[0]["function"]["parameters"]["properties"]["next"]["type"],"string");
+        assert_eq!(mgr.execute(&call("mcp_swap_0","2")).await,"after ok");
+    }
     #[tokio::test]
     async fn failed_stdio_server_cannot_break_healthy_server_and_indexing(){
         let script=r#"while IFS= read -r line; do

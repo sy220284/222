@@ -213,3 +213,7 @@ Rust 实现：`src/task_events.rs` 订阅通知，`src/task_graph.rs` 无效记�
 - `McpManager::connect` 现在逐服务捕获启动、握手及 `tools/list` 发现失败；失败标记 `failed`，成功实例继续可调用。拒绝在分页失败中发布一半工具和路由；MCP status 按原服务器配置顺序对应健康或失败的连接，而不是与压缩后的成功客户端错位。
 - `tools/call` 强制输入 JSON 对象，`isError` 转 `ERROR:`；包含结构化内容、图片或资源块时返回完整 JSON，而不是只拼文本丢数据；HTTP 状态将端点查询参数移除以免泄露密钥。
 - 新增本地 stdio mock 的失败连接隔离、无效工具定义回滚、错误与结构化内容保留、非法输入回归。完整断开重连、动态工具发现通知、资源/提示/订阅和 OAuth 仍是本任务 #3 的未闭环范围。
+
+#### MCP 运行时工具目录更新与 RPC ping
+
+对照原始 MCP SDK 客户端工具目录变化通知，新版 Rust stdio 连接在等待工具 RPC 回复时识别 `notifications/tools/list_changed`、对 server-initiated `ping` 回 `{}`，不会误作普通工具结果。`McpManager::refresh_changed_tools` 逐连接重新发现和分页，发生错误时保留原有效工具表并标记稍后重试；只有全部页成功才原子替换该服务的工具定义/路由/状态。Agent 每个模型请求前刷新，下一轮模型获得最新工具 schema。新增连接后工具表变化的真实 stdio mock 回归。SSE/HTTP 长连接通知、子代理多连接刷新以及完整重连策略未实现，不升级源路径验收状态。

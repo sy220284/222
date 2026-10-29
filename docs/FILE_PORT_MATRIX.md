@@ -1049,16 +1049,16 @@
 | `src/services/mcp/channelNotification.ts` | 317 | 12540 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/channelPermissions.ts` | 241 | 8981 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/claudeai.ts` | 165 | 6126 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
-| `src/services/mcp/client.ts` | 3349 | 119060 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE 请求链、连接/发现失败隔离、工具结果保留及 SDK 状态映射；OAuth、资源/提示、动态列表更新、重连、其他传输和全部客户端回调未等价 |
-| `src/services/mcp/config.ts` | 1579 | 51130 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE 请求链、连接/发现失败隔离、工具结果保留及 SDK 状态映射；OAuth、资源/提示、动态列表更新、重连、其他传输和全部客户端回调未等价 |
+| `src/services/mcp/client.ts` | 3349 | 119060 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、连接失败隔离、动态 tools/list_changed 更新、工具结果保留及 SDK 状态；OAuth、资源/提示、跨传输动态事件、重连、其他传输/回调尚未等价 |
+| `src/services/mcp/config.ts` | 1579 | 51130 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、连接失败隔离、动态 tools/list_changed 更新、工具结果保留及 SDK 状态；OAuth、资源/提示、跨传输动态事件、重连、其他传输/回调尚未等价 |
 | `src/services/mcp/elicitationHandler.ts` | 314 | 10166 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/envExpansion.ts` | 39 | 1047 | 重写：多模型通用 MCP | `src/compat_helpers.rs` | 已验收：环境变量展开、默认值、缺失列表及重复缺失项的纯函数语义对照；证据 compat_helpers::tests::source_env_expansion_cases |
-| `src/services/mcp/headersHelper.ts` | 139 | 4718 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE 请求链、连接/发现失败隔离、工具结果保留及 SDK 状态映射；OAuth、资源/提示、动态列表更新、重连、其他传输和全部客户端回调未等价 |
+| `src/services/mcp/headersHelper.ts` | 139 | 4718 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、连接失败隔离、动态 tools/list_changed 更新、工具结果保留及 SDK 状态；OAuth、资源/提示、跨传输动态事件、重连、其他传输/回调尚未等价 |
 | `src/services/mcp/mcpStringUtils.ts` | 107 | 3968 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/normalization.ts` | 24 | 879 | 重写：多模型通用 MCP | `src/runtime_contracts.rs / src/mcp.rs` | 部分实现：已迁移通用 ASCII 名称归一化；原厂服务名前缀专有规则按要求移除 |
 | `src/services/mcp/oauthPort.ts` | 79 | 2325 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/officialRegistry.ts` | 73 | 2013 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
-| `src/services/mcp/types.ts` | 259 | 6962 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE 请求链、连接/发现失败隔离、工具结果保留及 SDK 状态映射；OAuth、资源/提示、动态列表更新、重连、其他传输和全部客户端回调未等价 |
+| `src/services/mcp/types.ts` | 259 | 6962 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、连接失败隔离、动态 tools/list_changed 更新、工具结果保留及 SDK 状态；OAuth、资源/提示、跨传输动态事件、重连、其他传输/回调尚未等价 |
 | `src/services/mcp/useManageMCPConnections.ts` | 1142 | 44866 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/utils.ts` | 576 | 17931 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/vscodeSdkMcp.ts` | 113 | 3703 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |

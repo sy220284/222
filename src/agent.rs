@@ -776,7 +776,13 @@ impl Agent {
                     },"required":["prompt"]}
                 }}));
             }
-            if let Some(mcp) = &self.mcp {
+            if let Some(mcp) = &mut self.mcp {
+                // A server may announce tools/list_changed during the previous
+                // tool call. Refresh before exposing tools to the next model
+                // request; failures preserve the previous working definitions.
+                if let Err(error)=mcp.refresh_changed_tools().await{
+                    eprintln!("MCP dynamic tool discovery failed: {error:#}");
+                }
                 available_tools.extend(mcp.definitions());
             }
             if self.lsp.is_some(){ available_tools.push(LspManager::definition()); }
