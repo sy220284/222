@@ -1465,7 +1465,7 @@
 | `src/utils/cwd.ts` | 33 | 985 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/debug.ts` | 269 | 8000 | 重写：保持通用行为 | `src/generated_ports/p_5b257a1951fde.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/debugFilter.ts` | 158 | 5069 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/deepLink/banner.ts` | 124 | 4694 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/deepLink/banner.ts` | 124 | 4694 | 重写：保持通用行为 | `src/deep_link_banner.rs / src/main.rs / src/git_filesystem.rs` | 部分实现：原版外部深链来源、工作目录展示、长预填提示与本地克隆 FETCH_HEAD 新旧状态告警已原生 Rust 实现并接入 CLI；原版无头启动进程及全平台终端唤起仍未完成 |
 | `src/utils/deepLink/parseDeepLink.ts` | 171 | 5715 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/deepLink/protocolHandler.ts` | 137 | 4943 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/deepLink/registerProtocol.ts` | 349 | 11858 | 重写：保持通用行为 | 待定 | 未迁移 |
