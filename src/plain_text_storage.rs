@@ -34,7 +34,8 @@ impl PlainTextStorage {
         }
         let mut file = opts.open(&temporary)?;
         let result = (|| -> std::io::Result<()> {
-            serde_json::to_writer(&mut file, data)?;
+            let bytes = serde_json::to_vec(data).map_err(std::io::Error::other)?;
+            file.write_all(&bytes)?;
             file.write_all(b"\n")?;
             file.sync_all()?;
             drop(file);
