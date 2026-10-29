@@ -313,27 +313,35 @@ fn skill_roots(plugin_root: &Path, manifest: &Manifest) -> Result<Vec<PathBuf>> 
 fn skill_files(plugin_root: &Path, manifest: &Manifest) -> Result<Vec<(String, PathBuf)>> {
     let mut files = std::collections::BTreeMap::new();
     for root in skill_roots(plugin_root, manifest)? {
-        // A custom manifest path may point directly to one skill directory.
-        if root.join("SKILL.md").is_file() {
-            let name = root.file_name().and_then(|name| name.to_str())
-                .context("Invalid skill directory name")?;
-            if valid_name(name) {
-                let file = checked_component(plugin_root, &root.join("SKILL.md"))?;
-                files.insert(name.to_owned(), file);
-            }
-            continue;
-        }
-        for entry in fs::read_dir(&root)? {
+        // loadPluginCommands.ts::getCommandNameFromFile uses colon-delimited
+        // namespaces for nested SKILL.md directories. Do not follow links.
+        for entry in walkdir::WalkDir::new(&root).follow_links(false) {
             let entry = entry?;
-            let skill = entry.file_name().to_string_lossy().to_string();
-            if !valid_name(&skill) {
+            if !entry.file_type().is_file()
+                || !entry.file_name().to_string_lossy().eq_ignore_ascii_case("skill.md") {
                 continue;
             }
-            let path = entry.path().join("SKILL.md");
-            if path.is_file() {
-                let file = checked_component(plugin_root, &path)?;
-                files.insert(skill, file);
+            let parent = entry.path().parent().context("Invalid plugin skill path")?;
+            let relative = parent.strip_prefix(&root)?;
+            let mut parts = Vec::new();
+            for component in relative.components() {
+                let part = component.as_os_str().to_str().context("Invalid skill namespace")?;
+                if !valid_name(part) {
+                    bail!("Invalid plugin skill namespace: {part}")
+                }
+                parts.push(part.to_owned());
             }
+            if parts.is_empty() {
+                let name = root.file_name().and_then(|name| name.to_str())
+                    .context("Invalid skill directory name")?;
+                if !valid_name(name) {
+                    bail!("Invalid plugin skill name: {name}")
+                }
+                parts.push(name.to_owned());
+            }
+            let name = parts.join(":");
+            let file = checked_component(plugin_root, entry.path())?;
+            files.insert(name, file);
         }
     }
     Ok(files.into_iter().collect())
@@ -355,7 +363,7 @@ pub fn read_skill(root: &Path, enabled: &[String], identifier: &str) -> Result<S
     let (name, skill) = identifier
         .split_once(':')
         .context("Use plugin:skill as plugin skill name")?;
-    if !valid_name(skill) || !enabled.iter().any(|n| n == name) {
+    if !skill.split(':').all(valid_name) || !enabled.iter().any(|n| n == name) {
         bail!("Plugin skill not enabled")
     }
     let plugin_root = directory(root, name)?;
