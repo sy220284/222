@@ -1600,9 +1600,49 @@ impl Agent {
         Ok(())
     }
 
-    pub fn clear_history(&mut self) -> Result<()> {
-        self.session.clear();
-        self.session.save(&self.root)
+    /// A clear starts a new conversation, preserving the previous transcript for
+    /// resume. The source's SessionEnd and SessionStart hooks bracket the reset.
+    pub async fn clear_history(&mut self) -> Result<()> {
+        self.hooks
+            .run(
+                HookEvent::SessionEnd,
+                None,
+                json!({"session_id":self.session.id,"workspace":self.root,"reason":"clear"}),
+            )
+            .await?;
+
+        // Keep old conversations intact. In particular, never overwrite the old
+        // session JSON with an empty message list.
+        self.session.save(&self.root)?;
+        let mut next = Session::fresh();
+        next.permission_mode = Some(self.permission_mode.label().to_owned());
+        next.team_name = self.team_name.clone();
+        next.agent_name = self.agent_name.clone();
+        let graph = if self.team_name.is_none() {
+            task_graph::TaskGraph::new(&self.root, &next.id.to_string())?
+        } else {
+            self.graph.clone()
+        };
+        // Prepare the new durable session before swapping the active state.
+        next.save(&self.root)?;
+        self.session = next;
+        self.graph = graph;
+        self.session_context.clear();
+        self.transient_mailbox = in_memory_mailbox::Mailbox::new();
+        self.session_env.clear();
+        self.background.set_environment(&self.session_env);
+        self.file_metrics = Arc::new(ToolMetrics::with_totals(0, 0));
+
+        let start = self
+            .hooks
+            .run(
+                HookEvent::SessionStart,
+                None,
+                json!({"session_id":self.session.id,"workspace":self.root,"source":"clear"}),
+            )
+            .await?;
+        self.session_context = start.additional_context.join("\n");
+        Ok(())
     }
 
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
@@ -3365,4 +3405,69 @@ mod tests {
         assert!(prompt.contains("Use lowercase commands."));
         assert!(prompt.contains("Current workspace:"));
     }
+
+    #[tokio::test]
+    async fn clear_starts_new_session_without_destroying_old_history_or_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let profile = ProviderProfile {
+            id: "mock".into(),
+            kind: "openai-compatible".into(),
+            base_url: "http://127.0.0.1:1/v1".into(),
+            model: "mock".into(),
+            api_key_env: None,
+            stream: false,
+        };
+        let mut original = Session::fresh();
+        let original_id = original.id.to_string();
+        original.messages.push(Message::text("user", "retain this message"));
+        original.summary = Some("Retained summary".into());
+        original.save(&root).unwrap();
+        let mut agent = Agent::new(profile, root.clone(), Approval::Ask, true, 5, original).unwrap();
+        agent.set_sdk_permission_mode("plan").unwrap();
+        agent.graph.create(&json!({"subject":"Old session task","description":"Old graph"})).unwrap();
+        agent.clear_history().await.unwrap();
+
+        assert_ne!(agent.session_id(), original_id);
+        assert!(agent.session.messages.is_empty());
+        assert_eq!(agent.session.summary, None);
+        assert_eq!(agent.current_permission_mode(), "plan");
+        assert_eq!(agent.session.permission_mode.as_deref(), Some("plan"));
+        assert!(agent.graph.peek("1").unwrap().is_none());
+
+        let saved_old = Session::load(&root, &original_id).unwrap();
+        assert_eq!(saved_old.messages.len(), 1);
+        assert_eq!(saved_old.messages[0].content.as_deref(), Some("retain this message"));
+        assert_eq!(saved_old.summary.as_deref(), Some("Retained summary"));
+        let saved_new = Session::load(&root, &agent.session_id()).unwrap();
+        assert!(saved_new.messages.is_empty());
+        assert_eq!(saved_new.permission_mode.as_deref(), Some("plan"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn clear_runs_end_then_start_hook_with_distinct_sessions() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let profile = ProviderProfile {
+            id: "mock".into(),
+            kind: "openai-compatible".into(),
+            base_url: "http://127.0.0.1:1/v1".into(),
+            model: "mock".into(),
+            api_key_env: None,
+            stream: false,
+        };
+        let mut agent = Agent::new(profile, root.clone(), Approval::Ask, true, 5, Session::fresh()).unwrap();
+        let before = agent.session_id();
+        let log_path = root.join("hook-events.log");
+        let shell = |event: &str| format!("printf '{}\\n' >> '{}'", event, log_path.display());
+        agent.hooks = HookRunner::new(&[
+            HookRule {event: HookEvent::SessionEnd, matcher: None, command: shell("end"), timeout_seconds: 5},
+            HookRule {event: HookEvent::SessionStart, matcher: None, command: shell("start"), timeout_seconds: 5},
+        ]).unwrap();
+        agent.clear_history().await.unwrap();
+        assert_ne!(before, agent.session_id());
+        assert_eq!(std::fs::read_to_string(&log_path).unwrap(), "end\nstart\n");
+    }
+
 }

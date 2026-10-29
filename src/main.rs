@@ -811,7 +811,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 continue;
             }
             "/clear" => {
-                agent.clear_history()?;
+                agent.clear_history().await?;
                 println!("Conversation cleared.");
                 continue;
             }
@@ -1215,7 +1215,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     continue;
                 }
                 let result = match action {
-                    "clear" => agent.clear_history(),
+                    "clear" => agent.clear_history().await,
                     "compact" => agent.compact_history().await,
                     "model" => {
                         let provider = event.get("provider").and_then(Value::as_str);
