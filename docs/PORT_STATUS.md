@@ -1,3 +1,12 @@
+## 2026-10-29：插件市场移除与批量刷新生命周期（源码已提交、待验收）
+
+- **原版源码**：用户完整 2.1.88 ZIP 的 `source/src/utils/plugins/marketplaceManager.ts::removeMarketplaceSource` 第 1937–2020 行移除市场后清理该市场关联的 `enabledPlugins`；`source/src/commands/plugin/ManageMarketplaces.tsx` 第 197–221 行在移除市场前禁用该市场已安装插件；`marketplaceManager.ts::refreshAllMarketplaces` 第 2296–2351 行对单个市场刷新失败逐项隔离，其他市场仍可继续更新。
+- **真实 Rust 入口**：`src/plugin_commands.rs::parse_plugin_args` → `src/plugin_manager.rs::execute` → `src/marketplace_registry.rs::execute`；插件运行端仍由 `Config.enabled_plugins` → `PluginSet::load` 加载。
+- **修复 1（移除市场后插件仍执行）**：旧 `remove` 仅删除市场登记，原市场安装的插件继续处于已启用状态。现依据安装时写入的 `.atlas-plugin-origin.json` 精确定位 `plugin@marketplace`，移除登记时同步从启用配置剔除，避免同名其他来源误伤；目录和来源文件不跟随符号链接，注册表保存失败时尝试恢复原启用配置。源码提交 `aa7f7bff5b23dc25853923da35e336a1afddbb28`。
+- **修复 2（批量刷新单项失败拖垮全体）**：旧 `update` 预检所有市场，任一清单损坏即取消其他健康市场的更新时间更新。现批量更新逐市场验证并分别返回 `updated` 和 `failed`，指定单一市场仍直接报错；源码提交 `6f55a24baae508a406d0f037bdd9a365fc083889`。
+- **状态**：本次保守计 **2/100 项不同用户可感知业务功能源码已提交、待行为验收**，其余 98 项未完成。未运行 Cargo、测试或 CI；新增完整等价验收 0 项；Issue #3 冻结 362 条保持开放。100 项先行逐项确认清单及全量实施方案尚未完成，流程 A/B 和本轮数量硬目标未达成。
+- **剩余精确差异**：原版移除市场时还会卸载其插件、清理所有设置来源和缓存；当前仅禁用该工作区已安装且来源可核对的插件，跨工作区同名插件、全局设置作用域、并发配置写入与异常恢复仍待补齐。远程市场拉取与完整刷新、插件版本重装、缓存回收、管理策略及完整诊断仍未实现。批量刷新当前仅对已支持的本地市场验证清单，不等于远程刷新等价。
+
 ## 2026-10-29：Grep 内容/计数模式的分页顺序（已提交、待验收）
 
 - **原版依据**：完整 2.1.88 ZIP `source/src/tools/GrepTool/GrepTool.ts::call` 第 443–524 行：`content` 和 `count` 直接对 ripgrep 返回行应用 `head_limit/offset`；第 526–563 行只有 `files_with_matches` 先按文件修改时间从新到旧排序。
