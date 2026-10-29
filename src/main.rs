@@ -101,6 +101,7 @@ mod semantic_inputs;
 mod semantic_session_search;
 mod session;
 mod session_control;
+mod side_question;
 mod shell_quote;
 mod shell_runtime;
 mod skill_arguments;
@@ -2386,6 +2387,48 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             // not create errors or mutate the active conversation.
             "keep_alive" => {}
             "control_request" if event.get("request").is_some() => {
+                // side_question is fire-and-forget in the original SDK. Its
+                // model request must not hold up subsequent stdin controls.
+                if event.pointer("/request/subtype").and_then(Value::as_str)
+                    == Some("side_question")
+                {
+                    let prepared: Result<(String, config::ProviderProfile,
+                        protocol::ModelRequest)> = (|| {
+                        let id = event.get("request_id")
+                            .and_then(Value::as_str)
+                            .filter(|value| !value.is_empty())
+                            .ok_or_else(|| anyhow::anyhow!(
+                                "side_question requires request_id"))?;
+                        let question = event.pointer("/request/question")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| anyhow::anyhow!(
+                                "side_question requires question string"))?;
+                        Ok((id.to_owned(), agent.profile().clone(),
+                            agent.side_question_request(question)?))
+                    })();
+                    match prepared {
+                        Ok((id, profile, request)) => {
+                            tokio::spawn(async move {
+                                let outcome = side_question::answer(profile, request).await;
+                                let reply = match outcome {
+                                    Ok(response) => json!({"type":"control_response",
+                                        "response":{"subtype":"success",
+                                            "request_id":id,"response":response}}),
+                                    Err(error) => json!({"type":"control_response",
+                                        "response":{"subtype":"error",
+                                            "request_id":id,"error":format!("{error:#}")}}),
+                                };
+                                print_json!(reply);
+                            });
+                        }
+                        Err(error) => print_json!(json!({"type":"control_response",
+                            "response":{"subtype":"error",
+                                "request_id":event.get("request_id")
+                                    .cloned().unwrap_or(Value::Null),
+                                "error":format!("{error:#}")}})),
+                    }
+                    continue;
+                }
                 print_json!(
                     sdk_nested_control(
                         agent,
