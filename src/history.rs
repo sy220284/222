@@ -221,20 +221,30 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
 }
 pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
     let folder = storage(root, session_id)?;
-    let mut results = Vec::<Value>::new();
+    // fileHistory.ts keeps snapshots in insertion order. UUIDv4 lexical
+    // ordering shuffled the visible checkpoint list on every session.
+    let mut results = Vec::<(std::time::SystemTime, String, Value)>::new();
     for entry in fs::read_dir(folder)? {
         let entry = entry?;
         if entry.path().extension().and_then(|x| x.to_str()) != Some("json") {
             continue;
         }
-        if let Ok(data) = fs::read(entry.path()) {
-            if let Ok(record) = serde_json::from_slice::<Record>(&data) {
-                results.push(json!({"id":record.id,"path":record.path}));
-            }
+        let path = entry.path();
+        let data = fs::read(&path)
+            .with_context(|| format!("Read file checkpoint {}", path.display()))?;
+        let record: Record = serde_json::from_slice(&data)
+            .with_context(|| format!("Parse file checkpoint {}", path.display()))?;
+        if path.file_stem().and_then(|s| s.to_str()) != Some(record.id.to_string().as_str()) {
+            bail!("History checkpoint filename/id mismatch: {}", path.display())
         }
+        let modified = entry.metadata()?.modified()?;
+        results.push((modified, record.id.to_string(),
+            json!({"id":record.id,"path":record.path})));
     }
-    results.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
-    Ok(serde_json::to_string_pretty(&results)?)
+    results.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    Ok(serde_json::to_string_pretty(
+        &results.into_iter().map(|(_, _, record)| record).collect::<Vec<_>>()
+    )?)
 }
 pub fn definitions() -> Vec<Value> {
     vec![
