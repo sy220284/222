@@ -13,6 +13,12 @@ pub struct ConversationContext {
 }
 
 impl ConversationContext {
+    /// Current Git branch at session creation, independent of the optional
+    /// context shown to the model. Detached HEAD returns None.
+    pub fn branch_at_start(root: &Path) -> Option<String> {
+        branch_at_start(root)
+    }
+
     pub fn capture(root: &Path) -> Self {
         let git_status = if git_context_enabled() {
             git_status_at_start(root)
