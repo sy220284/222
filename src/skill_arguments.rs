@@ -101,6 +101,28 @@ pub fn substitute_arguments(
     text
 }
 
+/// The source skill loader parses YAML frontmatter separately and only
+/// supplies the Markdown body to the model. Keep the original file available
+/// for reading its argument declarations, but do not inject metadata as
+/// instructions. An unterminated frontmatter header is preserved as content.
+pub fn markdown_body(content: &str) -> &str {
+    let mut lines = content.split_inclusive('\n');
+    let Some(first) = lines.next() else {
+        return content;
+    };
+    if first.trim() != "---" {
+        return content;
+    }
+    let mut offset = first.len();
+    for line in lines {
+        offset += line.len();
+        if line.trim() == "---" {
+            return &content[offset..];
+        }
+    }
+    content
+}
+
 /// Reads optional arguments frontmatter declaration from SKILL.md.
 /// Supports whitespace-separated string, inline arrays, YAML multiline arrays.
 pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
