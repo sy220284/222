@@ -466,6 +466,24 @@ impl TaskGraph {
         let (Some(mut source), Some(mut target)) = (self.load(from)?, self.load(to)?) else {
             return Ok(false);
         };
+        // 2.1.88 blockTask updates both sides of a dependency. A self-link
+        // addresses the same persisted task twice: writing the stale second
+        // snapshot would otherwise erase its newly written blocks field.
+        if from == to {
+            let mut changed = false;
+            if !source.blocks.iter().any(|id| id == to) {
+                source.blocks.push(to.to_owned());
+                changed = true;
+            }
+            if !source.blocked_by.iter().any(|id| id == from) {
+                source.blocked_by.push(from.to_owned());
+                changed = true;
+            }
+            if changed {
+                self.save(&source)?;
+            }
+            return Ok(true);
+        }
         if !source.blocks.contains(&to.to_owned()) {
             source.blocks.push(to.to_owned());
             self.save(&source)?;
