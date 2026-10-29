@@ -616,6 +616,27 @@ pub fn command_prompt_with_session(
         bail!("Plugin manifest identity does not match installed name")
     }
 
+    // Plugin skills are slash commands in the original loader as well as
+    // model-visible skills. Resolve the same manifest paths as read_skill.
+    if let Some((_, path)) = skill_files(&plugin_root, &manifest)?
+        .into_iter().find(|(name, _)| name == suffix) {
+        if fs::metadata(&path)?.len() > 64_000 {
+            bail!("Plugin skill too large")
+        }
+        let content = fs::read_to_string(&path)?;
+        let prompt = plugin_command_body(&content, args, &plugin_root, session_id)?;
+        if prompt.is_none() && session_id.is_some() {
+            bail!("Plugin skill is not user invocable")
+        }
+        let Some(prompt) = prompt else {
+            return Ok(None);
+        };
+        let dir = path.parent().context("Plugin skill has no parent directory")?
+            .to_string_lossy().replace('\\', "/");
+        return Ok(Some(format!("Base directory for this skill: {dir}\\n\\n{prompt}")
+            .replace("${CLAUDE_SKILL_DIR}", &dir)));
+    }
+
     // Manifest commands may be inline content or a source file, or an
     // alternate directory list. These are distinct source formats.
     if let Some(entries) = manifest.commands.as_object() {
@@ -718,7 +739,8 @@ pub fn list_commands(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
     for plugin in enabled {
         let location = directory(root, plugin)?;
         let manifest = read_manifest(&location, plugin)?;
-        let mut candidates = Vec::new();
+        let mut candidates = skill_files(&location, &manifest)?
+            .into_iter().map(|(name, _)| name).collect::<Vec<_>>();
         match &manifest.commands {
             Value::Object(entries) => {
                 candidates.extend(entries.keys().cloned());
@@ -816,6 +838,30 @@ mod tests {
         assert!(data_prompt.contains(".atlas/plugin-data/demo"), "{data_prompt}");
         assert!(temporary.path().join(".atlas/plugin-data/demo").is_dir());
     }
+    #[test]
+    fn plugin_skills_are_real_slash_commands_and_respect_visibility() {
+        let root = tempfile::tempdir().unwrap();
+        let plugin = root.path().join(".atlas/plugins/demo");
+        let skill = plugin.join("extra/group/review");
+        fs::create_dir_all(&skill).unwrap();
+        fs::write(plugin.join("plugin.json"), r#"{"name":"demo","skills":"extra"}"#).unwrap();
+        fs::write(skill.join("SKILL.md"),
+            "---\narguments: topic\n---\nReview $topic at ${CLAUDE_SKILL_DIR}").unwrap();
+        let enabled = vec!["demo".to_owned()];
+        assert_eq!(list_commands(root.path(), &enabled).unwrap(),
+            vec!["demo:group:review".to_owned()]);
+        let prompt = command_prompt_with_session(root.path(), &enabled,
+            "demo:group:review", "errors", Some("session-42")).unwrap().unwrap();
+        assert!(prompt.contains("Base directory for this skill:"), "{prompt}");
+        assert!(prompt.contains("Review errors at "), "{prompt}");
+        assert!(prompt.contains("extra/group/review"), "{prompt}");
+        fs::write(skill.join("SKILL.md"),
+            "---\nuser-invocable: false\n---\nModel-only skill").unwrap();
+        assert!(list_commands(root.path(), &enabled).unwrap().is_empty());
+        assert!(command_prompt_with_session(root.path(), &enabled,
+            "demo:group:review", "", Some("session-42")).is_err());
+    }
+
     #[test]
     fn loads_only_explicitly_enabled_plugins() {
         let root = tempfile::tempdir().unwrap();
