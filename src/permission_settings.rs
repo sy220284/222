@@ -63,6 +63,17 @@ impl SettingsPaths {
         })
     }
 
+    /// The original pluginPolicy.ts uses managed enabledPlugins=false as a
+    /// hard deny across installation, activation and runtime discovery.
+    /// Read the same merged managed policy used by the permission system.
+    pub fn plugin_blocked_by_policy(&self, plugin_id: &str) -> Result<bool> {
+        Ok(self.load_policy()?.as_ref()
+            .and_then(|policy| policy.get("enabledPlugins"))
+            .and_then(Value::as_object)
+            .and_then(|plugins| plugins.get(plugin_id))
+            .and_then(Value::as_bool) == Some(false))
+    }
+
     /// Read only non-sensitive plugin options from the user settings source.
     /// The original pluginOptionsStorage.ts keeps sensitive values in a
     /// separate secure store; those must never be read into model prompts.
