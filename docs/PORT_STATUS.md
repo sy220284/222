@@ -1175,3 +1175,12 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **队长重命名与身份恢复**：对照原版 `source/src/commands/rename/rename.ts::call` 与 `source/src/utils/teammate.ts::isTeammate`，发现 Rust `src/agent.rs::run_team_tools(TeamCreate)` 把 `session.agent_name` 写成 `team-lead`，而 `src/session_control.rs::rename` 把任何同时含 team_name/agent_name 的会话都误当队友拒绝。修复后队长可以手动或通过模型自动命名；保存自定义标题时保留 `team-lead` 的路由身份，历史会话列表展示新标题，重新加载仍能进入协调者分支。普通会话与队友的原有限制不变。代码提交 `c082318e8ce57bd0316278886556093f5e5e0318`、`cc7b5933f896e5d5967712e8b02e048d535b1afe`。
 - 本次按独立用户行为保守计 **2 项已提交、待行为验收**。只做原版/Rust 源码、可达入口、远端文件及提交静态复核；未运行 Cargo、测试或 CI。完整 100 项预先缺口清单与 100 项代码补齐尚未完成，不以这些提交宣告本轮达标。Issue #3 固定 362 项继续开放，0 项升级完整等价。
 - **剩余差异**：Hook 仍缺原版动态注册/取消、按插件与技能来源隔离去重、HTTP/SDK 回调与异步调度；队长重命名尚缺远程通用会话标题同步、原版完整 UI 更新及取消传播，跨进程/行为测试未做。下一续接优先原版 `hooks.ts` 的动态注册与权限请求 Hook，复核并行 HEAD 去重后再接线。
+
+### 2026-10-29：Hook 异常匹配、超时、Agent 入口与 Windows Shell 补强（待验收）
+
+- **无效 Hook 正则隔离**：原版 `source/src/utils/hooks.ts::matchesPattern` 遇到错误正则仅令该匹配不命中，继续处理其他规则；Rust `src/hooks.rs::HookRunner::new` 原先直接拒绝整个 Hook 配置并阻断会话启动。现保留无效匹配器的非命中语义，其他脚本继续执行。提交 `8badc1e0cf89e8e40fa9a1333693eadf38914723`、静态借用修正 `cb61c4ff66e00015429931b2b4072d8f90bd2952`。
+- **Hook 超时设置**：原版 `source/src/utils/hooks.ts::execCommandHook` 的显式 `timeout:0` 使用默认 600 秒，用户指定 3600 秒等更长超时有效；Rust 先前将 0 和大于 600 秒全部当作配置错误。现在配置入口规范化 0→600 并保留更长超时，原有超时取消进程组逻辑不变。提交 `476353e950e1bd48adf4075d969dd9dabca73581`。
+- **Agent 工具 Hook 可达性**：原版 Agent 工具名为 `Agent`，Rust 真实执行入口为 `spawn_agent`/`spawn_team`；现将二者接入 Hook 精确及正则匹配，使 `Agent`/`Task` 的原版规则可在子代理和团队启动前触发。提交 `7d0d89a075af8bb0c9cd83c7e32b0b5637ef86b3`、回归代码 `d8cfcef96d0f5554f83c6e9daed55bdfd9c15458`。
+- **Windows 默认命令 Hook 的 Bash 语义**：原版 `source/src/utils/hooks.ts::execCommandHook` 在 Windows 默认使用 Git Bash，必要时给 `.sh` 脚本补 `bash` 前缀；Rust 原先通过 cmd.exe 执行，导致 POSIX Hook 语法失效。现改用现有 `ShellKind::Bash.build_command` 并接入 `.sh` 检测。提交 `a9b475a2dd12f932ed61f52e08d59fc0c9c6b5c5`、`7293a44c5da668108b5247b6afc2fcfdd4ec5424`、字符串转义修复 `8125f74d158efc34cd7eeb4de0ae28cf326360c5`。
+- 与前段 2 项合计本次 **6 项不同用户业务行为的源码补齐，均已提交、待行为验收**；其余 94 项未完成。本轮未形成经逐项证实的 100 项预先缺口清单，不能据此宣称流程 A 或 100 项目标达标。未运行 Cargo、CI 或测试。Issue #3 固定 362 条继续开放，0 项最终等价验收。
+- **剩余**：原版 Hook 的独立 `shell:powershell`、插件来源去重、动态/异步/HTTP/SDK 回调、权限请求与取消传播仍缺；Windows Bash 运行及全部改动尚未做行为测试，均保持待验收。
