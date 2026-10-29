@@ -390,10 +390,16 @@ impl ToolExecutor {
         // Path rules are evaluated against the requested path and the
         // symlink-resolved target, including files not created yet.
         let mut permission_args = args.clone();
-        if matches!(permission_rules::canonical_tool(tool), "Write" | "Edit") {
-            if let Some(path) = args.get("path").and_then(Value::as_str) {
-                permission_args["paths"] = json!(self.file_rule_paths(path)?);
-            }
+        let edit_path = if tool == "notebook_edit" {
+            args.get("notebook_path").and_then(Value::as_str)
+        } else if matches!(permission_rules::canonical_tool(tool), "Write" | "Edit") {
+            args.get("path").and_then(Value::as_str)
+        } else {
+            None
+        };
+        if let Some(path) = edit_path {
+            permission_args["path"] = json!(path);
+            permission_args["paths"] = json!(self.file_rule_paths(path)?);
         }
         // PowerShell is a separate source tool with case-insensitive cmdlet
         // and alias permissions. Never evaluate its commands under Bash rules.
@@ -1078,6 +1084,60 @@ mod tests {
 
     fn executor(root: &Path, approval: Approval) -> ToolExecutor {
         ToolExecutor::new(root.canonicalize().unwrap(), approval, false)
+    }
+
+    #[tokio::test]
+    async fn notebook_edit_obeys_shared_edit_path_permissions_before_mutation() {
+        // NotebookEditTool.ts::checkPermissions delegates to
+        // filesystem.ts::checkWritePermissionForTool (Edit path rules).
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join("secrets")).unwrap();
+        fs::create_dir_all(root.path().join("public")).unwrap();
+        let initial = json!({"nbformat":4,"nbformat_minor":4,"metadata":{},
+            "cells":[{"cell_type":"code","source":"original","metadata":{},
+                "outputs":[],"execution_count":null}]}).to_string();
+        fs::write(root.path().join("secrets/private.ipynb"), &initial).unwrap();
+        fs::write(root.path().join("public/work.ipynb"), &initial).unwrap();
+        let rules = permission_rules::compile_rules(&[
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "Edit(secrets/**)".into(),
+            },
+            permission_rules::RuleSetting {
+                behavior: "allow".into(),
+                rule: "Edit(public/**)".into(),
+            },
+        ]).unwrap();
+        let edit = |path: &str| ToolCall {
+            id: "notebook-edit-permission".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "notebook_edit".into(),
+                arguments: json!({"notebook_path":path,"cell_id":"cell-0",
+                    "new_source":"updated","edit_mode":"replace"}).to_string(),
+            },
+        };
+        let read = |path: &str| ToolCall {
+            id: "notebook-read-permission".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "read_file".into(),
+                arguments: json!({"path":path}).to_string(),
+            },
+        };
+        let full = executor(root.path(), Approval::Full).with_permission_rules(rules.clone());
+        assert!(!full.execute(&read("secrets/private.ipynb")).await.starts_with("ERROR:"));
+        let denied = full.execute(&edit("secrets/private.ipynb")).await;
+        assert!(denied.contains("explicit permission rule"), "{denied}");
+        assert_eq!(fs::read_to_string(root.path().join("secrets/private.ipynb")).unwrap(), initial);
+        let ask = executor(root.path(), Approval::Ask).with_permission_rules(rules);
+        assert!(!ask.execute(&read("public/work.ipynb")).await.starts_with("ERROR:"));
+        let allowed = ask.execute(&edit("public/work.ipynb")).await;
+        assert!(!allowed.starts_with("ERROR:"), "{allowed}");
+        let updated: Value = serde_json::from_str(
+            &fs::read_to_string(root.path().join("public/work.ipynb")).unwrap()
+        ).unwrap();
+        assert_eq!(updated["cells"][0]["source"], "updated");
     }
 
     #[cfg(unix)]
