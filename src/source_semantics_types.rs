@@ -71,8 +71,12 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         ("src/ink/termio/types.ts", "defaultStyle") => Some(default_style()),
         ("src/ink/termio/types.ts", "colorsEqual") => Some(json!(colors_equal(a, b))),
         ("src/ink/termio/types.ts", "stylesEqual") => Some(json!(styles_equal(a, b))),
-        ("src/vim/motions.ts", "isInclusiveMotion") => Some(json!(is_inclusive_motion(a.as_str().unwrap_or("")))),
-        ("src/vim/motions.ts", "isLinewiseMotion") => Some(json!(is_linewise_motion(a.as_str().unwrap_or("")))),
+        ("src/vim/motions.ts", "isInclusiveMotion") => {
+            Some(json!(is_inclusive_motion(a.as_str().unwrap_or(""))))
+        }
+        ("src/vim/motions.ts", "isLinewiseMotion") => {
+            Some(json!(is_linewise_motion(a.as_str().unwrap_or(""))))
+        }
         _ => None,
     }
 }
@@ -90,8 +94,14 @@ mod tests {
     fn tagged_color_identity_and_style_transitions() {
         let base = default_style();
         assert!(styles_equal(&base, &base));
-        assert!(colors_equal(&json!({"type":"default"}), &json!({"type":"default","metadata":1})));
-        assert!(!colors_equal(&json!({"type":"rgb","r":1,"g":2,"b":3}), &json!({"type":"rgb","r":1,"g":3,"b":3})));
+        assert!(colors_equal(
+            &json!({"type":"default"}),
+            &json!({"type":"default","metadata":1})
+        ));
+        assert!(!colors_equal(
+            &json!({"type":"rgb","r":1,"g":2,"b":3}),
+            &json!({"type":"rgb","r":1,"g":3,"b":3})
+        ));
         let mut bold = base.clone();
         bold["bold"] = json!(true);
         assert!(!styles_equal(&base, &bold));
