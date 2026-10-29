@@ -93,7 +93,9 @@ impl BackgroundTasks {
     pub fn for_session(root: &Path, session_id: Uuid) -> Result<Self> {
         Self::in_directory(
             root,
-            root.join(".atlas").join("background").join(session_id.to_string()),
+            root.join(".atlas")
+                .join("background")
+                .join(session_id.to_string()),
         )
     }
 
