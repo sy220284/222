@@ -11,6 +11,7 @@ mod compat_helpers;
 mod config;
 mod control_message_compat;
 mod cost;
+mod deep_link;
 mod env_validation;
 mod event_signal;
 mod gemini_sse;
@@ -76,6 +77,7 @@ mod tool_metrics;
 mod tool_names;
 mod tool_search;
 mod tools;
+mod unicode_sanitization;
 mod webfetch;
 mod websearch;
 mod workspace_dirs;
@@ -158,6 +160,17 @@ impl From<ApprovalArg> for Approval {
 enum Commands {
     /// Create a user-owned JSON config file with example providers
     Init,
+    /// Parse a provider-neutral deep link without opening a terminal
+    ParseDeepLink { uri: String },
+    /// Encode an atlas-cli://open link for a reviewable prompt/workspace
+    BuildDeepLink {
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long)]
+        cwd: Option<String>,
+        #[arg(long)]
+        repo: Option<String>,
+    },
     /// Inspect newly implemented Rust source exports without connecting a model
     InspectSource {
         source: String,
@@ -203,6 +216,26 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    match &cli.command {
+        Commands::ParseDeepLink { uri } => {
+            let action = deep_link::parse_deep_link(uri)?;
+            println!("{}", serde_json::to_string_pretty(&json!({
+                "query":action.query,"cwd":action.cwd,"repo":action.repo
+            }))?);
+            return Ok(());
+        }
+        Commands::BuildDeepLink { query, cwd, repo } => {
+            let url = deep_link::build_deep_link(&deep_link::DeepLinkAction {
+                query:query.clone(),cwd:cwd.clone(),repo:repo.clone(),
+            })?;
+            // The parser is the single validation and sanitization boundary.
+            let action = deep_link::parse_deep_link(&url)?;
+            println!("{}", deep_link::build_deep_link(&action)?);
+            return Ok(());
+        }
+        _ => {}
+    }
+
     if let Commands::Init = &cli.command {
         let path = Config::init()?;
         println!("Created {}", path.display());
