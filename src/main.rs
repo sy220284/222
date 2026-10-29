@@ -2578,7 +2578,7 @@ async fn sdk_nested_control(
                     "release-notes", "skills", "stats", "status", "tasks",
                     "usage", "tag",
                 ];
-                let commands = command_manifest::visible()
+                let mut commands = command_manifest::visible()
                     .filter(|command| implemented.contains(&command.name))
                     .map(|command| json!({
                         "name":command.name,
@@ -2586,6 +2586,28 @@ async fn sdk_nested_control(
                         "argumentHint":command.hint.unwrap_or("")
                     }))
                     .collect::<Vec<_>>();
+                // The SDK must advertise the same actual user-invocable
+                // plugin commands and project skills that its text input can
+                // execute. Keep model-only skills out of the public catalog.
+                let mut known = commands.iter()
+                    .filter_map(|command| command.get("name").and_then(Value::as_str))
+                    .map(str::to_owned)
+                    .collect::<std::collections::HashSet<_>>();
+                let mut skill_commands = plugins::list_commands(
+                    agent.workspace_root(), &config.enabled_plugins,
+                )?;
+                skill_commands.extend(agent.list_user_skills()?.lines().map(str::to_owned));
+                for name in skill_commands {
+                    if known.insert(name.clone()) {
+                        let description = if name.contains(':') {
+                            "Installed plugin command or skill"
+                        } else {
+                            "Project skill"
+                        };
+                        commands.push(json!({"name":name,"description":description,
+                            "argumentHint":""}));
+                    }
+                }
                 let agents = agent.sdk_agent_descriptors()?;
                 *sdk_initialized = true;
                 Ok(json!({"commands":commands,"agents":agents,"output_style":"default",
