@@ -12,6 +12,7 @@ mod shell_runtime;
 mod subprocess_env;
 mod portable_source_utils;
 mod portable_ui_runtime;
+mod portable_async_runtime;
 mod skill_arguments;
 mod semantic_inputs;
 mod xml_escape;

@@ -1345,11 +1345,11 @@
 | `src/utils/QueryGuard.ts` | 122 | 3597 | 重写：查询排队、预约、运行、取消与代次状态机 | `src/query_guard.rs` / `src/sdk_queue.rs` | 部分实现：同步预约、运行、取消和代次保护有测试；原始信号订阅动态增删、React UI 生命周期及跨模块取消时序未验收；证据 query_guard::tests / integration_cli::sdk_queue_drain_honors_priority_fifo_and_worker_isolation |
 | `src/utils/Shell.ts` | 475 | 16929 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ShellCommand.ts` | 466 | 14138 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/abortController.ts` | 100 | 3364 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/abortController.ts` | 100 | 3364 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/activityManager.ts` | 165 | 4973 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/advisor.ts` | 146 | 5585 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/agentContext.ts` | 179 | 6660 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/agentId.ts` | 100 | 2805 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/agentId.ts` | 100 | 2805 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/agentSwarmsEnabled.ts` | 45 | 1417 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/agenticSessionSearch.ts` | 308 | 10067 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/analyzeContext.ts` | 1383 | 42931 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1401,7 +1401,7 @@
 | `src/utils/billing.ts` | 79 | 2413 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/binaryCheck.ts` | 54 | 1466 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/browser.ts` | 69 | 1867 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/bufferedWriter.ts` | 101 | 2584 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/bufferedWriter.ts` | 101 | 2584 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/bundledMode.ts` | 23 | 618 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/caCerts.ts` | 116 | 4401 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/caCertsConfig.ts` | 89 | 3608 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1427,7 +1427,7 @@
 | `src/utils/collapseHookSummaries.ts` | 60 | 1714 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/collapseReadSearch.ts` | 1110 | 37902 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/collapseTeammateShutdowns.ts` | 56 | 1322 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/combinedAbortSignal.ts` | 48 | 1714 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/combinedAbortSignal.ts` | 48 | 1714 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/commandLifecycle.ts` | 22 | 440 | 重写：保持通用行为 | `src/command_lifecycle.rs / src/tools.rs` | 已验收：单监听器设置/替换/清除、通知同步顺序；证据 command_lifecycle::tests::single_listener_replace_clear_and_event_order |
 | `src/utils/commitAttribution.ts` | 962 | 29594 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/completionCache.ts` | 167 | 5654 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1504,7 +1504,7 @@
 | `src/utils/filePersistence/filePersistence.ts` | 288 | 7763 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/filePersistence/outputsScanner.ts` | 127 | 3682 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/fileRead.ts` | 103 | 3168 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/fileReadCache.ts` | 97 | 2432 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/fileReadCache.ts` | 97 | 2432 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/fileStateCache.ts` | 143 | 4175 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/findExecutable.ts` | 18 | 553 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/fingerprint.ts` | 77 | 2248 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1562,7 +1562,7 @@
 | `src/utils/iTermBackup.ts` | 74 | 1608 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ide.ts` | 1495 | 46585 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/idePathConversion.ts` | 91 | 2602 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/idleTimeout.ts` | 54 | 1574 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/idleTimeout.ts` | 54 | 1574 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/imagePaste.ts` | 417 | 14509 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/imageResizer.ts` | 881 | 26699 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/imageStore.ts` | 168 | 4320 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1578,7 +1578,7 @@
 | `src/utils/lazySchema.ts` | 9 | 295 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/listSessionsImpl.ts` | 455 | 15071 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/localInstaller.ts` | 163 | 4810 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/lockfile.ts` | 44 | 1330 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/lockfile.ts` | 44 | 1330 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/log.ts` | 363 | 11693 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/logoV2Utils.ts` | 351 | 9835 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mailbox.ts` | 74 | 1596 | 重写：保持通用行为 | `src/in_memory_mailbox.rs / src/event_signal.rs` | 部分实现：原始消息队列、谓词匹配、等待者优先、即时登记、FIFO、revision 与取消恢复；原 JS 同步异常边界仍待对照 |
@@ -1721,7 +1721,7 @@
 | `src/utils/queryContext.ts` | 180 | 5937 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/queryHelpers.ts` | 553 | 19734 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/queryProfiler.ts` | 302 | 8894 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/queueProcessor.ts` | 96 | 3174 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/queueProcessor.ts` | 96 | 3174 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/readEditContext.ts` | 228 | 7224 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/readFileInRange.ts` | 384 | 12259 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/releaseNotes.ts` | 361 | 11813 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1731,7 +1731,7 @@
 | `src/utils/sandbox/sandbox-ui-utils.ts` | 13 | 389 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/sanitization.ts` | 92 | 4003 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/screenshotClipboard.ts` | 122 | 3709 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sdkEventQueue.ts` | 135 | 4077 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sdkEventQueue.ts` | 135 | 4077 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/secureStorage/fallbackStorage.ts` | 71 | 2362 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/index.ts` | 18 | 559 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/keychainPrefetch.ts` | 117 | 4755 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1741,7 +1741,7 @@
 | `src/utils/semanticBoolean.ts` | 30 | 1167 | 重写：严格布尔字符串转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：仅精确 true/false 字符串归一化并接入工具参数；Zod 可选/默认 schema 泛型组合待核对 |
 | `src/utils/semanticNumber.ts` | 37 | 1486 | 重写：严格十进制数字转换 | `src/semantic_inputs.rs` / `src/tools.rs` | 部分实现：十进制词法、非有限拒绝、IEEE-754 数字精度与负零、工具整数参数及 JSON 数值字面量对齐；Zod 泛型输出与全部调用方待核对 |
 | `src/utils/semver.ts` | 60 | 1713 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sequential.ts` | 57 | 1641 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sequential.ts` | 57 | 1641 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/sessionActivity.ts` | 134 | 4081 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionEnvVars.ts` | 23 | 590 | 重写：保持通用行为 | `src/agent.rs / src/tools.rs / src/background.rs / src/main.rs` | 部分实现：会话变量增删查、前台/后台 Shell 和子代理继承、真实 CLI 回归；Hooks/MCP/LSP 完整透传未对照 |
 | `src/utils/sessionEnvironment.ts` | 167 | 5053 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1753,7 +1753,7 @@
 | `src/utils/sessionStorage.ts` | 5106 | 180620 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionStoragePortable.ts` | 794 | 25448 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionTitle.ts` | 130 | 4757 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sessionUrl.ts` | 65 | 1672 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sessionUrl.ts` | 65 | 1672 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/set.ts` | 54 | 1036 | 重写：Set 差集、交集判定、包含关系与有序并集 | `src/collections.rs` | 部分实现：4 个函数保持 Set 插入顺序和空集语义；JS 对象引用与 SameValueZero 非整数数字语义待跨语言核对 |
 | `src/utils/settings/allErrors.ts` | 33 | 1257 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/applySettingsChange.ts` | 93 | 3656 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1802,7 +1802,7 @@
 | `src/utils/status.tsx` | 362 | 48635 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/statusNoticeDefinitions.tsx` | 198 | 30638 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/statusNoticeHelpers.ts` | 21 | 673 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/stream.ts` | 77 | 1926 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/stream.ts` | 77 | 1926 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/streamJsonStdoutGuard.ts` | 124 | 3987 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/streamlinedTransform.ts` | 202 | 5941 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/stringUtils.ts` | 236 | 6595 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1877,7 +1877,7 @@
 | `src/utils/tokenBudget.ts` | 74 | 2675 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/tokens.ts` | 262 | 9606 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/toolErrors.ts` | 133 | 4012 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/toolPool.ts` | 80 | 3136 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/toolPool.ts` | 80 | 3136 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/toolResultStorage.ts` | 1041 | 38384 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/toolSchemaCache.ts` | 27 | 1061 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/toolSearch.ts` | 757 | 26606 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1890,14 +1890,14 @@
 | `src/utils/undercover.ts` | 90 | 3681 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/user.ts` | 195 | 5714 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/userAgent.ts` | 11 | 281 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/userPromptKeywords.ts` | 28 | 929 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/userPromptKeywords.ts` | 28 | 929 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/uuid.ts` | 28 | 888 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/warningHandler.ts` | 122 | 4486 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/which.ts` | 83 | 2392 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/windowsPaths.ts` | 174 | 6008 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/withResolvers.ts` | 14 | 444 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/withResolvers.ts` | 14 | 444 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/words.ts` | 801 | 10960 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/workloadContext.ts` | 58 | 2337 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/workloadContext.ts` | 58 | 2337 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/worktree.ts` | 1520 | 49995 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
 | `src/utils/worktreeModeEnabled.ts` | 12 | 415 | 重写：Git 工作树隔离 | `src/compat_helpers.rs` | 已验收：原始无条件 true 开关纯函数语义对照；证据 compat_helpers::tests::worktree_feature_is_enabled |
 | `src/utils/xdg.ts` | 66 | 1876 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
