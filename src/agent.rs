@@ -3669,6 +3669,8 @@ mod tests {
             hook_rules: Vec::new(),
             model_prices: Vec::new(),
             file_metrics: Arc::new(ToolMetrics::default()),
+            notebook_reads: Arc::new(Mutex::new(HashMap::new())),
+            file_reads: Arc::new(Mutex::new(HashMap::new())),
             last_context_usage: None,
             last_model_usage: None,
         };
