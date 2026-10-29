@@ -57,7 +57,6 @@ mod search;
 mod semantic_inputs;
 mod session;
 mod session_control;
-mod transcript_search;
 mod shell_quote;
 mod shell_runtime;
 mod skill_arguments;
@@ -78,6 +77,7 @@ mod tool_metrics;
 mod tool_names;
 mod tool_search;
 mod tools;
+mod transcript_search;
 mod unicode_sanitization;
 mod webfetch;
 mod websearch;
@@ -336,7 +336,10 @@ async fn main() -> Result<()> {
     }
     if matches!(
         &cli.command,
-        Commands::Sessions { .. } | Commands::Rename { .. } | Commands::Export { .. } | Commands::TranscriptSearch { .. }
+        Commands::Sessions { .. }
+            | Commands::Rename { .. }
+            | Commands::Export { .. }
+            | Commands::TranscriptSearch { .. }
     ) {
         let root = canonical_workspace(&cli.workspace)?;
         match &cli.command {
@@ -348,7 +351,9 @@ async fn main() -> Result<()> {
             }
             Commands::TranscriptSearch { session_id, query } => {
                 let session = session_control::resolve(&root, session_id)?;
-                for hit in transcript_search::TranscriptIndex::from_stored(&session.messages).find(query) {
+                for hit in
+                    transcript_search::TranscriptIndex::from_stored(&session.messages).find(query)
+                {
                     println!("{}  {}  {}", hit.message_index, hit.role, hit.excerpt);
                 }
                 return Ok(());
@@ -579,7 +584,9 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
             "/help" => {
                 println!("/model PROVIDER [MODEL]  switch provider or model");
                 println!("/session                 show resumable session id");
-                println!("/status                  show live session, model, permissions and MCP status");
+                println!(
+                    "/status                  show live session, model, permissions and MCP status"
+                );
                 println!("/history [query]         search saved prompt history");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
