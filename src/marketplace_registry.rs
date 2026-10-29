@@ -345,12 +345,29 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
     let _guard = exclusive_lock(root)?;
     let mut registry = load(root)?;
     match action {
-        "list" => Ok(
-            json!({"marketplaces":registry.into_iter().map(|(name, record)| json!({
-            "name":name,"source":record.source,"installLocation":record.install_location,
-            "lastUpdated":record.last_updated
-        })).collect::<Vec<_>>() }),
-        ),
+        "list" => {
+            // ManageMarketplaces.tsx loads catalogs with graceful degradation:
+            // one broken marketplace is visible as a warning while healthy
+            // catalogs remain discoverable. Keep each source's diagnostic in
+            // the CLI result instead of silently claiming every entry works.
+            let marketplaces = registry.into_iter().map(|(name, record)| {
+                let diagnostic = inspect_local(&record.source).and_then(|(actual, _)| {
+                    if actual != name {
+                        bail!("Marketplace name changed from '{name}' to '{actual}'");
+                    }
+                    Ok(())
+                });
+                let available = diagnostic.is_ok();
+                let error = diagnostic.err().map(|error| format!("{error:#}"));
+                json!({
+                    "name":name,"source":record.source,
+                    "installLocation":record.install_location,
+                    "lastUpdated":record.last_updated,
+                    "available":available,"error":error
+                })
+            }).collect::<Vec<_>>();
+            Ok(json!({"marketplaces":marketplaces}))
+        },
         "add" => {
             let target = target
                 .filter(|t| !t.trim().is_empty())
