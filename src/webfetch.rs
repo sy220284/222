@@ -530,8 +530,24 @@ pub async fn execute_with_redirect_policy_in_workspace(
         .and_then(Value::as_str)
         .context("web_fetch requires url")?;
     let prompt = args.get("prompt").and_then(Value::as_str).unwrap_or("");
-    let mut output = fetch_with_redirect_policy_in_workspace(url, false, approve_redirect, Some(workspace)).await?;
+    let started = Instant::now();
+    let mut output =
+        fetch_with_redirect_policy_in_workspace(url, false, approve_redirect, Some(workspace))
+            .await?;
+    if output.get("redirect").and_then(Value::as_bool) == Some(true) {
+        // The original tool tells the agent exactly which URL and original
+        // prompt to use on the next, separately authorized fetch.
+        if let Some(target) = output.get("redirectUrl").and_then(Value::as_str) {
+            let previous = output.get("content").and_then(Value::as_str).unwrap_or("");
+            let message = format!(
+                "{previous}\n\nTo complete the request, use web_fetch again with fresh approval:\n- url: {target:?}\n- prompt: {prompt:?}"
+            );
+            output["bytes"] = json!(message.len());
+            output["content"] = json!(message);
+        }
+    }
     output["prompt"] = json!(prompt);
+    output["durationMs"] = json!(started.elapsed().as_millis());
     Ok(output.to_string())
 }
 
