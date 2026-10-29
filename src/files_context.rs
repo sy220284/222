@@ -105,13 +105,25 @@ pub fn paths(messages: &[Message], root: &Path) -> Vec<String> {
 
         if message.role == "tool" {
             if let Some(id) = message.tool_call_id.as_deref() {
-                if let Some(path) = pending.remove(id) {
-                    let failed = message.content.as_deref().is_none_or(|content| {
-                        let trimmed = content.trim_start();
-                        trimmed.starts_with("ERROR:") || trimmed.starts_with("Error:")
-                    });
-                    if !failed {
-                        add_successful_file(&mut recent, &canonical_root, path);
+                // Prefer the structured result below when the provider
+                // includes content blocks alongside a tool-call identifier.
+                let has_structured_result = message.content_blocks.as_ref().is_some_and(|blocks| {
+                    blocks.iter().any(|block| {
+                        block.get("type").and_then(serde_json::Value::as_str)
+                            == Some("tool_result")
+                            && block.get("tool_use_id").and_then(serde_json::Value::as_str)
+                                == Some(id)
+                    })
+                });
+                if !has_structured_result {
+                    if let Some(path) = pending.remove(id) {
+                        let failed = message.content.as_deref().is_none_or(|content| {
+                            let trimmed = content.trim_start();
+                            trimmed.starts_with("ERROR:") || trimmed.starts_with("Error:")
+                        });
+                        if !failed {
+                            add_successful_file(&mut recent, &canonical_root, path);
+                        }
                     }
                 }
             }
