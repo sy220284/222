@@ -1735,3 +1735,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **待补差异**：远程市场及下载仍缺；多安装范围、版本约束、跨进程原子事务、安装失败清理异常传播与完整安装交互仍待对照。仅作原始源码、Rust 接线及提交静态核查，未运行 Cargo、测试或 CI；**已提交、待行为验收**，完整等价验收新增 0。Issue #3 冻结 362 项不勾选。本轮 100 项先行缺口清单与完整方案未完成，余 99 项未达硬目标。
 
 - **继续补齐跨市场信任边界**：原版 `dependencyResolver.ts::resolveDependencyClosure` 允许根市场 `allowCrossMarketplaceDependenciesOn` 中的市场参与自动依赖安装，且只采用根市场白名单、不传递信任。Rust 通过 `marketplace_registry::local_marketplace_dependency_allowlist` 读取注册市场清单，并在 `plugin_manager::dependency_install_plan` 对每个传递依赖应用该规则；已启用的跨市场依赖保留原版跳过语义。源码提交 `9c4657c1c7e4bdecca00e4be9ab80ec18d511833`、`2a1164e36cda4a39cb7481000123196b4bbc480d`，计入上述同一插件依赖安装业务链，**不重复增加功能数**；未行为验收。
+
+
+## 2026-10-29：Grep/Glob 的 ripgrep 专属忽略规则（已提交、待验收）
+
+- **原版证据**：用户完整 2.1.88 ZIP 的 `source/src/tools/GrepTool/GrepTool.ts::call`（315–441 行）通过 `ripGrep` 执行带 `--hidden`、显式 `--glob`、Read 排除模式的内容搜索；`source/src/utils/glob.ts::glob` 也通过 ripgrep 的忽略选项执行文件发现。ripgrep 的目录级 `.ignore`、`.rgignore` 规则高于 Git 忽略规则，原 Rust 只调用 `git check-ignore`，导致非 Git 目录和嵌套忽略文件的搜索结果不正确。
+- **Rust 真实入口**：`ToolExecutor` → `src/search.rs::grep_files_filtered` / `glob_files_filtered` → `ripgrep_custom_ignore`。新增逐目录解析和缓存 `.ignore`、`.rgignore`，按来源优先级、目录深度及规则顺序处理包含/排除，支持目录规则、路径锚定及反向规则；在 Git 忽略结果之上覆盖，保留 Grep 显式正向 glob 的最高优先级。Glob 在明确启用忽略模式时使用相同过滤。新增针对非 Git 工作区、嵌套规则、反向包含、来源覆盖及显式 glob 的源码回归用例。
+- **提交**：`6b3d3292d1d86e4e0b0c163ee5e6d1c4d4854516`、`55328d321e04ea44a245ad05698f2c8e3352e7ca`，以及迁移矩阵更新 `6a25ce1a2071d0c2b34b2b100c3cb9d3ca34c685`。按独立用户业务链保守计 **1/100 项**，新增完整等价验收 0 项。
+- **仍有差异**：父目录被整体排除时的反向恢复、Git 全局排除和 `.git/info/exclude` 完整规则、忽略文件复杂转义/通配语义、外部取消与并发文件变化仍需核对。按本任务约束未运行 Cargo、测试或 CI；全部标记 **已提交、待行为验收**。Issue #3 冻结 362 项继续开放。本轮未完成100项独立缺口的全部预先逐函数确认及完整方案，余99项未达到硬目标。
