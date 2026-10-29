@@ -214,4 +214,37 @@ mod tests{
         assert_eq!(reply.message.content.as_deref(),Some("Hello"));
         assert_eq!(reply.usage.unwrap().total_tokens,5);
     }
+    #[tokio::test]
+    async fn stream_retries_capacity_before_first_delta_without_duplication(){
+        use tokio::io::{AsyncReadExt,AsyncWriteExt};
+        let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address=listener.local_addr().unwrap();
+        let server=tokio::spawn(async move{
+            for attempt in 0..2{
+                let (mut socket,_)=listener.accept().await.unwrap();
+                let mut data=[0u8;4096];
+                socket.read(&mut data).await.unwrap();
+                let (status,body)=if attempt==0{
+                    ("503 Service Unavailable",r#"{"error":"temporary"}"#.to_string())
+                }else{
+                    ("200 OK",concat!(
+                        "data: {\"choices\":[{\"delta\":{\"content\":\"Recovered\"},\"finish_reason\":\"stop\"}]}\n\n",
+                        "data: [DONE]\n\n").to_string())
+                };
+                socket.write_all(format!(
+                    "HTTP/1.1 {status}\r\nRetry-After: 0\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()).as_bytes()).await.unwrap();
+            }
+        });
+        let (tx,mut rx)=tokio::sync::mpsc::unbounded_channel();
+        let response=complete(&Client::new(),&format!("http://{address}/v1"),None,
+            &ModelRequest{model:"mock".into(),system:"system".into(),
+                messages:vec![Message::text("user","recover")],tools:vec![]},tx)
+            .await.unwrap();
+        server.await.unwrap();
+        assert_eq!(response.message.content.as_deref(),Some("Recovered"));
+        assert_eq!(rx.try_recv().unwrap(),"Recovered");
+        assert!(rx.try_recv().is_err(),"retry must not emit a duplicate delta");
+    }
+
 }
