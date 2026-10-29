@@ -1485,6 +1485,30 @@ impl Agent {
         crate::copy_response::copy(&self.session.messages, age, code)
     }
 
+    pub fn list_agents(&self) -> Result<String> {
+        let mut output = Vec::new();
+        let root = self.root.canonicalize()?;
+        for (source, user) in [("project", false), ("user", true)] {
+            let directory = crate::agent_definition::directory(&root, user)?;
+            if !user && directory.exists()
+                && !directory.canonicalize()?.starts_with(&root)
+            {
+                bail!("Project agent definitions escape workspace");
+            }
+            let mut agents = crate::agent_definition::existing_agent_types(&directory)?
+                .into_iter().collect::<Vec<_>>();
+            agents.sort();
+            for name in agents {
+                output.push(format!("{source}: {name}"));
+            }
+        }
+        if output.is_empty() {
+            Ok("No configured custom agents.".into())
+        } else {
+            Ok(output.join("\n"))
+        }
+    }
+
     pub fn list_skills(&self) -> Result<String> {
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_plugins(self.enabled_plugins.clone())
