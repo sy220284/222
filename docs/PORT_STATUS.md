@@ -1,3 +1,10 @@
+## 2026-10-29：文件历史无损备份与失败语义补齐（已提交、待验收）
+
+- **原版完整源码**：`source/src/utils/fileHistory.ts::fileHistoryTrackEdit/createBackup/restoreBackup` 使用文件复制保存原始字节和权限，不对文件施加 8MiB 文本上限；`fileHistoryMakeSnapshot` 按消息顺序保存快照；`FileWriteTool/FileEditTool/NotebookEditTool` 在文件修改前记录备份，备份错误由文件历史模块处理。
+- **真实 Rust 修复**：`src/history.rs::snapshot/record/load/restore` 现按原始字节保存独立 `.bak`，不经 UTF-8 或 JSON 内联大文件；旧版 JSON 内联文本检查点继续可恢复，按 UUID 校验备份名和符号链接；文件历史列表按检查点修改时间排序并明确报告损坏记录。 `src/tools.rs` 的 Write/Edit/NotebookEdit 实际入口通过 `record_notice` 在文件已修改成功、备份保存失败时返回成功与可见告警，避免模型误判为编辑失败后再次修改。
+- **本轮提交**：`0f1c5ff96ec35b06a98b819af7b1af6ded9ea1c4`、`06c700ce585d8c8e6c49b08d68ac8307c08daaae`、`3ba0c2629911b89c695b11c7e459e1af635a1461`、`771c1f459b452f2e9b97f76d2a94ec964edd3359`、`e8823bcccb4eed4bd91c1f293624cdcd1ec62815`。保守计 **2 条独立用户业务行为**：①大文件/非 UTF-8 文件可无损保存并恢复检查点；②备份故障不误报实际编辑失败。列表排序及坏记录显式报错归入文件历史可靠性关联修复，不额外计数。
+- **剩余原版差异**：按消息 ID 的全文件快照、100 条快照上限、Shell/Bash 修改跟踪、会话恢复备份复制、异步并发竞态、跨平台权限与原版完整文件历史 UI 尚未等价。**本轮未完成 100 项双侧逐函数确认清单，2/100，剩余 98 项。** 未运行 Cargo、测试或 CI，均为源码已提交、待行为验收；Issue #3 冻结 362 项未核销。
+
 ## 2026-10-29：插件与技能命令 YAML 元数据读取补齐（源码已提交、待验收）
 
 - **原版源码**：完整原始 ZIP 的 `source/src/utils/frontmatterParser.ts::parseFrontmatter` 使用 YAML 解析整个闭合的 frontmatter；`source/src/utils/plugins/loadPluginCommands.ts::createPluginCommand` 从解析结果读取多行 `description`、`argument-hint` 与 `arguments`；`source/src/utils/argumentSubstitution.ts::parseArgumentNames/substituteArguments` 将命名参数应用到用户实际执行的技能和插件命令。
