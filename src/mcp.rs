@@ -136,7 +136,11 @@ impl Client {
         .context("MCP initialize timed out")??;
         client.server_info = initialized.get("serverInfo").cloned();
         client.capabilities = initialized.get("capabilities").cloned();
-        client.instructions = initialized.get("instructions").and_then(Value::as_str).filter(|text| !text.trim().is_empty()).map(str::to_owned);
+        client.instructions = initialized
+            .get("instructions")
+            .and_then(Value::as_str)
+            .filter(|text| !text.trim().is_empty())
+            .map(str::to_owned);
         client
             .send(&json!({"jsonrpc":"2.0","method":"notifications/initialized"}))
             .await?;
@@ -672,14 +676,22 @@ impl McpManager {
                 continue;
             }
             let Some(client_index) = index else { continue };
-            let Some(client) = self.clients.get(*client_index) else { continue };
-            let Some(instructions) = client.instructions() else { continue };
-            if instructions.trim().is_empty() { continue; }
+            let Some(client) = self.clients.get(*client_index) else {
+                continue;
+            };
+            let Some(instructions) = client.instructions() else {
+                continue;
+            };
+            if instructions.trim().is_empty() {
+                continue;
+            }
             let text: String = instructions.chars().take(16_384).collect();
             let name = status["name"].as_str().unwrap_or("unknown");
-            entries.push(format!("Server {}: {}\n",
+            entries.push(format!(
+                "Server {}: {}\n",
                 serde_json::to_string(name).expect("MCP name JSON encoding"),
-                serde_json::to_string(&text).expect("MCP instructions JSON encoding")));
+                serde_json::to_string(&text).expect("MCP instructions JSON encoding")
+            ));
         }
         if entries.is_empty() {
             String::new()
@@ -702,9 +714,12 @@ impl McpManager {
                 let diagnostic = format!("ERROR: {error:#}");
                 // Request errors can include a resolved URL and query token.
                 // Apply the same sanitization as connection-status output.
-                self.routes.get(&call.function.name)
+                self.routes
+                    .get(&call.function.name)
                     .and_then(|(index, _)| {
-                        self.status_clients.iter().position(|slot| *slot == Some(*index))
+                        self.status_clients
+                            .iter()
+                            .position(|slot| *slot == Some(*index))
                     })
                     .and_then(|position| self.configs.get(position))
                     .map(|config| Self::redact_connection_error(config, diagnostic.clone()))
@@ -805,7 +820,11 @@ impl McpManager {
         if !(detail.contains("session expired") || detail.contains("authentication expired")) {
             return;
         }
-        if let Some(position) = self.status_clients.iter().position(|slot| *slot == Some(client_index)) {
+        if let Some(position) = self
+            .status_clients
+            .iter()
+            .position(|slot| *slot == Some(client_index))
+        {
             self.server_statuses[position]["status"] = json!("failed");
             self.server_statuses[position]["error"] =
                 json!("MCP session or authentication expired; reconnect required");
@@ -813,11 +832,14 @@ impl McpManager {
     }
 
     fn redact_request_error(&self, client_index: usize, error: anyhow::Error) -> anyhow::Error {
-        let Some(config) = self.status_clients.iter()
+        let Some(config) = self
+            .status_clients
+            .iter()
             .position(|slot| *slot == Some(client_index))
-            .and_then(|position| self.configs.get(position)) else {
-                return error;
-            };
+            .and_then(|position| self.configs.get(position))
+        else {
+            return error;
+        };
         anyhow::anyhow!(Self::redact_connection_error(config, format!("{error:#}")))
     }
 
@@ -866,9 +888,8 @@ impl McpManager {
             // keep its failure isolated if reconnect still fails.
             if self.server_statuses[index]["status"] != "connected" {
                 if let Err(error) = self.reconnect_server(index).await {
-                    let safe_error = Self::redact_connection_error(
-                        &self.configs[index], format!("{error:#}")
-                    );
+                    let safe_error =
+                        Self::redact_connection_error(&self.configs[index], format!("{error:#}"));
                     servers.push(json!({"server":name,"ok":false,
                         "error":safe_error}));
                     continue;
