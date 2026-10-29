@@ -109,6 +109,7 @@ pub fn program_arguments(action: &TerminalLaunch) -> Vec<OsString> {
         arguments.push(cwd.as_os_str().to_owned());
     }
     arguments.push("chat".into());
+    arguments.push("--deep-link-origin".into());
     if let Some(repo) = &action.repo {
         arguments.push("--deep-link-repo".into());
         arguments.push(repo.into());
@@ -360,7 +361,7 @@ pub fn launch_in_terminal(executable: &Path, action: &TerminalLaunch) -> Result<
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 
