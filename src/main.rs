@@ -55,6 +55,7 @@ mod plugins;
 mod portable_async_runtime;
 mod portable_configuration;
 mod portable_ink_core;
+mod portable_render_semantics;
 mod portable_missing_utilities;
 mod portable_platform;
 mod portable_settings_runtime;
@@ -680,6 +681,7 @@ async fn main() -> Result<()> {
             Some(raw) => serde_json::from_str::<Value>(raw)?,
             None => json!({}),
         };
+        let input = portable_render_semantics::expand_tabs(&input, 8);
         println!("{}", source_semantics::ansi_to_svg(&input, &opts));
         return Ok(());
     }
@@ -698,6 +700,7 @@ async fn main() -> Result<()> {
             match source_semantics::inspect(source, name, &args)
                 .or_else(|| source_semantics_osc::inspect(source, name, &args))
                 .or_else(|| source_semantics_types::inspect(source, name, &args))
+                .or_else(|| portable_render_semantics::inspect(source, name, &args))
                 .or_else(|| generated_ports::inspect(source, name, &args))
                 .or_else(|| {
                     if source != "src/utils/transcriptSearch.ts" {
@@ -755,6 +758,13 @@ async fn main() -> Result<()> {
             }
             if let Some(source_exports) = source_semantics_types::exports(source) {
                 for name in source_exports {
+                    if !exports.contains(name) {
+                        exports.push(*name);
+                    }
+                }
+            }
+            if let Some(names) = portable_render_semantics::exports(source) {
+                for name in names {
                     if !exports.contains(name) {
                         exports.push(*name);
                     }
