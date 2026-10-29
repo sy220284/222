@@ -10,9 +10,42 @@ pub fn definition() -> Value {
         "description":"Search the web through the user's explicitly configured SearXNG or Brave Search service. Requires external network approval.",
         "parameters":{"type":"object","properties":{
             "query":{"type":"string"},
-            "limit":{"type":"integer","minimum":1,"maximum":10}
+            "limit":{"type":"integer","minimum":1,"maximum":10},
+            "allowed_domains":{"type":"array","items":{"type":"string"}},
+            "blocked_domains":{"type":"array","items":{"type":"string"}}
         },"required":["query"]}
     }})
+}
+
+fn domain_filter(args: &Value, key: &str) -> Result<Vec<String>> {
+    let Some(raw) = args.get(key) else {
+        return Ok(Vec::new());
+    };
+    let domains = raw.as_array().with_context(|| format!("{key} must be an array"))?;
+    domains.iter().map(|item| {
+        let domain = item.as_str().with_context(|| format!("{key} entries must be strings"))?
+            .trim().trim_end_matches('.').to_ascii_lowercase();
+        if domain.is_empty() || domain.contains(['/', ':', '@', ' ']) {
+            bail!("{key} must contain hostnames without schemes or paths");
+        }
+        Ok(domain)
+    }).collect()
+}
+
+fn domain_allowed(url: &str, allowed: &[String], blocked: &[String]) -> bool {
+    let Ok(parsed) = Url::parse(url) else {
+        return false;
+    };
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return false;
+    }
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    let matches_domain = |domain: &String| host == *domain || host.ends_with(&format!(".{domain}"));
+    !blocked.iter().any(matches_domain)
+        && (allowed.is_empty() || allowed.iter().any(matches_domain))
 }
 
 pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
@@ -20,9 +53,11 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
         .get("query")
         .and_then(Value::as_str)
         .context("Search query missing")?;
-    if query.trim().is_empty() {
-        bail!("Search query must not be empty")
+    if query.trim().encode_utf16().count() < 2 {
+        bail!("Search query must contain at least two UTF-16 code units")
     }
+    let allowed = domain_filter(args, "allowed_domains")?;
+    let blocked = domain_filter(args, "blocked_domains")?;
     let limit = args
         .get("limit")
         .and_then(Value::as_u64)
@@ -61,10 +96,10 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
         other => bail!("Unsupported search backend {other}"),
     };
     let status = response.status();
-    let value: Value = response.json().await?;
     if !status.is_success() {
         bail!("Search endpoint HTTP {status}")
     }
+    let value: Value = response.json().await?;
     let rows = match backend.kind.as_str() {
         "searxng" => value.get("results").and_then(Value::as_array),
         "brave" => value.pointer("/web/results").and_then(Value::as_array),
@@ -73,6 +108,10 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
     .context("Search endpoint returned no result array")?;
     let results = rows
         .iter()
+        .filter(|result| {
+            result.get("url").and_then(Value::as_str)
+                .is_some_and(|url| domain_allowed(url, &allowed, &blocked))
+        })
         .take(limit as usize)
         .map(|result| {
             json!({
