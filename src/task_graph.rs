@@ -116,6 +116,16 @@ impl TaskGraph {
         Ok(path)
     }
     fn load(&self, id: &str) -> Result<Option<Item>> {
+        // The reference getTask returns null for absent/invalid task IDs.
+        // Tool inputs may contain an arbitrary string; a malformed ID must
+        // not turn TaskGet, TaskUpdate or team claim into a storage error.
+        if id.is_empty()
+            || id.len() > 20
+            || !id.bytes().all(|b| b.is_ascii_digit())
+            || id.parse::<u64>().is_err()
+        {
+            return Ok(None);
+        }
         let path = self.path(id)?;
         let bytes = match fs::read(path) {
             Ok(v) => v,
