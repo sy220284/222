@@ -6,6 +6,9 @@
 
 ## 2026-10-29：SDK MCP 服务启停与初始化真实能力发现（已提交、待验收）
 
+- 追加贯通交互式 `/mcp enable SERVER_NAME`、`/mcp disable SERVER_NAME`，与 SDK 共用同一持久化与实时路由清理逻辑；再次启用时检查 stdio 子进程是否已退出并独立重连，提交 `b32c18a7d87263f28a662bffb0f1cb9518ca3dd8`。该接线归入前述 MCP 启停功能，不重复计数。
+
+
 - 原版依据：完整 2.1.88 `source/src/cli/print.ts:3206–3296` 的 `mcp_toggle` 持久禁用、断开并清理工具/提示词/资源；`source/src/cli/print.ts:4336–4495` 的 `handleInitializeRequest` 返回真实可调用命令与自定义代理目录。
 - 已补齐的三个独立用户业务行为：① SDK 通过 `mcp_toggle` 按服务名启停 stdio/HTTP MCP，禁用状态跨会话保存，实时清理路由与资源订阅，禁止目录查询和自动重连偷偷重启禁用服务，重新启用时独立重连并恢复工具；② SDK 初始化返回已接入交互 CLI 的真实命令及说明，不暴露尚未迁移的静态注册命令；③ SDK 初始化读取项目/用户磁盘自定义代理定义的名称、描述和模型，项目同名优先，跳过无效元数据，不返回代理系统提示词。
 - Rust 实际接线：`src/main.rs::sdk_nested_control` → `src/agent.rs::toggle_named_mcp/sdk_agent_descriptors` → `src/mcp.rs::McpManager::toggle_named/connect_with_root_filtered`、`src/agent_definition.rs::existing_agent_types`、`src/command_manifest.rs::visible`。代码提交 `6dbe7e97b7ed7fd0ff4aed9c2e02d183c1cd9171`、`a24b095ea653815f4332c93a5bb950c24ba0e47f`、`eb248f8674555d2a524dd17d8bdc2cf883fa7575`。
