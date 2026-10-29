@@ -42,7 +42,7 @@ pub fn record(root:&Path,path:&Path,previous:Option<String>)->Result<Option<Uuid
     if previous.as_ref().is_some_and(|p|p.as_bytes()==now){
         return Ok(None)
     }
-    let relative=path.strip_prefix(root).context("History file outside workspace")?;
+    let relative=path.strip_prefix(root).unwrap_or(path);
     let id=Uuid::new_v4();
     let entry=Record{id,path:relative.to_string_lossy().to_string(),
         previous,updated_hash:fingerprint(&now)};

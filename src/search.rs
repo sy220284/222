@@ -36,7 +36,7 @@ fn sort_newest(items: &mut [PathBuf]) {
     });
 }
 fn relative<'a>(root: &'a Path, path: &'a Path) -> Result<&'a Path> {
-    path.strip_prefix(root).context("Path not under workspace")
+    Ok(path.strip_prefix(root).unwrap_or(path))
 }
 fn bounded_num(args: &Value, name: &str, default: u64, max: u64) -> Result<usize> {
     let number = match args.get(name) {

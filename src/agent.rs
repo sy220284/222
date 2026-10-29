@@ -64,6 +64,7 @@ pub struct Agent {
     profile: ProviderProfile,
     provider: Box<dyn ModelProvider>,
     root: PathBuf,
+    additional_dirs: Vec<PathBuf>,
     approval: Approval,
     interactive: bool,
     max_steps: usize,
@@ -132,7 +133,7 @@ impl Agent {
                 Approval::Full=>permission_mode::Mode::BypassPermissions,
             }
         };
-        Ok(Self { profile, provider, root, approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), permission_mode:mode,
+        Ok(Self { profile, provider, root, additional_dirs: Vec::new(), approval, interactive, max_steps, session, mcp: None, lsp: None, hooks: HookRunner::default(), session_context: String::new(), structured_output: false, child_depth: 0, mcp_configs: Vec::new(), lsp_configs: Vec::new(), enabled_plugins: Vec::new(), search_backend: None, background, graph, team_name: restored_team, agent_name: restored_member, team_root: restored_root, shutdown_requested: false, transient_mailbox: in_memory_mailbox::Mailbox::new(), permission_rules: Vec::new(), permission_mode:mode,
         hook_rules: Vec::new(), model_prices: Vec::new(), file_metrics })
     }
 
@@ -725,6 +726,25 @@ impl Agent {
         Ok(())
     }
 
+    pub fn working_directories(&self) -> Vec<PathBuf> {
+        std::iter::once(self.root.clone()).chain(self.additional_dirs.iter().cloned()).collect()
+    }
+    pub fn validate_workspace_directory(&self, raw: &str) -> Result<crate::workspace_dirs::Validation> {
+        crate::workspace_dirs::validate(raw,&self.root,&self.root,&self.additional_dirs)
+    }
+    pub fn add_workspace_directory(&mut self, path: PathBuf) {
+        if !self.additional_dirs.contains(&path) { self.additional_dirs.push(path); }
+    }
+    pub fn attach_configured_directories(&mut self, dirs: &[String]) -> Result<()> {
+        for dir in dirs {
+            match self.validate_workspace_directory(dir)? {
+                crate::workspace_dirs::Validation::Success(path) => self.add_workspace_directory(path),
+                crate::workspace_dirs::Validation::PathNotFound(path) | crate::workspace_dirs::Validation::NotADirectory(path) => eprintln!("Configured working directory unavailable: {}",path.display()),
+                _ => {},
+            }
+        }
+        Ok(())
+    }
     pub fn profile(&self) -> &ProviderProfile { &self.profile }
     pub fn set_search_backend(&mut self,backend:Option<SearchBackend>){
         self.search_backend=backend;
@@ -979,12 +999,17 @@ impl Agent {
                 eprintln!("Local memory recall unavailable: {error:#}");
             }
         }
+        if !self.additional_dirs.is_empty() {
+            system.push_str("\nAdditional user-authorized working directories:\n");
+            for dir in &self.additional_dirs { system.push_str(&format!("{}\n",dir.display())); }
+        }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_metrics(self.file_metrics.clone())
             .with_plugins(self.enabled_plugins.clone())
             .with_search(self.search_backend.clone())
             .with_background(self.background.clone())
             .with_permission_rules(self.permission_rules.clone())
+            .with_extra_roots(self.additional_dirs.clone())
             .with_permission_mode(self.permission_mode);
         let mut stop_hook_active = false;
         for _ in 0..self.max_steps {
@@ -1352,6 +1377,7 @@ mod tests {
             },
             provider: Box::new(SummaryModel),
             root: dir.path().canonicalize().unwrap(),
+            additional_dirs: Vec::new(),
             approval: Approval::ReadOnly,
             interactive: false,
             max_steps: 5,

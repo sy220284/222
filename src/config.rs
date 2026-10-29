@@ -57,6 +57,8 @@ pub struct Config {
     pub default_provider: String,
     pub providers: Vec<ProviderProfile>,
     #[serde(default)]
+    pub additional_directories: Vec<String>,
+    #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
     #[serde(default)]
     pub hooks: Vec<HookRule>,
@@ -76,6 +78,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             default_provider: "local".into(),
+            additional_directories: Vec::new(),
             providers: vec![
                 ProviderProfile {
                     id: "local".into(),
@@ -134,6 +137,22 @@ impl Config {
         Ok(config)
     }
 
+    pub fn save(&self) -> Result<()> {
+        let path=Self::path()?;
+        if let Some(parent)=path.parent(){fs::create_dir_all(parent)?;}
+        let temp=path.with_extension(format!("{}.tmp",uuid::Uuid::new_v4()));
+        let bytes=serde_json::to_vec_pretty(self)?;
+        let result=(||->Result<()>{
+            use std::io::Write;
+            let mut file=fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+            fs::rename(&temp,&path)?;
+            Ok(())
+        })();
+        if result.is_err(){let _=fs::remove_file(temp);}
+        result
+    }
     pub fn init() -> Result<PathBuf> {
         let path = Self::path()?;
         if path.exists() {

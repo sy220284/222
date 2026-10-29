@@ -84,9 +84,9 @@
 | `src/cli/transports/ccrClient.ts` | 999 | 33775 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/transports/transportUtils.ts` | 46 | 1767 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/update.ts` | 423 | 14487 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/add-dir/add-dir.tsx` | 126 | 18017 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/add-dir/index.ts` | 12 | 260 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/add-dir/validation.ts` | 111 | 3207 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/add-dir/add-dir.tsx` | 126 | 18017 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
+| `src/commands/add-dir/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
+| `src/commands/add-dir/validation.ts` | 111 | 3207 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/advisor.ts` | 110 | 3182 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/agents/agents.tsx` | 12 | 2500 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/agents/index.ts` | 11 | 232 | 重写：保持通用行为 | 待定 | 未迁移 |

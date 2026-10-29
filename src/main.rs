@@ -56,6 +56,7 @@ mod permission_rules;
 mod permission_mode;
 mod reactive_store;
 mod cleanup_registry;
+mod workspace_dirs;
 
 macro_rules! print_json {
     ($value:expr)=>{{ println!("{}",crate::ndjson::stringify_value(&$value)); }};
@@ -147,7 +148,7 @@ async fn main() -> Result<()> {
         println!("Created {}", path.display());
         return Ok(());
     }
-    let config = Config::load()?;
+    let mut config = Config::load()?;
     if let Commands::Models = &cli.command {
         for profile in &config.providers {
             let default = if profile.id == config.default_provider { " (default)" } else { "" };
@@ -167,6 +168,7 @@ async fn main() -> Result<()> {
     let mut agent = Agent::new(
         profile, root, cli.approval.into(), interactive, cli.max_steps, session
     )?;
+    agent.attach_configured_directories(&config.additional_directories)?;
     agent.set_enabled_plugins(config.enabled_plugins.clone());
     agent.set_model_prices(&config.model_prices);
     agent.set_permission_rules(&config.permission_rules)?;
@@ -192,7 +194,7 @@ async fn main() -> Result<()> {
             } else { prompt.clone() };
             agent.ask(&actual_prompt).await.map(|answer| println!("{answer}"))
         }
-        Commands::Chat { .. } => chat(&mut agent, &config).await,
+        Commands::Chat { .. } => chat(&mut agent, &mut config).await,
         Commands::Sdk { .. } => sdk(&mut agent, &config).await,
         _ => unreachable!(),
     };
@@ -202,7 +204,7 @@ async fn main() -> Result<()> {
 
 }
 
-async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
+async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
     println!("Atlas Agent. /help lists commands; /exit quits.");
     loop {
         print!("atlas> ");
@@ -220,6 +222,8 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
                 println!("/cost                    show model costs and unknown pricing");
                 println!("/tasks                   list background shell tasks");
                 println!("/mode                    cycle permission mode (default/accept edits/plan)");
+                println!("/add-dir PATH [--remember] add an authorized working directory");
+                println!("/dirs                    show authorized working directories");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
                 println!("/mcp-prompts             list available MCP prompt commands");
@@ -227,6 +231,7 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
                 println!("/exit                    quit");
                 continue;
             }
+            "/dirs" => { for dir in agent.working_directories() { println!("{}",dir.display()); } continue; }
             "/session" => {
                 println!("{}", agent.session_id());
                 continue;
@@ -270,6 +275,34 @@ async fn chat(agent: &mut Agent, config: &Config) -> Result<()> {
                 continue;
             }
             _ => {}
+        }
+        if input == "/add-dir" || input.starts_with("/add-dir ") {
+            let mut raw = input.trim_start_matches("/add-dir").trim();
+            let remember = raw.ends_with(" --remember");
+            if remember { raw = raw.trim_end_matches(" --remember").trim_end(); }
+            match agent.validate_workspace_directory(raw)? {
+                workspace_dirs::Validation::EmptyPath => eprintln!("Usage: /add-dir PATH [--remember]"),
+                workspace_dirs::Validation::PathNotFound(p) => eprintln!("Path {} was not found",p.display()),
+                workspace_dirs::Validation::NotADirectory(p) => eprintln!("{} is not a directory. Try {}",p.display(),p.parent().unwrap_or(&p).display()),
+                workspace_dirs::Validation::AlreadyAccessible { path, existing_root } => println!("{} is already accessible via {}",path.display(),existing_root.display()),
+                workspace_dirs::Validation::Success(path) => {
+                    print!("Allow {}{}? [y/N] ",path.display(),if remember {" and save to local settings"} else {" for this session"});
+                    io::stdout().flush()?;
+                    let mut response=String::new();
+                    io::stdin().read_line(&mut response)?;
+                    if matches!(response.trim().to_ascii_lowercase().as_str(),"y"|"yes") {
+                        agent.add_workspace_directory(path.clone());
+                        if remember {
+                            if !config.additional_directories.iter().any(|d| d == path.to_string_lossy().as_ref()) { config.additional_directories.push(path.to_string_lossy().to_string()); }
+                            match config.save() {
+                                Ok(()) => println!("Added {} and saved to local settings",path.display()),
+                                Err(err) => eprintln!("Added {} for this session; settings save failed: {err:#}",path.display()),
+                            }
+                        } else { println!("Added {} for this session",path.display()); }
+                    } else { println!("Did not add {}",path.display()); }
+                }
+            }
+            continue;
         }
         if let Some(parsed) = slash_command::parse_slash_command(input)
             .filter(|parsed|parsed.command_name=="model" && !parsed.is_mcp) {

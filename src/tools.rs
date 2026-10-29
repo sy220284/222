@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::{
     fs,
     io::{self, Write},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     process::Stdio,
     sync::{Mutex, Arc},
     collections::HashMap,
@@ -26,6 +26,7 @@ pub enum Approval {
 
 pub struct ToolExecutor {
     root: PathBuf,
+    extra_roots: Vec<PathBuf>,
     approval: Approval,
     interactive: bool,
     reads: Mutex<HashMap<PathBuf, u64>>,
@@ -39,9 +40,10 @@ pub struct ToolExecutor {
 
 impl ToolExecutor {
     pub fn new(root: PathBuf, approval: Approval, interactive: bool) -> Self {
-        Self { root, approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new(), mode: None, metrics: Arc::new(ToolMetrics::default()) }
+        Self { root, extra_roots: Vec::new(), approval, interactive, reads: Mutex::new(HashMap::new()), enabled_plugins: Vec::new(), search_backend: None, background: None, permission_rules: Vec::new(), mode: None, metrics: Arc::new(ToolMetrics::default()) }
     }
 
+    pub fn with_extra_roots(mut self,roots:Vec<PathBuf>)->Self{self.extra_roots=roots;self}
     pub fn with_metrics(mut self,metrics:Arc<ToolMetrics>)->Self{
         self.metrics=metrics;
         self
@@ -281,34 +283,7 @@ impl ToolExecutor {
 
     /// Resolve paths lexically and check the nearest real ancestor against root.
     /// Existing symlinks that lead outside the workspace are rejected.
-    fn checked_path(&self, raw: &str) -> Result<PathBuf> {
-        if raw.is_empty() { bail!("Empty file path") }
-        let input = Path::new(raw);
-        let path = if input.is_absolute() { input.to_path_buf() } else { self.root.join(input) };
-        let mut normalized = PathBuf::new();
-        for part in path.components() {
-            match part {
-                Component::Prefix(_) | Component::RootDir | Component::Normal(_) =>
-                    normalized.push(part.as_os_str()),
-                Component::CurDir => {}
-                Component::ParentDir => {
-                    if !normalized.pop() { bail!("Path escapes filesystem root") }
-                }
-            }
-        }
-        if !normalized.starts_with(&self.root) {
-            bail!("Path outside workspace: {}", normalized.display());
-        }
-        let mut ancestor = normalized.as_path();
-        while !ancestor.exists() {
-            ancestor = ancestor.parent().context("No existing ancestor")?;
-        }
-        let real = ancestor.canonicalize()?;
-        if !real.starts_with(&self.root) {
-            bail!("Path traverses a symlink outside workspace");
-        }
-        Ok(normalized)
-    }
+    fn checked_path(&self,raw:&str)->Result<PathBuf>{crate::workspace_dirs::checked_path(raw,&self.root,&self.extra_roots)}
 
     fn read_file(&self, args: &Value) -> Result<String> {
         let path = self.checked_path(required(args, "path")?)?;
@@ -346,7 +321,7 @@ impl ToolExecutor {
         for entry in WalkDir::new(&path).max_depth(depth).into_iter().filter_entry(in_scope) {
             let entry = entry?;
             if entry.path() == path { continue; }
-            entries.push(entry.path().strip_prefix(&self.root)?.display().to_string());
+            entries.push(entry.path().strip_prefix(&self.root).unwrap_or(entry.path()).display().to_string());
             if entries.len() >= limit { break; }
         }
         Ok(entries.join("\n"))
@@ -365,7 +340,7 @@ impl ToolExecutor {
             let Ok(data) = fs::read_to_string(entry.path()) else { continue };
             for (line_no, line) in data.lines().enumerate() {
                 if regex.is_match(line) {
-                    matches.push(format!("{}:{}: {}", entry.path().strip_prefix(&self.root)?
+                    matches.push(format!("{}:{}: {}", entry.path().strip_prefix(&self.root).unwrap_or(entry.path())
                         .display(), line_no + 1, truncate(line, 300)));
                     if matches.len() >= limit { return Ok(matches.join("\n")); }
                 }
@@ -890,6 +865,31 @@ mod tests {
         let output=tools.execute(&call).await;
         assert!(output.contains("denied by explicit permission rule"),"{output}");
         assert!(!root.path().join("forbidden.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn extra_working_directory_is_usable_by_real_file_tools() {
+        let root=tempfile::tempdir().unwrap();
+        let other=tempfile::tempdir().unwrap();
+        let outside=tempfile::tempdir().unwrap();
+        let read=other.path().join("source.txt");
+        fs::write(&read,"from additional workspace").unwrap();
+        let tool=executor(root.path(),Approval::Full)
+            .with_extra_roots(vec![other.path().canonicalize().unwrap()]);
+        let call=|id:&str,name:&str,args:Value| ToolCall {
+            id:id.into(),kind:"function".into(),
+            function:crate::protocol::FunctionCall {
+                name:name.into(),arguments:args.to_string()
+            }
+        };
+        let answer=tool.execute(&call("1","read_file",json!({"path":read}))).await;
+        assert!(answer.contains("from additional workspace"),"{answer}");
+        let target=other.path().join("written.txt");
+        let result=tool.execute(&call("2","write_file",json!({"path":target,"content":"authorized"}))).await;
+        assert!(!result.starts_with("ERROR:"),"{result}");
+        assert_eq!(fs::read_to_string(target).unwrap(),"authorized");
+        let blocked=tool.execute(&call("3","read_file",json!({"path":outside.path().join("private.txt")}))).await;
+        assert!(blocked.contains("outside authorized"),"{blocked}");
     }
 
 }
