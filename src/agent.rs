@@ -151,6 +151,7 @@ struct SdkAgentDefinition {
     initial_prompt: Option<String>,
     permission_mode: Option<permission_mode::Mode>,
     skills: Vec<String>,
+    hooks: Vec<HookRule>,
 }
 
 pub struct Agent {
@@ -460,7 +461,7 @@ impl Agent {
             let definition = value.as_object()
                 .with_context(|| format!("SDK agent {name} must be an object"))?;
             for field in definition.keys() {
-                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt" | "permissionMode" | "skills") {
+                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt" | "permissionMode" | "skills" | "hooks") {
                     bail!("SDK agent {name} field {field} is not yet supported");
                 }
             }
@@ -572,6 +573,18 @@ impl Agent {
                 }
                 Some(_) => bail!("SDK agent {name} skills must be an array"),
             };
+            let mut hooks = match definition.get("hooks") {
+                None => Vec::new(),
+                Some(value) => crate::plugins::source_hooks(&self.root, value)
+                    .with_context(|| format!("Invalid SDK agent {name} hooks"))?,
+            };
+            // Agent-scoped Stop hooks run at the subagent lifecycle boundary.
+            for hook in &mut hooks {
+                if matches!(&hook.event, HookEvent::Stop) {
+                    hook.event = HookEvent::SubagentStop;
+                }
+            }
+            HookRunner::new(&hooks)?;
             parsed.insert(name.clone(), SdkAgentDefinition {
                 description: description.to_owned(),
                 prompt: prompt.to_owned(),
@@ -583,6 +596,7 @@ impl Agent {
                 initial_prompt,
                 permission_mode,
                 skills,
+                hooks,
             });
         }
         self.sdk_agent_definitions = parsed;
@@ -1557,6 +1571,8 @@ impl Agent {
         let sdk_definition = self.sdk_agent_definitions.get(&agent_type).cloned();
         let initial_prompt = sdk_definition.as_ref()
             .and_then(|definition| definition.initial_prompt.clone());
+        let sdk_hooks = sdk_definition.as_ref()
+            .map(|definition| definition.hooks.clone()).unwrap_or_default();
         // Validate the requested permission mode before creating a worktree
         // or starting any child process, so denied modes leave no side effects.
         if let Some(mode) = sdk_definition.as_ref().and_then(|definition| definition.permission_mode) {
@@ -1662,7 +1678,9 @@ impl Agent {
                 || self.mcp_configs.clone(), McpManager::configured_servers);
             child.attach_mcp(&inherited_mcp).await?;
             child.attach_lsp(&self.lsp_configs).await?;
-            child.attach_hooks(&self.hook_rules).await?;
+            let mut child_hooks = self.hook_rules.clone();
+            child_hooks.extend(sdk_hooks);
+            child.attach_hooks(&child_hooks).await?;
             let start = child
                 .hooks
                 .run(HookEvent::SubagentStart, Some(&agent_type), {
