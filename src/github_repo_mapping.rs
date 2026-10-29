@@ -1,10 +1,6 @@
 //! Repository clone MRU mapping for deep links.
 //! Port of 2.1.88 src/utils/githubRepoPathMapping.ts.
-use crate::{
-    config::Config,
-    detect_repository::parse_github_repository,
-    git_filesystem,
-};
+use crate::{config::Config, detect_repository::parse_github_repository, git_filesystem};
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use unicode_normalization::UnicodeNormalization;
@@ -22,8 +18,9 @@ fn git_root(path: &Path) -> Option<&Path> {
 
 /// Promote an actual checkout root, never the active subdirectory.
 pub fn update_repo_path_mapping(config: &mut Config, cwd: &Path) -> Result<bool> {
-    let Some(repo) = git_filesystem::get_remote_url_for_dir(cwd)
-        .and_then(|raw| parse_github_repository(&raw)) else {
+    let Some(repo) =
+        git_filesystem::get_remote_url_for_dir(cwd).and_then(|raw| parse_github_repository(&raw))
+    else {
         return Ok(false);
     };
     let root = git_root(cwd).unwrap_or(cwd);
@@ -39,7 +36,9 @@ pub fn update_repo_path_mapping(config: &mut Config, cwd: &Path) -> Result<bool>
 }
 
 pub fn get_known_paths_for_repo(config: &Config, repo: &str) -> Vec<PathBuf> {
-    config.github_repo_paths.get(&key(repo))
+    config
+        .github_repo_paths
+        .get(&key(repo))
         .into_iter()
         .flatten()
         .map(PathBuf::from)
@@ -116,11 +115,18 @@ mod tests {
         let mut config = Config::default();
         let root = tempfile::tempdir().unwrap();
         let project = root.path();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(project).status()
-            .unwrap().success());
         assert!(Command::new("git")
-            .args(["remote","add","origin","git@github.com:Acme/Tools.git"])
-            .current_dir(project).status().unwrap().success());
+            .args(["init", "-q"])
+            .current_dir(project)
+            .status()
+            .unwrap()
+            .success());
+        assert!(Command::new("git")
+            .args(["remote", "add", "origin", "git@github.com:Acme/Tools.git"])
+            .current_dir(project)
+            .status()
+            .unwrap()
+            .success());
         fs::create_dir(project.join("src")).unwrap();
         assert!(update_repo_path_mapping(&mut config, &project.join("src")).unwrap());
         assert!(!update_repo_path_mapping(&mut config, project).unwrap());
@@ -135,18 +141,34 @@ mod tests {
         assert!(get_known_paths_for_repo(&config, "acme/tools").is_empty());
         let missing = resolve_cwd(&config, None, Some("Acme/Tools")).unwrap();
         assert!(missing.resolved_repo.is_none());
-        assert_eq!(resolve_cwd(&config, Some(project), Some("wrong/repo"))
-            .unwrap().cwd, project);
+        assert_eq!(
+            resolve_cwd(&config, Some(project), Some("wrong/repo"))
+                .unwrap()
+                .cwd,
+            project
+        );
     }
 
     #[test]
     fn tracked_paths_promote_to_front_and_preserve_other_clones() {
         let mut cfg = Config::default();
-        cfg.github_repo_paths.insert("team/repo".into(),
-            vec!["/tmp/first".into(), "/tmp/second".into()]);
-        assert!(remove_path_from_repo(&mut cfg, "TEAM/REPO", Path::new("/tmp/first")));
-        assert_eq!(get_known_paths_for_repo(&cfg, "TEAM/REPO"),
-            vec![PathBuf::from("/tmp/second")]);
-        assert!(!remove_path_from_repo(&mut cfg, "team/repo", Path::new("/tmp/missing")));
+        cfg.github_repo_paths.insert(
+            "team/repo".into(),
+            vec!["/tmp/first".into(), "/tmp/second".into()],
+        );
+        assert!(remove_path_from_repo(
+            &mut cfg,
+            "TEAM/REPO",
+            Path::new("/tmp/first")
+        ));
+        assert_eq!(
+            get_known_paths_for_repo(&cfg, "TEAM/REPO"),
+            vec![PathBuf::from("/tmp/second")]
+        );
+        assert!(!remove_path_from_repo(
+            &mut cfg,
+            "team/repo",
+            Path::new("/tmp/missing")
+        ));
     }
 }
