@@ -67,7 +67,7 @@ pub fn collapse_hook_summaries(messages: &[Value]) -> Vec<Value> {
             let mut errors = Vec::new();
             let mut prevented = false;
             let mut output = false;
-            let mut duration = 0f64;
+            let mut duration = json!(0);
             for message in &messages[start..index] {
                 count += message["hookCount"].as_u64().unwrap_or(0);
                 if let Some(values) = message["hookInfos"].as_array() {
@@ -78,14 +78,18 @@ pub fn collapse_hook_summaries(messages: &[Value]) -> Vec<Value> {
                 }
                 prevented |= message["preventedContinuation"].as_bool().unwrap_or(false);
                 output |= message["hasOutput"].as_bool().unwrap_or(false);
-                duration = duration.max(message["totalDurationMs"].as_f64().unwrap_or(0.0));
+                if message["totalDurationMs"].as_f64().unwrap_or(0.0)
+                    > duration.as_f64().unwrap_or(0.0)
+                {
+                    duration = message["totalDurationMs"].clone();
+                }
             }
             merged["hookCount"] = json!(count);
             merged["hookInfos"] = Value::Array(infos);
             merged["hookErrors"] = Value::Array(errors);
             merged["preventedContinuation"] = json!(prevented);
             merged["hasOutput"] = json!(output);
-            merged["totalDurationMs"] = json!(duration);
+            merged["totalDurationMs"] = duration;
             result.push(merged);
         } else {
             result.push(first.clone());
