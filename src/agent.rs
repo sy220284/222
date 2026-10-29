@@ -3420,12 +3420,18 @@ mod tests {
         };
         let mut original = Session::fresh();
         let original_id = original.id.to_string();
-        original.messages.push(Message::text("user", "retain this message"));
+        original
+            .messages
+            .push(Message::text("user", "retain this message"));
         original.summary = Some("Retained summary".into());
         original.save(&root).unwrap();
-        let mut agent = Agent::new(profile, root.clone(), Approval::Ask, true, 5, original).unwrap();
+        let mut agent =
+            Agent::new(profile, root.clone(), Approval::Ask, true, 5, original).unwrap();
         agent.set_sdk_permission_mode("plan").unwrap();
-        agent.graph.create(&json!({"subject":"Old session task","description":"Old graph"})).unwrap();
+        agent
+            .graph
+            .create(&json!({"subject":"Old session task","description":"Old graph"}))
+            .unwrap();
         agent.clear_history().await.unwrap();
 
         assert_ne!(agent.session_id(), original_id);
@@ -3437,7 +3443,10 @@ mod tests {
 
         let saved_old = Session::load(&root, &original_id).unwrap();
         assert_eq!(saved_old.messages.len(), 1);
-        assert_eq!(saved_old.messages[0].content.as_deref(), Some("retain this message"));
+        assert_eq!(
+            saved_old.messages[0].content.as_deref(),
+            Some("retain this message")
+        );
         assert_eq!(saved_old.summary.as_deref(), Some("Retained summary"));
         let saved_new = Session::load(&root, &agent.session_id()).unwrap();
         assert!(saved_new.messages.is_empty());
@@ -3457,17 +3466,35 @@ mod tests {
             api_key_env: None,
             stream: false,
         };
-        let mut agent = Agent::new(profile, root.clone(), Approval::Ask, true, 5, Session::fresh()).unwrap();
+        let mut agent = Agent::new(
+            profile,
+            root.clone(),
+            Approval::Ask,
+            true,
+            5,
+            Session::fresh(),
+        )
+        .unwrap();
         let before = agent.session_id();
         let log_path = root.join("hook-events.log");
         let shell = |event: &str| format!("printf '{}\\n' >> '{}'", event, log_path.display());
         agent.hooks = HookRunner::new(&[
-            HookRule {event: HookEvent::SessionEnd, matcher: None, command: shell("end"), timeout_seconds: 5},
-            HookRule {event: HookEvent::SessionStart, matcher: None, command: shell("start"), timeout_seconds: 5},
-        ]).unwrap();
+            HookRule {
+                event: HookEvent::SessionEnd,
+                matcher: None,
+                command: shell("end"),
+                timeout_seconds: 5,
+            },
+            HookRule {
+                event: HookEvent::SessionStart,
+                matcher: None,
+                command: shell("start"),
+                timeout_seconds: 5,
+            },
+        ])
+        .unwrap();
         agent.clear_history().await.unwrap();
         assert_ne!(before, agent.session_id());
         assert_eq!(std::fs::read_to_string(&log_path).unwrap(), "end\nstart\n");
     }
-
 }
