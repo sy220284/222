@@ -1,3 +1,12 @@
+## 2026-10-29：文件历史恢复权限、会话隔离与 SDK 检查点启停（已提交、待验收）
+
+- **原版完整源码**：用户资料库 `claude-code-2.1.88-main(1).zip` 中 `source/src/utils/fileHistory.ts:63–77`（交互配置/SDK opt-in）、`:725–740`（按会话 ID 保存备份）、`:785–786,801–836`（备份和恢复 Unix 文件权限），以及 `:39–54,196–338,345–399`（原版按消息快照与回退）。
+- **已发现的 Rust 差异**：`src/history.rs::Record/restore` 只保存前后文本，文件恢复会丢失原权限，也不会检测后续外部 chmod；`history::storage` 把所有会话的检查点混放在同一目录；`src/tools.rs::dispatch` 对交互与 SDK 无条件创建检查点，忽略原版开关。
+- **已补齐的实际调用链**：`src/tools.rs::dispatch` 的 `write_file/edit_file/notebook_edit` 在修改前捕获文件模式，`history::record` 保存前后模式，`file_revert` 检查内容与后续权限变化、恢复原 Unix 模式；`ToolExecutor::with_session_id` 使创建、列举、恢复只访问当前会话目录；`src/config.rs::Config` 的 `fileCheckpointingEnabled` → `src/agent.rs::Agent::new/ask` → `ToolExecutor::with_file_checkpointing` → `history::enabled`，交互可禁用，SDK 默认关闭、显式 `ATLAS_ENABLE_SDK_FILE_CHECKPOINTING` 开启，`ATLAS_DISABLE_FILE_CHECKPOINTING` 始终优先。三个文件编辑工具、检查点列表与回退均使用同一开关。
+- **Rust 源码提交**：权限保留 `2a0f929b79362d3897824b8103165030a5d002da`、`0f3e5461087521e5a57cfba66be32d963bbe24a6`；会话隔离 `28b827520cde1258df6aeff33a2717ea412813a1`、`1b90480ac9405e5c30e94b397db02399e41eb9a2`；开关贯通 `b63e28038acdf1590b515510a4dacaf387b1aa41`、`af8374732d53328592b9743ed5965e14e45996e5`、`d8a79bb803130c2b47f557fe7e3451a321420568`、`68f00be1b37ea408f5ea90c73e2ab03621bcbe96`。
+- **本轮严格计数**：①文件回退保留原权限且保护后续权限修改；②不同会话的文件检查点隔离；③交互/SDK 检查点开关与实际文件编辑链一致。合计 **3/100 项独立用户可感知业务功能**，剩余 97；未完成事先逐函数确认 100 项的完整清单，流程 A/B 仍未达标。源码已提交、待行为验收；本任务按要求未运行 Cargo、测试或 CI。
+- **未闭环差异**：原版消息级快照/回退、最多 100 次快照、Shell/Bash 修改跟踪、跨会话复制备份、完整备份版本序列、并发写入/取消/异常恢复、跨平台模式及 SDK UI 回放。Issue #3 冻结 362 项继续开放，新增完整等价验收 0 项。
+
 ## 2026-10-29：SDK 排队未知技能反馈与后续队列继续（已提交、待验收）
 
 - **原版**：`source/src/utils/processUserInput/processSlashCommand.tsx:333–359` 对合法名称但未注册的斜杠技能返回 `Unknown skill: NAME`，不发起模型请求，后续输入仍可继续。
