@@ -13,8 +13,16 @@ use std::{
 
 pub fn prepare_launch(uri: &str, config: &Config) -> Result<TerminalLaunch> {
     let action = deep_link::parse_deep_link(uri)?;
-    let cwd = action.cwd.as_deref().map(Path::new);
-    let selected = github_repo_mapping::resolve_cwd(config, cwd, action.repo.as_deref())?;
+    // parseDeepLink preserves an explicitly empty cwd, but the original
+    // protocolHandler.resolveCwd uses truthiness: empty cwd falls through
+    // to the repo MRU mapping (or home) instead of launching in "".
+    let cwd = action
+        .cwd
+        .as_deref()
+        .filter(|path| !path.is_empty())
+        .map(Path::new);
+    let repo = action.repo.as_deref().filter(|repo| !repo.is_empty());
+    let selected = github_repo_mapping::resolve_cwd(config, cwd, repo)?;
     let fetched = selected
         .resolved_repo
         .as_ref()
