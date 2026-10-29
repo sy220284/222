@@ -1685,7 +1685,7 @@ impl Agent {
             // user turn, preserving the caller's task as trailing context.
             for (name, content) in &skill_prompts {
                 child.session.messages.push(Message::text("user",
-                    format!("Preloaded agent skill {name}:\\n{content}")));
+                    format!("Preloaded agent skill {name}:\n{content}")));
             }
             let mut continuation = match initial_prompt {
                 Some(initial) if !initial.is_empty() => format!("{initial}\n\n{prompt}"),
