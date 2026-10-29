@@ -179,7 +179,7 @@ pub struct Agent {
     file_metrics: Arc<ToolMetrics>,
     /// Read/Edit and NotebookEdit observations survive subsequent model turns.
     notebook_reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
-    file_reads: Arc<Mutex<HashMap<PathBuf, tools::FileReadState>>>,
+    file_reads: Arc<Mutex<tools::FileReadCache>>,
     last_context_usage: Option<crate::context_usage::Snapshot>,
     last_model_usage: Option<TokenUsage>,
 }
@@ -291,7 +291,7 @@ impl Agent {
             model_prices: Vec::new(),
             file_metrics,
             notebook_reads: Arc::new(Mutex::new(HashMap::new())),
-            file_reads: Arc::new(Mutex::new(HashMap::new())),
+            file_reads: Arc::new(Mutex::new(tools::FileReadCache::default())),
             last_context_usage: None,
             last_model_usage: None,
         })
@@ -3678,7 +3678,7 @@ mod tests {
             model_prices: Vec::new(),
             file_metrics: Arc::new(ToolMetrics::default()),
             notebook_reads: Arc::new(Mutex::new(HashMap::new())),
-            file_reads: Arc::new(Mutex::new(HashMap::new())),
+            file_reads: Arc::new(Mutex::new(tools::FileReadCache::default())),
             last_context_usage: None,
             last_model_usage: None,
         };
