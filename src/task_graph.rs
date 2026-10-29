@@ -328,11 +328,20 @@ impl TaskGraph {
             .all()?
             .into_iter()
             .filter(|t| {
+                // TaskListTool.ts uses !task.metadata?._internal. Metadata is
+                // arbitrary JSON, so JS treats nonempty strings, nonzero
+                // numbers, arrays and objects as internal too; as_bool()
+                // exposed those hidden tasks in the interactive task list.
                 !t.metadata
                     .as_ref()
                     .and_then(|m| m.get("_internal"))
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
+                    .is_some_and(|value| match value {
+                        Value::Null => false,
+                        Value::Bool(value) => *value,
+                        Value::Number(value) => value.as_f64().is_some_and(|n| n != 0.0),
+                        Value::String(value) => !value.is_empty(),
+                        Value::Array(_) | Value::Object(_) => true,
+                    })
             })
             .collect::<Vec<_>>();
         if tasks.is_empty() {
