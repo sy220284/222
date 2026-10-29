@@ -159,13 +159,43 @@ pub async fn control(
                 } else {
                     None
                 };
+                // processSlashCommand.tsx:333-359 returns "Unknown skill"
+                // without a model request. A typo must not stall all later
+                // queued prompts, while known built-ins remain with their
+                // dedicated handlers until those are migrated.
+                let unknown_skill = if next.command.mode == Mode::Prompt
+                    && next.command.is_slash() && slash_expansion.is_none() {
+                    let candidate = next.command.value.as_str().or_else(|| {
+                        let last = next.command.value.as_array()?.last()?;
+                        (last.get("type").and_then(Value::as_str) == Some("text"))
+                            .then(|| last.get("text").and_then(Value::as_str))
+                            .flatten()
+                    });
+                    candidate.and_then(crate::slash_command::parse_slash_command)
+                        .and_then(|parsed| {
+                            let name = parsed.command_name;
+                            let looks_like_command = !name.is_empty()
+                                && name.bytes().all(|c| c.is_ascii_alphanumeric()
+                                    || matches!(c, b':' | b'-' | b'_'));
+                            if !parsed.is_mcp && looks_like_command
+                                && crate::command_manifest::lookup(&name).is_none()
+                                && !std::path::Path::new(&format!("/{name}")).exists() {
+                                Some(format!("Unknown skill: {name}"))
+                            } else {
+                                None
+                            }
+                        })
+                } else {
+                    None
+                };
                 // Bail without consuming unsupported messages. A future caller
                 // can edit, inspect or explicitly remove them.
                 // Preserve completed results if a later item requires a different handler.
                 let reason = match &next.command.mode {
                     Mode::Bash => Some("bash"),
                     Mode::OrphanedPermission => Some("permission"),
-                    _ if next.command.is_slash() && slash_expansion.is_none() => Some("slash-command"),
+                    _ if next.command.is_slash() && slash_expansion.is_none()
+                        && unknown_skill.is_none() => Some("slash-command"),
                     _ if crate::multimodal::parse(&next.command.value).is_err() => {
                         Some("unsupported-content")
                     }
@@ -181,6 +211,21 @@ pub async fn control(
                     }
                     blocked = Some(json!({"identity":next.identity,"reason":reason}));
                     break;
+                }
+                if let Some(message) = unknown_skill {
+                    let item = queue.dequeue(|c| {
+                        c.agent_id.is_none()
+                            && c.priority().rank_for_sdk() <= threshold.rank_for_sdk()
+                    }).context("Unknown skill disappeared from queue")?;
+                    if replay_user_messages {
+                        if let Some(uuid) = item.command.uuid.as_deref() {
+                            emit_user_replay(&item.command.value, uuid, &agent.session_id());
+                        }
+                    }
+                    results.push(json!({"identity":item.identity,"ok":true,
+                        "content":message,"session_id":agent.session_id()}));
+                    processed += 1;
+                    continue;
                 }
                 if !guard.reserve() {
                     bail!("Query already running; queue unchanged");
