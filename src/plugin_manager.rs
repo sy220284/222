@@ -395,6 +395,28 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             if crate::plugins::plugin_blocked_by_policy(&root, name)? {
                 bail!("Plugin '{name}' is disabled by managed policy");
             }
+            // PluginSet::load intentionally isolates unavailable plugins and
+            // returns diagnostics rather than Err, so it cannot by itself
+            // establish that an installation exists. Verify the installed
+            // identity before changing the user's enabled state.
+            let installed = checked_installed_root(&root, false)?.join(name);
+            let metadata = fs::symlink_metadata(&installed)
+                .with_context(|| format!("Plugin '{name}' is not installed"))?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                bail!("Plugin '{name}' installation is invalid");
+            }
+            let manifest = [installed.join(".claude-plugin/plugin.json"), installed.join("plugin.json")]
+                .into_iter().find(|path| path.exists());
+            if let Some(path) = manifest {
+                let metadata = fs::symlink_metadata(&path)?;
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    bail!("Plugin '{name}' manifest is redirected or invalid");
+                }
+                let value: Value = serde_json::from_slice(&fs::read(path)?)?;
+                if value.get("name").and_then(Value::as_str) != Some(name.as_str()) {
+                    bail!("Plugin '{name}' manifest identity does not match installation");
+                }
+            }
             PluginSet::load(&root, std::slice::from_ref(name))?;
             if config.enabled_plugins.contains(name) {
                 bail!("Plugin '{name}' is already enabled");
