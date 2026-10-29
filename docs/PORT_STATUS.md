@@ -1,5 +1,16 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：会话压缩 Token 差额与远程 MCP 失效凭据续接（源码已提交、待验收）
+
+本轮直接读取完整 claude-code-2.1.88-main(1).zip；对照 source/src/services/compact/compact.ts::truncateHeadForPTLRetry、source/src/services/compact/grouping.ts::groupMessagesByApiRound、source/src/services/api/errors.ts::parsePromptTooLongTokenCounts、source/src/services/tokenEstimation.ts::roughTokenCountEstimationForMessages、source/src/services/compact/autoCompact.ts::shouldAutoCompact、source/src/services/mcp/client.ts 中 401/重新连接处理和 source/src/services/mcp/headersHelper.ts。当前源代码提交均只标记“源码已补齐并提交，待验证”，不得勾选 Issue #3 冻结 362 项。
+
+- **压缩报错按 Token 差额分组删减**：src/agent.rs::compact_token_gap、compact_round_token_estimate、truncate_compact_rounds 保留用户可见的历史轮次边界，能解析 `prompt is too long: X tokens > Y` 并按超限量估算所需删减轮次，无法解析时使用原版 20% 回退，重试前清理前轮标记。提交 7de6e7ca。Rust 现有 Message 无原版流式 assistant ID，仍缺跨流片段完整同 ID 分组、取消传播和模型精确 tokenizer。
+- **多模型自动压缩触发**：src/agent.rs::ask_with_blocks 按结构化内容、工具结果和媒体块估算上下文 Token；可通过 ATLAS_CONTEXT_WINDOW_TOKENS 提供当前模型窗口，保留原版 13k 预留空间；ATLAS_DISABLE_COMPACT/ATLAS_DISABLE_AUTO_COMPACT 允许关闭对应模式，不影响手动模式的独立开关。提交 08271117。未提供窗口时维持原有约 25k Token 触发阈值；模型元数据动态窗口、压缩取消及更多外部事件仍待完善。
+- **远程 MCP 动态认证失效后重连**：src/mcp_http.rs::post/poll_notifications 在 HTTP 401 返回明确认证过期，src/mcp.rs::call/poll_resource_updates 将对应连接标记 failed，后续 reconnect_failed 使用已有配置重新建立连接、重新执行 headersHelper 获取凭据；不会无确认地重放可能已产生副作用的工具调用。提交 91a461b6、3d23068a、9e890a5f。完整 OAuth PKCE、刷新令牌、403 权限升级和撤销生命周期仍待补齐。
+
+本轮 2 条独立业务链产生代码补强并推送；均未进行 Cargo/测试/CI，最终等价验收 0。其余候选缺口保持未完成，无法将源码路径、静态文件或同一链的内部修复重复计为 100 个不同功能。
+
+
 ## 2026-10-29：会话 Git 分支检索、任务更新校验及后台任务参数（源码已提交、待验收）
 
 对照用户完整 2.1.88 原始 ZIP 的 `source/src/utils/agenticSessionSearch.ts:110–139,202–253`、`source/src/tools/TaskUpdateTool/TaskUpdateTool.ts:33–65,158–274`、`source/src/tools/TaskOutputTool/TaskOutputTool.tsx:30–34` 和 `source/src/utils/semanticBoolean.ts`，本次完成三条独立用户可感知功能的 Rust 代码补齐：
