@@ -147,6 +147,7 @@ struct SdkAgentDefinition {
     tools: Option<std::collections::HashSet<String>>,
     disallowed_tools: std::collections::HashSet<String>,
     max_turns: Option<usize>,
+    isolation: Option<String>,
 }
 
 pub struct Agent {
@@ -456,7 +457,7 @@ impl Agent {
             let definition = value.as_object()
                 .with_context(|| format!("SDK agent {name} must be an object"))?;
             for field in definition.keys() {
-                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns") {
+                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation") {
                     bail!("SDK agent {name} field {field} is not yet supported");
                 }
             }
@@ -514,6 +515,11 @@ impl Agent {
                     Some(limit as usize)
                 }
             };
+            let isolation = match definition.get("isolation") {
+                None => None,
+                Some(serde_json::Value::String(value)) if value == "worktree" => Some(value.clone()),
+                Some(_) => bail!("SDK agent {name} isolation must be worktree"),
+            };
             parsed.insert(name.clone(), SdkAgentDefinition {
                 description: description.to_owned(),
                 prompt: prompt.to_owned(),
@@ -521,6 +527,7 @@ impl Agent {
                 tools,
                 disallowed_tools,
                 max_turns,
+                isolation,
             });
         }
         self.sdk_agent_definitions = parsed;
@@ -1486,9 +1493,17 @@ impl Agent {
         if prompt.trim().is_empty() {
             bail!("Subagent prompt cannot be empty")
         }
+        let agent_type = args
+            .get("subagent_type")
+            .or_else(|| args.get("agent_type"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("general")
+            .to_owned();
+        let sdk_definition = self.sdk_agent_definitions.get(&agent_type).cloned();
         let isolation = args
             .get("isolation")
             .and_then(|v| v.as_str())
+            .or_else(|| sdk_definition.as_ref().and_then(|definition| definition.isolation.as_deref()))
             .unwrap_or("none");
         if !matches!(isolation, "none" | "worktree") {
             bail!("Unknown isolation mode {isolation}");
@@ -1505,13 +1520,6 @@ impl Agent {
             .as_ref()
             .map(|w| w.path.clone())
             .unwrap_or_else(|| self.root.clone());
-        let agent_type = args
-            .get("subagent_type")
-            .or_else(|| args.get("agent_type"))
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("general")
-            .to_owned();
-        let sdk_definition = self.sdk_agent_definitions.get(&agent_type).cloned();
         let mut child_profile = self.profile.clone();
         if let Some(model) = args.get("model").and_then(|v| v.as_str())
             .or_else(|| sdk_definition.as_ref().and_then(|definition| definition.model.as_deref())) {
