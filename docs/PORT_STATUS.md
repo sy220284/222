@@ -1,5 +1,17 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：MCP 资源请求过期重连与错误凭据脱敏（源码已提交、待验收）
+
+原版依据：`source/src/services/mcp/client.ts` 中 401/过期会话触发连接缓存清理并由 `ensureConnectedClient` 获取新连接、更新 resources/prompts 缓存；`source/src/services/mcp/headersHelper.ts` 中动态请求头重新获取。Rust 已有工具调用恢复，本轮扩展到此前遗漏的资源及提示词真实用户入口，并保证未成功确认的请求不会自动重放。
+
+- MCP 用户读取 resources/read、prompts/get、resources/subscribe/unsubscribe 现在通过 `src/mcp.rs::connected_client` 按需恢复失败连接，保留资源订阅恢复和其他 MCP 服务器状态；提交 `03693b72`。
+- resources/list、prompts/list 和 resourceTemplates/list 目录查询会独立恢复失败服务器，不丢失正常服务器返回；提交 `c03937b7`。
+- 当资源/提示词/订阅及目录请求实际返回会话失效或 401 时，同步记录该客户端失效状态，下次调用重新初始化并刷新动态凭据。失败的原请求不自动重放。提交 `49d6cdb3`。
+- MCP 工具、资源、订阅、提示词和通知轮询错误路径统一复用此前连接状态使用的 URL/配置请求头脱敏，避免显露原始配置和环境变量展开后的查询令牌。提交 `f7924b3e`、`a7177984`。
+
+本小节按 **2 条不同用户业务链**（MCP 资源/提示词恢复、MCP 错误隐私保护）计入源码实际补强。完整 OAuth PKCE 交互、scope 提升后重新授权、刷新令牌轮换及注销仍未实现；Issue #3 的 362 条冻结清单不勾选。本轮没有运行 Cargo、测试或 CI，均保留源码已提交、待验收。
+
+
 ## 2026-10-29：压缩生命周期 Hook 原版行为与多模态 Token 计算续接（源码已提交、待验收）
 
 本次从完整 Claude Code 2.1.88 原始 ZIP 对照 `source/src/utils/hooks.ts::executePreCompactHooks/executePostCompactHooks/executeHooksOutsideREPL`、`source/src/services/compact/compact.ts::compactConversation`、`source/src/services/tokenEstimation.ts::roughTokenCountEstimationForMessages`。源码审阅范围为真实 Agent 压缩、Hook 命令执行和 SDK 结构化消息预算，无静态生成文件计数。
