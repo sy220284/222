@@ -80,7 +80,8 @@ impl PluginSet {
 pub fn list_skills(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
     let mut names = Vec::new();
     for name in enabled {
-        let dir = directory(root, name)?.join("skills");
+        let plugin_root = directory(root, name)?;
+        let dir = plugin_root.join("skills");
         if !dir.is_dir() {
             continue;
         }
@@ -92,8 +93,11 @@ pub fn list_skills(root: &Path, enabled: &[String]) -> Result<Vec<String>> {
             }
             let path = entry.path().join("SKILL.md");
             if path.is_file() {
-                if !path.canonicalize()?.starts_with(root) {
-                    bail!("Plugin skill path leaves workspace")
+                // Discovery and read_skill must enforce the same plugin
+                // boundary. A link into another installed plugin could
+                // otherwise appear in the list but fail when opened.
+                if !path.canonicalize()?.starts_with(&plugin_root) {
+                    bail!("Plugin skill path leaves plugin root")
                 }
                 names.push(format!("{name}:{skill}"));
             }
