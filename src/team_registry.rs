@@ -551,6 +551,10 @@ mod protocol_tests{
         assert!(registry.send_structured("team","worker","worker",
             &json!({"type":"plan_approval_response","request_id":"x",
                 "approve":true})).is_err());
+        let plan_request=registry.send_structured("team","team-lead","worker",
+            &json!({"type":"plan_approval_request","request_id":"p",
+                "plan_file_path":"plan.md","plan_content":"Review tests"})).unwrap();
+        assert_eq!(plan_request["request_id"],"p");
         let plan=registry.send_structured("team","worker","team-lead",
             &json!({"type":"plan_approval_response","request_id":"p",
                 "approve":false,"feedback":"fix tests"})).unwrap();
