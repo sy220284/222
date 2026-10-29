@@ -854,7 +854,9 @@ async fn main() -> Result<()> {
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
     let interactive = matches!(&cli.command, Commands::Chat { .. } | Commands::ProjectInit);
     let session = match &cli.command {
-        Commands::Chat { resume: Some(id), .. } => session_control::resolve(&root, id)?,
+        Commands::Chat {
+            resume: Some(id), ..
+        } => session_control::resolve(&root, id)?,
         Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
         _ => Session::fresh(),
     };
@@ -920,15 +922,17 @@ async fn main() -> Result<()> {
             deep_link_repo,
             deep_link_last_fetch,
             ..
-        } => chat(
-            &mut agent,
-            &mut config,
-            prefill.as_deref(),
-            *deep_link_origin,
-            deep_link_repo.as_deref(),
-            *deep_link_last_fetch,
-        )
-        .await,
+        } => {
+            chat(
+                &mut agent,
+                &mut config,
+                prefill.as_deref(),
+                *deep_link_origin,
+                deep_link_repo.as_deref(),
+                *deep_link_last_fetch,
+            )
+            .await
+        }
         Commands::Sdk { .. } => sdk(&mut agent, &config).await,
         _ => unreachable!(),
     };
@@ -950,8 +954,7 @@ async fn chat(
     println!("Atlas Agent. /help lists commands; /exit quits.");
     if deep_link_origin {
         let last_fetch = last_fetch_ms.and_then(|value| {
-            std::time::SystemTime::UNIX_EPOCH
-                .checked_add(std::time::Duration::from_millis(value))
+            std::time::SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_millis(value))
         });
         let banner = deep_link_banner::DeepLinkBannerInfo {
             cwd: agent.workspace_root().to_path_buf(),
