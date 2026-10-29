@@ -83,7 +83,20 @@ pub struct BackgroundTasks {
 
 impl BackgroundTasks {
     pub fn new(root: &Path) -> Result<Self> {
-        let directory = root.join(".atlas").join("background");
+        Self::in_directory(root, root.join(".atlas").join("background"))
+    }
+
+    /// Match diskOutput.ts::getTaskOutputDir: each conversation owns its
+    /// background output. A second session in the same workspace must never
+    /// list, stop, or read the first session's live shell tasks.
+    pub fn for_session(root: &Path, session_id: Uuid) -> Result<Self> {
+        Self::in_directory(
+            root,
+            root.join(".atlas").join("background").join(session_id.to_string()),
+        )
+    }
+
+    fn in_directory(root: &Path, directory: PathBuf) -> Result<Self> {
         fs::create_dir_all(&directory)?;
         if !directory.canonicalize()?.starts_with(root) {
             bail!("Background task directory escapes workspace");
@@ -186,7 +199,17 @@ impl BackgroundTasks {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-        let mut child = proc.spawn().context("Cannot start background command")?;
+        let mut child = match proc.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                // No process was started; discard its reserved output files.
+                drop(stdout_file);
+                drop(stderr_file);
+                let _ = fs::remove_file(&stdout_path);
+                let _ = fs::remove_file(&stderr_path);
+                return Err(error).context("Cannot start background command");
+            }
+        };
         let stdout = child.stdout.take().context("No background stdout")?;
         let stderr = child.stderr.take().context("No background stderr")?;
         let record = TaskRecord {
@@ -199,7 +222,21 @@ impl BackgroundTasks {
             error_file: stderr_path.to_string_lossy().to_string(),
             truncated: false,
         };
-        Self::save(&self.directory, &record)?;
+        if let Err(error) = Self::save(&self.directory, &record) {
+            // A started shell must not survive an unsuccessful task registration.
+            // Otherwise the user receives an error but the command keeps running.
+            #[cfg(unix)]
+            if let Some(pid) = child.id() {
+                let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+            }
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            drop(stdout);
+            drop(stderr);
+            let _ = fs::remove_file(&stdout_path);
+            let _ = fs::remove_file(&stderr_path);
+            return Err(error).context("Persist background task registration");
+        }
         let (stop, stopped) = oneshot::channel();
         let running = Arc::new(Running {
             record: Mutex::new(record.clone()),
@@ -214,7 +251,7 @@ impl BackgroundTasks {
         tokio::spawn(async move {
             let stdout_task = tokio::spawn(spool(stdout, stdout_file));
             let stderr_task = tokio::spawn(spool(stderr, stderr_file));
-            let (state, code) = tokio::select! {
+            let (mut state, code) = tokio::select! {
                 result = child.wait() => match result {
                     Ok(status) if status.success() => ("completed", status.code()),
                     Ok(status) => ("failed", status.code()),
@@ -231,8 +268,35 @@ impl BackgroundTasks {
                     ("killed", None)
                 }
             };
-            let out = stdout_task.await.ok().and_then(Result::ok).unwrap_or(true);
-            let err = stderr_task.await.ok().and_then(Result::ok).unwrap_or(true);
+            let (out, stdout_failed) = match stdout_task.await {
+                Ok(Ok(capped)) => (capped, false),
+                Ok(Err(error)) => {
+                    eprintln!("Background stdout persistence failed: {error:#}");
+                    (true, true)
+                }
+                Err(error) => {
+                    eprintln!("Background stdout writer failed: {error}");
+                    (true, true)
+                }
+            };
+            let (err, stderr_failed) = match stderr_task.await {
+                Ok(Ok(capped)) => (capped, false),
+                Ok(Err(error)) => {
+                    eprintln!("Background stderr persistence failed: {error:#}");
+                    (true, true)
+                }
+                Err(error) => {
+                    eprintln!("Background stderr writer failed: {error}");
+                    (true, true)
+                }
+            };
+            if stdout_failed || stderr_failed {
+                // A successful shell exit with lost output is a failed task,
+                // not a silently successful command with incomplete evidence.
+                if state == "completed" {
+                    state = "failed";
+                }
+            }
             let updated = {
                 let mut state_record = running.record.lock().unwrap();
                 state_record.status = state.into();
