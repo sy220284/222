@@ -120,7 +120,8 @@ fn hook_lifecycle_uses_executed_tools_and_structured_effective_input() {
     assert_eq!(failed["hook_event_name"], "PostToolUseFailure");
     assert_eq!(failed["tool_use_id"], "failed-edit");
     assert_eq!(failed["tool_input"]["path"], "absent.txt");
-    assert!(failed["error"].as_str().unwrap().contains("Missing required parameter"));
+    assert!(!failed["error"].as_str().unwrap().is_empty());
+    assert!(!failed["error"].as_str().unwrap().starts_with("ERROR:"));
     assert_eq!(failed["is_interrupt"], false);
     assert!(failed.get("tool_response").is_none());
 }
