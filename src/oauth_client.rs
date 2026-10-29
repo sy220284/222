@@ -37,9 +37,11 @@ impl OAuthProvider {
             if !url.username().is_empty() || url.password().is_some() {
                 bail!("OAuth endpoints may not embed credentials");
             }
-            if url.scheme() == "http" && !url.host_str().is_some_and(|h| {
-                h == "localhost" || h == "127.0.0.1" || h == "::1"
-            }) {
+            if url.scheme() == "http"
+                && !url
+                    .host_str()
+                    .is_some_and(|h| h == "localhost" || h == "127.0.0.1" || h == "::1")
+            {
                 bail!("Insecure OAuth HTTP endpoints are allowed only on localhost");
             }
         }
@@ -106,12 +108,22 @@ impl OAuthProvider {
         options: &AuthorizationOptions,
     ) -> AuthorizationLinks {
         AuthorizationLinks {
-            manual: self.build_auth_url(
-                &pkce.challenge, &pkce.state, &self.manual_redirect_uri, options
-            ).to_string(),
-            automatic: self.build_auth_url(
-                &pkce.challenge, &pkce.state, &self.automatic_redirect_uri(port), options
-            ).to_string(),
+            manual: self
+                .build_auth_url(
+                    &pkce.challenge,
+                    &pkce.state,
+                    &self.manual_redirect_uri,
+                    options,
+                )
+                .to_string(),
+            automatic: self
+                .build_auth_url(
+                    &pkce.challenge,
+                    &pkce.state,
+                    &self.automatic_redirect_uri(port),
+                    options,
+                )
+                .to_string(),
         }
     }
 
@@ -151,9 +163,14 @@ impl OAuthProvider {
             .await
             .context("OAuth authorization-code exchange failed")?;
         if response.status() != reqwest::StatusCode::OK {
-            bail!("OAuth token exchange failed (HTTP {})", response.status().as_u16());
+            bail!(
+                "OAuth token exchange failed (HTTP {})",
+                response.status().as_u16()
+            );
         }
-        let token: TokenExchange = response.json().await
+        let token: TokenExchange = response
+            .json()
+            .await
             .context("OAuth token endpoint returned invalid JSON")?;
         OAuthTokens::from_exchange(token, None)
     }
@@ -166,7 +183,9 @@ impl OAuthProvider {
         if refresh_token.is_empty() {
             bail!("Cannot refresh without a refresh token");
         }
-        let scopes = requested_scopes.filter(|s| !s.is_empty()).unwrap_or(&self.scopes);
+        let scopes = requested_scopes
+            .filter(|s| !s.is_empty())
+            .unwrap_or(&self.scopes);
         let request_body = json!({
             "grant_type":"refresh_token",
             "refresh_token":refresh_token,
@@ -180,15 +199,23 @@ impl OAuthProvider {
             .await
             .context("OAuth token refresh request failed")?;
         if response.status() != reqwest::StatusCode::OK {
-            bail!("OAuth token refresh failed (HTTP {})", response.status().as_u16());
+            bail!(
+                "OAuth token refresh failed (HTTP {})",
+                response.status().as_u16()
+            );
         }
-        let token: TokenExchange = response.json().await
+        let token: TokenExchange = response
+            .json()
+            .await
             .context("OAuth refresh endpoint returned invalid JSON")?;
         OAuthTokens::from_exchange(token, Some(refresh_token))
     }
 
     pub async fn fetch_user_roles(&self, access_token: &str) -> Result<Value> {
-        let url = self.roles_url.as_ref().context("Provider has no roles endpoint")?;
+        let url = self
+            .roles_url
+            .as_ref()
+            .context("Provider has no roles endpoint")?;
         let response = Self::http_client()?
             .get(url.clone())
             .bearer_auth(access_token)
@@ -196,13 +223,19 @@ impl OAuthProvider {
             .await
             .context("OAuth roles request failed")?;
         if response.status() != reqwest::StatusCode::OK {
-            bail!("OAuth roles endpoint returned HTTP {}", response.status().as_u16());
+            bail!(
+                "OAuth roles endpoint returned HTTP {}",
+                response.status().as_u16()
+            );
         }
         response.json().await.context("Invalid roles response")
     }
 
     pub async fn create_api_key(&self, access_token: &str) -> Result<Option<String>> {
-        let url = self.api_key_url.as_ref().context("Provider has no API key endpoint")?;
+        let url = self
+            .api_key_url
+            .as_ref()
+            .context("Provider has no API key endpoint")?;
         let response = Self::http_client()?
             .post(url.clone())
             .bearer_auth(access_token)
@@ -210,10 +243,16 @@ impl OAuthProvider {
             .await
             .context("OAuth API key creation failed")?;
         if !response.status().is_success() {
-            bail!("OAuth API key endpoint returned HTTP {}", response.status().as_u16());
+            bail!(
+                "OAuth API key endpoint returned HTTP {}",
+                response.status().as_u16()
+            );
         }
         let body: Value = response.json().await.context("Invalid API key response")?;
-        Ok(body["raw_key"].as_str().filter(|s| !s.is_empty()).map(str::to_owned))
+        Ok(body["raw_key"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned))
     }
 }
 
@@ -259,13 +298,12 @@ impl OAuthTokens {
         if token.access_token.is_empty() {
             bail!("OAuth token exchange returned no access token");
         }
-        let refresh_token = token.refresh_token
+        let refresh_token = token
+            .refresh_token
             .filter(|value| !value.is_empty())
             .or_else(|| existing_refresh.map(str::to_owned))
             .context("OAuth token exchange returned no refresh token")?;
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)?
-            .as_millis();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
         let expiry = now.saturating_add((token.expires_in as u128).saturating_mul(1000));
         let expires_at_ms = u64::try_from(expiry).context("Invalid OAuth expiry")?;
         Ok(Self {
@@ -284,7 +322,11 @@ impl OAuthTokens {
 }
 
 pub fn parse_scopes(scopes: &str) -> Vec<String> {
-    scopes.split(' ').filter(|part| !part.is_empty()).map(str::to_owned).collect()
+    scopes
+        .split(' ')
+        .filter(|part| !part.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Source semantics: unknown expiry does not imply expiration; a known expiry
@@ -303,7 +345,10 @@ pub fn is_oauth_token_expired(expires_at_ms: Option<u64>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpListener};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
 
     async fn respond(body: &str) -> (String, tokio::task::JoinHandle<String>) {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
@@ -318,11 +363,13 @@ mod tests {
                 assert_ne!(size, 0);
                 buffer.extend_from_slice(&block[..size]);
                 if let Some(end) = buffer.windows(4).position(|part| part == b"\r\n\r\n") {
-                    let header = String::from_utf8_lossy(&buffer[..end+4]);
-                    let content_length = header.lines()
+                    let header = String::from_utf8_lossy(&buffer[..end + 4]);
+                    let content_length = header
+                        .lines()
                         .find_map(|line| {
                             let lowercase = line.to_ascii_lowercase();
-                            lowercase.strip_prefix("content-length:")
+                            lowercase
+                                .strip_prefix("content-length:")
                                 .and_then(|value| value.trim().parse::<usize>().ok())
                         })
                         .unwrap_or(0);
@@ -351,21 +398,26 @@ mod tests {
             "public-client",
             vec!["openid".into(), "profile".into()],
             "http://localhost:8787/manual",
-        ).unwrap()
+        )
+        .unwrap()
     }
 
     #[test]
     fn auth_urls_include_pkce_and_provider_scopes_with_distinct_redirects() {
         let config = provider("http://127.0.0.1:9999");
         let pkce = crate::oauth_crypto::PkceRequest::create().unwrap();
-        let urls = config.authorization_links(&pkce, 35000, &AuthorizationOptions {
-            login_hint: Some("a@example.org".into()),
-            organization: Some("team-1".into()),
-            login_method: Some("sso".into()),
-        });
+        let urls = config.authorization_links(
+            &pkce,
+            35000,
+            &AuthorizationOptions {
+                login_hint: Some("a@example.org".into()),
+                organization: Some("team-1".into()),
+                login_method: Some("sso".into()),
+            },
+        );
         let auto = Url::parse(&urls.automatic).unwrap();
         let manual = Url::parse(&urls.manual).unwrap();
-        let pairs: std::collections::HashMap<_,_> = auto.query_pairs().into_owned().collect();
+        let pairs: std::collections::HashMap<_, _> = auto.query_pairs().into_owned().collect();
         assert_eq!(pairs["code_challenge"], pkce.challenge);
         assert_eq!(pairs["state"], pkce.state);
         assert_eq!(pairs["scope"], "openid profile");
@@ -373,16 +425,30 @@ mod tests {
         assert_eq!(pairs["login_hint"], "a@example.org");
         assert_eq!(pairs["orgUUID"], "team-1");
         assert_eq!(pairs["login_method"], "sso");
-        assert_eq!(manual.query_pairs().find(|(k,_)| k=="redirect_uri").unwrap().1, "http://localhost:8787/manual");
+        assert_eq!(
+            manual
+                .query_pairs()
+                .find(|(k, _)| k == "redirect_uri")
+                .unwrap()
+                .1,
+            "http://localhost:8787/manual"
+        );
     }
 
     #[tokio::test]
     async fn code_exchange_and_refresh_preserve_rotated_tokens_and_expiry() {
         let (base, exchange) = respond(r#"{"access_token":"token-one","refresh_token":"refresh-one","expires_in":3600,"scope":"openid profile"}"#).await;
         let config = provider(&base);
-        let first = config.exchange_code_for_tokens(
-            "auth code", "state", "verifier", "http://localhost:35000/callback", Some(3600)
-        ).await.unwrap();
+        let first = config
+            .exchange_code_for_tokens(
+                "auth code",
+                "state",
+                "verifier",
+                "http://localhost:35000/callback",
+                Some(3600),
+            )
+            .await
+            .unwrap();
         assert_eq!(first.access_token, "token-one");
         assert_eq!(first.refresh_token, "refresh-one");
         assert_eq!(first.scopes, ["openid", "profile"]);
@@ -395,13 +461,18 @@ mod tests {
         assert_eq!(posted["code_verifier"], "verifier");
         assert_eq!(posted["expires_in"], 3600);
 
-        let (base, refresh) = respond(r#"{"access_token":"token-two","expires_in":600,"scope":"profile"}"#).await;
+        let (base, refresh) =
+            respond(r#"{"access_token":"token-two","expires_in":600,"scope":"profile"}"#).await;
         let config = provider(&base);
-        let second = config.refresh_oauth_token("refresh-one", None).await.unwrap();
+        let second = config
+            .refresh_oauth_token("refresh-one", None)
+            .await
+            .unwrap();
         assert_eq!(second.access_token, "token-two");
         assert_eq!(second.refresh_token, "refresh-one");
         assert_eq!(second.scopes, ["profile"]);
-        let posted: Value = serde_json::from_str(refresh.await.unwrap().split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        let posted: Value =
+            serde_json::from_str(refresh.await.unwrap().split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(posted["grant_type"], "refresh_token");
         assert_eq!(posted["refresh_token"], "refresh-one");
         assert_eq!(posted["scope"], "openid profile");
