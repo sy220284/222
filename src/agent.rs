@@ -1628,6 +1628,54 @@ impl Agent {
 
     /// Replace previous turns with a model-generated, persistent compact summary.
     /// This is provider-neutral and never invokes executable tools.
+    /// Source compact.ts retries a prompt-too-long summary at most three
+    /// times, dropping complete older API rounds rather than losing the user's
+    /// live session or cutting a tool invocation apart.
+    fn compact_context_limit(message: &str) -> bool {
+        let error = message.to_ascii_lowercase();
+        [
+            "prompt too long",
+            "prompt is too long",
+            "context_length_exceeded",
+            "maximum context length",
+            "context window exceeded",
+            "input is too long",
+            "too many input tokens",
+        ]
+        .iter()
+        .any(|marker| error.contains(marker))
+    }
+
+    fn truncate_compact_rounds(history: &mut Vec<Message>) -> bool {
+        const MARKER: &str = "[earlier conversation truncated for compaction retry]";
+        if history.first().is_some_and(|message| {
+            message.role == "user" && message.content.as_deref() == Some(MARKER)
+        }) {
+            history.remove(0);
+        }
+        let mut boundaries = vec![0];
+        for (index, message) in history.iter().enumerate() {
+            if message.role == "assistant" && index > 0 {
+                boundaries.push(index);
+            }
+        }
+        if boundaries.len() < 2 {
+            return false;
+        }
+        // All messages between adjacent boundaries stay together. The
+        // previous tool result remains attached to its assistant turn.
+        let groups_to_drop = std::cmp::max(1, boundaries.len() / 5);
+        let drop_index = boundaries[std::cmp::min(groups_to_drop, boundaries.len() - 1)];
+        let mut remaining = history.split_off(drop_index);
+        if remaining.first().is_some_and(|message| message.role != "user") {
+            remaining.insert(0, Message::text("user", MARKER));
+        }
+        *history = remaining;
+        true
+    }
+
+    /// Replace previous turns with a model-generated, persistent compact summary.
+    /// Do not modify the live transcript until the new session is durable.
     pub async fn compact_history(&mut self) -> Result<()> {
         if self.session.messages.is_empty() {
             bail!("No history to compact")
@@ -1646,80 +1694,122 @@ impl Agent {
         }
         let previous = self.session.summary.as_deref().unwrap_or("");
         let prompt = crate::prompt_runtime::compact_prompt(previous);
-        let api_started = Instant::now();
-        let response_result = self
-            .provider
-            .complete(&ModelRequest {
-                model: self.profile.model.clone(),
-                system: prompt,
-                messages: {
-                    // Original stripImagesFromMessages avoids sending
-                    // binary image/document payloads into summarization.
-                    let mut history = self.session.messages.clone();
-                    for message in &mut history {
-                        if message.role != "user" { continue; }
-                        if let Some(blocks) = message.content_blocks.as_mut() {
-                            for block in blocks.iter_mut() {
-                                match block.get("type").and_then(serde_json::Value::as_str).map(str::to_owned).as_deref() {
-                                    Some("image") => *block = json!({"type":"text","text":"[image]"}),
-                                    Some("document") => *block = json!({"type":"text","text":"[document]"}),
-                                    Some("tool_result") => {
-                                        if let Some(content) = block.get_mut("content").and_then(serde_json::Value::as_array_mut) {
-                                            for item in content {
-                                                match item.get("type").and_then(serde_json::Value::as_str).map(str::to_owned).as_deref() {
-                                                    Some("image") => *item = json!({"type":"text","text":"[image]"}),
-                                                    Some("document") => *item = json!({"type":"text","text":"[document]"}),
-                                                    _ => {}
-                                                }
-                                            }
+        // The original stripImagesFromMessages removes binary payloads only
+        // from the summarization request, never from saved conversation data.
+        let mut history = self.session.messages.clone();
+        for message in &mut history {
+            if message.role != "user" {
+                continue;
+            }
+            if let Some(blocks) = message.content_blocks.as_mut() {
+                for block in blocks {
+                    match block.get("type").and_then(serde_json::Value::as_str) {
+                        Some("image") => *block = json!({"type":"text","text":"[image]"}),
+                        Some("document") => *block = json!({"type":"text","text":"[document]"}),
+                        Some("tool_result") => {
+                            if let Some(content) = block
+                                .get_mut("content")
+                                .and_then(serde_json::Value::as_array_mut)
+                            {
+                                for item in content {
+                                    match item.get("type").and_then(serde_json::Value::as_str) {
+                                        Some("image") => {
+                                            *item = json!({"type":"text","text":"[image]"})
                                         }
+                                        Some("document") => {
+                                            *item = json!({"type":"text","text":"[document]"})
+                                        }
+                                        _ => {}
                                     }
-                                    _ => {}
                                 }
                             }
                         }
+                        _ => {}
                     }
-                    history
-                },
-                tools: Vec::new(),
-            })
-            .await;
-        self.session.cost.add_api_duration(api_started.elapsed());
-        let response = match response_result {
-            Ok(response) => response,
-            Err(error) => {
-                self.session.save(&self.root)?;
-                return Err(error);
+                }
+            }
+        }
+
+        let mut retries = 0;
+        let response = loop {
+            let api_started = Instant::now();
+            let result = self
+                .provider
+                .complete(&ModelRequest {
+                    model: self.profile.model.clone(),
+                    system: prompt.clone(),
+                    messages: history.clone(),
+                    tools: Vec::new(),
+                })
+                .await;
+            self.session.cost.add_api_duration(api_started.elapsed());
+            match result {
+                Ok(response) => {
+                    let visible = response.message.visible_text();
+                    if Self::compact_context_limit(&visible) {
+                        if retries < 3 && Self::truncate_compact_rounds(&mut history) {
+                            retries += 1;
+                            continue;
+                        }
+                        bail!("Compaction exceeded model context after {retries} retries");
+                    }
+                    break response;
+                }
+                Err(error) if Self::compact_context_limit(&format!("{error:#}")) => {
+                    if retries < 3 && Self::truncate_compact_rounds(&mut history) {
+                        retries += 1;
+                        continue;
+                    }
+                    self.session.save(&self.root)?;
+                    return Err(error);
+                }
+                Err(error) => {
+                    self.session.save(&self.root)?;
+                    return Err(error);
+                }
             }
         };
         if let Some(usage) = response.usage {
             self.record_usage(usage);
         }
-        if response.message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
+        if response
+            .message
+            .tool_calls
+            .as_ref()
+            .is_some_and(|calls| !calls.is_empty())
+        {
             bail!("Compaction model unexpectedly requested tools");
         }
         let summary = response.message.visible_text();
         if summary.trim().is_empty() {
             bail!("Compaction returned empty text")
         }
-        self.session.summary = Some(summary);
-        runtime_contracts::suppress_compact_warning();
-        self.session.messages.clear();
-        // Compaction removes earlier memory attachments from the context.
-        self.session.surfaced_memories.clear();
-        self.session.surfaced_memory_units = 0;
-        self.session.save(&self.root)?;
+
+        // The original executes PostCompact hooks before returning the new
+        // message set. Keep the old transcript if a blocking hook fails.
         let after = self
             .hooks
             .run(
                 HookEvent::PostCompact,
                 None,
-                json!({"session_id":self.session.id,"summary":self.session.summary}),
+                json!({"session_id":self.session.id,"summary":summary}),
             )
             .await?;
         if let Some(reason) = after.blocking_reason {
             bail!("PostCompact blocked: {reason}")
         }
+
+        // Session::save already uses a temporary file and atomic rename.
+        // Persist a candidate before swapping it into the live Agent so a
+        // disk failure cannot destroy the conversation in memory.
+        let mut candidate = self.session.clone();
+        candidate.summary = Some(summary);
+        candidate.messages.clear();
+        candidate.surfaced_memories.clear();
+        candidate.surfaced_memory_units = 0;
+        candidate.save(&self.root)?;
+        self.session = candidate;
+        runtime_contracts::suppress_compact_warning();
         Ok(())
     }
 
