@@ -88,7 +88,13 @@ fn manifest_name(root: &Path) -> Result<String> {
 }
 
 fn copy_local_tree(source: &Path, stage: &Path) -> Result<()> {
-    for entry in WalkDir::new(source).follow_links(false) {
+    // pluginLoader.ts::installFromLocal removes the source repository's .git
+    // metadata. Do not copy private remotes, hooks or history into the
+    // installed plugin in the first place.
+    for entry in WalkDir::new(source).follow_links(false).into_iter()
+        .filter_entry(|entry| entry.depth() != 1
+            || entry.file_name() != std::ffi::OsStr::new(".git"))
+    {
         let entry = entry?;
         if entry.file_type().is_symlink() {
             bail!("Cannot install a plugin containing symbolic links");
