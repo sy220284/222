@@ -1,3 +1,10 @@
+## 2026-10-29：SDK 动态 MCP 服务配置更新进入真实执行链（源码已提交、待验收）
+
+- **原版完整源码**：`source/src/cli/print.ts::applyMcpServerChanges` 与 `mcp_set_servers` 控制分支；`source/src/cli/print.ts::handleMcpSetServers/reconcileMcpServers`；`source/src/services/mcp/config.ts::filterMcpServersByPolicy`。原版支持按 SDK 期望配置增删、更换进程/HTTP 服务，清除旧工具路由并保留无变化服务，按策略拒绝非法注入，逐服务返回错误。
+- **Rust 实际代码**：`src/main.rs::sdk_nested_control("mcp_set_servers")` → `src/agent.rs::set_dynamic_mcp_servers` → `src/mcp_policy.rs::allows` / `Config::validate` → `src/mcp.rs::McpManager::reconcile_dynamic` → 真实连接/断开、工具定义更新、MCP 状态与错误回传；Agent 子代理和团队成员继承当前动态服务配置。重配仅触及有差异的动态服务，保留静态服务及未改变的连接；单服务失败写入可见状态，配置和策略错误逐项返回。新进程服务只在当前会话生效。
+- **提交**：`91bb6189`、`3524b306`、`9a402ee4`、`046bbd4e`、`cb8355a3`、`b6351fa9`、`83e6f124`、`56883624`、`5cbcd324`、`a0716f3e`、`63a53430`。已静态审查 SDK 入口→配置校验→策略→增删/重连→工具路由→子代理继承，未运行 Cargo、CI 或行为测试。保守计 **1 项独立用户可感知业务功能：SDK 会话内动态配置 MCP 服务**，已提交、待验收，新增完整等价验收 0。
+- **尚存差异**：原版 SDK 内进程 `type:sdk` 传输回调、SSE 传输、OAuth 交互、原版完整策略来源/匹配边界、动态服务与插件后台安装的并发合并、所有工具和资源订阅恢复及异常时序尚未全等；对不支持的 SDK 传输明确返回错误。此段与同轮文件编码读写补强合计 **2/100，剩余 98 项**；100 条前置缺口清单仍未完整核验，不宣称本轮达标。Issue #3 冻结 362 项继续开放。
+
 ## 2026-10-29：文件读取、编辑及 SDK 读取状态的原版编码与换行处理（源码已提交、待验收）
 
 - **原版完整源码依据**：`source/src/utils/fileRead.ts::readFileSyncWithMetadata/detectLineEndingsForString`；`source/src/tools/FileEditTool/FileEditTool.ts::readFileForEdit`；`source/src/tools/FileWriteTool/FileWriteTool.ts::call`；`source/src/cli/print.ts` 的 `seed_read_state`。原版按 UTF-16LE BOM 识别编码、读取时规范化 CRLF、编辑时恢复原有换行风格；完整覆盖写入遵从模型明确指定的换行内容并保留原文件编码。
