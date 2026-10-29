@@ -262,6 +262,7 @@ fn manifest_servers(root: &Path, value: &Value) -> Result<Vec<McpServerConfig>> 
 fn resolve_plugin_mcp_server(
     root: &Path,
     plugin_name: &str,
+    manifest: &Manifest,
     mut server: McpServerConfig,
 ) -> Result<McpServerConfig> {
     let plugin_root = if cfg!(windows) {
@@ -285,11 +286,54 @@ fn resolve_plugin_mcp_server(
     } else {
         data.to_string_lossy().into_owned()
     };
+    // mcpPluginIntegration.ts::buildMcpUserConfig/resolvePluginMcpEnvironment:
+    // expand saved user_config values in the actual MCP launch arguments,
+    // headers and URLs before resolving ordinary environment variables.
+    // Secrets remain outside public settings until secure storage is ported.
+    let config_schema = manifest.user_config.as_object();
+    let user_config_pattern = regex::Regex::new(r"\$\{user_config\.([^}]+)\}")?;
+    let needs_user_config = std::iter::once(server.command.as_str())
+        .chain(server.args.iter().map(String::as_str))
+        .chain(server.env.values().map(String::as_str))
+        .chain(server.url.iter().map(String::as_str))
+        .chain(server.headers.values().map(String::as_str))
+        .any(|value| user_config_pattern.is_match(value));
+    let options = if needs_user_config && config_schema.is_some() {
+        let workspace = root.parent().and_then(Path::parent).and_then(Path::parent)
+            .context("Plugin installation is outside the workspace")?;
+        Some(crate::permission_settings::SettingsPaths::for_workspace(workspace)?
+            .plugin_public_options(plugin_name)?)
+    } else {
+        None
+    };
     let expand = |raw: &str| -> Result<String> {
+        let mut substituted = String::with_capacity(raw.len());
+        let mut last = 0;
+        for capture in user_config_pattern.captures_iter(raw) {
+            let whole = capture.get(0).context("Invalid user config reference")?;
+            substituted.push_str(&raw[last..whole.start()]);
+            let key = &capture[1];
+            if let Some(options) = &options {
+                let field = config_schema.and_then(|schema| schema.get(key))
+                    .with_context(|| format!("Undeclared plugin user configuration: {key}"))?;
+                if field.get("sensitive").and_then(Value::as_bool) == Some(true) {
+                    bail!("Plugin user configuration '{key}' requires secure secret storage")
+                }
+                let value = options.get(key)
+                    .with_context(|| format!("Missing required plugin user configuration: {key}"))?;
+                match value {
+                    Value::String(value) => substituted.push_str(value),
+                    other => substituted.push_str(&other.to_string()),
+                }
+            } else {
+                substituted.push_str(whole.as_str());
+            }
+            last = whole.end();
+        }
+        substituted.push_str(&raw[last..]);
         // Keep unresolved ambient variables intact: the original plugin
-        // loader records them and the MCP transport reports a per-server
-        // connection failure, without hiding that server from status.
-        Ok(crate::compat_helpers::expand_env_vars_with(raw, |key| {
+        // loader records them and reports a per-server connection failure.
+        Ok(crate::compat_helpers::expand_env_vars_with(&substituted, |key| {
             match key {
                 "ATLAS_PLUGIN_ROOT" | "CLAUDE_PLUGIN_ROOT" => Some(plugin_root.clone()),
                 "ATLAS_PLUGIN_DATA" | "CLAUDE_PLUGIN_DATA" => Some(plugin_data.clone()),
@@ -395,8 +439,12 @@ impl PluginSet {
             for server in manifest_servers(&location, &manifest.mcp_servers)? {
                 // A single unconfigured MCP server must not prevent other
                 // tools, skills and hooks in this plugin from loading.
-                let Ok(mut server) = resolve_plugin_mcp_server(&location, name, server) else {
-                    continue;
+                let mut server = match resolve_plugin_mcp_server(&location, name, &manifest, server) {
+                    Ok(server) => server,
+                    Err(error) => {
+                        eprintln!("Plugin '{name}' MCP server '{}' unavailable: {error:#}", server.id);
+                        continue;
+                    }
                 };
                 // Plugin-scoped MCP names may exceed the local config's
                 // short identifier limit; the original source scopes the full
@@ -509,9 +557,6 @@ pub fn resolve_skill_path(root: &Path, enabled: &[String], identifier: &str) -> 
 
 pub fn read_skill(root: &Path, enabled: &[String], identifier: &str) -> Result<String> {
     let path = resolve_skill_path(root, enabled, identifier)?;
-    if fs::metadata(&path)?.len() > 64_000 {
-        bail!("Plugin skill too large")
-    }
     Ok(fs::read_to_string(path)?)
 }
 
@@ -661,9 +706,6 @@ pub fn command_prompt_with_session(
     // model-visible skills. Resolve the same manifest paths as read_skill.
     if let Some((_, path)) = skill_files(&plugin_root, &manifest)?
         .into_iter().find(|(name, _)| name == suffix) {
-        if fs::metadata(&path)?.len() > 64_000 {
-            bail!("Plugin skill too large")
-        }
         let content = fs::read_to_string(&path)?;
         let prompt = plugin_command_body(&content, args, &plugin_root, session_id)?;
         if prompt.is_none() && session_id.is_some() {
