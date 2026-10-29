@@ -46,6 +46,7 @@ mod portable_source_utils;
 mod portable_ui_runtime;
 mod powershell_permission_matching;
 mod prompt_history;
+mod project_init;
 mod protocol;
 mod provider;
 mod query_guard;
@@ -165,6 +166,8 @@ enum Commands {
     Init,
     /// Inspect local installation, settings, Git and MCP availability offline
     Doctor,
+    /// Set up project instructions, skills and hooks through guided model tools
+    ProjectInit,
     /// Report actual local session and model usage statistics
     Stats,
     /// Parse a provider-neutral deep link without opening a terminal
@@ -458,7 +461,7 @@ async fn main() -> Result<()> {
         permission_settings::SettingsPaths::for_workspace(&root)?.load(&config.permission_rules)?;
     let plugins = PluginSet::load(&root, &config.enabled_plugins)?;
     let profile = config.select(cli.provider.as_deref(), cli.model.as_deref())?;
-    let interactive = matches!(&cli.command, Commands::Chat { .. });
+    let interactive = matches!(&cli.command, Commands::Chat { .. } | Commands::ProjectInit);
     let session = match &cli.command {
         Commands::Chat { resume: Some(id) } => session_control::resolve(&root, id)?,
         Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
@@ -515,6 +518,10 @@ async fn main() -> Result<()> {
                 .ask(&actual_prompt)
                 .await
                 .map(|answer| println!("{answer}"))
+        }
+        Commands::ProjectInit => {
+            let prompt = project_init::prompt(agent.workspace_root())?;
+            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
         }
         Commands::Chat { .. } => chat(&mut agent, &mut config).await,
         Commands::Sdk { .. } => sdk(&mut agent, &config).await,
@@ -651,6 +658,7 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 );
                 println!("/tag NAME                add/replace a searchable session tag; repeat to remove");
                 println!("/branch [name]           fork the conversation and resume independently");
+                println!("/init                    set up project instructions, optional skills and hooks");
                 println!("/stats                   report real local session usage and costs");
                 println!("/history [query]         search saved prompt history");
                 println!("/find TEXT               search visible messages in this conversation");
@@ -833,6 +841,14 @@ async fn chat(agent: &mut Agent, config: &mut Config) -> Result<()> {
                 }
             } else {
                 println!("{}", agent.set_session_tag(Some(tag))?);
+            }
+            continue;
+        }
+        if input == "/init" {
+            let prompt = project_init::prompt(agent.workspace_root())?;
+            match agent.ask(&prompt).await {
+                Ok(answer) => println!("{answer}"),
+                Err(error) => eprintln!("Project initialization failed: {error:#}"),
             }
             continue;
         }
