@@ -1,3 +1,9 @@
+## 2026-10-29：SDK 初始化真实插件与技能命令目录（已提交、待验收）
+
+- **原版**：`source/src/cli/print.ts:4453–4460` 的 SDK initialize 返回用户可调用命令的名称、说明及参数提示，隐藏 `userInvocable=false` 项。
+- **Rust 可达链**：`src/main.rs::sdk_nested_control(initialize)` → 原有可执行内建命令 + `plugins::list_commands` + `Agent::list_user_skills` → 去重、排除用户不可调用项 → SDK `commands` 字段；命令执行已接入同一 `expand_user_skill_prompt`。避免 SDK 宣传实际上不可调用的模型专用技能。
+- **提交**：`662beed672e9669fc6bb686305d119947abca094`。新增 **1 项独立 SDK 业务功能**，本轮累计 **14/100，余 86**。已知差异：插件 Markdown frontmatter 的完整描述/参数提示尚未回传（当前插件/技能使用通用说明），SDK 动态刷新和排队执行仍缺；未运行 Cargo、测试或 CI，已提交、待验收。先行 100 项完整问题清单未形成，Issue #3 冻结 362 项继续开放。
+
 ## 2026-10-29：SDK 文本技能/插件命令展开复用交互权限（已提交、待验收）
 
 - **原版线索**：`source/src/cli/print.ts` 的 SDK 用户消息和 `skipSlashCommands` 路径，结合 `source/src/utils/plugins/loadPluginCommands.ts:169–211,326–400`、`source/src/skills/loadSkillsDir.ts:316–373` 的用户命令提示展开。
