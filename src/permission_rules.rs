@@ -107,6 +107,90 @@ pub fn parse_rule(s: &str) -> RuleValue {
         rule_content: Some(unescape_content(body)),
     }
 }
+/// Validate persisted permission rules before applying them. The source
+/// settings loader filters invalid entries individually, keeping valid rules
+/// from the same settings file (settings/permissionValidation.ts).
+pub fn valid_stored_rule(raw: &str) -> bool {
+    if raw.trim().is_empty() {
+        return false;
+    }
+    let bytes = raw.as_bytes();
+    let mut opens = 0usize;
+    let mut closes = 0usize;
+    for (index, ch) in bytes.iter().enumerate() {
+        if *ch != b'(' && *ch != b')' {
+            continue;
+        }
+        let escaped = bytes[..index]
+            .iter()
+            .rev()
+            .take_while(|byte| **byte == b'\\')
+            .count()
+            % 2
+            != 0;
+        if !escaped {
+            if *ch == b'(' {
+                opens += 1;
+                if bytes.get(index + 1) == Some(&b')') {
+                    return false;
+                }
+            } else {
+                closes += 1;
+            }
+        }
+    }
+    if opens != closes {
+        return false;
+    }
+    let value = parse_rule(raw);
+    let name = value.tool_name.as_str();
+    if name.is_empty() || name.chars().next().is_some_and(|ch| ch.is_lowercase()) {
+        // MCP tool names are the only lowercase persisted tool identifiers.
+        if !name.starts_with("mcp__") {
+            return false;
+        }
+    }
+    if name.starts_with("mcp__") {
+        return opens == 0;
+    }
+    let Some(content) = value.rule_content.as_deref() else {
+        return true;
+    };
+    match name {
+        "Bash" => {
+            if (content.contains(":*") && !content.ends_with(":*")) || content == ":*" {
+                return false;
+            }
+        }
+        "Read" | "Write" | "Edit" | "Glob" | "NotebookRead" | "NotebookEdit" => {
+            if content.contains(":*") {
+                return false;
+            }
+            if content.contains('*')
+                && !content.starts_with('*')
+                && !content.ends_with('*')
+                && !content.contains("**")
+                && !content.contains("/*")
+                && !content.contains("*.")
+                && !content.contains("*)")
+            {
+                return false;
+            }
+        }
+        "WebFetch" => {
+            if content.contains("://")
+                || content.starts_with("http")
+                || !content.starts_with("domain:")
+            {
+                return false;
+            }
+        }
+        "WebSearch" if content.contains('*') || content.contains('?') => return false,
+        _ => {}
+    }
+    true
+}
+
 pub fn format_rule(value: &RuleValue) -> String {
     match value.rule_content.as_deref().filter(|s| !s.is_empty()) {
         Some(content) => format!("{}({})", value.tool_name, escape_content(content)),
@@ -802,6 +886,41 @@ mod tests {
             None
         );
     }
+    #[test]
+    fn persisted_rule_validation_matches_original_settings_filter() {
+        for valid in [
+            "Bash(git status)",
+            "Bash(git:*)",
+            "Bash(git *)",
+            "Read(src/**)",
+            "WebFetch(domain:example.com)",
+            "WebSearch(rust language)",
+            "mcp__server__tool",
+            "mcp__server__*",
+            "KillShell(123)",
+        ] {
+            assert!(valid_stored_rule(valid), "valid: {valid}");
+        }
+        for invalid in [
+            "",
+            " ",
+            "Bash()",
+            "Bash(echo (",
+            "Bash(echo ))",
+            "Bash(npm:* run)",
+            "Bash(:*)",
+            "Read(path:*)",
+            "Read(path*name)",
+            "WebFetch(https://example.com)",
+            "WebFetch(example.com)",
+            "WebSearch(foo*)",
+            "mcp__server(*)",
+            "read_file(foo)",
+        ] {
+            assert!(!valid_stored_rule(invalid), "invalid: {invalid}");
+        }
+    }
+
     #[test]
     fn parsing_and_escaping_reference_cases() {
         for (text, name, content) in [
