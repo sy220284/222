@@ -3308,7 +3308,7 @@ mod tests {
             event: HookEvent::TaskCompleted,
             matcher: None,
             command: "printf '{\"decision\":\"block\",\"reason\":\"Tests missing\"}'".into(),
-            timeout_seconds: 5,
+            shell: None, timeout_seconds: 5,
         }])
         .unwrap();
         let call = ToolCall {
@@ -4765,13 +4765,13 @@ done"#;
                 event: HookEvent::SessionEnd,
                 matcher: None,
                 command: shell("end"),
-                timeout_seconds: 5,
+                shell: None, timeout_seconds: 5,
             },
             HookRule {
                 event: HookEvent::SessionStart,
                 matcher: None,
                 command: shell("start"),
-                timeout_seconds: 5,
+                shell: None, timeout_seconds: 5,
             },
         ])
         .unwrap();
