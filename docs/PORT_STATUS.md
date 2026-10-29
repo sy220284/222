@@ -789,3 +789,12 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 对照原版 `src/tools/TaskUpdateTool/TaskUpdateTool.ts::mapToolResultToToolResultBlockParam`，补齐队员成功完成任务后向模型反馈下一项 TaskList 检索提示；仅对真实状态从非 completed 转 completed 且处于团队队员身份时发出，不重复提醒。代码提交 `090137302528e0550003bb2e66fa0e77bbe08998`。
 
 本轮两条独立用户业务链源码已提交，均**待行为验收**；未运行 Cargo、测试或 CI，未提升任何原路径的完整等价验收状态，Issue #3 冻结 362 项继续开放。后续需要核对无交互/交互 SDK 工具模式、原版 Todo UI 状态和复杂团队任务时序。100 项本轮硬目标仍未完成，禁止将这两项当作 100 项闭环。
+
+
+## 2026-10-29：任务列表显式共享与 Doctor 可执行探测（源码已提交，待验收）
+
+对照原版 `src/utils/tasks.ts::getTaskListId` 的“显式列表 ID → 团队名 → 会话 ID”优先级，在 Rust `src/agent.rs` 中补齐厂商中立的 `ATLAS_TASK_LIST_ID`，跨独立会话及恢复/清空/分支会话沿用指定列表。创建团队时仍重置团队专属任务存储；删除团队只清理团队目录，避免误删显式共享列表。提交 `decdb5835ffd840b33dc1fde8c2f0901bee22a6a`。团队生命周期完整时序仍需验收。
+
+对照原版 `src/utils/which.ts` 使用 `which` / `where.exe` / `Bun.which` 查找**可执行命令**的语义，修复 `src/diagnostics.rs` 只检查 `is_file()` 的偏差：POSIX 系统必须具有执行权限，Windows 按 PATHEXT 逐个检查；Doctor 的 Git 检测及 MCP stdio 启动预检查均接入同一函数。提交 `0a5791afe65b775bd0781748bfa42db79be67d5a`。未运行 Cargo、测试或 CI，仍待行为验收。
+
+以上为两条独立业务功能链的源码补齐；与此前同轮 TodoWrite、队员任务反馈共计四条源码补齐、待验收。Issue #3 冻结 362 项均保持开放，100 项目标未达成。

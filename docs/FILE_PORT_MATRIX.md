@@ -969,7 +969,7 @@
 | `src/remote/remotePermissionBridge.ts` | 79 | 2378 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/remote/sdkMessageAdapter.ts` | 303 | 9060 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/schemas/hooks.ts` | 223 | 7884 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/screens/Doctor.tsx` | 575 | 73277 | 重写：终端 UI／交互 | `src/diagnostics.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：原版 Doctor 诊断中可移植部分落地为实际可运行命令，支持真实 MCP 状态/上下文大小/配置错误报告；新增 Bash/后台任务输出长度环境变量的非法值与上限截断诊断，以及 40,000 UTF-16 字符超大指令文件警告，源码已提交待行为验收；仍缺原版 React/Ink UI、自动更新、版本锁与完整环境安装诊断 |
+| `src/screens/Doctor.tsx` | 575 | 73277 | 重写：终端 UI／交互 | `src/diagnostics.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：原版 Doctor 诊断中可移植部分落地为实际可运行命令，支持真实 MCP 状态/上下文大小/配置错误报告；新增 Bash/后台任务输出长度环境变量的非法值与上限截断诊断，以及 40,000 UTF-16 字符超大指令文件警告，源码已提交待行为验收；修复 PATH 中不可执行文件被误判为可用程序；仍缺原版 React/Ink UI、自动更新、版本锁与完整环境安装诊断 |
 | `src/screens/REPL.tsx` | 5006 | 895850 | 重写：终端 UI／交互 | `src/generated_ports/p_fe5e0a874b3c2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/screens/ResumeConversation.tsx` | 399 | 59682 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/server/createDirectConnectSession.ts` | 89 | 2193 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1844,7 +1844,7 @@
 | `src/utils/task/framework.ts` | 309 | 9869 | 重写：保持通用行为 | `src/background.rs / src/task.rs` | 部分实现：任务状态与后台状态持久化；通知队列及通用生命周期未等价 |
 | `src/utils/task/outputFormatting.ts` | 39 | 1188 | 重写：保持通用行为 | `src/task_output_format.rs` | 部分实现：长度上限、UTF-16 计数、尾部截断和日志路径；代理项边界与任务目录待核对 |
 | `src/utils/task/sdkProgress.ts` | 37 | 1153 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/tasks.ts` | 863 | 26354 | 重写：保持通用行为 | `src/task_graph.rs / src/task_events.rs / src/agent.rs` | 部分实现：CRUD、依赖/认领、高水位、重置、退出收回、订阅回调锁外派发；已补齐损坏/超长任务文件名隔离、异常 JSON 重置清理、损坏记录占用编号不复用、无效编号读取返回任务不存在；原版全部状态迁移、跨进程通知与文件级并发仍未等价 |
+| `src/utils/tasks.ts` | 863 | 26354 | 重写：保持通用行为 | `src/task_graph.rs / src/task_events.rs / src/agent.rs` | 部分实现：CRUD、依赖/认领、高水位、重置、退出收回、订阅回调锁外派发；已补齐损坏/超长任务文件名隔离、异常 JSON 重置清理、损坏记录占用编号不复用、无效编号读取返回任务不存在；新增 ATLAS_TASK_LIST_ID 跨会话共享任务列表优先级及团队清理隔离；原版全部状态迁移、跨进程通知与文件级并发仍未等价 |
 | `src/utils/teamDiscovery.ts` | 82 | 2323 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teamMemoryOps.ts` | 89 | 2471 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teammate.ts` | 293 | 9206 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1893,7 +1893,7 @@
 | `src/utils/userPromptKeywords.ts` | 28 | 929 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/uuid.ts` | 28 | 888 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/warningHandler.ts` | 122 | 4486 | 重写：保持通用行为 | `src/generated_ports/p_6123ef3cb4c62.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/which.ts` | 83 | 2392 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
+| `src/utils/which.ts` | 83 | 2392 | 重写：保持通用行为 | `src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs / src/diagnostics.rs` | 部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；Doctor/MCP 探测已排除不可执行的普通文件、Windows PATHEXT 扩展查找；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
 | `src/utils/windowsPaths.ts` | 174 | 6008 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/withResolvers.ts` | 14 | 444 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/words.ts` | 801 | 10960 | 重写：保持通用行为 | 待定 | 未迁移 |
