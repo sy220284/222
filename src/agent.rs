@@ -4,11 +4,12 @@ use crate::{
     config::{LspServerConfig, McpServerConfig, SearchBackend},
     conversation_context::ConversationContext,
     cost::{CostLedger, ModelPrice},
+    files_context,
     hooks::{HookEvent, HookRule, HookRunner},
     in_memory_mailbox,
     lsp::LspManager,
     mcp::McpManager,
-    files_context, memory, permission_mode, permission_rules,
+    memory, permission_mode, permission_rules,
     protocol::ToolCall,
     protocol::{Message, ModelRequest, TokenUsage},
     provider::{self, ModelProvider},
@@ -230,7 +231,8 @@ impl Agent {
 
     pub async fn finish(&self) -> Result<()> {
         self.background.stop_all().await;
-        let outcome = self.hooks
+        let outcome = self
+            .hooks
             .run(
                 HookEvent::SessionEnd,
                 None,
@@ -1669,7 +1671,10 @@ impl Agent {
         let groups_to_drop = std::cmp::max(1, boundaries.len() / 5);
         let drop_index = boundaries[std::cmp::min(groups_to_drop, boundaries.len() - 1)];
         let mut remaining = history.split_off(drop_index);
-        if remaining.first().is_some_and(|message| message.role != "user") {
+        if remaining
+            .first()
+            .is_some_and(|message| message.role != "user")
+        {
             remaining.insert(0, Message::text("user", MARKER));
         }
         *history = remaining;
@@ -1959,13 +1964,15 @@ impl Agent {
         self.session.save(&self.root)?;
         let mut system = system_prompt(&self.root)?;
         let resumed_team_worker = self.team_name.is_some()
-            && self.agent_name.as_deref().is_some_and(|name| name != "team-lead");
+            && self
+                .agent_name
+                .as_deref()
+                .is_some_and(|name| name != "team-lead");
         if resumed_team_worker {
             system.push_str(crate::prompt_runtime::WORKER);
         } else if self.child_depth > 0 {
             let role = self.prompt_role.as_deref().unwrap_or("general");
-            if let Some(custom) =
-                crate::prompt_runtime::custom_role_instructions(&self.root, role)?
+            if let Some(custom) = crate::prompt_runtime::custom_role_instructions(&self.root, role)?
             {
                 system.push_str("\n# Custom Agent Instructions\n");
                 system.push_str(&custom);
@@ -2046,7 +2053,8 @@ impl Agent {
                 // Only successfully surfaced memories consume the budget.
                 if !relevant.surfaced.is_empty() {
                     self.session.surfaced_memories.extend(relevant.surfaced);
-                    self.session.surfaced_memory_units = self.session
+                    self.session.surfaced_memory_units = self
+                        .session
                         .surfaced_memory_units
                         .saturating_add(relevant.surfaced_units);
                     self.session.save(&self.root)?;
@@ -2757,7 +2765,6 @@ mod tests {
         );
     }
 
-
     struct PromptCaptureModel(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
     #[async_trait::async_trait]
     impl ModelProvider for PromptCaptureModel {
@@ -2776,18 +2783,30 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("AGENTS.md"), "Check the real code paths.").unwrap();
         let profile = ProviderProfile {
-            id: "mock".into(), kind: "openai-compatible".into(),
-            base_url: "http://127.0.0.1:1/v1".into(), model: "mock".into(),
-            api_key_env: None, stream: false,
+            id: "mock".into(),
+            kind: "openai-compatible".into(),
+            base_url: "http://127.0.0.1:1/v1".into(),
+            model: "mock".into(),
+            api_key_env: None,
+            stream: false,
         };
-        let mut agent = Agent::new(profile, dir.path().canonicalize().unwrap(),
-            Approval::ReadOnly, false, 2, Session::fresh()).unwrap();
+        let mut agent = Agent::new(
+            profile,
+            dir.path().canonicalize().unwrap(),
+            Approval::ReadOnly,
+            false,
+            2,
+            Session::fresh(),
+        )
+        .unwrap();
         let captured = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         agent.provider = Box::new(PromptCaptureModel(captured.clone()));
         agent.child_depth = 1;
         agent.prompt_role = Some("verification".to_owned());
-        assert_eq!(agent.ask("Verify changed behavior").await.unwrap(),
-            "Validated the supplied prompt.");
+        assert_eq!(
+            agent.ask("Verify changed behavior").await.unwrap(),
+            "Validated the supplied prompt."
+        );
         let requests = captured.lock().unwrap();
         assert_eq!(requests.len(), 1);
         assert!(requests[0].contains("# Authority and scope"));
