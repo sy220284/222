@@ -2006,6 +2006,15 @@ impl Agent {
         executor.list_skills()
     }
 
+    pub fn list_user_skills(&self) -> Result<String> {
+        let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+            .with_plugins(self.enabled_plugins.clone())
+            .with_permission_rules(self.permission_rules.clone())
+            .with_extra_roots(self.additional_dirs.clone())
+            .with_permission_mode(self.permission_mode);
+        executor.list_user_skills()
+    }
+
     pub fn files_in_context(&self) -> String {
         crate::files_context::render(&self.session.messages, &self.root)
     }
