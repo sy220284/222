@@ -33,7 +33,11 @@ fn block_tokens(block: &Value) -> (u64, u64) {
     }
     match block.get("type").and_then(Value::as_str) {
         Some("text" | "input_text" | "output_text") => (
-            block.get("text").and_then(Value::as_str).map(estimate).unwrap_or(0),
+            block
+                .get("text")
+                .and_then(Value::as_str)
+                .map(estimate)
+                .unwrap_or(0),
             0,
         ),
         Some("image" | "document") => (0, 2_000),
@@ -46,8 +50,15 @@ fn block_tokens(block: &Value) -> (u64, u64) {
             _ => (0, 0),
         },
         Some("tool_use") => (
-            block.get("name").and_then(Value::as_str).map(estimate).unwrap_or(0)
-                + block.get("input").map(|v| estimate(&v.to_string())).unwrap_or(0),
+            block
+                .get("name")
+                .and_then(Value::as_str)
+                .map(estimate)
+                .unwrap_or(0)
+                + block
+                    .get("input")
+                    .map(|v| estimate(&v.to_string()))
+                    .unwrap_or(0),
             0,
         ),
         _ => (0, 0),
@@ -81,13 +92,20 @@ impl Snapshot {
             system_tools: Vec::new(),
         };
         for definition in &request.tools {
-            let name = definition.pointer("/function/name")
+            let name = definition
+                .pointer("/function/name")
                 .or_else(|| definition.get("name"))
-                .and_then(Value::as_str).unwrap_or("");
+                .and_then(Value::as_str)
+                .unwrap_or("");
             let tokens = estimate(&definition.to_string());
-            if let Some(server) = name.strip_prefix("mcp__").and_then(|s| s.split("__").next()) {
+            if let Some(server) = name
+                .strip_prefix("mcp__")
+                .and_then(|s| s.split("__").next())
+            {
                 result.mcp_tokens += tokens;
-                result.mcp_tools.push(json!({"name":name,"serverName":server,
+                result
+                    .mcp_tools
+                    .push(json!({"name":name,"serverName":server,
                     "tokens":tokens,"isLoaded":true}));
             } else {
                 result.built_in_tokens += tokens;
@@ -163,10 +181,12 @@ impl Snapshot {
             }
             if let Some(calls) = message.tool_calls.as_ref() {
                 for call in calls {
-                    let tokens = estimate(&call.function.name)
-                        + estimate(&call.function.arguments);
+                    let tokens = estimate(&call.function.name) + estimate(&call.function.arguments);
                     self.tool_call_tokens += tokens;
-                    self.tool_calls.entry(call.function.name.clone()).or_default().0 += tokens;
+                    self.tool_calls
+                        .entry(call.function.name.clone())
+                        .or_default()
+                        .0 += tokens;
                 }
             }
             if message.role == "tool" {
@@ -178,14 +198,21 @@ impl Snapshot {
     }
 
     pub fn total_tokens(&self) -> u64 {
-        self.system_tokens + self.built_in_tokens + self.mcp_tokens
-            + self.user_tokens + self.assistant_tokens + self.tool_call_tokens
-            + self.tool_result_tokens + self.attachment_tokens
+        self.system_tokens
+            + self.built_in_tokens
+            + self.mcp_tokens
+            + self.user_tokens
+            + self.assistant_tokens
+            + self.tool_call_tokens
+            + self.tool_result_tokens
+            + self.attachment_tokens
     }
 
     pub fn to_json(&self, usage: Option<TokenUsage>, from_last_request: bool, compact_available: bool) -> Value {
-        let window = std::env::var("ATLAS_CONTEXT_WINDOW_TOKENS").ok()
-            .and_then(|raw| raw.parse::<u64>().ok()).filter(|v| *v > 0);
+        let window = std::env::var("ATLAS_CONTEXT_WINDOW_TOKENS")
+            .ok()
+            .and_then(|raw| raw.parse::<u64>().ok())
+            .filter(|v| *v > 0);
         let total = self.total_tokens();
         let mut categories = vec![
             json!({"name":"System prompt","tokens":self.system_tokens,"color":"secondaryText"}),
@@ -198,8 +225,10 @@ impl Snapshot {
             json!({"name":"Attachments","tokens":self.attachment_tokens,"color":"magenta"}),
         ];
         if let Some(limit) = window {
-            categories.push(json!({"name":"Free space","tokens":limit.saturating_sub(total),
-                "color":"secondaryText"}));
+            categories.push(
+                json!({"name":"Free space","tokens":limit.saturating_sub(total),
+                "color":"secondaryText"}),
+            );
         }
         let breakdown = self.tool_calls.iter().map(|(name, (call, result))|
             json!({"name":name,"callTokens":call,"resultTokens":result})
@@ -258,12 +287,14 @@ impl Snapshot {
             let width = if max >= 1_000_000 { 20 } else { 10 };
             squares.chunks(width).map(|chunk| chunk.to_vec()).collect::<Vec<_>>()
         };
-        let api_usage = usage.map(|usage| json!({
-            "input_tokens":usage.input_tokens,
-            "output_tokens":usage.output_tokens,
-            "cache_creation_input_tokens":usage.cache_creation_input_tokens,
-            "cache_read_input_tokens":usage.cache_read_input_tokens
-        }));
+        let api_usage = usage.map(|usage| {
+            json!({
+                "input_tokens":usage.input_tokens,
+                "output_tokens":usage.output_tokens,
+                "cache_creation_input_tokens":usage.cache_creation_input_tokens,
+                "cache_read_input_tokens":usage.cache_read_input_tokens
+            })
+        });
         json!({
             "categories":categories,
             "totalTokens":total,
@@ -296,22 +327,33 @@ impl Snapshot {
 
     pub fn render(&self, usage: Option<TokenUsage>, from_last_request: bool, compact_available: bool) -> String {
         let data = self.to_json(usage, from_last_request, compact_available);
-        let mut output = format!("## Context Usage\n\nModel: {}\nEstimated tokens: {}\n",
-            self.model, self.total_tokens());
+        let mut output = format!(
+            "## Context Usage\n\nModel: {}\nEstimated tokens: {}\n",
+            self.model,
+            self.total_tokens()
+        );
         if data["windowKnown"] == true {
-            output.push_str(&format!("Context window: {} ({}%)\n",
-                data["rawMaxTokens"], data["percentage"]));
+            output.push_str(&format!(
+                "Context window: {} ({}%)\n",
+                data["rawMaxTokens"], data["percentage"]
+            ));
         } else {
-            output.push_str("Context window: unknown (set ATLAS_CONTEXT_WINDOW_TOKENS for percentage)\n");
+            output.push_str(
+                "Context window: unknown (set ATLAS_CONTEXT_WINDOW_TOKENS for percentage)\n",
+            );
         }
         if !from_last_request {
-            output.push_str("Snapshot: reconstructed from current session (no model request yet)\n");
+            output
+                .push_str("Snapshot: reconstructed from current session (no model request yet)\n");
         }
         output.push_str("Token counts are estimates; provider tokenization may differ.\n\n");
         for category in data["categories"].as_array().into_iter().flatten() {
             if category["tokens"].as_u64().unwrap_or(0) > 0 {
-                output.push_str(&format!("{}: {}\n", category["name"].as_str().unwrap_or(""),
-                    category["tokens"]));
+                output.push_str(&format!(
+                    "{}: {}\n",
+                    category["name"].as_str().unwrap_or(""),
+                    category["tokens"]
+                ));
             }
         }
         output
