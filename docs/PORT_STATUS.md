@@ -6,7 +6,8 @@
 - **MCP 远程连接诊断（1 项）**：对照 `source/src/services/mcp/envExpansion.ts`、`src/mcp_http.rs::connect_with_root`，`/doctor` 先展开 `${NAME}` 和 `${NAME:-fallback}`，对缺失变量提示，拒绝 URL 内嵌账号密码及与实际 HTTP 握手冲突的保留请求头，不再误判正常动态 URL 为无效。提交 `9c9df945`、`0ce1edb2`。动态助手生成的请求头、网络可达性和完整 OAuth 仍未诊断。
 - **Bash 高风险操作交互提醒（1 项）**：对照 `source/src/tools/BashTool/destructiveCommandWarning.ts`，在 `src/bash_permission_suggestions.rs` 实现 Git 强制改写、删除、数据库清空、Kubernetes/Terraform 销毁等危险命令的原版告警与 `git clean --dry-run` 例外，并接入 `src/tools.rs::require_approval` 的真实交互授权界面；仅提示，不改变显式拒绝、非交互策略或已有安全审查。提交 `79e789cc`、`2a13eff5`、`1dbbdb64`。完整 Shell AST、所有复合命令与原版 UI 布局仍未等价。
 - **并行冲突处理**：曾调整权限保存接口返回值，静态复查发现其既有布尔值表达“策略允许写入”而非“本次内容发生变化”，且原有重复规则调用依赖该语义；已通过 `aa2336df` 恢复，不计有效补强。
-- **本次严格计数**：3 个互不重复、用户可感知功能的源码补强已提交，**3/100**，尚差 97 项。没有执行 Cargo、单元/集成测试或 CI，以上均为“已提交、待验收”，Issue #3 冻结 362 条不勾选。已从 Issue #3 和迁移矩阵抽取 100 条部分实现**源路径候选**，但源路径不能替代 100 个独立业务功能，尚需继续逐功能源码级核查、去重、明确 Rust 调用链及补齐；不能当作本轮 100 项清单完成证据。
+- **Bash 命令结果语义（1 项）**：对照 `source/src/tools/BashTool/commandSemantics.ts`，`src/shell_runtime.rs` 依据实际命令末段区分 `grep`/`rg` 无匹配、`diff` 文件不同、`find` 部分目录不可访问、`test` 条件为假与真正的退出失败；`src/tools.rs::run_command_with_shell` 将解释写入真实命令输出，保留 stdout/stderr 和退出码。提交 `b1d1a019`、`add9f36b`；复杂 Shell AST、Windows PowerShell 与所有输出 UI 尚未等价。
+- **本次严格计数**：4 个互不重复、用户可感知功能的源码补强已提交，**4/100**，尚差 96 项。没有执行 Cargo、单元/集成测试或 CI，以上均为“已提交、待验收”，Issue #3 冻结 362 条不勾选。已从 Issue #3 和迁移矩阵抽取 100 条部分实现**源路径候选**，但源路径不能替代 100 个独立业务功能，尚需继续逐功能源码级核查、去重、明确 Rust 调用链及补齐；不能当作本轮 100 项清单完成证据。
 
 
 ## 2026-10-29：交互问答注释与诊断警告源码补齐（已提交、待验收）
