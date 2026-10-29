@@ -1,5 +1,12 @@
 # Rust 全量迁移实况（基于逐文件台账）
 
+## 2026-10-29：交互问答注释与诊断警告源码补齐（已提交、待验收）
+
+- **交互问答（1 个独立业务功能）**：对照原版 `src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx` 的严格输入 Schema、`annotations`、`mapToolResultToToolResultBlockParam` 和 `validateHtmlPreview`。Rust `src/ask_user_question.rs` 从真实终端选择收集所选预览及用户备注，不信任模型伪造的答案/注释，按原版问答顺序构建供模型继续推理的文本；`src/agent.rs` 已接通结果回传。新增可选 HTML 预览片段校验（`ATLAS_QUESTION_PREVIEW_FORMAT=html`）。提交 `2da9a86b`、`742306f0`、`3c65520d`、`948cef64`、`63656e5f`、`a2272dae`；仍缺 SDK 外部问答回执、完整预览格式配置传播和 TUI，**未做行为测试，不能标记等价**。
+- **Doctor 诊断（1 个独立业务功能）**：对照 `src/screens/Doctor.tsx`、`src/utils/envValidation.ts`、`src/utils/shell/outputLimits.ts`、`src/utils/task/outputFormatting.ts`、`src/utils/doctorContextWarnings.ts`、`src/utils/claudemd.ts`，在 `src/diagnostics.rs` 补充 Bash/任务输出环境变量的无效值、上限截断警告及超过 40,000 UTF-16 字符的指令文件告警；提交 `82c8e968`、`2baec2e4`。原版诊断的其他面板、安装渠道、版本锁、MCP 工具上下文和 UI 仍缺，**未做行为测试，不能标记等价**。
+- **本次严格计数**：实际提交 2 个独立用户业务功能的源码补齐，**2/100**；其他提交属于同功能完善和台账更新，不另计数。Issue #3 冻结 362 条继续开放；只在现有 Draft PR #2 分支提交，未执行测试或跟进 CI。
+
+
 ## 2026-10-29：MCP HTTP 动态请求头、凭据助手及远程地址变量展开（源码已提交，待验证）
 
 - **原版依据**：`source/src/services/mcp/headersHelper.ts:30–138`、`envExpansion.ts:7–35`、`config.ts:556–615`、`client.ts:800–805`。原版在远程 MCP 连接时合并静态请求头与脚本生成的动态请求头，动态值覆盖静态值；脚本有 10 秒超时，输出必须为字符串键值 JSON 对象，失败不阻断静态连接；远程 URL 与请求头均支持环境变量替换。
