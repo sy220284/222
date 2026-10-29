@@ -56,20 +56,49 @@ fn grep_globs(raw: Option<&str>) -> Result<(Vec<GlobMatcher>, Vec<GlobMatcher>)>
     Ok((include, exclude))
 }
 
-fn files(base: &Path, exclude_vcs: bool) -> Result<Vec<PathBuf>> {
+/// Prune denied directories before traversing them. Checking only the
+/// returned files would still enter unreadable/denied subtrees and could
+/// turn an otherwise valid search into an unexpected traversal error.
+fn files_filtered<F: Fn(&Path) -> Result<bool>>(
+    base: &Path,
+    exclude_vcs: bool,
+    allow_path: &F,
+) -> Result<Vec<PathBuf>> {
     if base.is_file() {
-        return Ok(vec![base.to_path_buf()]);
+        return Ok(if allow_path(base)? {
+            vec![base.to_path_buf()]
+        } else {
+            Vec::new()
+        });
     }
     let mut result = Vec::new();
+    let mut filter_error = None;
     for item in WalkDir::new(base)
         .follow_links(false)
         .into_iter()
-        .filter_entry(|entry| allowed(entry, exclude_vcs))
+        .filter_entry(|entry| {
+            if !allowed(entry, exclude_vcs) || filter_error.is_some() {
+                return false;
+            }
+            if entry.depth() == 0 {
+                return true;
+            }
+            match allow_path(entry.path()) {
+                Ok(allowed) => allowed,
+                Err(error) => {
+                    filter_error = Some(error);
+                    false
+                }
+            }
+        })
     {
         let item = item?;
         if item.file_type().is_file() {
             result.push(item.into_path());
         }
+    }
+    if let Some(error) = filter_error {
+        return Err(error);
     }
     Ok(result)
 }
@@ -290,7 +319,7 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
         no_ignore.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
     );
-    let mut matches = files(base, false)?
+    let mut matches = files_filtered(base, false, allow_file)?
         .into_iter()
         .filter(|p| {
             p.strip_prefix(base).is_ok_and(|rel| {
@@ -432,7 +461,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
     // GrepTool.ts explicitly passes --hidden. Hidden project files and
     // directories must be searchable; only the six VCS directories above
     // are excluded. GlobTool uses a separate --hidden configuration.
-    let mut candidates = files(base, true)?;
+    let mut candidates = files_filtered(base, true, allow_file)?;
     let ignored = git_ignored_paths(base, &candidates);
     candidates.retain(|path| !ignored.contains(path));
     sort_newest(&mut candidates);
