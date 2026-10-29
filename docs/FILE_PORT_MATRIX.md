@@ -1876,7 +1876,7 @@
 | `src/utils/todo/types.ts` | 19 | 602 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/tokenBudget.ts` | 74 | 2675 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/tokens.ts` | 262 | 9606 | 重写：保持通用行为 | `src/generated_ports/p_faf3dbb033a1d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/toolErrors.ts` | 133 | 4012 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/toolErrors.ts` | 133 | 4012 | 重写：保持通用行为 | `src/tool_errors.rs / src/tools.rs` | 部分实现：按原版补充错误头尾保留、Shell 错误字段、JSON 参数校验提示，接入真实工具执行错误输出；原版 Zod Schema 输入与 AbortError 类型传播仍待验收 |
 | `src/utils/toolPool.ts` | 80 | 3136 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/toolResultStorage.ts` | 1041 | 38384 | 重写：保持通用行为 | `src/generated_ports/p_8aa6e76dd0af2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/toolSchemaCache.ts` | 27 | 1061 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
