@@ -1608,6 +1608,10 @@ impl Agent {
             if self.lsp.is_some() {
                 available_tools.push(LspManager::definition());
             }
+            available_tools.push(crate::tool_search::definition());
+            if self.interactive {
+                available_tools.push(crate::ask_user_question::definition());
+            }
             let request = ModelRequest {
                 model: self.profile.model.clone(),
                 system: system.clone(),
@@ -1800,6 +1804,26 @@ impl Agent {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
                 } else if let Some(reason) = hook_ask_rejection {
                     format!("ERROR: {reason}")
+                } else if call.function.name == "ToolSearch" {
+                    match serde_json::from_str::<serde_json::Value>(&call.function.arguments)
+                        .map_err(anyhow::Error::from)
+                        .and_then(|args| crate::tool_search::execute(&args, &request.tools))
+                    {
+                        Ok(result) => result.to_string(),
+                        Err(error) => format!("ERROR: {error:#}"),
+                    }
+                } else if call.function.name == "AskUserQuestion" {
+                    if !self.interactive {
+                        "ERROR: AskUserQuestion requires an interactive terminal".to_owned()
+                    } else {
+                        match serde_json::from_str::<serde_json::Value>(&call.function.arguments)
+                            .map_err(anyhow::Error::from)
+                            .and_then(|args| crate::ask_user_question::ask_from_terminal(&args))
+                        {
+                            Ok(result) => result.to_string(),
+                            Err(error) => format!("ERROR: {error:#}"),
+                        }
+                    }
                 } else if matches!(
                     call.function.name.as_str(),
                     "TeamCreate" | "TeamDelete" | "SendMessage" | "TeamInbox"
