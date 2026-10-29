@@ -354,11 +354,15 @@ fn ripgrep_ignore_rules(
     Ok(rules)
 }
 
-fn ripgrep_rule_matches(rule: &RipgrepIgnoreRule, relative: &Path) -> bool {
+fn ripgrep_rule_matches(
+    rule: &RipgrepIgnoreRule,
+    relative: &Path,
+    candidate_is_directory: bool,
+) -> bool {
     let mut candidate = Some(relative);
     while let Some(path) = candidate {
         if !path.as_os_str().is_empty()
-            && (!rule.directories_only || path != relative)
+            && (!rule.directories_only || candidate_is_directory || path != relative)
             && rule.matcher.is_match(path)
         {
             return true;
@@ -398,29 +402,48 @@ fn ripgrep_custom_ignore(
             current = directory.parent();
         }
         directories.reverse();
-        let mut decision = None;
-        // The source priority is .rgignore > .ignore > .gitignore.
-        // Within each source, the closest directory and last rule win.
-        for filename in [".ignore", ".rgignore"] {
-            let mut source_decision = None;
-            for directory in &directories {
-                let key = (directory.clone(), filename);
-                if !cache.contains_key(&key) {
-                    cache.insert(key.clone(), ripgrep_ignore_rules(directory, filename)?);
-                }
-                let relative = path.strip_prefix(directory)
-                    .context("Ignore rule directory does not contain candidate")?;
-                for rule in cache.get(&key).context("Ignore rule cache entry missing")? {
-                    if ripgrep_rule_matches(rule, relative) {
-                        source_decision = Some(rule.exclude);
+        // ripgrep prunes excluded directories before visiting their files.
+        // A !child rule alone cannot resurrect a file inside a directory
+        // excluded by parent/; the parent must first be re-included.
+        let mut ignored_parent = false;
+        let mut final_decision = None;
+        for candidate in directories.iter().skip(1).chain(std::iter::once(path)) {
+            check_search_deadline(Some(deadline))?;
+            let is_directory = candidate != path;
+            let mut decision = None;
+            // The source priority is .rgignore > .ignore > .gitignore.
+            // Within each source, the closest directory and last rule win.
+            for filename in [".ignore", ".rgignore"] {
+                let mut source_decision = None;
+                for directory in &directories {
+                    if directory == candidate || !candidate.starts_with(directory) {
+                        continue;
+                    }
+                    let key = (directory.clone(), filename);
+                    if !cache.contains_key(&key) {
+                        cache.insert(key.clone(), ripgrep_ignore_rules(directory, filename)?);
+                    }
+                    let relative = candidate.strip_prefix(directory)
+                        .context("Ignore rule directory does not contain candidate")?;
+                    for rule in cache.get(&key).context("Ignore rule cache entry missing")? {
+                        if ripgrep_rule_matches(rule, relative, is_directory) {
+                            source_decision = Some(rule.exclude);
+                        }
                     }
                 }
+                if source_decision.is_some() {
+                    decision = source_decision;
+                }
             }
-            if source_decision.is_some() {
-                decision = source_decision;
+            if is_directory && decision == Some(true) {
+                ignored_parent = true;
+                break;
             }
+            final_decision = decision;
         }
-        if let Some(exclude) = decision {
+        if ignored_parent {
+            decisions.insert(path.clone(), true);
+        } else if let Some(exclude) = final_decision {
             decisions.insert(path.clone(), exclude);
         }
     }
@@ -1037,6 +1060,9 @@ mod tests {
         fs::write(root.path().join("sub/.rgignore"), "*.txt\n").unwrap();
         fs::write(root.path().join("sub/hidden.txt"), "needle").unwrap();
         fs::write(root.path().join("sub/visible.rs"), "needle").unwrap();
+        fs::create_dir(root.path().join("blocked")).unwrap();
+        fs::write(root.path().join("blocked/keep.rs"), "needle").unwrap();
+        fs::write(root.path().join(".rgignore"), "!special.tmp\\nblocked/\\n!blocked/keep.rs\\n").unwrap();
         let result: Value = serde_json::from_str(
             &grep_files(root.path(), root.path(),
                 &json!({"pattern":"needle","output_mode":"files_with_matches"})).unwrap()
@@ -1048,6 +1074,7 @@ mod tests {
         assert!(names.iter().any(|name| name.ends_with("visible.rs")));
         assert!(!names.iter().any(|name| name.ends_with("one.tmp")));
         assert!(!names.iter().any(|name| name.ends_with("hidden.txt")));
+        assert!(!names.iter().any(|name| name.ends_with("blocked/keep.rs")));
         // A user-supplied positive glob overrides an ignore exclusion.
         let included: Value = serde_json::from_str(
             &grep_files(root.path(), root.path(),
