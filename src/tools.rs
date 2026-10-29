@@ -21,6 +21,16 @@ use walkdir::WalkDir;
 const MAX_FILE_BYTES: u64 = 1_048_576;
 const MAX_OUTPUT_CHARS: usize = 16_000;
 
+fn skill_model_invocable(path: &Path) -> Result<bool> {
+    if fs::metadata(path)?.len() > 64_000 {
+        return Ok(false);
+    }
+    let content = fs::read_to_string(path)?;
+    Ok(!crate::skill_arguments::frontmatter_boolean(
+        &content, "disable-model-invocation",
+    ).unwrap_or(false))
+}
+
 /// The original Read/Edit contract is scoped to a conversation, not a
 /// particular model turn. A partial Read cannot authorize a full-file Edit.
 #[derive(Clone, Debug)]
@@ -1180,7 +1190,8 @@ impl ToolExecutor {
                     continue;
                 }
                 let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
-                if path.is_file() && self.search_read_allowed(&path)? {
+                if path.is_file() && self.search_read_allowed(&path)?
+                    && skill_model_invocable(&path)? {
                     skills.push(name);
                 }
             }
@@ -1190,7 +1201,7 @@ impl ToolExecutor {
                 &self.root, &self.enabled_plugins, &name,
             )?;
             let path = self.checked_path(&resolved.to_string_lossy())?;
-            if self.search_read_allowed(&path)? {
+            if self.search_read_allowed(&path)? && skill_model_invocable(&path)? {
                 skills.push(name);
             }
         }
@@ -1231,6 +1242,11 @@ impl ToolExecutor {
                 .to_path_buf();
             (fs::read_to_string(path)?, dir)
         };
+        if crate::skill_arguments::frontmatter_boolean(
+            &content, "disable-model-invocation",
+        ).unwrap_or(false) {
+            bail!("Skill cannot be invoked by the model")
+        }
         let raw = args.get("arguments");
         let arguments = raw
             .map(|v| v.as_str().context("arguments must be a string"))
@@ -2349,6 +2365,17 @@ mod tests {
         assert!(!rendered.contains("${CLAUDE_SKILL_DIR}"));
     }
 
+    #[test]
+    fn model_invocation_disabled_skill_is_hidden_from_model_and_rejected() {
+        let root = tempfile::tempdir().unwrap();
+        let folder = root.path().join(".atlas/skills/manual");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(folder.join("SKILL.md"),
+            "---\ndisable-model-invocation: true\n---\nOnly users can invoke").unwrap();
+        let tool = executor(root.path(), Approval::ReadOnly);
+        assert!(!tool.list_skills().unwrap().contains("manual"));
+        assert!(tool.read_skill(&json!({"name":"manual"})).is_err());
+    }
     #[test]
     fn skills_are_discovered_and_loaded_from_workspace() {
         let root = tempfile::tempdir().unwrap();
