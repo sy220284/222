@@ -2077,7 +2077,7 @@ impl Agent {
                             .map_err(anyhow::Error::from)
                             .and_then(|args| crate::ask_user_question::ask_from_terminal(&args))
                         {
-                            Ok(result) => result.to_string(),
+                            Ok(result) => crate::ask_user_question::format_result_for_model(&result),
                             Err(error) => format!("ERROR: {error:#}"),
                         }
                     }
