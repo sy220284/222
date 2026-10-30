@@ -242,7 +242,8 @@ impl HybridTransport {
         let _ = tokio::time::timeout(
             Duration::from_millis(CLOSE_GRACE_MS),
             self.writes.flush(),
-        ).await;
+        )
+        .await;
         self.writes.close();
     }
 }
@@ -385,12 +386,22 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
         let hybrid = HybridTransport::new(
             "ws://127.0.0.1:9/ws/s1".into(),
-            Vec::new(), None, tx, Arc::new(Vec::new),
-        ).unwrap();
-        hybrid.writes.write(&serde_json::json!({"type":"stream_event"})).await;
+            Vec::new(),
+            None,
+            tx,
+            Arc::new(Vec::new),
+        )
+        .unwrap();
+        hybrid
+            .writes
+            .write(&serde_json::json!({"type":"stream_event"}))
+            .await;
         tokio::time::timeout(
-            Duration::from_millis(CLOSE_GRACE_MS + 2_000), hybrid.close(),
-        ).await.expect("Hybrid close must end despite repeated HTTP failures");
+            Duration::from_millis(CLOSE_GRACE_MS + 2_000),
+            hybrid.close(),
+        )
+        .await
+        .expect("Hybrid close must end despite repeated HTTP failures");
         assert!(hybrid.reads.is_closed());
     }
 

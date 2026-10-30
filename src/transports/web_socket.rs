@@ -1161,7 +1161,10 @@ mod tests {
             client.handle_connection_error(Some(4003)),
             ConnectionOutcome::Reconnect
         );
-        assert_eq!(client.handle_connection_error(Some(4003)), ConnectionOutcome::Terminal);
+        assert_eq!(
+            client.handle_connection_error(Some(4003)),
+            ConnectionOutcome::Terminal
+        );
         assert_eq!(
             client.handle_connection_error(Some(4001)),
             ConnectionOutcome::Terminal
@@ -1173,7 +1176,11 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
         let transport = Arc::new(WebSocketTransport::new(
             "ws://127.0.0.1:0/unreachable".into(),
-            Vec::new(), None, tx, true, None,
+            Vec::new(),
+            None,
+            tx,
+            true,
+            None,
         ));
         let pending = {
             let transport = Arc::clone(&transport);
@@ -1182,7 +1189,9 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(30)).await;
         transport.close();
         let result = tokio::time::timeout(Duration::from_millis(500), pending)
-            .await.expect("close must wake the reconnect timer").unwrap();
+            .await
+            .expect("close must wake the reconnect timer")
+            .unwrap();
         assert!(result.is_none());
         assert_eq!(transport.state(), WsState::Closed);
     }
