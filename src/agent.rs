@@ -3452,6 +3452,20 @@ impl Agent {
     /// Original commands/resume/resume.tsx resumes the selected conversation
     /// in the current UI. Rebind all session-scoped stores, counters and
     /// permissions before allowing another model turn.
+    pub fn resumable_sessions(&self) -> Result<Vec<crate::session_control::SessionItem>> {
+        let mut available = Vec::new();
+        for item in crate::session_control::list(&self.root)? {
+            if item.id == self.session.id {
+                continue;
+            }
+            let candidate = crate::session::Session::load(&self.root, &item.id.to_string())?;
+            if candidate.team_name.is_none() && candidate.agent_name.is_none() {
+                available.push(item);
+            }
+        }
+        Ok(available)
+    }
+
     pub async fn resume_interactive_session(&mut self, query: &str) -> Result<String> {
         if !self.interactive {
             bail!("Interactive session switching requires chat mode");
