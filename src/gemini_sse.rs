@@ -22,6 +22,9 @@ impl Accumulator {
         if let Some(error) = v.get("error") {
             bail!("Streamed provider error: {error}")
         }
+        if let Some(reason) = v.pointer("/promptFeedback/blockReason").and_then(Value::as_str) {
+            bail!("Model blocked the request: {reason}");
+        }
         if let Some(usage) = parse_gemini_usage(v) {
             self.usage = Some(usage);
         }
