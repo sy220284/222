@@ -539,8 +539,8 @@ impl BackgroundTasks {
     pub fn output_delta(&self, id: &str, from_offset: u64, max_bytes: u64) -> Result<String> {
         let id = canonical_shell_task_id(id)?;
         let path = self.directory.join(format!("{id}.stdout"));
-        // Explicit zero is a zero-byte read, not an implicit default.
-        let max_bytes = max_bytes.min(DEFAULT_DELTA_READ_BYTES);
+        // diskOutput.ts::getTaskOutputDelta applies the 8 MiB default only
+        // when maxBytes is omitted. An explicit larger range is respected.
         let delta = read_output_range(&path, from_offset, max_bytes)?;
         let (content, bytes_read, total) = match delta {
             Some((content, bytes_read, total)) => (content, bytes_read, total),
@@ -706,9 +706,11 @@ fn read_output_range(
     }
     use std::io::{Read, Seek, SeekFrom};
     file.seek(SeekFrom::Start(offset))?;
-    let mut bytes = Vec::with_capacity((total - offset).min(max_bytes) as usize);
-    file.take((total - offset).min(max_bytes))
-        .read_to_end(&mut bytes)?;
+    let bytes_to_read = (total - offset).min(max_bytes);
+    let capacity = usize::try_from(bytes_to_read)
+        .context("Requested task output range exceeds addressable memory")?;
+    let mut bytes = Vec::with_capacity(capacity);
+    file.take(bytes_to_read).read_to_end(&mut bytes)?;
     let count = bytes.len() as u64;
     Ok(Some((
         String::from_utf8_lossy(&bytes).into_owned(),
@@ -823,10 +825,10 @@ pub fn definitions() -> Vec<Value> {
                 "timeout":{"type":"integer","minimum":0,"maximum":600000}
             },"required":["task_id"]}}}),
         json!({"type":"function","function":{"name":"task_output_delta",
-            "description":"Read appended stdout by byte offset; max 8MiB per read; never follows a symlink.",
+            "description":"Read appended stdout by byte offset; defaults to 8MiB, but honors explicit larger ranges; never follows a symlink.",
             "parameters":{"type":"object","properties":{
                 "task_id":{"type":"string"},"from_offset":{"type":"integer","minimum":0},
-                "max_bytes":{"type":"integer","minimum":1,"maximum":8388608}
+                "max_bytes":{"type":"integer","minimum":0,"maximum":5368709120}
             },"required":["task_id"]}}}),
         json!({"type":"function","function":{"name":"task_stop",
         "description":"Stop a running background shell task by ID. Requires approval.",
