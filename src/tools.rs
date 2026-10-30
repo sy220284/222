@@ -2625,7 +2625,7 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn shell_command_respects_output_limit() {
+    async fn shell_command_previews_large_output_without_killing_it() {
         let root = tempfile::tempdir().unwrap();
         let executor = executor(root.path(), Approval::Full);
         let small = ToolCall {
@@ -2645,10 +2645,12 @@ mod tests {
                 arguments: json!({"command":"head -c 200000 /dev/zero"}).to_string(),
             },
         };
-        assert!(executor
-            .execute(&large)
-            .await
-            .contains("Command output exceeded"));
+        // 200 KiB exceeds the model preview but remains safely under the
+        // original 5 GiB termination threshold. Preserve command success.
+        let output = executor.execute(&large).await;
+        assert!(output.contains("stdout preview only"), "{output}");
+        assert!(output.contains("Exit: exit status: 0"), "{output}");
+        assert!(!output.contains("Command output exceeded"), "{output}");
     }
 
     #[cfg(target_os = "linux")]
@@ -2685,9 +2687,23 @@ mod tests {
         }
         panic!("Foreground shell timeout left descendant PID {pid} running");
     }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn combined_shell_output_hard_limit_remains_five_gibibytes() {
+        use std::sync::atomic::AtomicU64;
+        use tokio::io::AsyncWriteExt as _;
+        let (mut writer, reader) = tokio::io::duplex(16_384);
+        writer.write_all(&vec![b'x'; 8192]).await.unwrap();
+        drop(writer);
+        let already_consumed = 5_u64 * 1024 * 1024 * 1024 - 4096;
+        let shared = Arc::new(AtomicU64::new(already_consumed));
+        let error = capped_read(reader, 128, shared).await.unwrap_err();
+        assert!(error.to_string().contains("5 GiB"), "{error:#}");
+    }
+
     #[cfg(target_os = "linux")]
     #[tokio::test]
-    async fn foreground_output_cap_terminates_shell_descendants() {
+    async fn foreground_timeout_with_large_output_terminates_shell_descendants() {
         let root = tempfile::tempdir().unwrap();
         let tool = executor(root.path(), Approval::Full);
         let call = ToolCall {
@@ -2697,13 +2713,13 @@ mod tests {
                 name: "run_command".into(),
                 arguments: json!({
                     "command":"sleep 30 & echo $! > oversize.pid; head -c 300000 /dev/zero",
-                    "timeout_seconds":8
+                    "timeout_seconds":1
                 })
                 .to_string(),
             },
         };
         let result = tool.execute(&call).await;
-        assert!(result.contains("Command output exceeded"), "{result}");
+        assert!(result.contains("Command timed out"), "{result}");
         let pid: i32 = fs::read_to_string(root.path().join("oversize.pid"))
             .unwrap()
             .trim()

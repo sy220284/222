@@ -1,3 +1,16 @@
+## 2026-10-30：SDK 消息快照回退、异步 Hook、插件崩溃恢复续接（源码已提交、待验收）
+
+原始源码依据：完整 source/src/utils/fileHistory.ts (fileHistoryMakeSnapshot/fileHistoryRewind/100 snapshots)、source/src/cli/print.ts (SDK rewind_files 控制/用户 UUID)、source/src/utils/hooks.ts (execCommandHook async 首行及配置 async)、source/src/utils/hooks/AsyncHookRegistry.ts (pending/complete/finalize)、source/src/schemas/hooks.ts (async/asyncRewake)、source/src/bridge/replBridgeTransport.ts、source/src/bridge/remoteBridgeCore.ts。此处只记录真实 Rust 入口，不用静态 generated_ports 计数。
+
+- **消息级文件回退**：src/session.rs 保存 history_message_ids 和合并消息 UUID 别名；src/agent.rs::ask_with_blocks_for_message 及 src/main.rs::sdk_interruptible_turn 传入实际 SDK UUID，src/sdk_queue.rs 合并队列消息也登记同一快照。src/history.rs::records_for_message_sequence/preflight_message_rewind 按消息逆序解析文件检查点、核对备份完整性及外部修改冲突；src/tools.rs::sdk_rewind_message_records 复用 Read/Edit 权限、审批及真实恢复，src/main.rs::sdk_nested_control 处理 rewind_files + dry_run。提交 2a12cdcf、c5344b77、9a38bb34、b66aa57e、cd64051a、8c869cde、69652c1b、4a8bc0d4、57bd4caf、005fe52a、7ed62844。仅源码已提交待验收；老会话无 UUID 索引、合并队列时序、跨进程并行恢复和原版 UI 差异尚待核验。
+- **异步 Hook 完成与退出生命周期**：src/hooks.rs 首行解析 {async:true} 后转移 Shell 所有权到按会话隔离的待完成登记簿；配置级 async/asyncRewake 已从本地与插件声明接入；后台完成/超时/取消收集结果，SessionEnd 回收。Agent::pump_async_hook_events 将完成通知投递到真实模型上下文，SDK 500ms 空闲轮询；Windows Hook 取消增加子进程树清理。提交 0c421e0e、58d52fbe、03ab39ed、76cccf83、fb675c9d、8087262f、3e712214、79bcff9b、28caa503、31e20090、7ca28146、88e17f34。完整 asyncRewake 自动触发模型续写、异步结果 hookSpecificOutput 应用和持续进度事件仍未等价。
+- **插件崩溃恢复**：src/plugin_manager.rs 在独占锁内检查 .install-/.update-/.previous-/.failed-update- 目录，拒绝符号链接、只接受 UUID 后缀、恢复缺失目标的旧版本并安全清理中断暂存目录；对无法判断设置提交状态的旧版本保留供恢复，不冒险删除。提交 20d3e46e、c2f96029。完整跨进程安装事务日志/提交点及版本回滚仍缺。
+- **SDK 取消跨平台**：src/tools.rs::ShellCancelTreeGuard 与 src/hooks.rs::HookCancelTreeGuard 为 Windows 添加主动中断和 SessionEnd Drop 进程树清理（taskkill /PID /T /F），在正常完成后解除；提交 eac172f3、7ca28146，待行为验收。脱离原进程树的后台任务仍依赖其独立所有者。
+
+保守按独立用户能力计数，本次新增 **3 条业务链源码补齐**（消息级回退、异步 Hook、插件崩溃恢复），Windows 主动取消作为此前 SDK 中断链补强不重复计数。所有变更仅做源码接线与远端保留核对，按现行要求不运行 cargo fmt/check/clippy/test 或 CI；新增源码完整等价验收 0 项，Issue #3 冻结 362 项不勾选。
+
+**仍未闭环**：SDK initialize 的回调 hooks、SDK 原生 MCP server、JSON Schema 严格约束、提示建议和进度摘要；异步 Hook asyncRewake 完整自动续写及状态/错误事件；插件崩溃事务 commit journal；远程 Bridge 完整认证、SSE/WS 读、批量上传、断线重放游标与权限回传；后台已脱组任务的取消/恢复、跨平台 UI 验收。现有 BridgeSession 仅提供本地 SDK 缓冲控制，不能当成真实远程传输已完成。
+
 ## 2026-10-29：AI 辅助生成自定义 Agent 并审核保存（源码已提交、待验收）
 
 原版 source/src/components/agents/generateAgent.ts::generateAgent、new-agent-creation/wizard-steps/GenerateStep.tsx：用户描述目标后，以无工具模型请求生成 identifier/whenToUse/systemPrompt JSON，再预览、校验并由用户确认保存。Rust 原仅支持手工填写 Agent 定义，未接入此流程。

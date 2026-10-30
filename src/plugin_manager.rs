@@ -256,10 +256,20 @@ fn recover_plugin_crash_artifacts(root: &Path) -> Result<Vec<String>> {
         if recover_backup {
             // Derive the only permissible restoration destination from the
             // original validated manifest, never from uncontrolled filenames.
-            let plugin = manifest_name(&backup)?;
-            if !valid_name(&plugin) {
-                bail!("Plugin backup has invalid manifest identity");
-            }
+            let plugin = match manifest_name(&backup) {
+                Ok(name) if valid_name(&name) => name,
+                Ok(_) | Err(_) => {
+                    // Manifest-less local plugins cannot be identified from
+                    // an anonymous .previous-UUID backup. Preserve the bytes
+                    // and report manual recovery instead of blocking every
+                    // later plugin operation or guessing a target name.
+                    recovered.push(format!(
+                        "Retained unidentified plugin backup {} for manual recovery",
+                        name
+                    ));
+                    continue;
+                }
+            };
             let target = home.join(&plugin);
             match fs::symlink_metadata(&target) {
                 Ok(current) if current.file_type().is_symlink() || !current.is_dir() => {
