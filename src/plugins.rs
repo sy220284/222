@@ -84,15 +84,19 @@ pub(crate) fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> 
                     },
                     None => 600,
                 };
-                if hook.get("async").and_then(Value::as_bool) == Some(true) {
-                    bail!("Asynchronous plugin command hooks are not yet supported")
-                }
+                // Plugin command hooks share the same background lifecycle
+                // as local hook configuration; asyncRewake implies async.
+                let async_background = hook.get("async")
+                    .and_then(Value::as_bool).unwrap_or(false);
+                let async_rewake = hook.get("asyncRewake")
+                    .and_then(Value::as_bool).unwrap_or(false);
                 if hook.get("once").and_then(Value::as_bool) == Some(true) {
                     bail!("One-shot plugin command hooks require lifecycle tracking")
                 }
                 let shell = hook.get("shell").map(|value|
                     serde_json::from_value(value.clone())).transpose()?;
                 rules.push(HookRule {
+                    async_background, async_rewake,
                     event: event.clone(), matcher: matcher_name.clone(),
                     if_condition: matcher.get("if").and_then(Value::as_str).map(str::to_owned),
                     plugin_root: Some(root.to_owned()),
