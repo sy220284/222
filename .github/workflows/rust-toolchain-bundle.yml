@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-  # 每周重新生成，覆盖 GitHub Actions 工件 30 天保留期；仅默认分支执行计划事件。
-  schedule:
-    - cron: '17 3 * * 0'
 
 permissions:
   contents: read
