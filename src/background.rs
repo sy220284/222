@@ -1158,7 +1158,7 @@ pub fn definitions() -> Vec<Value> {
             "description":"Read appended stdout by byte offset; defaults to 8MiB, but honors explicit larger ranges; never follows a symlink.",
             "parameters":{"type":"object","properties":{
                 "task_id":{"type":"string"},"from_offset":{"type":"integer","minimum":0},
-                "max_bytes":{"type":"integer","minimum":0,"maximum":5368709120}
+                "max_bytes":{"type":"integer","minimum":0,"maximum":LOG_CAP}
             },"required":["task_id"]}}}),
         json!({"type":"function","function":{"name":"task_stop",
         "description":"Stop a running background shell task by ID. Requires approval.",
