@@ -1530,7 +1530,7 @@
 | `src/utils/format.ts` | 309 | 9375 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/formatBriefTimestamp.ts` | 82 | 2223 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/fpsTracker.ts` | 48 | 1299 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
-| `src/utils/frontmatterParser.ts` | 371 | 12404 | 重写：保持通用行为 | `src/generated_ports/p_2e571c4a5ca80.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/frontmatterParser.ts` | 371 | 12404 | 重写：保持通用行为 | `src/generated_ports/p_2e571c4a5ca80.rs`| 部分实现：frontmatter 解析——YAML 特殊字符引用表逐字（含冒号空格细节保护时间与 URL）、quoteProblematicValues（列表/块标量/已引用行不动）、--- 定界提取、known key 访问器（allowed-tools 列表拆分）；上游 parseYaml 无 Rust 等价，轻量 key-value 子集实现、嵌套 YAML 记差异，registry 兼容导出 parseBooleanFrontmatter，附 4 测试|
 | `src/utils/fsOperations.ts` | 771 | 24230 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/fullscreen.ts` | 203 | 8632 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/generatedFiles.ts` | 137 | 3481 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1822,7 +1822,7 @@
 | `src/utils/statusNoticeHelpers.ts` | 21 | 673 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/stream.ts` | 77 | 1926 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/streamJsonStdoutGuard.ts` | 124 | 3987 | 重写：保持通用行为 | `src/generated_ports/p_39a1e33432530.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/streamlinedTransform.ts` | 202 | 5941 | 重写：保持通用行为 | `src/generated_ports/p_8478b958d159a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/streamlinedTransform.ts` | 202 | 5941 | 重写：保持通用行为 | `src/generated_ports/p_8478b958d159a.rs`| 部分实现：精简输出转换——工具分类前缀表（search/reads/writes/commands 顺序匹配）、摘要单复数措辞、消息变换（text 保留并重置累计计数、纯 tool_use 块折叠计数、thinking 省略、尾部汇总）、registry 兼容导出 shouldIncludeInStreamlined，附 3 测试|
 | `src/utils/stringUtils.ts` | 236 | 6595 | 重写：保持通用行为 | `src/generated_ports/p_33ab1f755c819.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/subprocessEnv.ts` | 100 | 3975 | 重写：保持通用行为 | `src/subprocess_env.rs / src/tools.rs / src/background.rs / src/hooks.rs / src/mcp.rs / src/lsp.rs` | 部分实现：通用凭据环境隔离，接入 Shell、Git、Hook、MCP、LSP 全部进程入口；上游代理环境尚缺 |
 | `src/utils/suggestions/commandSuggestions.ts` | 568 | 18558 | 重写：保持通用行为 | `src/generated_ports/p_955a1746e1a31.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
