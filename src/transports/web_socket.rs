@@ -972,6 +972,65 @@ mod tests {
             .is_err());
     }
 
+    #[tokio::test]
+    async fn upgrade_confirmation_replays_only_unconfirmed_and_forwards_open_payload() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut peer, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buf = [0_u8; 512];
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = peer.read(&mut buf).await.unwrap();
+                assert!(n > 0 && request.len() < 16384);
+                request.extend_from_slice(&buf[..n]);
+            }
+            let request = String::from_utf8(request).unwrap();
+            let key = request.lines().find_map(|line| line.strip_prefix("Sec-WebSocket-Key: ")).unwrap().trim();
+            let reply = format!(
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\nX-Last-Request-Id: a\r\n\r\n",
+                websocket_accept(key)
+            );
+            peer.write_all(reply.as_bytes()).await.unwrap();
+            let inbound = r#"{"type":"open","content":"application event"}"#;
+            let mut frame = vec![0x81, inbound.len() as u8];
+            frame.extend_from_slice(inbound.as_bytes());
+            peer.write_all(&frame).await.unwrap();
+
+            let mut header = [0_u8; 2];
+            peer.read_exact(&mut header).await.unwrap();
+            assert_eq!(header[0], 0x81);
+            let n = (header[1] & 0x7F) as usize;
+            let mut mask = [0_u8; 4];
+            peer.read_exact(&mut mask).await.unwrap();
+            let mut body = vec![0_u8; n];
+            peer.read_exact(&mut body).await.unwrap();
+            for (i, byte) in body.iter_mut().enumerate() { *byte ^= mask[i % 4]; }
+            serde_json::from_slice::<Value>(&body).unwrap()
+        });
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let client = Arc::new(WebSocketTransport::new(
+            format!("ws://127.0.0.1:{port}/session"), Vec::new(), None, tx, false, None,
+        ));
+        {
+            let mut buffered = client.shared.buffer.lock().unwrap();
+            buffered.add(json!({"type":"result","uuid":"a"}));
+            buffered.add(json!({"type":"result","uuid":"b"}));
+        }
+        let run = { let client = client.clone(); tokio::spawn(async move { client.run().await }) };
+        let observed = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await.expect("must forward open content").expect("inbound payload");
+        assert_eq!(serde_json::from_str::<Value>(&observed).unwrap()["content"], "application event");
+        let replayed = tokio::time::timeout(Duration::from_secs(5), server)
+            .await.expect("replay arrives").unwrap();
+        assert_eq!(replayed["uuid"], "b");
+        assert_eq!(client.buffered_count(), 1);
+        client.close();
+        tokio::time::timeout(Duration::from_secs(5), run).await.unwrap().unwrap();
+    }
+
     #[test]
     fn permanent_close_codes_are_terminal() {
         let (data_tx, _data_rx) = mpsc::unbounded_channel();
