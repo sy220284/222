@@ -582,7 +582,7 @@
 | `src/components/messages/AttachmentMessage.tsx` | 536 | 71430 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/CollapsedReadSearchContent.tsx` | 484 | 78078 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/CompactBoundaryMessage.tsx` | 18 | 2275 | 重写：终端 UI／交互 | `src/generated_ports/p_a516d1f1cd2db.rs` | 部分实现：完整等价：压缩边界文案构造（快捷键三元组常量+参数化文本）含单测；useShortcutDisplay 接线随键绑定链，待验收 |
-| `src/components/messages/GroupedToolUseContent.tsx` | 58 | 8289 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/GroupedToolUseContent.tsx` | 58 | 8289 | 重写：终端 UI／交互 | `src/generated_ports/p_3a265805303ed.rs` | 部分实现：完整等价：renderGroupedToolUse 缺省渲染 null 守卫+tool_use_id→output 首写优先 Map 构造含单测；JSX 主体归 ink 宿主，待验收 |
 | `src/components/messages/HighlightedThinkingText.tsx` | 162 | 14902 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/HookProgressMessage.tsx` | 116 | 10613 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/PlanApprovalMessage.tsx` | 222 | 25339 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -593,10 +593,10 @@
 | `src/components/messages/TaskAssignmentMessage.tsx` | 76 | 8186 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserAgentNotificationMessage.tsx` | 83 | 6151 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserBashInputMessage.tsx` | 58 | 4503 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/UserBashOutputMessage.tsx` | 54 | 4188 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/UserBashOutputMessage.tsx` | 54 | 4188 | 重写：终端 UI／交互 | `src/generated_ports/p_2b966f3a217d5.rs` | 部分实现：完整等价：bash-stdout/persisted-output 双层剥离+bash-stderr 提取+缺省空串，复用 messages 端口 extract_tag 含双单测；JSX 宿主归 ink，待验收 |
 | `src/components/messages/UserChannelMessage.tsx` | 137 | 11325 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserCommandMessage.tsx` | 108 | 9210 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/UserImageMessage.tsx` | 59 | 5897 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/UserImageMessage.tsx` | 59 | 5897 | 重写：终端 UI／交互 | `src/generated_ports/p_a2bd5c24a5c92.rs` | 部分实现：完整等价：[Image #N]/[Image] 标签构造+存储路径∧超链接支持的链接门纯函数含三分支单测；Link/hyperlink 桩已就位，待验收 |
 | `src/components/messages/UserLocalCommandOutputMessage.tsx` | 167 | 14566 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserMemoryInputMessage.tsx` | 75 | 6516 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserPlanMessage.tsx` | 42 | 3743 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -884,7 +884,7 @@
 | `src/ink/hooks/use-declared-cursor.ts` | 74 | 2996 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-input.ts` | 93 | 3107 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-interval.ts` | 68 | 1796 | 重写：终端 UI／交互 | `src/generated_ports/p_d4af41e8141ae.rs` | 部分实现：完整等价：共享时钟 interval 门控数学（含饱和差值）含单测；Clock 订阅非 keepAlive 语义归 ink 运行时，待验收 |
-| `src/ink/hooks/use-search-highlight.ts` | 54 | 2158 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/hooks/use-search-highlight.ts` | 54 | 2158 | 重写：终端 UI／交互 | `src/generated_ports/p_74d7087914f2b.rs` | 部分实现：AST 转写：屏幕空间高亮契约（SGR 7 全匹配反色+黄标当前位+损坏机制与选择共用、只匹配渲染文本原注保留）；ink 实例宿主待验收 |
 | `src/ink/hooks/use-selection.ts` | 105 | 4421 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-stdin.ts` | 9 | 232 | 重写：终端 UI／交互 | `src/generated_ports/p_9c2555f93b38d.rs` | 部分实现：契约记录：useStdin stdin 流句柄，宿主待验收 |
 | `src/ink/hooks/use-tab-status.ts` | 73 | 2175 | 重写：终端 UI／交互 | `src/generated_ports/p_7ec0d98f5f3f7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -1460,7 +1460,7 @@
 | `src/utils/computerUse/hostAdapter.ts` | 70 | 2771 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/inputLoader.ts` | 31 | 1190 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/computerUse/mcpServer.ts` | 107 | 4123 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/computerUse/setup.ts` | 54 | 2020 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/computerUse/setup.ts` | 54 | 2020 | 重写：保持通用行为 | `src/generated_ports/p_82db38503503d.rs` | 部分实现：部分等价：mcp__computer-use__* 线名构造完整等价（后端 CU 提示键控语义原注保留）；@ant/computer-use-mcp 工具集为厂商原生（差异记录），待验收 |
 | `src/utils/computerUse/swiftLoader.ts` | 24 | 925 | 重写：保持通用行为 | `src/generated_ports/p_4eb90ef213b90.rs` | 部分实现：AST 转写：平台守卫（非 darwin 报 macOS-only）+原生模块缓存语义；Rust 侧无原生 computer-use 依赖，接口以类型与错误面承载，交互待验收 |
 | `src/utils/computerUse/toolRendering.tsx` | 125 | 17706 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/wrapper.tsx` | 336 | 49436 | 重写：保持通用行为 | 待定 | 未迁移 |
