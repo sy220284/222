@@ -1483,6 +1483,31 @@ async fn chat(
             }
             continue;
         }
+        if input == "/reload-plugins" {
+            // The source /reload-plugins command refreshes the live session,
+            // without restarting the model or dropping conversation history.
+            match Config::load() {
+                Ok(refreshed) => match agent.reload_plugins(&refreshed).await {
+                    Ok(status) => {
+                        // Skill/command dispatch in this CLI reads this list
+                        // after reload; keep it aligned with the live Agent.
+                        config.enabled_plugins = refreshed.enabled_plugins;
+                        println!(
+                            "Reloaded plugin hooks and MCP services ({} configured plugins).",
+                            config.enabled_plugins.len()
+                        );
+                        println!("{}", serde_json::to_string_pretty(&status)?);
+                        match plugins::list_commands(agent.workspace_root(), &config.enabled_plugins) {
+                            Ok(commands) => println!("Available plugin commands and skills: {}", commands.len()),
+                            Err(error) => eprintln!("Plugin command discovery failed after reload: {error:#}"),
+                        }
+                    }
+                    Err(error) => eprintln!("Plugin reload failed: {error:#}"),
+                },
+                Err(error) => eprintln!("Cannot reload plugin settings: {error:#}"),
+            }
+            continue;
+        }
         if input == "/history" || input.starts_with("/history ") {
             let query = input
                 .strip_prefix("/history")
@@ -1650,6 +1675,7 @@ async fn chat(
                     "/diff                    view staged, unstaged and untracked Git changes"
                 );
                 println!("/skills                  list accessible project and plugin skills");
+                println!("/reload-plugins          refresh active plugin hooks, MCP and command catalog");
                 println!("/agents                  list project and user custom agent definitions");
                 println!("/hooks                   list active hook events, matchers and timeouts");
                 println!("/find TEXT               search visible messages in this conversation");
