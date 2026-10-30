@@ -1,3 +1,12 @@
+## 2026-10-30：Agent 主链 token budget 全链路手工重写（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 `source/src/query/{tokenBudget.ts,config.ts,deps.ts}`、`source/src/utils/tokenBudget.ts`，及 `query.ts` 主循环接线段（Stop hook 阻断之后、completed 返回之前）与 `REPL.tsx` 轮首/轮末快照调用现场逐行对照。
+- **Rust 行为**：`src/query_token_budget.rs` 还原 BudgetTracker 与 checkTokenBudget 全分支（agentId 或非正预算直接停、0.9 完成阈值、500 双窗口递减判定、Math.round 取整语义、续写文案含 Intl 千分位）；`src/query_config.rs` 还原 buildQueryConfig 四门快照（env 门按仓库中立惯例映射 ATLAS_* 并走 is_env_truthy；streaming tool execution 服务端灰度门在 StreamingToolExecutor 迁移前如实为 false；feature('TOKEN_BUDGET') 编译门按既有惯例改 ATLAS_TOKEN_BUDGET 进程开关）；`src/agent.rs` 主循环接线：ask 入口解析预算并快照（无新预算时沿用上一轮），完成点执行决策（Continue→计数递增+meta 续写消息入会话并继续循环，Stop→递减 debug 行后自然完成），自然完成清空轮预算。
+- **deps.ts 映射**：QueryDeps 注入语义由既有 Provider trait 与 Agent 方法注入点等价承载，不新增平行结构。
+- **实际测试**：`cargo test --locked --offline --all-targets` 合计 881 通过 0 失败（含 tests/privacy.rs 品牌中立扫描），`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets --offline -- -D clippy::correctness -D clippy::suspicious`、`cargo check --locked --offline --all-targets` 全部通过；port_workbench check 基线一致。
+- **保留差异**：REPL 轮末 budgetInfo 的 UI 展示消息（turn duration message）属终端 UI 链后续补齐；原版 logEvent 遥测按隐私政策移除；续写消息的 isMeta 展示过滤随终端 UI 链补齐（模型上下文行为已等价）。本轮同时修复 PR #6 尾部 terminal_input.rs vim 接线编译阻断（恢复 4 参 redraw 与 VimKeys 状态机接线及 read_prompt vim_enabled 透传）。
+- **本地门禁**：五道门禁全绿，已提交待行为验收。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
+
 ## 2026-10-30：MCP CLI 原版 JSON 导入、详情与项目授权续补（全功能等价待验收）
 
 - **源代码对照**：`source/src/main.tsx` 中 `mcp add-json / get / remove / reset-project-choices` 注册及 `source/src/cli/handlers/mcp.tsx` 中对应处理器。
