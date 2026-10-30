@@ -99,11 +99,19 @@ mod tests {
             counter.fetch_add(1, Ordering::SeqCst);
         }));
         let failing = on_tasks_updated(Arc::new(|| panic!("observer error")));
+        // The observer bus is process-wide. Other parallel tests may publish
+        // notifications, so verify changes relative to each subscription's
+        // current count instead of assuming an isolated global event total.
+        let before = hits.load(Ordering::SeqCst);
         notify_tasks_updated();
-        assert_eq!(hits.load(Ordering::SeqCst), 1);
+        assert!(hits.load(Ordering::SeqCst) > before);
         drop(failing);
+        let before = hits.load(Ordering::SeqCst);
         notify_tasks_updated();
-        assert_eq!(hits.load(Ordering::SeqCst), 2);
+        assert!(hits.load(Ordering::SeqCst) > before);
         drop(listener);
+        let after_drop = hits.load(Ordering::SeqCst);
+        notify_tasks_updated();
+        assert_eq!(hits.load(Ordering::SeqCst), after_drop);
     }
 }
