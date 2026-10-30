@@ -1780,6 +1780,15 @@ impl ToolExecutor {
         args: &Value,
         kind: crate::shell_runtime::ShellKind,
     ) -> Result<String> {
+        self.run_command_with_shell_limit(args, kind, 5 * 1024 * 1024 * 1024).await
+    }
+
+    async fn run_command_with_shell_limit(
+        &self,
+        args: &Value,
+        kind: crate::shell_runtime::ShellKind,
+        hard_output_limit: u64,
+    ) -> Result<String> {
         let command = required(args, "command")?;
         let timeout_ms = Self::shell_timeout_ms(args)?;
         let mut proc = kind.build_command(command)?;
@@ -1811,9 +1820,10 @@ impl ToolExecutor {
                 capped_read(
                     stdout,
                     crate::shell_runtime::max_output_length().saturating_mul(4),
-                    combined_output_bytes.clone()
+                    combined_output_bytes.clone(),
+                    hard_output_limit
                 ),
-                capped_read(stderr, 32_000, combined_output_bytes.clone())
+                capped_read(stderr, 32_000, combined_output_bytes.clone(), hard_output_limit)
             )?;
             let status = child.wait().await?;
             Ok::<_, anyhow::Error>((status, out, err))
@@ -1924,10 +1934,10 @@ async fn capped_read<R: tokio::io::AsyncRead + Unpin>(
     mut input: R,
     max_bytes: usize,
     combined_bytes: Arc<std::sync::atomic::AtomicU64>,
+    hard_limit: u64,
 ) -> Result<(Vec<u8>, u64)> {
     use std::sync::atomic::Ordering;
     use tokio::io::AsyncReadExt;
-    const HARD_OUTPUT_LIMIT: u64 = 5 * 1024 * 1024 * 1024;
     let mut bytes = Vec::new();
     let mut total = 0u64;
     let mut buffer = [0u8; 8192];
@@ -1939,8 +1949,8 @@ async fn capped_read<R: tokio::io::AsyncRead + Unpin>(
         total = total.saturating_add(n as u64);
         let combined = combined_bytes.fetch_add(n as u64, Ordering::Relaxed)
             .saturating_add(n as u64);
-        if combined > HARD_OUTPUT_LIMIT {
-            bail!("Combined command output exceeded the original 5 GiB hard limit");
+        if combined > hard_limit {
+            bail!("Command output exceeded hard limit ({hard_limit} bytes)");
         }
         let keep = n.min(max_bytes.saturating_sub(bytes.len()));
         bytes.extend_from_slice(&buffer[..keep]);
@@ -2583,10 +2593,10 @@ mod tests {
                 arguments: json!({"command":"head -c 200000 /dev/zero"}).to_string(),
             },
         };
-        assert!(executor
-            .execute(&large)
-            .await
-            .contains("Command output exceeded"));
+        // The source allows this output below its 5 GiB disk cap and returns
+        // a bounded preview. A preview limit must not kill a healthy command.
+        let result = executor.execute(&large).await;
+        assert!(result.contains("stdout preview only"), "{result}");
     }
 
     #[cfg(target_os = "linux")]
@@ -2640,7 +2650,12 @@ mod tests {
                 .to_string(),
             },
         };
-        let result = tool.execute(&call).await;
+        let args: Value = serde_json::from_str(&call.function.arguments).unwrap();
+        // Exercise the exact production termination path with a small test
+        // cap; emitting 5 GiB into CI is unnecessary and slow.
+        let result = tool.run_command_with_shell_limit(
+            &args, crate::shell_runtime::ShellKind::Bash, 100_000
+        ).await.unwrap_err().to_string();
         assert!(result.contains("Command output exceeded"), "{result}");
         let pid: i32 = fs::read_to_string(root.path().join("oversize.pid"))
             .unwrap()
