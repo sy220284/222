@@ -694,6 +694,7 @@ mod tests {
             key: "unused".into(),
             thinking_budget: None,
             response_schema: None,
+            tuning: Default::default(),
         };
         provider.set_thinking_budget(Some(2048)).unwrap();
         let schema = json!({"type":"object","properties":{"value":{"type":"string"}}});
