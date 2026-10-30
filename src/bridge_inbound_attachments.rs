@@ -295,6 +295,44 @@ mod tests {
         assert!(!temp.path().join(".atlas").exists());
     }
 
+    #[tokio::test]
+    async fn bridge_attachment_redirect_and_large_length_cannot_write_files() {
+        for response in [
+            "HTTP/1.1 302 Found\r\nLocation: http://example.invalid/steal\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned(),
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                MAX_ATTACHMENT_BYTES + 1
+            ),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let base = format!("http://{}", listener.local_addr().unwrap());
+            let server = thread::spawn(move || {
+                let (mut conn, _) = listener.accept().unwrap();
+                let mut request = [0u8; 4096];
+                conn.read(&mut request).unwrap();
+                conn.write_all(response.as_bytes()).unwrap();
+            });
+            let event = json!({
+                "file_attachments": [{"file_uuid":"abc123","file_name":"test.txt"}]
+            });
+            let message = json!("preserve input");
+            assert_eq!(
+                resolve_and_prepend(
+                    &event,
+                    &message,
+                    temp.path(),
+                    "s",
+                    Some((&base, "secret")),
+                )
+                .await,
+                message
+            );
+            server.join().unwrap();
+            assert!(!temp.path().join(".atlas").exists());
+        }
+    }
+
     #[test]
     fn rejects_invalid_attachments_without_partial_results() {
         assert!(extract(&json!({"file_attachments":[{"file_uuid":"x","file_name":"ok"},{"file_uuid":12,"file_name":"bad"}]})).is_empty());
