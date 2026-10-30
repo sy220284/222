@@ -182,3 +182,101 @@ fn four_domestic_provider_ids_use_existing_authenticated_chat_pipeline() {
         );
     }
 }
+
+
+#[test]
+fn deepseek_reasoning_is_replayed_with_tool_result_in_next_api_turn() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("sample.txt"), "reasoning-roundtrip-file\n").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = thread::spawn(move || {
+        for turn in 0..2 {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let (mut socket, _) = loop {
+                match listener.accept() {
+                    Ok(connection) => break connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "missing model API turn {turn}");
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("API accept: {error}"),
+                }
+            };
+            let (_headers, request) = read_request(&mut socket);
+            let response = if turn == 0 {
+                json!({"choices":[{"message":{
+                    "role":"assistant",
+                    "content":null,
+                    "reasoning_content":"I will inspect the file before answering",
+                    "tool_calls":[{
+                        "id":"deepseek_call_1","type":"function",
+                        "function":{"name":"read_file","arguments":"{\\"path\\":\\"sample.txt\\"}"}
+                    }]
+                },"finish_reason":"tool_calls"}]})
+            } else {
+                let messages = request["messages"].as_array().unwrap();
+                let assistant = messages.iter().find(|m| {
+                    m["role"] == "assistant" && m["tool_calls"].is_array()
+                }).expect("missing prior assistant tool message");
+                assert_eq!(assistant["reasoning_content"], "I will inspect the file before answering");
+                assert_eq!(assistant["tool_calls"][0]["id"], "deepseek_call_1");
+                let tool_result = messages.iter().find(|m| m["role"] == "tool")
+                    .expect("missing tool result");
+                assert_eq!(tool_result["tool_call_id"], "deepseek_call_1");
+                assert!(tool_result["content"].as_str().unwrap().contains("reasoning-roundtrip-file"));
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"reasoning roundtrip completed"},"finish_reason":"stop"}]})
+            };
+            let payload = response.to_string();
+            write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                payload.len(),
+                payload
+            )
+            .unwrap();
+        }
+    });
+    let config = dir.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"deepseek","providers":[{
+            "id":"deepseek","kind":"openai-compatible",
+            "base_url":format!("http://{address}/v1"),
+            "model":"deepseek-flash","api_key_env":"TEST_DOMESTIC_API_KEY"
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
+        .args([
+            "--workspace", dir.path().to_str().unwrap(),
+            "--approval", "read-only", "run", "Inspect sample.txt",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .env("TEST_DOMESTIC_API_KEY", "test-key-123")
+        .output()
+        .unwrap();
+    server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("reasoning roundtrip completed"),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let session_dir = dir.path().join(".atlas/sessions");
+    let session_file = fs::read_dir(session_dir)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let saved = fs::read_to_string(session_file).unwrap();
+    assert!(saved.contains("I will inspect the file before answering"));
+}
