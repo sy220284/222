@@ -1,3 +1,11 @@
+## 2026-10-29：/resume 真正切换会话及无参数选择器（源码已提交、待验收）
+
+原版 source/src/commands/resume/resume.tsx::call/ResumeCommand：/resume 无参数打开历史会话选择器，输入 UUID/标题后在当前交互界面恢复该会话。Rust 原 src/main.rs::chat 仅打印重启命令，当前对话未恢复。
+
+已实现 src/main.rs::chat → Agent::resumable_sessions / resume_interactive_session → session_control::resolve / Session::load：无参数列出最近可恢复的非团队会话，支持编号选择和取消；有参数按原有 UUID/标题解析；切换前校验保存的权限模式不超出当前 CLI 授权，执行旧会话结束 Hook，停止旧后台任务，重新绑定会话任务/文件历史/统计/缓存/后台输出隔离，清空旧文件读取授权和临时上下文，再执行恢复会话的 SessionStart Hook，并重新加载对应提示词历史。Hook 失败明确提示当前会话已经切换。提交 898a1a35、cbe890a2、71b0ce56、b761c336。已静态核对入口及跨模块状态。
+
+原版跨工作树/跨项目会话选择、模糊搜索 UI、恢复时后台远程任务的全部生命周期、完整 Hook 时序仍待等价。**本轮累计10/100，剩余90项**，未完成100项先行缺口逐函数核查与全量方案。源码已提交待行为验收，新增完整等价验收0；未运行 Cargo/测试/CI，Issue #3 冻结362项保持开放。
+
 ## 2026-10-29：会话导出预览、文件名选择和取消（源码已提交、待验收）
 
 原版 source/src/commands/export/export.tsx::call → ExportDialog：/export 无参数时展示会话内容预览和由首条用户消息/本地时间生成的默认文件名，用户可修改或取消；提供参数时直接写出。Rust 原 src/main.rs::chat 直接调用 Agent::export_session(None)，未提供选择或取消。
