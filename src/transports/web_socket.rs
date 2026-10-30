@@ -128,7 +128,8 @@ impl MinimalWsClient {
         .await
         .map_err(|_| anyhow!("WS connect timeout after {CONNECT_TIMEOUT_MS}ms"))??;
         let mut key_bytes = [0_u8; 16];
-        getrandom::getrandom(&mut key_bytes).map_err(|error| anyhow!("WS handshake randomness: {error}"))?;
+        getrandom::getrandom(&mut key_bytes)
+            .map_err(|error| anyhow!("WS handshake randomness: {error}"))?;
         let key = base64::engine::general_purpose::STANDARD.encode(key_bytes);
         let mut request = format!(
             "GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
@@ -197,7 +198,8 @@ impl MinimalWsClient {
         frame.push(0x80 | opcode);
         let len = payload.len();
         let mut mask = [0_u8; 4];
-        getrandom::getrandom(&mut mask).map_err(|error| anyhow!("WS frame masking randomness: {error}"))?;
+        getrandom::getrandom(&mut mask)
+            .map_err(|error| anyhow!("WS frame masking randomness: {error}"))?;
         if len < 126 {
             frame.push(0x80 | len as u8);
         } else if len <= u16::MAX as usize {

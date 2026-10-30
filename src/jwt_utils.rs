@@ -13,9 +13,12 @@ use serde_json::Value;
 pub fn decode_jwt_payload(token: &str) -> Option<Value> {
     let jwt = token.strip_prefix("sk-ant-si-").unwrap_or(token);
     let parts: Vec<&str> = jwt.split('.').collect();
-    if parts.len() != 3 || parts[1].is_empty() { return None; }
+    if parts.len() != 3 || parts[1].is_empty() {
+        return None;
+    }
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(parts[1].trim_end_matches('=')).ok()?;
+        .decode(parts[1].trim_end_matches('='))
+        .ok()?;
     serde_json::from_slice(&bytes).ok()
 }
 

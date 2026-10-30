@@ -149,7 +149,8 @@ async fn send_loop(shared: Arc<WorkerStateShared>, mut current: Value) {
             return;
         }
         failures = failures.saturating_add(1);
-        let delay = shared.base_delay_ms
+        let delay = shared
+            .base_delay_ms
             .saturating_mul(1_u64 << failures.saturating_sub(1).min(16))
             .min(shared.max_delay_ms);
         tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
@@ -163,8 +164,8 @@ async fn send_loop(shared: Arc<WorkerStateShared>, mut current: Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::AtomicUsize;
     use serde_json::json;
+    use std::sync::atomic::AtomicUsize;
 
     #[test]
     fn overlay_merge_preserves_nulls_and_wins() {

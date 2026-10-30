@@ -235,7 +235,10 @@ impl SseTransport {
         let mut url = self.url.clone();
         let last_seq = self.state.lock().expect("sse state").last_sequence_num;
         if last_seq > 0 {
-            url.push_str(&format!("{}from_sequence_num={last_seq}", if url.contains('?') { "&" } else { "?" }));
+            url.push_str(&format!(
+                "{}from_sequence_num={last_seq}",
+                if url.contains('?') { "&" } else { "?" }
+            ));
         }
         let mut request = reqwest::Client::new().get(&url);
         for (name, value) in (self.auth)() {
@@ -439,7 +442,8 @@ mod tests {
         for attempts in 1..30_u32 {
             let delay = reconnect_delay(attempts);
             assert!(
-                delay.as_millis() <= ((RECONNECT_MAX_DELAY_MS + RECONNECT_MAX_DELAY_MS / 4) as u128)
+                delay.as_millis()
+                    <= ((RECONNECT_MAX_DELAY_MS + RECONNECT_MAX_DELAY_MS / 4) as u128)
             );
         }
     }

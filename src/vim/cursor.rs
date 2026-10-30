@@ -92,7 +92,10 @@ impl<'a> VimCursor<'a> {
 
     // ----- logical lines -------------------------------------------------
     fn line_bounds(&self) -> (usize, usize) {
-        let start = self.text[..self.offset].rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let start = self.text[..self.offset]
+            .rfind('\n')
+            .map(|i| i + 1)
+            .unwrap_or(0);
         let end = self.text[self.offset..]
             .find('\n')
             .map(|i| self.offset + i)
@@ -116,7 +119,10 @@ impl<'a> VimCursor<'a> {
         VimCursor::new(self.text, start + col)
     }
     pub fn line_index(&self) -> usize {
-        self.text[..self.offset].bytes().filter(|b| *b == b'\n').count()
+        self.text[..self.offset]
+            .bytes()
+            .filter(|b| *b == b'\n')
+            .count()
     }
     /// Preserve the current column while moving one logical line up/down,
     /// clamped to the target line length (Cursor.upLogicalLine/downLogicalLine).
@@ -137,11 +143,13 @@ impl<'a> VimCursor<'a> {
             if start == 0 {
                 return self.clone();
             }
-            let prev_start = self.text[..start - 1].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            let prev_start = self.text[..start - 1]
+                .rfind('\n')
+                .map(|i| i + 1)
+                .unwrap_or(0);
             (prev_start, start - 1)
         };
-        let clamped = self
-            .text[other_start..other_end]
+        let clamped = self.text[other_start..other_end]
             .chars()
             .take(column)
             .map(char::len_utf8)
@@ -185,7 +193,10 @@ impl<'a> VimCursor<'a> {
         }
     }
     fn is_word(&self) -> bool {
-        matches!(Self::class(char_at(self.text, self.offset).map(|(ch, _)| ch)), 1 | 2)
+        matches!(
+            Self::class(char_at(self.text, self.offset).map(|(ch, _)| ch)),
+            1 | 2
+        )
     }
     /// `w` — start of next vim word (words are word/punct runs; whitespace skipped).
     pub fn next_vim_word(&self) -> VimCursor<'a> {
@@ -196,11 +207,15 @@ impl<'a> VimCursor<'a> {
         let start_class = Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch));
         if start_class != 0 {
             let class = start_class;
-            while !cursor.is_at_end() && Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == class {
+            while !cursor.is_at_end()
+                && Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == class
+            {
                 cursor = cursor.right();
             }
         }
-        while !cursor.is_at_end() && Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == 0 {
+        while !cursor.is_at_end()
+            && Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == 0
+        {
             cursor = cursor.right();
         }
         cursor
@@ -250,7 +265,10 @@ impl<'a> VimCursor<'a> {
         }
     }
     fn is_word_big(&self) -> bool {
-        matches!(Self::class_word(char_at(self.text, self.offset).map(|(ch, _)| ch)), 1)
+        matches!(
+            Self::class_word(char_at(self.text, self.offset).map(|(ch, _)| ch)),
+            1
+        )
     }
     /// `W` — start of next WORD (runs of non-whitespace).
     pub fn next_word_big(&self) -> VimCursor<'a> {
@@ -260,11 +278,16 @@ impl<'a> VimCursor<'a> {
         }
         let start_class = Self::class_word(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch));
         if start_class != 0 {
-            while !cursor.is_at_end() && Self::class_word(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == start_class {
+            while !cursor.is_at_end()
+                && Self::class_word(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch))
+                    == start_class
+            {
                 cursor = cursor.right();
             }
         }
-        while !cursor.is_at_end() && Self::class_word(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == 0 {
+        while !cursor.is_at_end()
+            && Self::class_word(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == 0
+        {
             cursor = cursor.right();
         }
         cursor
@@ -407,12 +430,27 @@ mod tests {
     #[test]
     fn find_character_supports_f_t_and_counts() {
         let text = "a1b2c3d4";
-        assert_eq!(cursor(text, 0).find_character('3', FindType::FForward, 1), Some(6));
-        assert_eq!(cursor(text, 6).find_character('a', FindType::FBackward, 1), Some(0));
+        assert_eq!(
+            cursor(text, 0).find_character('3', FindType::FForward, 1),
+            Some(6)
+        );
+        assert_eq!(
+            cursor(text, 6).find_character('a', FindType::FBackward, 1),
+            Some(0)
+        );
         // t stops one before
-        assert_eq!(cursor(text, 0).find_character('3', FindType::TTill, 1), Some(5));
+        assert_eq!(
+            cursor(text, 0).find_character('3', FindType::TTill, 1),
+            Some(5)
+        );
         // T stops one after (moving backwards)
-        assert_eq!(cursor(text, 6).find_character('a', FindType::TBackTill, 1), Some(1));
-        assert_eq!(cursor(text, 0).find_character('z', FindType::FForward, 1), None);
+        assert_eq!(
+            cursor(text, 6).find_character('a', FindType::TBackTill, 1),
+            Some(1)
+        );
+        assert_eq!(
+            cursor(text, 0).find_character('z', FindType::FForward, 1),
+            None
+        );
     }
 }

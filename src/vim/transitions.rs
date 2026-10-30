@@ -2,13 +2,15 @@
 //! The scannable source of truth: to understand what happens in any state,
 //! look up that state's transition function.
 
+use super::motions::resolve_motion;
 use super::operators::{
     execute_indent, execute_join, execute_line_op, execute_open_line, execute_operator_find,
     execute_operator_g, execute_operator_gg, execute_operator_motion, execute_operator_text_obj,
-    execute_paste, execute_replace, execute_toggle_case, execute_repeat_find, execute_x, VimCtx,
+    execute_paste, execute_repeat_find, execute_replace, execute_toggle_case, execute_x, VimCtx,
 };
-use super::types::{is_text_obj_type, is_text_obj_scope_key, FindType, Operator, TextObjScope, MAX_VIM_COUNT};
-use super::motions::resolve_motion;
+use super::types::{
+    is_text_obj_scope_key, is_text_obj_type, FindType, Operator, TextObjScope, MAX_VIM_COUNT,
+};
 use super::types::{FIND_KEYS, SIMPLE_MOTIONS};
 
 /// Pending command state (`CommandState`).
@@ -16,16 +18,46 @@ use super::types::{FIND_KEYS, SIMPLE_MOTIONS};
 pub enum CommandState {
     #[default]
     Idle,
-    Count { digits: String },
-    Operator { op: Operator, count: usize },
-    OperatorCount { op: Operator, count: usize, digits: String },
-    OperatorFind { op: Operator, count: usize, find: FindType },
-    OperatorTextObj { op: Operator, count: usize, scope: TextObjScope },
-    Find { find: FindType, count: usize },
-    G { count: usize },
-    OperatorG { op: Operator, count: usize },
-    Replace { count: usize },
-    Indent { dir: char, count: usize },
+    Count {
+        digits: String,
+    },
+    Operator {
+        op: Operator,
+        count: usize,
+    },
+    OperatorCount {
+        op: Operator,
+        count: usize,
+        digits: String,
+    },
+    OperatorFind {
+        op: Operator,
+        count: usize,
+        find: FindType,
+    },
+    OperatorTextObj {
+        op: Operator,
+        count: usize,
+        scope: TextObjScope,
+    },
+    Find {
+        find: FindType,
+        count: usize,
+    },
+    G {
+        count: usize,
+    },
+    OperatorG {
+        op: Operator,
+        count: usize,
+    },
+    Replace {
+        count: usize,
+    },
+    Indent {
+        dir: char,
+        count: usize,
+    },
 }
 
 fn parse_find(key: char) -> FindType {
@@ -59,9 +91,7 @@ pub fn transition(state: &mut CommandState, input: &str, ctx: &mut VimCtx) -> bo
     match &snapshot {
         CommandState::Idle => from_idle(state, input, ctx),
         CommandState::Count { digits } => from_count(state, digits, input, ctx),
-        CommandState::Operator { op, count } => {
-            from_operator(state, *op, *count, input, ctx)
-        }
+        CommandState::Operator { op, count } => from_operator(state, *op, *count, input, ctx),
         CommandState::OperatorCount { op, count, digits } => {
             from_operator_count(state, *op, *count, digits, input, ctx)
         }
@@ -127,7 +157,9 @@ fn from_idle(state: &mut CommandState, input: &str, ctx: &mut VimCtx) -> bool {
     if input.len() == 1 {
         let first = input.chars().next().unwrap();
         if first.is_ascii_digit() && first != '0' {
-            *state = CommandState::Count { digits: input.to_string() };
+            *state = CommandState::Count {
+                digits: input.to_string(),
+            };
             return true;
         }
         if first == '0' {
@@ -155,8 +187,13 @@ fn from_count(state: &mut CommandState, digits: &str, input: &str, ctx: &mut Vim
         let first = input.chars().next().unwrap();
         if first.is_ascii_digit() {
             let new_digits = format!("{digits}{input}");
-            let count: usize = new_digits.parse().unwrap_or(MAX_VIM_COUNT).min(MAX_VIM_COUNT);
-            *state = CommandState::Count { digits: count.to_string() };
+            let count: usize = new_digits
+                .parse()
+                .unwrap_or(MAX_VIM_COUNT)
+                .min(MAX_VIM_COUNT);
+            *state = CommandState::Count {
+                digits: count.to_string(),
+            };
             return true;
         }
     }
@@ -194,7 +231,10 @@ fn handle_normal_input(input: &str, count: usize, ctx: &mut VimCtx) -> Outcome {
         return Outcome::Executed;
     }
     if is_find_key(first) {
-        return Outcome::Pending(CommandState::Find { find: parse_find(first), count });
+        return Outcome::Pending(CommandState::Find {
+            find: parse_find(first),
+            count,
+        });
     }
     match first {
         'g' => Outcome::Pending(CommandState::G { count }),
@@ -262,7 +302,11 @@ fn handle_normal_input(input: &str, count: usize, ctx: &mut VimCtx) -> Outcome {
         }
         'a' => {
             let cur = ctx.cursor();
-            let offset = if cur.is_at_end() { cur.offset } else { cur.right().offset };
+            let offset = if cur.is_at_end() {
+                cur.offset
+            } else {
+                cur.right().offset
+            };
             ctx.enter_insert(offset);
             Outcome::Executed
         }
@@ -299,7 +343,11 @@ fn from_operator(
             return true;
         }
         if first.is_ascii_digit() {
-            *state = CommandState::OperatorCount { op, count, digits: first.to_string() };
+            *state = CommandState::OperatorCount {
+                op,
+                count,
+                digits: first.to_string(),
+            };
             return true;
         }
     }
@@ -329,11 +377,19 @@ fn handle_operator_input(op: Operator, count: usize, input: &str, ctx: &mut VimC
         return Outcome::Pending(CommandState::OperatorTextObj {
             op,
             count,
-            scope: if first == 'i' { TextObjScope::Inner } else { TextObjScope::Around },
+            scope: if first == 'i' {
+                TextObjScope::Inner
+            } else {
+                TextObjScope::Around
+            },
         });
     }
     if is_find_key(first) {
-        return Outcome::Pending(CommandState::OperatorFind { op, count, find: parse_find(first) });
+        return Outcome::Pending(CommandState::OperatorFind {
+            op,
+            count,
+            find: parse_find(first),
+        });
     }
     if SIMPLE_MOTIONS.contains(&first) {
         execute_operator_motion(ctx, op, input, count);
@@ -362,8 +418,15 @@ fn from_operator_count(
         let first = input.chars().next().unwrap();
         if first.is_ascii_digit() {
             let new_digits = format!("{digits}{input}");
-            let parsed: usize = new_digits.parse().unwrap_or(MAX_VIM_COUNT).min(MAX_VIM_COUNT);
-            *state = CommandState::OperatorCount { op, count, digits: parsed.to_string() };
+            let parsed: usize = new_digits
+                .parse()
+                .unwrap_or(MAX_VIM_COUNT)
+                .min(MAX_VIM_COUNT);
+            *state = CommandState::OperatorCount {
+                op,
+                count,
+                digits: parsed.to_string(),
+            };
             return true;
         }
     }

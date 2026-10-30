@@ -37,12 +37,7 @@ pub fn find_text_object(
 }
 
 /// Shared helper: `aw` trailing-whitespace extension (or leading at line start).
-fn extend_around(
-    text: &str,
-    start: &mut usize,
-    end: &mut usize,
-    is_ws: impl Fn(char) -> bool,
-) {
+fn extend_around(text: &str, start: &mut usize, end: &mut usize, is_ws: impl Fn(char) -> bool) {
     while *end < text.len() {
         let next = match text[*end..].chars().next() {
             Some(c) if is_ws(c) => c,
@@ -102,7 +97,11 @@ fn find_word_big_object(text: &str, offset: usize, is_inner: bool) -> Option<Tex
     let is_non_ws = |c: char| !is_vim_whitespace(c);
     let char_at = |i: usize| text[i..].chars().next();
     let c = char_at(offset)?;
-    let same: Box<dyn Fn(char) -> bool> = if is_ws(c) { Box::new(is_ws) } else { Box::new(is_non_ws) };
+    let same: Box<dyn Fn(char) -> bool> = if is_ws(c) {
+        Box::new(is_ws)
+    } else {
+        Box::new(is_non_ws)
+    };
     let mut start = offset;
     let mut end = offset;
     while start > 0 {
@@ -130,9 +129,17 @@ fn find_word_big_object(text: &str, offset: usize, is_inner: bool) -> Option<Tex
 
 /// Quote objects are line-scoped: quotes pair as 0-1, 2-3, ... within the
 /// line; the cursor must sit inside a pair.
-fn find_quote_object(text: &str, offset: usize, quote: char, is_inner: bool) -> Option<TextObjectRange> {
+fn find_quote_object(
+    text: &str,
+    offset: usize,
+    quote: char,
+    is_inner: bool,
+) -> Option<TextObjectRange> {
     let line_start = text[..offset].rfind('\n').map(|i| i + 1).unwrap_or(0);
-    let line_end = text[offset..].find('\n').map(|i| offset + i).unwrap_or(text.len());
+    let line_end = text[offset..]
+        .find('\n')
+        .map(|i| offset + i)
+        .unwrap_or(text.len());
     let line_text = &text[line_start..line_end];
     let pos_in_line = offset - line_start;
     let mut positions = Vec::new();
@@ -149,9 +156,15 @@ fn find_quote_object(text: &str, offset: usize, quote: char, is_inner: bool) -> 
         let (qe, qe_next) = positions[i + 1];
         if qs <= pos_in_line && pos_in_line <= qe_next {
             return Some(if is_inner {
-                TextObjectRange { start: line_start + qs + 1, end: line_start + qe }
+                TextObjectRange {
+                    start: line_start + qs + 1,
+                    end: line_start + qe,
+                }
             } else {
-                TextObjectRange { start: line_start + qs, end: line_start + qe_next }
+                TextObjectRange {
+                    start: line_start + qs,
+                    end: line_start + qe_next,
+                }
             });
         }
     }
@@ -185,7 +198,11 @@ fn find_bracket_object(
         if i == 0 {
             break;
         }
-        i = text[..i].char_indices().next_back().map(|(p, _)| p).unwrap_or(0);
+        i = text[..i]
+            .char_indices()
+            .next_back()
+            .map(|(p, _)| p)
+            .unwrap_or(0);
     }
     let start = start?;
     depth = 0;
@@ -209,9 +226,15 @@ fn find_bracket_object(
     }
     let end = end?;
     Some(if is_inner {
-        TextObjectRange { start: start + open.len_utf8(), end }
+        TextObjectRange {
+            start: start + open.len_utf8(),
+            end,
+        }
     } else {
-        TextObjectRange { start, end: end + close.len_utf8() }
+        TextObjectRange {
+            start,
+            end: end + close.len_utf8(),
+        }
     })
 }
 

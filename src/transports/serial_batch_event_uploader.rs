@@ -25,7 +25,11 @@ pub enum UploaderError {
 
 impl std::fmt::Display for UploaderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self { Self::Retryable { retry_after_ms } => write!(f, "upload retry required: {retry_after_ms:?}") }
+        match self {
+            Self::Retryable { retry_after_ms } => {
+                write!(f, "upload retry required: {retry_after_ms:?}")
+            }
+        }
     }
 }
 impl std::error::Error for UploaderError {}
@@ -177,7 +181,11 @@ impl<T: serde::Serialize + Send + Clone + 'static> SerialBatchEventUploader<T> {
                 if state.closed {
                     return;
                 }
-                let capacity = self.shared.config.max_queue_size.saturating_sub(state.pending.len());
+                let capacity = self
+                    .shared
+                    .config
+                    .max_queue_size
+                    .saturating_sub(state.pending.len());
                 if capacity > 0 {
                     let count = capacity.min(remaining.len());
                     state.pending.extend(remaining.drain(..count));
@@ -277,7 +285,9 @@ async fn drain_loop<T: serde::Serialize + Send + Clone + 'static>(shared: Arc<Sh
                     if failures >= max {
                         {
                             let mut state = shared.state.lock().expect("uploader state");
-                            for _ in 0..batch_size { state.pending.pop_front(); }
+                            for _ in 0..batch_size {
+                                state.pending.pop_front();
+                            }
                         }
                         shared.dropped_batches.fetch_add(1, Ordering::SeqCst);
                         if let Some(handler) = &shared.config.on_batch_dropped {
@@ -295,7 +305,13 @@ async fn drain_loop<T: serde::Serialize + Send + Clone + 'static>(shared: Arc<Sh
                 // Backoff sleep is not interruptible — matching the source's
                 // plain `setTimeout`; close() takes effect on the next loop
                 // head via the closed check below.
-                let delay = retry_delay(failures, retry_after_ms, shared.config.base_delay_ms, shared.config.max_delay_ms, shared.config.jitter_ms);
+                let delay = retry_delay(
+                    failures,
+                    retry_after_ms,
+                    shared.config.base_delay_ms,
+                    shared.config.max_delay_ms,
+                    shared.config.jitter_ms,
+                );
                 tokio::time::sleep(delay).await;
                 if shared.closed.load(Ordering::SeqCst) {
                     break;
@@ -343,7 +359,9 @@ pub(super) fn retry_delay(
     let jitter = rand_below(jitter_ms);
     let clamped = match retry_after_ms {
         Some(retry_after) => retry_after.max(base_delay_ms).min(max_delay_ms),
-        None => base_delay_ms.saturating_mul(1u64 << failures.saturating_sub(1).min(16)).min(max_delay_ms),
+        None => base_delay_ms
+            .saturating_mul(1u64 << failures.saturating_sub(1).min(16))
+            .min(max_delay_ms),
     };
     std::time::Duration::from_millis(clamped.saturating_add(jitter))
 }
@@ -493,9 +511,21 @@ mod tests {
         config.base_delay_ms = 100;
         config.max_delay_ms = 200;
         config.jitter_ms = 10;
-        let delay = retry_delay(1, Some(5_000), &config);
+        let delay = retry_delay(
+            1,
+            Some(5_000),
+            config.base_delay_ms,
+            config.max_delay_ms,
+            config.jitter_ms,
+        );
         assert!(delay.as_millis() >= 200, "retry-after clamped to max");
-        let delay = retry_delay(3, None, &config);
+        let delay = retry_delay(
+            3,
+            None,
+            config.base_delay_ms,
+            config.max_delay_ms,
+            config.jitter_ms,
+        );
         assert!(delay.as_millis() <= 210);
     }
 

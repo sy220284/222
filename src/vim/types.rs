@@ -105,16 +105,46 @@ pub const MAX_VIM_COUNT: usize = 10_000;
 /// A recorded change, sufficient to replay the command (dot repeat).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordedChange {
-    Insert { text: String },
-    Operator { op: Operator, motion: String, count: usize },
-    OperatorTextObj { op: Operator, obj_type: char, scope: TextObjScope, count: usize },
-    OperatorFind { op: Operator, find: FindType, ch: char, count: usize },
-    Replace { ch: char, count: usize },
-    X { count: usize },
-    ToggleCase { count: usize },
-    Indent { dir: char, count: usize },
-    OpenLine { below: bool },
-    Join { count: usize },
+    Insert {
+        text: String,
+    },
+    Operator {
+        op: Operator,
+        motion: String,
+        count: usize,
+    },
+    OperatorTextObj {
+        op: Operator,
+        obj_type: char,
+        scope: TextObjScope,
+        count: usize,
+    },
+    OperatorFind {
+        op: Operator,
+        find: FindType,
+        ch: char,
+        count: usize,
+    },
+    Replace {
+        ch: char,
+        count: usize,
+    },
+    X {
+        count: usize,
+    },
+    ToggleCase {
+        count: usize,
+    },
+    Indent {
+        dir: char,
+        count: usize,
+    },
+    OpenLine {
+        below: bool,
+    },
+    Join {
+        count: usize,
+    },
 }
 
 /// Persistent "memory" of vim that survives across commands.

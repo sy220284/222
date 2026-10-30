@@ -62,7 +62,10 @@ mod tests {
         assert_eq!(resolve_motion("w", &VimCursor::new(text, 0), 2).offset, 8);
         // h at start cannot move further
         assert_eq!(resolve_motion("h", &VimCursor::new(text, 0), 5).offset, 0);
-        assert_eq!(resolve_motion("$", &VimCursor::new(text, 0), 1).offset, text.len());
+        assert_eq!(
+            resolve_motion("$", &VimCursor::new(text, 0), 1).offset,
+            text.len()
+        );
         assert_eq!(resolve_motion("^", &VimCursor::new(text, 0), 1).offset, 0);
         // unknown keys are a no-op
         assert_eq!(resolve_motion("z", &VimCursor::new(text, 4), 3).offset, 4);
