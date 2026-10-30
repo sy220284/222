@@ -21,6 +21,21 @@ fn el(tag: &str, attrs: Value, children: Vec<VNode>) -> VNode {
 }
 
 fn relative_path(cwd: &Path, path: &Path) -> String {
+    // Source props may contain POSIX workspace paths even on a Windows host.
+    // Resolve their lexical slash components instead of treating '/repo' as
+    // a Windows drive-relative path.
+    if let (Some(root), Some(target)) = (cwd.to_str(), path.to_str()) {
+        if root.starts_with('/') && target.starts_with('/') {
+            let root_parts = root.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>();
+            let target_parts = target.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>();
+            let shared = root_parts.iter().zip(&target_parts)
+                .take_while(|(a, b)| a == b).count();
+            if shared == 0 { return target.to_owned(); }
+            return std::iter::repeat("..").take(root_parts.len() - shared)
+                .chain(target_parts[shared..].iter().copied())
+                .collect::<Vec<_>>().join("/");
+        }
+    }
     if !path.is_absolute() {
         return path.to_string_lossy().into_owned();
     }
