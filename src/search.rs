@@ -563,19 +563,13 @@ pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
 
 
 fn type_matches(path: &Path, kind: &str) -> Result<bool> {
-    use std::{collections::HashMap, process::Command, sync::OnceLock};
+    use std::{collections::HashMap, sync::OnceLock};
     static TYPES: OnceLock<Result<HashMap<String, Vec<GlobMatcher>>, String>> = OnceLock::new();
     let types = TYPES.get_or_init(|| {
-        // The original GrepTool delegates --type to ripgrep. Read the
-        // installed ripgrep definitions once, including special filenames.
-        let output = Command::new("rg").arg("--type-list").output()
-            .map_err(|error| format!("Cannot load ripgrep file types: {error}"))?;
-        if !output.status.success() {
-            return Err(format!("ripgrep --type-list failed: {}",
-                String::from_utf8_lossy(&output.stderr)));
-        }
-        let text = String::from_utf8(output.stdout)
-            .map_err(|error| format!("Invalid ripgrep type list: {error}"))?;
+        // Bundle ripgrep's official default type table. The 2.1.88 Grep
+        // tool accepts its --type names without requiring an external rg
+        // binary at runtime.
+        let text = include_str!("ripgrep_types.txt");
         let mut types = HashMap::new();
         for entry in text.lines() {
             let (name, globs) = entry.split_once(": ")
