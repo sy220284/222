@@ -2277,6 +2277,41 @@ impl Agent {
         Ok(title)
     }
 
+    /// fileHistoryRewind(user_message_id) replays the target and subsequent
+    /// edits backwards, without touching the conversation transcript. Keep
+    /// the original message UUID and all path approvals in the active Agent.
+    pub fn sdk_rewind_files(
+        &self,
+        user_message_id: &str,
+        dry_run: bool,
+    ) -> Result<serde_json::Value> {
+        let id = uuid::Uuid::parse_str(user_message_id)
+            .context("rewind_files requires a user message UUID")?;
+        let start = self.session.history_message_ids.iter()
+            .position(|saved| *saved == id)
+            .context("User message was not found in session file history")?;
+        if !crate::history::enabled(self.interactive, self.file_checkpointing_enabled) {
+            bail!("File checkpointing is disabled");
+        }
+        let records = crate::history::records_for_message_sequence(
+            &self.root, &self.session.id.to_string(),
+            &self.session.history_message_ids[start..],
+        )?;
+        let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+            .with_session_id(self.session.id.to_string())
+            .with_file_checkpointing(self.file_checkpointing_enabled)
+            .with_permission_rules(self.permission_rules.clone())
+            .with_extra_roots(self.additional_dirs.clone())
+            .with_permission_mode(self.permission_mode);
+        let result = executor.sdk_rewind_message_records(&records, dry_run)?;
+        Ok(json!({
+            "canRewind": true,
+            "dryRun": dry_run,
+            "files": result,
+            "userMessageId": id,
+        }))
+    }
+
     pub fn export_session(&self, filename: Option<&str>) -> Result<std::path::PathBuf> {
         crate::session_control::export(&self.session, &self.root, filename)
     }
