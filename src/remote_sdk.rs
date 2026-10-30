@@ -124,9 +124,12 @@ fn read_token(file: Option<&Path>) -> Result<Option<String>> {
 fn start_sdk(cli: &crate::Cli, session_id: &str, resume: Option<&str>) -> Result<Child> {
     use std::process::Stdio;
     let mut cmd = Command::new(std::env::current_exe()?);
-    cmd.arg("--workspace").arg(&cli.workspace)
-        .arg("--max-steps").arg(cli.max_steps.to_string())
-        .arg("--approval").arg(match cli.approval {
+    cmd.arg("--workspace")
+        .arg(&cli.workspace)
+        .arg("--max-steps")
+        .arg(cli.max_steps.to_string())
+        .arg("--approval")
+        .arg(match cli.approval {
             crate::ApprovalArg::ReadOnly => "read-only",
             crate::ApprovalArg::Ask => "ask",
             crate::ApprovalArg::Full => "full",
@@ -146,7 +149,9 @@ fn start_sdk(cli: &crate::Cli, session_id: &str, resume: Option<&str>) -> Result
     } else {
         cmd.arg("--remote-session-id").arg(session_id);
     }
-    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
+    cmd.stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit());
     cmd.spawn().context("Unable to start SDK child")
 }
 
@@ -236,8 +241,12 @@ pub async fn run(
     let (channel, mut driver, sse_forwarder) = match get_transport_for_url(url)? {
         TransportKind::WebSocket => {
             let ws = Arc::new(WebSocketTransport::new(
-                url.to_owned(), Vec::new(), Some(session_id.to_owned()),
-                ws_tx, true, Some(Arc::clone(&headers)),
+                url.to_owned(),
+                Vec::new(),
+                Some(session_id.to_owned()),
+                ws_tx,
+                true,
+                Some(Arc::clone(&headers)),
             ));
             let reader = Arc::clone(&ws);
             let driver = tokio::spawn(async move {
@@ -248,8 +257,11 @@ pub async fn run(
         }
         TransportKind::Hybrid => {
             let hybrid = Arc::new(HybridTransport::new(
-                url.to_owned(), Vec::new(), Some(session_id.to_owned()),
-                ws_tx, Arc::clone(&headers),
+                url.to_owned(),
+                Vec::new(),
+                Some(session_id.to_owned()),
+                ws_tx,
+                Arc::clone(&headers),
             )?);
             let reader = Arc::clone(&hybrid);
             let driver = tokio::spawn(async move {
@@ -261,11 +273,17 @@ pub async fn run(
         TransportKind::Sse => {
             let stream_url = sse_stream_url_for_session(url)?;
             let sse = Arc::new(SseTransport::new(
-                stream_url.clone(), Vec::new(), Some(session_id.to_owned()),
+                stream_url.clone(),
+                Vec::new(),
+                Some(session_id.to_owned()),
                 Arc::clone(&headers),
             ));
-            let receiver = sse.event_rx.lock().expect("SSE receiver lock poisoned")
-                .take().context("SSE event receiver already taken")?;
+            let receiver = sse
+                .event_rx
+                .lock()
+                .expect("SSE receiver lock poisoned")
+                .take()
+                .context("SSE event receiver already taken")?;
             let sse_sender = incoming_tx.clone();
             let forwarder = tokio::spawn(async move {
                 let mut receiver = receiver;
@@ -279,10 +297,12 @@ pub async fn run(
                     }
                 }
             });
-            let channel = if std::env::var("ATLAS_USE_CCR_V2").ok()
+            let channel = if std::env::var("ATLAS_USE_CCR_V2")
+                .ok()
                 .is_some_and(|flag| matches!(flag.as_str(), "1" | "true" | "TRUE" | "yes" | "on"))
             {
-                let worker_token = original_token.as_deref()
+                let worker_token = original_token
+                    .as_deref()
                     .context("CCR v2 requires a worker token file")?;
                 let epoch = crate::work_secret::register_worker(url, worker_token).await?;
                 let mut ccr = CcrClient::new(&sse, url, Arc::clone(&headers), None, None, None);
@@ -338,7 +358,8 @@ pub async fn run(
                 }
             }
         }
-    }.await;
+    }
+    .await;
     if let Some(scheduler) = &refresh {
         scheduler.cancel(session_id);
     }
