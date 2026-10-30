@@ -75,8 +75,10 @@ impl ModelTuning {
                 bail!("DeepSeek V4 Pro thinking mode ignores top_p");
             }
         }
-        if matches!(model, "kimi-k3.1-pro" | "kimi-k3.1-pro-highspeed" | "k3.1-pro" | "k3.1-pro-highspeed")
-            && effort == Some("none")
+        if matches!(
+            model,
+            "kimi-k3.1-pro" | "kimi-k3.1-pro-highspeed" | "k3.1-pro" | "k3.1-pro-highspeed"
+        ) && effort == Some("none")
         {
             bail!("Kimi K3.1 Pro only supports thinking mode");
         }
