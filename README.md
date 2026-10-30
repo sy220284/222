@@ -87,6 +87,10 @@ cargo run -- --provider gemini chat
 **连接和选择模型：**
 
 ```bash
+cargo run -- models setup
+# 一次完成品牌选择、密钥校验、实时型号与能力标签展示、模型可调用验证和保存
+cargo run -- models setup kimi
+# 也可以使用下面的分步命令：
 cargo run -- models brands
 cargo run -- models connect deepseek
 # 在提示后从标准输入提供密钥；验证 /models 成功后，密钥仅写入本地 0600 文件
@@ -98,6 +102,8 @@ cargo run -- --provider deepseek chat
 
 如果只需临时查询，不想保存密钥，可用 `models discover deepseek --key-stdin` 从标准输入读取。环境变量密钥优先于本地已保存密钥，均不回显。保存在配置文件旁的 `.model-api-keys.json` 具有 Unix 用户独享访问权限（0600），仍属于本地明文密钥文件，请保证机器账号和磁盘受保护；不可提交到 Git。已有配置和自定义供应商优先保留。不同品牌的 Coding 套餐、国际区域、付费 API 可能使用不同的密钥和 URL，允许覆盖同名条目的根地址。
 
+Gemini 使用官方原生 `models.list` 分页目录、`x-goog-api-key` 鉴权与 `generateContent` 实际调用检测；只列出支持 `generateContent` 的型号。其 `temperature`、`topP`、`maxOutputTokens` 和 `thinkingLevel` 会映射到 Gemini 原生 `generationConfig`，并拒绝不支持的思考档位。`chatgpt` 的模型发现使用登录账户的官方专属目录，`models setup chatgpt` 会启动账号授权，不接受 API Key。
+
 **调整模型参数：**
 
 ```bash
@@ -107,7 +113,7 @@ cargo run -- models tune minimax --temperature 0.3 --top-p 0.95
 cargo run -- models tune minimax --reset
 ```
 
-默认参数原则是使用官方服务端自身的推荐值，特别是开启思考的模型，temperature/top_p 可能被忽略或被拒绝，**不会虚构通用最优值**。明确调整的参数才会发至 Chat Completions（温度 0–2、Top-P (0,1]、输出 token 上限、reasoning_effort）；`context_window` 为本地设置的上下文容量提示，不会作为不存在的 HTTP 参数发送，具体可用上下文以模型实际限制为准。流式和非流式采用相同设置。使用其他版本可通过 `models use` 或 `--model MODEL_ID` 调整。
+默认参数原则是使用官方服务端自身的推荐值，特别是开启思考的模型，temperature/top_p 可能被忽略或被拒绝，**不会虚构通用最优值**。明确调整的参数才会发至 Chat Completions（温度 0–2、Top-P (0,1]、输出 token 上限、reasoning_effort）；`context_window` 为本地设置的上下文容量提示，不会作为不存在的 HTTP 参数发送，有实时目录元数据时，选择模型会保存其上下文容量，并将该容量应用于 Agent 的自动压缩阈值；若提供商未返回则继续使用默认阈值或用户显式设置。具体可用上下文以模型实际限制为准。流式和非流式采用相同设置。使用其他版本可通过 `models use` 或 `--model MODEL_ID` 调整。
 
 ### ChatGPT 账号登录使用套餐额度（独立于普通 API）
 
