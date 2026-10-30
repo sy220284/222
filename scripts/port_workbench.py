@@ -412,6 +412,52 @@ def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
                 evidence_records=len(proof), excluded=counts['excluded'])
 
 
+
+def detect_generated_stubs(rows: dict[str, dict], repo: Path) -> dict:
+    """Find concrete AST placeholders; don't confuse source coverage with behavior.
+
+    The inventory reads Rust source bytes and the generated inspection catalog.
+    Only actual `Value::Null` expressions in AST-generated modules are counted,
+    and already handwritten ports are excluded from automatic 'stub' labeling.
+    """
+    registry_text = '\n'.join(p.read_text(encoding='utf-8')
+                               for p in (repo / 'src/generated_ports').glob('registry_*.rs'))
+    results = []
+    for row in rows.values():
+        if row['status'] == 'excluded':
+            continue
+        for file in rust_targets(row['rust_mapping']):
+            if not re.fullmatch(r'src/generated_ports/p_[0-9a-f]{13}\.rs', file):
+                continue
+            path = repo / file
+            if not path.is_file():
+                raise AuditError(f'已登记的 Rust 模块不存在: {file}')
+            code = path.read_text(encoding='utf-8')
+            automatic = code.startswith(('//! Native Rust UI structure derived from original:',
+                                         '//! Rust exports derived from original:'))
+            if not automatic:
+                continue
+            nulls = len(re.findall(r'\bValue::Null\b', code))
+            # `match export { _ => None }` means even the inspection adapter
+            # has no entry for the generated function.
+            source_pattern = re.compile('"' + re.escape(row['path']) + r'"\s*=>\s*match export\s*\{([^}]*)\}', re.S)
+            match = source_pattern.search(registry_text)
+            has_export = bool(match and re.search(r'"[A-Za-z_][A-Za-z0-9_]*"\s*=>', match.group(1)))
+            has_render = bool(re.search(r'\bpub fn render_source_view\s*\(', code))
+            if nulls or (has_render and not has_export):
+                results.append(dict(source=row['path'], rust=file, source_lines=row['source_lines'],
+                                    null_expression_count=nulls, view_export_unreachable=has_render and not has_export,
+                                    rust_lines=len(code.splitlines())))
+    results.sort(key=lambda r: (-int(r['view_export_unreachable']),
+                                -r['null_expression_count'], -r['source_lines'], r['source']))
+    return dict(schema='port-stubs/v1', disclaimer='仅是自动生成空壳的静态检测，不证明手写代码功能完整。',
+                count=len(results), with_null=sum(r['null_expression_count']>0 for r in results),
+                unreachable_views=sum(r['view_export_unreachable'] for r in results),
+                total_null_expressions=sum(r['null_expression_count'] for r in results),
+                items=results)
+
+
+
 def current_counts(rows: dict[str, dict], strict: bool = True) -> dict:
     """Derive the sole current progress snapshot from FILE_PORT_MATRIX.md."""
     counts = verify_counts(rows, strict=strict)
@@ -431,7 +477,7 @@ def current_counts(rows: dict[str, dict], strict: bool = True) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('scan', 'check', 'freeze-baseline', 'impact', 'counts', 'reachability'))
+    parser.add_argument('command', choices=('scan', 'check', 'freeze-baseline', 'impact', 'counts', 'stubs', 'reachability'))
     parser.add_argument('--repo', type=Path, default=Path('.'))
     parser.add_argument('--source', type=Path, help='解压后的 2.1.88 原始源码根目录')
     parser.add_argument('--output', type=Path, default=Path('port-audit-output'))
@@ -443,6 +489,11 @@ def main(argv: list[str] | None = None) -> int:
         counts = verify_counts(rows, strict=not args.allow_fixture)
         if args.command == 'counts':
             result = current_counts(rows, strict=not args.allow_fixture)
+        elif args.command == 'stubs':
+            inventory = detect_generated_stubs(rows, args.repo)
+            json_dump(args.output / 'source-stub-inventory.json', inventory)
+            result = {k: v for k, v in inventory.items() if k != 'items'}
+            result['report'] = str(args.output / 'source-stub-inventory.json')
         elif args.command == 'reachability':
             result = generated_runtime_reachability(args.repo, rows)
             output_file = args.output / 'generated-reachability.json'

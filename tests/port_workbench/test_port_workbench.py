@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from port_workbench import (AuditError, affected_source_paths, check_evidence, collect, label_status,
-                            read_matrix, report, resolve_import, verify_counts, current_counts,
+                            read_matrix, report, resolve_import, verify_counts, current_counts, detect_generated_stubs,
                             generated_runtime_reachability, verify_github_test_evidence, main)
 
 
@@ -101,6 +101,24 @@ class WorkbenchTests(unittest.TestCase):
         result=report(rows,self.repo,self.src,Path(self.tmp.name)/'out',strict=False)
         self.assertEqual(result['counts'], {'partial':1,'unported':1})
         self.assertEqual(len(json.loads((Path(self.tmp.name)/'out/source-port-inventory.json').read_text())['entries']),2)
+
+
+    def test_stub_inventory_flags_unreachable_generated_nulls_without_mislabeling_hand_port(self):
+        port_dir = self.repo / 'src/generated_ports'
+        port_dir.mkdir()
+        stub = port_dir / ('p_'+'a'*13+'.rs')
+        stub.write_text('//! Native Rust UI structure derived from original: src/cli.ts\n'
+                        'pub fn render_source_view() { Value::Null }\n')
+        (port_dir/'registry_00.rs').write_text('"src/cli.ts" => match export { _ => None },\n')
+        self.matrix.write_text(self.matrix.read_text().replace('| 待定 | 未迁移 |',
+            f'| `src/generated_ports/{stub.name}` | 部分实现：生成待核验 |'))
+        inventory = detect_generated_stubs(read_matrix(self.repo), self.repo)
+        self.assertEqual(inventory['count'], 1)
+        self.assertEqual(inventory['with_null'], 1)
+        self.assertEqual(inventory['unreachable_views'], 1)
+        stub.write_text('//! Hand-port of src/cli.ts\npub fn render_source_view() { 42 }\n')
+        clean = detect_generated_stubs(read_matrix(self.repo), self.repo)
+        self.assertEqual(clean['count'], 0)
 
     def test_change_impact_captures_callers_and_rust_owners(self):
         entries,_=collect(read_matrix(self.repo),self.repo,self.src)
