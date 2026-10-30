@@ -515,11 +515,13 @@ impl BackgroundTasks {
             let merged = Arc::new(AsyncMutex::new(CombinedLog {
                 file: output_file, size: 0, capped: false,
             }));
-            let stdout_task = tokio::spawn(spool_merged(stdout, stdout_file, merged.clone()));
-            let stderr_task = tokio::spawn(spool_merged(stderr, stderr_file, merged.clone()));
-            let deadline = tokio::time::sleep(Duration::from_millis(timeout_ms));
+            let mut stdout_task = tokio::spawn(spool_merged(stdout, stdout_file, merged.clone()));
+            let mut stderr_task = tokio::spawn(spool_merged(stderr, stderr_file, merged.clone()));
+            let process_id = child.id();
+            let deadline_at = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+            let deadline = tokio::time::sleep_until(deadline_at);
             tokio::pin!(deadline);
-            let (mut state, code, timed_out) = tokio::select! {
+            let (mut state, mut code, mut timed_out) = tokio::select! {
                 result = child.wait() => match result {
                     Ok(status) if status.success() => ("completed", status.code(), false),
                     Ok(status) => ("failed", status.code(), false),
@@ -543,27 +545,55 @@ impl BackgroundTasks {
                     ("failed", None, true)
                 }
             };
-            let (out, stdout_failed) = match stdout_task.await {
-                Ok(Ok(capped)) => (capped, false),
-                Ok(Err(error)) => {
-                    eprintln!("Background stdout persistence failed: {error:#}");
-                    (true, true)
-                }
-                Err(error) => {
-                    eprintln!("Background stdout writer failed: {error}");
-                    (true, true)
-                }
+            // A shell can exit while a descendant still holds stdout/stderr.
+            // The original ShellCommand deadline covers output draining too;
+            // never leave TaskOutput blocked forever on an inherited pipe.
+            let drain_deadline = if timed_out {
+                tokio::time::Instant::now() + Duration::from_secs(1)
+            } else {
+                deadline_at
             };
-            let (err, stderr_failed) = match stderr_task.await {
-                Ok(Ok(capped)) => (capped, false),
-                Ok(Err(error)) => {
-                    eprintln!("Background stderr persistence failed: {error:#}");
-                    (true, true)
+            let output_results = tokio::select! {
+                pair = async { tokio::join!(&mut stdout_task, &mut stderr_task) } => Some(pair),
+                _ = tokio::time::sleep_until(drain_deadline) => None,
+            };
+            let (out, stdout_failed, err, stderr_failed) = if let Some((stdout_result, stderr_result)) = output_results {
+                let (out, stdout_failed) = match stdout_result {
+                    Ok(Ok(capped)) => (capped, false),
+                    Ok(Err(error)) => {
+                        eprintln!("Background stdout persistence failed: {error:#}");
+                        (true, true)
+                    }
+                    Err(error) => {
+                        eprintln!("Background stdout writer failed: {error}");
+                        (true, true)
+                    }
+                };
+                let (err, stderr_failed) = match stderr_result {
+                    Ok(Ok(capped)) => (capped, false),
+                    Ok(Err(error)) => {
+                        eprintln!("Background stderr persistence failed: {error:#}");
+                        (true, true)
+                    }
+                    Err(error) => {
+                        eprintln!("Background stderr writer failed: {error}");
+                        (true, true)
+                    }
+                };
+                (out, stdout_failed, err, stderr_failed)
+            } else {
+                timed_out = true;
+                state = "failed";
+                code = None;
+                #[cfg(unix)]
+                if let Some(pid) = process_id {
+                    let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                 }
-                Err(error) => {
-                    eprintln!("Background stderr writer failed: {error}");
-                    (true, true)
-                }
+                stdout_task.abort();
+                stderr_task.abort();
+                let _ = stdout_task.await;
+                let _ = stderr_task.await;
+                (true, true, true, true)
             };
             let merged_failed = {
                 let mut log = merged.lock().await;
