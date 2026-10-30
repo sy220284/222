@@ -1,8 +1,7 @@
 //! Native Rust port derived from original: src/utils/diagLogs.ts
 //!
 //! Diagnostic logging for container session-ingress monitoring. JSON-lines
-//! appended to `ATLAS_DIAGNOSTICS_FILE` (original:
-//! `ATLAS_DIAGNOSTICS_FILE`); directory creation on first append
+//! appended to `ATLAS_DIAGNOSTICS_FILE`; directory creation on first append
 //! failure; timing wrapper logs `{event}_started/_completed/_failed` with
 //! `duration_ms`. **Must never receive PII** — same contract as original.
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
@@ -154,19 +153,55 @@ use std::future::Future;
 
 #[cfg(test)]
 mod tests {
+    use super::*#[cfg(test)]
+mod tests {
     use super::*;
     use serde_json::json;
 
-    fn temp_env(path: &str) -> String {
-        std::env::set_var("ATLAS_DIAGNOSTICS_FILE", path);
-        path.to_string()
+    use std::ffi::OsString;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    const DIAGNOSTIC_ENV: &str = "ATLAS_DIAGNOSTICS_FILE";
+
+    // The variable belongs to the whole process, so tests must serialize
+    // changes and restore the caller's environment even on assertion panic.
+    struct DiagnosticEnvGuard {
+        _lock: MutexGuard<'static, ()>,
+        previous: Option<OsString>,
+    }
+
+    impl DiagnosticEnvGuard {
+        fn set(path: Option<&Path>) -> Self {
+            static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+            let lock = LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+            let previous = std::env::var_os(DIAGNOSTIC_ENV);
+            if let Some(path) = path {
+                std::env::set_var(DIAGNOSTIC_ENV, path);
+            } else {
+                std::env::remove_var(DIAGNOSTIC_ENV);
+            }
+            Self {
+                _lock: lock,
+                previous,
+            }
+        }
+    }
+
+    impl Drop for DiagnosticEnvGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = &self.previous {
+                std::env::set_var(DIAGNOSTIC_ENV, previous);
+            } else {
+                std::env::remove_var(DIAGNOSTIC_ENV);
+            }
+        }
     }
 
     #[test]
     fn writes_json_line_to_env_file() {
-        let dir = std::env::temp_dir().join(format!("diag_test_{}", std::process::id()));
-        let path = dir.join("nested").join("diag.log");
-        temp_env(path.to_str().unwrap());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("diag.log");
+        let _env = DiagnosticEnvGuard::set(Some(&path));
         log_for_diagnostics_no_pii(DiagnosticLogLevel::info, "mcp_connected", None);
         let content = fs::read_to_string(&path).expect("nested dir must be auto-created");
         let entry: DiagnosticLogEntry =
@@ -174,22 +209,20 @@ mod tests {
         assert_eq!(entry.event, "mcp_connected");
         assert_eq!(entry.level, DiagnosticLogLevel::info);
         assert!(entry.timestamp.contains('T'));
-        std::env::remove_var("ATLAS_DIAGNOSTICS_FILE");
-        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn disabled_without_env() {
-        std::env::remove_var("ATLAS_DIAGNOSTICS_FILE");
+        let _env = DiagnosticEnvGuard::set(None);
         // Must be a no-op, not a panic.
         log_for_diagnostics_no_pii(DiagnosticLogLevel::error, "should_not_write", None);
     }
 
     #[tokio::test]
     async fn timing_wrapper_logs_started_completed_failed() {
-        let dir = std::env::temp_dir().join(format!("diag_timing_{}", std::process::id()));
-        let path = dir.join("diag.log");
-        temp_env(path.to_str().unwrap());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("diag.log");
+        let _env = DiagnosticEnvGuard::set(Some(&path));
 
         let ok: Result<u32, ()> = with_diagnostics_timing(
             "git_status",
@@ -213,7 +246,5 @@ mod tests {
         assert!(events.iter().any(|event| event == "git_status_completed"));
         assert!(events.iter().any(|event| event == "boom_started"));
         assert!(events.iter().any(|event| event == "boom_failed"));
-        std::env::remove_var("ATLAS_DIAGNOSTICS_FILE");
-        let _ = fs::remove_dir_all(dir);
     }
 }
