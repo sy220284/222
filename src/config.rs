@@ -158,9 +158,30 @@ fn default_file_checkpointing() -> bool {
     true
 }
 
+
+/** Built-in Chinese model API profiles. Credentials are read from environment variables. */
+fn domestic_api_profiles() -> Vec<ProviderProfile> {
+    [
+        ("deepseek", "https://api.deepseek.com", "deepseek-flash", "DEEPSEEK_API_KEY"),
+        ("kimi", "https://api.moonshot.cn/v1", "kimi-k2.6", "MOONSHOT_API_KEY"),
+        ("glm", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7", "ZHIPU_API_KEY"),
+        ("minimax", "https://api.minimaxi.com/v1", "MiniMax-M2.7", "MINIMAX_API_KEY"),
+    ]
+    .into_iter()
+    .map(|(id, base_url, model, api_key_env)| ProviderProfile {
+        id: id.into(),
+        kind: "openai-compatible".into(),
+        base_url: base_url.into(),
+        model: model.into(),
+        api_key_env: Some(api_key_env.into()),
+        stream: false,
+    })
+    .collect()
+}
+
 impl Default for Config {
     fn default() -> Self {
-        Self {
+        let mut config = Self {
             default_provider: "openai".into(),
             env: std::collections::HashMap::new(),
             editor_mode: default_editor_mode(),
@@ -200,11 +221,23 @@ impl Default for Config {
             search_backend: None,
             permission_rules: vec![],
             model_prices: vec![],
-        }
+        };
+        config.include_domestic_api_profiles();
+        config
     }
 }
 
 impl Config {
+    /// Append bundled APIs to old settings in memory; custom provider IDs win.
+    /// The user's config file is not rewritten merely by reading it.
+    fn include_domestic_api_profiles(&mut self) {
+        for builtin in domestic_api_profiles() {
+            if !self.providers.iter().any(|existing| existing.id == builtin.id) {
+                self.providers.push(builtin);
+            }
+        }
+    }
+
     pub fn path() -> Result<PathBuf> {
         if let Ok(p) = std::env::var("ATLAS_CONFIG") {
             return Ok(PathBuf::from(p));
@@ -220,8 +253,13 @@ impl Config {
             return Ok(Self::default());
         }
         let raw = fs::read_to_string(&path).with_context(|| format!("Read {}", path.display()))?;
-        let config: Self = serde_json::from_str(crate::json_read::strip_bom(&raw))
+        let mut config: Self = serde_json::from_str(crate::json_read::strip_bom(&raw))
             .with_context(|| format!("Parse {}", path.display()))?;
+        // Preserve the old configuration and its custom overrides while making
+        // the new API providers immediately selectable after an upgrade.
+        if !config.providers.is_empty() {
+            config.include_domestic_api_profiles();
+        }
         config.validate()?;
         Ok(config)
     }
@@ -573,6 +611,52 @@ mod tests {
         c.providers[0].base_url = "http://127.0.0.1:11434/v1".into();
         assert!(c.validate().is_err());
     }
+
+    #[test]
+    fn domestic_api_profiles_are_configured_with_official_endpoints() {
+        let config = Config::default();
+        config.validate().unwrap();
+        assert_eq!(config.providers.len(), 6);
+        for (id, url, model, env) in [
+            ("deepseek", "https://api.deepseek.com", "deepseek-flash", "DEEPSEEK_API_KEY"),
+            ("kimi", "https://api.moonshot.cn/v1", "kimi-k2.6", "MOONSHOT_API_KEY"),
+            ("glm", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7", "ZHIPU_API_KEY"),
+            ("minimax", "https://api.minimaxi.com/v1", "MiniMax-M2.7", "MINIMAX_API_KEY"),
+        ] {
+            let profile = config.select(Some(id), None).unwrap();
+            assert_eq!(profile.kind, "openai-compatible");
+            assert_eq!(profile.base_url, url);
+            assert_eq!(profile.model, model);
+            assert_eq!(profile.api_key_env.as_deref(), Some(env));
+            assert!(!profile.stream);
+            assert_eq!(config.select(Some(id), Some("custom-model")).unwrap().model, "custom-model");
+        }
+    }
+
+    #[test]
+    fn domestic_profiles_merge_without_clobbering_user_overrides() {
+        let mut previous = Config::default();
+        previous.providers.retain(|p| p.id == "openai" || p.id == "gemini");
+        assert_eq!(previous.providers.len(), 2);
+        previous.include_domestic_api_profiles();
+        previous.include_domestic_api_profiles();
+        assert_eq!(previous.providers.len(), 6);
+        previous.default_provider = "kimi".into();
+        previous.validate().unwrap();
+        assert_eq!(previous.select(None, None).unwrap().model, "kimi-k2.6");
+
+        let mut custom = previous.select(Some("glm"), None).unwrap();
+        custom.model = "my-glm".into();
+        custom.base_url = "https://custom.example/v1".into();
+        previous.providers.retain(|p| p.id != "glm");
+        previous.providers.push(custom);
+        previous.include_domestic_api_profiles();
+        previous.validate().unwrap();
+        assert_eq!(previous.providers.len(), 6);
+        assert_eq!(previous.select(Some("glm"), None).unwrap().model, "my-glm");
+        assert_eq!(previous.select(Some("glm"), None).unwrap().base_url, "https://custom.example/v1");
+    }
+
     #[test]
     fn selecting_custom_model_does_not_mutate_config() {
         let c = Config::default();
