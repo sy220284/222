@@ -136,6 +136,7 @@ mod task_output_format;
 mod team_mailbox;
 mod team_registry;
 mod terminal_input;
+mod tls_ca;
 mod terminal_launcher;
 #[cfg(test)]
 mod test_http;
@@ -504,6 +505,7 @@ const LEGACY_OUTPUT_STYLE_NOTICE: &str = "/output-style has been deprecated. Use
 
 async fn run_cli() -> Result<()> {
     let cli = Cli::parse();
+    tls_ca::apply_user_startup_config()?;
     match &cli.command {
         Commands::ReleaseNotes => {
             let home = keybindings::config_home()?;

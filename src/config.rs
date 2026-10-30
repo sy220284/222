@@ -71,6 +71,10 @@ pub struct Config {
     )]
     pub file_checkpointing_enabled: bool,
     pub default_provider: String,
+    /// Only NODE_EXTRA_CA_CERTS is applied at process startup. Other keys
+    /// remain stored user settings and do not automatically enter the environment.
+    #[serde(default)]
+    pub env: std::collections::HashMap<String, String>,
     #[serde(
         default = "default_editor_mode",
         rename = "editorMode",
@@ -158,6 +162,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             default_provider: "local".into(),
+            env: std::collections::HashMap::new(),
             editor_mode: default_editor_mode(),
             advisor_model: None,
             file_checkpointing_enabled: true,

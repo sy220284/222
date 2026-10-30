@@ -34,7 +34,8 @@ impl ProfileEndpoints {
 }
 
 fn client() -> Option<Client> {
-    Client::builder()
+    crate::tls_ca::client_builder()
+        .ok()?
         .timeout(Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::none())
         .build()

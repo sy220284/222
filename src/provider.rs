@@ -55,7 +55,7 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
     // aborts healthy long-running generations after 180 seconds even while
     // tokens are arriving. Streaming adapters enforce per-chunk idle timeouts;
     // non-streaming requests retain their own bounded deadline.
-    let client = Client::builder()
+    let client = crate::tls_ca::client_builder()?
         .connect_timeout(Duration::from_secs(30))
         // Do not follow a TLS-to-HTTP redirect with credentials or tool data.
         .redirect(reqwest::redirect::Policy::none())

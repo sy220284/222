@@ -201,7 +201,7 @@ impl HttpClient {
                 HeaderValue::from_str(&expanded.expanded).context("Invalid MCP header value")?,
             );
         }
-        let client = Client::builder()
+        let client = crate::tls_ca::client_builder()?
             // Only bound connection establishment here. Request-specific
             // deadlines are enforced by the MCP manager; tools/call can
             // legitimately run far longer than discovery or initialization.

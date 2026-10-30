@@ -84,7 +84,7 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
         &backend.base_url,
         backend.kind == "brave" && backend.api_key_env.is_some(),
     )?;
-    let client = Client::builder()
+    let client = crate::tls_ca::client_builder()?
         .timeout(Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
         .build()?;

@@ -212,7 +212,7 @@ impl LegacySseClient {
                 HeaderValue::from_str(&expanded.expanded).context("Invalid SSE header value")?,
             );
         }
-        let client = Client::builder()
+        let client = crate::tls_ca::client_builder()?
             .connect_timeout(Duration::from_secs(20))
             .redirect(reqwest::redirect::Policy::none())
             .build()?;

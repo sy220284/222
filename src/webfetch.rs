@@ -462,7 +462,7 @@ async fn fetch_with_redirect_policy_in_workspace(
             .map_err(|_| anyhow::anyhow!("Cannot upgrade WebFetch URL to HTTPS"))?;
     }
     for _ in 0..=10 {
-        let mut builder = Client::builder()
+        let mut builder = crate::tls_ca::client_builder()?
             .timeout(Duration::from_secs(60))
             .redirect(reqwest::redirect::Policy::none())
             .user_agent("AtlasAgent/0.1 (+user-requested-web-fetch)");

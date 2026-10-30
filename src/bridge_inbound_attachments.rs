@@ -231,7 +231,11 @@ pub async fn resolve_and_prepend(
     if attachments.is_empty() {
         return content.clone();
     }
-    let client = match reqwest::Client::builder()
+    let builder = match crate::tls_ca::client_builder() {
+        Ok(builder) => builder,
+        Err(_) => return content.clone(),
+    };
+    let client = match builder
         .timeout(TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
         .build()
