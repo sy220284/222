@@ -2237,25 +2237,11 @@ impl Agent {
         description: &str,
         persist: bool,
     ) -> Result<Option<String>> {
-        let description = description.trim();
-        if description.is_empty() {
+        let Some(request) = self.sdk_title_request(description) else {
             return Ok(None);
-        }
-        let system = concat!(
-            "Generate a concise, sentence-case title (3-7 words) that captures ",
-            "the main topic or goal of this coding session. The title should be ",
-            "clear enough that the user recognizes the session in a list. ",
-            "Use sentence case: capitalize only the first word and proper nouns. ",
-            "Return JSON with a single \"title\" field. ",
-            "Example: {\"title\":\"Fix login button on mobile\"}."
-        );
+        };
         let started = Instant::now();
-        let response = self.provider.complete(&ModelRequest {
-            model: self.profile.model.clone(),
-            system: system.to_owned(),
-            messages: vec![Message::text("user", description)],
-            tools: Vec::new(),
-        }).await;
+        let response = self.provider.complete(&request).await;
         self.session.cost.add_api_duration(started.elapsed());
         let completion = match response {
             Ok(completion) => completion,
