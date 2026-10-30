@@ -969,6 +969,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         if !allow_file(&path)? {
             continue;
         }
+        let filename = relative(root, &path)?.to_string_lossy().to_string();
         if !multiline && matches!(mode, "files_with_matches" | "count") {
             let Some((hits, binary)) = stream_search_hits(&path, &regex, deadline)? else {
                 continue;
@@ -1003,7 +1004,6 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         }
         check_search_deadline(Some(deadline))?;
         let content = String::from_utf8_lossy(&bytes);
-        let filename = relative(root, &path)?.to_string_lossy().to_string();
         if binary && mode == "content" {
             if matching_lines(&content, &regex, multiline, deadline)?
                 .into_iter()
