@@ -1341,6 +1341,9 @@ mod tests {
         fs::create_dir_all(root.path().join(".atlas/plugins")).unwrap();
         std::os::unix::fs::symlink(outside.path(), root.path().join(".atlas/plugins/leak"))
             .unwrap();
-        assert!(PluginSet::load(root.path(), &["leak".into()]).is_err());
+        let loaded = PluginSet::load(root.path(), &["leak".into()]).unwrap();
+        assert!(loaded.hooks.is_empty());
+        assert!(loaded.mcp_servers.is_empty());
+        assert!(loaded.errors.iter().any(|error| error.contains("leak")));
     }
 }
