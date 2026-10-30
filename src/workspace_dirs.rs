@@ -1,4 +1,5 @@
 //! User-approved working directories. Tool calls cannot expand their own access.
+//! Hand-ported from commands/add-dir/validation.ts and filesystem.ts (2.1.88).
 use anyhow::{bail, Context, Result};
 use std::{
     fs,
@@ -22,6 +23,37 @@ fn expand(raw: &str, cwd: &Path) -> Result<PathBuf> {
     crate::path_support::expand_path(raw, cwd)
 }
 
+
+/** The source validates using the lexical absolute path rather than resolving
+ * symlinks. Permission checking is a separate, stricter operation. */
+fn comparison_path(path: &Path) -> String {
+    let value = path.to_string_lossy().replace('\\', "/");
+    let normalized = if let Some(rest) = value.strip_prefix("/private/var/") {
+        format!("/var/{rest}")
+    } else if value == "/private/tmp" {
+        "/tmp".to_owned()
+    } else if let Some(rest) = value.strip_prefix("/private/tmp/") {
+        format!("/tmp/{rest}")
+    } else {
+        value.into_owned()
+    };
+    normalized.to_lowercase()
+}
+
+fn path_in_working_path(candidate: &Path, working_root: &Path) -> bool {
+    let candidate = comparison_path(candidate);
+    let root = comparison_path(working_root);
+    if candidate == root {
+        return true;
+    }
+    if root == "/" {
+        return candidate.starts_with('/');
+    }
+    candidate
+        .strip_prefix(root.trim_end_matches('/'))
+        .is_some_and(|rest| rest.starts_with('/'))
+}
+
 pub fn validate(raw: &str, cwd: &Path, primary: &Path, extra: &[PathBuf]) -> Result<Validation> {
     if raw.is_empty() {
         return Ok(Validation::EmptyPath);
@@ -35,23 +67,26 @@ pub fn validate(raw: &str, cwd: &Path, primary: &Path, extra: &[PathBuf]) -> Res
                 ErrorKind::NotFound | ErrorKind::PermissionDenied
             ) || error.raw_os_error() == Some(libc::ENOTDIR) =>
         {
-            return Ok(Validation::PathNotFound(path))
+            return Ok(Validation::PathNotFound(path));
         }
         Err(error) => return Err(error).with_context(|| format!("Inspect {}", path.display())),
     };
     if !metadata.is_dir() {
         return Ok(Validation::NotADirectory(path));
     }
-    let resolved = path.canonicalize()?;
+
+    // validation.ts returns the expanded lexical path (including a symlink
+    // alias), and filesystem.ts compares it to every currently allowed root.
     for allowed in std::iter::once(primary).chain(extra.iter().map(PathBuf::as_path)) {
-        if resolved.starts_with(allowed) {
+        let normalized_root = expand(&allowed.to_string_lossy(), cwd)?;
+        if path_in_working_path(&path, &normalized_root) {
             return Ok(Validation::AlreadyAccessible {
-                path: resolved,
+                path,
                 existing_root: allowed.to_path_buf(),
             });
         }
     }
-    Ok(Validation::Success(resolved))
+    Ok(Validation::Success(path))
 }
 
 /// Canonicalize the nearest existing ancestor to reject symlink escapes,
@@ -119,6 +154,42 @@ mod tests {
             Validation::AlreadyAccessible { .. }
         ));
     }
+    #[test]
+    fn lexical_source_semantics_and_directory_boundary() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        fs::create_dir(root.join("child")).unwrap();
+        let sibling = root.with_file_name(format!(
+            "{}2", root.file_name().unwrap().to_string_lossy()
+        ));
+        fs::create_dir(&sibling).unwrap();
+        assert_eq!(
+            validate(sibling.to_str().unwrap(), &root, &root, &[]).unwrap(),
+            Validation::Success(sibling.clone())
+        );
+        assert_eq!(
+            validate("child/../", &root, &root, &[]).unwrap(),
+            Validation::AlreadyAccessible {
+                path: root.clone(),
+                existing_root: root.clone()
+            }
+        );
+        fs::remove_dir(&sibling).unwrap();
+
+        #[cfg(unix)]
+        {
+            let outside = tempfile::tempdir().unwrap();
+            std::os::unix::fs::symlink(outside.path(), root.join("alias")).unwrap();
+            assert_eq!(
+                validate("alias/", &root, &root, &[]).unwrap(),
+                Validation::AlreadyAccessible {
+                    path: root.join("alias"),
+                    existing_root: root.clone()
+                }
+            );
+        }
+    }
+
     #[test]
     fn authorized_access_and_symlink_escapes() {
         let dir = tempfile::tempdir().unwrap();
