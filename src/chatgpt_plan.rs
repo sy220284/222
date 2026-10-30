@@ -507,6 +507,7 @@ fn parse_completed(response: &Value) -> Result<ModelResponse> {
             content_blocks: None,
             tool_calls: has_calls.then_some(calls),
             tool_call_id: None,
+            reasoning_content: None,
         },
         usage,
         finish_reason: Some(if has_calls { "tool_calls" } else { "stop" }.into()),
@@ -586,7 +587,8 @@ mod tests {
             messages:vec![
                 Message::text("user","hello"),
                 Message {role:"assistant".into(),content:None,content_blocks:None,
-                    tool_calls:Some(vec![call.clone()]),tool_call_id:None},
+                    tool_calls:Some(vec![call.clone()]),tool_call_id:None,
+                    reasoning_content:None},
                 Message::tool_result(&call, "done".into()),
             ],
             tools:vec![json!({"type":"function","function":{"name":"read_file",
