@@ -629,7 +629,13 @@ mod tests {
             assert_eq!(profile.model, model);
             assert_eq!(profile.api_key_env.as_deref(), Some(env));
             assert!(!profile.stream);
-            assert_eq!(config.select(Some(id), Some("custom-model")).unwrap().model, "custom-model");
+            assert_eq!(
+                config
+                    .select(Some(id), Some("custom-model"))
+                    .unwrap()
+                    .model,
+                "custom-model"
+            );
         }
     }
 
@@ -654,7 +660,10 @@ mod tests {
         previous.validate().unwrap();
         assert_eq!(previous.providers.len(), 6);
         assert_eq!(previous.select(Some("glm"), None).unwrap().model, "my-glm");
-        assert_eq!(previous.select(Some("glm"), None).unwrap().base_url, "https://custom.example/v1");
+        assert_eq!(
+            previous.select(Some("glm"), None).unwrap().base_url,
+            "https://custom.example/v1"
+        );
     }
 
     #[test]
