@@ -62,7 +62,12 @@ fn accept_before(listener: &TcpListener, deadline: Instant) -> TcpStream {
     listener.set_nonblocking(true).unwrap();
     loop {
         match listener.accept() {
-            Ok((stream, _)) => return stream,
+            Ok((stream, _)) => {
+                // Poll accept with a deadline, then use blocking HTTP reads
+                // consistently on both Windows and Unix.
+                stream.set_nonblocking(false).unwrap();
+                return stream;
+            }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 assert!(
                     Instant::now() < deadline,

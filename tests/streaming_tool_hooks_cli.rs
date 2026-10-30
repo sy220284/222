@@ -41,6 +41,9 @@ fn run_tool_turn(
                     Err(error) => panic!("accept model request: {error}"),
                 }
             };
+            // Windows can inherit the listener's nonblocking mode. The
+            // fixture deliberately reads a full HTTP request synchronously.
+            conn.set_nonblocking(false).unwrap();
             conn.set_read_timeout(Some(Duration::from_secs(10)))
                 .unwrap();
             let mut data = Vec::new();
