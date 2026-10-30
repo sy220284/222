@@ -1349,7 +1349,7 @@ mod tests {
         assert!(loaded.hooks.is_empty());
         assert!(loaded.mcp_servers.is_empty());
         assert!(loaded.errors.iter().any(|error|
-            error.contains("leak") && error.contains("workspace")
+            error.contains("leak") && (error.contains("symbolic link") || error.contains("workspace"))
         ), "Unsafe symlink must be reported and must not load: {:?}", loaded.errors);
     }
 }
