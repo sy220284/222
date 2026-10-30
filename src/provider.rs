@@ -183,6 +183,17 @@ pub(crate) fn openai_messages(request: &ModelRequest) -> Result<Vec<Value>> {
         .chain(request.messages.iter().cloned())
     {
         let mut wire = serde_json::to_value(&msg)?;
+        // Responses-only encrypted reasoning is provider-bound opaque state.
+        // Never forward this internal envelope as DeepSeek reasoning text.
+        if msg
+            .reasoning_content
+            .as_deref()
+            .is_some_and(|value| value.starts_with(crate::chatgpt_plan::REASONING_ITEMS_PREFIX))
+        {
+            if let Some(map) = wire.as_object_mut() {
+                map.remove("reasoning_content");
+            }
+        }
         if let Some(blocks) = msg.content_blocks.as_deref() {
             wire["content"] = json!(crate::multimodal::openai(blocks)?);
             if let Some(map) = wire.as_object_mut() {
