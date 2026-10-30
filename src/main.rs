@@ -1,3 +1,4 @@
+mod advisor_command;
 mod agent;
 mod agent_definition;
 mod array_utils;
@@ -1505,6 +1506,14 @@ async fn chat(
             Some(format!("/{}{}", command.name, rest))
         });
         let input = normalized.as_deref().unwrap_or(input);
+        if input == "/advisor" || input.starts_with("/advisor ") {
+            let args = input.strip_prefix("/advisor").unwrap_or("").trim();
+            match advisor_command::execute(config, agent.profile(), args) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Cannot change advisor model: {error:#}"),
+            }
+            continue;
+        }
         if input == "/color" || input.starts_with("/color ") {
             let color = input.strip_prefix("/color").unwrap_or("").trim();
             match agent.set_session_color(color) {

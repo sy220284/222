@@ -71,6 +71,14 @@ pub struct Config {
     )]
     pub file_checkpointing_enabled: bool,
     pub default_provider: String,
+    /// User-selected reviewer provider, independent of the main-loop provider.
+    #[serde(
+        default,
+        rename = "advisorModel",
+        alias = "advisor_model",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub advisor_model: Option<String>,
     pub providers: Vec<ProviderProfile>,
     #[serde(default)]
     pub additional_directories: Vec<String>,
@@ -140,6 +148,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             default_provider: "local".into(),
+            advisor_model: None,
             file_checkpointing_enabled: true,
             additional_directories: Vec::new(),
             instruction_excludes: Vec::new(),
