@@ -60,6 +60,20 @@ pub fn get_extra_certs_path_from_config(
     path
 }
 
+/// Computes the startup-only update without reading or mutating process-global
+/// environment. Keeping this decision pure allows the original precedence and
+/// empty-value behavior to be tested in parallel on every platform.
+fn extra_ca_certs_update(
+    current_env: Option<&std::ffi::OsStr>,
+    settings_env: Option<&Value>,
+    global_env: Option<&Value>,
+) -> Option<String> {
+    if current_env.is_some_and(|value| !value.is_empty()) {
+        return None;
+    }
+    get_extra_certs_path_from_config(settings_env, global_env)
+}
+
 /// Applies NODE_EXTRA_CA_CERTS from settings to the process env early in
 /// init, BEFORE any TLS connections are made. Returns whether the env var
 /// was set by this call. Safe before the trust dialog: only user-controlled
@@ -68,10 +82,8 @@ pub fn apply_extra_ca_certs_from_config(
     settings_env: Option<&Value>,
     global_env: Option<&Value>,
 ) -> bool {
-    if std::env::var_os(NODE_EXTRA_CA_CERTS).is_some_and(|v| !v.is_empty()) {
-        return false; // Already set in environment, nothing to do
-    }
-    match get_extra_certs_path_from_config(settings_env, global_env) {
+    let existing = std::env::var_os(NODE_EXTRA_CA_CERTS);
+    match extra_ca_certs_update(existing.as_deref(), settings_env, global_env) {
         Some(config_path) => {
             std::env::set_var(NODE_EXTRA_CA_CERTS, &config_path);
             log_for_debugging(
@@ -118,25 +130,25 @@ mod tests {
 
     #[test]
     fn apply_respects_preexisting_env() {
-        std::env::set_var(NODE_EXTRA_CA_CERTS, "/already/set.pem");
+        use std::ffi::OsStr;
         let settings = json!({ NODE_EXTRA_CA_CERTS: "/from/settings.pem" });
-        assert!(!apply_extra_ca_certs_from_config(Some(&settings), None));
         assert_eq!(
-            std::env::var(NODE_EXTRA_CA_CERTS).as_deref(),
-            Ok("/already/set.pem")
+            extra_ca_certs_update(Some(OsStr::new("/already/set.pem")), Some(&settings), None),
+            None,
         );
-        std::env::remove_var(NODE_EXTRA_CA_CERTS);
+        assert_eq!(
+            extra_ca_certs_update(Some(OsStr::new("")), Some(&settings), None),
+            Some("/from/settings.pem".to_owned()),
+        );
     }
 
     #[test]
     fn apply_sets_env_from_settings() {
-        std::env::remove_var(NODE_EXTRA_CA_CERTS);
         let settings = json!({ NODE_EXTRA_CA_CERTS: "/applied.pem" });
-        assert!(apply_extra_ca_certs_from_config(Some(&settings), None));
         assert_eq!(
-            std::env::var(NODE_EXTRA_CA_CERTS).as_deref(),
-            Ok("/applied.pem")
+            extra_ca_certs_update(None, Some(&settings), None),
+            Some("/applied.pem".to_owned()),
         );
-        std::env::remove_var(NODE_EXTRA_CA_CERTS);
+        assert_eq!(extra_ca_certs_update(None, None, None), None);
     }
 }
