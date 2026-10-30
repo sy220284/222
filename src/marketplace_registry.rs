@@ -574,7 +574,7 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
                 name.clone(),
                 StoredMarketplace {
                     source,
-                    install_location: file,
+                    install_location: file.clone(),
                     last_updated: registered_at.clone(),
                     registered_at: Some(registered_at),
                 },
