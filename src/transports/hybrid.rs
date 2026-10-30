@@ -397,7 +397,7 @@ mod tests {
             .await;
         tokio::time::timeout(
             Duration::from_secs(4),
-            outbound.write(&serde_json::json!({"type":"result","uuid":"second"})),
+            outbound.write_batch(&[serde_json::json!({"type":"result","uuid":"second"})]),
         )
         .await
         .unwrap();
