@@ -955,37 +955,100 @@ async fn run_command(
     if input.len() > 256_000 {
         bail!("Hook input exceeds 256 KB")
     }
-    let operation = async {
+    // hooks.ts detects the first response line before the hook process
+    // completes. A JSON {"async":true} transfers process ownership to the
+    // registry; ordinary hooks continue waiting for the complete output.
+    let (first_sender, first_receiver) = tokio::sync::oneshot::channel::<Vec<u8>>();
+    let operation = async move {
         let input_future = async move {
-            // Move the pipe into the writer future so it is dropped as soon
-            // as writing finishes. A child such as 'cat' waits for EOF;
-            // shutdown() alone does not reliably close ChildStdin here.
-            // A hook may finish without reading stdin. Closed pipe is not
-            // a hook failure; the exit code and response decide the result.
             if let Err(error) = stdin.write_all(&input).await {
                 if error.kind() != std::io::ErrorKind::BrokenPipe {
-                    return Err(error.into());
+                    return Err(anyhow::Error::from(error));
                 }
             }
             let _ = stdin.shutdown().await;
             drop(stdin);
             Ok::<_, anyhow::Error>(())
         };
-        let output_future = read_limited(&mut stdout, 64_000);
+        let output_future = async move {
+            use tokio::io::AsyncBufReadExt;
+            let mut buffered = tokio::io::BufReader::new(stdout);
+            let mut first = Vec::new();
+            loop {
+                let chunk = buffered.fill_buf().await?;
+                if chunk.is_empty() {
+                    break;
+                }
+                let n = chunk.iter().position(|byte| *byte == b'\n')
+                    .map(|index| index + 1).unwrap_or(chunk.len());
+                if first.len().saturating_add(n) > 64_000 {
+                    bail!("Hook output exceeds 64000 bytes");
+                }
+                let found_newline = chunk[..n].contains(&b'\n');
+                first.extend_from_slice(&chunk[..n]);
+                buffered.consume(n);
+                if found_newline {
+                    break;
+                }
+            }
+            let _ = first_sender.send(first.clone());
+            let mut remaining = read_limited(
+                &mut buffered, 64_000usize.saturating_sub(first.len())
+            ).await?;
+            first.append(&mut remaining);
+            Ok::<_, anyhow::Error>(first)
+        };
         let errors_future = read_limited(&mut stderr, 16_000);
-        let (_, out, err) = tokio::try_join!(input_future, output_future, errors_future)?;
+        let (_, out, err) = tokio::try_join!(
+            input_future, output_future, errors_future
+        )?;
         let status = child.wait().await?;
+        #[cfg(unix)]
+        { group_guard.0 = None; }
         Ok::<_, anyhow::Error>((status, out, err))
     };
-    let (status, out, err) = timeout(Duration::from_secs(rule.timeout_seconds), operation)
+    let task = tokio::spawn(operation);
+    let mut drop_guard = HookTaskDropGuard {
+        handle: task.abort_handle(),
+        transferred: false,
+    };
+    let started = tokio::time::Instant::now();
+    let sync_deadline = started + Duration::from_secs(rule.timeout_seconds);
+    let first_line = tokio::time::timeout_at(sync_deadline, first_receiver)
         .await
-        .context("Hook timed out")??;
-    #[cfg(unix)]
-    {
-        // The process and its output pipes exited normally. Do not terminate
-        // any independent work that a successful hook intentionally started.
-        group_guard.0 = None;
+        .context("Hook timed out before first output")?
+        .context("Hook exited before output could be inspected")?;
+    if let Ok(hello) = serde_json::from_slice::<Value>(&first_line) {
+        if hello.get("async") == Some(&Value::Bool(true)) {
+            let timeout_ms = hello.get("asyncTimeout")
+                .map(|value| value.as_u64().filter(|v| *v > 0)
+                    .context("asyncTimeout must be a positive millisecond count"))
+                .transpose()?.unwrap_or(15_000);
+            let session_id = payload.get("session_id").and_then(Value::as_str)
+                .context("Asynchronous hook requires session_id")?
+                .to_owned();
+            let mut pending = async_hook_registry()
+                .lock().unwrap_or_else(|e| e.into_inner());
+            if pending.len() >= 128 {
+                bail!("Too many pending asynchronous hooks (maximum 128)");
+            }
+            pending.push(PendingAsyncHook {
+                id: uuid::Uuid::new_v4().to_string(),
+                session_id,
+                event: payload["hook_event_name"].as_str().unwrap_or("").to_owned(),
+                command: rule.command.clone(),
+                deadline: std::time::Instant::now() + Duration::from_millis(timeout_ms),
+                task,
+            });
+            drop_guard.transferred = true;
+            // The first JSON line is an asynchronous acknowledgement. It is
+            // not permission approval or a completed hook response.
+            return Ok(HookOutcome::default());
+        }
     }
+    let (status, out, err) = tokio::time::timeout_at(sync_deadline, task)
+        .await.context("Hook timed out")?
+        .context("Hook worker was cancelled")??;
     let stderr_text = String::from_utf8_lossy(&err).trim().to_string();
     // Original hooks.ts:2499-2533, 2543-2613, 2647-2695 parses JSON
     // before interpreting the exit status. Valid JSON decisions apply even
