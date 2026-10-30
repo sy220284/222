@@ -27,12 +27,17 @@ fn oauth_pkce_cli_uses_original_32_byte_crypto_and_independent_state() {
         let state = record["state"].as_str().unwrap();
         for token in [verifier, challenge, state] {
             assert_eq!(token.len(), 43);
-            assert!(token.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
+            assert!(token
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
             assert_eq!(URL_SAFE_NO_PAD.decode(token).unwrap().len(), 32);
         }
         let calculated = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
         assert_eq!(challenge, calculated);
-        assert_ne!(verifier, state, "verifier and anti-CSRF state must be independent");
+        assert_ne!(
+            verifier, state,
+            "verifier and anti-CSRF state must be independent"
+        );
     }
     assert_ne!(first["verifier"], second["verifier"]);
     assert_ne!(first["state"], second["state"]);
