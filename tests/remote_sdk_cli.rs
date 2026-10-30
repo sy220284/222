@@ -86,8 +86,10 @@ fn accept_with_deadline(listener: &TcpListener) -> TcpStream {
         match listener.accept() {
             Ok((peer, _)) => {
                 peer.set_nonblocking(false).unwrap();
-                peer.set_read_timeout(Some(Duration::from_secs(15))).unwrap();
-                peer.set_write_timeout(Some(Duration::from_secs(15))).unwrap();
+                peer.set_read_timeout(Some(Duration::from_secs(15)))
+                    .unwrap();
+                peer.set_write_timeout(Some(Duration::from_secs(15)))
+                    .unwrap();
                 return peer;
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -109,8 +111,10 @@ fn remote_sdk_process_handles_initialize_and_shutdown_over_real_websocket() {
             "default_provider":"mock",
             "providers":[{"id":"mock","kind":"openai-compatible",
                 "model":"test-model","base_url":"http://127.0.0.1:1234/v1"}]
-        }).to_string(),
-    ).unwrap();
+        })
+        .to_string(),
+    )
+    .unwrap();
     let token = root.path().join("access-token");
     fs::write(&token, "test-local-token\n").unwrap();
     let session = uuid::Uuid::new_v4();
@@ -132,19 +136,25 @@ fn remote_sdk_process_handles_initialize_and_shutdown_over_real_websocket() {
         let initial = read_json(&mut peer);
         assert_eq!(initial["type"], "system");
         assert_eq!(initial["session_id"], session.to_string());
-        send_json(&mut peer, json!({
-            "type":"control_request","request_id":"remote-init",
-            "request":{"subtype":"initialize"}
-        }));
+        send_json(
+            &mut peer,
+            json!({
+                "type":"control_request","request_id":"remote-init",
+                "request":{"subtype":"initialize"}
+            }),
+        );
         let response = read_json(&mut peer);
         assert_eq!(response["type"], "control_response");
         assert_eq!(response["response"]["request_id"], "remote-init");
         assert_eq!(response["response"]["subtype"], "success");
 
-        send_json(&mut peer, json!({
-            "type":"control_request","request_id":"remote-stop",
-            "request":{"subtype":"end_session"}
-        }));
+        send_json(
+            &mut peer,
+            json!({
+                "type":"control_request","request_id":"remote-stop",
+                "request":{"subtype":"end_session"}
+            }),
+        );
         let end = read_json(&mut peer);
         assert_eq!(end["type"], "control_response");
         assert_eq!(end["response"]["request_id"], "remote-stop");
@@ -153,11 +163,15 @@ fn remote_sdk_process_handles_initialize_and_shutdown_over_real_websocket() {
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
         .args([
-            "--workspace", root.path().to_str().unwrap(),
+            "--workspace",
+            root.path().to_str().unwrap(),
             "sdk",
-            "--remote-url", &format!("ws://127.0.0.1:{port}/session/{session}"),
-            "--remote-session-id", &session.to_string(),
-            "--token-file", token.to_str().unwrap(),
+            "--remote-url",
+            &format!("ws://127.0.0.1:{port}/session/{session}"),
+            "--remote-session-id",
+            &session.to_string(),
+            "--token-file",
+            token.to_str().unwrap(),
         ])
         .env("ATLAS_CONFIG", &config)
         .env_remove("ATLAS_USE_CCR_V2")
@@ -165,7 +179,8 @@ fn remote_sdk_process_handles_initialize_and_shutdown_over_real_websocket() {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn().unwrap();
+        .spawn()
+        .unwrap();
 
     server.join().unwrap();
     let deadline = Instant::now() + Duration::from_secs(20);
@@ -177,6 +192,13 @@ fn remote_sdk_process_handles_initialize_and_shutdown_over_real_websocket() {
         thread::sleep(Duration::from_millis(20));
     }
     let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert!(output.stdout.is_empty(), "remote mode must not echo all SDK messages to stdout");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "remote mode must not echo all SDK messages to stdout"
+    );
 }
