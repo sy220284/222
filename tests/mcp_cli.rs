@@ -324,3 +324,45 @@ fn mcp_get_checks_real_connection_and_stale_project_approval() {
     let value: Value = serde_json::from_slice(&get.stdout).unwrap();
     assert_eq!(value["health"]["status"], "needs_approval");
 }
+
+#[test]
+fn desktop_import_selects_servers_without_running_them_and_renames_collisions() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("global.json");
+    let source = root.path().join("desktop-mcp.json");
+    fs::write(
+        &source,
+        serde_json::json!({"mcpServers":{
+            "server":{"command":"echo","args":["x"]},
+            "other":{"type":"stdio","command":"echo","args":["y"]}
+        }})
+        .to_string(),
+    )
+    .unwrap();
+    let path = source.to_str().unwrap();
+    let missing = run(root.path(), &config, &["add-from-desktop", "--file", path]);
+    assert!(!missing.status.success());
+    assert!(run(
+        root.path(),
+        &config,
+        &["add-from-desktop", "--file", path, "--server", "server"]
+    )
+    .status
+    .success());
+    let imported = run(
+        root.path(),
+        &config,
+        &["add-from-desktop", "--file", path, "--all"],
+    );
+    assert!(
+        imported.status.success(),
+        "{}",
+        String::from_utf8_lossy(&imported.stderr)
+    );
+    let result: Value = serde_json::from_slice(&imported.stdout).unwrap();
+    assert_eq!(result["imported"], serde_json::json!(["other", "server_1"]));
+    let checked = run(root.path(), &config, &["get", "server_1", "--no-check"]);
+    assert!(checked.status.success());
+    let result: Value = serde_json::from_slice(&checked.stdout).unwrap();
+    assert_eq!(result["args"], serde_json::json!(["x"]));
+}

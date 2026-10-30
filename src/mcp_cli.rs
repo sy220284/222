@@ -67,6 +67,18 @@ pub enum McpCommand {
         #[arg(long)]
         client_secret: bool,
     },
+    /// Import selected MCP server configs from a desktop client's JSON file.
+    /// Explicit selection avoids executing or importing unreviewed entries.
+    AddFromDesktop {
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(short = 's', long, value_enum, default_value = "local")]
+        scope: Scope,
+        #[arg(long = "server", conflicts_with = "all")]
+        servers: Vec<String>,
+        #[arg(long)]
+        all: bool,
+    },
     /// Inspect the saved MCP server configuration without launching a process
     Get {
         name: String,
@@ -519,6 +531,65 @@ pub async fn run(root: &Path, command: &McpCommand) -> Result<String> {
             let server = parse_server_json(name, json)?;
             let path = store_server(root, *scope, server)?;
             Ok(format!("Added MCP server {name} to {}", path.display()))
+        }
+        McpCommand::AddFromDesktop {
+            file,
+            scope,
+            servers,
+            all,
+        } => {
+            if !*all && servers.is_empty() {
+                bail!("Choose --server NAME (repeatable) or --all to import MCP entries");
+            }
+            if file.symlink_metadata()?.file_type().is_symlink() {
+                bail!("Desktop MCP configuration cannot be a symbolic link");
+            }
+            if file.metadata()?.len() > 2 * 1024 * 1024 {
+                bail!("Desktop MCP configuration is too large");
+            }
+            let source: Value =
+                serde_json::from_slice(&fs::read(file)?).context("Invalid desktop MCP JSON")?;
+            let definitions = source
+                .get("mcpServers")
+                .and_then(Value::as_object)
+                .context("Desktop MCP JSON must contain mcpServers object")?;
+            let mut chosen = if *all {
+                definitions.keys().cloned().collect::<Vec<_>>()
+            } else {
+                servers.clone()
+            };
+            chosen.sort();
+            chosen.dedup();
+            let mut existing = HashSet::new();
+            for scoped in [Scope::Local, Scope::Project] {
+                existing.extend(scoped_servers(root, scoped)?.into_keys());
+            }
+            existing.extend(Config::load()?.mcp_servers.into_iter().map(|s| s.id));
+            let mut prepared = Vec::new();
+            for requested in chosen {
+                let value = definitions
+                    .get(&requested)
+                    .with_context(|| format!("Desktop MCP server {requested} not found"))?;
+                let mut name = requested.clone();
+                let mut count = 0usize;
+                while existing.contains(&name) {
+                    count += 1;
+                    name = format!("{requested}_{count}");
+                }
+                let server = parse_server_json(&name, &serde_json::to_string(value)?)?;
+                existing.insert(name.clone());
+                prepared.push((name, server));
+            }
+            let mut imported = Vec::new();
+            for (name, server) in prepared {
+                store_server(root, *scope, server)?;
+                imported.push(name);
+            }
+            Ok(serde_json::to_string_pretty(&json!({
+                "source":file.display().to_string(),
+                "scope":scope_name(*scope),
+                "imported":imported,
+            }))?)
         }
         McpCommand::Get {
             name,
