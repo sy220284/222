@@ -302,7 +302,6 @@ impl SseTransport {
         }
         request = request
             .header("Content-Type", "application/json")
-            .header("anthropic-version", "2023-06-01")
             .body(crate::ndjson::stringify_value(message));
         let mut last_status: Option<u16> = None;
         for attempt in 1..=POST_MAX_RETRIES {

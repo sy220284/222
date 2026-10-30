@@ -344,7 +344,7 @@ impl CcrClient {
         if headers.is_empty() {
             bail!("{}", CcrInitFailReason::NoAuthHeaders);
         }
-        let epoch = match std::env::var("CLAUDE_CODE_WORKER_EPOCH")
+        let epoch = match std::env::var("ATLAS_WORKER_EPOCH")
             .ok()
             .and_then(|raw| raw.parse::<u64>().ok())
         {
@@ -643,7 +643,6 @@ impl CcrShared {
         for (name, value) in (self.auth)() {
             request = request.header(name, value);
         }
-        request = request.header("anthropic-version", "2023-06-01");
         if let Some(body) = body {
             request = request
                 .header("Content-Type", "application/json")

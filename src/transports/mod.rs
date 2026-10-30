@@ -3,10 +3,10 @@
 //! HybridTransport,SerialBatchEventUploader,WorkerStateUploader,ccrClient}.ts`.
 //!
 //! Selection priority (source `getTransportForUrl`):
-//! 1. SSE (SSE reads + POST writes) when `CLAUDE_CODE_USE_CCR_V2` is truthy —
+//! 1. SSE (SSE reads + POST writes) when `ATLAS_USE_CCR_V2` is truthy —
 //!    the session URL gains `/worker/events/stream` after ws→http conversion
 //! 2. Hybrid (WS reads + POST writes) when
-//!    `CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2` is truthy
+//!    `ATLAS_POST_FOR_SESSION_INGRESS_V2` is truthy
 //! 3. WebSocket (WS reads + WS writes) — default for ws:// URLs
 
 pub mod ccr_client;
@@ -61,14 +61,14 @@ pub fn sse_stream_url_for_session(session_url: &str) -> String {
 /// Resolve which transport a session URL should use (source
 /// `getTransportForUrl`; ws→SSE conversion preserved).
 pub fn get_transport_for_url(url: &str) -> Result<TransportKind> {
-    if is_env_truthy("CLAUDE_CODE_USE_CCR_V2") {
+    if is_env_truthy("ATLAS_USE_CCR_V2") {
         // CCR v2: the session URL becomes an SSE stream URL. Any ws:// or
         // ws(s) session URL is accepted after scheme conversion.
         return Ok(TransportKind::Sse);
     }
     let lower = url.to_ascii_lowercase();
     if lower.starts_with("ws://") || lower.starts_with("wss://") {
-        if is_env_truthy("CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2") {
+        if is_env_truthy("ATLAS_POST_FOR_SESSION_INGRESS_V2") {
             return Ok(TransportKind::Hybrid);
         }
         return Ok(TransportKind::WebSocket);
@@ -130,7 +130,6 @@ impl SdkOutbound {
             client
                 .post(post_url)
                 .header("Content-Type", "application/json")
-                .header("anthropic-version", "2023-06-01")
                 .body(crate::ndjson::stringify_value(message))
                 .send()
                 .await?

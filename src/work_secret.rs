@@ -132,7 +132,6 @@ pub async fn register_worker(session_url: &str, access_token: &str) -> Result<u6
             .post(&url)
             .header("Authorization", auth)
             .header("Content-Type", "application/json")
-            .header("anthropic-version", "2023-06-01")
             .timeout(std::time::Duration::from_secs(10))
             .json(&json!({}))
             .send()

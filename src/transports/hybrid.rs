@@ -71,7 +71,6 @@ impl HybridOutbound {
                 let mut request = client
                     .post(&post_url)
                     .header("Content-Type", "application/json")
-                    .header("anthropic-version", "2023-06-01")
                     .timeout(Duration::from_millis(POST_TIMEOUT_MS));
                 for (name, value) in auth() {
                     request = request.header(name, value);
