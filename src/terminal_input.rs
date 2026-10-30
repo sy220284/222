@@ -469,14 +469,19 @@ fn decode(reader: &mut impl Read, head: u8) -> io::Result<Key> {
     }
 }
 #[cfg(unix)]
-fn redraw(out: &mut impl Write, prompt: &str, e: &Editor) -> io::Result<()> {
+fn redraw(out: &mut impl Write, prompt: &str, e: &Editor, vim: &VimKeys) -> io::Result<()> {
+    let mode = if vim.enabled && !vim.insert {
+        "[NORMAL] "
+    } else {
+        ""
+    };
     let displayed = e.text.replace('\n', "↵").replace('\t', "⇥");
     let to_cursor = e.text[..e.cursor].replace('\n', "↵").replace('\t', "⇥");
     let tail = displayed
         .chars()
         .count()
         .saturating_sub(to_cursor.chars().count());
-    write!(out, "\r\x1b[2K{prompt}{displayed}")?;
+    write!(out, "\r\x1b[2K{mode}{prompt}{displayed}")?;
     if e.text.is_empty() {
         let view = text_input_semantics::render_placeholder(&json!({
             "placeholder":"Type a message or /help","value":"","showCursor":false,"focus":true,"terminalFocus":true
@@ -490,7 +495,7 @@ fn redraw(out: &mut impl Write, prompt: &str, e: &Editor) -> io::Result<()> {
     out.flush()
 }
 #[cfg(unix)]
-fn interactive(prompt: &str, history: &[String]) -> Result<PromptRead> {
+fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<PromptRead> {
     let _raw = RawMode::enter()?;
     let mut input = io::stdin().lock();
     let mut out = io::stdout().lock();
@@ -498,6 +503,7 @@ fn interactive(prompt: &str, history: &[String]) -> Result<PromptRead> {
     let mut bindings = keybindings::KeybindingRuntime::from_disk(&file);
     bindings.register_context("Chat");
     let mut e = Editor::default();
+    let mut vim = VimKeys::new(vim_enabled);
     let mut paste = false;
     write!(out, "\x1b[?2004h")?;
     let result = (|| -> Result<PromptRead> {
@@ -523,6 +529,10 @@ fn interactive(prompt: &str, history: &[String]) -> Result<PromptRead> {
                     Key::Backspace => e.insert('\u{8}')?,
                     _ => {}
                 }
+                redraw(&mut out, prompt, &e, &vim)?;
+                continue;
+            }
+            if vim.handle(&mut e, &key)? {
                 redraw(&mut out, prompt, &e, &vim)?;
                 continue;
             }
@@ -599,10 +609,10 @@ fn interactive(prompt: &str, history: &[String]) -> Result<PromptRead> {
     out.flush()?;
     result
 }
-pub fn read_prompt(prompt: &str, history: &[String]) -> Result<PromptRead> {
+pub fn read_prompt(prompt: &str, history: &[String], vim_enabled: bool) -> Result<PromptRead> {
     #[cfg(unix)]
     if io::stdin().is_terminal() && io::stdout().is_terminal() {
-        return interactive(prompt, history);
+        return interactive(prompt, history, vim_enabled);
     }
     print!("{prompt}");
     io::stdout().flush()?;
