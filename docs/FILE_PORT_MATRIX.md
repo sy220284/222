@@ -118,7 +118,7 @@
 | `src/commands/bridge/index.ts` | 27 | 604 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/bridge-kick.ts` | 201 | 6703 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/brief.ts` | 131 | 5173 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/btw/btw.tsx` | 243 | 30250 | 重写：保持通用行为 | `src/generated_ports/p_45e0c7d37ad4a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/btw/btw.tsx` | 243 | 30250 | 重写：保持通用行为 | `src/generated_ports/p_45e0c7d37ad4a.rs`| 部分实现：side-question 覆盖层决策核——键盘契约（escape/return/space/ctrl-c/ctrl-d 完成显示 skip、up/ctrl-p 上滚、down/ctrl-n 下滚、余忽略）、取数分支（有响应即用/空响应 No response received/异常保消息或默认）、chrome 度量逐字（5/6 行、3 行滚动步），附 4 测试；React 状态机与 ScrollBox 属组件域|
 | `src/commands/btw/index.ts` | 14 | 314 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/bughunter/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/chrome/chrome.tsx` | 285 | 31974 | 重写：保持通用行为 | 待定 | 未迁移 |
