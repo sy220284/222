@@ -199,10 +199,14 @@ pub async fn run(
     let token = Arc::new(RwLock::new(original_token.clone()));
     let headers: Headers = {
         let token = Arc::clone(&token);
-        Arc::new(move || token.read().expect("Remote token lock poisoned")
-            .as_deref()
-            .map(|value| vec![("Authorization".into(), format!("Bearer {value}"))])
-            .unwrap_or_default())
+        Arc::new(move || {
+            token
+                .read()
+                .expect("Remote token lock poisoned")
+                .as_deref()
+                .map(|value| vec![("Authorization".into(), format!("Bearer {value}"))])
+                .unwrap_or_default()
+        })
     };
     let refresh = token_file.map(|path| {
         let path = path.to_owned();
