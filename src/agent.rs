@@ -5333,8 +5333,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut original = Session::fresh();
         let parent_id = original.id;
@@ -5375,8 +5374,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5435,8 +5433,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5511,8 +5508,7 @@ mod tests {
                 model: "mock".into(),
                 api_key_env: None,
                 stream: false,
-
-            tuning: Default::default(),
+                tuning: Default::default(),
             },
             provider: Box::new(SummaryModel),
             root: dir.path().canonicalize().unwrap(),
@@ -5611,8 +5607,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5649,8 +5644,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5787,8 +5781,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut leader = Agent::new(
             profile.clone(),
@@ -5866,8 +5859,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut worker = Agent::new(
             profile,
@@ -5918,8 +5910,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut worker = Agent::new(
             profile,
@@ -5978,8 +5969,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut leader = Agent::new(
             profile,
@@ -6042,8 +6032,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut leader = Agent::new(
             profile,
@@ -6093,8 +6082,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut leader = Agent::new(
             profile.clone(),
@@ -6233,8 +6221,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut worker = Agent::new(
             profile,
@@ -6295,8 +6282,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -6343,8 +6329,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -6403,8 +6388,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let teams = Teams::new(root.path()).unwrap();
         teams.create("team", None, "leader").unwrap();
@@ -6480,8 +6464,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -6511,8 +6494,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -6542,8 +6524,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut session = Session::fresh();
         session.permission_mode = Some("unknown-future-mode".into());
@@ -6580,8 +6561,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile.clone(),
@@ -6626,8 +6606,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let teams = Teams::new(root.path()).unwrap();
         teams.create("team", None, "leader").unwrap();
@@ -6695,8 +6674,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let teams = Teams::new(root.path()).unwrap();
         teams.create("team", None, "leader").unwrap();
@@ -6762,8 +6740,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let teams = Teams::new(root.path()).unwrap();
         teams.create("team", None, "leader").unwrap();
@@ -6851,8 +6828,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut original = Session::fresh();
         let original_id = original.id.to_string();
@@ -6901,8 +6877,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
-
-        tuning: Default::default(),
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
