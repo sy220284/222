@@ -84,6 +84,7 @@ impl Accumulator {
                 } else {
                     Some(self.text)
                 },
+                reasoning_content: None,
                 content_blocks: None,
                 tool_calls: if self.calls.is_empty() {
                     None
