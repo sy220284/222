@@ -88,8 +88,11 @@ pub fn parse_plugin_args(args: Option<&str>) -> PluginCommand {
                 Some("--keep-data") => Some(false),
                 _ => None,
             };
-            PluginCommand::Uninstall { plugin: target, delete_data }
-        },
+            PluginCommand::Uninstall {
+                plugin: target,
+                delete_data,
+            }
+        }
         Some("enable") => PluginCommand::Enable { plugin: target },
         Some("disable") => PluginCommand::Disable { plugin: target },
         Some("validate") => {

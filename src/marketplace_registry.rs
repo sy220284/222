@@ -50,7 +50,10 @@ fn exclusive_lock(root: &Path) -> Result<File> {
     for path in [&home, &lock_path, &registry_path] {
         match fs::symlink_metadata(path) {
             Ok(meta) if meta.file_type().is_symlink() => {
-                bail!("Marketplace storage cannot be a symbolic link: {}", path.display())
+                bail!(
+                    "Marketplace storage cannot be a symbolic link: {}",
+                    path.display()
+                )
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -171,6 +174,176 @@ fn inspect_local(source: &MarketplaceSource) -> Result<(String, PathBuf)> {
     }
     Ok((name.to_owned(), file.canonicalize()?))
 }
+
+fn is_remote(source: &MarketplaceSource) -> bool {
+    matches!(
+        source,
+        MarketplaceSource::Git { .. }
+            | MarketplaceSource::Github { .. }
+            | MarketplaceSource::Url { .. }
+    )
+}
+
+fn cached_root(project: &Path, file: &Path) -> Result<PathBuf> {
+    let base = project.join(".atlas/marketplace-cache").canonicalize()?;
+    let path = file.canonicalize()?;
+    let relative = path
+        .strip_prefix(&base)
+        .context("Marketplace cache escapes the trusted storage")?;
+    let id = relative
+        .components()
+        .next()
+        .context("Marketplace cache ID missing")?;
+    let root = base.join(id.as_os_str()).canonicalize()?;
+    if root == base || !path.starts_with(&root) {
+        bail!("Invalid marketplace cache identity");
+    }
+    Ok(root)
+}
+
+fn inspect_registered(project: &Path, record: &StoredMarketplace) -> Result<(String, PathBuf)> {
+    if !is_remote(&record.source) {
+        return inspect_local(&record.source);
+    }
+    let _ = cached_root(project, &record.install_location)?;
+    inspect_local(&MarketplaceSource::File {
+        path: record.install_location.clone(),
+    })
+}
+
+/// The 2.1.88 marketplaceManager fetches Git and URL catalogs into a private
+/// cache. Never run a fetched manifest as code during the materialization step.
+fn materialize_remote(project: &Path, source: &MarketplaceSource) -> Result<(String, PathBuf)> {
+    use std::{
+        process::{Command, Stdio},
+        thread,
+        time::{Duration, Instant},
+    };
+    let home = project.join(".atlas/marketplace-cache");
+    match fs::symlink_metadata(&home) {
+        Ok(meta) if !meta.is_dir() || meta.file_type().is_symlink() => {
+            bail!("Marketplace cache storage is redirected")
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => fs::create_dir_all(&home)?,
+        Err(error) => return Err(error.into()),
+    }
+    if !home.canonicalize()?.starts_with(project.canonicalize()?) {
+        bail!("Marketplace cache escapes workspace");
+    }
+    let id = Uuid::new_v4().to_string();
+    let staging = home.join(format!(".staged-{id}"));
+    let published = home.join(id);
+    let fetch = (|| -> Result<(String, PathBuf)> {
+        let mut command = match source {
+            MarketplaceSource::Github { repo, r#ref } => {
+                let segments = repo.split('/').collect::<Vec<_>>();
+                if segments.len() != 2
+                    || segments.iter().any(|part| {
+                        part.is_empty()
+                            || part.starts_with('-')
+                            || !part.bytes().all(|byte| {
+                                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+                            })
+                    })
+                {
+                    bail!("Invalid GitHub repository identifier");
+                }
+                let mut git = Command::new("git");
+                git.arg("clone")
+                    .arg("--depth")
+                    .arg("1")
+                    .arg("--recurse-submodules");
+                if let Some(reference) = r#ref {
+                    if reference.is_empty() || reference.starts_with('-') {
+                        bail!("Invalid marketplace branch");
+                    }
+                    git.arg("--branch").arg(reference);
+                }
+                git.arg(format!("https://github.com/{repo}.git"))
+                    .arg(&staging);
+                git
+            }
+            MarketplaceSource::Git { url, r#ref } => {
+                let mut git = Command::new("git");
+                git.arg("-c")
+                    .arg("core.sshCommand=ssh -o BatchMode=yes -o StrictHostKeyChecking=yes")
+                    .arg("clone")
+                    .arg("--depth")
+                    .arg("1")
+                    .arg("--recurse-submodules");
+                if let Some(reference) = r#ref {
+                    if reference.is_empty() || reference.starts_with('-') {
+                        bail!("Invalid marketplace branch");
+                    }
+                    git.arg("--branch").arg(reference);
+                }
+                git.arg("--").arg(url).arg(&staging);
+                git
+            }
+            MarketplaceSource::Url { url } => {
+                let parsed = reqwest::Url::parse(url).context("Invalid marketplace URL")?;
+                if parsed.scheme() != "https" {
+                    bail!("Marketplace JSON download requires HTTPS");
+                }
+                fs::create_dir(&staging)?;
+                let mut curl = Command::new("curl");
+                curl.arg("--fail")
+                    .arg("--silent")
+                    .arg("--location")
+                    .arg("--max-time")
+                    .arg("120")
+                    .arg("--max-filesize")
+                    .arg("8000000")
+                    .arg("--proto")
+                    .arg("=https")
+                    .arg("--proto-redir")
+                    .arg("=https")
+                    .arg("--output")
+                    .arg(staging.join("marketplace.json"))
+                    .arg("--url")
+                    .arg(url);
+                curl
+            }
+            _ => bail!("Expected a remote marketplace"),
+        };
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .env("GIT_TERMINAL_PROMPT", "0");
+        let mut child = command.spawn().context("Start marketplace source fetch")?;
+        let deadline = Instant::now() + Duration::from_secs(120);
+        loop {
+            if let Some(status) = child.try_wait()? {
+                if !status.success() {
+                    bail!("Marketplace source download failed: {status}");
+                }
+                break;
+            }
+            if Instant::now() >= deadline {
+                child.kill().context("Stop expired marketplace download")?;
+                child.wait()?;
+                bail!("Marketplace source download timed out");
+            }
+            thread::sleep(Duration::from_millis(30));
+        }
+        let (name, file) = inspect_local(&MarketplaceSource::Directory {
+            path: staging.clone(),
+        })?;
+        let relative = file
+            .strip_prefix(staging.canonicalize()?)
+            .context("Marketplace manifest escapes downloaded source")?
+            .to_path_buf();
+        fs::rename(&staging, &published).context("Publish marketplace cache")?;
+        Ok((name, published.join(relative)))
+    })();
+    if fetch.is_err() && staging.exists() {
+        fs::remove_dir_all(&staging).context("Clean failed marketplace download")?;
+    }
+    fetch
+}
+
 /// Resolve one plugin in an explicitly registered local marketplace. The
 /// manifest's relative source is confined to the marketplace root even when
 /// intermediate directories contain symlinks.
@@ -180,7 +353,7 @@ pub fn resolve_local_plugin(project: &Path, marketplace: &str, plugin: &str) -> 
     let record = registry
         .get(marketplace)
         .with_context(|| format!("Marketplace '{marketplace}' is not registered"))?;
-    let (current_name, manifest) = inspect_local(&record.source)?;
+    let (current_name, manifest) = inspect_registered(project, record)?;
     if current_name != marketplace {
         bail!("Marketplace '{marketplace}' changed its name on disk");
     }
@@ -202,7 +375,7 @@ pub fn resolve_local_plugin(project: &Path, marketplace: &str, plugin: &str) -> 
                 parent.canonicalize()?
             }
         }
-        _ => bail!("Remote marketplace requires a trusted materialization step"),
+        _ => cached_root(project, &record.install_location)?,
     };
     let document: Value = serde_json::from_slice(&fs::read(&manifest)?)?;
     let candidates = document["plugins"]
@@ -233,21 +406,34 @@ pub fn resolve_local_plugin(project: &Path, marketplace: &str, plugin: &str) -> 
 
 /// The original dependency resolver trusts only the ROOT marketplace's
 /// explicit allowlist; trust never propagates from transitive dependencies.
-pub fn local_marketplace_dependency_allowlist(project: &Path, marketplace: &str) -> Result<Vec<String>> {
+pub fn local_marketplace_dependency_allowlist(
+    project: &Path,
+    marketplace: &str,
+) -> Result<Vec<String>> {
     let _guard = exclusive_lock(project)?;
     let registry = load(project)?;
-    let record = registry.get(marketplace)
+    let record = registry
+        .get(marketplace)
         .with_context(|| format!("Marketplace '{marketplace}' is not registered"))?;
-    let (actual, manifest) = inspect_local(&record.source)?;
-    if actual != marketplace { bail!("Marketplace '{marketplace}' changed its name on disk"); }
+    let (actual, manifest) = inspect_registered(project, record)?;
+    if actual != marketplace {
+        bail!("Marketplace '{marketplace}' changed its name on disk");
+    }
     let document: Value = serde_json::from_slice(&fs::read(manifest)?)?;
     match document.get("allowCrossMarketplaceDependenciesOn") {
         None | Some(Value::Null) => Ok(Vec::new()),
-        Some(Value::Array(items)) => items.iter().map(|item| {
-            let name = item.as_str().context("Trusted marketplace name must be a string")?;
-            if !valid_marketplace_name(name) { bail!("Invalid trusted marketplace name"); }
-            Ok(name.to_owned())
-        }).collect(),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|item| {
+                let name = item
+                    .as_str()
+                    .context("Trusted marketplace name must be a string")?;
+                if !valid_marketplace_name(name) {
+                    bail!("Invalid trusted marketplace name");
+                }
+                Ok(name.to_owned())
+            })
+            .collect(),
         _ => bail!("Marketplace cross-dependency allowlist must be an array"),
     }
 }
@@ -255,25 +441,41 @@ pub fn local_marketplace_dependency_allowlist(project: &Path, marketplace: &str)
 /// Read dependencies declared by the registered marketplace entry. The
 /// original installer resolves its dependency closure from marketplace.json,
 /// which can declare dependencies absent from the installed plugin.json.
-pub fn local_plugin_dependencies(project: &Path, marketplace: &str, plugin: &str) -> Result<Vec<String>> {
+pub fn local_plugin_dependencies(
+    project: &Path,
+    marketplace: &str,
+    plugin: &str,
+) -> Result<Vec<String>> {
     let _guard = exclusive_lock(project)?;
     let registry = load(project)?;
-    let record = registry.get(marketplace)
+    let record = registry
+        .get(marketplace)
         .with_context(|| format!("Marketplace '{marketplace}' is not registered"))?;
-    let (actual, manifest) = inspect_local(&record.source)?;
-    if actual != marketplace { bail!("Marketplace '{marketplace}' changed its name on disk"); }
+    let (actual, manifest) = inspect_registered(project, record)?;
+    if actual != marketplace {
+        bail!("Marketplace '{marketplace}' changed its name on disk");
+    }
     let document: Value = serde_json::from_slice(&fs::read(manifest)?)?;
-    let entry = document["plugins"].as_array()
+    let entry = document["plugins"]
+        .as_array()
         .context("Marketplace plugins must be an array")?
-        .iter().find(|entry| entry["name"].as_str() == Some(plugin))
+        .iter()
+        .find(|entry| entry["name"].as_str() == Some(plugin))
         .with_context(|| format!("Plugin '{plugin}' not found in marketplace '{marketplace}'"))?;
     match entry.get("dependencies") {
         None | Some(Value::Null) => Ok(Vec::new()),
-        Some(Value::Array(items)) => items.iter().map(|item| {
-            let dependency = item.as_str().context("Marketplace dependency must be a string")?;
-            if dependency.is_empty() { bail!("Marketplace dependency is empty"); }
-            Ok(dependency.to_owned())
-        }).collect(),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|item| {
+                let dependency = item
+                    .as_str()
+                    .context("Marketplace dependency must be a string")?;
+                if dependency.is_empty() {
+                    bail!("Marketplace dependency is empty");
+                }
+                Ok(dependency.to_owned())
+            })
+            .collect(),
         _ => bail!("Marketplace plugin dependencies must be an array"),
     }
 }
@@ -287,15 +489,22 @@ pub fn resolve_local_plugin_by_name(project: &Path, plugin: &str) -> Result<(Str
         let _guard = exclusive_lock(project)?;
         let mut entries = load(project)?.into_iter().collect::<Vec<_>>();
         entries.sort_by(|(left_name, left), (right_name, right)| {
-            left.registered_at.as_deref().unwrap_or(&left.last_updated)
-                .cmp(right.registered_at.as_deref().unwrap_or(&right.last_updated))
+            left.registered_at
+                .as_deref()
+                .unwrap_or(&left.last_updated)
+                .cmp(
+                    right
+                        .registered_at
+                        .as_deref()
+                        .unwrap_or(&right.last_updated),
+                )
                 .then_with(|| left_name.cmp(right_name))
         });
         entries
     };
     let mut failures = Vec::new();
     for (name, record) in registered {
-        let manifest = match inspect_local(&record.source) {
+        let manifest = match inspect_registered(project, &record) {
             Ok((actual, manifest)) if actual == name => manifest,
             Ok((actual, _)) => {
                 failures.push(format!("{name}: manifest now identifies as {actual}"));
@@ -317,13 +526,14 @@ pub fn resolve_local_plugin_by_name(project: &Path, plugin: &str) -> Result<(Str
             }
         };
         let found = document["plugins"].as_array().is_some_and(|entries| {
-            entries.iter().any(|entry| entry["name"].as_str() == Some(plugin))
+            entries
+                .iter()
+                .any(|entry| entry["name"].as_str() == Some(plugin))
         });
         if found {
             // Resolve again under the registry lock and recheck canonical paths.
             // This prevents a catalog edit from bypassing source containment.
-            return resolve_local_plugin(project, &name, plugin)
-                .map(|path| (name, path));
+            return resolve_local_plugin(project, &name, plugin).map(|path| (name, path));
         }
     }
     if failures.is_empty() {
@@ -373,7 +583,9 @@ fn installed_plugins_from_marketplace(root: &Path, marketplace: &str) -> Result<
         }
         let value: Value = serde_json::from_slice(&fs::read(&origin)?)
             .with_context(|| format!("Invalid marketplace identity for plugin '{plugin}'"))?;
-        let identity = value.get("pluginId").and_then(Value::as_str)
+        let identity = value
+            .get("pluginId")
+            .and_then(Value::as_str)
             .with_context(|| format!("Plugin '{plugin}' is missing its marketplace identity"))?;
         if identity == format!("{plugin}@{marketplace}") {
             affected.push(plugin);
@@ -397,24 +609,27 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
             // one broken marketplace is visible as a warning while healthy
             // catalogs remain discoverable. Keep each source's diagnostic in
             // the CLI result instead of silently claiming every entry works.
-            let marketplaces = registry.into_iter().map(|(name, record)| {
-                let diagnostic = inspect_local(&record.source).and_then(|(actual, _)| {
-                    if actual != name {
-                        bail!("Marketplace name changed from '{name}' to '{actual}'");
-                    }
-                    Ok(())
-                });
-                let available = diagnostic.is_ok();
-                let error = diagnostic.err().map(|error| format!("{error:#}"));
-                json!({
-                    "name":name,"source":record.source,
-                    "installLocation":record.install_location,
-                    "lastUpdated":record.last_updated,
-                    "available":available,"error":error
+            let marketplaces = registry
+                .into_iter()
+                .map(|(name, record)| {
+                    let diagnostic = inspect_registered(root, &record).and_then(|(actual, _)| {
+                        if actual != name {
+                            bail!("Marketplace name changed from '{name}' to '{actual}'");
+                        }
+                        Ok(())
+                    });
+                    let available = diagnostic.is_ok();
+                    let error = diagnostic.err().map(|error| format!("{error:#}"));
+                    json!({
+                        "name":name,"source":record.source,
+                        "installLocation":record.install_location,
+                        "lastUpdated":record.last_updated,
+                        "available":available,"error":error
+                    })
                 })
-            }).collect::<Vec<_>>();
+                .collect::<Vec<_>>();
             Ok(json!({"marketplaces":marketplaces}))
-        },
+        }
         "add" => {
             let target = target
                 .filter(|t| !t.trim().is_empty())
@@ -424,11 +639,19 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
                 .context(
                     "Invalid marketplace source format. Try owner/repo, https://..., or ./path",
                 )?;
-            let (name, file) = inspect_local(&source)?;
             if let Some((existing, _)) = registry.iter().find(|(_, r)| r.source == source) {
                 return Ok(json!({"name":existing,"alreadyMaterialized":true}));
             }
+            let remote = is_remote(&source);
+            let (name, file) = if remote {
+                materialize_remote(root, &source)?
+            } else {
+                inspect_local(&source)?
+            };
             if let Some(existing) = registry.get(&name) {
+                if remote {
+                    fs::remove_dir_all(cached_root(root, &file)?)?;
+                }
                 if existing.source != source {
                     bail!("Marketplace '{name}' is already registered from another source");
                 }
@@ -439,12 +662,18 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
                 name.clone(),
                 StoredMarketplace {
                     source,
-                    install_location: file,
+                    install_location: file.clone(),
                     last_updated: registered_at.clone(),
                     registered_at: Some(registered_at),
                 },
             );
-            save(root, &registry)?;
+            if let Err(error) = save(root, &registry) {
+                if remote {
+                    let cached = cached_root(root, &file)?;
+                    fs::remove_dir_all(cached).context("Clean unregistered marketplace cache")?;
+                }
+                return Err(error);
+            }
             Ok(json!({"name":name,"alreadyMaterialized":false}))
         }
         "remove" => {
@@ -462,7 +691,9 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
             let affected = installed_plugins_from_marketplace(root, name)?;
             let original_config = crate::config::Config::load()?;
             let mut updated_config = original_config.clone();
-            updated_config.enabled_plugins.retain(|plugin| !affected.contains(plugin));
+            updated_config
+                .enabled_plugins
+                .retain(|plugin| !affected.contains(plugin));
             let changed = updated_config.enabled_plugins != original_config.enabled_plugins;
             if changed {
                 updated_config.save()?;
@@ -499,26 +730,64 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
             let single = target.is_some_and(|value| !value.trim().is_empty());
             let mut updated = Vec::new();
             let mut failed = Vec::new();
+            let mut old_cache = Vec::new();
+            let mut new_cache = Vec::new();
             for name in names {
-                let result = inspect_local(&registry[&name].source).and_then(|(actual, _)| {
-                    if actual != name {
-                        bail!("Marketplace name changed from '{name}' to '{actual}'");
-                    }
-                    Ok(())
-                });
+                let record = registry
+                    .get(&name)
+                    .context("Marketplace disappeared during update")?
+                    .clone();
+                let remote = is_remote(&record.source);
+                let result = if remote {
+                    materialize_remote(root, &record.source)
+                } else {
+                    inspect_registered(root, &record)
+                };
                 match result {
-                    Ok(()) => {
-                        registry.get_mut(&name).expect("marketplace exists").last_updated = now();
+                    Ok((actual, file)) if actual == name => {
+                        if remote {
+                            old_cache.push(cached_root(root, &record.install_location)?);
+                            new_cache.push(cached_root(root, &file)?);
+                            registry
+                                .get_mut(&name)
+                                .context("Marketplace update target disappeared")?
+                                .install_location = file;
+                        }
+                        registry
+                            .get_mut(&name)
+                            .context("Marketplace update target disappeared")?
+                            .last_updated = now();
                         updated.push(name);
+                    }
+                    Ok((actual, file)) => {
+                        if remote {
+                            fs::remove_dir_all(cached_root(root, &file)?)?;
+                        }
+                        let error = anyhow!("Marketplace name changed from '{name}' to '{actual}'");
+                        if single {
+                            return Err(error);
+                        }
+                        failed.push(json!({"name":name,"error":format!("{error:#}")}));
                     }
                     Err(error) if single => return Err(error),
                     Err(error) => failed.push(json!({"name":name,"error":format!("{error:#}")})),
                 }
             }
             if !updated.is_empty() {
-                save(root, &registry)?;
+                if let Err(error) = save(root, &registry) {
+                    for path in new_cache {
+                        fs::remove_dir_all(path).context("Clean uncommitted marketplace update")?;
+                    }
+                    return Err(error);
+                }
             }
-            Ok(json!({"updated":updated,"failed":failed}))
+            let mut cleanup_warnings = Vec::new();
+            for path in old_cache {
+                if let Err(error) = fs::remove_dir_all(&path) {
+                    cleanup_warnings.push(format!("{}: {error}", path.display()));
+                }
+            }
+            Ok(json!({"updated":updated,"failed":failed,"cleanupWarnings":cleanup_warnings}))
         }
         _ => bail!("Unsupported marketplace action: {action}"),
     }
@@ -663,19 +932,60 @@ mod tests {
         assert!(!project.path().join(".atlas/marketplaces.json").exists());
     }
     #[test]
-    fn remote_source_rejected_before_registry_writes() {
+    fn invalid_remote_source_cannot_write_registry() {
         let (project, _) = fixture();
-        assert!(execute(project.path(), Some("add"), Some("owner/repo#branch")).is_err());
         assert!(execute(
             project.path(),
             Some("add"),
-            Some("https://example.org/marketplace.json")
+            Some("http://example.org/marketplace.json")
         )
         .is_err());
         assert!(!project.path().join(".atlas/marketplaces.json").exists());
     }
+
     #[test]
-    fn update_is_all_or_nothing_and_missing_name_is_an_error() {
+    fn git_marketplace_can_be_cached_and_resolved_without_external_network() {
+        use std::process::Command;
+        let (project, source) = fixture();
+        let init = Command::new("git")
+            .args(["init", "-q"])
+            .arg(source.path())
+            .status()
+            .unwrap();
+        assert!(init.success());
+        assert!(Command::new("git")
+            .arg("-C")
+            .arg(source.path())
+            .args(["add", "."])
+            .status()
+            .unwrap()
+            .success());
+        assert!(Command::new("git")
+            .arg("-C")
+            .arg(source.path())
+            .args([
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "user.name=Source Test",
+                "commit",
+                "-qm",
+                "Initial catalog"
+            ])
+            .status()
+            .unwrap()
+            .success());
+        let input = MarketplaceSource::Git {
+            url: source.path().to_string_lossy().into_owned(),
+            r#ref: None,
+        };
+        let (name, path) = materialize_remote(project.path(), &input).unwrap();
+        assert_eq!(name, "team-repo");
+        assert!(path.exists());
+        assert!(cached_root(project.path(), &path).unwrap().is_dir());
+    }
+    #[test]
+    fn bulk_update_reports_broken_marketplace_without_losing_registry() {
         let (project, source) = fixture();
         let source_path = source.path().to_str().unwrap();
         execute(project.path(), Some("add"), Some(source_path)).unwrap();
@@ -686,7 +996,9 @@ mod tests {
         let refresh = execute(project.path(), Some("update"), None).unwrap();
         assert_eq!(refresh["updated"], json!([]));
         assert_eq!(refresh["failed"][0]["name"], "team-repo");
-        assert!(refresh["failed"][0]["error"].as_str().is_some_and(|text| !text.is_empty()));
+        assert!(refresh["failed"][0]["error"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty()));
         assert!(execute(project.path(), Some("update"), Some("team-repo")).is_err());
         assert_eq!(fs::read(storage(project.path())).unwrap(), registry_before);
         assert!(execute(project.path(), Some("remove"), Some("does-not-exist")).is_err());

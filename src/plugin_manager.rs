@@ -14,15 +14,23 @@ use std::{
 /// would allow two processes to lock different inodes for the same settings.
 fn plugin_operation_lock() -> Result<fs::File> {
     let config_path = Config::path()?;
-    let parent = config_path.parent()
+    let parent = config_path
+        .parent()
         .filter(|path| !path.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent)
-        .with_context(|| format!("Cannot create plugin settings directory {}", parent.display()))?;
+    fs::create_dir_all(parent).with_context(|| {
+        format!(
+            "Cannot create plugin settings directory {}",
+            parent.display()
+        )
+    })?;
     let lock_path = parent.join(".atlas-plugin-operations.lock");
     match fs::symlink_metadata(&lock_path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
-            bail!("Plugin settings lock is redirected or invalid: {}", lock_path.display());
+            bail!(
+                "Plugin settings lock is redirected or invalid: {}",
+                lock_path.display()
+            );
         }
         Ok(_) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -35,13 +43,18 @@ fn plugin_operation_lock() -> Result<fs::File> {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_NOFOLLOW);
     }
-    let file = options.open(&lock_path)
+    let file = options
+        .open(&lock_path)
         .with_context(|| format!("Cannot open plugin settings lock {}", lock_path.display()))?;
     if !file.metadata()?.is_file() {
         bail!("Plugin settings lock is not a regular file");
     }
-    fs2::FileExt::lock_exclusive(&file)
-        .with_context(|| format!("Cannot acquire plugin settings lock {}", lock_path.display()))?;
+    fs2::FileExt::lock_exclusive(&file).with_context(|| {
+        format!(
+            "Cannot acquire plugin settings lock {}",
+            lock_path.display()
+        )
+    })?;
     Ok(file)
 }
 
@@ -71,7 +84,10 @@ fn checked_installed_root(root: &Path, create: bool) -> Result<PathBuf> {
     for path in [&atlas, &home] {
         match fs::symlink_metadata(path) {
             Ok(meta) if meta.file_type().is_symlink() => {
-                bail!("Plugin storage cannot be a symbolic link: {}", path.display())
+                bail!(
+                    "Plugin storage cannot be a symbolic link: {}",
+                    path.display()
+                )
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -93,29 +109,30 @@ fn checked_installed_root(root: &Path, create: bool) -> Result<PathBuf> {
 
 pub fn installed(root: &Path, config: &Config) -> Result<Value> {
     let dir = checked_installed_root(root, false)?;
-    let (active, runtime_errors) = crate::plugins::active_plugin_names(root, &config.enabled_plugins);
+    let (active, runtime_errors) =
+        crate::plugins::active_plugin_names(root, &config.enabled_plugins);
     let mut names = Vec::new();
     if dir.exists() {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let name = entry.file_name().to_string_lossy().into_owned();
-            if !valid_name(&name)
-                || entry.file_type()?.is_symlink()
-                || !entry.path().is_dir()
-            {
+            if !valid_name(&name) || entry.file_type()?.is_symlink() || !entry.path().is_dir() {
                 continue;
             }
             let location = entry.path();
             let has_components = ["commands", "agents", "skills", "hooks"]
-                .iter().any(|component| location.join(component).is_dir());
-            let has_manifest = location.join(".claude-plugin/plugin.json").is_file()
+                .iter()
+                .any(|component| location.join(component).is_dir());
+            let has_manifest = location.join(".atlas-plugin/plugin.json").is_file()
                 || location.join("plugin.json").is_file();
             if has_manifest || has_components {
                 let enabled = config.enabled_plugins.contains(&name);
                 let prefix = format!("Plugin '{name}' ");
-                let warnings = runtime_errors.iter()
+                let warnings = runtime_errors
+                    .iter()
                     .filter(|message| message.starts_with(&prefix))
-                    .cloned().collect::<Vec<_>>();
+                    .cloned()
+                    .collect::<Vec<_>>();
                 names.push(json!({
                     "name":name,
                     "enabled":enabled,
@@ -137,14 +154,24 @@ fn installed_origin_id(target: &Path) -> Result<Option<String>> {
     let origin_file = target.join(".atlas-plugin-origin.json");
     match fs::symlink_metadata(&origin_file) {
         Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
-            let value: Value = serde_json::from_slice(&fs::read(&origin_file)?)
-                .with_context(|| format!("Invalid plugin marketplace identity at {}", origin_file.display()))?;
-            let id = value.get("pluginId").and_then(Value::as_str)
+            let value: Value =
+                serde_json::from_slice(&fs::read(&origin_file)?).with_context(|| {
+                    format!(
+                        "Invalid plugin marketplace identity at {}",
+                        origin_file.display()
+                    )
+                })?;
+            let id = value
+                .get("pluginId")
+                .and_then(Value::as_str)
                 .context("Installed plugin has invalid marketplace identity")?;
-            let (name, marketplace) = id.split_once('@')
+            let (name, marketplace) = id
+                .split_once('@')
                 .context("Installed plugin marketplace identity must contain @")?;
-            if !valid_name(name) || marketplace.is_empty()
-                || target.file_name().and_then(|part| part.to_str()) != Some(name) {
+            if !valid_name(name)
+                || marketplace.is_empty()
+                || target.file_name().and_then(|part| part.to_str()) != Some(name)
+            {
                 bail!("Installed plugin has invalid or mismatched marketplace identity '{id}'");
             }
             Ok(Some(id.to_owned()))
@@ -155,15 +182,16 @@ fn installed_origin_id(target: &Path) -> Result<Option<String>> {
     }
 }
 
-
 /// Rebase a link to the corresponding staged file without dereferencing
 /// the plugin source. Both paths share the same staging root.
 fn relative_plugin_link(from: &Path, to: &Path) -> PathBuf {
     let from_parts = from.components().collect::<Vec<_>>();
     let to_parts = to.components().collect::<Vec<_>>();
     let mut common = 0;
-    while common < from_parts.len() && common < to_parts.len()
-        && from_parts[common] == to_parts[common] {
+    while common < from_parts.len()
+        && common < to_parts.len()
+        && from_parts[common] == to_parts[common]
+    {
         common += 1;
     }
     let mut result = PathBuf::new();
@@ -184,9 +212,12 @@ fn copy_local_tree(source: &Path, stage: &Path) -> Result<()> {
     // to the installed copy, external links become absolute, and broken links
     // retain their original text. WalkDir never follows directory symlinks.
     // installFromLocal excludes the source .git directory.
-    for entry in WalkDir::new(source).follow_links(false).into_iter()
-        .filter_entry(|entry| entry.depth() != 1
-            || entry.file_name() != std::ffi::OsStr::new(".git"))
+    for entry in WalkDir::new(source)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| {
+            entry.depth() != 1 || entry.file_name() != std::ffi::OsStr::new(".git")
+        })
     {
         let entry = entry?;
         let relative = entry.path().strip_prefix(source)?;
@@ -241,17 +272,23 @@ fn recover_plugin_crash_artifacts(root: &Path) -> Result<Vec<String>> {
     // This handles a process killed between target -> backup and stage -> target.
     for item in &entries {
         let name = item.file_name().to_string_lossy().into_owned();
-        let (recover_backup, suffix) =
-            if let Some(id) = name.strip_prefix(".previous-") {
-                (true, id)
-            } else if let Some(id) = name.strip_prefix(".failed-update-") {
-                (true, id)
-            } else { continue };
-        if Uuid::parse_str(suffix).is_err() { continue; }
+        let (recover_backup, suffix) = if let Some(id) = name.strip_prefix(".previous-") {
+            (true, id)
+        } else if let Some(id) = name.strip_prefix(".failed-update-") {
+            (true, id)
+        } else {
+            continue;
+        };
+        if Uuid::parse_str(suffix).is_err() {
+            continue;
+        }
         let backup = item.path();
         let metadata = fs::symlink_metadata(&backup)?;
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            bail!("Plugin crash recovery entry is redirected: {}", backup.display());
+            bail!(
+                "Plugin crash recovery entry is redirected: {}",
+                backup.display()
+            );
         }
         if recover_backup {
             // Derive the only permissible restoration destination from the
@@ -273,7 +310,10 @@ fn recover_plugin_crash_artifacts(root: &Path) -> Result<Vec<String>> {
             let target = home.join(&plugin);
             match fs::symlink_metadata(&target) {
                 Ok(current) if current.file_type().is_symlink() || !current.is_dir() => {
-                    bail!("Installed plugin changed to unsafe target: {}", target.display());
+                    bail!(
+                        "Installed plugin changed to unsafe target: {}",
+                        target.display()
+                    );
                 }
                 Ok(_) => {
                     // Without a durable settings-commit marker a crash may
@@ -301,10 +341,15 @@ fn recover_plugin_crash_artifacts(root: &Path) -> Result<Vec<String>> {
     }
     for item in entries {
         let name = item.file_name().to_string_lossy().into_owned();
-        let suffix = name.strip_prefix(".install-")
+        let suffix = name
+            .strip_prefix(".install-")
             .or_else(|| name.strip_prefix(".update-"));
-        let Some(suffix) = suffix else { continue; };
-        if Uuid::parse_str(suffix).is_err() { continue; }
+        let Some(suffix) = suffix else {
+            continue;
+        };
+        if Uuid::parse_str(suffix).is_err() {
+            continue;
+        }
         let stage = item.path();
         match fs::symlink_metadata(&stage) {
             Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
@@ -330,7 +375,9 @@ pub fn install_local(root: &Path, location: &Path) -> Result<String> {
 }
 
 fn install_local_with_origin(
-    root: &Path, location: &Path, marketplace_id: Option<&str>,
+    root: &Path,
+    location: &Path,
+    marketplace_id: Option<&str>,
 ) -> Result<String> {
     let source = location
         .canonicalize()
@@ -377,12 +424,14 @@ fn install_local_with_origin(
         // A failed stage or rename must never erase another installation.
         // Only remove the final directory after our own rename succeeded.
         if stage.exists() {
-            fs::remove_dir_all(&stage)
-                .with_context(|| format!("Plugin install failed: {error:#}; staged cleanup failed"))?;
+            fs::remove_dir_all(&stage).with_context(|| {
+                format!("Plugin install failed: {error:#}; staged cleanup failed")
+            })?;
         }
         if activated {
-            fs::remove_dir_all(&target)
-                .with_context(|| format!("Plugin install failed: {error:#}; activated rollback failed"))?;
+            fs::remove_dir_all(&target).with_context(|| {
+                format!("Plugin install failed: {error:#}; activated rollback failed")
+            })?;
         }
         return Err(error);
     }
@@ -393,11 +442,16 @@ fn install_local_with_origin(
 /// even when it is already enabled. Stage a replacement before touching the
 /// installed copy, then retain the previous directory until settings commit.
 fn replace_local_with_origin(
-    root: &Path, location: &Path, marketplace_id: Option<&str>,
+    root: &Path,
+    location: &Path,
+    marketplace_id: Option<&str>,
 ) -> Result<PathBuf> {
-    let source = location.canonicalize()
+    let source = location
+        .canonicalize()
         .with_context(|| format!("Cannot access plugin source {}", location.display()))?;
-    if !source.is_dir() { bail!("Plugin source must be a directory"); }
+    if !source.is_dir() {
+        bail!("Plugin source must be a directory");
+    }
     let name = manifest_name(&source)?;
     let home = checked_installed_root(root, false)?;
     if home.starts_with(&source) {
@@ -413,8 +467,10 @@ fn replace_local_with_origin(
     if existing_origin.as_deref() != marketplace_id {
         bail!("Cannot replace plugin '{name}' from a different marketplace or source");
     }
-    let origin_blocked = marketplace_id.map(|id|
-        crate::plugins::plugin_blocked_by_policy(root, id)).transpose()?.unwrap_or(false);
+    let origin_blocked = marketplace_id
+        .map(|id| crate::plugins::plugin_blocked_by_policy(root, id))
+        .transpose()?
+        .unwrap_or(false);
     if crate::plugins::plugin_blocked_by_policy(root, &name)? || origin_blocked {
         bail!("Plugin '{name}' is disabled by managed policy");
     }
@@ -442,7 +498,8 @@ fn replace_local_with_origin(
     }
     if let Err(error) = fs::rename(&target, &backup) {
         fs::remove_dir_all(&stage).context("Cannot clean staged plugin after update failure")?;
-        return Err(error).with_context(|| format!("Cannot stage previous installation of '{name}'"));
+        return Err(error)
+            .with_context(|| format!("Cannot stage previous installation of '{name}'"));
     }
     if let Err(error) = fs::rename(&stage, &target) {
         let restore = fs::rename(&backup, &target);
@@ -455,9 +512,7 @@ fn replace_local_with_origin(
     Ok(backup)
 }
 
-fn restore_replaced_installation(
-    root: &Path, name: &str, backup: &Path,
-) -> Result<()> {
+fn restore_replaced_installation(root: &Path, name: &str, backup: &Path) -> Result<()> {
     let home = checked_installed_root(root, false)?;
     let target = home.join(name);
     let failed = home.join(format!(".failed-update-{}", Uuid::new_v4()));
@@ -524,13 +579,21 @@ fn reverse_dependents(root: &Path, config: &Config, target: &str) -> (Vec<String
             bail!("Invalid plugin marketplace identity");
         }
         let value: Value = serde_json::from_slice(&fs::read(origin)?)?;
-        Ok(Some(value["pluginId"].as_str()
-            .context("Plugin marketplace identity must be a string")?.to_owned()))
+        Ok(Some(
+            value["pluginId"]
+                .as_str()
+                .context("Plugin marketplace identity must be a string")?
+                .to_owned(),
+        ))
     };
     let target_marketplace = match read_origin(target) {
-        Ok(origin) => origin.and_then(|id| id.rsplit_once('@').map(|(_, market)| market.to_owned())),
+        Ok(origin) => {
+            origin.and_then(|id| id.rsplit_once('@').map(|(_, market)| market.to_owned()))
+        }
         Err(error) => {
-            warnings.push(format!("Cannot inspect plugin '{target}' origin: {error:#}"));
+            warnings.push(format!(
+                "Cannot inspect plugin '{target}' origin: {error:#}"
+            ));
             None
         }
     };
@@ -551,8 +614,12 @@ fn reverse_dependents(root: &Path, config: &Config, target: &str) -> (Vec<String
                 continue;
             }
         }
-        let manifest = [directory.join(".claude-plugin/plugin.json"), directory.join("plugin.json")]
-            .into_iter().find(|path| path.exists());
+        let manifest = [
+            directory.join(".atlas-plugin/plugin.json"),
+            directory.join("plugin.json"),
+        ]
+        .into_iter()
+        .find(|path| path.exists());
         let Some(manifest) = manifest else { continue };
         let parsed = (|| -> Result<Value> {
             let metadata = fs::symlink_metadata(&manifest)?;
@@ -564,17 +631,23 @@ fn reverse_dependents(root: &Path, config: &Config, target: &str) -> (Vec<String
         let value = match parsed {
             Ok(value) => value,
             Err(error) => {
-                warnings.push(format!("Cannot inspect dependencies of '{name}': {error:#}"));
+                warnings.push(format!(
+                    "Cannot inspect dependencies of '{name}': {error:#}"
+                ));
                 continue;
             }
         };
-        let Some(dependencies) = value.get("dependencies") else { continue };
+        let Some(dependencies) = value.get("dependencies") else {
+            continue;
+        };
         let Some(dependencies) = dependencies.as_array() else {
             warnings.push(format!("Plugin '{name}' dependencies must be an array"));
             continue;
         };
         let declaring_marketplace = match read_origin(name) {
-            Ok(origin) => origin.and_then(|id| id.rsplit_once('@').map(|(_, market)| market.to_owned())),
+            Ok(origin) => {
+                origin.and_then(|id| id.rsplit_once('@').map(|(_, market)| market.to_owned()))
+            }
             Err(error) => {
                 warnings.push(format!("Cannot inspect plugin '{name}' origin: {error:#}"));
                 continue;
@@ -618,11 +691,12 @@ fn reverse_dependents(root: &Path, config: &Config, target: &str) -> (Vec<String
     (dependents, warnings)
 }
 
-
 /// Undo only directories created by the current install attempt. Never
 /// follow redirected plugin storage; report a rollback failure explicitly.
 fn rollback_new_installations(root: &Path, names: &[String]) -> Result<()> {
-    if names.is_empty() { return Ok(()); }
+    if names.is_empty() {
+        return Ok(());
+    }
     let home = checked_installed_root(root, false)?;
     for name in names.iter().rev() {
         let target = home.join(name);
@@ -649,24 +723,40 @@ fn dependency_install_plan(
     use std::collections::HashSet;
 
     fn dependencies(directory: &Path) -> Result<Vec<String>> {
-        let standard = directory.join(".claude-plugin/plugin.json");
+        let standard = directory.join(".atlas-plugin/plugin.json");
         let legacy = directory.join("plugin.json");
-        let path = if standard.exists() { Some(standard) }
-            else if legacy.exists() { Some(legacy) } else { None };
-        let Some(path) = path else { return Ok(Vec::new()); };
+        let path = if standard.exists() {
+            Some(standard)
+        } else if legacy.exists() {
+            Some(legacy)
+        } else {
+            None
+        };
+        let Some(path) = path else {
+            return Ok(Vec::new());
+        };
         let metadata = fs::symlink_metadata(&path)?;
-        if metadata.file_type().is_symlink() || !metadata.is_file()
-            || !path.canonicalize()?.starts_with(directory.canonicalize()?) {
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || !path.canonicalize()?.starts_with(directory.canonicalize()?)
+        {
             bail!("Plugin dependency manifest is redirected or invalid");
         }
         let manifest: Value = serde_json::from_slice(&fs::read(path)?)?;
         match manifest.get("dependencies") {
             None | Some(Value::Null) => Ok(Vec::new()),
-            Some(Value::Array(items)) => items.iter().map(|item| {
-                let id = item.as_str().context("Plugin dependency must be a string")?;
-                if id.is_empty() { bail!("Plugin dependency is empty"); }
-                Ok(id.to_owned())
-            }).collect(),
+            Some(Value::Array(items)) => items
+                .iter()
+                .map(|item| {
+                    let id = item
+                        .as_str()
+                        .context("Plugin dependency must be a string")?;
+                    if id.is_empty() {
+                        bail!("Plugin dependency is empty");
+                    }
+                    Ok(id.to_owned())
+                })
+                .collect(),
             _ => bail!("Plugin dependencies must be an array"),
         }
     }
@@ -684,14 +774,21 @@ fn dependency_install_plan(
         stack: &mut Vec<String>,
         ordered: &mut Vec<(String, PathBuf, Option<String>, bool)>,
     ) -> Result<()> {
-        if !valid_name(name) { bail!("Invalid dependency plugin name '{name}'"); }
+        if !valid_name(name) {
+            bail!("Invalid dependency plugin name '{name}'");
+        }
         if stack.iter().any(|item| item == name) {
             bail!("Plugin dependency cycle: {} -> {name}", stack.join(" -> "));
         }
         if visited.contains(name) {
-            if ordered.iter().any(|(existing_name, _, existing_origin, _):
-                &(String, PathBuf, Option<String>, bool)|
-                existing_name == name && existing_origin != &origin) {
+            if ordered.iter().any(
+                |(existing_name, _, existing_origin, _): &(
+                    String,
+                    PathBuf,
+                    Option<String>,
+                    bool,
+                )| existing_name == name && existing_origin != &origin,
+            ) {
                 bail!("Dependency '{name}' resolves to conflicting marketplaces");
             }
             return Ok(());
@@ -724,13 +821,16 @@ fn dependency_install_plan(
             return Ok(());
         }
         stack.push(name.to_owned());
-        let dependency_source = if existing && !is_root { target.clone() } else { source.clone() };
+        let dependency_source = if existing && !is_root {
+            target.clone()
+        } else {
+            source.clone()
+        };
         let mut required = dependencies(&dependency_source)?;
-        if let Some((plugin, marketplace)) = origin.as_deref()
-            .and_then(|id| id.split_once('@')) {
-            for dependency in crate::marketplace_registry::local_plugin_dependencies(
-                root, marketplace, plugin,
-            )? {
+        if let Some((plugin, marketplace)) = origin.as_deref().and_then(|id| id.split_once('@')) {
+            for dependency in
+                crate::marketplace_registry::local_plugin_dependencies(root, marketplace, plugin)?
+            {
                 if !required.contains(&dependency) {
                     required.push(dependency);
                 }
@@ -738,37 +838,65 @@ fn dependency_install_plan(
         }
         for raw in required {
             let (dep_name, dep_marketplace) = match raw.split_once('@') {
-                Some((plugin, market)) if !plugin.is_empty() && !market.is_empty() =>
-                    (plugin, Some(market)),
+                Some((plugin, market)) if !plugin.is_empty() && !market.is_empty() => {
+                    (plugin, Some(market))
+                }
                 Some(_) => bail!("Invalid plugin dependency '{raw}'"),
-                None => (raw.as_str(), origin.as_deref().and_then(|id| id.split_once('@').map(|(_, market)| market))),
+                None => (
+                    raw.as_str(),
+                    origin
+                        .as_deref()
+                        .and_then(|id| id.split_once('@').map(|(_, market)| market)),
+                ),
             };
-            if !valid_name(dep_name) { bail!("Invalid plugin dependency '{raw}'"); }
+            if !valid_name(dep_name) {
+                bail!("Invalid plugin dependency '{raw}'");
+            }
             let dep_origin = dep_marketplace.map(|market| format!("{dep_name}@{market}"));
             // Trust is inherited only from the root marketplace. An already
             // installed and enabled cross-market dependency is allowed, but
             // automatic cross-market installation requires explicit trust.
             if dep_marketplace != root_marketplace {
                 let installed = checked_installed_root(root, false)?.join(dep_name);
-                let already_enabled = enabled.iter().any(|item| item == dep_name)
-                    && installed.is_dir();
-                let explicitly_trusted = dep_marketplace.is_some_and(|market|
-                    allowed_cross_marketplaces.iter().any(|trusted| trusted == market));
+                let already_enabled =
+                    enabled.iter().any(|item| item == dep_name) && installed.is_dir();
+                let explicitly_trusted = dep_marketplace.is_some_and(|market| {
+                    allowed_cross_marketplaces
+                        .iter()
+                        .any(|trusted| trusted == market)
+                });
                 if !already_enabled && !explicitly_trusted {
                     bail!("Cross-marketplace dependency '{raw}' is not trusted by the root marketplace");
                 }
             }
             let dep_source = if let Some(market) = dep_marketplace {
                 let installed = checked_installed_root(root, false)?.join(dep_name);
-                if installed.is_dir() { installed }
-                else { crate::marketplace_registry::resolve_local_plugin(root, market, dep_name)? }
+                if installed.is_dir() {
+                    installed
+                } else {
+                    crate::marketplace_registry::resolve_local_plugin(root, market, dep_name)?
+                }
             } else {
                 let installed = checked_installed_root(root, false)?.join(dep_name);
-                if installed.is_dir() { installed }
-                else { bail!("Dependency '{raw}' requires a registered marketplace"); }
+                if installed.is_dir() {
+                    installed
+                } else {
+                    bail!("Dependency '{raw}' requires a registered marketplace");
+                }
             };
-            visit(root, dep_name, dep_source, dep_origin, root_marketplace,
-                allowed_cross_marketplaces, false, enabled, visited, stack, ordered)?;
+            visit(
+                root,
+                dep_name,
+                dep_source,
+                dep_origin,
+                root_marketplace,
+                allowed_cross_marketplaces,
+                false,
+                enabled,
+                visited,
+                stack,
+                ordered,
+            )?;
         }
         stack.pop();
         visited.insert(name.to_owned());
@@ -777,19 +905,28 @@ fn dependency_install_plan(
     }
 
     let name = manifest_name(source)?;
-    let root_marketplace = root_origin.and_then(|id|
-        id.split_once('@').map(|(_, market)| market));
+    let root_marketplace = root_origin.and_then(|id| id.split_once('@').map(|(_, market)| market));
     let allowed_cross_marketplaces = match root_marketplace {
-        Some(marketplace) => crate::marketplace_registry::local_marketplace_dependency_allowlist(
-            root, marketplace,
-        )?,
+        Some(marketplace) => {
+            crate::marketplace_registry::local_marketplace_dependency_allowlist(root, marketplace)?
+        }
         None => Vec::new(),
     };
     let mut ordered = Vec::new();
     let mut visited = HashSet::new();
-    visit(root, &name, source.to_owned(), root_origin.map(str::to_owned),
-        root_marketplace, &allowed_cross_marketplaces,
-        true, enabled, &mut visited, &mut Vec::new(), &mut ordered)?;
+    visit(
+        root,
+        &name,
+        source.to_owned(),
+        root_origin.map(str::to_owned),
+        root_marketplace,
+        &allowed_cross_marketplaces,
+        true,
+        enabled,
+        &mut visited,
+        &mut Vec::new(),
+        &mut ordered,
+    )?;
     Ok(ordered)
 }
 
@@ -799,13 +936,22 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
     // must not overwrite each other's enabled-plugin settings. Read-only
     // commands preserve their no-write behavior (including no lock file).
     let mutating = match command {
-        PluginCommand::Menu | PluginCommand::Manage | PluginCommand::Help
+        PluginCommand::Menu
+        | PluginCommand::Manage
+        | PluginCommand::Help
         | PluginCommand::Validate { .. } => false,
         PluginCommand::Marketplace { action, .. }
-            if action.as_deref().unwrap_or("list") == "list" => false,
+            if action.as_deref().unwrap_or("list") == "list" =>
+        {
+            false
+        }
         _ => true,
     };
-    let _lock = if mutating { Some(plugin_operation_lock()?) } else { None };
+    let _lock = if mutating {
+        Some(plugin_operation_lock()?)
+    } else {
+        None
+    };
     if mutating {
         for report in recover_plugin_crash_artifacts(&root)? {
             eprintln!("Plugin recovery: {report}");
@@ -834,12 +980,15 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 if let Some(marketplace) = marketplace.as_deref() {
                     marketplace_id = Some(format!("{plugin_name}@{marketplace}"));
                     crate::marketplace_registry::resolve_local_plugin(
-                        &root, marketplace, plugin_name,
+                        &root,
+                        marketplace,
+                        plugin_name,
                     )?
                 } else {
                     let (marketplace, path) =
                         crate::marketplace_registry::resolve_local_plugin_by_name(
-                            &root, plugin_name,
+                            &root,
+                            plugin_name,
                         )?;
                     marketplace_id = Some(format!("{plugin_name}@{marketplace}"));
                     path
@@ -878,7 +1027,10 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 }
             }
             let plan = dependency_install_plan(
-                &root, &local, marketplace_id.as_deref(), &config.enabled_plugins,
+                &root,
+                &local,
+                marketplace_id.as_deref(),
+                &config.enabled_plugins,
             )?;
             let mut newly_installed = Vec::<String>::new();
             let mut replaced_root: Option<PathBuf> = None;
@@ -907,8 +1059,9 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 }
             }
             if let Err(error) = config.save() {
-                let restore = replaced_root.as_ref().map(|backup|
-                    restore_replaced_installation(&root, &actual_name, backup));
+                let restore = replaced_root
+                    .as_ref()
+                    .map(|backup| restore_replaced_installation(&root, &actual_name, backup));
                 let cleanup = rollback_new_installations(&root, &newly_installed);
                 if let Some(Err(restore_error)) = restore {
                     bail!("Cannot save plugin settings: {error:#}; previous installation restore failed: {restore_error:#}");
@@ -921,7 +1074,9 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             let mut warnings = Vec::<String>::new();
             if let Some(backup) = replaced_root {
                 if let Err(error) = fs::remove_dir_all(&backup) {
-                    warnings.push(format!("Previous plugin version could not be cleaned: {error}"));
+                    warnings.push(format!(
+                        "Previous plugin version could not be cleaned: {error}"
+                    ));
                 }
             }
             // Installation can succeed while the runtime loader reports
@@ -936,14 +1091,20 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                     ));
                 }
                 let prefix = format!("Plugin '{name}' ");
-                warnings.extend(runtime_errors.iter()
-                    .filter(|error| error.starts_with(&prefix)).cloned());
+                warnings.extend(
+                    runtime_errors
+                        .iter()
+                        .filter(|error| error.starts_with(&prefix))
+                        .cloned(),
+                );
             }
             warnings.sort();
             warnings.dedup();
             let root_active = active.contains(&actual_name);
-            let dependencies = installed_names.into_iter()
-                .filter(|name| name != &actual_name).collect::<Vec<_>>();
+            let dependencies = installed_names
+                .into_iter()
+                .filter(|name| name != &actual_name)
+                .collect::<Vec<_>>();
             Ok(json!({
                 "installed":actual_name,
                 "active":root_active,
@@ -977,8 +1138,12 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                     bail!("Plugin '{origin}' is disabled by managed policy");
                 }
             }
-            let manifest = [installed.join(".claude-plugin/plugin.json"), installed.join("plugin.json")]
-                .into_iter().find(|path| path.exists());
+            let manifest = [
+                installed.join(".atlas-plugin/plugin.json"),
+                installed.join("plugin.json"),
+            ]
+            .into_iter()
+            .find(|path| path.exists());
             if let Some(path) = manifest {
                 let metadata = fs::symlink_metadata(&path)?;
                 if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -998,8 +1163,10 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             let (active, runtime_errors) =
                 crate::plugins::active_plugin_names(&root, &config.enabled_plugins);
             let prefix = format!("Plugin '{name}' ");
-            let mut warnings = runtime_errors.into_iter()
-                .filter(|error| error.starts_with(&prefix)).collect::<Vec<_>>();
+            let mut warnings = runtime_errors
+                .into_iter()
+                .filter(|error| error.starts_with(&prefix))
+                .collect::<Vec<_>>();
             let runnable = active.contains(name);
             if !runnable {
                 warnings.push(format!(
@@ -1027,7 +1194,10 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             config.save()?;
             Ok(json!({"disabled":name,"reverseDependents":reverse_dependents,"warnings":warnings}))
         }
-        PluginCommand::Uninstall { plugin, delete_data } => {
+        PluginCommand::Uninstall {
+            plugin,
+            delete_data,
+        } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
             if !valid_name(name) {
                 bail!("Invalid plugin name");
@@ -1110,9 +1280,13 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             }
             let preserved = *delete_data == Some(false);
             if warnings.is_empty() {
-                Ok(json!({"uninstalled":name,"dataPreserved":preserved,"reverseDependents":reverse_dependents}))
+                Ok(
+                    json!({"uninstalled":name,"dataPreserved":preserved,"reverseDependents":reverse_dependents}),
+                )
             } else {
-                Ok(json!({"uninstalled":name,"dataPreserved":preserved,"reverseDependents":reverse_dependents,"warnings":warnings}))
+                Ok(
+                    json!({"uninstalled":name,"dataPreserved":preserved,"reverseDependents":reverse_dependents,"warnings":warnings}),
+                )
             }
         }
         PluginCommand::Validate { path } => {

@@ -43,22 +43,32 @@ fn sdk_agent_metadata(markdown: &str) -> std::collections::HashMap<String, Strin
         return metadata;
     }
     while let Some(line) = lines.next() {
-        if line.trim() == "---" { break; }
-        if line.starts_with(' ') || line.starts_with('\t') { continue; }
-        let Some((key, raw)) = line.split_once(':') else { continue; };
-        if !matches!(key, "description" | "model") { continue; }
+        if line.trim() == "---" {
+            break;
+        }
+        if line.starts_with(' ') || line.starts_with('\t') {
+            continue;
+        }
+        let Some((key, raw)) = line.split_once(':') else {
+            continue;
+        };
+        if !matches!(key, "description" | "model") {
+            continue;
+        }
         let raw = raw.trim();
         let value = if raw.starts_with('>') || raw.starts_with('|') {
             let mut parts = Vec::new();
-            while lines.peek().is_some_and(|next| next.starts_with(' ') || next.starts_with('\t')) {
+            while lines
+                .peek()
+                .is_some_and(|next| next.starts_with(' ') || next.starts_with('\t'))
+            {
                 parts.push(lines.next().unwrap().trim().to_owned());
             }
             parts.join(if raw.starts_with('>') { " " } else { "\n" })
         } else if raw.starts_with('"') && raw.ends_with('"') {
-            serde_json::from_str::<String>(raw)
-                .unwrap_or_else(|_| raw.trim_matches('"').to_owned())
+            serde_json::from_str::<String>(raw).unwrap_or_else(|_| raw.trim_matches('"').to_owned())
         } else if raw.starts_with('\'') && raw.ends_with('\'') && raw.len() >= 2 {
-            raw[1..raw.len()-1].replace("''", "'")
+            raw[1..raw.len() - 1].replace("''", "'")
         } else {
             raw.split(" #").next().unwrap_or("").trim().to_owned()
         };
@@ -91,7 +101,9 @@ fn save_disabled_mcp_servers(disabled: &std::collections::HashSet<String>) -> Re
     let outcome = (|| -> Result<()> {
         use std::io::Write as _;
         let mut file = fs::OpenOptions::new()
-            .write(true).create_new(true).open(&temp)?;
+            .write(true)
+            .create_new(true)
+            .open(&temp)?;
         let mut names = disabled.iter().cloned().collect::<Vec<_>>();
         names.sort();
         file.write_all(&serde_json::to_vec_pretty(&names)?)?;
@@ -252,8 +264,7 @@ impl Agent {
             "startup"
         };
         let provider = provider::create(&profile)?;
-        let file_checkpointing_enabled =
-            crate::config::Config::load()?.file_checkpointing_enabled;
+        let file_checkpointing_enabled = crate::config::Config::load()?.file_checkpointing_enabled;
         let background = Arc::new(BackgroundTasks::for_session(&root, session.id)?);
         let list_id = task_list_id(session.id, session.team_name.as_deref());
         let graph = task_graph::TaskGraph::new(&root, &list_id)?;
@@ -393,9 +404,8 @@ impl Agent {
         self.last_side_question_request = None;
         if !servers.is_empty() {
             let disabled = load_disabled_mcp_servers()?;
-            self.mcp = Some(McpManager::connect_with_root_filtered(
-                servers, &self.root, &disabled,
-            ).await?);
+            self.mcp =
+                Some(McpManager::connect_with_root_filtered(servers, &self.root, &disabled).await?);
         }
         Ok(())
     }
@@ -404,11 +414,10 @@ impl Agent {
     /// the active SDK session. Validate the new configuration before replacing
     /// live hooks; never replay SessionStart or erase SDK-owned MCP servers.
     pub async fn reload_plugins(
-        &mut self, config: &crate::config::Config,
+        &mut self,
+        config: &crate::config::Config,
     ) -> Result<serde_json::Value> {
-        let plugin_set = crate::plugins::PluginSet::load(
-            &self.root, &config.enabled_plugins,
-        )?;
+        let plugin_set = crate::plugins::PluginSet::load(&self.root, &config.enabled_plugins)?;
         let plugin_load_errors = plugin_set.errors.len();
         let mut hook_rules = config.hooks.clone();
         hook_rules.extend(plugin_set.hooks);
@@ -421,7 +430,10 @@ impl Agent {
         let mut ids = std::collections::HashSet::new();
         for server in &fixed {
             if !ids.insert(&server.id) {
-                bail!("Duplicate configured MCP server during plugin reload: {}", server.id);
+                bail!(
+                    "Duplicate configured MCP server during plugin reload: {}",
+                    server.id
+                );
             }
         }
 
@@ -429,9 +441,9 @@ impl Agent {
             Some(manager) => manager.reconcile_fixed(fixed.clone()).await?,
             None if !fixed.is_empty() => {
                 let disabled = load_disabled_mcp_servers()?;
-                self.mcp = Some(McpManager::connect_with_root_filtered(
-                    &fixed, &self.root, &disabled,
-                ).await?);
+                self.mcp = Some(
+                    McpManager::connect_with_root_filtered(&fixed, &self.root, &disabled).await?,
+                );
                 json!({"added":fixed.iter().map(|server| &server.id).collect::<Vec<_>>(),
                     "removed":[],"errors":{}})
             }
@@ -453,42 +465,70 @@ impl Agent {
     /// Reject fields whose behavior is not yet supported (especially tool
     /// restrictions) so a caller cannot accidentally receive broader access.
     pub fn set_sdk_agent_definitions(&mut self, input: &serde_json::Value) -> Result<()> {
-        let definitions = input.as_object().context("initialize agents must be an object")?;
+        let definitions = input
+            .as_object()
+            .context("initialize agents must be an object")?;
         let mut parsed = std::collections::BTreeMap::new();
         for (name, value) in definitions {
             if let Some(error) = crate::agent_definition::validate_agent_type(name) {
                 bail!("Invalid SDK agent {name}: {error}");
             }
-            let definition = value.as_object()
+            let definition = value
+                .as_object()
                 .with_context(|| format!("SDK agent {name} must be an object"))?;
             for field in definition.keys() {
-                if !matches!(field.as_str(), "description" | "prompt" | "model" | "tools" | "disallowedTools" | "maxTurns" | "isolation" | "initialPrompt" | "permissionMode" | "skills" | "hooks" | "mcpServers") {
+                if !matches!(
+                    field.as_str(),
+                    "description"
+                        | "prompt"
+                        | "model"
+                        | "tools"
+                        | "disallowedTools"
+                        | "maxTurns"
+                        | "isolation"
+                        | "initialPrompt"
+                        | "permissionMode"
+                        | "skills"
+                        | "hooks"
+                        | "mcpServers"
+                ) {
                     bail!("SDK agent {name} field {field} is not yet supported");
                 }
             }
-            let description = definition.get("description")
+            let description = definition
+                .get("description")
                 .and_then(serde_json::Value::as_str)
                 .filter(|value| !value.trim().is_empty())
                 .with_context(|| format!("SDK agent {name} requires description"))?;
-            let prompt = definition.get("prompt")
+            let prompt = definition
+                .get("prompt")
                 .and_then(serde_json::Value::as_str)
                 .filter(|value| !value.trim().is_empty())
                 .with_context(|| format!("SDK agent {name} requires prompt"))?;
             let model = match definition.get("model") {
                 None => None,
                 Some(serde_json::Value::String(value)) if value == "inherit" => None,
-                Some(serde_json::Value::String(value)) if !value.trim().is_empty() => Some(value.clone()),
+                Some(serde_json::Value::String(value)) if !value.trim().is_empty() => {
+                    Some(value.clone())
+                }
                 Some(_) => bail!("SDK agent {name} model must be a nonempty string"),
             };
             let tools = match definition.get("tools") {
                 None => None,
-                Some(serde_json::Value::String(value)) => Some(value.split(',')
-                    .map(str::trim).filter(|tool| !tool.is_empty())
-                    .map(str::to_owned).collect()),
+                Some(serde_json::Value::String(value)) => Some(
+                    value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|tool| !tool.is_empty())
+                        .map(str::to_owned)
+                        .collect(),
+                ),
                 Some(serde_json::Value::Array(values)) => {
                     let mut names = std::collections::HashSet::new();
                     for value in values {
-                        let tool = value.as_str().filter(|value| !value.trim().is_empty())
+                        let tool = value
+                            .as_str()
+                            .filter(|value| !value.trim().is_empty())
                             .with_context(|| format!("SDK agent {name} tools must be strings"))?;
                         names.insert(tool.to_owned());
                     }
@@ -498,30 +538,42 @@ impl Agent {
             };
             let disallowed_tools = match definition.get("disallowedTools") {
                 None => std::collections::HashSet::new(),
-                Some(serde_json::Value::String(value)) => value.split(',')
-                    .map(str::trim).filter(|tool| !tool.is_empty())
-                    .map(str::to_owned).collect(),
+                Some(serde_json::Value::String(value)) => value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|tool| !tool.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
                 Some(serde_json::Value::Array(values)) => {
                     let mut names = std::collections::HashSet::new();
                     for value in values {
-                        let tool = value.as_str().filter(|value| !value.trim().is_empty())
-                            .with_context(|| format!("SDK agent {name} disallowedTools must be strings"))?;
+                        let tool = value
+                            .as_str()
+                            .filter(|value| !value.trim().is_empty())
+                            .with_context(|| {
+                                format!("SDK agent {name} disallowedTools must be strings")
+                            })?;
                         names.insert(tool.to_owned());
                     }
                     names
                 }
-                Some(_) => bail!("SDK agent {name} disallowedTools must be a list or comma-separated string"),
+                Some(_) => bail!(
+                    "SDK agent {name} disallowedTools must be a list or comma-separated string"
+                ),
             };
             // Source permissionSetup.ts normalizes legacy tool names. A
             // parameterized rule (e.g. Bash(git:*)) needs command-level
             // enforcement; reject it until that gate is implemented, rather
             // than accidentally granting unrestricted Bash access.
-            let normalize = |specs: std::collections::HashSet<String>, field: &str|
-                -> Result<std::collections::HashSet<String>> {
+            let normalize = |specs: std::collections::HashSet<String>,
+                             field: &str|
+             -> Result<std::collections::HashSet<String>> {
                 let mut normalized = std::collections::HashSet::new();
                 for spec in specs {
                     if spec.contains('(') || spec.contains(')') {
-                        bail!("SDK agent {name} {field} parameterized tool rules are not supported");
+                        bail!(
+                            "SDK agent {name} {field} parameterized tool rules are not supported"
+                        );
                     }
                     for item in spec.split_whitespace() {
                         normalized.insert(crate::tool_names::canonical_name(item).to_owned());
@@ -534,14 +586,20 @@ impl Agent {
             let max_turns = match definition.get("maxTurns") {
                 None => None,
                 Some(value) => {
-                    let limit = value.as_u64().filter(|value| *value > 0 && *value <= usize::MAX as u64)
-                        .with_context(|| format!("SDK agent {name} maxTurns must be a positive integer"))?;
+                    let limit = value
+                        .as_u64()
+                        .filter(|value| *value > 0 && *value <= usize::MAX as u64)
+                        .with_context(|| {
+                            format!("SDK agent {name} maxTurns must be a positive integer")
+                        })?;
                     Some(limit as usize)
                 }
             };
             let isolation = match definition.get("isolation") {
                 None => None,
-                Some(serde_json::Value::String(value)) if value == "worktree" => Some(value.clone()),
+                Some(serde_json::Value::String(value)) if value == "worktree" => {
+                    Some(value.clone())
+                }
                 Some(_) => bail!("SDK agent {name} isolation must be worktree"),
             };
             let initial_prompt = match definition.get("initialPrompt") {
@@ -566,8 +624,12 @@ impl Agent {
                 Some(serde_json::Value::Array(values)) => {
                     let mut names = Vec::new();
                     for value in values {
-                        let skill = value.as_str().filter(|value| !value.trim().is_empty())
-                            .with_context(|| format!("SDK agent {name} skills must be nonempty strings"))?;
+                        let skill = value
+                            .as_str()
+                            .filter(|value| !value.trim().is_empty())
+                            .with_context(|| {
+                                format!("SDK agent {name} skills must be nonempty strings")
+                            })?;
                         names.push(skill.to_owned());
                     }
                     names
@@ -601,20 +663,23 @@ impl Agent {
                 }
                 Some(_) => bail!("SDK agent {name} mcpServers must be an array"),
             };
-            parsed.insert(name.clone(), SdkAgentDefinition {
-                description: description.to_owned(),
-                prompt: prompt.to_owned(),
-                model,
-                tools,
-                disallowed_tools,
-                max_turns,
-                isolation,
-                initial_prompt,
-                permission_mode,
-                skills,
-                hooks,
-                mcp_servers,
-            });
+            parsed.insert(
+                name.clone(),
+                SdkAgentDefinition {
+                    description: description.to_owned(),
+                    prompt: prompt.to_owned(),
+                    model,
+                    tools,
+                    disallowed_tools,
+                    max_turns,
+                    isolation,
+                    initial_prompt,
+                    permission_mode,
+                    skills,
+                    hooks,
+                    mcp_servers,
+                },
+            );
         }
         self.sdk_agent_definitions = parsed;
         Ok(())
@@ -1275,8 +1340,10 @@ impl Agent {
             let approval = self.approval;
             let interactive = self.interactive;
             let steps = self.max_steps;
-            let mcps = self.mcp.as_ref().map_or_else(
-                || self.mcp_configs.clone(), McpManager::configured_servers);
+            let mcps = self
+                .mcp
+                .as_ref()
+                .map_or_else(|| self.mcp_configs.clone(), McpManager::configured_servers);
             let lsps = self.lsp_configs.clone();
             let hooks = self.hook_rules.clone();
             let plugins = self.enabled_plugins.clone();
@@ -1586,24 +1653,37 @@ impl Agent {
             .unwrap_or("general")
             .to_owned();
         let sdk_definition = self.sdk_agent_definitions.get(&agent_type).cloned();
-        let initial_prompt = sdk_definition.as_ref()
+        let initial_prompt = sdk_definition
+            .as_ref()
             .and_then(|definition| definition.initial_prompt.clone());
-        let sdk_hooks = sdk_definition.as_ref()
-            .map(|definition| definition.hooks.clone()).unwrap_or_default();
+        let sdk_hooks = sdk_definition
+            .as_ref()
+            .map(|definition| definition.hooks.clone())
+            .unwrap_or_default();
         // Validate the requested permission mode before creating a worktree
         // or starting any child process, so denied modes leave no side effects.
-        if let Some(mode) = sdk_definition.as_ref().and_then(|definition| definition.permission_mode) {
+        if let Some(mode) = sdk_definition
+            .as_ref()
+            .and_then(|definition| definition.permission_mode)
+        {
             let parent = self.permission_mode;
             let allowed = match mode {
                 permission_mode::Mode::Plan => true,
                 permission_mode::Mode::DontAsk => parent != permission_mode::Mode::Plan,
-                permission_mode::Mode::Default => matches!(parent,
-                    permission_mode::Mode::Default | permission_mode::Mode::AcceptEdits
-                    | permission_mode::Mode::BypassPermissions),
-                permission_mode::Mode::AcceptEdits => matches!(parent,
-                    permission_mode::Mode::AcceptEdits | permission_mode::Mode::BypassPermissions),
-                permission_mode::Mode::BypassPermissions => parent == permission_mode::Mode::BypassPermissions
-                    && self.approval == Approval::Full,
+                permission_mode::Mode::Default => matches!(
+                    parent,
+                    permission_mode::Mode::Default
+                        | permission_mode::Mode::AcceptEdits
+                        | permission_mode::Mode::BypassPermissions
+                ),
+                permission_mode::Mode::AcceptEdits => matches!(
+                    parent,
+                    permission_mode::Mode::AcceptEdits | permission_mode::Mode::BypassPermissions
+                ),
+                permission_mode::Mode::BypassPermissions => {
+                    parent == permission_mode::Mode::BypassPermissions
+                        && self.approval == Approval::Full
+                }
                 permission_mode::Mode::Auto => false,
             };
             if !allowed {
@@ -1633,10 +1713,13 @@ impl Agent {
         let mut agent_mcp_configs = Vec::new();
         if let Some(definition) = &sdk_definition {
             if !definition.mcp_servers.is_empty() {
-                let inherited = self.mcp.as_ref().map_or_else(
-                    || self.mcp_configs.clone(), McpManager::configured_servers);
-                let settings = crate::permission_settings::SettingsPaths::for_workspace(&self.root)?
-                    .settings_snapshot(&self.profile.model)?;
+                let inherited = self
+                    .mcp
+                    .as_ref()
+                    .map_or_else(|| self.mcp_configs.clone(), McpManager::configured_servers);
+                let settings =
+                    crate::permission_settings::SettingsPaths::for_workspace(&self.root)?
+                        .settings_snapshot(&self.profile.model)?;
                 for spec in &definition.mcp_servers {
                     if let Some(name) = spec.as_str() {
                         if !inherited.iter().any(|server| server.id == name) {
@@ -1647,14 +1730,19 @@ impl Agent {
                     let entries = spec.as_object().context("Invalid agent MCP server map")?;
                     for (name, raw) in entries {
                         if inherited.iter().any(|server| server.id == *name)
-                            || agent_mcp_configs.iter().any(|server: &McpServerConfig| server.id == *name) {
+                            || agent_mcp_configs
+                                .iter()
+                                .any(|server: &McpServerConfig| server.id == *name)
+                        {
                             bail!("Duplicate agent MCP server name {name}");
                         }
-                        let mut value = raw.as_object().cloned()
+                        let mut value = raw
+                            .as_object()
+                            .cloned()
                             .context("Inline agent MCP server must be an object")?;
                         value.insert("id".to_owned(), json!(name));
-                        let server: McpServerConfig = serde_json::from_value(
-                            serde_json::Value::Object(value))?;
+                        let server: McpServerConfig =
+                            serde_json::from_value(serde_json::Value::Object(value))?;
                         if server.transport.as_deref() == Some("sdk") {
                             bail!("SDK-owned in-process MCP transport is unavailable");
                         }
@@ -1672,7 +1760,11 @@ impl Agent {
         let isolation = args
             .get("isolation")
             .and_then(|v| v.as_str())
-            .or_else(|| sdk_definition.as_ref().and_then(|definition| definition.isolation.as_deref()))
+            .or_else(|| {
+                sdk_definition
+                    .as_ref()
+                    .and_then(|definition| definition.isolation.as_deref())
+            })
             .unwrap_or("none");
         if !matches!(isolation, "none" | "worktree") {
             bail!("Unknown isolation mode {isolation}");
@@ -1690,8 +1782,11 @@ impl Agent {
             .map(|w| w.path.clone())
             .unwrap_or_else(|| self.root.clone());
         let mut child_profile = self.profile.clone();
-        if let Some(model) = args.get("model").and_then(|v| v.as_str())
-            .or_else(|| sdk_definition.as_ref().and_then(|definition| definition.model.as_deref())) {
+        if let Some(model) = args.get("model").and_then(|v| v.as_str()).or_else(|| {
+            sdk_definition
+                .as_ref()
+                .and_then(|definition| definition.model.as_deref())
+        }) {
             if model.trim().is_empty() {
                 bail!("Subagent model cannot be empty");
             }
@@ -1733,8 +1828,10 @@ impl Agent {
             }
         }
         let result = async {
-            let mut inherited_mcp = self.mcp.as_ref().map_or_else(
-                || self.mcp_configs.clone(), McpManager::configured_servers);
+            let mut inherited_mcp = self
+                .mcp
+                .as_ref()
+                .map_or_else(|| self.mcp_configs.clone(), McpManager::configured_servers);
             inherited_mcp.extend(agent_mcp_configs.clone());
             child.attach_mcp(&inherited_mcp).await?;
             child.attach_lsp(&self.lsp_configs).await?;
@@ -1762,8 +1859,10 @@ impl Agent {
             // Source main.tsx prepends an agent's initialPrompt to the first
             // user turn, preserving the caller's task as trailing context.
             for (name, content) in &skill_prompts {
-                child.session.messages.push(Message::text("user",
-                    format!("Preloaded agent skill {name}:\n{content}")));
+                child.session.messages.push(Message::text(
+                    "user",
+                    format!("Preloaded agent skill {name}:\n{content}"),
+                ));
             }
             let mut continuation = match initial_prompt {
                 Some(initial) if !initial.is_empty() => format!("{initial}\n\n{prompt}"),
@@ -2058,7 +2157,9 @@ impl Agent {
             crate::history::enabled(self.interactive, self.file_checkpointing_enabled);
         if history_enabled {
             crate::history::copy_for_resume(
-                &self.root, &original_id.to_string(), &child.id.to_string(),
+                &self.root,
+                &original_id.to_string(),
+                &child.id.to_string(),
             )?;
         }
         if let Err(error) = child.save(&self.root) {
@@ -2178,29 +2279,38 @@ impl Agent {
     /// Consume completed hooks while the SDK is idle and between Agent API
     /// rounds. Model-visible attachments and UI notifications are once-only.
     pub async fn pump_async_hook_events(&mut self) -> Result<usize> {
-        let events = crate::hooks::collect_async_hook_responses(
-            &self.session.id.to_string()
-        ).await;
+        let events = crate::hooks::collect_async_hook_responses(&self.session.id.to_string()).await;
         let count = events.len();
         for event in events {
             self.emit(event.clone());
-            let stdout = event["stdout"].as_str().unwrap_or("").lines()
-                .filter(|line| serde_json::from_str::<serde_json::Value>(line.trim())
-                    .ok().is_none_or(|value| value.get("async") != Some(&json!(true))))
-                .collect::<Vec<_>>().join("\n");
+            let stdout = event["stdout"]
+                .as_str()
+                .unwrap_or("")
+                .lines()
+                .filter(|line| {
+                    serde_json::from_str::<serde_json::Value>(line.trim())
+                        .ok()
+                        .is_none_or(|value| value.get("async") != Some(&json!(true)))
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
             let body = if event["outcome"] == "success" {
                 stdout.trim().to_owned()
             } else {
-                format!("Async hook {}: {}",
+                format!(
+                    "Async hook {}: {}",
                     event["outcome"].as_str().unwrap_or("failed"),
-                    event["stderr"].as_str().unwrap_or(""))
+                    event["stderr"].as_str().unwrap_or("")
+                )
             };
             if !body.trim().is_empty() {
                 self.session.messages.push(Message::text(
                     "user",
-                    format!("[Asynchronous {} hook result]\n{}",
+                    format!(
+                        "[Asynchronous {} hook result]\n{}",
                         event["hook_event_name"].as_str().unwrap_or("Hook"),
-                        body),
+                        body
+                    ),
                 ));
                 self.session.save(&self.root)?;
             }
@@ -2210,7 +2320,9 @@ impl Agent {
 
     pub fn sdk_title_request(&self, description: &str) -> Option<ModelRequest> {
         let description = description.trim();
-        if description.is_empty() { return None; }
+        if description.is_empty() {
+            return None;
+        }
         let system = concat!(
             "Generate a concise, sentence-case title (3-7 words) that captures ",
             "the main topic or goal of this coding session. The title should be ",
@@ -2245,9 +2357,9 @@ impl Agent {
         self.session.cost.add_api_duration(elapsed);
         if let Some(usage) = usage {
             self.session.usage.accumulate(usage);
-            self.session.cost.record(
-                &model.id, &model.model, usage, &self.model_prices,
-            );
+            self.session
+                .cost
+                .record(&model.id, &model.model, usage, &self.model_prices);
         }
         if persist {
             if let Some(value) = title.as_ref() {
@@ -2289,13 +2401,22 @@ impl Agent {
         }
         // Account for the model call even when output is invalid or persist=false.
         self.session.save(&self.root)?;
-        if completion.message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
+        if completion
+            .message
+            .tool_calls
+            .as_ref()
+            .is_some_and(|calls| !calls.is_empty())
+        {
             return Ok(None);
         }
-        let title = serde_json::from_str::<serde_json::Value>(
-            &completion.message.visible_text(),
-        ).ok()
-            .and_then(|value| value.get("title").and_then(|v| v.as_str()).map(str::to_owned))
+        let title = serde_json::from_str::<serde_json::Value>(&completion.message.visible_text())
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            })
             .map(|title| title.trim().to_owned())
             .filter(|title| !title.is_empty());
         if persist {
@@ -2341,16 +2462,24 @@ impl Agent {
     ) -> Result<serde_json::Value> {
         let requested_id = uuid::Uuid::parse_str(user_message_id)
             .context("rewind_files requires a user message UUID")?;
-        let id = self.session.history_message_aliases
-            .get(&requested_id).copied().unwrap_or(requested_id);
-        let start = self.session.history_message_ids.iter()
+        let id = self
+            .session
+            .history_message_aliases
+            .get(&requested_id)
+            .copied()
+            .unwrap_or(requested_id);
+        let start = self
+            .session
+            .history_message_ids
+            .iter()
             .position(|saved| *saved == id)
             .context("User message was not found in session file history")?;
         if !crate::history::enabled(self.interactive, self.file_checkpointing_enabled) {
             bail!("File checkpointing is disabled");
         }
         let records = crate::history::records_for_message_sequence(
-            &self.root, &self.session.id.to_string(),
+            &self.root,
+            &self.session.id.to_string(),
             &self.session.history_message_ids[start..],
         )?;
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
@@ -2446,9 +2575,10 @@ impl Agent {
         if let Some(mcp) = &self.mcp {
             system.push_str(&mcp.instruction_context());
         }
-        let mut definitions = tools::definitions_with_checkpointing(
-            crate::history::enabled(self.interactive, self.file_checkpointing_enabled),
-        );
+        let mut definitions = tools::definitions_with_checkpointing(crate::history::enabled(
+            self.interactive,
+            self.file_checkpointing_enabled,
+        ));
         if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
             definitions.push(tools::powershell_definition());
         }
@@ -2495,7 +2625,8 @@ impl Agent {
             // If the transcript was replaced, use its current contents
             // rather than accidentally resurrecting an earlier turn.
             if self.session.messages.starts_with(&fork.messages) {
-                fork.messages.extend(self.session.messages[fork.messages.len()..].iter().cloned());
+                fork.messages
+                    .extend(self.session.messages[fork.messages.len()..].iter().cloned());
             } else {
                 fork.messages = self.session.messages.clone();
             }
@@ -2546,7 +2677,8 @@ impl Agent {
     /// agent definition through a tool-free model request, without changing
     /// the active conversation transcript or binding to a specific vendor.
     pub async fn generate_custom_agent_definition(
-        &mut self, description: &str,
+        &mut self,
+        description: &str,
     ) -> Result<crate::agent_definition::AgentDefinition> {
         if description.trim().is_empty() {
             bail!("Describe the custom agent you want to create");
@@ -2561,7 +2693,10 @@ impl Agent {
             system,
             messages: vec![Message::text(
                 "user",
-                format!("Create an agent configuration based on this request: {}", description.trim()),
+                format!(
+                    "Create an agent configuration based on this request: {}",
+                    description.trim()
+                ),
             )],
             tools: Vec::new(),
         };
@@ -2582,14 +2717,18 @@ impl Agent {
         let text = response.message.visible_text();
         let trimmed = text.trim();
         let parsed = serde_json::from_str::<serde_json::Value>(trimmed).or_else(|_| {
-            let start = trimmed.find('{').ok_or_else(|| anyhow::anyhow!("No JSON object in agent generation"))?;
-            let end = trimmed.rfind('}').ok_or_else(|| anyhow::anyhow!("Incomplete JSON object in agent generation"))?;
-            Ok::<serde_json::Value, anyhow::Error>(
-                serde_json::from_str(&trimmed[start..=end])?
-            )
+            let start = trimmed
+                .find('{')
+                .ok_or_else(|| anyhow::anyhow!("No JSON object in agent generation"))?;
+            let end = trimmed
+                .rfind('}')
+                .ok_or_else(|| anyhow::anyhow!("Incomplete JSON object in agent generation"))?;
+            Ok::<serde_json::Value, anyhow::Error>(serde_json::from_str(&trimmed[start..=end])?)
         })?;
         let field = |key: &str| -> Result<String> {
-            parsed.get(key).and_then(serde_json::Value::as_str)
+            parsed
+                .get(key)
+                .and_then(serde_json::Value::as_str)
                 .filter(|value| !value.trim().is_empty())
                 .map(str::to_owned)
                 .with_context(|| format!("Generated agent is missing {key}"))
@@ -2656,13 +2795,15 @@ impl Agent {
                 let content = fs::read_to_string(&path)
                     .with_context(|| format!("Read agent definition {}", path.display()))?;
                 let metadata = sdk_agent_metadata(&content);
-                let Some(description) = metadata.get("description")
+                let Some(description) = metadata
+                    .get("description")
                     .filter(|description| !description.trim().is_empty())
                 else {
                     continue;
                 };
                 let mut agent = json!({"name":name,"description":description});
-                if let Some(model) = metadata.get("model")
+                if let Some(model) = metadata
+                    .get("model")
                     .filter(|model| !model.is_empty() && model.as_str() != "inherit")
                 {
                     agent["model"] = json!(model);
@@ -2801,11 +2942,13 @@ impl Agent {
         let mut rejected = serde_json::Map::new();
         for (name, raw) in requested {
             let outcome: Result<McpServerConfig> = (|| {
-                let mut config = raw.as_object().cloned()
+                let mut config = raw
+                    .as_object()
+                    .cloned()
                     .context("MCP server configuration must be an object")?;
                 config.insert("id".to_owned(), json!(name));
-                let server: McpServerConfig = serde_json::from_value(
-                    serde_json::Value::Object(config))?;
+                let server: McpServerConfig =
+                    serde_json::from_value(serde_json::Value::Object(config))?;
                 if self.mcp_configs.iter().any(|fixed| fixed.id == server.id) {
                     bail!("SDK dynamic server name conflicts with a fixed MCP server");
                 }
@@ -2830,9 +2973,16 @@ impl Agent {
         if self.mcp.is_none() {
             self.mcp = Some(McpManager::connect_with_root(&[], &self.root).await?);
         }
-        let mut result = self.mcp.as_mut().context("MCP manager missing")?
-            .reconcile_dynamic(accepted).await?;
-        if let Some(errors) = result.get_mut("errors").and_then(serde_json::Value::as_object_mut) {
+        let mut result = self
+            .mcp
+            .as_mut()
+            .context("MCP manager missing")?
+            .reconcile_dynamic(accepted)
+            .await?;
+        if let Some(errors) = result
+            .get_mut("errors")
+            .and_then(serde_json::Value::as_object_mut)
+        {
             errors.extend(rejected);
         }
         self.last_context_usage = None;
@@ -2844,19 +2994,33 @@ impl Agent {
     /// A failed enable remains enabled in settings and visible as a failed
     /// connection, so a later reconnect can recover without reconfiguration.
     pub async fn toggle_named_mcp(
-        &mut self, name: &str, enabled: bool,
+        &mut self,
+        name: &str,
+        enabled: bool,
     ) -> Result<serde_json::Value> {
         if self.mcp.is_none() {
             bail!("No MCP servers configured");
         }
-        if !self.mcp.as_ref().is_some_and(|manager| manager.configured(name)) {
+        if !self
+            .mcp
+            .as_ref()
+            .is_some_and(|manager| manager.configured(name))
+        {
             bail!("MCP server {name:?} not found");
         }
         let mut disabled = load_disabled_mcp_servers()?;
-        if enabled { disabled.remove(name); } else { disabled.insert(name.to_owned()); }
+        if enabled {
+            disabled.remove(name);
+        } else {
+            disabled.insert(name.to_owned());
+        }
         save_disabled_mcp_servers(&disabled)?;
-        let result = self.mcp.as_mut().context("No MCP servers configured")?
-            .toggle_named(name, enabled).await;
+        let result = self
+            .mcp
+            .as_mut()
+            .context("No MCP servers configured")?
+            .toggle_named(name, enabled)
+            .await;
         self.last_context_usage = None;
         self.last_side_question_request = None;
         result
@@ -2975,7 +3139,13 @@ impl Agent {
             .with_context(|| format!("Unknown MCP prompt {}:{}", call.server, call.name))?;
         let args = crate::mcp_prompt::named_arguments(prompt, &call.args)?;
         let result = mcp.get_prompt(&call.server, &call.name, &args).await?;
-        crate::mcp_prompt::render_content_in_workspace(&call.server, &call.name, &result, &self.root).map(Some)
+        crate::mcp_prompt::render_content_in_workspace(
+            &call.server,
+            &call.name,
+            &result,
+            &self.root,
+        )
+        .map(Some)
     }
 
     pub fn background_tasks(&self) -> Result<String> {
@@ -3066,9 +3236,13 @@ impl Agent {
             "<local-command-caveat>Caveat: The messages below were generated by the user while running local commands. DO NOT respond to these messages or otherwise consider them in your response unless the user explicitly asks you to.</local-command-caveat>");
         let input = Message::text("user", format!(
             "<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args>{requested}</command-args>"));
-        let output = Message::text("user", format!(
-            "<local-command-stdout>Set model to {resolved}</local-command-stdout>"));
-        self.session.messages.extend([caveat, input, output.clone()]);
+        let output = Message::text(
+            "user",
+            format!("<local-command-stdout>Set model to {resolved}</local-command-stdout>"),
+        );
+        self.session
+            .messages
+            .extend([caveat, input, output.clone()]);
         if let Err(error) = self.session.save(&self.root) {
             self.session.messages.truncate(previous_len);
             if let Err(rollback) = self.switch_model(previous_profile) {
@@ -3547,7 +3721,9 @@ impl Agent {
         if loaded.id == self.session.id {
             return Ok(format!("Already using session {}", loaded.id));
         }
-        let mode = loaded.permission_mode.as_deref()
+        let mode = loaded
+            .permission_mode
+            .as_deref()
             .map(permission_mode::Mode::from_persisted_string)
             .unwrap_or(self.permission_mode);
         if mode == permission_mode::Mode::BypassPermissions && self.approval != Approval::Full {
@@ -3561,17 +3737,22 @@ impl Agent {
         }
         let background = Arc::new(BackgroundTasks::for_session(&self.root, loaded.id)?);
         let graph = task_graph::TaskGraph::new(
-            &self.root, &task_list_id(loaded.id, loaded.team_name.as_deref()),
+            &self.root,
+            &task_list_id(loaded.id, loaded.team_name.as_deref()),
         )?;
         let metrics = Arc::new(ToolMetrics::with_totals(
-            loaded.cost.total_lines_added, loaded.cost.total_lines_removed,
+            loaded.cost.total_lines_added,
+            loaded.cost.total_lines_removed,
         ));
         // Run the old session's exit hook before changing its identity.
-        let end = self.hooks.run(HookEvent::SessionEnd, None, {
-            let mut input = self.base_hook_input();
-            input["reason"] = json!("other");
-            input
-        }).await?;
+        let end = self
+            .hooks
+            .run(HookEvent::SessionEnd, None, {
+                let mut input = self.base_hook_input();
+                input["reason"] = json!("other");
+                input
+            })
+            .await?;
         self.report_hook_warnings(HookEvent::SessionEnd, &end);
         self.session.save(&self.root)?;
         self.background.stop_all().await;
@@ -3594,12 +3775,16 @@ impl Agent {
         self.session_context.clear();
         self.pending_initial_user_message = None;
         self.transient_mailbox = in_memory_mailbox::Mailbox::new();
-        let start = match self.hooks.run(HookEvent::SessionStart, None, {
-            let mut input = self.base_hook_input();
-            input["source"] = json!("resume");
-            input["model"] = json!(self.profile.model);
-            input
-        }).await {
+        let start = match self
+            .hooks
+            .run(HookEvent::SessionStart, None, {
+                let mut input = self.base_hook_input();
+                input["source"] = json!("resume");
+                input["model"] = json!(self.profile.model);
+                input
+            })
+            .await
+        {
             Ok(start) => start,
             Err(error) => {
                 // Session identity was already changed. Report the hook
@@ -4033,18 +4218,27 @@ impl Agent {
             }
             if !self.sdk_disallowed_tools.is_empty() {
                 available_tools.retain(|tool| {
-                    tool.pointer("/function/name").or_else(|| tool.get("name"))
+                    tool.pointer("/function/name")
+                        .or_else(|| tool.get("name"))
                         .and_then(serde_json::Value::as_str)
-                        .is_some_and(|name| !self.sdk_disallowed_tools.contains(name)
-                            && !self.sdk_disallowed_tools.contains(crate::tool_names::canonical_name(name)))
+                        .is_some_and(|name| {
+                            !self.sdk_disallowed_tools.contains(name)
+                                && !self
+                                    .sdk_disallowed_tools
+                                    .contains(crate::tool_names::canonical_name(name))
+                        })
                 });
             }
             if let Some(allowed) = &self.sdk_allowed_tools {
                 available_tools.retain(|tool| {
-                    tool.pointer("/function/name").or_else(|| tool.get("name"))
+                    tool.pointer("/function/name")
+                        .or_else(|| tool.get("name"))
                         .and_then(serde_json::Value::as_str)
-                        .is_some_and(|name| allowed.contains("*") || allowed.contains(name)
-                            || allowed.contains(crate::tool_names::canonical_name(name)))
+                        .is_some_and(|name| {
+                            allowed.contains("*")
+                                || allowed.contains(name)
+                                || allowed.contains(crate::tool_names::canonical_name(name))
+                        })
                 });
             }
             let complete_catalog = available_tools;
@@ -4120,9 +4314,10 @@ impl Agent {
             // tool call must never execute merely because its JSON parses.
             // Keep the partial message and usage for recovery, but stop before
             // dispatching any tools or invoking Stop hooks.
-            if matches!(finish.as_deref(), Some(
-                "length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded"
-            )) {
+            if matches!(
+                finish.as_deref(),
+                Some("length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded")
+            ) {
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
                 bail!("Model reached its output limit before completion; session saved")
@@ -4130,14 +4325,24 @@ impl Agent {
             // The original errors.ts::getErrorMessageIfRefusal surfaces an
             // explicit refusal instead of treating an empty answer as success.
             // Keep this provider-neutral and do not dispatch partial tools.
-            if matches!(finish.as_deref(), Some(
-                "refusal" | "content_filter" | "SAFETY" | "PROHIBITED_CONTENT"
-                | "BLOCKLIST" | "RECITATION" | "SPII"
-            )) {
+            if matches!(
+                finish.as_deref(),
+                Some(
+                    "refusal"
+                        | "content_filter"
+                        | "SAFETY"
+                        | "PROHIBITED_CONTENT"
+                        | "BLOCKLIST"
+                        | "RECITATION"
+                        | "SPII"
+                )
+            ) {
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
-                bail!("Model declined to generate a response ({}); session saved",
-                    finish.as_deref().unwrap_or("refusal"))
+                bail!(
+                    "Model declined to generate a response ({}); session saved",
+                    finish.as_deref().unwrap_or("refusal")
+                )
             }
             if calls.is_empty() {
                 if self.absorb_team_messages()? {
@@ -4215,11 +4420,17 @@ impl Agent {
                 let restricted_by_role = (self.child_depth > 0
                     && self.prompt_role.as_deref().is_some_and(|role| {
                         !crate::prompt_runtime::tool_allowed_for_role(role, &call.function.name)
-                    })) || self.sdk_allowed_tools.as_ref().is_some_and(|allowed| {
-                        !allowed.contains("*") && !allowed.contains(&call.function.name)
-                            && !allowed.contains(crate::tool_names::canonical_name(&call.function.name))
-                    }) || self.sdk_disallowed_tools.contains(&call.function.name)
-                        || self.sdk_disallowed_tools.contains(crate::tool_names::canonical_name(&call.function.name));
+                    }))
+                    || self.sdk_allowed_tools.as_ref().is_some_and(|allowed| {
+                        !allowed.contains("*")
+                            && !allowed.contains(&call.function.name)
+                            && !allowed
+                                .contains(crate::tool_names::canonical_name(&call.function.name))
+                    })
+                    || self.sdk_disallowed_tools.contains(&call.function.name)
+                    || self
+                        .sdk_disallowed_tools
+                        .contains(crate::tool_names::canonical_name(&call.function.name));
                 let invalid_input = if restricted_by_role {
                     Some(format!(
                         "Tool {} is unavailable to this agent's tool policy",
@@ -4232,15 +4443,19 @@ impl Agent {
                             if matches!(call.function.name.as_str(), "Read" | "Edit" | "Write") {
                                 let mut normalized = value.clone();
                                 crate::semantic_inputs::normalize_source_file_tool(
-                                    &call.function.name, &mut normalized,
-                                )
-                                .and_then(|_| crate::semantic_inputs::normalize_tool_fields(
-                                    crate::tool_names::canonical_name(&call.function.name),
+                                    &call.function.name,
                                     &mut normalized,
-                                ))
+                                )
+                                .and_then(|_| {
+                                    crate::semantic_inputs::normalize_tool_fields(
+                                        crate::tool_names::canonical_name(&call.function.name),
+                                        &mut normalized,
+                                    )
+                                })
                                 .err()
-                                .map(|error| format!(
-                                    "Invalid {} arguments: {error:#}", call.function.name))
+                                .map(|error| {
+                                    format!("Invalid {} arguments: {error:#}", call.function.name)
+                                })
                             } else if matches!(
                                 crate::tool_names::canonical_name(&call.function.name),
                                 "grep_files" | "glob_files"
@@ -4252,14 +4467,20 @@ impl Agent {
                                 .err()
                                 .map(|error| format!("Invalid search arguments: {error:#}"))
                             } else if task_graph::handles(&call.function.name) {
-                                task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
-                                    .err()
-                                    .map(|error| format!("Invalid {} arguments: {error:#}", call.function.name))
+                                task_graph::TaskGraph::validate_tool_input(
+                                    &call.function.name,
+                                    &value,
+                                )
+                                .err()
+                                .map(|error| {
+                                    format!("Invalid {} arguments: {error:#}", call.function.name)
+                                })
                             } else if matches!(
                                 crate::tool_names::canonical_name(&call.function.name),
                                 "task_stop" | "KillShell"
                             ) {
-                                executor.validate_task_stop(&value)
+                                executor
+                                    .validate_task_stop(&value)
                                     .err()
                                     .map(|error| format!("Invalid TaskStop arguments: {error:#}"))
                             } else if crate::tool_names::canonical_name(&call.function.name)
@@ -4281,7 +4502,7 @@ impl Agent {
                             } else {
                                 None
                             }
-                        },
+                        }
                         Ok(_) => Some("Tool arguments must be a JSON object".to_owned()),
                     }
                 };
@@ -4529,10 +4750,9 @@ fn system_prompt(root: &Path) -> Result<String> {
 
 fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<String> {
     let mut prompt = format!("{DEFAULT_SYSTEM}\nCurrent workspace: {}\n", root.display());
-    prompt.push_str(&crate::conversation_context::project_instructions_with_dirs(
-        root,
-        additional_dirs,
-    )?);
+    prompt.push_str(
+        &crate::conversation_context::project_instructions_with_dirs(root, additional_dirs)?,
+    );
     if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
         let instructions = crate::prompt_runtime::output_style_instructions(root, &style)?;
         prompt.push_str("\nOutput style:\n");
@@ -4611,11 +4831,16 @@ mod tests {
             .graph
             .create(&json!({"subject":"Verify","description":"Check tests"}))
             .unwrap();
-        agent.hooks = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
+        agent.hooks = HookRunner::new(&[HookRule {
+            async_background: false,
+            async_rewake: false,
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::TaskCompleted,
             matcher: None,
             command: "printf '{\"decision\":\"block\",\"reason\":\"Tests missing\"}'".into(),
-            shell: None, timeout_seconds: 5,
+            shell: None,
+            timeout_seconds: 5,
         }])
         .unwrap();
         let call = ToolCall {
@@ -6080,17 +6305,27 @@ done"#;
         let log_path = root.join("hook-events.log");
         let shell = |event: &str| format!("printf '{}\\n' >> '{}'", event, log_path.display());
         agent.hooks = HookRunner::new(&[
-            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
+            HookRule {
+                async_background: false,
+                async_rewake: false,
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::SessionEnd,
                 matcher: None,
                 command: shell("end"),
-                shell: None, timeout_seconds: 5,
+                shell: None,
+                timeout_seconds: 5,
             },
-            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
+            HookRule {
+                async_background: false,
+                async_rewake: false,
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::SessionStart,
                 matcher: None,
                 command: shell("start"),
-                shell: None, timeout_seconds: 5,
+                shell: None,
+                timeout_seconds: 5,
             },
         ])
         .unwrap();

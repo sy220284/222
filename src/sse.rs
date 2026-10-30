@@ -25,7 +25,10 @@ impl Assembler {
                 .and_then(Value::as_str)
                 .or_else(|| error.as_str())
                 .unwrap_or("provider reported a streaming error");
-            bail!("Model stream error: {}", detail.chars().take(500).collect::<String>());
+            bail!(
+                "Model stream error: {}",
+                detail.chars().take(500).collect::<String>()
+            );
         }
         if let Some(usage) = value.get("usage") {
             if usage.is_object() {
@@ -78,7 +81,10 @@ impl Assembler {
         // delta field while the final finish_reason is simply "stop".
         // Do not silently drop that field and return an empty success.
         if let Some(refusal) = delta.get("refusal").and_then(Value::as_str) {
-            bail!("Model refused the request: {}", refusal.chars().take(500).collect::<String>());
+            bail!(
+                "Model refused the request: {}",
+                refusal.chars().take(500).collect::<String>()
+            );
         }
         if let Some(text) = delta.get("content").and_then(Value::as_str) {
             self.content.push_str(text);
@@ -162,7 +168,10 @@ fn consume_frame(
     let mut data = Vec::new();
     let mut error_event = false;
     for line in lines.lines() {
-        if line.strip_prefix("event:").is_some_and(|name| name.trim() == "error") {
+        if line
+            .strip_prefix("event:")
+            .is_some_and(|name| name.trim() == "error")
+        {
             error_event = true;
         }
         if let Some(body) = line.strip_prefix("data:") {
@@ -178,11 +187,15 @@ fn consume_frame(
     }
     let value: Value = serde_json::from_str(&payload).context("Invalid model SSE event")?;
     if error_event {
-        let detail = value.pointer("/error/message")
+        let detail = value
+            .pointer("/error/message")
             .or_else(|| value.get("message"))
             .and_then(Value::as_str)
             .unwrap_or("provider reported an SSE error event");
-        bail!("Model stream error: {}", detail.chars().take(500).collect::<String>());
+        bail!(
+            "Model stream error: {}",
+            detail.chars().take(500).collect::<String>()
+        );
     }
     assembler.consume(&value, deltas)?;
     Ok(false)
@@ -239,7 +252,8 @@ pub async fn complete(
     // total deadline to a healthy multi-minute model generation.
     while let Some(part) = tokio::time::timeout(idle_timeout, stream.next())
         .await
-        .context("Model stream idle timeout")? {
+        .context("Model stream idle timeout")?
+    {
         buffered.extend_from_slice(&part?);
         // A single network read can contain many valid small SSE frames.
         // Enforce the bound only on the unconsumed frame after draining.
@@ -322,8 +336,9 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let (mut connection, _) = listener.accept().await.unwrap();
-            let mut data = [0u8; 4096];
-            connection.read_exact(&mut data[..1]).await.unwrap();
+            crate::test_http::consume_request(&mut connection)
+                .await
+                .unwrap();
             let payload=concat!(
                 "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\n",
                 "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\n\n",
@@ -368,8 +383,9 @@ mod tests {
         let server = tokio::spawn(async move {
             for attempt in 0..2 {
                 let (mut socket, _) = listener.accept().await.unwrap();
-                let mut data = [0u8; 4096];
-                socket.read_exact(&mut data[..1]).await.unwrap();
+                crate::test_http::consume_request(&mut socket)
+                    .await
+                    .unwrap();
                 let (status, body) = if attempt == 0 {
                     (
                         "503 Service Unavailable",

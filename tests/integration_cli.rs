@@ -3642,18 +3642,19 @@ fn sdk_mcp_resource_subscriptions_preserve_notifications_and_idempotence() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("mcp-subscriptions.json");
     let script = r#"while IFS= read -r line; do
+id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
 case "$line" in
-  *'"id":1'*)
-    echo '{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"resources":{"subscribe":true}}}}' ;;
-  *'"id":2'*)
-    echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}' ;;
-  *'"id":3'*)
+  *'"method":"initialize"'*)
+    echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"capabilities\":{\"resources\":{\"subscribe\":true}}}}" ;;
+  *'"method":"tools/list"'*)
+    echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"tools\":[]}}" ;;
+  *'"method":"resources/subscribe"'*)
     echo '{"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"file:///document","revision":2}}'
-    echo '{"jsonrpc":"2.0","id":3,"result":{}}' ;;
-  *'"id":4'*)
-    echo '{"jsonrpc":"2.0","id":4,"result":{}}' ;;
-  *)
-    echo '{"jsonrpc":"2.0","id":999,"error":{"code":-32601,"message":"unexpected request"}}' ;;
+    echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{}}" ;;
+  *'"method":"resources/unsubscribe"'*)
+    echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{}}" ;;
+  *'"id":'*)
+    echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"error\":{\"code\":-32601,\"message\":\"unexpected request\"}}" ;;
 esac
 done"#;
     fs::write(

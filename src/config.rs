@@ -64,25 +64,45 @@ pub struct SearchBackend {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Original fileHistoryEnabled user setting, enabled for interactive sessions.
-    #[serde(default = "default_file_checkpointing", rename = "fileCheckpointingEnabled", alias = "file_checkpointing_enabled")]
+    #[serde(
+        default = "default_file_checkpointing",
+        rename = "fileCheckpointingEnabled",
+        alias = "file_checkpointing_enabled"
+    )]
     pub file_checkpointing_enabled: bool,
     pub default_provider: String,
     pub providers: Vec<ProviderProfile>,
     #[serde(default)]
     pub additional_directories: Vec<String>,
     /// Glob patterns for project/user/local instruction files omitted from model context.
-    #[serde(default, rename = "instructionExcludes", alias = "instruction_excludes")]
+    #[serde(
+        default,
+        rename = "instructionExcludes",
+        alias = "instruction_excludes"
+    )]
     pub instruction_excludes: Vec<String>,
     /// Per-source instruction switches: user, project and local (default enabled).
     #[serde(default, rename = "instructionSources", alias = "instruction_sources")]
     pub instruction_sources: std::collections::HashMap<String, bool>,
     /// Per-project approval, keyed by canonical workspace path, for external @includes.
-    #[serde(default, rename = "approvedExternalInstructionIncludes", alias = "approved_external_instruction_includes")]
+    #[serde(
+        default,
+        rename = "approvedExternalInstructionIncludes",
+        alias = "approved_external_instruction_includes"
+    )]
     pub approved_external_instruction_includes: std::collections::HashMap<String, bool>,
     /// Administrator-provided global instructions, independent of user/project switches.
-    #[serde(default, rename = "managedInstructionFile", alias = "managed_instruction_file")]
+    #[serde(
+        default,
+        rename = "managedInstructionFile",
+        alias = "managed_instruction_file"
+    )]
     pub managed_instruction_file: Option<String>,
-    #[serde(default, rename = "managedRulesDirectory", alias = "managed_rules_directory")]
+    #[serde(
+        default,
+        rename = "managedRulesDirectory",
+        alias = "managed_rules_directory"
+    )]
     pub managed_rules_directory: Option<String>,
     #[serde(default)]
     pub default_shell: Option<String>,
@@ -112,7 +132,9 @@ pub struct Config {
     pub model_prices: Vec<ModelPrice>,
 }
 
-fn default_file_checkpointing() -> bool { true }
+fn default_file_checkpointing() -> bool {
+    true
+}
 
 impl Default for Config {
     fn default() -> Self {

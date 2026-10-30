@@ -62,11 +62,19 @@ fn block_tokens(block: &Value) -> (u64, u64) {
             0,
         ),
         Some("thinking") => (
-            block.get("thinking").and_then(Value::as_str).map(estimate).unwrap_or(0),
+            block
+                .get("thinking")
+                .and_then(Value::as_str)
+                .map(estimate)
+                .unwrap_or(0),
             0,
         ),
         Some("redacted_thinking") => (
-            block.get("data").and_then(Value::as_str).map(estimate).unwrap_or(0),
+            block
+                .get("data")
+                .and_then(Value::as_str)
+                .map(estimate)
+                .unwrap_or(0),
             0,
         ),
         // tokenEstimation.ts::roughTokenCountEstimationForBlock counts

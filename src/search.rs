@@ -610,51 +610,45 @@ pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
     Ok(())
 }
 
-fn type_matches(path: &Path, kind: &str) -> bool {
-    let extension = path.extension().and_then(|v| v.to_str()).unwrap_or("");
-    match kind {
-        "rust" | "rs" => extension == "rs",
-        "js" => matches!(extension, "js" | "jsx" | "mjs" | "cjs" | "vue"),
-        "ts" => matches!(extension, "ts" | "tsx" | "mts" | "cts"),
-        "py" | "python" => matches!(extension, "py" | "pyi"),
-        "json" => {
-            matches!(extension, "json" | "sarif")
-                || path.file_name().and_then(|name| name.to_str()) == Some("composer.lock")
+fn type_matches(path: &Path, kind: &str) -> Result<bool> {
+    use std::{collections::HashMap, sync::OnceLock};
+    static TYPES: OnceLock<Result<HashMap<String, Vec<GlobMatcher>>, String>> = OnceLock::new();
+    let types = TYPES.get_or_init(|| {
+        // Bundle ripgrep's official default type table. The 2.1.88 Grep
+        // tool accepts its --type names without requiring an external rg
+        // binary at runtime.
+        let text = include_str!("ripgrep_types.txt");
+        let mut types = HashMap::new();
+        for entry in text.lines() {
+            let (name, globs) = entry
+                .split_once(": ")
+                .ok_or_else(|| format!("Invalid ripgrep type entry: {entry}"))?;
+            let mut matchers = Vec::new();
+            for pattern in globs.split(", ") {
+                let matcher = Glob::new(pattern)
+                    .map_err(|error| format!("Invalid ripgrep type pattern for {name}: {error}"))?
+                    .compile_matcher();
+                matchers.push(matcher);
+            }
+            types.insert(name.to_owned(), matchers);
         }
-        "md" => matches!(
-            extension,
-            "markdown" | "md" | "mdown" | "mdwn" | "mdx" | "mkd" | "mkdn"
-        ),
-        "go" => extension == "go",
-        "java" => extension == "java",
-        "cpp" | "c++" => matches!(
-            extension,
-            "cpp" | "cc" | "cxx" | "c++" | "hpp" | "hh" | "hxx" | "h"
-        ),
-        "c" => matches!(extension, "c" | "h"),
-        "yaml" => matches!(extension, "yaml" | "yml"),
-        "html" => matches!(extension, "html" | "htm"),
-        "css" => matches!(extension, "css" | "scss" | "sass" | "less"),
-        "sh" | "shell" => matches!(extension, "sh" | "bash" | "zsh" | "fish"),
-        "toml" => extension == "toml",
-        "xml" => matches!(extension, "xml" | "xsl" | "xslt" | "svg"),
-        "web" => matches!(
-            extension,
-            "html"
-                | "htm"
-                | "css"
-                | "scss"
-                | "sass"
-                | "less"
-                | "js"
-                | "jsx"
-                | "mjs"
-                | "cjs"
-                | "ts"
-                | "tsx"
-        ),
-        other => extension == other,
-    }
+        Ok(types)
+    });
+    let types = types.as_ref().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let alias = match kind {
+        "rs" => "rust",
+        "python" => "py",
+        "shell" => "sh",
+        "c++" => "cpp",
+        other => other,
+    };
+    let matchers = types
+        .get(alias)
+        .with_context(|| format!("Unknown ripgrep file type: {kind}"))?;
+    let name = path.file_name().context("Search file has no filename")?;
+    Ok(matchers
+        .iter()
+        .any(|matcher| matcher.is_match(path) || matcher.is_match(Path::new(name))))
 }
 
 pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
@@ -819,6 +813,48 @@ fn matching_lines(
     Ok(matched)
 }
 
+/// The original ripgrep subprocess reads search candidates incrementally.
+/// Files-with-matches and count mode need only one line at a time; never
+/// allocate the whole file or build an index of every line for these modes.
+fn stream_search_hits(
+    path: &Path,
+    regex: &regex::Regex,
+    deadline: Instant,
+) -> Result<Option<(usize, bool)>> {
+    use std::io::BufRead;
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| format!("Opening search file {}", path.display()));
+        }
+    };
+    let mut input = std::io::BufReader::new(file);
+    let mut line = Vec::new();
+    let mut matching_lines = 0usize;
+    let mut binary = false;
+    loop {
+        check_search_deadline(Some(deadline))?;
+        line.clear();
+        if input
+            .read_until(b'\n', &mut line)
+            .with_context(|| format!("Reading search file {}", path.display()))?
+            == 0
+        {
+            break;
+        }
+        binary |= line.contains(&0);
+        let text = String::from_utf8_lossy(&line);
+        let text = text.strip_suffix('\n').unwrap_or(&text);
+        let text = text.strip_suffix('\r').unwrap_or(text);
+        if regex.is_match(text) {
+            matching_lines = matching_lines.saturating_add(1);
+        }
+    }
+    check_search_deadline(Some(deadline))?;
+    Ok(Some((matching_lines, binary)))
+}
+
 pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
     grep_files_filtered(root, base, args, &|_| Ok(true))
 }
@@ -920,7 +956,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         // not a whole-file size cap. Large log/source files still need
         // to be searched for matches.
         if let Some(kind) = kind {
-            if !type_matches(&path, kind) {
+            if !type_matches(&path, kind)? {
                 continue;
             }
         }
@@ -931,6 +967,20 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
             continue;
         }
         if !allow_file(&path)? {
+            continue;
+        }
+        let filename = relative(root, &path)?.to_string_lossy().to_string();
+        if !multiline && matches!(mode, "files_with_matches" | "count") {
+            let Some((hits, binary)) = stream_search_hits(&path, &regex, deadline)? else {
+                continue;
+            };
+            if hits > 0 && !(binary && base.is_dir()) {
+                if mode == "count" {
+                    matches.push(format!("{filename}:{hits}"));
+                } else {
+                    matches.push(filename);
+                }
+            }
             continue;
         }
         // ripgrep searches valid text around malformed UTF-8 bytes. Rejecting
@@ -954,7 +1004,6 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         }
         check_search_deadline(Some(deadline))?;
         let content = String::from_utf8_lossy(&bytes);
-        let filename = relative(root, &path)?.to_string_lossy().to_string();
         if binary && mode == "content" {
             if matching_lines(&content, &regex, multiline, deadline)?
                 .into_iter()
@@ -1090,7 +1139,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
 pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"glob_files",
-            "description":"Find up to 100 paths matching a wildcard glob; returns newest first and indicates truncation.",
+            "description":"Find up to 100 paths matching a wildcard glob; returns oldest first and indicates truncation.",
             "parameters":{"type":"object","properties":{
                 "pattern":{"type":"string"},"path":{"type":"string"}
             },"required":["pattern"]}}}),
@@ -1110,6 +1159,51 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn grep_scans_large_files_incrementally_for_count_and_file_modes() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("large.log");
+        let mut content = "irrelevant\n".repeat(300_000);
+        content.push_str("needle\n");
+        fs::write(&path, content).unwrap();
+        for mode in ["count", "files_with_matches"] {
+            let result: Value = serde_json::from_str(
+                &grep_files(
+                    root.path(),
+                    root.path(),
+                    &json!({
+                        "pattern":"needle", "output_mode":mode
+                    }),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(result["numFiles"], 1);
+        }
+        fs::write(&path, b"needle\n\0other").unwrap();
+        let suppressed: Value = serde_json::from_str(
+            &grep_files(
+                root.path(),
+                root.path(),
+                &json!({
+                    "pattern":"needle", "output_mode":"files_with_matches"
+                }),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(suppressed["numFiles"], 0);
+    }
+
+    #[test]
+    fn grep_uses_ripgrep_file_types_for_special_file_names() {
+        assert!(type_matches(Path::new("project/Makefile"), "make").unwrap());
+        assert!(type_matches(Path::new("project/CMakeLists.txt"), "cmake").unwrap());
+        assert!(type_matches(Path::new("project/Dockerfile"), "docker").unwrap());
+        assert!(type_matches(Path::new("project/main.rs"), "rust").unwrap());
+        assert!(!type_matches(Path::new("project/main.ts"), "rust").unwrap());
+        assert!(type_matches(Path::new("project/main.foo"), "invalid_type_222").is_err());
+    }
     #[test]
     fn grep_respects_nested_ripgrep_ignore_files_and_override_priority() {
         let root = tempfile::tempdir().unwrap();

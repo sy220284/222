@@ -675,7 +675,10 @@ mod tests {
         );
         assert_eq!(list(root).unwrap()[0].title, "Active project");
         let output = export(&session, root, Some("history.md")).unwrap();
-        assert_eq!(output, root.join("history.txt"));
+        assert_eq!(
+            output.canonicalize().unwrap(),
+            root.join("history.txt").canonicalize().unwrap()
+        );
         let rendered = fs::read_to_string(output).unwrap();
         for expected in [
             "User:\nFix login",

@@ -145,7 +145,11 @@ pub fn frontmatter_boolean(content: &str, key: &str) -> Option<bool> {
         let value = value.trim_matches(|c| c == '\'' || c == '"');
         found = Some(value == "true");
     }
-    if closed { found } else { None }
+    if closed {
+        found
+    } else {
+        None
+    }
 }
 
 /// Return a top-level string field from a closed YAML frontmatter header.
@@ -180,41 +184,59 @@ pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
         if line.starts_with(' ') || line.starts_with('\t') {
             continue;
         }
-        let Some(raw) = line.strip_prefix(key).and_then(|tail| tail.strip_prefix(':')) else {
+        let Some(raw) = line
+            .strip_prefix(key)
+            .and_then(|tail| tail.strip_prefix(':'))
+        else {
             continue;
         };
         let raw = raw.trim();
         let marker = raw.split_whitespace().next().unwrap_or("");
         let block_marker = marker.chars().next().filter(|ch| matches!(ch, '|' | '>'));
-        if let Some(kind) = block_marker.filter(|_| marker.chars().skip(1)
-            .all(|ch| matches!(ch, '+' | '-' | '1'..='9'))) {
+        if let Some(kind) = block_marker.filter(|_| {
+            marker
+                .chars()
+                .skip(1)
+                .all(|ch| matches!(ch, '+' | '-' | '1'..='9'))
+        }) {
             let mut raw_lines = Vec::new();
             while index < header.len() {
                 let next = header[index];
-                if !next.trim().is_empty()
-                    && !next.starts_with(' ') && !next.starts_with('\t') {
+                if !next.trim().is_empty() && !next.starts_with(' ') && !next.starts_with('\t') {
                     break;
                 }
                 raw_lines.push(next);
                 index += 1;
             }
-            let indent = raw_lines.iter()
+            let indent = raw_lines
+                .iter()
                 .filter(|line| !line.trim().is_empty())
-                .map(|line| line.len() - line.trim_start_matches(|ch: char| ch == ' ' || ch == '\t').len())
-                .min().unwrap_or(0);
-            let block = raw_lines.into_iter().map(|line| {
-                if line.trim().is_empty() {
-                    String::new()
-                } else {
-                    line.get(indent..).unwrap_or(line).to_owned()
-                }
-            }).collect::<Vec<_>>();
+                .map(|line| {
+                    line.len()
+                        - line
+                            .trim_start_matches(|ch: char| ch == ' ' || ch == '\t')
+                            .len()
+                })
+                .min()
+                .unwrap_or(0);
+            let block = raw_lines
+                .into_iter()
+                .map(|line| {
+                    if line.trim().is_empty() {
+                        String::new()
+                    } else {
+                        line.get(indent..).unwrap_or(line).to_owned()
+                    }
+                })
+                .collect::<Vec<_>>();
             let mut value = String::new();
             for (i, line) in block.iter().enumerate() {
                 if i > 0 {
-                    let folded = kind == '>' && !line.is_empty()
+                    let folded = kind == '>'
+                        && !line.is_empty()
                         && !block[i - 1].is_empty()
-                        && !line.starts_with(' ') && !block[i - 1].starts_with(' ');
+                        && !line.starts_with(' ')
+                        && !block[i - 1].starts_with(' ');
                     value.push(if folded { ' ' } else { '\n' });
                 }
                 value.push_str(line);
@@ -229,8 +251,7 @@ pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
             continue;
         }
         let value = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
-            serde_json::from_str::<String>(raw)
-                .unwrap_or_else(|_| raw[1..raw.len() - 1].to_owned())
+            serde_json::from_str::<String>(raw).unwrap_or_else(|_| raw[1..raw.len() - 1].to_owned())
         } else if raw.starts_with('\'') && raw.ends_with('\'') && raw.len() >= 2 {
             raw[1..raw.len() - 1].replace("''", "'")
         } else {
@@ -246,10 +267,13 @@ pub fn frontmatter_text(content: &str, key: &str) -> Option<String> {
 pub fn command_metadata(content: &str, fallback: &str) -> (String, String) {
     let description = frontmatter_text(content, "description")
         .filter(|value| !value.trim().is_empty())
-        .or_else(|| markdown_body(content).lines()
-            .map(str::trim)
-            .find(|line| !line.is_empty() && !line.starts_with("<!--"))
-            .map(|line| line.trim_start_matches('#').trim().to_owned()))
+        .or_else(|| {
+            markdown_body(content)
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty() && !line.starts_with("<!--"))
+                .map(|line| line.trim_start_matches('#').trim().to_owned())
+        })
         .unwrap_or_else(|| fallback.to_owned());
     let hint = frontmatter_text(content, "argument-hint").unwrap_or_default();
     (description, hint)
@@ -277,8 +301,7 @@ pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
             }
             // A YAML sequence belongs to the arguments field only while
             // indented beneath it; another top-level key ends the sequence.
-            if (line.starts_with(' ') || line.starts_with('\t'))
-                && trimmed.starts_with("- ") {
+            if (line.starts_with(' ') || line.starts_with('\t')) && trimmed.starts_with("- ") {
                 let raw = trimmed[2..].trim();
                 let value = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
                     serde_json::from_str::<String>(raw)
@@ -336,17 +359,20 @@ pub fn frontmatter_argument_names(content: &str) -> Vec<String> {
                 }
             }
             entries.push(part);
-            list = entries.into_iter().map(|entry| {
-                let entry = entry.trim();
-                if entry.starts_with('"') && entry.ends_with('"') && entry.len() >= 2 {
-                    serde_json::from_str::<String>(entry)
-                        .unwrap_or_else(|_| entry[1..entry.len() - 1].to_owned())
-                } else if entry.starts_with('\'') && entry.ends_with('\'') && entry.len() >= 2 {
-                    entry[1..entry.len() - 1].replace("''", "'")
-                } else {
-                    entry.to_owned()
-                }
-            }).collect();
+            list = entries
+                .into_iter()
+                .map(|entry| {
+                    let entry = entry.trim();
+                    if entry.starts_with('"') && entry.ends_with('"') && entry.len() >= 2 {
+                        serde_json::from_str::<String>(entry)
+                            .unwrap_or_else(|_| entry[1..entry.len() - 1].to_owned())
+                    } else if entry.starts_with('\'') && entry.ends_with('\'') && entry.len() >= 2 {
+                        entry[1..entry.len() - 1].replace("''", "'")
+                    } else {
+                        entry.to_owned()
+                    }
+                })
+                .collect();
             continue;
         }
         list = parse_argument_names(Some(&Value::String(
@@ -366,12 +392,24 @@ mod tests {
     use serde_json::json;
     #[test]
     fn frontmatter_flags_respect_top_level_and_defaults() {
-        assert_eq!(frontmatter_boolean("---\ndisable-model-invocation: true\n---\nbody",
-            "disable-model-invocation"), Some(true));
-        assert_eq!(frontmatter_boolean("---\nmetadata:\n  disable-model-invocation: true\n---\nbody",
-            "disable-model-invocation"), None);
-        assert_eq!(frontmatter_boolean("---\nuser-invocable: false\n---\nbody",
-            "user-invocable"), Some(false));
+        assert_eq!(
+            frontmatter_boolean(
+                "---\ndisable-model-invocation: true\n---\nbody",
+                "disable-model-invocation"
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            frontmatter_boolean(
+                "---\nmetadata:\n  disable-model-invocation: true\n---\nbody",
+                "disable-model-invocation"
+            ),
+            None
+        );
+        assert_eq!(
+            frontmatter_boolean("---\nuser-invocable: false\n---\nbody", "user-invocable"),
+            Some(false)
+        );
         assert_eq!(frontmatter_boolean("body", "user-invocable"), None);
     }
     #[test]

@@ -496,7 +496,7 @@ pub fn project_instructions_with_dirs(
         paths
     }
 
-    // Source claudemd.ts excludes user/project/local memory before reading,
+    // Source memory loader excludes user/project/local memory before reading,
     // including files reached through @includes. Absolute globs also need
     // their symlink-resolved variants (e.g. /tmp versus /private/tmp).
     fn build_instruction_excludes(patterns: &[String]) -> anyhow::Result<globset::GlobSet> {
@@ -508,7 +508,8 @@ pub fn project_instructions_with_dirs(
             }
             let mut expanded = vec![pattern.clone()];
             if pattern.starts_with('/') {
-                let wildcard = pattern.char_indices()
+                let wildcard = pattern
+                    .char_indices()
                     .find(|(_, ch)| matches!(*ch, '*' | '?' | '{' | '['))
                     .map(|(index, _)| index)
                     .unwrap_or(pattern.len());
@@ -528,11 +529,15 @@ pub fn project_instructions_with_dirs(
                         .literal_separator(true)
                         .backslash_escape(false)
                         .build()
-                        .with_context(|| format!("Invalid instruction exclusion pattern: {variant}"))?,
+                        .with_context(|| {
+                            format!("Invalid instruction exclusion pattern: {variant}")
+                        })?,
                 );
             }
         }
-        builder.build().context("Compile instruction exclusion patterns")
+        builder
+            .build()
+            .context("Compile instruction exclusion patterns")
     }
 
     fn excluded_file(path: &Path, excludes: &globset::GlobSet) -> bool {
@@ -549,7 +554,17 @@ pub fn project_instructions_with_dirs(
         seen: &mut HashSet<PathBuf>,
         output: &mut String,
     ) -> anyhow::Result<()> {
-        add_file_inner(path, scope, include_scope, is_rule, allow_external, excludes, seen, output, 0)
+        add_file_inner(
+            path,
+            scope,
+            include_scope,
+            is_rule,
+            allow_external,
+            excludes,
+            seen,
+            output,
+            0,
+        )
     }
 
     fn add_file_inner(
@@ -692,7 +707,16 @@ pub fn project_instructions_with_dirs(
             } else if metadata.is_file()
                 && entry.extension().and_then(|extension| extension.to_str()) == Some("md")
             {
-                add_file(&entry, scope, include_scope, true, allow_external, excludes, seen, output)?;
+                add_file(
+                    &entry,
+                    scope,
+                    include_scope,
+                    true,
+                    allow_external,
+                    excludes,
+                    seen,
+                    output,
+                )?;
             }
         }
         Ok(())
@@ -708,13 +732,24 @@ pub fn project_instructions_with_dirs(
     let approval_root = git(&root, &["rev-parse", "--show-toplevel"])
         .and_then(|path| PathBuf::from(path).canonicalize().ok())
         .unwrap_or_else(|| root.clone());
-    let external_includes_approved = config.approved_external_instruction_includes
-        .iter()
-        .any(|(workspace, approved)| {
-            *approved && Path::new(workspace).canonicalize().is_ok_and(|path| path == approval_root)
-        });
+    let external_includes_approved =
+        config
+            .approved_external_instruction_includes
+            .iter()
+            .any(|(workspace, approved)| {
+                *approved
+                    && Path::new(workspace)
+                        .canonicalize()
+                        .is_ok_and(|path| path == approval_root)
+            });
     let excludes = build_instruction_excludes(&config.instruction_excludes)?;
-    let source_enabled = |source: &str| config.instruction_sources.get(source).copied().unwrap_or(true);
+    let source_enabled = |source: &str| {
+        config
+            .instruction_sources
+            .get(source)
+            .copied()
+            .unwrap_or(true)
+    };
     let mut output = String::new();
     let mut seen = HashSet::new();
     let mut visited = HashSet::new();
@@ -736,7 +771,9 @@ pub fn project_instructions_with_dirs(
         let file = managed_path(file);
         if file.exists() {
             let file = file.canonicalize()?;
-            let scope = file.parent().context("Managed instruction has no parent directory")?;
+            let scope = file
+                .parent()
+                .context("Managed instruction has no parent directory")?;
             add_file(
                 &file,
                 scope,
@@ -860,17 +897,26 @@ pub fn project_instructions_with_dirs(
     // The original getMemoryFiles loads entrypoints at added roots only.
     if source_enabled("project")
         && std::env::var("ATLAS_ADDITIONAL_DIRECTORIES_INSTRUCTIONS")
-        .ok()
-        .is_some_and(|value| {
-            matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
-        })
+            .ok()
+            .is_some_and(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
     {
         for additional in additional_dirs {
             let directory = additional.canonicalize().with_context(|| {
-                format!("Resolve authorized instruction directory: {}", additional.display())
+                format!(
+                    "Resolve authorized instruction directory: {}",
+                    additional.display()
+                )
             })?;
             if !directory.is_dir() {
-                bail!("Authorized instruction directory is not a directory: {}", directory.display());
+                bail!(
+                    "Authorized instruction directory is not a directory: {}",
+                    directory.display()
+                );
             }
             for relative in ["AGENTS.md", ".atlas/AGENTS.md", ".atlas/instructions.md"] {
                 add_file(

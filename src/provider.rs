@@ -180,7 +180,9 @@ impl ModelProvider for OpenAiCompatible {
             body["tool_choice"] = json!("auto");
         }
         let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
-        let mut post = self.client.post(url)
+        let mut post = self
+            .client
+            .post(url)
             .timeout(Duration::from_secs(180))
             .json(&body);
         if let Some(key) = &self.key {
@@ -196,7 +198,10 @@ impl ModelProvider for OpenAiCompatible {
             .and_then(|a| a.first())
             .context("Model returned no choices")?;
         if let Some(refusal) = choice.pointer("/message/refusal").and_then(Value::as_str) {
-            bail!("Model refused the request: {}", refusal.chars().take(500).collect::<String>());
+            bail!(
+                "Model refused the request: {}",
+                refusal.chars().take(500).collect::<String>()
+            );
         }
         let mut message: Message = serde_json::from_value(
             choice
@@ -361,7 +366,10 @@ impl ModelProvider for Gemini {
         // Gemini may reject the prompt before producing any candidates.
         // Preserve the explicit block reason instead of a misleading
         // "no candidates" error, and never enter the Agent tool loop.
-        if let Some(reason) = value.pointer("/promptFeedback/blockReason").and_then(Value::as_str) {
+        if let Some(reason) = value
+            .pointer("/promptFeedback/blockReason")
+            .and_then(Value::as_str)
+        {
             bail!("Model blocked the request: {reason}");
         }
         let candidate = value

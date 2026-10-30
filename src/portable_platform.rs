@@ -79,11 +79,7 @@ pub fn windows_path_to_posix_path(path: &str) -> String {
     }
     let normalized = path.replace('\\', "/");
     let bytes = normalized.as_bytes();
-    if bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && bytes[2] == b'/'
-    {
+    if bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/' {
         format!(
             "/{}{}",
             (bytes[0] as char).to_ascii_lowercase(),

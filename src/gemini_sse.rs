@@ -22,7 +22,10 @@ impl Accumulator {
         if let Some(error) = v.get("error") {
             bail!("Streamed provider error: {error}")
         }
-        if let Some(reason) = v.pointer("/promptFeedback/blockReason").and_then(Value::as_str) {
+        if let Some(reason) = v
+            .pointer("/promptFeedback/blockReason")
+            .and_then(Value::as_str)
+        {
             bail!("Model blocked the request: {reason}");
         }
         if let Some(usage) = parse_gemini_usage(v) {
@@ -138,10 +141,11 @@ pub async fn complete(
     );
     let response = client.post(url).header("x-goog-api-key", key).json(body);
     let idle_timeout = crate::provider::stream_idle_timeout();
-    let response = tokio::time::timeout(idle_timeout, crate::provider::send_model_request(response))
-        .await
-        .context("Gemini stream response headers timed out")?
-        .context("Gemini stream request failed")?;
+    let response =
+        tokio::time::timeout(idle_timeout, crate::provider::send_model_request(response))
+            .await
+            .context("Gemini stream response headers timed out")?
+            .context("Gemini stream request failed")?;
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await?;
@@ -157,7 +161,8 @@ pub async fn complete(
     // the provider stops sending any data for the configured idle interval.
     while let Some(bytes) = tokio::time::timeout(idle_timeout, stream.next())
         .await
-        .context("Gemini stream idle timeout")? {
+        .context("Gemini stream idle timeout")?
+    {
         let chunk = bytes.context("Gemini stream socket failed")?;
         pending.extend_from_slice(&chunk);
         // Bound an incomplete SSE frame, not the sum of many complete
@@ -223,8 +228,9 @@ mod tests {
         let server = tokio::spawn(async move {
             for attempt in 0..2 {
                 let (mut socket, _) = listener.accept().await.unwrap();
-                let mut data = [0u8; 4096];
-                socket.read_exact(&mut data[..1]).await.unwrap();
+                crate::test_http::consume_request(&mut socket)
+                    .await
+                    .unwrap();
                 let (status, body) = if attempt == 0 {
                     (
                         "429 Too Many Requests",

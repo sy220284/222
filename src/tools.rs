@@ -941,6 +941,33 @@ impl ToolExecutor {
                 }
                 history::restore(&record, &path)
             }
+            "file_rewind" => {
+                if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
+                    bail!("File checkpointing is disabled");
+                }
+                let id = required(&args, "id")?;
+                let plan = history::plan_rewind(&self.root, self.session_id.as_deref(), id)?;
+                for entry in &plan.entries {
+                    let path = self.checked_path(&entry.path)?;
+                    let decision = permission_rules::policy_for(
+                        &self.permission_rules,
+                        "edit_file",
+                        &json!({"path":entry.path,"paths":self.file_rule_paths(&entry.path)?}),
+                    )?;
+                    if decision == Some(permission_rules::Behavior::Deny) {
+                        bail!(
+                            "File rewind denied by explicit Edit path rule: {}",
+                            entry.path
+                        );
+                    }
+                    self.require_read_rules(&entry.path, &path)?;
+                    if decision == Some(permission_rules::Behavior::Ask) {
+                        self.require_approval("edit_file", &json!({"path":entry.path}))?;
+                    }
+                }
+                self.require_approval("file_revert", &args)?;
+                history::apply_rewind(&self.root, &plan)
+            }
             "run_command" | "PowerShell" => {
                 Self::validate_shell_input(name, &args)?;
                 let kind = if call.function.name == "PowerShell" {
@@ -1703,7 +1730,7 @@ impl ToolExecutor {
         // Resolve the exact plugin root already validated by skill discovery.
         let rendered = rendered
             .replace("${SKILL_DIR}", &dir)
-            .replace("${CLAUDE_SKILL_DIR}", &dir);
+            .replace("${ATLAS_SKILL_DIR}", &dir);
         let rendered = if let Some((plugin, _)) = name.split_once(':') {
             let root = self
                 .root
@@ -1711,7 +1738,7 @@ impl ToolExecutor {
                 .join(plugin)
                 .canonicalize()?;
             let root = root.to_string_lossy().replace('\\', "/");
-            rendered.replace("${CLAUDE_PLUGIN_ROOT}", &root)
+            rendered.replace("${ATLAS_PLUGIN_ROOT}", &root)
         } else {
             rendered
         };
@@ -1723,7 +1750,7 @@ impl ToolExecutor {
         Ok(match self.session_id.as_deref() {
             Some(id) => rendered
                 .replace("${SESSION_ID}", id)
-                .replace("${CLAUDE_SESSION_ID}", id),
+                .replace("${ATLAS_SESSION_ID}", id),
             None => rendered,
         })
     }
@@ -1961,6 +1988,16 @@ impl ToolExecutor {
         args: &Value,
         kind: crate::shell_runtime::ShellKind,
     ) -> Result<String> {
+        self.run_command_with_shell_limit(args, kind, 5 * 1024 * 1024 * 1024)
+            .await
+    }
+
+    async fn run_command_with_shell_limit(
+        &self,
+        args: &Value,
+        kind: crate::shell_runtime::ShellKind,
+        hard_output_limit: u64,
+    ) -> Result<String> {
         let command = required(args, "command")?;
         let timeout_ms = Self::shell_timeout_ms(args)?;
         let mut proc = kind.build_command(command)?;
@@ -1994,9 +2031,15 @@ impl ToolExecutor {
                 capped_read(
                     stdout,
                     crate::shell_runtime::max_output_length().saturating_mul(4),
-                    combined_output_bytes.clone()
+                    combined_output_bytes.clone(),
+                    hard_output_limit
                 ),
-                capped_read(stderr, 32_000, combined_output_bytes.clone())
+                capped_read(
+                    stderr,
+                    32_000,
+                    combined_output_bytes.clone(),
+                    hard_output_limit
+                )
             )?;
             let status = child.wait().await?;
             Ok::<_, anyhow::Error>((status, out, err))
@@ -2135,10 +2178,10 @@ async fn capped_read<R: tokio::io::AsyncRead + Unpin>(
     mut input: R,
     max_bytes: usize,
     combined_bytes: Arc<std::sync::atomic::AtomicU64>,
+    hard_limit: u64,
 ) -> Result<(Vec<u8>, u64)> {
     use std::sync::atomic::Ordering;
     use tokio::io::AsyncReadExt;
-    const HARD_OUTPUT_LIMIT: u64 = 5 * 1024 * 1024 * 1024;
     let mut bytes = Vec::new();
     let mut total = 0u64;
     let mut buffer = [0u8; 8192];
@@ -2151,8 +2194,8 @@ async fn capped_read<R: tokio::io::AsyncRead + Unpin>(
         let combined = combined_bytes
             .fetch_add(n as u64, Ordering::Relaxed)
             .saturating_add(n as u64);
-        if combined > HARD_OUTPUT_LIMIT {
-            bail!("Combined command output exceeded the original 5 GiB hard limit");
+        if combined > hard_limit {
+            bail!("Command output exceeded hard limit ({hard_limit} bytes)");
         }
         let keep = n.min(max_bytes.saturating_sub(bytes.len()));
         bytes.extend_from_slice(&buffer[..keep]);
@@ -2847,8 +2890,10 @@ mod tests {
         drop(writer);
         let already_consumed = 5_u64 * 1024 * 1024 * 1024 - 4096;
         let shared = Arc::new(AtomicU64::new(already_consumed));
-        let error = capped_read(reader, 128, shared).await.unwrap_err();
-        assert!(error.to_string().contains("5 GiB"), "{error:#}");
+        let error = capped_read(reader, 128, shared, 5_u64 * 1024 * 1024 * 1024)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("5368709120 bytes"), "{error:#}");
     }
 
     #[cfg(target_os = "linux")]
@@ -2868,8 +2913,18 @@ mod tests {
                 .to_string(),
             },
         };
-        let result = tool.execute(&call).await;
-        assert!(result.contains("Command timed out"), "{result}");
+        let args: Value = serde_json::from_str(&call.function.arguments).unwrap();
+        // Exercise the exact production termination path with a small test
+        // cap; emitting 5 GiB into CI is unnecessary and slow.
+        let result = tool
+            .run_command_with_shell_limit(&args, crate::shell_runtime::ShellKind::Bash, 100_000)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            result.contains("Command output exceeded hard limit"),
+            "{result}"
+        );
         let pid: i32 = fs::read_to_string(root.path().join("oversize.pid"))
             .unwrap()
             .trim()
@@ -2956,7 +3011,7 @@ mod tests {
         .unwrap();
         fs::write(
             skill.join("SKILL.md"),
-            "Review ${CLAUDE_SKILL_DIR} from ${CLAUDE_PLUGIN_ROOT}",
+            "Review ${ATLAS_SKILL_DIR} from ${ATLAS_PLUGIN_ROOT}",
         )
         .unwrap();
         let tool = executor(root.path(), Approval::ReadOnly).with_plugins(vec!["demo".into()]);
@@ -2966,7 +3021,7 @@ mod tests {
             .unwrap();
         assert!(rendered.contains("extra/group/review"), "{rendered}");
         assert!(rendered.contains(".atlas/plugins/demo"), "{rendered}");
-        assert!(!rendered.contains("${CLAUDE_SKILL_DIR}"));
+        assert!(!rendered.contains("${ATLAS_SKILL_DIR}"));
     }
 
     #[test]

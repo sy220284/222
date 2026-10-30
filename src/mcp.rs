@@ -64,7 +64,11 @@ fn mcp_tool_timeout() -> Duration {
     std::env::var("MCP_TOOL_TIMEOUT")
         .ok()
         .and_then(|raw| {
-            let digits: String = raw.trim_start().chars().take_while(|c| c.is_ascii_digit()).collect();
+            let digits: String = raw
+                .trim_start()
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
             digits.parse::<u64>().ok()
         })
         .filter(|millis| *millis > 0)
@@ -76,33 +80,57 @@ fn mcp_tool_timeout() -> Duration {
 /// Read/Shell tools instead of silently clipping them at 16,000 characters.
 fn present_mcp_tool_output(output: String, workspace: &Path, has_images: bool) -> String {
     let token_limit = std::env::var("MAX_MCP_OUTPUT_TOKENS")
-        .ok().and_then(|v| v.trim().parse::<usize>().ok())
-        .filter(|n| *n > 0).unwrap_or(25_000);
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(25_000);
     let char_limit = token_limit.saturating_mul(4);
     let length = output.encode_utf16().count();
-    if length <= char_limit { return output; }
+    if length <= char_limit {
+        return output;
+    }
     if has_images {
         let mut units = 0;
-        let preview: String = output.chars().take_while(|ch| {
-            let next = units + ch.len_utf16();
-            if next > char_limit { false } else { units = next; true }
-        }).collect();
+        let preview: String = output
+            .chars()
+            .take_while(|ch| {
+                let next = units + ch.len_utf16();
+                if next > char_limit {
+                    false
+                } else {
+                    units = next;
+                    true
+                }
+            })
+            .collect();
         return format!("{preview}\n\n[OUTPUT TRUNCATED - exceeded {token_limit} token limit; image blocks cannot be persisted as text]");
     }
     let save = (|| -> Result<PathBuf> {
         use std::io::Write as _;
-        let root = workspace.canonicalize().context("Cannot resolve MCP workspace")?;
+        let root = workspace
+            .canonicalize()
+            .context("Cannot resolve MCP workspace")?;
         let config = root.join(".atlas");
         std::fs::create_dir_all(&config)?;
         let config = config.canonicalize()?;
-        if !config.starts_with(&root) { bail!("MCP output directory escapes workspace"); }
+        if !config.starts_with(&root) {
+            bail!("MCP output directory escapes workspace");
+        }
         let directory = config.join("tool-results");
         std::fs::create_dir_all(&directory)?;
         let directory = directory.canonicalize()?;
-        if !directory.starts_with(&root) { bail!("MCP output directory escapes workspace"); }
+        if !directory.starts_with(&root) {
+            bail!("MCP output directory escapes workspace");
+        }
         let path = directory.join(format!("mcp-output-{}.txt", uuid::Uuid::new_v4()));
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
-        if let Err(error) = file.write_all(output.as_bytes()).and_then(|_| file.sync_all()) {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        if let Err(error) = file
+            .write_all(output.as_bytes())
+            .and_then(|_| file.sync_all())
+        {
             drop(file);
             let _ = std::fs::remove_file(&path);
             return Err(error).context("Cannot persist MCP output");
@@ -114,7 +142,6 @@ fn present_mcp_tool_output(output: String, workspace: &Path, has_images: bool) -
         Err(error) => format!("Error: MCP result ({length} characters) exceeds the output budget and could not be saved: {error:#}. Use server pagination or filtering."),
     }
 }
-
 
 struct Client {
     name: String,
@@ -349,14 +376,20 @@ fn mcp_tool_metadata(tool: &Value) -> (bool, Option<String>) {
     let meta = tool.get("_meta");
     let always_load = tool.get("alwaysLoad").and_then(Value::as_bool) == Some(true)
         || meta
-            .and_then(|value| value.get("alwaysLoad").or_else(|| value.get("anthropic/alwaysLoad")))
+            .and_then(|value| {
+                value
+                    .get("alwaysLoad")
+                    .or_else(|| value.get("atlas/alwaysLoad"))
+            })
             .and_then(Value::as_bool)
             == Some(true);
     let hint = tool
         .get("searchHint")
         .or_else(|| {
             meta.and_then(|value| {
-                value.get("searchHint").or_else(|| value.get("anthropic/searchHint"))
+                value
+                    .get("searchHint")
+                    .or_else(|| value.get("atlas/searchHint"))
             })
         })
         .and_then(Value::as_str)
@@ -435,52 +468,65 @@ impl McpManager {
             let mut seen_cursors = std::collections::HashSet::new();
             // Resource-only and prompt-only MCP servers are valid: do not
             // require tools/list when the server did not advertise tools.
-            let discovery: Result<()> = if client.capabilities().map_or(true, |caps| caps.get("tools").is_some_and(Value::is_object)) {
+            let discovery: Result<()> = if client
+                .capabilities()
+                .map_or(true, |caps| caps.get("tools").is_some_and(Value::is_object))
+            {
                 async {
-                loop {
-                    let params = cursor.as_ref().map_or(json!({}), |c| json!({"cursor":c}));
-                    let page = timeout(RPC_TIMEOUT, client.request("tools/list", params))
-                        .await
-                        .context("MCP discovery timed out")??;
-                    let tools = page
-                        .get("tools")
-                        .and_then(Value::as_array)
-                        .context("MCP tools/list missing tools array")?;
-                    for tool in tools {
-                        let name = tool
-                            .get("name")
-                            .and_then(Value::as_str)
-                            .context("MCP tool missing name")?;
-                        let alias = mcp_tool_alias(&server.id, name);
-                        if !seen_aliases.insert(alias.clone()) || out.routes.contains_key(&alias) {
-                            bail!("MCP duplicate normalized tool identity: {alias}");
+                    loop {
+                        let params = cursor.as_ref().map_or(json!({}), |c| json!({"cursor":c}));
+                        let page = timeout(RPC_TIMEOUT, client.request("tools/list", params))
+                            .await
+                            .context("MCP discovery timed out")??;
+                        let tools = page
+                            .get("tools")
+                            .and_then(Value::as_array)
+                            .context("MCP tools/list missing tools array")?;
+                        for tool in tools {
+                            let name = tool
+                                .get("name")
+                                .and_then(Value::as_str)
+                                .context("MCP tool missing name")?;
+                            let alias = mcp_tool_alias(&server.id, name);
+                            if !seen_aliases.insert(alias.clone())
+                                || out.routes.contains_key(&alias)
+                            {
+                                bail!("MCP duplicate normalized tool identity: {alias}");
+                            }
+                            let desc = tool
+                                .get("description")
+                                .and_then(Value::as_str)
+                                .unwrap_or(name);
+                            let params = tool
+                                .get("inputSchema")
+                                .cloned()
+                                .unwrap_or(json!({"type":"object","properties":{}}));
+                            let (always_load, search_hint) = mcp_tool_metadata(tool);
+                            discovered.push((
+                                alias,
+                                name.to_owned(),
+                                desc.to_owned(),
+                                params,
+                                always_load,
+                                search_hint,
+                            ));
+                            display_tools.push(json!({"name":name,"description":desc}));
                         }
-                        let desc = tool
-                            .get("description")
+                        cursor = page
+                            .get("nextCursor")
                             .and_then(Value::as_str)
-                            .unwrap_or(name);
-                        let params = tool
-                            .get("inputSchema")
-                            .cloned()
-                            .unwrap_or(json!({"type":"object","properties":{}}));
-                        let (always_load, search_hint) = mcp_tool_metadata(tool);
-                        discovered.push((alias, name.to_owned(), desc.to_owned(), params, always_load, search_hint));
-                        display_tools.push(json!({"name":name,"description":desc}));
-                    }
-                    cursor = page
-                        .get("nextCursor")
-                        .and_then(Value::as_str)
-                        .map(str::to_owned);
-                    match cursor.as_ref() {
-                        None => break,
-                        Some(c) if !seen_cursors.insert(c.clone()) => {
-                            bail!("MCP repeated pagination cursor")
+                            .map(str::to_owned);
+                        match cursor.as_ref() {
+                            None => break,
+                            Some(c) if !seen_cursors.insert(c.clone()) => {
+                                bail!("MCP repeated pagination cursor")
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
+                    Ok(())
                 }
-                Ok(())
-                }.await
+                .await
             } else {
                 Ok(())
             };
@@ -652,9 +698,15 @@ impl McpManager {
     pub async fn reconcile_dynamic(&mut self, desired: Vec<McpServerConfig>) -> Result<Value> {
         let mut requested = HashMap::new();
         for config in desired {
-            if self.configs.iter().any(|old| old.id == config.id
-                && !self.dynamic_names.contains(&old.id)) {
-                bail!("Dynamic MCP server conflicts with a fixed server: {}", config.id);
+            if self
+                .configs
+                .iter()
+                .any(|old| old.id == config.id && !self.dynamic_names.contains(&old.id))
+            {
+                bail!(
+                    "Dynamic MCP server conflicts with a fixed server: {}",
+                    config.id
+                );
             }
             if requested.insert(config.id.clone(), config).is_some() {
                 bail!("Duplicate dynamic MCP server id");
@@ -666,11 +718,15 @@ impl McpManager {
         let mut previous = self.dynamic_names.iter().cloned().collect::<Vec<_>>();
         previous.sort();
         for name in previous {
-            let index = self.configs.iter().position(|config| config.id == name)
+            let index = self
+                .configs
+                .iter()
+                .position(|config| config.id == name)
                 .context("Dynamic MCP server configuration disappeared")?;
-            let unchanged = requested.get(&name).is_some_and(|new_config|
+            let unchanged = requested.get(&name).is_some_and(|new_config| {
                 serde_json::to_value(new_config).ok()
-                    == serde_json::to_value(&self.configs[index]).ok());
+                    == serde_json::to_value(&self.configs[index]).ok()
+            });
             if unchanged {
                 continue;
             }
@@ -679,7 +735,8 @@ impl McpManager {
             self.configs.remove(index);
             self.server_statuses.remove(index);
             self.status_clients.remove(index);
-            self.resource_subscriptions.retain(|(server, _)| server != &name);
+            self.resource_subscriptions
+                .retain(|(server, _)| server != &name);
             self.dynamic_names.remove(&name);
             if !previously_disabled {
                 self.disabled.remove(&name);
@@ -694,11 +751,13 @@ impl McpManager {
             if self.dynamic_names.contains(&name) {
                 continue;
             }
-            let config = requested.remove(&name)
+            let config = requested
+                .remove(&name)
                 .context("Dynamic MCP config disappeared during reconciliation")?;
             let disabled = self.disabled.contains(&name);
             let status = if disabled { "disabled" } else { "pending" };
-            self.server_statuses.push(json!({"name":name,"status":status,
+            self.server_statuses
+                .push(json!({"name":name,"status":status,
                 "config":Self::public_config(&config)}));
             self.status_clients.push(None);
             self.configs.push(config.clone());
@@ -725,7 +784,10 @@ impl McpManager {
         let mut requested = HashMap::new();
         for config in desired {
             if self.dynamic_names.contains(&config.id) {
-                bail!("Fixed MCP server conflicts with an SDK server: {}", config.id);
+                bail!(
+                    "Fixed MCP server conflicts with an SDK server: {}",
+                    config.id
+                );
             }
             if requested.insert(config.id.clone(), config).is_some() {
                 bail!("Duplicate fixed MCP server id");
@@ -735,15 +797,22 @@ impl McpManager {
         let mut removed = Vec::new();
         let mut added = Vec::new();
         let mut errors = serde_json::Map::new();
-        let previous = self.configs.iter()
+        let previous = self
+            .configs
+            .iter()
             .filter(|config| !self.dynamic_names.contains(&config.id))
-            .map(|config| config.id.clone()).collect::<Vec<_>>();
+            .map(|config| config.id.clone())
+            .collect::<Vec<_>>();
         for name in previous {
-            let index = self.configs.iter().position(|config| config.id == name)
+            let index = self
+                .configs
+                .iter()
+                .position(|config| config.id == name)
                 .context("Fixed MCP configuration disappeared during reload")?;
-            let unchanged = requested.get(&name).is_some_and(|new_config|
+            let unchanged = requested.get(&name).is_some_and(|new_config| {
                 serde_json::to_value(new_config).ok()
-                    == serde_json::to_value(&self.configs[index]).ok());
+                    == serde_json::to_value(&self.configs[index]).ok()
+            });
             if unchanged {
                 continue;
             }
@@ -752,7 +821,8 @@ impl McpManager {
             self.configs.remove(index);
             self.server_statuses.remove(index);
             self.status_clients.remove(index);
-            self.resource_subscriptions.retain(|(server, _)| server != &name);
+            self.resource_subscriptions
+                .retain(|(server, _)| server != &name);
             if !was_disabled {
                 self.disabled.remove(&name);
             }
@@ -767,7 +837,8 @@ impl McpManager {
             if self.configs.iter().any(|config| config.id == name) {
                 continue;
             }
-            let config = requested.remove(&name)
+            let config = requested
+                .remove(&name)
                 .context("Fixed MCP config disappeared during reload")?;
             let disabled = self.disabled.contains(&name);
             self.server_statuses.push(json!({
@@ -796,7 +867,10 @@ impl McpManager {
     /// peers. Disabling drops its transport (stdio children use kill_on_drop),
     /// tool routes and resource subscriptions before returning to the SDK.
     pub async fn toggle_named(&mut self, name: &str, enabled: bool) -> Result<Value> {
-        let position = self.configs.iter().position(|server| server.id == name)
+        let position = self
+            .configs
+            .iter()
+            .position(|server| server.id == name)
             .with_context(|| format!("MCP server {name:?} not found"))?;
         if enabled {
             let was_disabled = self.disabled.remove(name);
@@ -810,7 +884,9 @@ impl McpManager {
             if was_disabled || exited || self.server_statuses[position]["status"] != "connected" {
                 if let Err(error) = self.reconnect_server(position).await {
                     let diagnostic = Self::redact_connection_error(
-                        &self.configs[position], format!("{error:#}"));
+                        &self.configs[position],
+                        format!("{error:#}"),
+                    );
                     self.server_statuses[position] = json!({
                         "name":name,"status":"failed",
                         "config":Self::public_config(&self.configs[position]),
@@ -821,25 +897,37 @@ impl McpManager {
             }
         } else if self.disabled.insert(name.to_owned()) {
             if let Some(old_index) = self.status_clients[position].take() {
-                let old_aliases = self.routes.iter()
-                    .filter_map(|(alias, (index, _))|
-                        (*index == old_index).then_some(alias.clone()))
+                let old_aliases = self
+                    .routes
+                    .iter()
+                    .filter_map(|(alias, (index, _))| {
+                        (*index == old_index).then_some(alias.clone())
+                    })
                     .collect::<std::collections::HashSet<_>>();
                 self.routes.retain(|_, (index, _)| *index != old_index);
-                self.tools.retain(|tool| !old_aliases.contains(
-                    tool.pointer("/function/name")
-                        .and_then(Value::as_str).unwrap_or("")));
+                self.tools.retain(|tool| {
+                    !old_aliases.contains(
+                        tool.pointer("/function/name")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                    )
+                });
                 // Removing this slot drops the transport and terminates its
                 // stdio child. Adjust all other client indices atomically.
                 self.clients.remove(old_index);
                 for index in self.status_clients.iter_mut().flatten() {
-                    if *index > old_index { *index -= 1; }
+                    if *index > old_index {
+                        *index -= 1;
+                    }
                 }
                 for (index, _) in self.routes.values_mut() {
-                    if *index > old_index { *index -= 1; }
+                    if *index > old_index {
+                        *index -= 1;
+                    }
                 }
             }
-            self.resource_subscriptions.retain(|(server, _)| server != name);
+            self.resource_subscriptions
+                .retain(|(server, _)| server != name);
             self.server_statuses[position] = json!({
                 "name":name,"status":"disabled",
                 "config":Self::public_config(&self.configs[position])
@@ -1152,7 +1240,9 @@ impl McpManager {
             response.to_string()
         };
         let has_images = parts.is_some_and(|items| {
-            items.iter().any(|item| item.get("type").and_then(Value::as_str) == Some("image"))
+            items
+                .iter()
+                .any(|item| item.get("type").and_then(Value::as_str) == Some("image"))
         });
         Ok(present_mcp_tool_output(result, &self.root, has_images))
     }
@@ -1257,8 +1347,13 @@ impl McpManager {
                     self.server_statuses[index]["error"].as_str().unwrap_or("not connected")}));
                 continue;
             };
-            let capability = if kind == "prompts" { "prompts" } else { "resources" };
-            if self.clients[client_index].capabilities()
+            let capability = if kind == "prompts" {
+                "prompts"
+            } else {
+                "resources"
+            };
+            if self.clients[client_index]
+                .capabilities()
                 .is_some_and(|caps| !caps.get(capability).is_some_and(Value::is_object))
             {
                 servers.push(json!({"server":name,"ok":true,"items":[]}));

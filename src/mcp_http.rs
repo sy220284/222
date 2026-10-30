@@ -155,16 +155,18 @@ impl HttpClient {
             root: root.to_path_buf(),
             last_event_id: None,
         };
-        let initial = tokio::time::timeout(Duration::from_secs(30), http
-            .request(
+        let initial = tokio::time::timeout(
+            Duration::from_secs(30),
+            http.request(
                 "initialize",
                 json!({
                     "protocolVersion":"2025-03-26","capabilities":{"roots":{},"elicitation":{}},
                     "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")}
                 }),
-            ))
-            .await
-            .context("MCP HTTP initialization timed out")??;
+            ),
+        )
+        .await
+        .context("MCP HTTP initialization timed out")??;
         http.server_info = initial.get("serverInfo").cloned();
         http.capabilities = initial.get("capabilities").cloned();
         http.instructions = initial
@@ -172,9 +174,12 @@ impl HttpClient {
             .and_then(Value::as_str)
             .filter(|text| !text.trim().is_empty())
             .map(str::to_owned);
-        tokio::time::timeout(Duration::from_secs(30), http.notify("notifications/initialized", json!({})))
-            .await
-            .context("MCP HTTP initialized notification timed out")??;
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            http.notify("notifications/initialized", json!({})),
+        )
+        .await
+        .context("MCP HTTP initialized notification timed out")??;
         Ok(http)
     }
     fn request_headers(&self) -> HeaderMap {

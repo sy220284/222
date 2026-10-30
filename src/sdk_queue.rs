@@ -141,45 +141,55 @@ pub async fn control(
                 // user-invocable slash skills when they reach the query engine.
                 // Resolve before dequeue so a denied or malformed skill stays
                 // available for inspection instead of disappearing.
-                let slash_expansion = if next.command.mode == Mode::Prompt
-                    && next.command.is_slash() {
-                    let candidate = next.command.value.as_str().or_else(|| {
-                        let last = next.command.value.as_array()?.last()?;
-                        (last.get("type").and_then(Value::as_str) == Some("text"))
-                            .then(|| last.get("text").and_then(Value::as_str))
-                            .flatten()
-                    });
-                    let parsed = candidate.and_then(crate::slash_command::parse_slash_command);
-                    match parsed {
-                        Some(parsed) => crate::expand_user_skill_prompt(
-                            agent, config, &parsed.command_name, &parsed.args, parsed.is_mcp,
-                        )?,
-                        None => None,
-                    }
-                } else {
-                    None
-                };
+                let slash_expansion =
+                    if next.command.mode == Mode::Prompt && next.command.is_slash() {
+                        let candidate = next.command.value.as_str().or_else(|| {
+                            let last = next.command.value.as_array()?.last()?;
+                            (last.get("type").and_then(Value::as_str) == Some("text"))
+                                .then(|| last.get("text").and_then(Value::as_str))
+                                .flatten()
+                        });
+                        let parsed = candidate.and_then(crate::slash_command::parse_slash_command);
+                        match parsed {
+                            Some(parsed) => crate::expand_user_skill_prompt(
+                                agent,
+                                config,
+                                &parsed.command_name,
+                                &parsed.args,
+                                parsed.is_mcp,
+                            )?,
+                            None => None,
+                        }
+                    } else {
+                        None
+                    };
                 // processSlashCommand.tsx:333-359 returns "Unknown skill"
                 // without a model request. A typo must not stall all later
                 // queued prompts, while known built-ins remain with their
                 // dedicated handlers until those are migrated.
                 let unknown_skill = if next.command.mode == Mode::Prompt
-                    && next.command.is_slash() && slash_expansion.is_none() {
+                    && next.command.is_slash()
+                    && slash_expansion.is_none()
+                {
                     let candidate = next.command.value.as_str().or_else(|| {
                         let last = next.command.value.as_array()?.last()?;
                         (last.get("type").and_then(Value::as_str) == Some("text"))
                             .then(|| last.get("text").and_then(Value::as_str))
                             .flatten()
                     });
-                    candidate.and_then(crate::slash_command::parse_slash_command)
+                    candidate
+                        .and_then(crate::slash_command::parse_slash_command)
                         .and_then(|parsed| {
                             let name = parsed.command_name;
                             let looks_like_command = !name.is_empty()
-                                && name.bytes().all(|c| c.is_ascii_alphanumeric()
-                                    || matches!(c, b':' | b'-' | b'_'));
-                            if !parsed.is_mcp && looks_like_command
+                                && name.bytes().all(|c| {
+                                    c.is_ascii_alphanumeric() || matches!(c, b':' | b'-' | b'_')
+                                });
+                            if !parsed.is_mcp
+                                && looks_like_command
                                 && crate::command_manifest::lookup(&name).is_none()
-                                && !std::path::Path::new(&format!("/{name}")).exists() {
+                                && !std::path::Path::new(&format!("/{name}")).exists()
+                            {
                                 Some(format!("Unknown skill: {name}"))
                             } else {
                                 None
@@ -194,8 +204,12 @@ pub async fn control(
                 let reason = match &next.command.mode {
                     Mode::Bash => Some("bash"),
                     Mode::OrphanedPermission => Some("permission"),
-                    _ if next.command.is_slash() && slash_expansion.is_none()
-                        && unknown_skill.is_none() => Some("slash-command"),
+                    _ if next.command.is_slash()
+                        && slash_expansion.is_none()
+                        && unknown_skill.is_none() =>
+                    {
+                        Some("slash-command")
+                    }
                     _ if crate::multimodal::parse(&next.command.value).is_err() => {
                         Some("unsupported-content")
                     }
@@ -213,10 +227,12 @@ pub async fn control(
                     break;
                 }
                 if let Some(message) = unknown_skill {
-                    let item = queue.dequeue(|c| {
-                        c.agent_id.is_none()
-                            && c.priority().rank_for_sdk() <= threshold.rank_for_sdk()
-                    }).context("Unknown skill disappeared from queue")?;
+                    let item = queue
+                        .dequeue(|c| {
+                            c.agent_id.is_none()
+                                && c.priority().rank_for_sdk() <= threshold.rank_for_sdk()
+                        })
+                        .context("Unknown skill disappeared from queue")?;
                     if replay_user_messages {
                         if let Some(uuid) = item.command.uuid.as_deref() {
                             emit_user_replay(&item.command.value, uuid, &agent.session_id());
@@ -244,7 +260,9 @@ pub async fn control(
                 while processed + batch.len() < max {
                     // A slash skill is a complete user turn, never batch it
                     // with the following prompt even if workload matches.
-                    if slash_expansion.is_some() { break; }
+                    if slash_expansion.is_some() {
+                        break;
+                    }
                     let candidate = queue
                         .peek(|c| {
                             c.agent_id.is_none()
@@ -280,7 +298,10 @@ pub async fn control(
                     }
                 } else {
                     queued_prompt_batch::join_prompt_values(
-                        &batch.iter().map(|i| i.command.value.clone()).collect::<Vec<_>>(),
+                        &batch
+                            .iter()
+                            .map(|i| i.command.value.clone())
+                            .collect::<Vec<_>>(),
                     )
                 };
                 // Content is validated before dequeue; retain image blocks
@@ -310,17 +331,23 @@ pub async fn control(
                 // Preserve the incoming SDK UUID as the checkpoint ID
                 // instead of assigning a fresh internal turn identifier.
                 // Batches share one model request and its file-edit snapshot.
-                let batch_uuid = batch.iter()
+                let batch_uuid = batch
+                    .iter()
                     .filter_map(|item| item.command.uuid.as_deref())
                     .find_map(|text| uuid::Uuid::parse_str(text).ok());
                 let answer = agent
                     .ask_with_blocks_for_message(&model_prompt, structured.blocks, batch_uuid)
                     .await;
                 if let Some(primary) = batch_uuid {
-                    let aliases = batch.iter().filter_map(|item| {
-                        item.command.uuid.as_deref()
-                            .and_then(|id| uuid::Uuid::parse_str(id).ok())
-                    }).collect::<Vec<_>>();
+                    let aliases = batch
+                        .iter()
+                        .filter_map(|item| {
+                            item.command
+                                .uuid
+                                .as_deref()
+                                .and_then(|id| uuid::Uuid::parse_str(id).ok())
+                        })
+                        .collect::<Vec<_>>();
                     if let Err(error) = agent.register_sdk_message_aliases(primary, &aliases) {
                         eprintln!("SDK merged user message history aliases unavailable: {error:#}");
                     }

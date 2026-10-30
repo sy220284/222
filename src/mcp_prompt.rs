@@ -3,9 +3,13 @@
 //! positional values against the prompt's named argument metadata.
 use crate::slash_command;
 use anyhow::{bail, Context, Result};
-use serde_json::{Map, Value};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use std::{fs::{self, OpenOptions}, io::Write, path::Path};
+use serde_json::{Map, Value};
+use std::{
+    fs::{self, OpenOptions},
+    io::Write,
+    path::Path,
+};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,7 +70,9 @@ pub fn named_arguments(prompt: &Value, args: &str) -> Result<Map<String, Value>>
 /// returns a text block with the resulting file path. A random filename avoids
 /// trusting a server-controlled URI or name as a filesystem path.
 fn persist_mcp_blob(bytes: &[u8], mime: Option<&str>, workspace: &Path) -> Result<String> {
-    let root = workspace.canonicalize().context("Cannot resolve MCP workspace")?;
+    let root = workspace
+        .canonicalize()
+        .context("Cannot resolve MCP workspace")?;
     let config_directory = root.join(".atlas");
     fs::create_dir_all(&config_directory).context("Cannot create MCP workspace directory")?;
     let config_directory = config_directory.canonicalize()?;
@@ -79,7 +85,13 @@ fn persist_mcp_blob(bytes: &[u8], mime: Option<&str>, workspace: &Path) -> Resul
     if !directory.starts_with(&root) {
         bail!("MCP tool results directory escapes workspace");
     }
-    let mime = mime.unwrap_or("").split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    let mime = mime
+        .unwrap_or("")
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
     let extension = match mime.as_str() {
         "application/pdf" => "pdf",
         "application/json" => "json",
@@ -102,29 +114,35 @@ fn persist_mcp_blob(bytes: &[u8], mime: Option<&str>, workspace: &Path) -> Resul
         _ => "bin",
     };
     let path = directory.join(format!("mcp-blob-{}.{}", Uuid::new_v4(), extension));
-    let mut file = OpenOptions::new().write(true).create_new(true).open(&path)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
     if let Err(error) = file.write_all(bytes).and_then(|_| file.sync_all()) {
         drop(file);
         let _ = fs::remove_file(&path);
         return Err(error).context("Cannot persist MCP binary resource");
     }
-    Ok(format!("Binary content ({}, {} bytes) saved to {}",
-        if mime.is_empty() { "unknown type" } else { &mime },
-        bytes.len(), path.display()))
+    Ok(format!(
+        "Binary content ({}, {} bytes) saved to {}",
+        if mime.is_empty() {
+            "unknown type"
+        } else {
+            &mime
+        },
+        bytes.len(),
+        path.display()
+    ))
 }
 
-fn binary_result_text(
-    data: &str,
-    mime: Option<&str>,
-    prefix: &str,
-    workspace: &Path,
-) -> String {
+fn binary_result_text(data: &str, mime: Option<&str>, prefix: &str, workspace: &Path) -> String {
     match STANDARD.decode(data) {
         Ok(bytes) => match persist_mcp_blob(&bytes, mime, workspace) {
             Ok(message) => format!("{prefix}{message}"),
             Err(error) => format!(
                 "{prefix}Binary content ({}, {} bytes) could not be saved to disk: {error:#}",
-                mime.unwrap_or("unknown type"), bytes.len()
+                mime.unwrap_or("unknown type"),
+                bytes.len()
             ),
         },
         Err(error) => format!(
@@ -215,11 +233,15 @@ pub fn render_content_in_workspace(
                     text.push_str(&format!("[image: {mime}]"));
                 }
                 Some("audio") => {
-                    let data = part.get("data").and_then(Value::as_str)
+                    let data = part
+                        .get("data")
+                        .and_then(Value::as_str)
                         .context("MCP audio block missing data")?;
                     let rendered = binary_result_text(
-                        data, part.get("mimeType").and_then(Value::as_str),
-                        &format!("[Audio from {server}] "), workspace,
+                        data,
+                        part.get("mimeType").and_then(Value::as_str),
+                        &format!("[Audio from {server}] "),
+                        workspace,
                     );
                     text.push_str(&rendered);
                     blocks.push(serde_json::json!({"type":"text","text":rendered}));
