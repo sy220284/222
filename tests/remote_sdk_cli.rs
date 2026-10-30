@@ -200,3 +200,140 @@ fn remote_sdk_process_handles_initialize_and_shutdown_over_real_websocket() {
         "remote mode must not echo all SDK messages to stdout"
     );
 }
+
+
+/// Real Hybrid ingress (WebSocket) and egress (serialized HTTP POST) must
+/// preserve SDK initialization and control-response order.
+#[test]
+fn remote_sdk_hybrid_delivers_real_post_bodies_in_order() {
+    fn read_post(peer: &mut TcpStream) -> Value {
+        let mut buffer = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let boundary = loop {
+            if let Some(index) = buffer.windows(4).position(|part| part == b"\r\n\r\n") {
+                break index + 4;
+            }
+            let n = peer.read(&mut chunk).unwrap();
+            assert!(n > 0 && buffer.len() < 65_536);
+            buffer.extend_from_slice(&chunk[..n]);
+        };
+        let headers = String::from_utf8_lossy(&buffer[..boundary]);
+        assert!(headers.starts_with("POST /v2/session_ingress/session/"));
+        assert!(headers.contains("Authorization: Bearer test-local-token"));
+        let length = headers
+            .lines()
+            .find_map(|line| {
+                line.split_once(':').and_then(|(name, value)| {
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().unwrap())
+                })
+            })
+            .expect("Hybrid POST requires Content-Length");
+        while buffer.len() - boundary < length {
+            let n = peer.read(&mut chunk).unwrap();
+            assert!(n > 0);
+            buffer.extend_from_slice(&chunk[..n]);
+        }
+        let body = serde_json::from_slice(&buffer[boundary..boundary + length]).unwrap();
+        peer.write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        )
+        .unwrap();
+        body
+    }
+
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({
+            "default_provider":"mock",
+            "providers":[{"id":"mock","kind":"openai-compatible",
+                "model":"test-model","base_url":"http://127.0.0.1:1234/v1"}]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let token = root.path().join("access-token");
+    fs::write(&token, "test-local-token\n").unwrap();
+    let session = uuid::Uuid::new_v4();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = thread::spawn(move || {
+        let mut websocket = accept_with_deadline(&listener);
+        let headers = read_headers(&mut websocket);
+        assert!(headers.contains("Authorization: Bearer test-local-token"));
+        let key = headers
+            .lines()
+            .find_map(|line| line.strip_prefix("Sec-WebSocket-Key: "))
+            .unwrap();
+        let reply = format!(
+            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n",
+            ws_accept(key),
+        );
+        websocket.write_all(reply.as_bytes()).unwrap();
+        let mut first = accept_with_deadline(&listener);
+        let body = read_post(&mut first);
+        assert_eq!(body["events"][0]["type"], "system");
+        assert_eq!(body["events"][0]["session_id"], session.to_string());
+        send_json(
+            &mut websocket,
+            json!({
+                "type":"control_request","request_id":"hybrid-init",
+                "request":{"subtype":"initialize"}
+            }),
+        );
+        let mut second = accept_with_deadline(&listener);
+        let reply = read_post(&mut second);
+        assert_eq!(reply["events"][0]["type"], "control_response");
+        assert_eq!(reply["events"][0]["response"]["request_id"], "hybrid-init");
+        assert_eq!(reply["events"][0]["response"]["subtype"], "success");
+        send_json(
+            &mut websocket,
+            json!({
+                "type":"control_request","request_id":"hybrid-stop",
+                "request":{"subtype":"end_session"}
+            }),
+        );
+        let mut third = accept_with_deadline(&listener);
+        let end = read_post(&mut third);
+        assert_eq!(end["events"][0]["response"]["request_id"], "hybrid-stop");
+        thread::sleep(Duration::from_millis(200));
+    });
+    let mut child = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "sdk",
+            "--remote-url",
+            &format!("ws://127.0.0.1:{port}/v2/session_ingress/ws/{session}"),
+            "--remote-session-id",
+            &session.to_string(),
+            "--token-file",
+            token.to_str().unwrap(),
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .env_remove("ATLAS_USE_CCR_V2")
+        .env("ATLAS_POST_FOR_SESSION_INGRESS_V2", "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    server.join().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while child.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            panic!("Hybrid SDK failed to exit after remote end_session");
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.is_empty());
+}
