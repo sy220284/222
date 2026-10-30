@@ -726,6 +726,114 @@ impl Drop for HookProcessGroupGuard {
     }
 }
 
+/// AsyncHookRegistry.ts: after a hook reports {"async":true}, retain
+/// ownership of its still-running process and deliver its final output once.
+/// The registry is session-scoped; a command is never replayed automatically.
+struct PendingAsyncHook {
+    id: String,
+    session_id: String,
+    event: String,
+    command: String,
+    deadline: std::time::Instant,
+    task: tokio::task::JoinHandle<Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)>>,
+}
+
+fn async_hook_registry() -> &'static std::sync::Mutex<Vec<PendingAsyncHook>> {
+    static REGISTRY: std::sync::OnceLock<std::sync::Mutex<Vec<PendingAsyncHook>>> =
+        std::sync::OnceLock::new();
+    REGISTRY.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// Snapshot completed hooks, releasing the global lock before any async wait.
+pub async fn collect_async_hook_responses(session_id: &str) -> Vec<Value> {
+    let mut completed = Vec::new();
+    {
+        let mut pending = async_hook_registry().lock().unwrap_or_else(|e| e.into_inner());
+        let mut index = 0;
+        while index < pending.len() {
+            if pending[index].session_id == session_id
+                && (pending[index].task.is_finished()
+                    || std::time::Instant::now() >= pending[index].deadline)
+            {
+                completed.push(pending.remove(index));
+            } else {
+                index += 1;
+            }
+        }
+    }
+    let mut responses = Vec::new();
+    for mut hook in completed {
+        let timed_out = std::time::Instant::now() >= hook.deadline
+            && !hook.task.is_finished();
+        if timed_out {
+            hook.task.abort();
+        }
+        let finished = hook.task.await;
+        let (outcome, exit_code, stdout, stderr) = match finished {
+            Ok(Ok((status, out, err))) => (
+                if status.success() { "success" } else { "error" },
+                status.code(),
+                String::from_utf8_lossy(&out).into_owned(),
+                String::from_utf8_lossy(&err).into_owned(),
+            ),
+            Ok(Err(error)) => ("error", None, String::new(), format!("{error:#}")),
+            Err(error) if timed_out || error.is_cancelled() =>
+                ("cancelled", None, String::new(), "Async hook cancelled or timed out".to_owned()),
+            Err(error) => ("error", None, String::new(), format!("{error:#}")),
+        };
+        // The initial async JSON is a handshake; only later JSON lines are
+        // accepted as the final synchronous hook response.
+        let response = stdout.lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
+            .find(|value| value.is_object() && value.get("async").is_none())
+            .unwrap_or_else(|| json!({}));
+        responses.push(json!({
+            "type":"hook_response","hook_id":hook.id,"hook_event_name":hook.event,
+            "command":hook.command,"outcome":outcome,"exit_code":exit_code,
+            "stdout":stdout,"stderr":stderr,"response":response
+        }));
+    }
+    responses
+}
+
+/// Mirror finalizePendingAsyncHooks on SDK/REPL teardown: cancel any
+/// outstanding processes and wait for their cleanup without reusing tokens.
+pub async fn finalize_async_hooks(session_id: &str) -> Vec<Value> {
+    let mut removed = Vec::new();
+    {
+        let mut pending = async_hook_registry().lock().unwrap_or_else(|e| e.into_inner());
+        let mut index = 0;
+        while index < pending.len() {
+            if pending[index].session_id == session_id {
+                removed.push(pending.remove(index));
+            } else {
+                index += 1;
+            }
+        }
+    }
+    let mut events = Vec::new();
+    for hook in removed {
+        hook.task.abort();
+        let _ = hook.task.await;
+        events.push(json!({"type":"hook_response","hook_id":hook.id,
+            "hook_event_name":hook.event,"command":hook.command,
+            "outcome":"cancelled"}));
+    }
+    events
+}
+
+struct HookTaskDropGuard {
+    handle: tokio::task::AbortHandle,
+    transferred: bool,
+}
+impl Drop for HookTaskDropGuard {
+    fn drop(&mut self) {
+        if !self.transferred {
+            self.handle.abort();
+        }
+    }
+}
+
 async fn run_command(
     rule: &HookRule,
     payload: &Value,
