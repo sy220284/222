@@ -194,6 +194,10 @@ pub struct Agent {
     session_context: String,
     /// One-shot first user turn supplied by a SessionStart hook in headless mode.
     pending_initial_user_message: Option<String>,
+    /// hooks.ts:237 asyncRewake blocking errors awaiting model wake-up.
+    /// Drained as a task-notification turn when idle, or injected into the
+    /// running conversation between API rounds.
+    pending_rewake_notifications: Vec<String>,
     conversation_context: ConversationContext,
     structured_output: bool,
     child_depth: u8,
@@ -331,6 +335,7 @@ impl Agent {
             hooks: HookRunner::default(),
             session_context: String::new(),
             pending_initial_user_message: None,
+            pending_rewake_notifications: Vec::new(),
             conversation_context,
             structured_output: false,
             child_depth: 0,
@@ -2335,41 +2340,58 @@ impl Agent {
     pub async fn pump_async_hook_events(&mut self) -> Result<usize> {
         let events = crate::hooks::collect_async_hook_responses(&self.session.id.to_string()).await;
         let count = events.len();
+        let mut rewake_notifications: Vec<String> = Vec::new();
+        let mut visible: Vec<String> = Vec::new();
         for event in events {
             self.emit(event.clone());
-            let stdout = event["stdout"]
-                .as_str()
-                .unwrap_or("")
-                .lines()
-                .filter(|line| {
-                    serde_json::from_str::<serde_json::Value>(line.trim())
-                        .ok()
-                        .is_none_or(|value| value.get("async") != Some(&json!(true)))
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            let body = if event["outcome"] == "success" {
-                stdout.trim().to_owned()
-            } else {
-                format!(
-                    "Async hook {}: {}",
-                    event["outcome"].as_str().unwrap_or("failed"),
-                    event["stderr"].as_str().unwrap_or("")
-                )
-            };
-            if !body.trim().is_empty() {
-                self.session.messages.push(Message::text(
-                    "user",
-                    format!(
-                        "[Asynchronous {} hook result]\n{}",
-                        event["hook_event_name"].as_str().unwrap_or("Hook"),
-                        body
-                    ),
+            // hooks.ts:237 asyncRewake hooks bypass the registry entirely:
+            // an exit code 2 result enqueues a task-notification that wakes
+            // the model via the queue processor (idle) or injects mid-query.
+            if event["rewake"].as_bool() == Some(true) {
+                let stderr = event["stderr"].as_str().unwrap_or("");
+                let stdout = event["stdout"].as_str().unwrap_or("");
+                let body = if stderr.is_empty() { stdout } else { stderr };
+                rewake_notifications.push(format!(
+                    "Stop hook blocking error from command \"{}\": {}",
+                    event["command"].as_str().unwrap_or(""),
+                    body
                 ));
-                self.session.save(&self.root)?;
+                continue;
+            }
+            // messages.ts:4026 async_hook_response: only systemMessage and
+            // hookSpecificOutput.additionalContext become model-visible
+            // messages; raw stdout never reaches the conversation.
+            let response = &event["response"];
+            if let Some(message) = response["systemMessage"].as_str().filter(|m| !m.is_empty()) {
+                visible.push(message.to_owned());
+            }
+            if let Some(context) = response["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .filter(|context| !context.is_empty())
+            {
+                visible.push(context.to_owned());
             }
         }
+        if !visible.is_empty() {
+            for text in visible {
+                self.session
+                    .messages
+                    .push(Message::text("user", wrap_in_system_reminder(&text)));
+            }
+            self.session.save(&self.root)?;
+        }
+        if !rewake_notifications.is_empty() {
+            self.pending_rewake_notifications
+                .extend(rewake_notifications);
+        }
         Ok(count)
+    }
+
+    /// Drain queued asyncRewake blocking errors. The SDK idle loop turns the
+    /// first notification into a wake-up turn; the running Agent query injects
+    /// them directly between API rounds.
+    pub fn take_rewake_notifications(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.pending_rewake_notifications)
     }
 
     pub fn sdk_title_request(&self, description: &str) -> Option<ModelRequest> {
