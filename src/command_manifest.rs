@@ -236,8 +236,18 @@ mod tests {
         assert_eq!(lookup("export").unwrap().name, "export");
         assert_eq!(lookup("rename").unwrap().name, "rename");
         assert_eq!(lookup("continue").unwrap().name, "resume");
-        for removed in ["remote-control", "remote-env", "web-setup", "mobile",
-            "voice", "upgrade", "rate-limit-options", "session", "extra-usage", "teleport"] {
+        for removed in [
+            "remote-control",
+            "remote-env",
+            "web-setup",
+            "mobile",
+            "voice",
+            "upgrade",
+            "rate-limit-options",
+            "session",
+            "extra-usage",
+            "teleport",
+        ] {
             assert!(lookup(removed).is_none(), "removed cloud command: {removed}");
         }
         for command in [
