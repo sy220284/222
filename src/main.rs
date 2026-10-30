@@ -2729,6 +2729,13 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 continue;
             }
             input = input_rx.recv() => input,
+            // A hook can finish after its originating model turn. Wake the
+            // SDK event loop even without new stdin, just like the source
+            // AsyncHookRegistry response-delivery path.
+            _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {
+                agent.pump_async_hook_events().await?;
+                continue;
+            }
         };
         let Some(input) = incoming else { break };
         let (line, input_epoch) = input?;
@@ -3199,6 +3206,11 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             other => print_json!(json!({"type":"error",
                 "message":format!("Unsupported SDK event {other}")})),
         }
+    }
+    // Cancel orphaned asynchronous shell hooks on SDK stream shutdown.
+    // The SessionEnd event will also finalize in the normal Agent path.
+    for event in hooks::finalize_async_hooks(&agent.session_id()).await {
+        print_json!(event);
     }
     // Bound the post-EOF flush window for accepted background title
     // requests; persist replies through the main Agent before exiting.
