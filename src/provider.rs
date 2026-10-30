@@ -77,9 +77,11 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
             tuning: profile.tuning.clone(),
             response_schema: None,
         })),
-        "openai-compatible" if profile.id == "openai"
-            && profile.model.starts_with("gpt-6")
-            && profile.base_url.trim_end_matches('/') == "https://api.openai.com/v1" => {
+        "openai-compatible"
+            if profile.id == "openai"
+                && profile.model.starts_with("gpt-6")
+                && profile.base_url.trim_end_matches('/') == "https://api.openai.com/v1" =>
+        {
             Ok(Box::new(OpenAiResponses {
                 key: key.context("OpenAI Responses requires an API key")?,
                 base_url: profile.base_url.clone(),
@@ -208,8 +210,14 @@ impl ModelProvider for OpenAiResponses {
 
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         crate::chatgpt_plan::complete_api(
-            request, &self.tuning, None, &self.key, self.response_schema.as_ref(), &self.base_url
-        ).await
+            request,
+            &self.tuning,
+            None,
+            &self.key,
+            self.response_schema.as_ref(),
+            &self.base_url,
+        )
+        .await
     }
 
     async fn complete_stream(
@@ -218,8 +226,14 @@ impl ModelProvider for OpenAiResponses {
         deltas: UnboundedSender<String>,
     ) -> Result<ModelResponse> {
         crate::chatgpt_plan::complete_api(
-            request, &self.tuning, Some(deltas), &self.key, self.response_schema.as_ref(), &self.base_url
-        ).await
+            request,
+            &self.tuning,
+            Some(deltas),
+            &self.key,
+            self.response_schema.as_ref(),
+            &self.base_url,
+        )
+        .await
     }
 }
 
@@ -819,13 +833,17 @@ mod tests {
             "reasoning_content":"I need to inspect source",
             "tool_calls":[{"id":"call_one","type":"function",
                 "function":{"name":"read_file","arguments":"{}"}}]
-        })).unwrap();
+        }))
+        .unwrap();
         let tool_call = assistant.tool_calls.as_ref().unwrap()[0].clone();
         let request = ModelRequest {
             model: "deepseek-flash".into(),
             system: "You are an assistant".into(),
-            messages: vec![Message::text("user", "Inspect source"),
-                assistant, Message::tool_result(&tool_call, "file content".into())],
+            messages: vec![
+                Message::text("user", "Inspect source"),
+                assistant,
+                Message::tool_result(&tool_call, "file content".into()),
+            ],
             tools: vec![],
         };
         let wire = openai_messages(&request).unwrap();
