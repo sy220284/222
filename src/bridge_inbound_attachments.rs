@@ -313,7 +313,8 @@ mod tests {
             let server = thread::spawn(move || {
                 let (mut conn, _) = listener.accept().unwrap();
                 let mut request = [0u8; 4096];
-                conn.read(&mut request).unwrap();
+                let received = conn.read(&mut request).unwrap();
+                assert!(received > 0, "HTTP 请求不得为空");
                 conn.write_all(response.as_bytes()).unwrap();
             });
             let event = json!({
