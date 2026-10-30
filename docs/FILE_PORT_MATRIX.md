@@ -1645,7 +1645,7 @@
 | `src/utils/permissions/classifierShared.ts` | 40 | 1174 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/permissions/dangerousPatterns.ts` | 81 | 2476 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/permissions/denialTracking.ts` | 46 | 1101 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
-| `src/utils/permissions/filesystem.ts` | 1778 | 62254 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |；Grep/Glob 现逐文件执行 Read 权限规则过滤，避免仅检查搜索根目录时泄露被拒绝路径（93fa1d9、7c5a8dd），已提交待验收；完整权限策略仍待等价；文件历史回退的路径写权限现在复用 Edit 原始/规范化路径规则，防止绕过显式拒绝（70d0bd1e，已提交待验收）；完整权限策略仍缺
+| `src/utils/permissions/filesystem.ts` | 1778 | 62254 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价；Grep/Glob 现逐文件执行 Read 权限规则过滤，避免仅检查搜索根目录时泄露被拒绝路径（93fa1d9、7c5a8dd），已提交待验收；完整权限策略仍待等价；文件历史回退的路径写权限现在复用 Edit 原始/规范化路径规则，防止绕过显式拒绝（70d0bd1e，已提交待验收）；完整权限策略仍缺；同项目跨会话临时任务输出 Read 已按原版允许且校验 UUID 会话/任务文件身份（9f2b353e），源码已提交待验收 |
 | `src/utils/permissions/getNextPermissionMode.ts` | 102 | 3301 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/permissions/pathValidation.ts` | 486 | 16249 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/permissions/permissionExplainer.ts` | 251 | 7606 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
@@ -1840,7 +1840,7 @@
 | `src/utils/systemTheme.ts` | 120 | 4231 | 重写：保持通用行为 | `src/generated_ports/p_ffaf2e1bb158c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/taggedId.ts` | 55 | 1573 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/task/TaskOutput.ts` | 391 | 12474 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/task/diskOutput.ts` | 452 | 13568 | 重写：保持通用行为 | `src/background.rs` | 部分实现：磁盘日志上限、原版 b 前缀短 ID 与旧 UUID 输出路径兼容、输出缺失时仍返回任务状态及空日志；新增会话级隔离及安全原子元数据读写，源码已提交待验收；后台 Shell 输出现按原版迁出项目至用户/项目/会话隔离的私有临时目录（778aaad2、fb9ea960、b80f3350，源码已提交待验收）；已有旧会话保留原目录可读；显式大于 8MiB 的任务增量读取不再被额外截断（09201860，源码已提交待验收）；跨进程恢复、旧记录迁移、输出驱逐策略与完整异步生命周期仍未等价；本会话任务输出 Read 授权与增量结果路径已接线（b40a1daa、46319cca、98777615），源码已提交待验收 |
+| `src/utils/task/diskOutput.ts` | 452 | 13568 | 重写：保持通用行为 | `src/background.rs` | 部分实现：磁盘日志上限、原版 b 前缀短 ID 与旧 UUID 输出路径兼容、输出缺失时仍返回任务状态及空日志；新增会话级隔离及安全原子元数据读写，源码已提交待验收；后台 Shell 输出现按原版迁出项目至用户/项目/会话隔离的私有临时目录（778aaad2、fb9ea960、b80f3350，源码已提交待验收）；已有旧会话保留原目录可读；显式大于 8MiB 的任务增量读取不再被额外截断（09201860，源码已提交待验收）；跨进程恢复、旧记录迁移、输出驱逐策略与完整异步生命周期仍未等价；本会话任务输出 Read 授权与增量结果路径已接线（b40a1daa、46319cca、98777615），源码已提交待验收 ；同项目跨会话任务日志 Read 已接线（9f2b353e），源码已提交待验收 |
 | `src/utils/task/framework.ts` | 309 | 9869 | 重写：保持通用行为 | `src/background.rs / src/task.rs` | 部分实现：任务状态与后台状态持久化；新增批量退出取消的共享等待期限，源码已提交待验收；通知队列及通用生命周期未等价 |
 | `src/utils/task/outputFormatting.ts` | 39 | 1188 | 重写：保持通用行为 | `src/task_output_format.rs` | 部分实现：长度上限、UTF-16 计数、尾部截断和日志路径；代理项边界与任务目录待核对 |
 | `src/utils/task/sdkProgress.ts` | 37 | 1153 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
