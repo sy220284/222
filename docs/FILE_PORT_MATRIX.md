@@ -1,5 +1,8 @@
 # 2.1.88 → Rust 逐文件迁移台账（原始清单）
 
+> 2026-10-29 交互式 /resume 真正恢复会话：原版 commands/resume/resume.tsx::call/ResumeCommand → src/main.rs / src/agent.rs / src/session_control.rs，新增无参数会话选择器、当前 Agent 直接恢复、权限上限校验、任务/文件缓存/统计隔离、会话结束和启动 Hook、对应提示词历史切换。提交 898a1a35、cbe890a2、71b0ce56、b761c336；**源码已提交待行为验收**，跨工作树/跨项目选择、完整 Hook 与后台任务行为仍待等价。
+
+
 > 2026-10-29 会话 /export 无参数预览与文件名确认：原版 commands/export/export.tsx::call/ExportDialog → src/session_control.rs / src/agent.rs / src/main.rs，新增默认文件名、纯文本预览、改名确认与取消操作，保留直接指定路径导出。提交 9c0823d1、7a30a16e、df1d979a；**源码已提交待行为验收**，原版富文本对话框和渲染细节仍有缺口，迁移状态不升级。
 
 
