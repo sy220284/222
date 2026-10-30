@@ -53,6 +53,30 @@ pub struct Record {
 fn fingerprint(content: &[u8]) -> String {
     format!("{:x}", Sha256::digest(content))
 }
+
+/// Read only a regular checkpoint file, including across the open itself.
+/// The no-follow flag closes the gap between symlink_metadata and fs::read.
+fn read_checkpoint_file(path: &Path) -> Result<Vec<u8>> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.file_type().is_file() {
+        bail!("History checkpoint must be a regular file: {}", path.display());
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let mut file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        bail!("History checkpoint changed to a non-file: {}", path.display());
+    }
+    let mut bytes = Vec::new();
+    use std::io::Read as _;
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
 /// Keep checkpoint backups under the user's private configuration directory,
 /// as in fileHistory.ts::resolveBackupPath. Workspace-local backups can be
 /// accidentally indexed or committed alongside project source files.
@@ -343,11 +367,7 @@ pub fn load(root: &Path, session_id: Option<&str>, id: &str) -> Result<Record> {
     let id = Uuid::parse_str(id).context("History id must be a UUID")?;
     let folder = storage(root, session_id)?;
     let path = folder.join(format!("{id}.json"));
-    let metadata = fs::symlink_metadata(&path)?;
-    if !metadata.file_type().is_file() {
-        bail!("History checkpoint must be a regular file: {}", path.display());
-    }
-    let mut record: Record = serde_json::from_slice(&fs::read(path)?)?;
+    let mut record: Record = serde_json::from_slice(&read_checkpoint_file(&path)?)?;
     if record.id != id {
         bail!("History id mismatch")
     }
@@ -492,7 +512,7 @@ pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
         if !metadata.file_type().is_file() {
             bail!("History checkpoint must be a regular file: {}", path.display());
         }
-        let data = fs::read(&path)
+        let data = read_checkpoint_file(&path)
             .with_context(|| format!("Read file checkpoint {}", path.display()))?;
         let record: Record = serde_json::from_slice(&data)
             .with_context(|| format!("Parse file checkpoint {}", path.display()))?;
