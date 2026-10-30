@@ -1,3 +1,10 @@
+## 2026-10-30：MCP CLI 原版 JSON 导入、详情与项目授权续补（全功能等价待验收）
+
+- **源代码对照**：`source/src/main.tsx` 中 `mcp add-json / get / remove / reset-project-choices` 注册及 `source/src/cli/handlers/mcp.tsx` 中对应处理器。
+- **Rust 具体行为**：`src/mcp_cli.rs` 新增 `add-json`（按 JSON 反序列化、单服务器 Config 校验、作用域保存、项目审批）、`get`（指定或解析服务所在范围，返回确切配置）、`reset-project-choices`（只撤销本机信任，保留项目配置）、`remove`（不指定范围时只删除唯一匹配项，重名跨范围时明确要求指定）。拒绝静默丢失未知 OAuth 字段。
+- **实际测试**：新增两项真实命令行集成测试，`cargo test --locked --offline --test mcp_cli` 合计 **4/4 成功**，`cargo fmt --all -- --check` 和 Clippy 正确性/可疑行为规则均通过。原 `mcp add` 分支和信任指纹保持覆盖。
+- **保留缺口**：原版 list/get 在线健康探测、SSE、OAuth/XAA、桌面导入与交互信任选择未完整重写；属于原有部分实现继续完善，暂不宣布完整等价。
+
 ## 2026-10-30：原版 MCP add 入口与多作用域配置手工重写（源码已完成、全功能未等价）
 
 - **原版基准**：`source/src/commands/mcp/addCommand.ts`（281 行）、`source/src/services/mcp/utils.ts::ensureConfigScope/ensureTransport/parseHeaders`、`source/src/utils/envUtils.ts::parseEnvVars`，来自用户原始 2.1.88 ZIP。
