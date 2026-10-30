@@ -24,7 +24,14 @@ jobs:
       - name: 核对全量迁移台账与新增验收证据
         run: |
           python3 scripts/port_workbench.py check --repo .
+          python3 scripts/port_workbench.py reachability --repo . --output .port-audit
           python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
+      - name: 保留自动生成模块调用路径审计结果
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-ports-reachability
+          path: .port-audit/generated-reachability.json
+          if-no-files-found: error
       - name: 使用固定 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
         with:
