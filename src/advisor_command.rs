@@ -122,8 +122,14 @@ mod tests {
             matches!(resolve(&config, &active, "  OPENAI "), AdvisorChange::Set { provider_id, .. } if provider_id == "openai")
         );
         assert!(
-            matches!(resolve(&config, &active, "gpt-6.1-sol"), AdvisorChange::Set { provider_id, .. } if provider_id == "openai")
+            matches!(resolve(&config, &active, "  CHATGPT "), AdvisorChange::Set { provider_id, .. } if provider_id == "chatgpt")
         );
+        // Both API-key OpenAI and ChatGPT-plan profiles advertise the same
+        // model: users must select the provider explicitly to avoid ambiguity.
+        assert!(matches!(
+            resolve(&config, &active, "gpt-6.1-sol"),
+            AdvisorChange::Unchanged(_)
+        ));
         config.advisor_model = Some("openai".into());
         assert!(
             matches!(resolve(&config, &active, "off"), AdvisorChange::Unset(s) if s.contains("openai"))
