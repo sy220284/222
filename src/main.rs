@@ -1715,6 +1715,7 @@ async fn chat(
                 println!("/plugin [subcommand]     manage, install, enable, disable and validate plugins");
                 println!("/reload-plugins          refresh active plugin hooks, MCP and command catalog");
                 println!("/agents                  list project and user custom agent definitions");
+                println!("/agents show project|user NAME    inspect a custom agent definition");
                 println!("/agents create project|user NAME  create a custom agent interactively");
                 println!("/agents delete project|user NAME  delete a custom agent with confirmation");
                 println!("/agents edit project|user NAME    replace an existing agent after validation");
@@ -2070,6 +2071,35 @@ async fn chat(
                 Err(error) => eprintln!("Project initialization failed: {error:#}"),
             }
             onboarding.maybe_mark_complete()?;
+            continue;
+        }
+        if input.starts_with("/agents show ") {
+            let args = input.trim_start_matches("/agents show ").trim();
+            let outcome = (|| -> Result<String> {
+                let parts = args.split_whitespace().collect::<Vec<_>>();
+                let [scope, name] = parts.as_slice() else {
+                    bail!("Usage: /agents show project|user NAME");
+                };
+                let user = match *scope {
+                    "project" => false,
+                    "user" => true,
+                    _ => bail!("Agent location must be project or user"),
+                };
+                let path = agent_definition::new_file_path(
+                    agent.workspace_root(), user, name,
+                )?;
+                let metadata = std::fs::symlink_metadata(&path)
+                    .with_context(|| format!("Agent definition missing: {}", path.display()))?;
+                if !metadata.is_file() || metadata.file_type().is_symlink() {
+                    bail!("Agent definition must be a regular file");
+                }
+                let content = std::fs::read_to_string(&path)?;
+                Ok(format!("{} agent {} ({})\n{}", scope, name, path.display(), content))
+            })();
+            match outcome {
+                Ok(details) => println!("{details}"),
+                Err(error) => eprintln!("Agent details unavailable: {error:#}"),
+            }
             continue;
         }
         if input.starts_with("/agents create ") {
