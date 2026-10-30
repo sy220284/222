@@ -442,10 +442,13 @@ pub fn validate_local(location: &Path) -> Result<String> {
     }
     let fallback = location.file_name().and_then(|name| name.to_str())
         .context("Plugin source has no valid directory name")?;
-    if !valid_name(fallback) {
+    // A manifest supplies the installed identity; an unpacked source
+    // directory may legitimately have a temporary name such as ".tmpXXXX".
+    // Only manifest-less plugins use their directory basename as identity.
+    let manifest = read_manifest(&location, fallback)?;
+    if !valid_name(fallback) && manifest.name == fallback {
         bail!("Invalid plugin directory name")
     }
-    let manifest = read_manifest(&location, fallback)?;
     let _ = manifest_hooks(&location, &manifest.hooks, None)?;
     let _ = manifest_servers(&location, &manifest.mcp_servers, None)?;
     let _ = skill_roots(&location, &manifest)?;
@@ -1342,6 +1345,11 @@ mod tests {
         fs::create_dir_all(root.path().join(".atlas/plugins")).unwrap();
         std::os::unix::fs::symlink(outside.path(), root.path().join(".atlas/plugins/leak"))
             .unwrap();
-        assert!(PluginSet::load(root.path(), &["leak".into()]).is_err());
+        let loaded = PluginSet::load(root.path(), &["leak".into()]).unwrap();
+        assert!(loaded.hooks.is_empty());
+        assert!(loaded.mcp_servers.is_empty());
+        assert!(loaded.errors.iter().any(|error|
+            error.contains("leak") && error.contains("workspace")
+        ), "Unsafe symlink must be reported and must not load: {:?}", loaded.errors);
     }
 }
