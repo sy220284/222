@@ -605,7 +605,7 @@ impl BackgroundTasks {
         let delta = read_output_range(&path, from_offset, max_bytes)?;
         let (content, bytes_read, total) = match delta {
             Some((content, bytes_read, total)) => (content, bytes_read, total),
-            None => (String::new(), 0, from_offset),
+            None => (String::new(), 0, 0),
         };
         Ok(json!({
             "task_id":id,
