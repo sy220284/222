@@ -21,7 +21,6 @@ autofix-pr|stub|disabled||-|Disabled internal PR autofix
 backfill-sessions|stub|disabled||-|Disabled legacy sessions
 branch|branch|local-jsx|fork|[name]|Create conversation branch
 break-cache|stub|disabled||-|Disabled internal cache command
-bridge|remote-control|local-jsx|rc|[name]|Connect remote control
 btw|btw|local-jsx||<question>|Ask side question
 bughunter|stub|disabled||-|Disabled debugging
 chrome|chrome|local-jsx||-|Manage browser integration
@@ -41,45 +40,35 @@ effort|effort|local-jsx||[low|medium|high|max|auto]|Set model effort
 env|stub|disabled||-|Disabled legacy env
 export|export|local-jsx||[filename]|Export the current conversation to a file or clipboard
 exit|exit|local-jsx|quit|-|Quit session
-extra-usage|extra-usage|local-jsx||-|Additional usage
 fast|fast|local-jsx||[on|off]|Fast mode
-feedback|feedback|local-jsx|bug|[report]|Send feedback
 files|files|local||-|Show context files
 good-CODEBRAND|stub|disabled||-|Disabled internal command
 heapdump|heapdump|local||-|Heap snapshot
 help|help|local-jsx||-|Show help
 hooks|hooks|local-jsx||-|Manage hooks
 ide|ide|local-jsx||[open]|Connect editor
-install-github-app|install-github-app|local-jsx||-|Install repository automation
-install-slack-app|install-slack-app|local||-|Install chat integration
 issue|stub|disabled||-|Disabled issue command
 keybindings|keybindings|local||-|Edit keybindings
 mcp|mcp|local-jsx||[enable|disable]|Manage MCP
 memory|memory|local-jsx||-|Edit memory
-mobile|mobile|local-jsx|ios,android|-|Mobile companion
 mock-limits|stub|disabled||-|Disabled limit mock
 model|model|local-jsx||[model]|Select model
 oauth-refresh|stub|disabled||-|Disabled OAuth refresh
 onboarding|stub|disabled||-|Disabled onboarding
 output-style|output-style|local-jsx||-|Legacy styles
-passes|passes|local-jsx||-|Usage passes
 perf-issue|stub|disabled||-|Disabled performance issue
 permissions|permissions|local-jsx|allowed-tools|-|Tool permissions
 plan|plan|local-jsx||[open|description]|Planning mode
 plugin|plugin|local-jsx|plugins,marketplace|-|Plugin manager
 pr_comments|pr-comments|text||-|PR comments
 privacy-settings|privacy-settings|local-jsx||-|Privacy options
-rate-limit-options|rate-limit-options|local-jsx||-|Rate options
 release-notes|release-notes|local||-|Release notes
 rename|rename|local-jsx||[name]|Rename the current conversation
 reload-plugins|reload-plugins|local||-|Reload plugins
-remote-env|remote-env|local-jsx||-|Remote environment
-remote-setup|web-setup|local-jsx||-|Setup remote
 reset-limits|stub|disabled||-|Disabled limit reset
 resume|resume|local-jsx|continue|[conversation id or search term]|Resume a previous conversation
 rewind|rewind|local|checkpoint|-|Rewind conversation
 sandbox-toggle|sandbox|local-jsx||-|Sandbox settings
-session|session|local-jsx|remote|-|Session URL
 share|stub|disabled||-|Disabled share
 skills|skills|local-jsx||-|List skills
 stats|stats|local-jsx||-|Activity statistics
@@ -88,15 +77,12 @@ stickers|stickers|local||-|Merchandise
 summary|stub|disabled||-|Disabled summary
 tag|tag|local-jsx||<tag-name>|Session tags
 tasks|tasks|local-jsx|bashes|-|Background tasks
-teleport|stub|disabled||-|Disabled teleport
 terminalSetup|terminal-setup|local-jsx||-|Terminal setup
 theme|theme|local-jsx||-|Terminal theme
 thinkback|think-back|local-jsx||-|Historical review
 thinkback-play|thinkback-play|local||-|Historical animation
-upgrade|upgrade|local-jsx||-|Upgrade options
 usage|usage|local-jsx||-|Usage
 vim|vim|local||-|Toggle Vim mode
-voice|voice|local||-|Voice mode"####;
 static REGISTRY: OnceLock<Vec<CommandDefinition>> = OnceLock::new();
 pub fn commands() -> &'static [CommandDefinition] {
     REGISTRY.get_or_init(|| {
@@ -120,8 +106,7 @@ pub fn commands() -> &'static [CommandDefinition] {
                     );
                 let immediate = matches!(
                     name,
-                    "remote-control"
-                        | "btw"
+                    "btw"
                         | "color"
                         | "exit"
                         | "hooks"
@@ -244,15 +229,18 @@ mod tests {
 
     #[test]
     fn registry_and_alias_resolution() {
-        assert_eq!(commands().len(), 83);
-        assert_eq!(commands().iter().filter(|c| c.disabled).count(), 18);
+        assert_eq!(commands().len(), 69);
+        assert_eq!(commands().iter().filter(|c| c.disabled).count(), 17);
         assert_eq!(lookup("settings").unwrap().name, "config");
         assert_eq!(lookup("add-dir").unwrap().name, "add-dir");
         assert_eq!(lookup("export").unwrap().name, "export");
         assert_eq!(lookup("rename").unwrap().name, "rename");
         assert_eq!(lookup("continue").unwrap().name, "resume");
+        for removed in ["remote-control", "remote-env", "web-setup", "mobile",
+            "voice", "upgrade", "rate-limit-options", "session", "extra-usage", "teleport"] {
+            assert!(lookup(removed).is_none(), "removed cloud command: {removed}");
+        }
         for command in [
-            "remote-control",
             "btw",
             "color",
             "exit",

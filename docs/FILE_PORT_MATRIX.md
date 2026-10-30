@@ -92,7 +92,7 @@
 | `src/cli/handlers/util.tsx` | 110 | 14501 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/ndjsonSafeStringify.ts` | 33 | 1408 | 重写：保持通用行为 | `src/ndjson.rs / src/main.rs / src/agent.rs` | 部分实现：JS 特殊行分隔符转义、SDK 输出回环与 JSON 值保持；jsonStringify 的非标准对象语义待核对 |
 | `src/cli/print.ts` | 5595 | 212735 | 重写：Headless 排队消息合并与会话执行 | `src/queued_prompt_batch.rs` / `src/sdk_queue.rs` / `src/main.rs`；SDK seed_read_state 接入共享会话已读缓存（9743d9bc），源码已提交待验收； | 部分实现：同 workload/meta 提示合并调用和去重计费、结构化 task_notification 系统事件、状态/用量解析；新增按 UUID 原始内容逐条回放（含批次合并与直接 SDK 消息），实际进程+HTTP 验证；原版全输出协议、完整消息确认/生命周期回调、远端 IO 和命令主流程仍未等价；SDK 原生取消待处理 UUID，取消后不会发送模型请求 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；队列同 workload/meta 图文合并单次模型调用及各 UUID 回放已验证；多模态 UI/非图片块仍未等价；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/资源等仍待验证；SDK initialize 已按真实插件/本地技能源文件返回描述和 argumentHint（48e34f9、2da7e57、ffd1056），仅源码提交待验收；排队命令处理、输出协议及取消时序仍未等价；SDK 非排队图文消息现在按原版识别末尾文本块斜杠命令，替换实际模型文本块并保留前置图片（64e2a9b），源码待验收；SDK side_question 独立模型调用已接线（21d3014、e165563），主模型忙碌期间 stdin 控制并发与中断仍缺；队列执行/取消仍缺；SDK 运行中控制：独立 stdin 读取线程和 watch 取消通知已接通 Agent ask、SessionStart、标准及旧版控制响应，SDK interrupt/end_session/now 可唤醒正在执行的主模型（006b2fe8、742656fa，源码已提交待验收）；队列自动调度、子代理取消、恢复时序仍有差异；SDK generate_session_title 现在按原版异步调用独立模型，不阻塞后续 SDK 输入；完成后由 Agent 单一写入口校验原会话 ID 再保存标题、按原始提供商记录 API 耗时与费用（04aa82ba、c0045acb、b2610475、d1449753，源码已提交待验收）；主 Agent 正执行其它模型时的标题回执时序、取消与 5 秒退出排空仍待进一步对齐；SDK 标准控制 rewind_files 已接真实 Agent、文件快照和审批；用户 UUID 经主模型与队列执行传递并支持 dry_run（9a38bb34、69652c1b、4a8bc0d4，源码已提交待验收）；回退响应详细统计/完整异步取消和 SDK 原生 MCP 初始化仍缺 |
-| `src/cli/remoteIO.ts` | 256 | 9946 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/cli/remoteIO.ts` | 256 | 9946 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程会话标准输入输出；不再跟进，通用本地能力与模型 API 保留 |
 | `src/cli/structuredIO.ts` | 860 | 28720 | 重写：保持通用行为 | `src/main.rs / src/agent.rs / src/sse.rs` | 部分实现：NDJSON SDK 多轮、事件和实时文本增量；控制请求体系未全等；SDK 本地控制包络初始化/状态/取消回环，其他协议仍未全等 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；多模态 UI/非图片块仍未等价|
 | `src/cli/transports/HybridTransport.ts` | 283 | 10883 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程 SDK 专属传输；不再跟进，通用本地能力保留 |
 | `src/cli/transports/SSETransport.ts` | 712 | 23758 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程 SDK 专属传输；不再跟进，通用本地能力保留 |
@@ -114,9 +114,9 @@
 | `src/commands/branch/branch.ts` | 297 | 9580 | 重写：保持通用行为 | `src/agent.rs / src/session.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：/branch 已连接真实运行主流程；克隆当前完整会话消息与工具结果、生成新会话 UUID、原会话不变、来源跟踪、默认/自定义标题加 (Branch) 后缀及冲突递增，持久化后可独立恢复。新分支隔离旧会话 TodoWrite/兼容任务清单；原版逐消息 forkedFrom UUID/JSONL content-replacement、额外 transcript 元数据仍待等价 |
 | `src/commands/branch/index.ts` | 15 | 445 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/break-cache/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/bridge/bridge.tsx` | 509 | 46907 | 重写：保持通用行为 | `src/generated_ports/p_c5c7a3a7a86d5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/bridge/index.ts` | 27 | 604 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/bridge-kick.ts` | 201 | 6703 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/bridge/bridge.tsx` | 509 | 46907 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程控制 CLI 命令；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/bridge/index.ts` | 27 | 604 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程控制 CLI 命令；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/bridge-kick.ts` | 201 | 6703 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程 Bridge 诊断；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/brief.ts` | 131 | 5173 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/btw/btw.tsx` | 243 | 30250 | 重写：保持通用行为 | `src/generated_ports/p_45e0c7d37ad4a.rs`| 部分实现：side-question 覆盖层决策核——键盘契约（escape/return/space/ctrl-c/ctrl-d 完成显示 skip、up/ctrl-p 上滚、down/ctrl-n 下滚、余忽略）、取数分支（有响应即用/空响应 No response received/异常保消息或默认）、chrome 度量逐字（5/6 行、3 行滚动步），附 4 测试；React 状态机与 ScrollBox 属组件域|
 | `src/commands/btw/index.ts` | 14 | 314 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -158,14 +158,14 @@
 | `src/commands/exit/index.ts` | 13 | 250 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/export/export.tsx` | 91 | 15104 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/export/index.ts` | 12 | 303 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/session_control.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、[filename] 参数提示及非即时执行完整对应，生产会话导出分发已接线；证据 CI #41041559517 |
-| `src/commands/extra-usage/extra-usage-core.ts` | 119 | 4000 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/extra-usage/extra-usage-noninteractive.ts` | 17 | 466 | 重写：保持通用行为 | `src/generated_ports/p_5e00d56a89e05.rs` | 部分实现：完整等价：浏览器已开/手动访问双文案与原版逐字一致；core 调用随订阅面，待验收 |
-| `src/commands/extra-usage/extra-usage.tsx` | 17 | 3134 | 重写：保持通用行为 | `src/generated_ports/p_fa4cf9bf81ae4.rs`| 部分实现：runExtraUsage 分支编排（message 直显 or Login 流程：上游 starting 文案、成功与中断完成消息、API key 变更通知），附 3 测试；Login 组件与用量服务注入|
-| `src/commands/extra-usage/index.ts` | 32 | 1101 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/extra-usage/extra-usage-core.ts` | 119 | 4000 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方超额用量付费入口；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/extra-usage/extra-usage-noninteractive.ts` | 17 | 466 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方超额用量付费入口；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/extra-usage/extra-usage.tsx` | 17 | 3134 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方超额用量付费入口；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/extra-usage/index.ts` | 32 | 1101 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方超额用量付费入口；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/fast/fast.tsx` | 269 | 33931 | 重写：保持通用行为 | `src/generated_ports/p_beab21f3c4363.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/fast/index.ts` | 27 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/feedback/feedback.tsx` | 25 | 5095 | 重写：保持通用行为 | `src/generated_ports/p_db7aa9242d70e.rs`| 部分实现：/feedback 入口契约（args 作为初始描述默认值、messages/abortSignal/backgroundTasks 透传 Feedback 组件视图），附 2 测试；Feedback 组件本体归组件域|
-| `src/commands/feedback/index.ts` | 27 | 931 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/feedback/feedback.tsx` | 25 | 5095 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂在线反馈上传；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/feedback/index.ts` | 27 | 931 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂在线反馈上传；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/files/files.ts` | 20 | 688 | 重写：保持通用行为 | `src/files_context.rs / src/agent.rs / src/main.rs` | 部分实现：/files 从真实工具结果重建读、写、编辑、NotebookEdit 的成功文件缓存，按最近使用排序、去重、保留最多 100 项，失败不入缓存，删除后的历史文件仍可跨会话恢复显示；原版独立 FileStateCache 的 25MB 字节淘汰、完整内容/mtime/offset/limit、编辑并发保护、压缩状态及实时失效仍待补齐 |
 | `src/commands/files/index.ts` | 13 | 316 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/good-claude/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：原版禁用注册节点 Rust 化，保持不可调用并等待统一验收 |
@@ -180,22 +180,22 @@
 | `src/commands/init-verifiers.ts` | 263 | 10315 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/init.ts` | 257 | 20961 | 重写：保持通用行为 | `src/project_init.rs / src/main.rs / src/agent.rs / tests/integration_cli.rs` | 部分实现：已实现模型中立的 AGENTS.md 初始化主流程，project-init 与交互 /init 连接真实模型及用户问答；实际文件扫描、两组用户偏好、方案预览、写入审批及完成复查通过模型+工具执行；未等价原版特定 React 预览、实验开关与外部身份/Onboarding 状态 |
 | `src/commands/insights.ts` | 3201 | 115949 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/ApiKeyStep.tsx` | 231 | 23518 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/CheckExistingSecretStep.tsx` | 190 | 18135 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/CheckGitHubStep.tsx` | 15 | 1248 | 重写：保持通用行为 | `src/generated_ports/p_26ba971b8d52d.rs`| 部分实现：GitHub CLI 可用性检查静态文案+Text 视图，附 1 测试|
-| `src/commands/install-github-app/ChooseRepoStep.tsx` | 211 | 21279 | 重写：保持通用行为 | `src/generated_ports/p_7c4a2c598240c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/install-github-app/CreatingStep.tsx` | 65 | 9266 | 重写：保持通用行为 | `src/generated_ports/p_7a696c359ec3c.rs`| 部分实现：进度步进双纯核——progress_steps（skipWorkflow 2步分支/existing-secret 分支/workflow 单复数措辞）与 step_status 分类器（completed/in-progress/pending 按当前索引），步骤行渲染（勾/省略号+success/warning色）+边框 Pane 视图，附 4 测试（敏感字面值按隐私门禁中性化）|
-| `src/commands/install-github-app/ErrorStep.tsx` | 85 | 8602 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/ExistingWorkflowStep.tsx` | 103 | 9833 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/InstallAppStep.tsx` | 94 | 9601 | 重写：保持通用行为 | `src/generated_ports/p_324bde623c2e0.rs` | 部分实现：完整等价：步骤文案两段（docs 域名随 github-app 常量桩）；键绑定与 JSX 归 ink 宿主，待验收 |
-| `src/commands/install-github-app/OAuthFlowStep.tsx` | 276 | 39935 | 重写：保持通用行为 | `src/generated_ports/p_92dc7da033a9e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/install-github-app/SuccessStep.tsx` | 96 | 10170 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/WarningsStep.tsx` | 73 | 9132 | 重写：保持通用行为 | `src/generated_ports/p_c4344a216659f.rs`| 部分实现：设置警告面板渲染（标题块/每警告行/条列说明/继续提示/手动设置文档指针），confirm:yes 键绑定上游驱动 onContinue（context=Confirmation）；docs URL env 可覆盖中性默认，附 3 测试|
-| `src/commands/install-github-app/index.ts` | 14 | 471 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/install-github-app/install-github-app.tsx` | 587 | 87155 | 重写：保持通用行为 | `src/generated_ports/p_a9174729be5dd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/install-github-app/setupGitHubActions.ts` | 326 | 10168 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-slack-app/index.ts` | 13 | 333 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/install-slack-app/install-slack-app.ts` | 31 | 877 | 重写：保持通用行为 | `src/generated_ports/p_bb12be5257a54.rs` | 部分实现：完整等价：点击计数器+双文案逐字；品牌 URL 按隐私门禁不落地（差异记录），browser 接线待验收 |
+| `src/commands/install-github-app/ApiKeyStep.tsx` | 231 | 23518 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/CheckExistingSecretStep.tsx` | 190 | 18135 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/CheckGitHubStep.tsx` | 15 | 1248 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/ChooseRepoStep.tsx` | 211 | 21279 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/CreatingStep.tsx` | 65 | 9266 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/ErrorStep.tsx` | 85 | 8602 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/ExistingWorkflowStep.tsx` | 103 | 9833 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/InstallAppStep.tsx` | 94 | 9601 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/OAuthFlowStep.tsx` | 276 | 39935 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/SuccessStep.tsx` | 96 | 10170 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/WarningsStep.tsx` | 73 | 9132 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/index.ts` | 14 | 471 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/install-github-app.tsx` | 587 | 87155 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-github-app/setupGitHubActions.ts` | 326 | 10168 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 GitHub App 安装流程；普通 Git 保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-slack-app/index.ts` | 13 | 333 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 Slack 自动化；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/install-slack-app/install-slack-app.ts` | 31 | 877 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；厂商托管 Slack 自动化；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/install.tsx` | 300 | 39068 | 重写：保持通用行为 | `src/generated_ports/p_3289389e68d82.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/keybindings/index.ts` | 14 | 448 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -210,8 +210,8 @@
 | `src/commands/mcp/xaaIdpCommand.ts` | 267 | 10290 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/memory/index.ts` | 11 | 220 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/memory/memory.tsx` | 90 | 12608 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/mobile/index.ts` | 12 | 282 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/mobile/mobile.tsx` | 274 | 21797 | 重写：保持通用行为 | `src/generated_ports/p_ad72c0a43614a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/mobile/index.ts` | 12 | 282 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端移动端伴随入口；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/mobile/mobile.tsx` | 274 | 21797 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端移动端伴随入口；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/mock-limits/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/model/index.ts` | 17 | 559 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/model/model.tsx` | 297 | 37569 | 重写：保持通用行为 | `src/generated_ports/p_8f75dbf7e21af.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -219,8 +219,8 @@
 | `src/commands/onboarding/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/output-style/index.ts` | 12 | 291 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/output-style/output-style.tsx` | 7 | 1343 | 重写：保持通用行为 | `src/main.rs` | 部分实现：交互式 /output-style 输出原版完整停用提示并保持会话不追加消息；仍待终端输出回归验证 |
-| `src/commands/passes/index.ts` | 23 | 632 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/passes/passes.tsx` | 24 | 3783 | 重写：保持通用行为 | `src/generated_ports/p_31ab458ab85e0.rs`| 部分实现：首次访问配置补丁（hasVisitedPasses 标记停止 upsell、缓存快照 passesLastSeenRemaining 缺失保旧值）+Passes 视图路由，附 3 测试；推荐码缓存与配置持久化注入|
+| `src/commands/passes/index.ts` | 23 | 632 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方订阅权益通行证；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/passes/passes.tsx` | 24 | 3783 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方订阅权益通行证；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/perf-issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/permissions/index.ts` | 12 | 296 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/permissions/permissions.tsx` | 10 | 2223 | 重写：保持通用行为 | `src/generated_ports/p_f0fb508cfc148.rs`| 部分实现：入口路由 PermissionRuleList 视图（onRetryDenials 由 createPermissionRetryMessage 构建），附 1 测试|
@@ -252,11 +252,11 @@
 | `src/commands/release-notes/release-notes.ts` | 51 | 1524 | 重写：保持通用行为 | `src/release_notes.rs / src/main.rs` | 部分实现：版本更新日志解析、500ms 下载、缓存及 CLI/交互调用已实现；自动通知仍缺 |
 | `src/commands/reload-plugins/index.ts` | 19 | 653 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/reload-plugins/reload-plugins.ts` | 62 | 2598 | 重写：保持通用行为 | `src/main.rs / src/agent.rs / src/plugins.rs` | 部分实现：交互式 /reload-plugins 已接入 Agent::reload_plugins 实际 Hook/MCP 刷新、技能命令目录同步及错误反馈（9c866231，源码已提交待验收）；原版远程设置重新拉取、插件 LSP 热重载及全部计数仍缺 |
-| `src/commands/remote-env/index.ts` | 16 | 577 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/remote-env/remote-env.tsx` | 7 | 1454 | 重写：保持通用行为 | `src/generated_ports/p_1d6be8358d910.rs`| 部分实现：入口路由 RemoteEnvironmentDialog 视图（onDone 透传），附 1 测试|
-| `src/commands/remote-setup/api.ts` | 183 | 5519 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/remote-setup/index.ts` | 21 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/remote-setup/remote-setup.tsx` | 187 | 21786 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/remote-env/index.ts` | 16 | 577 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方远程环境配置；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/remote-env/remote-env.tsx` | 7 | 1454 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方远程环境配置；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/remote-setup/api.ts` | 183 | 5519 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方远程环境初始化；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/remote-setup/index.ts` | 21 | 693 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方远程环境初始化；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/remote-setup/remote-setup.tsx` | 187 | 21786 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方远程环境初始化；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/rename/generateSessionName.ts` | 68 | 2297 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：通过当前选定模型生成 JSON kebab-case 名称、验证输入并持久保存、不污染历史会话且计入模型用量；近期上下文与多模态文本已按原版补齐；原厂专用模型与超时/中断策略按通用化要求调整 |
 | `src/commands/rename/index.ts` | 13 | 281 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/session_control.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、[name] 参数提示与 immediate=true 完整对应，生产重命名分发已接线；证据 CI #41041559517 |
 | `src/commands/rename/rename.ts` | 88 | 2759 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
@@ -273,8 +273,8 @@
 | `src/commands/sandbox-toggle/index.ts` | 51 | 1520 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/sandbox-toggle/sandbox-toggle.tsx` | 83 | 13157 | 重写：保持通用行为 | `src/generated_ports/p_d71c68a412fbd.rs`| 部分实现：/sandbox 编排——平台支持门禁（WSL 专属提示）→enabledPlatforms 白名单→policy 锁→参数路由（空=设置菜单视图带依赖检查、exclude <pattern>=去引号+设置写路径+cwd 相对消息、未知=错误），设置路径 .atlas/settings.local.json；SandboxManager/设置加载注入，菜单视图归组件域，附 4 测试|
 | `src/commands/security-review.ts` | 244 | 12531 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/session/index.ts` | 17 | 418 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/session/session.tsx` | 140 | 13009 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/session/index.ts` | 17 | 418 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方远程会话链接命令；本地会话保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/session/session.tsx` | 140 | 13009 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方远程会话链接命令；本地会话保留；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/share/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/skills/index.ts` | 11 | 226 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/skills/skills.tsx` | 8 | 1888 | 重写：保持通用行为 | `src/generated_ports/p_d54f470418286.rs`| 部分实现：入口路由 SkillsMenu 视图（onExit 与 commands 透传），附 1 测试|
@@ -290,7 +290,7 @@
 | `src/commands/tag/tag.tsx` | 215 | 20999 | 重写：保持通用行为 | `src/session.rs / src/agent.rs / src/session_control.rs / src/main.rs` | 部分实现：/tag 终端主流程、Unicode 规范化、原标签切换确认、新标签替换、原子保存、列表带 #标签、按标签检索和跨进程恢复；原版 React Select/Dialog 等 UI 仍待等价 |
 | `src/commands/tasks/index.ts` | 12 | 256 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/tasks/tasks.tsx` | 8 | 1901 | 重写：保持通用行为 | `src/generated_ports/p_65123b2aecfbb.rs`| 部分实现：入口路由 BackgroundTasksDialog 视图（toolUseContext 与 onDone 透传），附 1 测试|
-| `src/commands/teleport/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
+| `src/commands/teleport/index.js` | 2 | 73 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方 Teleport 入口；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/terminalSetup/index.ts` | 24 | 725 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/terminalSetup/terminalSetup.tsx` | 531 | 77528 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/theme/index.ts` | 11 | 217 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -307,8 +307,8 @@
 | `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | `src/version.rs` / `src/main.rs` | 已验收：仅本原路径完整等价；现有运行二进制版本及可选构建时间输出与原始源码一致，CLI/交互版本生产入口均复用此函数；专属 USER_TYPE gate 按明确的多模型/去品牌要求删除；证据 CI #41041559517 |
 | `src/commands/vim/index.ts` | 12 | 273 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/vim/vim.ts` | 39 | 1139 | 重写：保持通用行为 | `src/vim_mode_source.rs / src/main.rs / src/config.rs` | 部分实现：/vim 命令切换并持久化 Vim/标准编辑模式、旧 emacs 模式兼容及原版反馈文案；输入处理层须读取偏好才能完成终端等价 |
-| `src/commands/voice/index.ts` | 21 | 482 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/voice/voice.ts` | 151 | 5264 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/voice/index.ts` | 21 | 482 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端语音 CLI；不再跟进，通用本地能力与模型 API 保留 |
+| `src/commands/voice/voice.ts` | 151 | 5264 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端语音 CLI；不再跟进，通用本地能力与模型 API 保留 |
 | `src/components/AgentProgressLine.tsx` | 136 | 14238 | 重写：终端 UI／交互 | `src/generated_ports/p_6df1d1f49fc09.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/App.tsx` | 56 | 5204 | 重写：终端 UI／交互 | `src/generated_ports/p_e55bdaf86a903.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ApproveApiKey.tsx` | 123 | 10621 | 重写：终端 UI／交互 | `src/generated_ports/p_aacc3f689f27c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -318,7 +318,7 @@
 | `src/components/AwsAuthStatusBox.tsx` | 82 | 9707 | 重写：终端 UI／交互 | `src/generated_ports/p_dde39deb9414b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/BaseTextInput.tsx` | 136 | 19313 | 重写：终端 UI／交互 | `src/generated_ports/p_3949a8e5bc4d2.rs / src/terminal_input.rs / src/main.rs` | 部分实现：chat() 真实入口已接入 Unix TTY 逐键编辑、UTF-8 光标退格、历史回退、Bracketed Paste、Ctrl 中断，非 TTY 保留逐行输入；已有 Rust 单元测试；Ink JSX 多行布局、完整键位、焦点及 Windows 交互仍未等价 |
 | `src/components/BashModeProgress.tsx` | 56 | 5675 | 重写：终端 UI／交互 | `src/generated_ports/p_0b29474a0ccd4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/BridgeDialog.tsx` | 401 | 34418 | 重写：终端 UI／交互 | `src/generated_ports/p_21443fd0f496d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/BridgeDialog.tsx` | 401 | 34418 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程 Bridge 状态界面；不再跟进，通用本地能力与模型 API 保留 |
 | `src/components/BypassPermissionsModeDialog.tsx` | 87 | 9136 | 重写：终端 UI／交互 | `src/generated_ports/p_84f9c1e4e74b8.rs` | 部分实现：完整等价：选择结果（Accept 写设置继续/Cancel 同步优雅关机不返回）含单测；渲染与厂商事件归宿主/排除，待验收 |
 | `src/components/ChannelDowngradeDialog.tsx` | 102 | 8253 | 重写：终端 UI／交互 | `src/generated_ports/p_e842880c14f05.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ClaudeCodeHint/PluginHintMenu.tsx` | 78 | 9341 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -399,7 +399,7 @@
 | `src/components/LogoV2/LogoV2.tsx` | 543 | 75183 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/LogoV2/Opus1mMergeNotice.tsx` | 55 | 5812 | 重写：终端 UI／交互 | `src/generated_ports/p_92ccc82ba7039.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/OverageCreditUpsell.tsx` | 166 | 18347 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/LogoV2/VoiceModeNotice.tsx` | 68 | 7668 | 重写：终端 UI／交互 | `src/generated_ports/p_9eba1e482615d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/LogoV2/VoiceModeNotice.tsx` | 68 | 7668 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方语音提示；不再跟进，通用本地能力与模型 API 保留 |
 | `src/components/LogoV2/WelcomeV2.tsx` | 433 | 57864 | 重写：终端 UI／交互 | `src/generated_ports/p_ea10c11eb3bed.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/feedConfigs.tsx` | 92 | 12205 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/LspRecommendation/LspRecommendationMenu.tsx` | 88 | 10247 | 重写：终端 UI／交互 | `src/generated_ports/p_d3216b1df5fb4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -442,7 +442,7 @@
 | `src/components/PromptInput/PromptInputStashNotice.tsx` | 25 | 2291 | 重写：终端 UI／交互 | `src/generated_ports/p_f6470f6cbfbdc.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/PromptInput/SandboxPromptFooterHint.tsx` | 64 | 8031 | 重写：终端 UI／交互 | `src/generated_ports/p_90f4b2e173492.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/PromptInput/ShimmeredInput.tsx` | 143 | 16680 | 重写：终端 UI／交互 | `src/generated_ports/p_2f84f9e35605c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/PromptInput/VoiceIndicator.tsx` | 137 | 10810 | 重写：终端 UI／交互 | `src/generated_ports/p_92d31b9e1cfc8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/VoiceIndicator.tsx` | 137 | 10810 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方语音状态组件；不再跟进，通用本地能力与模型 API 保留 |
 | `src/components/PromptInput/inputModes.ts` | 34 | 731 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/components/PromptInput/inputPaste.ts` | 91 | 2693 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PromptInput/useMaybeTruncateInput.ts` | 59 | 1468 | 重写：终端 UI／交互 | `src/generated_ports/p_bff9de22583fd.rs` | 部分实现：完整等价：一次性截断门（10k 阈值/20k 上限/applied 标记不重置）纯函数含单测；maybeTruncateInput 本体随 inputPaste 链，待验收 |
@@ -451,8 +451,8 @@
 | `src/components/PromptInput/useSwarmBanner.ts` | 156 | 5344 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PromptInput/utils.ts` | 61 | 1744 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/QuickOpenDialog.tsx` | 244 | 28556 | 重写：终端 UI／交互 | `src/generated_ports/p_72b601fb5bd8f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/RemoteCallout.tsx` | 76 | 9978 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/RemoteEnvironmentDialog.tsx` | 340 | 33519 | 重写：终端 UI／交互 | `src/generated_ports/p_6945c8538facb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/RemoteCallout.tsx` | 76 | 9978 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程控制开通提示；不再跟进，通用本地能力与模型 API 保留 |
+| `src/components/RemoteEnvironmentDialog.tsx` | 340 | 33519 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程环境管理界面；不再跟进，通用本地能力与模型 API 保留 |
 | `src/components/ResumeTask.tsx` | 268 | 38550 | 重写：终端 UI／交互 | `src/generated_ports/p_0b6fa0f37f0d7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/SandboxViolationExpandedView.tsx` | 99 | 11401 | 重写：终端 UI／交互 | `src/generated_ports/p_d899e6008e2c6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ScrollKeybindingHandler.tsx` | 1012 | 149202 | 重写：终端 UI／交互 | `src/generated_ports/p_875b44513014b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -489,11 +489,11 @@
 | `src/components/TagTabs.tsx` | 139 | 20853 | 重写：终端 UI／交互 | `src/generated_ports/p_fdf5a5900b02b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/TaskListV2.tsx` | 378 | 50200 | 重写：终端 UI／交互 | `src/generated_ports/p_8f8e588ccdcf6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/TeammateViewHeader.tsx` | 82 | 7415 | 重写：终端 UI／交互 | `src/generated_ports/p_00d240667df39.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/TeleportError.tsx` | 189 | 18824 | 重写：终端 UI／交互 | `src/generated_ports/p_841962979051b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/TeleportProgress.tsx` | 140 | 16142 | 重写：终端 UI／交互 | `src/generated_ports/p_af902ff34c817.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/TeleportRepoMismatchDialog.tsx` | 104 | 13046 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/TeleportResumeWrapper.tsx` | 167 | 15381 | 重写：终端 UI／交互 | `src/generated_ports/p_145c13866144f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/TeleportStash.tsx` | 116 | 15582 | 重写：终端 UI／交互 | `src/generated_ports/p_a3657ca61fd5e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/TeleportError.tsx` | 189 | 18824 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；云端 Teleport 界面；不再跟进，通用本地能力与模型 API 保留 |
+| `src/components/TeleportProgress.tsx` | 140 | 16142 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；云端 Teleport 界面；不再跟进，通用本地能力与模型 API 保留 |
+| `src/components/TeleportRepoMismatchDialog.tsx` | 104 | 13046 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；云端 Teleport 界面；不再跟进，通用本地能力与模型 API 保留 |
+| `src/components/TeleportResumeWrapper.tsx` | 167 | 15381 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；云端 Teleport 界面；不再跟进，通用本地能力与模型 API 保留 |
+| `src/components/TeleportStash.tsx` | 116 | 15582 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；云端 Teleport 界面；不再跟进，通用本地能力与模型 API 保留 |
 | `src/components/TextInput.tsx` | 124 | 20998 | 重写：终端 UI／交互 | `src/generated_ports/p_d47fe9c9aae64.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ThemePicker.tsx` | 333 | 35662 | 重写：终端 UI／交互 | `src/generated_ports/p_b8623882ef24c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ThinkingToggle.tsx` | 153 | 18209 | 重写：终端 UI／交互 | `src/generated_ports/p_e827f2867375a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -563,7 +563,7 @@
 | `src/components/mcp/MCPAgentServerMenu.tsx` | 183 | 26662 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/MCPListPanel.tsx` | 504 | 58231 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/MCPReconnect.tsx` | 167 | 16195 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/mcp/MCPRemoteServerMenu.tsx` | 649 | 102489 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/mcp/MCPRemoteServerMenu.tsx` | 649 | 102489 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；Claude.ai 托管 MCP 菜单；本地标准 MCP 保留；不再跟进，通用本地能力与模型 API 保留 |
 | `src/components/mcp/MCPSettings.tsx` | 398 | 40386 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/MCPStdioServerMenu.tsx` | 177 | 28394 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/MCPToolDetailView.tsx` | 212 | 23139 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -682,8 +682,8 @@
 | `src/components/tasks/BackgroundTasksDialog.tsx` | 652 | 116395 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/tasks/DreamDetailDialog.tsx` | 251 | 25889 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/tasks/InProcessTeammateDetailDialog.tsx` | 266 | 31018 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/tasks/RemoteSessionDetailDialog.tsx` | 904 | 96185 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/tasks/RemoteSessionProgress.tsx` | 243 | 27859 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/tasks/RemoteSessionDetailDialog.tsx` | 904 | 96185 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程任务视图；不再跟进，通用本地能力与模型 API 保留 |
+| `src/components/tasks/RemoteSessionProgress.tsx` | 243 | 27859 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程任务视图；不再跟进，通用本地能力与模型 API 保留 |
 | `src/components/tasks/ShellDetailDialog.tsx` | 404 | 39167 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/tasks/ShellProgress.tsx` | 87 | 7004 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/tasks/renderToolActivity.tsx` | 33 | 4414 | 重写：终端 UI／交互 | `src/generated_ports/p_3d8cf7b105951.rs` | 部分实现：完整等价：回退链文本构造（未知工具/解析失败/空名→原名，含参→Name(args)）含四分支单测；inputSchema 解析随各工具桩，待验收 |
@@ -727,7 +727,7 @@
 | `src/context/overlayContext.tsx` | 151 | 14123 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context/promptOverlayContext.tsx` | 125 | 12138 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context/stats.tsx` | 220 | 22006 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/context/voice.tsx` | 88 | 8784 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/context/voice.tsx` | 88 | 8784 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方语音状态；不再跟进，通用本地能力与模型 API 保留 |
 | `src/coordinator/coordinatorMode.ts` | 370 | 19020 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/entrypoints/agentSdkTypes.ts` | 444 | 13076 | 重写：CLI／SDK 入口 | `src/main.rs` | 部分实现，多模式与 SDK 未等价 |
 | `src/entrypoints/cli.tsx` | 303 | 39275 | 重写：CLI／SDK 入口 | `src/main.rs` | 部分实现，多模式与 SDK 未等价 |
@@ -814,8 +814,8 @@
 | `src/hooks/usePromptSuggestion.ts` | 178 | 5315 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/usePromptsFromClaudeInChrome.tsx` | 71 | 11623 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useQueueProcessor.ts` | 69 | 2547 | 重写：终端 UI／交互 | `src/generated_ports/p_ada86ce0c1836.rs` | 部分实现：完整等价：出队泵门（无活动查询∧队列非空∧无本地 JSX UI 阻塞）纯函数含四分支单测；优先级排序随 messageQueue，待验收 |
-| `src/hooks/useRemoteSession.ts` | 606 | 23010 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useReplBridge.tsx` | 723 | 115652 | 重写：终端 UI／交互 | `src/generated_ports/p_c84de04e0085c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/hooks/useRemoteSession.ts` | 606 | 23010 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程会话 Hook；不再跟进，通用本地能力与模型 API 保留 |
+| `src/hooks/useReplBridge.tsx` | 723 | 115652 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程 Bridge Hook；不再跟进，通用本地能力与模型 API 保留 |
 | `src/hooks/useSSHSession.ts` | 242 | 8316 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useScheduledTasks.ts` | 140 | 5975 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useSearchInput.ts` | 365 | 10327 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -829,7 +829,7 @@
 | `src/hooks/useTaskListWatcher.ts` | 222 | 6822 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTasksV2.ts` | 251 | 8808 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTeammateViewAutoExit.ts` | 64 | 2189 | 重写：终端 UI／交互 | `src/generated_ports/p_870f27ccccd41.rs` | 部分实现：完整等价：自动退出决策纯函数（killed/错误/任务被逐出→退出；completed 留观；未查看即停留）含双单测；AppState 订阅宿主待验收 |
-| `src/hooks/useTeleportResume.tsx` | 85 | 9840 | 重写：终端 UI／交互 | `src/generated_ports/p_17ee0f10fb33b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/hooks/useTeleportResume.tsx` | 85 | 9840 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；云端 Teleport 恢复；不再跟进，通用本地能力与模型 API 保留 |
 | `src/hooks/useTerminalSize.ts` | 16 | 354 | 重写：终端 UI／交互 | `src/generated_ports/terminal_context.rs` | 部分实现：上下文读取与缺失错误已手写；React Ink Provider 与终端尺寸事件仍需完整接线验收 |
 | `src/hooks/useTextInput.ts` | 530 | 17027 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTimeout.ts` | 15 | 362 | 重写：终端 UI／交互 | `src/generated_ports/p_34de3d89a3b89.rs` | 部分实现：完整等价：超时状态机（reset 清除重排/delay 到期置位/时钟注入可测）含单测；定时器宿主待验收 |
@@ -838,9 +838,9 @@
 | `src/hooks/useUpdateNotification.ts` | 35 | 982 | 重写：终端 UI／交互 | `src/generated_ports/p_e2a7dc8bdd83c.rs` | 部分实现：完整等价：loose semver 三段提取+通知触发比较+状态转移纯函数含双单测；MACRO.VERSION 种子随构建宏，待验收 |
 | `src/hooks/useVimInput.ts` | 317 | 9741 | 重写：终端 UI／交互 | `src/terminal_input.rs / src/vim/mod.rs` | 部分实现：Vim 键盘状态机接通终端输入，插入、移动、撤销与重复部分可用；原版 Ink 多行输入、粘贴、模式联动及跨平台交互仍待等价 |
 | `src/hooks/useVirtualScroll.ts` | 722 | 35122 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useVoice.ts` | 1145 | 45802 | 重写：终端 UI／交互 | `src/generated_ports/p_5a4cf6e30ce08.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/hooks/useVoiceEnabled.ts` | 26 | 1134 | 重写：终端 UI／交互 | `src/generated_ports/p_f54a6cc84e937.rs` | 部分实现：完整等价：三输入组合判定（用户意图∧语音授权∧灰度开关）纯函数含单测；OAuth 授权半段随语音链，待验收 |
-| `src/hooks/useVoiceIntegration.tsx` | 677 | 99464 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useVoice.ts` | 1145 | 45802 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端语音录入；不再跟进，通用本地能力与模型 API 保留 |
+| `src/hooks/useVoiceEnabled.ts` | 26 | 1134 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端语音资格；不再跟进，通用本地能力与模型 API 保留 |
+| `src/hooks/useVoiceIntegration.tsx` | 677 | 99464 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方语音集成；不再跟进，通用本地能力与模型 API 保留 |
 | `src/ink/Ansi.tsx` | 292 | 33264 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/bidi.ts` | 140 | 4290 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/clearTerminal.ts` | 75 | 1901 | 重写：终端 UI／交互 | `src/platform_source_utilities.rs / src/main.rs` | 部分实现：Win32 传统终端、Windows Terminal、VS Code ConPTY、Mintty 和类 Unix 清屏与 scrollback ANSI 序列已实现并接通 clear-screen CLI；原版全部调用链待完整移植 |
@@ -965,7 +965,7 @@
 | `src/migrations/migrateFennecToOpus.ts` | 46 | 1372 | 重写：保持通用行为 | `src/generated_ports/p_1c5aeb13e35c9.rs` | 部分实现：完整等价：fennec 别名重映射表（四条含 fast 联动）含全表单测；ant 门与 userSettings 限定随原版；待验收 |
 | `src/migrations/migrateLegacyOpusToCurrent.ts` | 58 | 1974 | 重写：保持通用行为 | `src/generated_ports/p_d472ebaa4eeb0.rs` | 部分实现：旧模型资格判定接收显式提供方、迁移目标提供方及旧模型集合；移除专属模型硬编码，不自动改用户模型；通知和配置持久化、生产调用尚未接通，不声称完整等价 |
 | `src/migrations/migrateOpusToOpus1m.ts` | 44 | 1347 | 重写：保持通用行为 | `src/generated_ports/p_9c5d3f64a2870.rs` | 部分实现：完整等价：迁移决策纯函数（仅 eligible 且设置恰为 opus 别名才写，Pro/3P/运行时覆盖跳过语义同款）含单测；模型链访问器接线待验收 |
-| `src/migrations/migrateReplBridgeEnabledToRemoteControlAtStartup.ts` | 23 | 1000 | 重写：保持通用行为 | `src/generated_ports/p_72265c8cdc4d6.rs` | 部分实现：完整等价：replBridgeEnabled→remoteControlAtStartup 迁移决策（拷贝+删旧键+幂等+新键已设跳过）含双单测；saveGlobalConfig 随 settings 链，待验收 |
+| `src/migrations/migrateReplBridgeEnabledToRemoteControlAtStartup.ts` | 23 | 1000 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程控制迁移；不再跟进，通用本地能力与模型 API 保留 |
 | `src/migrations/migrateSonnet1mToSonnet45.ts` | 49 | 1582 | 重写：保持通用行为 | `src/generated_ports/p_2e1b0007c802b.rs` | 部分实现：完整等价：裸 sonnet] 别名钉到显式 4.5 1M 决策纯函数含四分支单测（只动 userSettings 防全局提升）；settings 访问器随 settings 链，待验收 |
 | `src/migrations/migrateSonnet45ToSonnet46.ts` | 68 | 2055 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/resetAutoModeOptInForDefaultOffer.ts` | 52 | 2106 | 重写：保持通用行为 | `src/generated_ports/p_138b407b8bbdb.rs` | 部分实现：完整等价：一次性迁移决策（编译门关早退/仅 enabled 态清 skip/幂等）含四分支单测；settings/config 访问器随各自链路，待验收 |
@@ -1010,8 +1010,8 @@
 | `src/services/analytics/metadata.ts` | 974 | 32617 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/services/analytics/sink.ts` | 115 | 3542 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/services/analytics/sinkKillswitch.ts` | 26 | 1063 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
-| `src/services/api/adminRequests.ts` | 120 | 3208 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/services/api/bootstrap.ts` | 142 | 4634 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
+| `src/services/api/adminRequests.ts` | 120 | 3208 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方组织管理员申请 API；不再跟进，通用本地能力与模型 API 保留 |
+| `src/services/api/bootstrap.ts` | 142 | 4634 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂 CLI 服务端启动配置；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/claude.ts` | 3420 | 125779 | 替换：独立模型／访问管理 | `src/provider.rs / src/sse.rs` | 部分实现：多提供商、SSE 增量及 Token 归一化；原版 API 流程未全等 |
 | `src/services/api/client.ts` | 390 | 16164 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/dumpPrompts.ts` | 227 | 7332 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
@@ -1019,16 +1019,16 @@
 | `src/services/api/errorUtils.ts` | 261 | 8405 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/errors.ts` | 1208 | 41735 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/filesApi.ts` | 749 | 21494 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂云端文件服务（保留本地文件）；不再跟进，通用本地能力保留 |
-| `src/services/api/firstTokenDate.ts` | 61 | 1765 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/services/api/grove.ts` | 358 | 11543 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
+| `src/services/api/firstTokenDate.ts` | 61 | 1765 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂组织首次使用数据；不再跟进，通用本地能力与模型 API 保留 |
+| `src/services/api/grove.ts` | 358 | 11543 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方账户信息服务；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/logging.ts` | 789 | 24191 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/services/api/metricsOptOut.ts` | 160 | 5355 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/services/api/overageCreditGrant.ts` | 138 | 4913 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
+| `src/services/api/metricsOptOut.ts` | 160 | 5355 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂服务端统计开关；不再跟进，通用本地能力与模型 API 保留 |
+| `src/services/api/overageCreditGrant.ts` | 138 | 4913 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方超额用量额度服务；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/promptCacheBreakDetection.ts` | 728 | 26288 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/referral.ts` | 282 | 7985 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂推荐奖励；不再跟进，通用本地能力保留 |
-| `src/services/api/sessionIngress.ts` | 515 | 17055 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/services/api/ultrareviewQuota.ts` | 39 | 1219 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/services/api/usage.ts` | 64 | 1685 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
+| `src/services/api/sessionIngress.ts` | 515 | 17055 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方远程会话持久化 API；不再跟进，通用本地能力与模型 API 保留 |
+| `src/services/api/ultrareviewQuota.ts` | 39 | 1219 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端审查配额；不再跟进，通用本地能力与模型 API 保留 |
+| `src/services/api/usage.ts` | 64 | 1685 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方订阅配额 API；本地费用统计保留；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/withRetry.ts` | 823 | 28238 | 重写：模型／Agent 循环 | `src/provider.rs / src/sse.rs / src/gemini_sse.rs / src/agent.rs` | 部分实现：多模型 HTTP/流式建立前的 408/409/429/5xx 与连接超时有限重试，尊重 x-should-retry:false、Retry-After 秒数，失败不执行工具或重复落盘；仍缺原版可取消等待、按查询来源的 529 策略、流中断恢复、模型回退及完整重试事件与自定义预算 |
 | `src/services/autoDream/autoDream.ts` | 325 | 11259 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/autoDream/config.ts` | 22 | 892 | 重写：保持通用行为 | `src/generated_ports/p_3f28a74b2c6e6.rs`| 部分实现：autoDream 决策纯函数（用户设置显式值覆盖实验默认，未设时实验值决定），settings/growthbook 读取由调用方传入；实验 flag 名按隐私门禁省略|
@@ -1098,11 +1098,11 @@
 | `src/services/preventSleep.ts` | 166 | 4586 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/rateLimitMessages.ts` | 345 | 10858 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/services/rateLimitMocking.ts` | 145 | 4420 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
-| `src/services/remoteManagedSettings/index.ts` | 639 | 20911 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/remoteManagedSettings/securityCheck.tsx` | 74 | 10513 | 重写：保持通用行为 | `src/generated_ports/p_8985ba0623d61.rs`| 部分实现：托管设置安全门三短路判定（无危险设置/危险未变/非交互→no_check_needed）否则阻断对话框；危险设置提取与 diff 谓词由调用方注入布尔结果，对话框归组件域，埋点保留调用形态注释，附 4 测试|
-| `src/services/remoteManagedSettings/syncCache.ts` | 113 | 4229 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/remoteManagedSettings/syncCacheState.ts` | 97 | 4004 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/remoteManagedSettings/types.ts` | 32 | 1060 | 重写：保持通用行为 | `src/generated_ports/p_dba9ae467f282.rs` | 部分实现：完整等价：响应结构（uuid/checksum/宽松 settings 记录防循环依赖）+is_valid 逐字段校验（zod 等价）+FetchResult 含 304 语义与 skipRetry，含单测；待验收 |
+| `src/services/remoteManagedSettings/index.ts` | 639 | 20911 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂服务端托管设置；本地设置保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/services/remoteManagedSettings/securityCheck.tsx` | 74 | 10513 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂服务端托管设置；本地设置保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/services/remoteManagedSettings/syncCache.ts` | 113 | 4229 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂服务端托管设置；本地设置保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/services/remoteManagedSettings/syncCacheState.ts` | 97 | 4004 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂服务端托管设置；本地设置保留；不再跟进，通用本地能力与模型 API 保留 |
+| `src/services/remoteManagedSettings/types.ts` | 32 | 1060 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂服务端托管设置；本地设置保留；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/settingsSync/index.ts` | 582 | 17924 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；设置云端同步（保留本地设置）；不再跟进，通用本地能力保留 |
 | `src/services/settingsSync/types.ts` | 68 | 1668 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；设置云端同步（保留本地设置）；不再跟进，通用本地能力保留 |
 | `src/services/teamMemorySync/index.ts` | 1257 | 44153 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；团队记忆云端同步（保留本地记忆）；不再跟进，通用本地能力保留 |
@@ -1133,7 +1133,7 @@
 | `src/skills/bundled/loop.ts` | 93 | 4667 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/loremIpsum.ts` | 283 | 4400 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/remember.ts` | 83 | 4227 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
-| `src/skills/bundled/scheduleRemoteAgents.ts` | 448 | 19048 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
+| `src/skills/bundled/scheduleRemoteAgents.ts` | 448 | 19048 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程 Agent 计划任务技能；不再跟进，通用本地能力与模型 API 保留 |
 | `src/skills/bundled/simplify.ts` | 70 | 4466 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/skillify.ts` | 198 | 9483 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/stuck.ts` | 80 | 4254 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
@@ -1157,7 +1157,7 @@
 | `src/tasks/LocalShellTask/LocalShellTask.tsx` | 523 | 66306 | 重写：任务调度 | `src/background.rs / src/tools.rs` | 部分实现：进程启动、磁盘输出、停止和状态回填；UI 和完整通知时序未等价；新增统一 .output 任务日志，stdout/stderr 按读取块到达顺序合并，合并流共享 5GiB 上限，TaskOutput、增量读取和 Read 均可达，旧分离日志仍可读取（4aa001f5、ea67020f，已提交待验收）；超出磁盘上限的 Shell 现触发终止并保留失败状态（38e0e4a8，待验收）；跨流调度精确时序、全部任务类型和完整输出生命周期仍待等价；后台超时与输出管道等待使用同一截止时间，超时结束进程组并保留可读错误日志（3e893596、c9eeb5f、1edf5f2，源码已提交待验收） |
 | `src/tasks/LocalShellTask/guards.ts` | 42 | 1552 | 重写：任务调度 | `src/task_guards.rs` | 已验收：isLocalShellTask 对 object/null/array/类型字段和附加字段的行为对照；证据 task_guards::tests |
 | `src/tasks/LocalShellTask/killShellTasks.ts` | 77 | 2565 | 重写：任务调度 | `src/background.rs` | 部分实现：补齐停止请求在输出排空阶段的取消传播、短时强制排空及 killed 状态保持，源码已提交待验收；Windows taskkill 进程树清理已接入停止路径（811d93c6、42e70ce7，待验收），Windows 父进程先退出后的后代归属、SDK/终端全生命周期仍未等价 |
-| `src/tasks/RemoteAgentTask/RemoteAgentTask.tsx` | 856 | 126389 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
+| `src/tasks/RemoteAgentTask/RemoteAgentTask.tsx` | 856 | 126389 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程 Agent 执行任务；不再跟进，通用本地能力与模型 API 保留 |
 | `src/tasks/pillLabel.ts` | 83 | 2898 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/stopTask.ts` | 101 | 2894 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/types.ts` | 47 | 1691 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
@@ -1389,8 +1389,8 @@
 | `src/utils/autoUpdater.ts` | 562 | 18012 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂更新服务；不再跟进，通用本地能力保留 |
 | `src/utils/aws.ts` | 75 | 2305 | 重写：保持通用行为 | `src/generated_ports/p_6ae88763d0d0f.rs`| 部分实现：AwsStsOutput 类型守卫（Credentials 三字段非空字符串验证）、isAwsCredentialsProviderError 名称判定，附 2 测试；checkStsCallerIdentity/clearAwsIniCache 依赖 AWS SDK（crate 无等价依赖）以钩子形式记录待 Bedrock 端口|
 | `src/utils/awsAuthStatusManager.ts` | 82 | 2043 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/background/remote/preconditions.ts` | 236 | 7336 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/background/remote/remoteSession.ts` | 99 | 3050 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/background/remote/preconditions.ts` | 236 | 7336 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程后台 Agent；不再跟进，通用本地能力与模型 API 保留 |
+| `src/utils/background/remote/remoteSession.ts` | 99 | 3050 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程后台 Agent；不再跟进，通用本地能力与模型 API 保留 |
 | `src/utils/backgroundHousekeeping.ts` | 95 | 3213 | 重写：保持通用行为 | `src/generated_ports/p_1af0a0aad0cfe.rs` |部分实现：完整等价：三档间隔常量（24h/10min/5min）+宿主清单十项（双编译门关闭标注）；初始化函数随各自特性链，待验收；原厂品牌标识已采用中性命名，原始字面值差异保留待验收|
 | `src/utils/bash/ParsedCommand.ts` | 319 | 9221 | 重写：保持通用行为 | `src/generated_ports/p_46a866ee4d3c1.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/bash/ShellSnapshot.ts` | 583 | 21780 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1764,7 +1764,7 @@
 | `src/utils/sessionEnvVars.ts` | 23 | 590 | 重写：保持通用行为 | `src/agent.rs / src/tools.rs / src/background.rs / src/main.rs` | 部分实现：会话变量增删查、前台/后台 Shell 和子代理继承、真实 CLI 回归；Hooks/MCP/LSP 完整透传未对照 |
 | `src/utils/sessionEnvironment.ts` | 167 | 5053 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionFileAccessHooks.ts` | 251 | 8138 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/sessionIngressAuth.ts` | 141 | 4737 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sessionIngressAuth.ts` | 141 | 4737 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；远程会话凭据注入；不再跟进，通用本地能力与模型 API 保留 |
 | `src/utils/sessionRestore.ts` | 552 | 20406 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sessionStart.ts` | 233 | 8151 | 重写：保持通用行为 | `src/agent.rs / src/hooks.rs` | 部分实现：SessionStart 阻断不终止会话，保留上下文和警告（f2d21933）；SessionStart 初始用户消息已由 Hook JSON 进入无头 Agent 首条用户轮次（1311f062、7485c83，源码已提交待验收）；SDK 无外部输入自动启动已接入（1e055ef、974dd67，待验收）；watchPaths、插件动态加载及完整 SDK 队列时序仍缺 |
 | `src/utils/sessionState.ts` | 151 | 5309 | 重写：保持通用行为 | `src/generated_ports/p_000102e58d700.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -1878,11 +1878,11 @@
 | `src/utils/telemetry/sessionTracing.ts` | 928 | 27991 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/telemetry/skillLoadedEvent.ts` | 40 | 1425 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/telemetryAttributes.ts` | 72 | 2095 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
-| `src/utils/teleport/api.ts` | 467 | 13327 | 重写：保持通用行为 | `src/generated_ports/p_1ae7384350177.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/teleport/environmentSelection.ts` | 78 | 2695 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/teleport/environments.ts` | 121 | 3471 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/teleport/gitBundle.ts` | 293 | 9820 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/teleport.tsx` | 1226 | 175779 | 重写：保持通用行为 | `src/generated_ports/p_b9c0fcb163e64.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/teleport/api.ts` | 467 | 13327 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端 Teleport API；不再跟进，通用本地能力与模型 API 保留 |
+| `src/utils/teleport/environmentSelection.ts` | 78 | 2695 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端 Teleport API；不再跟进，通用本地能力与模型 API 保留 |
+| `src/utils/teleport/environments.ts` | 121 | 3471 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端 Teleport API；不再跟进，通用本地能力与模型 API 保留 |
+| `src/utils/teleport/gitBundle.ts` | 293 | 9820 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端 Teleport API；不再跟进，通用本地能力与模型 API 保留 |
+| `src/utils/teleport.tsx` | 1226 | 175779 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；云端 Teleport 运行界面；不再跟进，通用本地能力与模型 API 保留 |
 | `src/utils/tempfile.ts` | 32 | 1170 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/terminal.ts` | 132 | 4372 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/terminalPanel.ts` | 192 | 6014 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1902,8 +1902,8 @@
 | `src/utils/transcriptSearch.ts` | 203 | 8039 | 重写：会话可见文本检索（通用化） | `src/transcript_search.rs / src/agent.rs / src/main.rs` | 部分实现：依原版实现用户/助手/工具/附件可见文本抽取、隐藏提醒剔除、大小写归一与缓存索引；已接交互式 /find、离线 transcript-search、inspect-source 和真实 CLI 测试；原版 React/Ink 搜索交互尚未验收 |
 | `src/utils/treeify.ts` | 171 | 5033 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/truncate.ts` | 180 | 5719 | 重写：保持通用行为 | `src/generated_ports/terminal_truncate.rs` | 部分实现：按终端显示宽度的截断、路径中间截断、头尾截断和换行 Rust 实现；全 UAX29 字素规则和 ANSI 边界待完成 |
-| `src/utils/ultraplan/ccrSession.ts` | 350 | 12987 | 重写：保持通用行为 | `src/generated_ports/p_322c9d928a344.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/ultraplan/ccrSession.ts` | 350 | 12987 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端规划专用工具；不再跟进，通用本地能力与模型 API 保留 |
+| `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端规划专用工具；不再跟进，通用本地能力与模型 API 保留 |
 | `src/utils/unaryLogging.ts` | 40 | 1254 | 重写：保持通用行为 | `src/generated_ports/p_5386fc6ccfc1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/undercover.ts` | 90 | 3681 | 重写：保持通用行为 | `src/generated_ports/p_bba75aff43791.rs` | 部分实现：完整等价：外部构建语义（USER_TYPE 构建常量折叠，全函数 trivial return）恒 false/空清单含单测；内仓 allowlist 属厂商归因面（排除），待验收 |
 | `src/utils/user.ts` | 195 | 5714 | 重写：保持通用行为 | 待定 | 未迁移 |

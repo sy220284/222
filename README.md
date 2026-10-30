@@ -9,7 +9,7 @@
 - 只通过模型 API 推理，取消默认 Ollama 配置；存量配置指向 11434 端口会明确报错。
 - 移除跨设备 Bridge、远程 SDK、云端 Trigger、云端专项审查/规划、官方账号权益及团队云端同步。
 - 保留普通本地 SDK、Agent、模型 API、HTTP MCP、WebSearch/WebFetch、本地文件、任务、设置与记忆。
-- 逐文件排除清单见 [docs/REMOVED_SCOPE.json](docs/REMOVED_SCOPE.json)，已列入移除范围的项目不再跟进。
+- 已按第二轮代码核查排除 186 条原路径；逐文件排除清单见 [docs/REMOVED_SCOPE.json](docs/REMOVED_SCOPE.json)，已列入移除范围的项目不再跟进。
 
 ## 已实现
 
