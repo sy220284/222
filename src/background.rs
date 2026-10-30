@@ -545,6 +545,7 @@ impl BackgroundTasks {
             let deadline_at = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
             let deadline = tokio::time::sleep_until(deadline_at);
             tokio::pin!(deadline);
+            let mut stop_requested = false;
             let (mut state, mut code, mut timed_out) = tokio::select! {
                 result = child.wait() => match result {
                     Ok(status) if status.success() => ("completed", status.code(), false),
@@ -552,6 +553,7 @@ impl BackgroundTasks {
                     Err(_) => ("failed", None, false),
                 },
                 _ = &mut stopped => {
+                    stop_requested = true;
                     #[cfg(unix)]
                     if let Some(pid) = child.id() {
                         // Kill the whole process group, not only the shell.
@@ -586,7 +588,7 @@ impl BackgroundTasks {
             // A stop request must also interrupt output draining. The shell
             // can exit while a descendant keeps its pipes open; waiting for
             // the original 10-minute deadline makes TaskStop falsely time out.
-            let drain_deadline = if timed_out || state == "killed" {
+            let drain_deadline = if timed_out || stop_requested || state == "killed" {
                 tokio::time::Instant::now() + Duration::from_secs(1)
             } else {
                 deadline_at
@@ -595,7 +597,7 @@ impl BackgroundTasks {
             let output_results = tokio::select! {
                 pair = async { tokio::join!(&mut stdout_task, &mut stderr_task) } => Some(pair),
                 _ = tokio::time::sleep_until(drain_deadline) => None,
-                _ = &mut stopped, if !timed_out && state != "killed" => {
+                _ = &mut stopped, if !stop_requested && !timed_out && state != "killed" => {
                     cancelled_during_drain = true;
                     None
                 },
@@ -630,7 +632,7 @@ impl BackgroundTasks {
                 // receives a timeout notice in the persisted output.
                 if cancelled_during_drain {
                     state = "killed";
-                } else if state != "killed" {
+                } else if !stop_requested && state != "killed" {
                     timed_out = true;
                     state = "failed";
                 }
