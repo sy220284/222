@@ -1,3 +1,11 @@
+## 2026-10-29：后台 Shell 继承原版命令超时并终止遗留输出管道（源码已提交、待行为验收）
+
+- **原版逐函数依据**：完整 `claude-code-2.1.88-main(1).zip` 的 `source/src/tools/BashTool/BashTool.tsx:854–882::runShellCommand` 在启动命令时使用 `timeout || getDefaultTimeoutMs()`，随后即使通过 `source/src/tasks/LocalShellTask/LocalShellTask.tsx:180–245::spawnShellTask` 转入后台，原有 `ShellCommand` 超时仍有效；默认 120000 毫秒，最高 600000 毫秒，环境变量按 `source/src/utils/timeouts.ts` 生效。
+- **原 Rust 差异**：`src/tools.rs::dispatch("run_command"/"PowerShell")` 对前台命令计算超时，后台却调用 `BackgroundTasks::start_with_shell`，该函数未接收或执行用户的超时值。后台命令可能无限运行；即使 Shell 进程退出，后代进程仍可能持有输出管道使任务一直处于运行中。
+- **实际补齐**：`src/tools.rs::shell_timeout_ms` 统一前后台的毫秒、秒数、默认值和上限；后台入口传递最终超时至 `src/background.rs::start_with_shell_timeout`，任务启动后用同一截止时间约束 Shell 进程及 stdout/stderr 输出排空。超时终止 Unix 进程组，结束输出读取任务，状态持久化为 failed，并在统一输出日志写明实际超时毫秒数，TaskOutput 和 Read 可见，重启后仍可读取。
+- **代码提交**：`3e893596f849d2f536820f81681a2fdf80be723b`、`c9eeb5f0c361a8fe0cd2d602de2c5d1054550e7d`、`1edf5f26e3e76e58ca72a06c093f2bf22e4aebba`；补充未运行的超时及重启后错误保留回归用例 `6191ce1403676e7e8d4ea86472ab1d7f003ba03e`。
+- **状态与未实现差异**：保守计 **1 项独立用户可感知功能的实质源码补齐**，**已提交、待行为验收**；未运行 cargo、测试或 CI。Windows 进程树终止、用户中断信号跨任务传播、原版完整超时错误结构、前后台自动切换与异步通知仍待源码对照；Issue #3 冻结 362 项继续开放，完整等价验收新增 0。本轮 100 项预先核查和全量方案尚未完成，数量目标未达标。
+
 ## 2026-10-29：后台 Shell 标准输出与错误输出统一日志（源码已提交、待验收）
 
 - **原版依据**：完整 2.1.88 源码 `source/src/utils/task/diskOutput.ts:69–74::getTaskOutputPath` 使用单个 `<taskId>.output`；`diskOutput.ts:89–120::DiskTaskOutput` 将任务输出依序排队、以一个 5GiB 容量预算持久化；`source/src/tasks/LocalShellTask/LocalShellTask.tsx:195–220` 将 Shell 命令输出交给统一任务输出对象。
