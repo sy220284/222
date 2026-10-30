@@ -263,7 +263,7 @@
 | `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/resume/index.ts` | 13 | 303 | 重写：保持通用行为 | `src/main.rs / src/session.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
-| `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | `src/generated_ports/p_8a0b520eb5d3b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | `src/generated_ports/p_8a0b520eb5d3b.rs`| 部分实现：超额计费对话框状态机——proceed 置 Launching 并执行回调（回调拒绝时回 Idle 可重试，上游承诺失败永不调 onDone）、cancel 与 Escape 先中止在途信号再回调（防已取消仍跑仍计费）、选项文案与对话框属性 verbatim；Dialog 与 Select 组件本体归组件域，附 5 测试|
 | `src/commands/review/reviewRemote.ts` | 317 | 11926 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 重写：保持通用行为 | `src/generated_ports/p_2a0eb439f5a02.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 重写：保持通用行为 | 待定 | 未迁移 |
