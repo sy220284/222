@@ -228,9 +228,8 @@ pub async fn complete(
         .await
         .context("Model stream idle timeout")? {
         buffered.extend_from_slice(&part?);
-        if buffered.len() > 4_000_000 {
-            bail!("Model SSE frame exceeds maximum size")
-        }
+        // A single network read can contain many valid small SSE frames.
+        // Enforce the bound only on the unconsumed frame after draining.
         while let Some((position, separator)) = boundary(&buffered) {
             let frame = buffered[..position].to_vec();
             buffered.drain(..position + separator);
@@ -241,6 +240,9 @@ pub async fn complete(
         }
         if finished {
             break;
+        }
+        if buffered.len() > 4_000_000 {
+            bail!("Model SSE frame exceeds maximum size")
         }
     }
     if !buffered.is_empty() && !finished {
