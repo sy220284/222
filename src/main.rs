@@ -1338,6 +1338,32 @@ async fn reload_live_plugins(agent: &mut Agent, config: &mut Config) -> Result<V
     Ok(status)
 }
 
+/// The original AgentEditor/creation wizard surfaces non-blocking
+/// validation warnings and requires the user to accept them before saving.
+fn confirm_custom_agent_warnings(
+    definition: &agent_definition::AgentDefinition,
+    workspace: &std::path::Path,
+    user: bool,
+) -> Result<bool> {
+    let validation = agent_definition::validate_in_workspace(definition, workspace, user)?;
+    if !validation.errors.is_empty() {
+        bail!("{}", validation.errors.join("; "));
+    }
+    if validation.warnings.is_empty() {
+        return Ok(true);
+    }
+    for warning in &validation.warnings {
+        eprintln!("Agent warning: {warning}");
+    }
+    print!("Save agent despite these warnings? [y/N]: ");
+    io::stdout().flush()?;
+    let mut answer = String::new();
+    if io::stdin().read_line(&mut answer)? == 0 {
+        return Ok(false);
+    }
+    Ok(matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"))
+}
+
 async fn chat(
     agent: &mut Agent,
     config: &mut Config,
@@ -2160,6 +2186,11 @@ async fn chat(
                     memory: None,
                     effort: None,
                 };
+                if !confirm_custom_agent_warnings(
+                    &definition, agent.workspace_root(), user,
+                )? {
+                    return Ok("Agent creation cancelled.".into());
+                }
                 let path = agent_definition::save_agent(
                     &definition, agent.workspace_root(), user, false,
                 )?;
@@ -2239,6 +2270,11 @@ async fn chat(
                     memory,
                     effort,
                 };
+                if !confirm_custom_agent_warnings(
+                    &definition, agent.workspace_root(), user,
+                )? {
+                    return Ok("Agent edit cancelled; existing file preserved.".into());
+                }
                 agent_definition::save_agent(
                     &definition, agent.workspace_root(), user, true,
                 )?;
