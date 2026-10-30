@@ -1,3 +1,11 @@
+## 2026-10-29：交互式自定义 Agent 创建、编辑、删除（源码已提交、待验收）
+
+对照原版 source/src/components/agents/agentFileUtils.ts::saveAgentToFile/updateAgentFile/deleteAgentFromFile、AgentsMenu.tsx、AgentEditor.tsx，Rust 原 src/agent_definition.rs 已有定义校验/持久化函数，但交互式 src/main.rs::chat 的 /agents 只列目录，用户无法在当前应用创建、修改或删除自定义 Agent。
+
+已接入三个独立用户操作：/agents create project|user NAME 提问描述、完整多行系统提示、允许工具和模型，调用原有 AgentDefinition 验证并以 create_new 持久化；/agents edit project|user NAME 读取原文件供参考，收集新定义，保留未展示的 color/memory/effort 元数据，校验后以临时文件同步+原子替换防止编辑失败截断旧内容；/agents delete project|user NAME 检查原文件类型、拒绝符号链接、明确二次确认后删除。当前会话后续代理定义读取直接使用更新的磁盘文件。代码提交 632cabc3、c59693b9、095251a2，静态确认 src/main.rs → agent_definition::save_agent/delete_agent 的实际调用。
+
+原版完整图形化向导、字段原地编辑、复杂 YAML 前置配置解析、工具细粒度权限选择、用户自定义色彩/记忆/思考级别的编辑界面仍未等价；不得标为完整。**本轮新增3项，累计7/100，剩余93项**。未完成先行100项独立缺口核查与全量方案；未运行 Cargo/测试/CI；全部源码已提交待行为验收，新增完整等价验收0，Issue #3 冻结362项保持开放。
+
 ## 2026-10-29：交互式 /copy 代码选择与跨会话偏好（已提交、待验收）
 
 原版 source/src/commands/copy/copy.tsx::call/CopyPicker：当回答包含代码块且未开启 copyFullResponse 时，/copy N 提供完整回答、每个代码块和“以后始终复制完整回答”的选择；保存用户偏好，下次免选。Rust 原 src/main.rs::chat 对 /copy 直接调用 Agent::copy_response，只有显式 --code 才能选代码，缺少原版交互。
