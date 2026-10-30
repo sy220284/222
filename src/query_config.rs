@@ -42,7 +42,11 @@ pub fn build_query_config(session_id: Uuid) -> QueryConfig {
     QueryConfig {
         session_id,
         gates: QueryGates {
-            streaming_tool_execution: false,
+            streaming_tool_execution: crate::env_runtime::is_env_truthy(
+                std::env::var("ATLAS_STREAMING_TOOL_EXECUTION")
+                    .ok()
+                    .as_deref(),
+            ),
             emit_tool_use_summaries: is_env_truthy(
                 std::env::var("ATLAS_EMIT_TOOL_USE_SUMMARIES")
                     .ok()
@@ -108,15 +112,23 @@ mod tests {
     }
 
     #[test]
-    fn streaming_tool_execution_resolves_off_until_ported() {
+    fn streaming_tool_execution_follows_process_switch() {
         std::env::remove_var("ATLAS_EMIT_TOOL_USE_SUMMARIES");
         std::env::remove_var("ATLAS_DISABLE_FAST_MODE");
         std::env::remove_var("USER_TYPE");
+        std::env::remove_var("ATLAS_STREAMING_TOOL_EXECUTION");
         assert!(
             !build_query_config(Uuid::nil())
                 .gates
                 .streaming_tool_execution
         );
+        std::env::set_var("ATLAS_STREAMING_TOOL_EXECUTION", "1");
+        assert!(
+            build_query_config(Uuid::nil())
+                .gates
+                .streaming_tool_execution
+        );
+        std::env::remove_var("ATLAS_STREAMING_TOOL_EXECUTION");
     }
 
     #[test]

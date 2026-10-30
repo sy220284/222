@@ -12,6 +12,12 @@ struct Assembler {
     calls: BTreeMap<u64, ToolCall>,
     finish_reason: Option<String>,
     usage: Option<TokenUsage>,
+    /// Index of the tool call currently accepting argument deltas. The
+    /// OpenAI-compatible stream carries no per-block completion signal, so a
+    /// delta on a new index marks every earlier block complete.
+    active_tool_index: Option<u64>,
+    /// Live sink for completed tool blocks; None keeps pure aggregation.
+    tool_blocks: Option<UnboundedSender<ToolCall>>,
 }
 
 impl Assembler {
@@ -97,6 +103,29 @@ impl Assembler {
             .flatten()
         {
             let index = part.get("index").and_then(Value::as_u64).unwrap_or(0);
+            // A delta on a new index ends every earlier in-flight block: the
+            // OpenAI-compatible stream has no per-block stop event, so the
+            // index switch is the completion boundary. Emit in index order.
+            if self.active_tool_index.is_some_and(|active| active != index) {
+                let completed: Vec<u64> = self
+                    .calls
+                    .keys()
+                    .copied()
+                    .filter(|i| Some(*i) != self.active_tool_index)
+                    .take_while(|i| Some(*i) != Some(index))
+                    .collect();
+                for done in completed {
+                    if let Some(mut call) = self.calls.remove(&done) {
+                        if call.id.is_empty() {
+                            call.id = uuid::Uuid::new_v4().to_string();
+                        }
+                        if let Some(sink) = &self.tool_blocks {
+                            let _ = sink.send(call);
+                        }
+                    }
+                }
+            }
+            self.active_tool_index = Some(index);
             let entry = self.calls.entry(index).or_insert_with(|| ToolCall {
                 id: String::new(),
                 kind: "function".into(),
@@ -117,9 +146,19 @@ impl Assembler {
         }
         Ok(())
     }
-    fn finish(self) -> Result<ModelResponse> {
+    fn finish(mut self) -> Result<ModelResponse> {
         if self.content.is_empty() && self.calls.is_empty() {
             bail!("SSE stream contained no assistant content or tool calls")
+        }
+        // End of stream completes any in-flight blocks, still in index order.
+        for (index, mut call) in std::mem::take(&mut self.calls) {
+            if call.id.is_empty() {
+                call.id = uuid::Uuid::new_v4().to_string();
+            }
+            if let Some(sink) = &self.tool_blocks {
+                let _ = sink.send(call.clone());
+            }
+            self.calls.insert(index, call);
         }
         let calls = self
             .calls
@@ -163,6 +202,7 @@ fn consume_frame(
     frame: &[u8],
     assembler: &mut Assembler,
     deltas: &UnboundedSender<String>,
+    tool_blocks: &Option<UnboundedSender<ToolCall>>,
 ) -> Result<bool> {
     let lines = String::from_utf8_lossy(frame);
     let mut data = Vec::new();
@@ -209,6 +249,32 @@ pub async fn complete(
     deltas: UnboundedSender<String>,
     response_schema: Option<&Value>,
 ) -> Result<ModelResponse> {
+    complete_with_tool_blocks(
+        client,
+        base_url,
+        key,
+        request,
+        deltas,
+        response_schema,
+        None,
+    )
+    .await
+}
+
+/// Streaming completion with an optional live tool-block sink. Blocks are
+/// forwarded as soon as the stream moves past them (new index or end of
+/// stream), preserving index order — the Rust equivalent of the original
+/// streaming loop handing complete tool_use blocks to the executor mid-turn.
+#[allow(clippy::too_many_arguments)]
+pub async fn complete_with_tool_blocks(
+    client: &Client,
+    base_url: &str,
+    key: Option<&str>,
+    request: &ModelRequest,
+    deltas: UnboundedSender<String>,
+    response_schema: Option<&Value>,
+    tool_blocks: Option<UnboundedSender<ToolCall>>,
+) -> Result<ModelResponse> {
     let mut body = json!({"model":request.model,
         "messages":crate::provider::openai_messages(request)?,
         "stream":true,"stream_options":{"include_usage":true}});
@@ -246,7 +312,14 @@ pub async fn complete(
     }
     let mut stream = response.bytes_stream();
     let mut buffered = Vec::new();
-    let mut assembler = Assembler::default();
+    // The assembler owns the sink; the frame loop shares a clone so both can
+    // emit blocks without fighting over ownership.
+    let frame_sink = tool_blocks.clone();
+    let mut assembler = Assembler {
+        active_tool_index: None,
+        tool_blocks,
+        ..Default::default()
+    };
     let mut finished = false;
     // Reset the watchdog after every received chunk, rather than applying a
     // total deadline to a healthy multi-minute model generation.
@@ -260,7 +333,7 @@ pub async fn complete(
         while let Some((position, separator)) = boundary(&buffered) {
             let frame = buffered[..position].to_vec();
             buffered.drain(..position + separator);
-            if consume_frame(&frame, &mut assembler, &deltas)? {
+            if consume_frame(&frame, &mut assembler, &deltas, &frame_sink)? {
                 finished = true;
                 break;
             }
@@ -273,7 +346,7 @@ pub async fn complete(
         }
     }
     if !buffered.is_empty() && !finished {
-        consume_frame(&buffered, &mut assembler, &deltas)?;
+        consume_frame(&buffered, &mut assembler, &deltas, &frame_sink)?;
     }
     // A dropped HTTP connection is not a completed assistant turn. In
     // particular, never dispatch a syntactically complete tool call from a

@@ -482,6 +482,7 @@ pub enum Approval {
     Full,
 }
 
+#[derive(Clone)]
 pub struct ToolExecutor {
     root: PathBuf,
     extra_roots: Vec<PathBuf>,

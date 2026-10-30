@@ -4457,10 +4457,73 @@ impl Agent {
             self.last_context_usage = Some(crate::context_usage::Snapshot::from_request(&request));
             self.last_side_question_request = Some(request.clone());
             let api_started = Instant::now();
+            // Original query.ts: config.gates.streamingToolExecution decides
+            // whether tool_use blocks start executing mid-stream. The gate is
+            // the established process-level switch; the executor owns the
+            // live block channel and runs admitted tools concurrently.
+            let streaming_on = self.profile.stream
+                && crate::env_runtime::is_env_truthy(
+                    std::env::var("ATLAS_STREAMING_TOOL_EXECUTION")
+                        .ok()
+                        .as_deref(),
+                );
+            let (streaming_executor, block_tx, block_pump) = if streaming_on {
+                let deps = crate::streaming_tool_executor::StreamingDeps {
+                    hooks: self.hooks.clone(),
+                    executor: executor.clone(),
+                    tool_hook_base: self.tool_hook_input(),
+                    structured_output: self.structured_output,
+                    session_id: self.session.id.to_string(),
+                    child_depth: self.child_depth,
+                    prompt_role: self.prompt_role.clone(),
+                    sdk_allowed_tools: self
+                        .sdk_allowed_tools
+                        .clone()
+                        .map(|set| set.into_iter().collect::<Vec<_>>()),
+                    sdk_disallowed_tools: self.sdk_disallowed_tools.clone(),
+                    permission_mode_label: self.permission_mode.label().to_owned(),
+                    bash_cancel: Default::default(),
+                    errored_description: Default::default(),
+                };
+                let shared = std::sync::Arc::new(tokio::sync::Mutex::new(
+                    crate::streaming_tool_executor::StreamingExecutor::new(deps),
+                ));
+                let (block_tx, mut block_rx) = tokio::sync::mpsc::unbounded_channel();
+                let pump_shared = shared.clone();
+                let pump = tokio::spawn(async move {
+                    while let Some(call) = block_rx.recv().await {
+                        let _ = pump_shared.lock().await.add_tool(call);
+                    }
+                });
+                (Some(shared), Some(block_tx), Some(pump))
+            } else {
+                (None, None, None)
+            };
             let response = if self.profile.stream {
                 let (tx, mut deltas) = tokio::sync::mpsc::unbounded_channel();
-                let future = self.provider.complete_stream(&request, tx);
-                tokio::pin!(future);
+                let mut future = if let (Some(_), Some(btx)) = (&streaming_executor, &block_tx) {
+                    let blocks = btx.clone();
+                    Box::pin(
+                        self.provider
+                            .complete_stream_with_tool_blocks(&request, tx, blocks),
+                    )
+                        as std::pin::Pin<
+                            Box<
+                                dyn std::future::Future<
+                                        Output = anyhow::Result<crate::protocol::ModelResponse>,
+                                    > + Send,
+                            >,
+                        >
+                } else {
+                    Box::pin(self.provider.complete_stream(&request, tx))
+                        as std::pin::Pin<
+                            Box<
+                                dyn std::future::Future<
+                                        Output = anyhow::Result<crate::protocol::ModelResponse>,
+                                    > + Send,
+                            >,
+                        >
+                };
                 let result = loop {
                     tokio::select! {
                         result=&mut future=>break result,
@@ -4480,6 +4543,12 @@ impl Agent {
             } else {
                 self.provider.complete(&request).await
             };
+            // The block pump ends when the transport drops its sink (the SSE
+            // finish flush sends every in-flight block first).
+            drop(block_tx);
+            if let Some(pump) = block_pump {
+                let _ = pump.await;
+            }
             self.session.cost.add_api_duration(api_started.elapsed());
             let response = match response {
                 Ok(response) => response,
@@ -4493,7 +4562,7 @@ impl Agent {
             if let Some(usage) = response.usage {
                 self.record_usage(usage);
             }
-            let calls = response.message.tool_calls.clone().unwrap_or_default();
+            let mut calls = response.message.tool_calls.clone().unwrap_or_default();
             let text = response.message.visible_text();
             let finish = response.finish_reason.clone();
             self.emit(json!({
@@ -4502,6 +4571,41 @@ impl Agent {
             }));
             self.session.messages.push(response.message);
             self.session.save(&self.root)?;
+            // Drain the streaming executor after the assistant message is on
+            // the transcript, so tool_results follow their tool_use blocks.
+            // Calls the executor could not carry (agent-layer dispatch:
+            // subagents, teams, task graph, MCP, plugins) stay in `calls` and
+            // run through the existing batched loop below.
+            let mut handled_ids: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            if let Some(shared) = &streaming_executor {
+                let mut ex = shared.lock().await;
+                for outcome in ex.drain().await {
+                    handled_ids.insert(outcome.call.id.clone());
+                    self.session
+                        .cost
+                        .add_tool_duration(outcome.started.elapsed());
+                    let (added, removed) = self.file_metrics.counts();
+                    self.session.cost.set_changed_lines(added, removed);
+                    self.emit(json!({
+                        "type":"tool_result","tool_use_id":outcome.call.id,
+                        "name":outcome.call.function.name,"content":outcome.result,
+                        "session_id":self.session.id,
+                    }));
+                    self.session
+                        .messages
+                        .push(Message::tool_result(&outcome.call, outcome.result));
+                    self.session.save(&self.root)?;
+                    if self.shutdown_requested {
+                        self.session.cost.add_wall_duration(ask_started.elapsed());
+                        self.session.save(&self.root)?;
+                        return Ok("Shutdown approved; confirmation delivered to team lead".into());
+                    }
+                }
+            }
+            if !handled_ids.is_empty() {
+                calls.retain(|call| !handled_ids.contains(&call.id));
+            }
             // The original streaming loop treats max_tokens/context-window
             // exhaustion as an incomplete assistant turn. A partially emitted
             // tool call must never execute merely because its JSON parses.

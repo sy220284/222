@@ -35,6 +35,24 @@ pub trait ModelProvider: Send + Sync {
     ) -> Result<ModelResponse> {
         self.complete(request).await
     }
+    /// Streaming completion with live tool-block delivery. The default keeps
+    /// the aggregate contract: blocks are emitted only once the full response
+    /// is assembled. Transports that can detect block boundaries mid-stream
+    /// (OpenAI-compatible index switching) override this.
+    async fn complete_stream_with_tool_blocks(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+        tool_blocks: UnboundedSender<ToolCall>,
+    ) -> Result<ModelResponse> {
+        let response = self.complete_stream(request, deltas).await?;
+        if let Some(calls) = response.message.tool_calls.as_ref() {
+            for call in calls {
+                let _ = tool_blocks.send(call.clone());
+            }
+        }
+        Ok(response)
+    }
 }
 
 pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
@@ -244,6 +262,23 @@ impl ModelProvider for OpenAiCompatible {
             request,
             deltas,
             self.response_schema.as_ref(),
+        )
+        .await
+    }
+    async fn complete_stream_with_tool_blocks(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+        tool_blocks: UnboundedSender<ToolCall>,
+    ) -> Result<ModelResponse> {
+        crate::sse::complete_with_tool_blocks(
+            &self.client,
+            &self.base_url,
+            self.key.as_deref(),
+            request,
+            deltas,
+            self.response_schema.as_ref(),
+            Some(tool_blocks),
         )
         .await
     }

@@ -150,6 +150,7 @@ pub struct HookOutcome {
 
 /// Source hook matchers use exact tool names for simple strings, not
 /// substring regexes. A missing event query bypasses matcher filtering.
+#[derive(Clone)]
 enum HookMatcher {
     Any,
     Exact(Vec<String>),
@@ -287,7 +288,7 @@ fn hook_if_matches(condition: &str, event: &str, tool_name: Option<&str>, input:
     )
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct HookRunner {
     rules: Vec<(HookRule, HookMatcher)>,
     workspace: Option<PathBuf>,
