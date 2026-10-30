@@ -87,6 +87,7 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
             key: key.context("Gemini endpoint requires an API key")?,
             thinking_budget: None,
             response_schema: None,
+            tuning: profile.tuning.clone(),
         })),
         other => bail!("Unsupported provider kind: {other}"),
     }
@@ -380,11 +381,30 @@ struct Gemini {
     key: String,
     thinking_budget: Option<u32>,
     response_schema: Option<Value>,
+    tuning: crate::config::ModelTuning,
 }
 
 impl Gemini {
     fn request_body(&self, request: &ModelRequest) -> Result<Value> {
         let mut body = gemini_request_body(request)?;
+        if let Some(temperature) = self.tuning.temperature {
+            body["generationConfig"]["temperature"] = json!(temperature);
+        }
+        if let Some(top_p) = self.tuning.top_p {
+            body["generationConfig"]["topP"] = json!(top_p);
+        }
+        if let Some(max) = self.tuning.max_output_tokens {
+            body["generationConfig"]["maxOutputTokens"] = json!(max);
+        }
+        if let Some(level) = &self.tuning.reasoning_effort {
+            if !matches!(level.as_str(), "low" | "medium" | "high") {
+                bail!("Gemini thinkingLevel supports low, medium or high; remove unsupported model tuning");
+            }
+            if self.thinking_budget.is_some() {
+                bail!("Gemini thinkingLevel cannot be combined with a token thinkingBudget");
+            }
+            body["generationConfig"]["thinkingConfig"]["thinkingLevel"] = json!(level);
+        }
         if let Some(budget) = self.thinking_budget {
             body["generationConfig"]["thinkingConfig"] = json!({"thinkingBudget":budget});
         }
