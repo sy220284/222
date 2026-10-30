@@ -1136,7 +1136,7 @@
 | `src/tasks/InProcessTeammateTask/types.ts` | 122 | 4322 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/LocalAgentTask/LocalAgentTask.tsx` | 683 | 82910 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/LocalMainSessionTask.ts` | 480 | 15136 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
-| `src/tasks/LocalShellTask/LocalShellTask.tsx` | 523 | 66306 | 重写：任务调度 | `src/background.rs / src/tools.rs` | 部分实现：进程启动、磁盘输出、停止和状态回填；UI 和完整通知时序未等价；新增统一 .output 任务日志，stdout/stderr 按读取块到达顺序合并，合并流共享 5GiB 上限，TaskOutput、增量读取和 Read 均可达，旧分离日志仍可读取（4aa001f5、ea67020f，已提交待验收）；跨流调度精确时序、全部任务类型和完整输出生命周期仍待等价 |
+| `src/tasks/LocalShellTask/LocalShellTask.tsx` | 523 | 66306 | 重写：任务调度 | `src/background.rs / src/tools.rs` | 部分实现：进程启动、磁盘输出、停止和状态回填；UI 和完整通知时序未等价；新增统一 .output 任务日志，stdout/stderr 按读取块到达顺序合并，合并流共享 5GiB 上限，TaskOutput、增量读取和 Read 均可达，旧分离日志仍可读取（4aa001f5、ea67020f，已提交待验收）；跨流调度精确时序、全部任务类型和完整输出生命周期仍待等价；后台超时与输出管道等待使用同一截止时间，超时结束进程组并保留可读错误日志（3e893596、c9eeb5f、1edf5f2，源码已提交待验收） |
 | `src/tasks/LocalShellTask/guards.ts` | 42 | 1552 | 重写：任务调度 | `src/task_guards.rs` | 已验收：isLocalShellTask 对 object/null/array/类型字段和附加字段的行为对照；证据 task_guards::tests |
 | `src/tasks/LocalShellTask/killShellTasks.ts` | 77 | 2565 | 重写：任务调度 | `src/background.rs` | 部分实现：Shell 进程组停止；取消状态和外部子进程边界未全等 |
 | `src/tasks/RemoteAgentTask/RemoteAgentTask.tsx` | 856 | 126389 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
@@ -1165,7 +1165,7 @@
 | `src/tools/AgentTool/runAgent.ts` | 974 | 35768 | 重写：工具行为、参数和权限 | `src/agent.rs / src/worktree.rs` | 部分实现：独立子 Agent 调用；后台管理未等价 |
 | `src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx` | 266 | 39887 | 重写：工具行为、参数和权限 | `src/ask_user_question.rs / src/agent.rs` | 部分实现：已接入交互式模型工具主链，验证1-4问题、2-4选项、去重、多选、Other、拒绝模型伪造答案；CLI→HTTP模型→真实输入→模型返回集成测试通过；终端已支持所选预览与用户备注 annotations 回传模型、严格输入字段校验；SDK 外部问答回执、预览格式的 SDK 配置传播及原版 TUI 仍未等价；新增可选 HTML 片段安全校验（ATLAS_QUESTION_PREVIEW_FORMAT=html）；新改动待行为验证 |
 | `src/tools/AskUserQuestionTool/prompt.ts` | 45 | 2903 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/BashTool/BashTool.tsx` | 1144 | 160530 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Bash 毫秒超时与语义数字输入接通真实进程截止时间，Shell 严格参数校验提前至 Hook 前（6de19f6、105373e），待验收 |
+| `src/tools/BashTool/BashTool.tsx` | 1144 | 160530 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Bash 毫秒超时与语义数字输入接通真实进程截止时间，Shell 严格参数校验提前至 Hook 前（6de19f6、105373e），待验收；后台超时继承用户 timeout 与环境默认/最大值，接通 run_command/PowerShell 实际启动入口（3e893596、c9eeb5f，源码已提交待验收）；前后台自动切换与完整取消传播仍缺 |
 | `src/tools/BashTool/BashToolResultMessage.tsx` | 191 | 19215 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/UI.tsx` | 185 | 25213 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/bashCommandHelpers.ts` | 266 | 8589 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
