@@ -693,9 +693,17 @@ fn dependency_install_plan(
 
 pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
     let root = root.canonicalize()?;
-    // Lock before Config::load: otherwise concurrent installs can overwrite
-    // enabled-plugin settings even when their filesystem copies succeed.
-    let _lock = plugin_operation_lock()?;
+    // Lock before Config::load for mutations: concurrent plugin commands
+    // must not overwrite each other's enabled-plugin settings. Read-only
+    // commands preserve their no-write behavior (including no lock file).
+    let mutating = match command {
+        PluginCommand::Menu | PluginCommand::Manage | PluginCommand::Help
+        | PluginCommand::Validate { .. } => false,
+        PluginCommand::Marketplace { action, .. }
+            if action.as_deref().unwrap_or("list") == "list" => false,
+        _ => true,
+    };
+    let _lock = if mutating { Some(plugin_operation_lock()?) } else { None };
     let mut config = Config::load()?;
     match command {
         PluginCommand::Menu | PluginCommand::Manage => installed(&root, &config),
