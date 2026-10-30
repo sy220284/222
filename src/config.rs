@@ -216,6 +216,18 @@ fn default_file_checkpointing() -> bool {
 
 
 /** Built-in Chinese model API profiles. Credentials are read from environment variables. */
+fn chatgpt_plan_profile() -> ProviderProfile {
+    ProviderProfile {
+        id: "chatgpt".into(),
+        kind: "chatgpt-plan".into(),
+        base_url: "https://api.openai.com/v1".into(),
+        model: "gpt-6.1-sol".into(),
+        api_key_env: None,
+        stream: true,
+        tuning: ModelTuning::default(),
+    }
+}
+
 fn domestic_api_profiles() -> Vec<ProviderProfile> {
     [
         ("deepseek", "https://api.deepseek.com", "deepseek-flash", "DEEPSEEK_API_KEY"),
@@ -290,7 +302,7 @@ impl Config {
     /// Append bundled APIs to old settings in memory; custom provider IDs win.
     /// The user's config file is not rewritten merely by reading it.
     fn include_domestic_api_profiles(&mut self) {
-        for builtin in domestic_api_profiles() {
+        for builtin in domestic_api_profiles().into_iter().chain(std::iter::once(chatgpt_plan_profile())) {
             if !self.providers.iter().any(|existing| existing.id == builtin.id) {
                 self.providers.push(builtin);
             }
@@ -373,7 +385,7 @@ impl Config {
             if !seen.insert(&p.id) {
                 bail!("Duplicate provider id: {}", p.id);
             }
-            if !matches!(p.kind.as_str(), "openai-compatible" | "gemini") {
+            if !matches!(p.kind.as_str(), "openai-compatible" | "gemini" | "chatgpt-plan") {
                 bail!("Unsupported provider kind for {}: {}", p.id, p.kind);
             }
             let url = reqwest::Url::parse(&p.base_url)?;
@@ -676,7 +688,7 @@ mod tests {
     fn domestic_api_profiles_are_configured_with_official_endpoints() {
         let config = Config::default();
         config.validate().unwrap();
-        assert_eq!(config.providers.len(), 6);
+        assert_eq!(config.providers.len(), 7);
         for (id, url, model, env) in [
             ("deepseek", "https://api.deepseek.com", "deepseek-flash", "DEEPSEEK_API_KEY"),
             ("kimi", "https://api.moonshot.cn/v1", "kimi-k3", "MOONSHOT_API_KEY"),
@@ -706,7 +718,7 @@ mod tests {
         assert_eq!(previous.providers.len(), 2);
         previous.include_domestic_api_profiles();
         previous.include_domestic_api_profiles();
-        assert_eq!(previous.providers.len(), 6);
+        assert_eq!(previous.providers.len(), 7);
         previous.default_provider = "kimi".into();
         previous.validate().unwrap();
         assert_eq!(previous.select(None, None).unwrap().model, "kimi-k3");
@@ -718,7 +730,7 @@ mod tests {
         previous.providers.push(custom);
         previous.include_domestic_api_profiles();
         previous.validate().unwrap();
-        assert_eq!(previous.providers.len(), 6);
+        assert_eq!(previous.providers.len(), 7);
         assert_eq!(previous.select(Some("glm"), None).unwrap().model, "my-glm");
         assert_eq!(
             previous.select(Some("glm"), None).unwrap().base_url,
