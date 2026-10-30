@@ -1,5 +1,8 @@
 # 2.1.88 → Rust 逐文件迁移台账（原始清单）
 
+> 2026-10-29 自定义 Agent 创建/编辑风险确认：原版 components/agents/AgentEditor.tsx、new-agent-creation 向导 → src/main.rs::confirm_custom_agent_warnings + agent_definition::validate_in_workspace，新增工具范围、描述长度和系统提示等非阻断警告展示及保存前明确确认，取消不落盘。提交 fb3ab49c650f2bcfc925fe8aee2c03b92310e62e；**源码已提交待行为验收**，不提升完整等价状态。
+
+
 > 2026-10-29 交互式 /resume 真正恢复会话：原版 commands/resume/resume.tsx::call/ResumeCommand → src/main.rs / src/agent.rs / src/session_control.rs，新增无参数会话选择器、当前 Agent 直接恢复、权限上限校验、任务/文件缓存/统计隔离、会话结束和启动 Hook、对应提示词历史切换。提交 898a1a35、cbe890a2、71b0ce56、b761c336；**源码已提交待行为验收**，跨工作树/跨项目选择、完整 Hook 与后台任务行为仍待等价。
 
 
