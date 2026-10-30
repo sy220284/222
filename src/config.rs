@@ -315,6 +315,10 @@ impl Config {
                     {
                         bail!("MCP HTTP server requires http(s) URL without credentials");
                     }
+                    require_secure_credential_transport(
+                        &expanded.expanded,
+                        s.headers.iter().any(|(name, value)| credential_header(name, value)),
+                    )?;
                 }
                 _ => bail!("Unsupported MCP transport; use stdio or http"),
             }
@@ -381,6 +385,22 @@ impl Config {
 
 /// Never send an API credential over cleartext remote HTTP. Provider-neutral
 /// loopback endpoints remain available for local runtimes and development.
+/// Classify token-like request headers before any environment expansion so
+/// user secrets cannot be sent to a non-loopback plaintext MCP endpoint.
+pub(crate) fn credential_header(name: &str, value: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name == "authorization"
+        || name == "proxy-authorization"
+        || name == "cookie"
+        || name == "set-cookie"
+        || name.contains("token")
+        || name.contains("secret")
+        || name.contains("api-key")
+        || name.ends_with("-key")
+        || value.trim_start().to_ascii_lowercase().starts_with("bearer ")
+        || value.trim_start().to_ascii_lowercase().starts_with("basic ")
+}
+
 pub(crate) fn require_secure_credential_transport(url: &str, has_credential: bool) -> Result<()> {
     if !has_credential {
         return Ok(());
@@ -410,6 +430,10 @@ mod tests {
 
     #[test]
     fn credentialed_endpoints_require_tls_except_loopback() {
+        assert!(credential_header("Authorization", "${API_TOKEN}"));
+        assert!(credential_header("X-Subscription-Token", "secret"));
+        assert!(credential_header("X-Custom", "Bearer token"));
+        assert!(!credential_header("X-Client-Version", "1.0"));
         for url in [
             "http://example.com/v1",
             "http://10.0.0.5:3000/v1",

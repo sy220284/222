@@ -630,10 +630,19 @@ mod tests {
             tools: vec![],
         };
         let body = provider.request_body(&request).unwrap();
-        assert_eq!(body["generationConfig"]["thinkingConfig"]["thinkingBudget"], 2048);
-        assert_eq!(body["generationConfig"]["responseMimeType"], "application/json");
+        assert_eq!(
+            body["generationConfig"]["thinkingConfig"]["thinkingBudget"],
+            2048
+        );
+        assert_eq!(
+            body["generationConfig"]["responseMimeType"],
+            "application/json"
+        );
         assert_eq!(body["generationConfig"]["responseJsonSchema"], schema);
-        assert_eq!(body["contents"][0]["parts"][0]["text"], "Return structured output");
+        assert_eq!(
+            body["contents"][0]["parts"][0]["text"],
+            "Return structured output"
+        );
     }
 
     #[test]

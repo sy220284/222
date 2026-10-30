@@ -132,6 +132,12 @@ impl HttpClient {
         for (key, value) in &dynamic_headers {
             merged.insert(key.to_ascii_lowercase(), value.as_str());
         }
+        crate::config::require_secure_credential_transport(
+            url.as_str(),
+            merged.iter().any(|(name, value)| {
+                crate::config::credential_header(name, value)
+            }),
+        )?;
         let mut headers = HeaderMap::new();
         for (key, value) in merged {
             let key = HeaderName::from_str(&key).context("Invalid MCP header name")?;
@@ -979,7 +985,14 @@ mod tests {
         assert!(
             format!("{:#}", HttpClient::connect(&c).await.err().unwrap()).contains("credentials")
         );
+        c.url = Some("http://example.com/mcp".into());
+        c.headers.insert("Authorization".into(), "Bearer secret".into());
+        assert!(
+            format!("{:#}", HttpClient::connect(&c).await.err().unwrap())
+                .contains("must use HTTPS")
+        );
         c.url = Some("http://127.0.0.1:1/mcp".into());
+        c.headers.clear();
         c.headers.insert("Mcp-Session-Id".into(), "forged".into());
         assert!(
             format!("{:#}", HttpClient::connect(&c).await.err().unwrap())
