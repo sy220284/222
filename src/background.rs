@@ -1248,6 +1248,36 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
+    async fn background_timeout_terminates_shell_and_keeps_failure_visible() {
+        let dir = tempfile::tempdir().unwrap();
+        let tasks = BackgroundTasks::new(&dir.path().canonicalize().unwrap()).unwrap();
+        let started: Value = serde_json::from_str(
+            &tasks.start_with_shell_timeout(
+                "printf 'before timeout\\n'; sleep 3",
+                "Bounded background command",
+                crate::shell_runtime::ShellKind::Bash,
+                100,
+            ).await.unwrap(),
+        ).unwrap();
+        let id = started["task_id"].as_str().unwrap();
+        let output: Value = serde_json::from_str(
+            &tasks.output(id, true, 5000).await.unwrap(),
+        ).unwrap();
+        assert_eq!(output["retrieval_status"], "success");
+        assert_eq!(output["task"]["status"], "failed");
+        assert!(output["task"]["output"].as_str().unwrap()
+            .contains("background command timed out after 100 milliseconds"));
+        // A later read must still show the cause after metadata is persisted.
+        let recovered = BackgroundTasks::new(&dir.path().canonicalize().unwrap()).unwrap();
+        let saved: Value = serde_json::from_str(
+            &recovered.output(id, false, 0).await.unwrap(),
+        ).unwrap();
+        assert_eq!(saved["task"]["status"], "failed");
+        assert!(saved["task"]["output"].as_str().unwrap().contains("timed out"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
     async fn completes_and_reads_output() {
         let dir = tempfile::tempdir().unwrap();
         let tasks = BackgroundTasks::new(&dir.path().canonicalize().unwrap()).unwrap();
