@@ -134,9 +134,9 @@ impl HttpClient {
         }
         crate::config::require_secure_credential_transport(
             url.as_str(),
-            merged.iter().any(|(name, value)| {
-                crate::config::credential_header(name, value)
-            }),
+            merged
+                .iter()
+                .any(|(name, value)| crate::config::credential_header(name, value)),
         )?;
         let mut headers = HeaderMap::new();
         for (key, value) in merged {
@@ -986,7 +986,8 @@ mod tests {
             format!("{:#}", HttpClient::connect(&c).await.err().unwrap()).contains("credentials")
         );
         c.url = Some("http://example.com/mcp".into());
-        c.headers.insert("Authorization".into(), "Bearer secret".into());
+        c.headers
+            .insert("Authorization".into(), "Bearer secret".into());
         assert!(
             format!("{:#}", HttpClient::connect(&c).await.err().unwrap())
                 .contains("must use HTTPS")

@@ -317,7 +317,9 @@ impl Config {
                     }
                     require_secure_credential_transport(
                         &expanded.expanded,
-                        s.headers.iter().any(|(name, value)| credential_header(name, value)),
+                        s.headers
+                            .iter()
+                            .any(|(name, value)| credential_header(name, value)),
                     )?;
                 }
                 _ => bail!("Unsupported MCP transport; use stdio or http"),
@@ -397,8 +399,14 @@ pub(crate) fn credential_header(name: &str, value: &str) -> bool {
         || name.contains("secret")
         || name.contains("api-key")
         || name.ends_with("-key")
-        || value.trim_start().to_ascii_lowercase().starts_with("bearer ")
-        || value.trim_start().to_ascii_lowercase().starts_with("basic ")
+        || value
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("bearer ")
+        || value
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("basic ")
 }
 
 pub(crate) fn require_secure_credential_transport(url: &str, has_credential: bool) -> Result<()> {
