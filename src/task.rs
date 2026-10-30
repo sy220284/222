@@ -33,7 +33,11 @@ pub struct Task {
 pub fn handles(name: &str) -> bool {
     matches!(
         name,
-        "task_create" | "task_update" | "task_list" | crate::tool_names::TODO_WRITE_TOOL_NAME | "todo_write"
+        "task_create"
+            | "task_update"
+            | "task_list"
+            | crate::tool_names::TODO_WRITE_TOOL_NAME
+            | "todo_write"
     )
 }
 
