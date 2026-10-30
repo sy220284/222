@@ -3425,6 +3425,17 @@ impl Agent {
         prompt: &str,
         blocks: Option<Vec<serde_json::Value>>,
     ) -> Result<String> {
+        self.ask_with_blocks_for_message(prompt, blocks, None).await
+    }
+
+    /// SDK user UUID is also the file-history turn identifier, matching
+    /// fileHistoryMakeSnapshot(messageId) in the original QueryEngine.
+    pub async fn ask_with_blocks_for_message(
+        &mut self,
+        prompt: &str,
+        blocks: Option<Vec<serde_json::Value>>,
+        message_id: Option<uuid::Uuid>,
+    ) -> Result<String> {
         let ask_started = Instant::now();
         // Original sessionStart.ts + cli/print.ts prepend a one-shot
         // initialUserMessage to the headless input stream. Keep it as an
@@ -3534,8 +3545,9 @@ impl Agent {
         let mut user_message = Message::text("user", &prompt);
         user_message.content_blocks = blocks;
         // All tools in one user turn share a file-history snapshot identity.
-        let history_message_id = uuid::Uuid::new_v4();
+        let history_message_id = message_id.unwrap_or_else(uuid::Uuid::new_v4);
         self.session.messages.push(user_message);
+        self.session.history_message_ids.push(history_message_id);
         self.session.save(&self.root)?;
         let mut system = self.effective_system_prompt()?;
         let resumed_team_worker = self.team_name.is_some()
