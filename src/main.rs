@@ -3810,15 +3810,23 @@ async fn sdk_nested_control(
                         })
                     })
                     .transpose()?;
-                if let Some(agents) = request.get("agents").filter(|value| !value.is_null()) {
-                    agent.set_sdk_agent_definitions(agents)?;
-                }
-                let agents = agent.sdk_agent_descriptors()?;
+                // Parse the new SDK agent catalog without mutating the active
+                // session. A schema error must not leak partially installed
+                // agents into a subsequent initialize attempt.
+                let prepared_agents = request
+                    .get("agents")
+                    .filter(|value| !value.is_null())
+                    .map(|definitions| agent.prepare_sdk_agent_definitions(definitions))
+                    .transpose()?;
                 let schema = request
                     .get("jsonSchema")
                     .filter(|value| !value.is_null())
                     .cloned();
                 agent.set_sdk_response_schema(schema)?;
+                if let Some(prepared) = prepared_agents {
+                    agent.install_sdk_agent_definitions(prepared);
+                }
+                let agents = agent.sdk_agent_descriptors()?;
                 agent.set_sdk_system_prompts(system_prompt, append_system_prompt);
                 *sdk_initialized = true;
                 Ok(

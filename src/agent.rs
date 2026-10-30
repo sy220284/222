@@ -168,6 +168,12 @@ struct SdkAgentDefinition {
     mcp_servers: Vec<serde_json::Value>,
 }
 
+/// Prepared SDK agent catalog; validation performs no session mutation.
+/// The commit step is infallible after provider schema validation succeeds.
+pub(crate) struct PreparedSdkAgentDefinitions(
+    std::collections::BTreeMap<String, SdkAgentDefinition>,
+);
+
 pub struct Agent {
     profile: ProviderProfile,
     provider: Box<dyn ModelProvider>,
@@ -477,7 +483,10 @@ impl Agent {
     /// appear in the public catalog, and change actual delegated model turns.
     /// Reject fields whose behavior is not yet supported (especially tool
     /// restrictions) so a caller cannot accidentally receive broader access.
-    pub fn set_sdk_agent_definitions(&mut self, input: &serde_json::Value) -> Result<()> {
+    pub(crate) fn prepare_sdk_agent_definitions(
+        &self,
+        input: &serde_json::Value,
+    ) -> Result<PreparedSdkAgentDefinitions> {
         let definitions = input
             .as_object()
             .context("initialize agents must be an object")?;
@@ -694,7 +703,18 @@ impl Agent {
                 },
             );
         }
-        self.sdk_agent_definitions = parsed;
+        Ok(PreparedSdkAgentDefinitions(parsed))
+    }
+
+    /// Install only a fully validated catalog. A rejected initialize request
+    /// must not leave new agents visible or mutate the selected provider.
+    pub(crate) fn install_sdk_agent_definitions(&mut self, prepared: PreparedSdkAgentDefinitions) {
+        self.sdk_agent_definitions = prepared.0;
+    }
+
+    pub(crate) fn set_sdk_agent_definitions(&mut self, input: &serde_json::Value) -> Result<()> {
+        let prepared = self.prepare_sdk_agent_definitions(input)?;
+        self.install_sdk_agent_definitions(prepared);
         Ok(())
     }
 
