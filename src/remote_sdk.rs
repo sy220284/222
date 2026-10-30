@@ -298,7 +298,11 @@ pub async fn run(
                 }
                 next = stdout.next_line() => {
                     let Some(line) = next.context("Unable to read SDK child output")? else {
-                        return child.wait().await?.exit_ok().map_err(Into::into);
+                        let status = child.wait().await?;
+                        if status.success() {
+                            return Ok(());
+                        }
+                        bail!("Local SDK process exited with {status}");
                     };
                     let event: Value = serde_json::from_str(&line)
                         .context("SDK child emitted malformed JSON")?;
