@@ -9,6 +9,59 @@ use std::{
     path::{Path, PathBuf},
 };
 
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ModelTuning {
+    /// Sampling settings are omitted unless configured; thinking models often reject them.
+    pub temperature: Option<f64>,
+    pub top_p: Option<f64>,
+    pub max_output_tokens: Option<u32>,
+    /// A client-side budget hint, never sent as an unrecognized API argument.
+    pub context_window: Option<u32>,
+    pub reasoning_effort: Option<String>,
+}
+
+impl ModelTuning {
+    pub fn validate(&self) -> Result<()> {
+        if self.temperature.is_some_and(|v| !v.is_finite() || !(0.0..=2.0).contains(&v)) {
+            bail!("temperature must be finite and between 0 and 2");
+        }
+        if self.top_p.is_some_and(|v| !v.is_finite() || v <= 0.0 || v > 1.0) {
+            bail!("top_p must be finite and within (0, 1]");
+        }
+        if self.max_output_tokens == Some(0) || self.context_window == Some(0) {
+            bail!("max_output_tokens and context_window must be positive");
+        }
+        if let (Some(max), Some(context)) = (self.max_output_tokens, self.context_window) {
+            if max > context {
+                bail!("max_output_tokens cannot exceed context_window");
+            }
+        }
+        if let Some(level) = &self.reasoning_effort {
+            if !matches!(level.as_str(), "none" | "low" | "medium" | "high" | "max") {
+                bail!("reasoning_effort must be none, low, medium, high or max");
+            }
+        }
+        Ok(())
+    }
+
+    pub fn apply_chat_completions(&self, body: &mut serde_json::Value) {
+        if let Some(v) = self.temperature {
+            body["temperature"] = serde_json::json!(v);
+        }
+        if let Some(v) = self.top_p {
+            body["top_p"] = serde_json::json!(v);
+        }
+        if let Some(v) = self.max_output_tokens {
+            body["max_tokens"] = serde_json::json!(v);
+        }
+        if let Some(v) = &self.reasoning_effort {
+            body["reasoning_effort"] = serde_json::json!(v);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderProfile {
     pub id: String,
@@ -20,6 +73,8 @@ pub struct ProviderProfile {
     pub api_key_env: Option<String>,
     #[serde(default)]
     pub stream: bool,
+    #[serde(default)]
+    pub tuning: ModelTuning,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +117,7 @@ pub struct SearchBackend {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     /// Original fileHistoryEnabled user setting, enabled for interactive sessions.
     #[serde(
@@ -163,9 +219,9 @@ fn default_file_checkpointing() -> bool {
 fn domestic_api_profiles() -> Vec<ProviderProfile> {
     [
         ("deepseek", "https://api.deepseek.com", "deepseek-flash", "DEEPSEEK_API_KEY"),
-        ("kimi", "https://api.moonshot.cn/v1", "kimi-k2.6", "MOONSHOT_API_KEY"),
-        ("glm", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7", "ZHIPU_API_KEY"),
-        ("minimax", "https://api.minimaxi.com/v1", "MiniMax-M2.7", "MINIMAX_API_KEY"),
+        ("kimi", "https://api.moonshot.cn/v1", "kimi-k3", "MOONSHOT_API_KEY"),
+        ("glm", "https://open.bigmodel.cn/api/paas/v4", "glm-5.3", "ZHIPU_API_KEY"),
+        ("minimax", "https://api.minimaxi.com/v1", "MiniMax-M3", "MINIMAX_API_KEY"),
     ]
     .into_iter()
     .map(|(id, base_url, model, api_key_env)| ProviderProfile {
@@ -175,6 +231,7 @@ fn domestic_api_profiles() -> Vec<ProviderProfile> {
         model: model.into(),
         api_key_env: Some(api_key_env.into()),
         stream: false,
+        tuning: ModelTuning::default(),
     })
     .collect()
 }
@@ -203,6 +260,7 @@ impl Default for Config {
                     model: "gpt-4.1-mini".into(),
                     api_key_env: Some("OPENAI_API_KEY".into()),
                     stream: false,
+                    tuning: ModelTuning::default(),
                 },
                 ProviderProfile {
                     id: "gemini".into(),
@@ -211,6 +269,7 @@ impl Default for Config {
                     model: "gemini-2.5-flash".into(),
                     api_key_env: Some("GEMINI_API_KEY".into()),
                     stream: false,
+                    tuning: ModelTuning::default(),
                 },
             ],
             mcp_servers: vec![],
@@ -307,6 +366,7 @@ impl Config {
         }
         let mut seen = std::collections::HashSet::new();
         for p in &self.providers {
+            p.tuning.validate()?;
             if p.id.trim().is_empty() || p.model.trim().is_empty() {
                 bail!("Provider id and model must be nonempty");
             }
@@ -619,9 +679,9 @@ mod tests {
         assert_eq!(config.providers.len(), 6);
         for (id, url, model, env) in [
             ("deepseek", "https://api.deepseek.com", "deepseek-flash", "DEEPSEEK_API_KEY"),
-            ("kimi", "https://api.moonshot.cn/v1", "kimi-k2.6", "MOONSHOT_API_KEY"),
-            ("glm", "https://open.bigmodel.cn/api/paas/v4", "glm-4.7", "ZHIPU_API_KEY"),
-            ("minimax", "https://api.minimaxi.com/v1", "MiniMax-M2.7", "MINIMAX_API_KEY"),
+            ("kimi", "https://api.moonshot.cn/v1", "kimi-k3", "MOONSHOT_API_KEY"),
+            ("glm", "https://open.bigmodel.cn/api/paas/v4", "glm-5.3", "ZHIPU_API_KEY"),
+            ("minimax", "https://api.minimaxi.com/v1", "MiniMax-M3", "MINIMAX_API_KEY"),
         ] {
             let profile = config.select(Some(id), None).unwrap();
             assert_eq!(profile.kind, "openai-compatible");
@@ -649,7 +709,7 @@ mod tests {
         assert_eq!(previous.providers.len(), 6);
         previous.default_provider = "kimi".into();
         previous.validate().unwrap();
-        assert_eq!(previous.select(None, None).unwrap().model, "kimi-k2.6");
+        assert_eq!(previous.select(None, None).unwrap().model, "kimi-k3");
 
         let mut custom = previous.select(Some("glm"), None).unwrap();
         custom.model = "my-glm".into();
