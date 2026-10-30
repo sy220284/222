@@ -119,14 +119,33 @@ impl BridgeSession {
     }
 }
 
+// 2.1.88 bridge/sessionIdCompat.ts injects the rollout gate at runtime.
+// The bridge SDK has no static GrowthBook dependency; a missing gate means
+// enabled, and a replacement gate takes effect on subsequent calls.
+type CseShimGate = std::sync::Arc<dyn Fn() -> bool + Send + Sync>;
+
+fn cse_shim_gate_slot() -> &'static std::sync::Mutex<Option<CseShimGate>> {
+    static GATE: std::sync::OnceLock<std::sync::Mutex<Option<CseShimGate>>> =
+        std::sync::OnceLock::new();
+    GATE.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+pub fn set_cse_shim_gate(gate: CseShimGate) {
+    *cse_shim_gate_slot().lock().unwrap() = Some(gate);
+}
+
 pub fn to_compat_session_id(id: &str, enabled: bool) -> String {
-    if enabled {
-        id.strip_prefix("cse_")
-            .map(|rest| format!("session_{rest}"))
-            .unwrap_or_else(|| id.to_owned())
-    } else {
-        id.to_owned()
+    let Some(rest) = id.strip_prefix("cse_") else {
+        return id.to_owned();
+    };
+    if !enabled {
+        return id.to_owned();
     }
+    let gate = cse_shim_gate_slot().lock().unwrap().clone();
+    if gate.is_some_and(|is_enabled| !is_enabled()) {
+        return id.to_owned();
+    }
+    format!("session_{rest}")
 }
 
 pub fn to_infra_session_id(id: &str) -> String {
@@ -152,6 +171,7 @@ pub fn poll_defaults() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    static CSE_GATE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn bridge_queue_rejection_is_atomic_and_recoverable() {
@@ -291,7 +311,47 @@ mod tests {
     }
 
     #[test]
+    fn registered_cse_shim_gate_is_lazy_replaceable_and_affects_sdk_calls() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::sync::Arc;
+        // Serialize tests that mutate the source module's process-wide gate.
+        let _gate_test = CSE_GATE_TEST_LOCK.lock().unwrap();
+        let enabled = Arc::new(AtomicBool::new(true));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let check_enabled = enabled.clone();
+        let check_calls = calls.clone();
+        set_cse_shim_gate(Arc::new(move || {
+            check_calls.fetch_add(1, Ordering::SeqCst);
+            check_enabled.load(Ordering::SeqCst)
+        }));
+        assert_eq!(to_compat_session_id("cse_a", true), "session_a");
+        enabled.store(false, Ordering::SeqCst);
+        assert_eq!(to_compat_session_id("cse_a", true), "cse_a");
+        assert_eq!(to_compat_session_id("cse_a", false), "cse_a");
+        assert_eq!(to_compat_session_id("session_a", true), "session_a");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        let mut session = BridgeSession::new("owner".to_owned());
+        assert_eq!(
+            session
+                .dispatch("bridge_session_ids", &json!({"id":"cse_a"}))
+                .unwrap()["compat_id"],
+            "cse_a"
+        );
+        set_cse_shim_gate(Arc::new(|| true));
+        assert_eq!(
+            session
+                .dispatch("bridge_session_ids", &json!({"id":"cse_a"}))
+                .unwrap()["compat_id"],
+            "session_a"
+        );
+        // Test cleanup: the real source has no remover; restoring the default
+        // enabled gate preserves that observable default for other callers.
+        set_cse_shim_gate(Arc::new(|| true));
+    }
+
+    #[test]
     fn session_retag_matches_original_shim_contract() {
+        let _gate_test = CSE_GATE_TEST_LOCK.lock().unwrap();
         assert_eq!(to_compat_session_id("cse_abc", true), "session_abc");
         assert_eq!(to_compat_session_id("cse_abc", false), "cse_abc");
         assert_eq!(to_compat_session_id("session_abc", true), "session_abc");
