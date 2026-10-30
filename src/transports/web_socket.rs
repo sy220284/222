@@ -593,7 +593,11 @@ impl WebSocketTransport {
         // headers; Bun's no-header branch replays the entire UUID buffer.
         if self.buffered_count() > 0 {
             let confirmed = conn.server_last_request_id.clone();
-            if self.replay_buffered_messages(&mut conn, confirmed.as_deref()).await.is_err() {
+            if self
+                .replay_buffered_messages(&mut conn, confirmed.as_deref())
+                .await
+                .is_err()
+            {
                 return ConnectionOutcome::Reconnect;
             }
         }
@@ -683,7 +687,8 @@ impl WebSocketTransport {
             self.shared.state.lock().expect("ws state").last_sent_id = None;
         }
         for message in &pending {
-            conn.send_text(&format!("{}\n", crate::ndjson::stringify_value(message))).await?;
+            conn.send_text(&format!("{}\n", crate::ndjson::stringify_value(message)))
+                .await?;
         }
         Ok(())
     }
@@ -1002,7 +1007,11 @@ mod tests {
                 request.extend_from_slice(&buf[..n]);
             }
             let request = String::from_utf8(request).unwrap();
-            let key = request.lines().find_map(|line| line.strip_prefix("Sec-WebSocket-Key: ")).unwrap().trim();
+            let key = request
+                .lines()
+                .find_map(|line| line.strip_prefix("Sec-WebSocket-Key: "))
+                .unwrap()
+                .trim();
             let reply = format!(
                 "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\nX-Last-Request-Id: a\r\n\r\n",
                 websocket_accept(key)
@@ -1021,28 +1030,48 @@ mod tests {
             peer.read_exact(&mut mask).await.unwrap();
             let mut body = vec![0_u8; n];
             peer.read_exact(&mut body).await.unwrap();
-            for (i, byte) in body.iter_mut().enumerate() { *byte ^= mask[i % 4]; }
+            for (i, byte) in body.iter_mut().enumerate() {
+                *byte ^= mask[i % 4];
+            }
             serde_json::from_slice::<Value>(&body).unwrap()
         });
         let (tx, mut rx) = mpsc::unbounded_channel();
         let client = Arc::new(WebSocketTransport::new(
-            format!("ws://127.0.0.1:{port}/session"), Vec::new(), None, tx, false, None,
+            format!("ws://127.0.0.1:{port}/session"),
+            Vec::new(),
+            None,
+            tx,
+            false,
+            None,
         ));
         {
             let mut buffered = client.shared.buffer.lock().unwrap();
             buffered.add(json!({"type":"result","uuid":"a"}));
             buffered.add(json!({"type":"result","uuid":"b"}));
         }
-        let run = { let client = client.clone(); tokio::spawn(async move { client.run().await }) };
+        let run = {
+            let client = client.clone();
+            tokio::spawn(async move { client.run().await })
+        };
         let observed = tokio::time::timeout(Duration::from_secs(5), rx.recv())
-            .await.expect("must forward open content").expect("inbound payload");
-        assert_eq!(serde_json::from_str::<Value>(&observed).unwrap()["content"], "application event");
+            .await
+            .expect("must forward open content")
+            .expect("inbound payload");
+        assert_eq!(
+            serde_json::from_str::<Value>(&observed).unwrap()["content"],
+            "application event"
+        );
         let replayed = tokio::time::timeout(Duration::from_secs(5), server)
-            .await.expect("replay arrives").unwrap();
+            .await
+            .expect("replay arrives")
+            .unwrap();
         assert_eq!(replayed["uuid"], "b");
         assert_eq!(client.buffered_count(), 1);
         client.close();
-        tokio::time::timeout(Duration::from_secs(5), run).await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(5), run)
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[tokio::test]
@@ -1056,12 +1085,23 @@ mod tests {
             server_last_request_id: None,
         };
         let (tx, _rx) = mpsc::unbounded_channel();
-        let transport = WebSocketTransport::new(
-            "ws://127.0.0.1:1".into(), Vec::new(), None, tx, false, None,
+        let transport =
+            WebSocketTransport::new("ws://127.0.0.1:1".into(), Vec::new(), None, tx, false, None);
+        transport
+            .shared
+            .buffer
+            .lock()
+            .unwrap()
+            .add(json!({"uuid":"unconfirmed"}));
+        assert!(transport
+            .replay_buffered_messages(&mut conn, None)
+            .await
+            .is_err());
+        assert_eq!(
+            transport.buffered_count(),
+            1,
+            "unconfirmed message remains queued"
         );
-        transport.shared.buffer.lock().unwrap().add(json!({"uuid":"unconfirmed"}));
-        assert!(transport.replay_buffered_messages(&mut conn, None).await.is_err());
-        assert_eq!(transport.buffered_count(), 1, "unconfirmed message remains queued");
     }
 
     #[test]

@@ -1064,10 +1064,10 @@ mod tests {
             Some(100),
             Some(0.0),
         );
-        let outcome = tokio::time::timeout(
-            Duration::from_secs(2),
-            client.initialize("s1", Some(9)),
-        ).await.expect("epoch conflict must fail without waiting for the stalled GET");
+        let outcome =
+            tokio::time::timeout(Duration::from_secs(2), client.initialize("s1", Some(9)))
+                .await
+                .expect("epoch conflict must fail without waiting for the stalled GET");
         assert!(outcome.is_err());
         assert!(client.heartbeat_task.lock().unwrap().is_none());
         client.close();
