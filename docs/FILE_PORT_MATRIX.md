@@ -82,7 +82,7 @@
 | `src/buddy/prompt.ts` | 37 | 1451 | 重写：保持通用行为 | `src/generated_ports/p_bf68628a27ff8.rs`| 部分实现：伙伴介绍文案模板逐字对齐、BUDDY 开关进程级化、已播报去重扫描（历史 attachment 类型与名称匹配、muted 跳过）、registry 兼容导出 companionIntroText，附 2 测试（开关为进程全局，gate 与 dedup 合并顺序单测防并行竞态）|
 | `src/buddy/sprites.ts` | 515 | 9797 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/buddy/types.ts` | 149 | 3805 | 重写：保持通用行为 | `src/generated_ports/p_0e2477efcdf43.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/buddy/useBuddyNotification.tsx` | 98 | 9959 | 重写：保持通用行为 | `src/generated_ports/p_336c8aa7f1741.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/buddy/useBuddyNotification.tsx` | 98 | 9959 | 重写：保持通用行为 | `src/generated_ports/p_336c8aa7f1741.rs`| 部分实现：预告窗口判定（2026年4月1-7日本地时间，ant 类型短路）、live 判定（窗口后永久）、通知契约（key=buddy-teaser/immediate/15s）、卸载清理 key；RainbowText 视图归 thinking 端口（调色板映射），附 3 测试|
 | `src/cli/exit.ts` | 32 | 1310 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/cli/handlers/agents.ts` | 71 | 2089 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/auth.ts` | 331 | 10756 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -237,7 +237,7 @@
 | `src/commands/plugin/PluginSettings.tsx` | 1072 | 128668 | 重写：保持通用行为 | `src/generated_ports/p_632353e8f57fc.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/PluginTrustWarning.tsx` | 32 | 3919 | 重写：保持通用行为 | `src/plugin_trust_warning_source.rs` | 部分实现：政策设置的信任告知、样式和附加提示由 Rust 计算，剔除原厂专属品牌文案；终端实际渲染与权限设置接线待验收 |
 | `src/commands/plugin/UnifiedInstalledCell.tsx` | 565 | 44441 | 重写：保持通用行为 | `src/generated_ports/p_48aef09fe12b8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/plugin/ValidatePlugin.tsx` | 98 | 12369 | 重写：保持通用行为 | `src/generated_ports/p_458eb28ef635b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/ValidatePlugin.tsx` | 98 | 12369 | 重写：保持通用行为 | `src/generated_ports/p_458eb28ef635b.rs`| 部分实现：validate 报告组装逐字（usage 文本/文件头/叉号警告勾号与单复数/成功与失败判定/退出码 0通过1失败2异常）；validateManifest 运行器注入，附 4 测试（路径字面按隐私门禁中性化）|
 | `src/commands/plugin/index.tsx` | 11 | 1337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/plugin/parseArgs.ts` | 104 | 2818 | 重写：保持通用行为 | `src/plugin_commands.rs / src/plugin_manager.rs / src/main.rs` | 部分实现：原版菜单、别名、安装参数、市场动作与完整解析分支已实现；管理命令落地本地插件安装/删除/启停，远程市场和 UI 待补；插件安装入口崩溃残留扫描与安全恢复接入实际 install/manager 独占锁（20d3e46e、c2f96029，待验收）；事务提交日志/全量自动恢复尚缺 |
 | `src/commands/plugin/plugin.tsx` | 7 | 1590 | 重写：保持通用行为 | `src/main.rs / src/plugin_commands.rs / src/plugin_manager.rs` | 部分实现：交互式 /plugin 命令已接通原版子命令解析及真实本地插件管理，修改后刷新当前 Agent Hook/MCP/技能命令目录并显示失败（580c0586，源码已提交待验收）；原版 PluginSettings 全 UI、远程市场、MCPB 和 LSP 动态刷新仍缺；静态生成 JSX 不计完成证据 |

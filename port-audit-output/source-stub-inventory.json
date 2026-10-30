@@ -1,5 +1,5 @@
 {
-  "count": 223,
+  "count": 209,
   "disclaimer": "仅是自动生成空壳的静态检测，不证明手写代码功能完整。",
   "items": [
     {
@@ -828,14 +828,6 @@
     },
     {
       "null_expression_count": 3,
-      "rust": "src/generated_ports/p_8985ba0623d61.rs",
-      "rust_lines": 44,
-      "source": "src/services/remoteManagedSettings/securityCheck.tsx",
-      "source_lines": 74,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 3,
       "rust": "src/generated_ports/p_90f4b2e173492.rs",
       "rust_lines": 35,
       "source": "src/components/PromptInput/SandboxPromptFooterHint.tsx",
@@ -972,14 +964,6 @@
     },
     {
       "null_expression_count": 2,
-      "rust": "src/generated_ports/p_2a0eb439f5a02.rs",
-      "rust_lines": 17,
-      "source": "src/commands/review/ultrareviewCommand.tsx",
-      "source_lines": 58,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
       "rust": "src/generated_ports/p_efeefe8aa34bc.rs",
       "rust_lines": 27,
       "source": "src/components/IdeStatusIndicator.tsx",
@@ -1036,66 +1020,10 @@
     },
     {
       "null_expression_count": 2,
-      "rust": "src/generated_ports/p_c014e56745958.rs",
-      "rust_lines": 17,
-      "source": "src/commands/agents/agents.tsx",
-      "source_lines": 12,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_101b0ecfa9b9b.rs",
-      "rust_lines": 17,
-      "source": "src/commands/help/help.tsx",
-      "source_lines": 11,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
       "rust": "src/generated_ports/p_f0fb508cfc148.rs",
       "rust_lines": 17,
       "source": "src/commands/permissions/permissions.tsx",
       "source_lines": 10,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_8e039596a976f.rs",
-      "rust_lines": 20,
-      "source": "src/commands/diff/diff.tsx",
-      "source_lines": 9,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_d54f470418286.rs",
-      "rust_lines": 23,
-      "source": "src/commands/skills/skills.tsx",
-      "source_lines": 8,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_65123b2aecfbb.rs",
-      "rust_lines": 17,
-      "source": "src/commands/tasks/tasks.tsx",
-      "source_lines": 8,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_18a7a03aea84b.rs",
-      "rust_lines": 18,
-      "source": "src/commands/config/config.tsx",
-      "source_lines": 7,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_4c1965fccb05b.rs",
-      "rust_lines": 18,
-      "source": "src/commands/usage/usage.tsx",
-      "source_lines": 7,
       "view_export_unreachable": true
     },
     {
@@ -1212,14 +1140,6 @@
     },
     {
       "null_expression_count": 1,
-      "rust": "src/generated_ports/p_ee2b485a76e48.rs",
-      "rust_lines": 8,
-      "source": "src/commands/upgrade/upgrade.tsx",
-      "source_lines": 38,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 1,
       "rust": "src/generated_ports/p_880d83dc9c810.rs",
       "rust_lines": 20,
       "source": "src/components/agents/AgentNavigationFooter.tsx",
@@ -1228,42 +1148,10 @@
     },
     {
       "null_expression_count": 1,
-      "rust": "src/generated_ports/p_31ab458ab85e0.rs",
-      "rust_lines": 12,
-      "source": "src/commands/passes/passes.tsx",
-      "source_lines": 24,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 1,
       "rust": "src/generated_ports/p_c02d27a4b4b47.rs",
       "rust_lines": 49,
       "source": "src/components/HelpV2/General.tsx",
       "source_lines": 23,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 1,
-      "rust": "src/generated_ports/p_fa4cf9bf81ae4.rs",
-      "rust_lines": 8,
-      "source": "src/commands/extra-usage/extra-usage.tsx",
-      "source_lines": 17,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 1,
-      "rust": "src/generated_ports/p_55d1ffc73afa2.rs",
-      "rust_lines": 12,
-      "source": "src/commands/desktop/desktop.tsx",
-      "source_lines": 9,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 1,
-      "rust": "src/generated_ports/p_1d6be8358d910.rs",
-      "rust_lines": 12,
-      "source": "src/commands/remote-env/remote-env.tsx",
-      "source_lines": 7,
       "view_export_unreachable": true
     },
     {
@@ -1788,7 +1676,7 @@
     }
   ],
   "schema": "port-stubs/v1",
-  "total_null_expressions": 995,
-  "unreachable_views": 186,
-  "with_null": 195
+  "total_null_expressions": 971,
+  "unreachable_views": 172,
+  "with_null": 181
 }
