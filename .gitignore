@@ -10,3 +10,8 @@
 .env.*
 !.env.example
 /.port-workbench/
+
+# OAuth sessions and model API keys must never enter source control.
+.model-api-keys.json
+.chatgpt-plan.json
+.credentials.json
