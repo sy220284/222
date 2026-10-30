@@ -384,6 +384,24 @@ impl BackgroundTasks {
         description: &str,
         kind: crate::shell_runtime::ShellKind,
     ) -> Result<String> {
+        let env = std::env::vars().collect::<HashMap<String, String>>();
+        let timeout_ms = crate::portable_source_utils::default_bash_timeout_ms(&env)
+            .clamp(1, crate::portable_source_utils::max_bash_timeout_ms(&env));
+        self.start_with_shell_timeout(command, description, kind, timeout_ms).await
+    }
+
+    /// BashTool creates its timed ShellCommand before moving it into the
+    /// background. Retain that deadline after detaching the task from the UI.
+    pub async fn start_with_shell_timeout(
+        &self,
+        command: &str,
+        description: &str,
+        kind: crate::shell_runtime::ShellKind,
+        timeout_ms: u64,
+    ) -> Result<String> {
+        if timeout_ms == 0 {
+            bail!("Background shell timeout must be positive");
+        }
         if command.trim().is_empty() {
             bail!("Background shell command is empty")
         }
@@ -499,21 +517,30 @@ impl BackgroundTasks {
             }));
             let stdout_task = tokio::spawn(spool_merged(stdout, stdout_file, merged.clone()));
             let stderr_task = tokio::spawn(spool_merged(stderr, stderr_file, merged.clone()));
-            let (mut state, code) = tokio::select! {
+            let deadline = tokio::time::sleep(Duration::from_millis(timeout_ms));
+            tokio::pin!(deadline);
+            let (mut state, code, timed_out) = tokio::select! {
                 result = child.wait() => match result {
-                    Ok(status) if status.success() => ("completed", status.code()),
-                    Ok(status) => ("failed", status.code()),
-                    Err(_) => ("failed", None),
+                    Ok(status) if status.success() => ("completed", status.code(), false),
+                    Ok(status) => ("failed", status.code(), false),
+                    Err(_) => ("failed", None, false),
                 },
                 _ = stopped => {
                     #[cfg(unix)]
                     if let Some(pid) = child.id() {
-                        // A negative PID targets the entire process group,
-                        // including Shell children which inherited output pipes.
+                        // Kill the whole process group, not only the shell.
                         let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                     }
                     let _ = child.kill().await;
-                    ("killed", None)
+                    ("killed", None, false)
+                },
+                _ = &mut deadline => {
+                    #[cfg(unix)]
+                    if let Some(pid) = child.id() {
+                        let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+                    }
+                    let _ = child.kill().await;
+                    ("failed", None, true)
                 }
             };
             let (out, stdout_failed) = match stdout_task.await {
@@ -540,12 +567,24 @@ impl BackgroundTasks {
             };
             let merged_failed = {
                 let mut log = merged.lock().await;
+                let mut failed = false;
+                if timed_out {
+                    // Persist the cause of failure so TaskOutput and Read can
+                    // distinguish a deadline from an ordinary nonzero exit,
+                    // including after a session restart.
+                    let notice = format!(
+                        "\n[background command timed out after {timeout_ms} milliseconds]\n"
+                    );
+                    if let Err(error) = log.file.write_all(notice.as_bytes()).await {
+                        eprintln!("Background timeout notice persistence failed: {error:#}");
+                        failed = true;
+                    }
+                }
                 if let Err(error) = log.file.flush().await {
                     eprintln!("Background combined output persistence failed: {error:#}");
-                    true
-                } else {
-                    false
+                    failed = true;
                 }
+                failed
             };
             if stdout_failed || stderr_failed || merged_failed {
                 // A successful shell exit with lost output is a failed task,
