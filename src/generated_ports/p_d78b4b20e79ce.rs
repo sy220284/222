@@ -8,9 +8,11 @@ use std::collections::BTreeMap;
 
 fn children_from_json(value: &Value, result: &mut Vec<VNode>) {
     match value {
-        Value::Null | Value::Bool(_) => {},
+        Value::Null | Value::Bool(_) => {}
         Value::Array(elements) => {
-            for child in elements { children_from_json(child, result); }
+            for child in elements {
+                children_from_json(child, result);
+            }
         }
         Value::Object(_) => {
             let child = serde_json::from_value::<VNode>(value.clone())
@@ -25,7 +27,9 @@ fn children_from_json(value: &Value, result: &mut Vec<VNode>) {
 pub fn render_source_view(props: &Value) -> VNode {
     let mut children = Vec::new();
     children_from_json(props.get("children").unwrap_or(&Value::Null), &mut children);
-    if children.is_empty() { return VNode::Empty; }
+    if children.is_empty() {
+        return VNode::Empty;
+    }
     let mut joined = Vec::with_capacity(children.len() * 2 - 1);
     for (i, child) in children.into_iter().enumerate() {
         if i > 0 {
@@ -45,15 +49,24 @@ mod source_parity_tests {
     use super::*;
     #[test]
     fn filters_conditional_children_and_joins_with_single_separator() {
-        let node = render_source_view(&json!({"children": [null,false,"Enter to confirm",null,true,"Esc to cancel"]}));
+        let node = render_source_view(
+            &json!({"children": [null,false,"Enter to confirm",null,true,"Esc to cancel"]}),
+        );
         assert_eq!(node.text_content(), "Enter to confirm · Esc to cancel");
         assert_eq!(node.unresolved_node_count(), 0);
-        assert_eq!(render_source_view(&json!({"children":[null,false]})),VNode::Empty);
+        assert_eq!(
+            render_source_view(&json!({"children":[null,false]})),
+            VNode::Empty
+        );
     }
     #[test]
     fn supports_actual_nested_ui_children() {
-        let child = VNode::Element { tag: "Text".into(), attrs: BTreeMap::new(), children: vec![VNode::Text("item".into())] };
+        let child = VNode::Element {
+            tag: "Text".into(),
+            attrs: BTreeMap::new(),
+            children: vec![VNode::Text("item".into())],
+        };
         let node = render_source_view(&json!({"children":[child,"other"]}));
-        assert_eq!(node.text_content(),"item · other");
+        assert_eq!(node.text_content(), "item · other");
     }
 }
