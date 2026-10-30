@@ -1,3 +1,9 @@
+## 2026-10-29：自定义 Agent 创建编辑前风险提醒（源码已提交、待验收）
+
+对照原版 components/agents/AgentEditor.tsx 和 new-agent-creation 向导：无工具、无限制工具、描述过短/过长、系统提示过长等校验警告应向用户展示并取得确认。Rust 原 agent_definition::validate 已计算 warnings，但交互式创建/编辑直接保存，用户看不到风险。现由 src/main.rs::confirm_custom_agent_warnings 复用真实验证结果，先拦截错误，逐条显示非阻断警告并请求 y/N 确认；取消时不创建文件，编辑取消保留旧文件。提交 fb3ab49c650f2bcfc925fe8aee2c03b92310e62e。
+
+本轮新增1项独立用户交互能力，**累计11/100，剩余89项**；源码已提交待行为验收，新增完整等价验收0。未运行 Cargo/测试/CI，Issue #3 冻结362项未核销，100项先行逐函数确认和全量实施方案仍未完成。
+
 ## 2026-10-29：/resume 真正切换会话及无参数选择器（源码已提交、待验收）
 
 原版 source/src/commands/resume/resume.tsx::call/ResumeCommand：/resume 无参数打开历史会话选择器，输入 UUID/标题后在当前交互界面恢复该会话。Rust 原 src/main.rs::chat 仅打印重启命令，当前对话未恢复。
