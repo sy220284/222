@@ -108,7 +108,6 @@ impl ShellKind {
     }
 }
 
-
 #[cfg(windows)]
 mod windows_job {
     use anyhow::{bail, Context, Result};
@@ -153,9 +152,7 @@ mod windows_job {
     #[link(name = "kernel32")]
     extern "system" {
         fn CreateJobObjectW(security: *const c_void, name: *const u16) -> Handle;
-        fn SetInformationJobObject(
-            job: Handle, kind: u32, data: *const c_void, size: u32
-        ) -> i32;
+        fn SetInformationJobObject(job: Handle, kind: u32, data: *const c_void, size: u32) -> i32;
         fn AssignProcessToJobObject(job: Handle, process: Handle) -> i32;
         fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
         fn TerminateJobObject(job: Handle, exit_code: u32) -> i32;
@@ -168,7 +165,9 @@ mod windows_job {
     unsafe impl Sync for ProcessJob {}
     impl Drop for ProcessJob {
         fn drop(&mut self) {
-            unsafe { CloseHandle(self.0); }
+            unsafe {
+                CloseHandle(self.0);
+            }
         }
     }
     impl ProcessJob {
@@ -176,32 +175,32 @@ mod windows_job {
             let pid = pid.context("Windows shell process ID missing")?;
             let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
             if handle.is_null() {
-                return Err(std::io::Error::last_os_error())
-                    .context("Create Windows process job");
+                return Err(std::io::Error::last_os_error()).context("Create Windows process job");
             }
             let job = Self(handle);
             let mut limits: ExtendedLimits = unsafe { mem::zeroed() };
             limits.basic.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
             let configured = unsafe {
                 SetInformationJobObject(
-                    job.0, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                    job.0,
+                    JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
                     &limits as *const _ as *const c_void,
-                    mem::size_of::<ExtendedLimits>() as u32
+                    mem::size_of::<ExtendedLimits>() as u32,
                 )
             };
             if configured == 0 {
                 return Err(std::io::Error::last_os_error())
                     .context("Enable kill-on-close for Windows background process job");
             }
-            let process = unsafe {
-                OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid)
-            };
+            let process = unsafe { OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid) };
             if process.is_null() {
                 return Err(std::io::Error::last_os_error())
                     .context("Open Windows child for process-job assignment");
             }
             let assigned = unsafe { AssignProcessToJobObject(job.0, process) };
-            unsafe { CloseHandle(process); }
+            unsafe {
+                CloseHandle(process);
+            }
             if assigned == 0 {
                 return Err(std::io::Error::last_os_error())
                     .context("Contain Windows shell descendants in job");
@@ -232,7 +231,9 @@ pub async fn terminate_windows_process_tree(pid: Option<u32>) -> Result<()> {
     let system_root = env::var_os("SystemRoot")
         .or_else(|| env::var_os("WINDIR"))
         .context("Windows system directory is unavailable for process-tree termination")?;
-    let taskkill = PathBuf::from(system_root).join("System32").join("taskkill.exe");
+    let taskkill = PathBuf::from(system_root)
+        .join("System32")
+        .join("taskkill.exe");
     let mut command = Command::new(taskkill);
     command
         .args(["/F", "/T", "/PID"])

@@ -92,8 +92,7 @@ impl Command {
                 .then(|| last.get("text").and_then(Value::as_str))
                 .flatten()
         });
-        text.is_some_and(|value| value.trim().starts_with('/'))
-            && !self.skip_slash_commands
+        text.is_some_and(|value| value.trim().starts_with('/')) && !self.skip_slash_commands
     }
     pub fn text(&self) -> Option<String> {
         if let Some(text) = self.value.as_str() {

@@ -60,7 +60,9 @@ pub fn number(value: Value) -> Value {
 /// Adapt the original strict Read/Edit/Write argument schemas at the
 /// tool boundary, before the provider-neutral Rust execution path.
 pub fn normalize_source_file_tool(name: &str, args: &mut Value) -> Result<()> {
-    let Some(map) = args.as_object_mut() else { return Ok(()); };
+    let Some(map) = args.as_object_mut() else {
+        return Ok(());
+    };
     let allowed: &[&str] = match name {
         "Read" => &["file_path", "offset", "limit", "pages"],
         "Edit" => &["file_path", "old_string", "new_string", "replace_all"],

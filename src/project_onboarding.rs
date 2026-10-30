@@ -70,8 +70,8 @@ impl Onboarding {
             ".atlas/instructions.md",
             ".atlas/instructions.local.md",
         ]
-            .iter()
-            .any(|name| self.root.join(name).is_file());
+        .iter()
+        .any(|name| self.root.join(name).is_file());
         Ok(vec![
             Step {
                 key: "workspace",

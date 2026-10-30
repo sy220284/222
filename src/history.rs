@@ -1,8 +1,8 @@
 use anyhow::{bail, Context, Result};
-use std::io::Write as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::io::Write as _;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -13,7 +13,10 @@ use uuid::Uuid;
 /// headless/SDK sessions require explicit opt-in. Disable always wins.
 fn env_truthy(name: &str) -> bool {
     std::env::var(name).ok().is_some_and(|value| {
-        matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
     })
 }
 pub fn enabled(interactive: bool, user_enabled: bool) -> bool {
@@ -59,7 +62,10 @@ fn fingerprint(content: &[u8]) -> String {
 fn open_history_file(path: &Path) -> Result<fs::File> {
     let metadata = fs::symlink_metadata(path)?;
     if !metadata.file_type().is_file() {
-        bail!("History checkpoint must be a regular file: {}", path.display());
+        bail!(
+            "History checkpoint must be a regular file: {}",
+            path.display()
+        );
     }
     let mut options = fs::OpenOptions::new();
     options.read(true);
@@ -70,7 +76,10 @@ fn open_history_file(path: &Path) -> Result<fs::File> {
     }
     let file = options.open(path)?;
     if !file.metadata()?.is_file() {
-        bail!("History checkpoint changed to a non-file: {}", path.display());
+        bail!(
+            "History checkpoint changed to a non-file: {}",
+            path.display()
+        );
     }
     Ok(file)
 }
@@ -88,7 +97,10 @@ fn read_checkpoint_file(path: &Path) -> Result<Vec<u8>> {
 fn private_history_dir(path: &Path) -> Result<PathBuf> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
-            bail!("File history directory is redirected or invalid: {}", path.display())
+            bail!(
+                "File history directory is redirected or invalid: {}",
+                path.display()
+            )
         }
         Ok(_) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -101,7 +113,8 @@ fn private_history_dir(path: &Path) -> Result<PathBuf> {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
     }
-    path.canonicalize().context("File history directory unavailable")
+    path.canonicalize()
+        .context("File history directory unavailable")
 }
 
 /// Move existing workspace-local checkpoints into private storage without
@@ -124,11 +137,16 @@ fn migrate_workspace_history(source: &Path, target: &Path, direct_files_only: bo
             continue;
         }
         if !metadata.is_file() || metadata.file_type().is_symlink() {
-            bail!("Previous file history contains a redirected or invalid entry: {}", item.path().display())
+            bail!(
+                "Previous file history contains a redirected or invalid entry: {}",
+                item.path().display()
+            )
         }
         files.push(item);
     }
-    if files.is_empty() { return Ok(()); }
+    if files.is_empty() {
+        return Ok(());
+    }
     if target.exists() && fs::read_dir(target)?.next().is_some() {
         // A previous migration may have published the private copy before
         // being interrupted while deleting old files. Only remove old files
@@ -142,11 +160,17 @@ fn migrate_workspace_history(source: &Path, target: &Path, direct_files_only: bo
                 bail!("History migration conflict: workspace and private checkpoints differ")
             }
         }
-        for item in &files { fs::remove_file(item.path())?; }
-        if !direct_files_only { fs::remove_dir(source)?; }
+        for item in &files {
+            fs::remove_file(item.path())?;
+        }
+        if !direct_files_only {
+            fs::remove_dir(source)?;
+        }
         return Ok(());
     }
-    let parent = target.parent().context("History destination has no parent")?;
+    let parent = target
+        .parent()
+        .context("History destination has no parent")?;
     let staged = parent.join(format!(".migrate-{}", Uuid::new_v4()));
     private_history_dir(&staged)?;
     let outcome = (|| -> Result<()> {
@@ -154,7 +178,10 @@ fn migrate_workspace_history(source: &Path, target: &Path, direct_files_only: bo
             let from = item.path();
             let to = staged.join(item.file_name());
             let mut input = fs::File::open(&from)?;
-            let mut output = fs::OpenOptions::new().write(true).create_new(true).open(&to)?;
+            let mut output = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&to)?;
             std::io::copy(&mut input, &mut output)?;
             output.sync_all()?;
             #[cfg(unix)]
@@ -163,7 +190,9 @@ fn migrate_workspace_history(source: &Path, target: &Path, direct_files_only: bo
                 fs::set_permissions(&to, fs::Permissions::from_mode(0o600))?;
             }
         }
-        if target.exists() { fs::remove_dir(target)?; }
+        if target.exists() {
+            fs::remove_dir(target)?;
+        }
         fs::rename(&staged, target)?;
         Ok(())
     })();
@@ -175,16 +204,24 @@ fn migrate_workspace_history(source: &Path, target: &Path, direct_files_only: bo
     }
     for item in &files {
         fs::remove_file(item.path()).with_context(|| {
-            format!("Private history is saved but the old checkpoint could not be removed: {}", item.path().display())
+            format!(
+                "Private history is saved but the old checkpoint could not be removed: {}",
+                item.path().display()
+            )
         })?;
     }
-    if !direct_files_only { fs::remove_dir(source)?; }
+    if !direct_files_only {
+        fs::remove_dir(source)?;
+    }
     Ok(())
 }
 fn storage(root: &Path, session_id: Option<&str>) -> Result<PathBuf> {
-    let root = root.canonicalize().context("History workspace unavailable")?;
+    let root = root
+        .canonicalize()
+        .context("History workspace unavailable")?;
     let config_path = crate::config::Config::path()?;
-    let config_parent = config_path.parent()
+    let config_parent = config_path
+        .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(config_parent)?;
@@ -192,8 +229,12 @@ fn storage(root: &Path, session_id: Option<&str>) -> Result<PathBuf> {
     let base = private_history_dir(&config_parent.join("file-history"))?;
     let session = match session_id {
         Some(id) => Uuid::parse_str(id)
-            .context("History session id must be a UUID")?.to_string(),
-        None => format!("workspace-{:x}", Sha256::digest(root.to_string_lossy().as_bytes())),
+            .context("History session id must be a UUID")?
+            .to_string(),
+        None => format!(
+            "workspace-{:x}",
+            Sha256::digest(root.to_string_lossy().as_bytes())
+        ),
     };
     let folder = base.join(&session);
     let legacy_base = root.join(".atlas/history");
@@ -206,7 +247,10 @@ fn storage(root: &Path, session_id: Option<&str>) -> Result<PathBuf> {
     for ancestor in [root.join(".atlas"), legacy_base.clone()] {
         match fs::symlink_metadata(&ancestor) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
-                bail!("Previous history storage is redirected: {}", ancestor.display())
+                bail!(
+                    "Previous history storage is redirected: {}",
+                    ancestor.display()
+                )
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -258,7 +302,10 @@ pub fn record(
     previous_mode: Option<u32>,
 ) -> Result<Option<Uuid>> {
     let now = fs::read(path)?;
-    if previous.as_ref().is_some_and(|p| p.as_slice() == now.as_slice()) {
+    if previous
+        .as_ref()
+        .is_some_and(|p| p.as_slice() == now.as_slice())
+    {
         return Ok(None);
     }
     // Validate the updated file metadata before creating any backup artifact.
@@ -273,7 +320,9 @@ pub fn record(
     // notebooks and large files never have to pass through JSON text fields.
     if let (Some(contents), Some(backup)) = (previous.as_ref(), backup_path.as_ref()) {
         let mut file = fs::OpenOptions::new()
-            .write(true).create_new(true).open(backup)
+            .write(true)
+            .create_new(true)
+            .open(backup)
             .with_context(|| format!("Create history backup {}", backup.display()))?;
         if let Err(error) = file.write_all(contents).and_then(|_| file.sync_all()) {
             drop(file);
@@ -296,7 +345,9 @@ pub fn record(
     let temporary = folder.join(format!("{id}.tmp"));
     let outcome = (|| -> Result<()> {
         let mut file = fs::OpenOptions::new()
-            .write(true).create_new(true).open(&temporary)?;
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
         file.write_all(&serde_json::to_vec_pretty(&entry)?)?;
         file.sync_all()?;
         fs::rename(&temporary, &final_path)?;
@@ -348,7 +399,13 @@ pub fn finish_after_edit(
     if let Some(warning) = pending.warning {
         return warning;
     }
-    record_notice(root, session_id, path, pending.previous, pending.previous_mode)
+    record_notice(
+        root,
+        session_id,
+        path,
+        pending.previous,
+        pending.previous_mode,
+    )
 }
 
 /// FileHistoryTrackEdit logs a failed backup without converting an already
@@ -364,7 +421,9 @@ pub fn record_notice(
     match record(root, session_id, path, previous, previous_mode) {
         Ok(Some(id)) => format!("\nCheckpoint: {id}"),
         Ok(None) => String::new(),
-        Err(error) => format!("\nWarning: file edit succeeded but checkpoint could not be saved: {error:#}"),
+        Err(error) => {
+            format!("\nWarning: file edit succeeded but checkpoint could not be saved: {error:#}")
+        }
     }
 }
 
@@ -393,12 +452,19 @@ pub fn load(root: &Path, session_id: Option<&str>, id: &str) -> Result<Record> {
 /// checkpoint created for a new file has no previous content.
 fn previous_bytes(record: &Record) -> Result<Option<Vec<u8>>> {
     let bytes = if record.previous_backup.is_some() {
-        let backup = record.backup_path.as_ref()
+        let backup = record
+            .backup_path
+            .as_ref()
             .context("History backup was not loaded from session storage")?;
-        Some(read_checkpoint_file(backup)
-            .with_context(|| format!("Read history backup {}", backup.display()))?)
+        Some(
+            read_checkpoint_file(backup)
+                .with_context(|| format!("Read history backup {}", backup.display()))?,
+        )
     } else {
-        record.previous.as_ref().map(|text| text.as_bytes().to_vec())
+        record
+            .previous
+            .as_ref()
+            .map(|text| text.as_bytes().to_vec())
     };
     if let (Some(expected), Some(bytes)) = (record.previous_hash.as_deref(), bytes.as_ref()) {
         if fingerprint(bytes) != expected {
@@ -419,8 +485,7 @@ pub fn preview(record: &Record, path: &Path) -> Result<String> {
         None => true,
         Some(bytes) => {
             fingerprint(bytes) == record.updated_hash
-                && (record.updated_mode.is_none()
-                    || snapshot_mode(path)? == record.updated_mode)
+                && (record.updated_mode.is_none() || snapshot_mode(path)? == record.updated_mode)
         }
     };
     let mut insertions = None;
@@ -437,7 +502,7 @@ pub fn preview(record: &Record, path: &Path) -> Result<String> {
             match change.tag() {
                 similar::ChangeTag::Insert => added += 1,
                 similar::ChangeTag::Delete => removed += 1,
-                similar::ChangeTag::Equal => {},
+                similar::ChangeTag::Equal => {}
             }
         }
         insertions = Some(added);
@@ -463,23 +528,31 @@ fn publish_verified_restore(path: &Path, bytes: &[u8], mode: Option<u32>) -> Res
     // symbolic link: replace its resolved target, keeping the link in place.
     // A dangling link is rejected rather than redirecting the staged write.
     let destination = match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => path.canonicalize()
+        Ok(metadata) if metadata.file_type().is_symlink() => path
+            .canonicalize()
             .with_context(|| format!("Resolve history restore target {}", path.display()))?,
         Ok(_) => path.to_path_buf(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => path.to_path_buf(),
         Err(error) => return Err(error.into()),
     };
-    let parent = destination.parent()
+    let parent = destination
+        .parent()
         .filter(|directory| !directory.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)?;
-    let name = destination.file_name().context("History restore target has no filename")?;
+    let name = destination
+        .file_name()
+        .context("History restore target has no filename")?;
     let temporary = parent.join(format!(
-        ".{}.history-{}.tmp", name.to_string_lossy(), Uuid::new_v4()
+        ".{}.history-{}.tmp",
+        name.to_string_lossy(),
+        Uuid::new_v4()
     ));
     let result = (|| -> Result<()> {
         let mut file = fs::OpenOptions::new()
-            .write(true).create_new(true).open(&temporary)
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
             .with_context(|| format!("Create staged history restore {}", temporary.display()))?;
         file.write_all(bytes)?;
         #[cfg(unix)]
@@ -500,7 +573,8 @@ fn publish_verified_restore(path: &Path, bytes: &[u8], mode: Option<u32>) -> Res
             Ok(()) => Err(error),
             Err(cleanup) if cleanup.kind() == std::io::ErrorKind::NotFound => Err(error),
             Err(cleanup) => Err(error.context(format!(
-                "Failed to clean staged history restore {}: {cleanup}", temporary.display()
+                "Failed to clean staged history restore {}: {cleanup}",
+                temporary.display()
             ))),
         }
     } else {
@@ -522,7 +596,9 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
         }
         if let Some(expected_mode) = record.updated_mode {
             if snapshot_mode(path)? != Some(expected_mode) {
-                bail!("File permissions changed since checkpoint; refusing to overwrite later edits")
+                bail!(
+                    "File permissions changed since checkpoint; refusing to overwrite later edits"
+                )
             }
         }
     }
@@ -530,15 +606,18 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
         // Use the exact bytes already verified by SHA-256. Reopening the
         // backup with fs::copy after verification allowed a replaced backup
         // path to write different bytes during the rewind.
-        let verified = previous_bytes(record)?
-            .context("History checkpoint has no previous content")?;
+        let verified =
+            previous_bytes(record)?.context("History checkpoint has no previous content")?;
         publish_verified_restore(path, &verified, record.previous_mode)?;
         Ok(format!("Restored {} to previous version", record.path))
     } else {
         if current.is_some() {
             fs::remove_file(path)?;
         }
-        Ok(format!("Removed newly created {} (if present)", record.path))
+        Ok(format!(
+            "Removed newly created {} (if present)",
+            record.path
+        ))
     }
 }
 pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
@@ -554,22 +633,34 @@ pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
         let path = entry.path();
         let metadata = fs::symlink_metadata(&path)?;
         if !metadata.file_type().is_file() {
-            bail!("History checkpoint must be a regular file: {}", path.display());
+            bail!(
+                "History checkpoint must be a regular file: {}",
+                path.display()
+            );
         }
         let data = read_checkpoint_file(&path)
             .with_context(|| format!("Read file checkpoint {}", path.display()))?;
         let record: Record = serde_json::from_slice(&data)
             .with_context(|| format!("Parse file checkpoint {}", path.display()))?;
         if path.file_stem().and_then(|s| s.to_str()) != Some(record.id.to_string().as_str()) {
-            bail!("History checkpoint filename/id mismatch: {}", path.display())
+            bail!(
+                "History checkpoint filename/id mismatch: {}",
+                path.display()
+            )
         }
         let modified = metadata.modified()?;
-        results.push((modified, record.id.to_string(),
-            json!({"id":record.id,"path":record.path})));
+        results.push((
+            modified,
+            record.id.to_string(),
+            json!({"id":record.id,"path":record.path}),
+        ));
     }
     results.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
     Ok(serde_json::to_string_pretty(
-        &results.into_iter().map(|(_, _, record)| record).collect::<Vec<_>>()
+        &results
+            .into_iter()
+            .map(|(_, _, record)| record)
+            .collect::<Vec<_>>(),
     )?)
 }
 /// Original fileHistory.ts::copyFileHistoryForResume migrates the complete
@@ -595,9 +686,14 @@ pub fn copy_for_resume(root: &Path, previous_session: &str, next_session: &str) 
             }
             let metadata = fs::symlink_metadata(&path)?;
             if !metadata.file_type().is_file() {
-                bail!("History snapshot must be a regular file: {}", path.display())
+                bail!(
+                    "History snapshot must be a regular file: {}",
+                    path.display()
+                )
             }
-            let id = path.file_stem().and_then(|name| name.to_str())
+            let id = path
+                .file_stem()
+                .and_then(|name| name.to_str())
                 .context("History snapshot filename is not valid UTF-8")?;
             let id = Uuid::parse_str(id).context("History snapshot filename must be a UUID")?;
             entries.push((metadata.modified()?, id));
@@ -612,14 +708,16 @@ pub fn copy_for_resume(root: &Path, previous_session: &str, next_session: &str) 
                 // linking; hard_link may link the symlink inode itself.
                 let _source = open_history_file(backup)?;
                 match fs::hard_link(backup, &target) {
-                    Ok(()) => {},
+                    Ok(()) => {}
                     Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                         return Err(error).context("History destination backup already exists")
                     }
                     Err(_) => {
                         let mut source_file = open_history_file(backup)?;
                         let mut target_file = fs::OpenOptions::new()
-                            .write(true).create_new(true).open(&target)?;
+                            .write(true)
+                            .create_new(true)
+                            .open(&target)?;
                         std::io::copy(&mut source_file, &mut target_file)?;
                         target_file.sync_all()?;
                     }
@@ -632,7 +730,9 @@ pub fn copy_for_resume(root: &Path, previous_session: &str, next_session: &str) 
             let target_record = destination.join(format!("{id}.json"));
             let mut input = open_history_file(&source_record)?;
             let mut output = fs::OpenOptions::new()
-                .write(true).create_new(true).open(&target_record)?;
+                .write(true)
+                .create_new(true)
+                .open(&target_record)?;
             std::io::copy(&mut input, &mut output)?;
             output.sync_all()?;
         }
@@ -658,7 +758,6 @@ pub fn discard_copied_session(root: &Path, new_session: &str) -> Result<()> {
     fs::remove_dir_all(destination)?;
     Ok(())
 }
-
 
 #[derive(Clone)]
 pub struct RewindEntry {
@@ -689,12 +788,16 @@ pub fn plan_rewind(root: &Path, session_id: Option<&str>, id: &str) -> Result<Re
             continue;
         }
         let modified = fs::symlink_metadata(&path)?.modified()?;
-        let id = path.file_stem().and_then(|name| name.to_str())
+        let id = path
+            .file_stem()
+            .and_then(|name| name.to_str())
             .context("Invalid checkpoint filename")?;
         history.push((modified, id.to_owned()));
     }
     history.sort();
-    let target = history.iter().position(|(_, current)| current == &checkpoint.to_string())
+    let target = history
+        .iter()
+        .position(|(_, current)| current == &checkpoint.to_string())
         .context("Requested file rewind checkpoint was not found")?;
     let mut changes: BTreeMap<String, RewindEntry> = BTreeMap::new();
     for (_, checkpoint_id) in history[target..].iter().rev() {
@@ -704,14 +807,20 @@ pub fn plan_rewind(root: &Path, session_id: Option<&str>, id: &str) -> Result<Re
         let current = snapshot(&path)?;
         if let Some(entry) = changes.get_mut(&record.path) {
             if entry.after.as_ref().map(|bytes| fingerprint(bytes))
-                != Some(record.updated_hash.clone()) {
-                bail!("File history diverged between checkpoints for {}", record.path);
+                != Some(record.updated_hash.clone())
+            {
+                bail!(
+                    "File history diverged between checkpoints for {}",
+                    record.path
+                );
             }
             entry.after = previous;
             entry.after_mode = record.previous_mode;
         } else {
-            if current.as_ref().is_some_and(|bytes|
-                fingerprint(bytes) != record.updated_hash) {
+            if current
+                .as_ref()
+                .is_some_and(|bytes| fingerprint(bytes) != record.updated_hash)
+            {
                 bail!("File changed after its last checkpoint: {}", record.path);
             }
             let entry = RewindEntry {
@@ -724,7 +833,9 @@ pub fn plan_rewind(root: &Path, session_id: Option<&str>, id: &str) -> Result<Re
             changes.insert(record.path, entry);
         }
     }
-    Ok(RewindPlan { entries: changes.into_values().collect() })
+    Ok(RewindPlan {
+        entries: changes.into_values().collect(),
+    })
 }
 
 fn publish_rewind_entry(path: &Path, bytes: Option<&[u8]>, mode: Option<u32>) -> Result<()> {
@@ -751,12 +862,16 @@ pub fn apply_rewind(root: &Path, plan: &RewindPlan) -> Result<String> {
     let mut committed: Vec<&RewindEntry> = Vec::new();
     for entry in &plan.entries {
         if let Err(error) = publish_rewind_entry(
-            &root.join(&entry.path), entry.after.as_deref(), entry.after_mode
+            &root.join(&entry.path),
+            entry.after.as_deref(),
+            entry.after_mode,
         ) {
             let mut failures = Vec::new();
             for done in committed.into_iter().rev() {
                 if let Err(rollback) = publish_rewind_entry(
-                    &root.join(&done.path), done.before.as_deref(), done.before_mode
+                    &root.join(&done.path),
+                    done.before.as_deref(),
+                    done.before_mode,
                 ) {
                     failures.push(format!("{}: {rollback:#}", done.path));
                 }
@@ -764,12 +879,17 @@ pub fn apply_rewind(root: &Path, plan: &RewindPlan) -> Result<String> {
             if failures.is_empty() {
                 return Err(error).context("Multi-file rewind rolled back");
             }
-            bail!("Multi-file rewind failed: {error:#}; rollback failures: {}",
-                failures.join("; "));
+            bail!(
+                "Multi-file rewind failed: {error:#}; rollback failures: {}",
+                failures.join("; ")
+            );
         }
         committed.push(entry);
     }
-    Ok(format!("Restored {} files to checkpoint state", plan.entries.len()))
+    Ok(format!(
+        "Restored {} files to checkpoint state",
+        plan.entries.len()
+    ))
 }
 
 pub fn definitions() -> Vec<Value> {
@@ -801,10 +921,14 @@ mod tests {
         fs::write(&second, "second-old").unwrap();
         let old_first = snapshot(&first).unwrap();
         fs::write(&first, "first-new").unwrap();
-        let first_id = record(root, None, &first, old_first, None).unwrap().unwrap();
+        let first_id = record(root, None, &first, old_first, None)
+            .unwrap()
+            .unwrap();
         let old_second = snapshot(&second).unwrap();
         fs::write(&second, "second-new").unwrap();
-        record(root, None, &second, old_second, None).unwrap().unwrap();
+        record(root, None, &second, old_second, None)
+            .unwrap()
+            .unwrap();
         let plan = plan_rewind(root, None, &first_id.to_string()).unwrap();
         assert_eq!(plan.entries.len(), 2);
         fs::write(&second, "outside modification").unwrap();
@@ -822,7 +946,9 @@ mod tests {
         fs::write(&source, "old").unwrap();
         let before = snapshot(&source).unwrap();
         fs::write(&source, "new").unwrap();
-        let id = record(root.path(), None, &source, before, None).unwrap().unwrap();
+        let id = record(root.path(), None, &source, before, None)
+            .unwrap()
+            .unwrap();
         assert!(list(root.path(), None).unwrap().contains(&id.to_string()));
         let entry = load(root.path(), None, &id.to_string()).unwrap();
         fs::write(&source, "external change").unwrap();
@@ -835,7 +961,9 @@ mod tests {
         let before = snapshot(&created).unwrap();
         assert!(before.is_none());
         fs::write(&created, "hello").unwrap();
-        let id = record(root.path(), None, &created, before, None).unwrap().unwrap();
+        let id = record(root.path(), None, &created, before, None)
+            .unwrap()
+            .unwrap();
         restore(&load(root.path(), None, &id.to_string()).unwrap(), &created).unwrap();
         assert!(!created.exists());
     }

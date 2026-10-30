@@ -228,7 +228,10 @@ impl HookMatcher {
 /// passed to the hook. Unknown or unsupported input patterns do not match;
 /// they must never turn a conditional command into an unconditional hook.
 fn hook_if_matches(condition: &str, event: &str, tool_name: Option<&str>, input: &Value) -> bool {
-    if !matches!(event, "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "PermissionRequest") {
+    if !matches!(
+        event,
+        "PreToolUse" | "PostToolUse" | "PostToolUseFailure" | "PermissionRequest"
+    ) {
         return false;
     }
     let Some(name) = tool_name.or_else(|| input.get("tool_name").and_then(Value::as_str)) else {
@@ -264,10 +267,12 @@ fn hook_if_matches(condition: &str, event: &str, tool_name: Option<&str>, input:
         return matching_arguments
             .get("command")
             .and_then(Value::as_str)
-            .is_some_and(|command| matches!(
-                crate::powershell_permission_matching::policy_for(&[condition_rule], command),
-                Ok(Some(crate::permission_rules::Behavior::Allow))
-            ));
+            .is_some_and(|command| {
+                matches!(
+                    crate::powershell_permission_matching::policy_for(&[condition_rule], command),
+                    Ok(Some(crate::permission_rules::Behavior::Allow))
+                )
+            });
     }
     matches!(
         crate::permission_rules::policy_for(&[condition_rule], name, &matching_arguments),
@@ -382,7 +387,8 @@ impl HookRunner {
         // launching them. Preserve first-registration order while retaining
         // the last matching definition for an identical command.
         let mut unique_rules: Vec<&HookRule> = Vec::new();
-        let mut positions = std::collections::HashMap::<(&str, &str, Option<&str>, Option<&Path>), usize>::new();
+        let mut positions =
+            std::collections::HashMap::<(&str, &str, Option<&str>, Option<&Path>), usize>::new();
         for (rule, matcher) in &self.rules {
             if rule.event.name() != event_name || !matcher.matches(match_query) {
                 continue;
@@ -394,7 +400,12 @@ impl HookRunner {
             }
             // hooks.ts::getMatchingHooks deduplicates commands by both
             // command text and shell; explicit bash equals the legacy default.
-            let key = (rule.command.as_str(), rule.shell.unwrap_or_default().label(), rule.if_condition.as_deref(), rule.plugin_root.as_deref());
+            let key = (
+                rule.command.as_str(),
+                rule.shell.unwrap_or_default().label(),
+                rule.if_condition.as_deref(),
+                rule.plugin_root.as_deref(),
+            );
             if let Some(&position) = positions.get(&key) {
                 unique_rules[position] = rule;
             } else {
@@ -427,7 +438,12 @@ impl HookRunner {
             }
             pending.push(async move {
                 let result = if let Some(cap) = shutdown_cap {
-                    match timeout(cap, run_command(rule, &data, workspace, original_cwd, project_root)).await {
+                    match timeout(
+                        cap,
+                        run_command(rule, &data, workspace, original_cwd, project_root),
+                    )
+                    .await
+                    {
                         Ok(result) => result,
                         Err(_) => Err(anyhow::anyhow!("SessionEnd hook exceeded shutdown timeout")),
                     }
@@ -738,7 +754,10 @@ async fn run_command(
     // protocol's blocking status 2. Keep each plugin root isolated.
     let command_text = if let Some(plugin_root) = rule.plugin_root.as_deref() {
         if !plugin_root.is_dir() {
-            bail!("Plugin hook directory is no longer available: {}", plugin_root.display());
+            bail!(
+                "Plugin hook directory is no longer available: {}",
+                plugin_root.display()
+            );
         }
         #[cfg(windows)]
         let root_text = if rule.shell.unwrap_or_default() == crate::shell_runtime::ShellKind::Bash {
@@ -817,9 +836,7 @@ async fn run_command(
             let project_dir = if rule.shell.unwrap_or_default()
                 == crate::shell_runtime::ShellKind::Bash
             {
-                crate::portable_platform::windows_path_to_posix_path(
-                    &stable_root.to_string_lossy(),
-                )
+                crate::portable_platform::windows_path_to_posix_path(&stable_root.to_string_lossy())
             } else {
                 stable_root.to_string_lossy().into_owned()
             };
@@ -1076,17 +1093,23 @@ mod tests {
     #[tokio::test]
     async fn subagent_matcher_receives_type_and_flattened_agent_identity() {
         let hook = HookRunner::new(&[
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule {
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::SubagentStart,
                 matcher: Some("^explore$".into()),
                 command: "cat | grep -q '\"agent_id\":\"worker-1\"'".into(),
-                shell: None, timeout_seconds: 3,
+                shell: None,
+                timeout_seconds: 3,
             },
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule {
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::SubagentStart,
                 matcher: Some("^plan$".into()),
                 command: "echo 'wrong hook' >&2; exit 2".into(),
-                shell: None, timeout_seconds: 3,
+                shell: None,
+                timeout_seconds: 3,
             },
         ])
         .unwrap();
@@ -1112,11 +1135,14 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn subagent_stop_blocking_does_not_mutate_prior_tool_output() {
-        let hook = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let hook = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::SubagentStop,
             matcher: Some("^general$".into()),
             command: "echo 'review not complete' >&2; exit 2".into(),
-            shell: None, timeout_seconds: 3,
+            shell: None,
+            timeout_seconds: 3,
         }])
         .unwrap();
         let result = hook
@@ -1168,11 +1194,14 @@ mod tests {
             r#"{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}"#,
             r#"{"hookSpecificOutput":{"permissionDecision":"allow"}}"#,
         ] {
-            let runner = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+            let runner = HookRunner::new(&[HookRule {
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: format!("printf '%s' '{}'", json_output),
-                shell: None, timeout_seconds: 3,
+                shell: None,
+                timeout_seconds: 3,
             }])
             .unwrap();
             let outcome = runner
@@ -1191,11 +1220,14 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn legacy_approve_and_invalid_permission_variants_match_source_contract() {
-        let approved = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let approved = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"decision\":\"approve\"}'".into(),
-            shell: None, timeout_seconds: 3,
+            shell: None,
+            timeout_seconds: 3,
         }])
         .unwrap();
         let outcome = approved
@@ -1208,11 +1240,14 @@ mod tests {
             r#"{"decision":"unrestricted"}"#,
             r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"unrestricted"}}"#,
         ] {
-            let runner = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+            let runner = HookRunner::new(&[HookRule {
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: format!("printf '%s' '{}'", json_output),
-                shell: None, timeout_seconds: 3,
+                shell: None,
+                timeout_seconds: 3,
             }])
             .unwrap();
             let outcome = runner
@@ -1260,11 +1295,14 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn continuation_flag_does_not_become_permission_denial() {
-        let runner = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let runner = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: r#"printf '{"continue":false,"stopReason":"stop requested"}'"#.into(),
-            shell: None, timeout_seconds: 3,
+            shell: None,
+            timeout_seconds: 3,
         }])
         .unwrap();
         let result = runner
@@ -1308,10 +1346,7 @@ mod tests {
             "timeout_seconds": 3
         }))
         .unwrap();
-        assert_eq!(
-            ps.shell,
-            Some(crate::shell_runtime::ShellKind::Powershell)
-        );
+        assert_eq!(ps.shell, Some(crate::shell_runtime::ShellKind::Powershell));
         let legacy: HookRule = serde_json::from_value(json!({
             "event": "PreToolUse",
             "command": "echo ready"
@@ -1327,28 +1362,37 @@ mod tests {
     }
     #[test]
     fn validates_hook_configuration() {
-        let invalid = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let invalid = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: Some("[".into()),
             command: "true".into(),
-            shell: None, timeout_seconds: 20,
+            shell: None,
+            timeout_seconds: 20,
         }])
         .unwrap();
         assert!(matches!(&invalid.rules[0].1, HookMatcher::Invalid));
         assert!(!invalid.rules[0].1.matches(Some("Bash")));
-        let zero = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let zero = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::Stop,
             matcher: None,
             command: "true".into(),
-            shell: None, timeout_seconds: 0,
+            shell: None,
+            timeout_seconds: 0,
         }])
         .unwrap();
         assert_eq!(zero.rules[0].0.timeout_seconds, 600);
-        let extended = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let extended = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::Stop,
             matcher: None,
             command: "true".into(),
-            shell: None, timeout_seconds: 3_600,
+            shell: None,
+            timeout_seconds: 3_600,
         }])
         .unwrap();
         assert_eq!(extended.rules[0].0.timeout_seconds, 3_600);
@@ -1356,11 +1400,14 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn blocks_tool_and_rewrites_input() {
-        let blocker = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let blocker = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: Some("^run_command$".into()),
             command: "printf '{\"decision\":\"block\",\"reason\":\"policy\"}'".into(),
-            shell: None, timeout_seconds: 5,
+            shell: None,
+            timeout_seconds: 5,
         }])
         .unwrap();
         let call = ToolCall {
@@ -1394,11 +1441,14 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn exit_code_two_blocks() {
-        let hooks = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let hooks = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::Stop,
             matcher: None,
             command: "echo 'Need tests' >&2; exit 2".into(),
-            shell: None, timeout_seconds: 5,
+            shell: None,
+            timeout_seconds: 5,
         }])
         .unwrap();
         let result = hooks.run(HookEvent::Stop, None, json!({})).await.unwrap();
@@ -1494,17 +1544,23 @@ mod tests {
             )
         };
         let runner = HookRunner::new(&[
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule {
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: command(&first, &second),
-                shell: None, timeout_seconds: 5,
+                shell: None,
+                timeout_seconds: 5,
             },
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule {
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: command(&second, &first),
-                shell: None, timeout_seconds: 5,
+                shell: None,
+                timeout_seconds: 5,
             },
         ])
         .unwrap();
@@ -1551,11 +1607,14 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn command_hook_json_precedes_exit_status_and_invalid_json_is_nonblocking() {
-        let approved = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let approved = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"decision\":\"approve\"}'; exit 2".into(),
-            shell: None, timeout_seconds: 3,
+            shell: None,
+            timeout_seconds: 3,
         }])
         .unwrap();
         let outcome = approved
@@ -1566,17 +1625,23 @@ mod tests {
         assert_eq!(outcome.permission_decision.as_deref(), Some("allow"));
 
         let malformed = HookRunner::new(&[
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule {
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: "printf '{not-json'; exit 1".into(),
-                shell: None, timeout_seconds: 3,
+                shell: None,
+                timeout_seconds: 3,
             },
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule {
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: "printf '{\"decision\":\"approve\"}'".into(),
-                shell: None, timeout_seconds: 3,
+                shell: None,
+                timeout_seconds: 3,
             },
         ])
         .unwrap();
@@ -1589,11 +1654,14 @@ mod tests {
         assert_eq!(outcome.non_blocking_errors.len(), 1);
         assert!(outcome.non_blocking_errors[0].contains("invalid JSON"));
 
-        let malformed_block = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let malformed_block = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{not-json'; echo 'blocked syntax' >&2; exit 2".into(),
-            shell: None, timeout_seconds: 3,
+            shell: None,
+            timeout_seconds: 3,
         }])
         .unwrap();
         assert_eq!(
@@ -1606,11 +1674,14 @@ mod tests {
             Some("blocked syntax")
         );
 
-        let blocked = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let blocked = HookRunner::new(&[HookRule {
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "echo 'explicit denial' >&2; exit 2".into(),
-            shell: None, timeout_seconds: 3,
+            shell: None,
+            timeout_seconds: 3,
         }])
         .unwrap();
         assert_eq!(

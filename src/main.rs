@@ -101,9 +101,9 @@ mod semantic_inputs;
 mod semantic_session_search;
 mod session;
 mod session_control;
-mod side_question;
 mod shell_quote;
 mod shell_runtime;
+mod side_question;
 mod skill_arguments;
 mod slash_command;
 mod sleep_helpers;
@@ -1309,21 +1309,36 @@ async fn run_cli() -> Result<()> {
 /// Resolve a real user-invocable skill or plugin command. Shared by the
 /// interactive CLI and SDK so the same frontmatter restrictions apply.
 pub(crate) fn expand_user_skill_prompt(
-    agent: &Agent, _config: &Config, command: &str, args: &str, is_mcp: bool,
+    agent: &Agent,
+    _config: &Config,
+    command: &str,
+    args: &str,
+    is_mcp: bool,
 ) -> Result<Option<String>> {
     if is_mcp {
         return Ok(None);
     }
     if command.contains(':') {
         return plugins::command_prompt_with_session(
-            agent.workspace_root(), agent.enabled_plugins(),
-            command, args, Some(&agent.session_id()),
+            agent.workspace_root(),
+            agent.enabled_plugins(),
+            command,
+            args,
+            Some(&agent.session_id()),
         );
     }
-    if !command.is_empty() && command.len() <= 64
-        && command.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
-        && agent.workspace_root().join(".atlas/skills").join(command)
-            .join("SKILL.md").is_file() {
+    if !command.is_empty()
+        && command.len() <= 64
+        && command
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+        && agent
+            .workspace_root()
+            .join(".atlas/skills")
+            .join(command)
+            .join("SKILL.md")
+            .is_file()
+    {
         return agent.invoke_user_skill(command, args).map(Some);
     }
     Ok(None)
@@ -1502,8 +1517,9 @@ async fn chat(
                 | plugin_commands::PluginCommand::Uninstall { .. }
                 | plugin_commands::PluginCommand::Enable { .. }
                 | plugin_commands::PluginCommand::Disable { .. } => true,
-                plugin_commands::PluginCommand::Marketplace { action, .. } =>
-                    action.as_deref() != Some("list"),
+                plugin_commands::PluginCommand::Marketplace { action, .. } => {
+                    action.as_deref() != Some("list")
+                }
                 _ => false,
             };
             match plugin_manager::execute(agent.workspace_root(), &command) {
@@ -1536,8 +1552,12 @@ async fn chat(
                     );
                     println!("{}", serde_json::to_string_pretty(&status)?);
                     match plugins::list_commands(agent.workspace_root(), &config.enabled_plugins) {
-                        Ok(commands) => println!("Available plugin commands and skills: {}", commands.len()),
-                        Err(error) => eprintln!("Plugin command discovery failed after reload: {error:#}"),
+                        Ok(commands) => {
+                            println!("Available plugin commands and skills: {}", commands.len())
+                        }
+                        Err(error) => {
+                            eprintln!("Plugin command discovery failed after reload: {error:#}")
+                        }
                     }
                 }
                 Err(error) => eprintln!("Plugin reload failed: {error:#}"),
@@ -1712,7 +1732,9 @@ async fn chat(
                 );
                 println!("/skills                  list accessible project and plugin skills");
                 println!("/plugin [subcommand]     manage, install, enable, disable and validate plugins");
-                println!("/reload-plugins          refresh active plugin hooks, MCP and command catalog");
+                println!(
+                    "/reload-plugins          refresh active plugin hooks, MCP and command catalog"
+                );
                 println!("/agents                  list project and user custom agent definitions");
                 println!("/hooks                   list active hook events, matchers and timeouts");
                 println!("/find TEXT               search visible messages in this conversation");
@@ -1768,9 +1790,8 @@ async fn chat(
                     };
                     println!("/{}{}  {}", entry.name, alias, entry.description);
                 }
-                match plugins::command_descriptors(
-                    agent.workspace_root(), &config.enabled_plugins,
-                ) {
+                match plugins::command_descriptors(agent.workspace_root(), &config.enabled_plugins)
+                {
                     Ok(commands) => {
                         for command in commands {
                             let name = command["name"].as_str().unwrap_or("");
@@ -1838,11 +1859,17 @@ async fn chat(
                         for name in skills.lines() {
                             let source = if name.contains(':') {
                                 plugins::read_skill(
-                                    agent.workspace_root(), &config.enabled_plugins, name,
+                                    agent.workspace_root(),
+                                    &config.enabled_plugins,
+                                    name,
                                 )
                             } else {
-                                agent.workspace_root().join(".atlas/skills")
-                                    .join(name).join("SKILL.md").canonicalize()
+                                agent
+                                    .workspace_root()
+                                    .join(".atlas/skills")
+                                    .join(name)
+                                    .join("SKILL.md")
+                                    .canonicalize()
                                     .and_then(std::fs::read_to_string)
                                     .map_err(anyhow::Error::from)
                             };
@@ -1856,9 +1883,7 @@ async fn chat(
                                         println!("/{name} {hint}  {description}");
                                     }
                                 }
-                                Err(error) => eprintln!(
-                                    "Cannot describe skill {name}: {error:#}"
-                                ),
+                                Err(error) => eprintln!("Cannot describe skill {name}: {error:#}"),
                             }
                         }
                     }
@@ -2246,15 +2271,21 @@ async fn chat(
         // /btw runs a one-turn, no-tools fork. It does not append a user
         // message or model response to the active conversation history.
         let mut side_parts = input.trim_start().splitn(2, char::is_whitespace);
-        if side_parts.next().is_some_and(|name| name.eq_ignore_ascii_case("/btw")) {
+        if side_parts
+            .next()
+            .is_some_and(|name| name.eq_ignore_ascii_case("/btw"))
+        {
             let question = side_parts.next().unwrap_or("");
-            let result = agent.side_question_request(question).and_then(|request| {
-                Ok((agent.profile().clone(), request))
-            });
+            let result = agent
+                .side_question_request(question)
+                .and_then(|request| Ok((agent.profile().clone(), request)));
             match result {
-                Ok((profile, request)) => match side_question::answer(profile, request, None).await {
-                    Ok(reply) => println!("{}", reply["response"].as_str()
-                        .unwrap_or("No response received")),
+                Ok((profile, request)) => match side_question::answer(profile, request, None).await
+                {
+                    Ok(reply) => println!(
+                        "{}",
+                        reply["response"].as_str().unwrap_or("No response received")
+                    ),
                     Err(error) => eprintln!("Side question failed: {error:#}"),
                 },
                 Err(error) => eprintln!("Side question failed: {error:#}"),
@@ -2265,7 +2296,11 @@ async fn chat(
         // expansion and user-invocable permission checks.
         if let Some(parsed) = slash_command::parse_slash_command(input) {
             match expand_user_skill_prompt(
-                agent, config, &parsed.command_name, &parsed.args, parsed.is_mcp,
+                agent,
+                config,
+                &parsed.command_name,
+                &parsed.args,
+                parsed.is_mcp,
             ) {
                 Ok(Some(prompt)) => {
                     onboarding.maybe_mark_complete()?;
@@ -2361,7 +2396,8 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     // A dedicated blocking reader can signal an interrupt while the Agent
     // awaits a model, tool, memory or hook request. Other controls remain in
     // FIFO order on the main SDK actor, preserving its unique state owner.
-    let (input_tx, mut input_rx) = tokio::sync::mpsc::unbounded_channel::<io::Result<(String, u64)>>();
+    let (input_tx, mut input_rx) =
+        tokio::sync::mpsc::unbounded_channel::<io::Result<(String, u64)>>();
     let (interrupt_tx, interrupt_rx) = tokio::sync::watch::channel(0u64);
     let _interrupt_keepalive = interrupt_tx.clone();
     std::thread::spawn(move || {
@@ -2497,25 +2533,33 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                             }
                         })
                     });
-                    if let Some(parsed) = candidate
-                        .and_then(slash_command::parse_slash_command) {
+                    if let Some(parsed) = candidate.and_then(slash_command::parse_slash_command) {
                         match expand_user_skill_prompt(
-                            agent, config, &parsed.command_name, &parsed.args, parsed.is_mcp,
+                            agent,
+                            config,
+                            &parsed.command_name,
+                            &parsed.args,
+                            parsed.is_mcp,
                         ) {
                             Ok(Some(expanded)) => {
                                 if let Some(blocks) = user.blocks.as_mut() {
                                     if let Some(last) = blocks.last_mut() {
                                         last["text"] = json!(expanded);
                                     }
-                                    user.preview = blocks.iter().map(|block| {
-                                        match block["type"].as_str() {
-                                            Some("text") => block["text"].as_str()
-                                                .unwrap_or("").to_owned(),
-                                            Some("image") => format!("[image: {}]",
-                                                block["mime_type"].as_str().unwrap_or("unknown")),
+                                    user.preview = blocks
+                                        .iter()
+                                        .map(|block| match block["type"].as_str() {
+                                            Some("text") => {
+                                                block["text"].as_str().unwrap_or("").to_owned()
+                                            }
+                                            Some("image") => format!(
+                                                "[image: {}]",
+                                                block["mime_type"].as_str().unwrap_or("unknown")
+                                            ),
                                             _ => String::new(),
-                                        }
-                                    }).collect::<Vec<_>>().join("\n");
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join("\n");
                                 } else {
                                     user.preview = expanded;
                                 }
@@ -2542,8 +2586,14 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     }
                 }
                 match sdk_interruptible_turn(
-                    agent, &user.preview, user.blocks, &interrupt_rx, input_epoch,
-                ).await {
+                    agent,
+                    &user.preview,
+                    user.blocks,
+                    &interrupt_rx,
+                    input_epoch,
+                )
+                .await
+                {
                     Ok(answer) => print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
                         "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -2563,26 +2613,36 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 if event.pointer("/request/subtype").and_then(Value::as_str)
                     == Some("side_question")
                 {
-                    let prepared: Result<(String, config::ProviderProfile,
-                        protocol::ModelRequest, Option<u32>)> = (|| {
-                        let id = event.get("request_id")
+                    let prepared: Result<(
+                        String,
+                        config::ProviderProfile,
+                        protocol::ModelRequest,
+                        Option<u32>,
+                    )> = (|| {
+                        let id = event
+                            .get("request_id")
                             .and_then(Value::as_str)
                             .filter(|value| !value.is_empty())
-                            .ok_or_else(|| anyhow::anyhow!(
-                                "side_question requires request_id"))?;
-                        let question = event.pointer("/request/question")
+                            .ok_or_else(|| anyhow::anyhow!("side_question requires request_id"))?;
+                        let question = event
+                            .pointer("/request/question")
                             .and_then(Value::as_str)
-                            .ok_or_else(|| anyhow::anyhow!(
-                                "side_question requires question string"))?;
-                        Ok((id.to_owned(), agent.profile().clone(),
+                            .ok_or_else(|| {
+                            anyhow::anyhow!("side_question requires question string")
+                        })?;
+                        Ok((
+                            id.to_owned(),
+                            agent.profile().clone(),
                             agent.side_question_request(question)?,
-                            agent.sdk_thinking_budget()))
+                            agent.sdk_thinking_budget(),
+                        ))
                     })();
                     match prepared {
                         Ok((id, profile, request, thinking_budget)) => {
                             side_question_tasks.retain(|task| !task.is_finished());
                             side_question_tasks.push(tokio::spawn(async move {
-                                let outcome = side_question::answer(profile, request, thinking_budget).await;
+                                let outcome =
+                                    side_question::answer(profile, request, thinking_budget).await;
                                 let reply = match outcome {
                                     Ok(response) => json!({"type":"control_response",
                                         "response":{"subtype":"success",
@@ -2602,8 +2662,8 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     }
                     continue;
                 }
-                let is_initialize = event.pointer("/request/subtype")
-                    .and_then(Value::as_str) == Some("initialize");
+                let is_initialize =
+                    event.pointer("/request/subtype").and_then(Value::as_str) == Some("initialize");
                 let response = sdk_nested_control(
                     agent,
                     config,
@@ -2612,9 +2672,12 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     &mut bridge_session,
                     &mut sdk_initialized,
                     &mut sdk_end_requested,
-                ).await;
+                )
+                .await;
                 let initialized = is_initialize
-                    && response.pointer("/response/subtype").and_then(Value::as_str)
+                    && response
+                        .pointer("/response/subtype")
+                        .and_then(Value::as_str)
                         == Some("success");
                 print_json!(response);
                 if initialized && initial_turn_pending {
@@ -2652,9 +2715,15 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     continue;
                 }
                 if action.starts_with("queue_") {
-                    let outcome =
-                        sdk_queue::control(action, &event, &mut queue, &mut query_guard, agent, config)
-                            .await;
+                    let outcome = sdk_queue::control(
+                        action,
+                        &event,
+                        &mut queue,
+                        &mut query_guard,
+                        agent,
+                        config,
+                    )
+                    .await;
                     match outcome {
                         Ok(result) => send_control!(json!({"type":"control_response",
                             "action":action,"ok":true,"result":result})),
@@ -2801,30 +2870,48 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
 
 fn sdk_visible_commands(agent: &Agent, _config: &Config) -> Result<Vec<Value>> {
     let implemented = [
-        "agents", "clear", "compact", "context", "copy", "cost",
-        "diff", "doctor", "files", "hooks", "mcp", "permissions",
-        "release-notes", "skills", "stats", "status", "tasks",
-        "usage", "tag",
+        "agents",
+        "clear",
+        "compact",
+        "context",
+        "copy",
+        "cost",
+        "diff",
+        "doctor",
+        "files",
+        "hooks",
+        "mcp",
+        "permissions",
+        "release-notes",
+        "skills",
+        "stats",
+        "status",
+        "tasks",
+        "usage",
+        "tag",
     ];
     let mut commands = command_manifest::visible()
         .filter(|command| implemented.contains(&command.name))
-        .map(|command| json!({
-            "name":command.name,
-            "description":command.description,
-            "argumentHint":command.hint.unwrap_or("")
-        }))
+        .map(|command| {
+            json!({
+                "name":command.name,
+                "description":command.description,
+                "argumentHint":command.hint.unwrap_or("")
+            })
+        })
         .collect::<Vec<_>>();
     // The SDK must advertise the same actual user-invocable
     // plugin commands and project skills that its text input can
     // execute. Keep model-only skills out of the public catalog.
-    let mut known = commands.iter()
+    let mut known = commands
+        .iter()
         .filter_map(|command| command.get("name").and_then(Value::as_str))
         .map(str::to_owned)
         .collect::<std::collections::HashSet<_>>();
-    for command in plugins::command_descriptors(
-        agent.workspace_root(), agent.enabled_plugins(),
-    )? {
-        let name = command.get("name").and_then(Value::as_str)
+    for command in plugins::command_descriptors(agent.workspace_root(), agent.enabled_plugins())? {
+        let name = command
+            .get("name")
+            .and_then(Value::as_str)
             .ok_or_else(|| anyhow::anyhow!("Plugin command descriptor missing name"))?;
         if known.insert(name.to_owned()) {
             commands.push(command);
@@ -2837,15 +2924,17 @@ fn sdk_visible_commands(agent: &Agent, _config: &Config) -> Result<Vec<Value>> {
         if name.contains(':') || !known.insert(name.to_owned()) {
             continue;
         }
-        let skill = agent.workspace_root().join(".atlas/skills")
-            .join(name).join("SKILL.md").canonicalize()?;
+        let skill = agent
+            .workspace_root()
+            .join(".atlas/skills")
+            .join(name)
+            .join("SKILL.md")
+            .canonicalize()?;
         if !skill.starts_with(agent.workspace_root()) {
             bail!("Skill command source leaves authorized workspace")
         }
         let source = std::fs::read_to_string(&skill)?;
-        let (description, hint) = skill_arguments::command_metadata(
-            &source, "Project skill",
-        );
+        let (description, hint) = skill_arguments::command_metadata(&source, "Project skill");
         commands.push(json!({"name":name,"description":description,
             "argumentHint":hint}));
     }
@@ -2929,13 +3018,21 @@ async fn sdk_nested_control(
                 // cli/print.ts::handleInitializeRequest applies both fields
                 // before QueryEngine assembles the next model request. Validate
                 // before mutating the active Agent so bad init leaves it intact.
-                let system_prompt = request.get("systemPrompt")
-                    .map(|value| value.as_str().ok_or_else(|| anyhow::anyhow!(
-                        "initialize systemPrompt must be a string")))
+                let system_prompt = request
+                    .get("systemPrompt")
+                    .map(|value| {
+                        value.as_str().ok_or_else(|| {
+                            anyhow::anyhow!("initialize systemPrompt must be a string")
+                        })
+                    })
                     .transpose()?;
-                let append_system_prompt = request.get("appendSystemPrompt")
-                    .map(|value| value.as_str().ok_or_else(|| anyhow::anyhow!(
-                        "initialize appendSystemPrompt must be a string")))
+                let append_system_prompt = request
+                    .get("appendSystemPrompt")
+                    .map(|value| {
+                        value.as_str().ok_or_else(|| {
+                            anyhow::anyhow!("initialize appendSystemPrompt must be a string")
+                        })
+                    })
                     .transpose()?;
                 if let Some(agents) = request.get("agents").filter(|value| !value.is_null()) {
                     agent.set_sdk_agent_definitions(agents)?;
@@ -2943,9 +3040,11 @@ async fn sdk_nested_control(
                 let agents = agent.sdk_agent_descriptors()?;
                 agent.set_sdk_system_prompts(system_prompt, append_system_prompt);
                 *sdk_initialized = true;
-                Ok(json!({"commands":commands,"agents":agents,"output_style":"default",
+                Ok(
+                    json!({"commands":commands,"agents":agents,"output_style":"default",
                     "available_output_styles":["default"],"models":models,
-                    "account":{},"pid":std::process::id()}))
+                    "account":{},"pid":std::process::id()}),
+                )
             }
             "reload_plugins" => {
                 // Reload from disk: the SDK may have updated enabled plugins
@@ -2955,37 +3054,47 @@ async fn sdk_nested_control(
                 let commands = sdk_visible_commands(agent, &refreshed)?;
                 let agents = agent.sdk_agent_descriptors()?;
                 let mcp_servers = agent.mcp_statuses()?;
-                let error_count = reload.get("plugin_error_count")
-                    .and_then(Value::as_u64).unwrap_or(0) as usize
-                    + mcp_servers.iter()
-                        .filter(|server| server.get("status").and_then(Value::as_str)
-                            == Some("failed"))
+                let error_count = reload
+                    .get("plugin_error_count")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0) as usize
+                    + mcp_servers
+                        .iter()
+                        .filter(|server| {
+                            server.get("status").and_then(Value::as_str) == Some("failed")
+                        })
                         .count();
-                let plugins = refreshed.enabled_plugins.iter()
-                    .map(|name| json!({
-                        "name":name,
-                        "path":agent.workspace_root().join(".atlas/plugins")
-                            .join(name).to_string_lossy(),
-                        "source":"local"
-                    }))
+                let plugins = refreshed
+                    .enabled_plugins
+                    .iter()
+                    .map(|name| {
+                        json!({
+                            "name":name,
+                            "path":agent.workspace_root().join(".atlas/plugins")
+                                .join(name).to_string_lossy(),
+                            "source":"local"
+                        })
+                    })
                     .collect::<Vec<_>>();
                 Ok(json!({"commands":commands,"agents":agents,
                     "plugins":plugins,"mcpServers":mcp_servers,
                     "error_count":error_count}))
             }
             "mcp_set_servers" => {
-                let servers = request.get("servers")
+                let servers = request
+                    .get("servers")
                     .and_then(Value::as_object)
-                    .ok_or_else(|| anyhow::anyhow!(
-                        "mcp_set_servers requires servers object"))?;
+                    .ok_or_else(|| anyhow::anyhow!("mcp_set_servers requires servers object"))?;
                 agent.set_dynamic_mcp_servers(servers).await
             }
             "mcp_toggle" => {
-                let server = request.get("serverName")
+                let server = request
+                    .get("serverName")
                     .and_then(Value::as_str)
                     .filter(|name| !name.is_empty())
                     .ok_or_else(|| anyhow::anyhow!("mcp_toggle requires serverName"))?;
-                let enabled = request.get("enabled")
+                let enabled = request
+                    .get("enabled")
                     .and_then(Value::as_bool)
                     .ok_or_else(|| anyhow::anyhow!("mcp_toggle requires boolean enabled"))?;
                 agent.toggle_named_mcp(server, enabled).await?;
@@ -3019,10 +3128,12 @@ async fn sdk_nested_control(
                 mcp_control_request(agent, subtype, &Value::Object(request.clone())).await
             }
             "generate_session_title" => {
-                let description = request.get("description")
+                let description = request
+                    .get("description")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow::anyhow!(
-                        "generate_session_title requires description string"))?;
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("generate_session_title requires description string")
+                    })?;
                 let persist = match request.get("persist") {
                     None => false,
                     Some(Value::Bool(value)) => *value,
@@ -3040,10 +3151,10 @@ async fn sdk_nested_control(
                 let mtime = request
                     .get("mtime")
                     .and_then(Value::as_f64)
-                    .filter(|value| value.is_finite() && *value >= 0.0
-                        && *value < u64::MAX as f64)
-                    .ok_or_else(|| anyhow::anyhow!(
-                        "seed_read_state requires a nonnegative finite mtime"))?;
+                    .filter(|value| value.is_finite() && *value >= 0.0 && *value < u64::MAX as f64)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("seed_read_state requires a nonnegative finite mtime")
+                    })?;
                 agent.seed_read_state(path, mtime.floor() as u64)?;
                 Ok(json!({}))
             }
@@ -3066,9 +3177,14 @@ async fn sdk_nested_control(
                 let budget = match request.get("max_thinking_tokens") {
                     Some(Value::Null) => None,
                     Some(Value::Number(number)) => {
-                        let value = number.as_u64().filter(|value| *value <= u32::MAX as u64)
-                            .ok_or_else(|| anyhow::anyhow!(
-                                "max_thinking_tokens must be a nonnegative integer within u32"))?;
+                        let value = number
+                            .as_u64()
+                            .filter(|value| *value <= u32::MAX as u64)
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "max_thinking_tokens must be a nonnegative integer within u32"
+                                )
+                            })?;
                         Some(value as u32)
                     }
                     _ => bail!("set_max_thinking_tokens requires max_thinking_tokens or null"),

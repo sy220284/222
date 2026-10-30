@@ -28,16 +28,25 @@ fn allowed(entry: &DirEntry, exclude_vcs: bool) -> bool {
 /// unrelated project file named .orphaned_at cannot hide user source files.
 fn orphaned_plugin_cache_entry(path: &Path) -> bool {
     for version in path.ancestors() {
-        let Some(plugin) = version.parent() else { continue };
-        let Some(marketplace) = plugin.parent() else { continue };
-        let Some(cache) = marketplace.parent() else { continue };
+        let Some(plugin) = version.parent() else {
+            continue;
+        };
+        let Some(marketplace) = plugin.parent() else {
+            continue;
+        };
+        let Some(cache) = marketplace.parent() else {
+            continue;
+        };
         if cache.file_name().and_then(|name| name.to_str()) != Some("cache") {
             continue;
         }
         let default_plugin_root = cache.parent().is_some_and(|plugins| {
             plugins.file_name().and_then(|name| name.to_str()) == Some("plugins")
-                && plugins.parent().and_then(|parent| parent.file_name())
-                    .and_then(|name| name.to_str()) == Some(".atlas")
+                && plugins
+                    .parent()
+                    .and_then(|parent| parent.file_name())
+                    .and_then(|name| name.to_str())
+                    == Some(".atlas")
         });
         let overridden_plugin_root = std::env::var_os("ATLAS_PLUGIN_CACHE_DIR")
             .is_some_and(|root| cache == Path::new(&root).join("cache").as_path());
@@ -222,7 +231,8 @@ fn git_output_before_deadline(
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let output = reader.join()
+                let output = reader
+                    .join()
                     .map_err(|_| anyhow::anyhow!("Git output reader panicked"))??;
                 return Ok(std::process::Output {
                     status,
@@ -263,7 +273,10 @@ fn git_ignored_paths(
     }
     check_search_deadline(Some(deadline))?;
     let mut probe = Command::new("git");
-    probe.arg("-C").arg(base).args(["rev-parse", "--is-inside-work-tree"]);
+    probe
+        .arg("-C")
+        .arg(base)
+        .args(["rev-parse", "--is-inside-work-tree"]);
     let repo = git_output_before_deadline(&mut probe, deadline)?;
     if !repo.status.success() || !repo.stdout.starts_with(b"true") {
         return Ok(ignored);
@@ -289,9 +302,13 @@ fn git_ignored_paths(
             Some(0) | Some(1) => {}
             other => bail!("Git ignore check failed with exit status {other:?}"),
         }
-        for name in output.stdout.split(|byte| *byte == 0).filter(|name| !name.is_empty()) {
-            let relative = std::str::from_utf8(name)
-                .context("Git ignore result contains invalid UTF-8")?;
+        for name in output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|name| !name.is_empty())
+        {
+            let relative =
+                std::str::from_utf8(name).context("Git ignore result contains invalid UTF-8")?;
             ignored.insert(base.join(relative));
         }
     }
@@ -307,16 +324,15 @@ struct RipgrepIgnoreRule {
     directories_only: bool,
 }
 
-fn ripgrep_ignore_rules(
-    directory: &Path,
-    filename: &str,
-) -> Result<Vec<RipgrepIgnoreRule>> {
+fn ripgrep_ignore_rules(directory: &Path, filename: &str) -> Result<Vec<RipgrepIgnoreRule>> {
     let path = directory.join(filename);
     let content = match fs::read_to_string(&path) {
         Ok(content) => content,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error)
-            .with_context(|| format!("Read ripgrep ignore file {}", path.display())),
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("Read ripgrep ignore file {}", path.display()))
+        }
     };
     let mut rules = Vec::new();
     for (line_number, raw) in content.lines().enumerate() {
@@ -329,7 +345,10 @@ fn ripgrep_ignore_rules(
         } else {
             (true, raw)
         };
-        let raw = raw.strip_prefix("\\#").or_else(|| raw.strip_prefix("\\!")).unwrap_or(raw);
+        let raw = raw
+            .strip_prefix("\\#")
+            .or_else(|| raw.strip_prefix("\\!"))
+            .unwrap_or(raw);
         let directories_only = raw.ends_with('/');
         let raw = raw.trim_end_matches('/');
         if raw.is_empty() {
@@ -343,7 +362,14 @@ fn ripgrep_ignore_rules(
             raw.to_owned()
         };
         let matcher = Glob::new(&pattern)
-            .with_context(|| format!("Invalid {} rule at {}:{}", filename, path.display(), line_number + 1))?
+            .with_context(|| {
+                format!(
+                    "Invalid {} rule at {}:{}",
+                    filename,
+                    path.display(),
+                    line_number + 1
+                )
+            })?
             .compile_matcher();
         rules.push(RipgrepIgnoreRule {
             matcher,
@@ -381,14 +407,19 @@ fn ripgrep_custom_ignore(
     deadline: Instant,
 ) -> Result<std::collections::HashMap<PathBuf, bool>> {
     use std::collections::HashMap;
-    let search_root = if base.is_dir() { base } else {
-        base.parent().context("Search file has no parent directory")?
+    let search_root = if base.is_dir() {
+        base
+    } else {
+        base.parent()
+            .context("Search file has no parent directory")?
     };
     let mut cache: HashMap<(PathBuf, &'static str), Vec<RipgrepIgnoreRule>> = HashMap::new();
     let mut decisions = HashMap::new();
     for path in paths {
         check_search_deadline(Some(deadline))?;
-        let parent = path.parent().context("Search candidate has no parent directory")?;
+        let parent = path
+            .parent()
+            .context("Search candidate has no parent directory")?;
         let mut directories = Vec::new();
         let mut current = Some(parent);
         while let Some(directory) = current {
@@ -423,7 +454,8 @@ fn ripgrep_custom_ignore(
                     if !cache.contains_key(&key) {
                         cache.insert(key.clone(), ripgrep_ignore_rules(directory, filename)?);
                     }
-                    let relative = candidate.strip_prefix(directory)
+                    let relative = candidate
+                        .strip_prefix(directory)
                         .context("Ignore rule directory does not contain candidate")?;
                     for rule in cache.get(&key).context("Ignore rule cache entry missing")? {
                         if ripgrep_rule_matches(rule, relative, is_directory) {
@@ -520,12 +552,26 @@ fn nonnegative_num(args: &Value, name: &str, default: u64) -> Result<usize> {
 pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
     let mut normalized = args.clone();
     crate::semantic_inputs::normalize_tool_fields(name, &mut normalized)?;
-    let object = normalized.as_object().context("Search arguments must be an object")?;
+    let object = normalized
+        .as_object()
+        .context("Search arguments must be an object")?;
     let fields: &[&str] = match name {
         "glob_files" => &["pattern", "path"],
         "grep_files" => &[
-            "pattern", "path", "glob", "output_mode", "-B", "-A", "-C",
-            "context", "-n", "-i", "type", "head_limit", "offset", "multiline",
+            "pattern",
+            "path",
+            "glob",
+            "output_mode",
+            "-B",
+            "-A",
+            "-C",
+            "context",
+            "-n",
+            "-i",
+            "type",
+            "head_limit",
+            "offset",
+            "multiline",
         ],
         _ => bail!("Unknown search tool: {name}"),
     };
@@ -533,8 +579,10 @@ pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
         if !fields.contains(&key.as_str()) {
             bail!("{name} unknown input field: {key}");
         }
-        if matches!(key.as_str(), "pattern" | "path" | "glob" | "type" | "output_mode")
-            && !value.is_string()
+        if matches!(
+            key.as_str(),
+            "pattern" | "path" | "glob" | "type" | "output_mode"
+        ) && !value.is_string()
         {
             bail!("{name}.{key} must be a string");
         }
@@ -542,7 +590,8 @@ pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
             bail!("{name}.{key} must be a boolean");
         }
         if matches!(
-            key.as_str(), "-A" | "-B" | "-C" | "context" | "head_limit" | "offset"
+            key.as_str(),
+            "-A" | "-B" | "-C" | "context" | "head_limit" | "offset"
         ) && value.as_u64().is_none()
         {
             bail!("{name}.{key} must be a nonnegative integer");
@@ -561,7 +610,6 @@ pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
     Ok(())
 }
 
-
 fn type_matches(path: &Path, kind: &str) -> Result<bool> {
     use std::{collections::HashMap, sync::OnceLock};
     static TYPES: OnceLock<Result<HashMap<String, Vec<GlobMatcher>>, String>> = OnceLock::new();
@@ -572,7 +620,8 @@ fn type_matches(path: &Path, kind: &str) -> Result<bool> {
         let text = include_str!("ripgrep_types.txt");
         let mut types = HashMap::new();
         for entry in text.lines() {
-            let (name, globs) = entry.split_once(": ")
+            let (name, globs) = entry
+                .split_once(": ")
                 .ok_or_else(|| format!("Invalid ripgrep type entry: {entry}"))?;
             let mut matchers = Vec::new();
             for pattern in globs.split(", ") {
@@ -593,11 +642,13 @@ fn type_matches(path: &Path, kind: &str) -> Result<bool> {
         "c++" => "cpp",
         other => other,
     };
-    let matchers = types.get(alias)
+    let matchers = types
+        .get(alias)
         .with_context(|| format!("Unknown ripgrep file type: {kind}"))?;
     let name = path.file_name().context("Search file has no filename")?;
-    Ok(matchers.iter().any(|matcher|
-        matcher.is_match(path) || matcher.is_match(Path::new(name))))
+    Ok(matchers
+        .iter()
+        .any(|matcher| matcher.is_match(path) || matcher.is_match(Path::new(name))))
 }
 
 pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
@@ -682,7 +733,13 @@ pub fn glob_files_filtered<F: Fn(&Path) -> Result<bool>>(
         let ignored = git_ignored_paths(base, &matches, deadline)?;
         let custom = ripgrep_custom_ignore(base, &matches, deadline)?;
         check_search_deadline(Some(deadline))?;
-        matches.retain(|path| custom.get(path).copied().unwrap_or_else(|| ignored.contains(path)) == false);
+        matches.retain(|path| {
+            custom
+                .get(path)
+                .copied()
+                .unwrap_or_else(|| ignored.contains(path))
+                == false
+        });
     }
     let mut visible = Vec::with_capacity(matches.len());
     for path in matches {
@@ -835,13 +892,15 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
     let custom = ripgrep_custom_ignore(base, &candidates, deadline)?;
     check_search_deadline(Some(deadline))?;
     candidates.retain(|path| {
-        let is_ignored = custom.get(path).copied().unwrap_or_else(|| ignored.contains(path));
+        let is_ignored = custom
+            .get(path)
+            .copied()
+            .unwrap_or_else(|| ignored.contains(path));
         if !is_ignored {
             return true;
         }
-        path.strip_prefix(base).is_ok_and(|relative| {
-            grep_glob_explicitly_includes(&glob_patterns, relative)
-        })
+        path.strip_prefix(base)
+            .is_ok_and(|relative| grep_glob_explicitly_includes(&glob_patterns, relative))
     });
     // GrepTool.ts::call sorts by mtime only in files_with_matches mode.
     // Content and count modes preserve ripgrep's discovery order so offset
@@ -877,7 +936,8 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
             // remain visible instead of pretending the search was complete.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => {
-                return Err(error).with_context(|| format!("Reading search file {}", path.display()));
+                return Err(error)
+                    .with_context(|| format!("Reading search file {}", path.display()));
             }
         };
         let binary = bytes.contains(&0);
@@ -932,7 +992,9 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
                 check_search_deadline(Some(deadline))?;
             }
             if *is_match {
-                for at in index.saturating_sub(before)..=index.saturating_add(after).min(lines.len() - 1) {
+                for at in
+                    index.saturating_sub(before)..=index.saturating_add(after).min(lines.len() - 1)
+                {
                     selected[at] = true;
                 }
             }
@@ -965,19 +1027,16 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
             } else {
                 String::new()
             };
-            let displayed_line = if line_byte_lengths
-                .get(index)
-                .copied()
-                .unwrap_or(line.len()) > 500
-            {
-                if is_match {
-                    "[Omitted long matching line]"
+            let displayed_line =
+                if line_byte_lengths.get(index).copied().unwrap_or(line.len()) > 500 {
+                    if is_match {
+                        "[Omitted long matching line]"
+                    } else {
+                        "[Omitted long context line]"
+                    }
                 } else {
-                    "[Omitted long context line]"
-                }
-            } else {
-                line
-            };
+                    line
+                };
             matches.push(format!("{filename}{marker}{location}{displayed_line}"));
             previous_selected = Some(index);
         }
@@ -1068,11 +1127,20 @@ mod tests {
         fs::write(root.path().join("sub/visible.rs"), "needle").unwrap();
         fs::create_dir(root.path().join("blocked")).unwrap();
         fs::write(root.path().join("blocked/keep.rs"), "needle").unwrap();
-        fs::write(root.path().join(".rgignore"), "!special.tmp\nblocked/\n!blocked/keep.rs\n").unwrap();
+        fs::write(
+            root.path().join(".rgignore"),
+            "!special.tmp\nblocked/\n!blocked/keep.rs\n",
+        )
+        .unwrap();
         let result: Value = serde_json::from_str(
-            &grep_files(root.path(), root.path(),
-                &json!({"pattern":"needle","output_mode":"files_with_matches"})).unwrap()
-        ).unwrap();
+            &grep_files(
+                root.path(),
+                root.path(),
+                &json!({"pattern":"needle","output_mode":"files_with_matches"}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         let files = result["filenames"].as_array().unwrap();
         let names: Vec<&str> = files.iter().filter_map(Value::as_str).collect();
         assert!(names.iter().any(|name| name.ends_with("allowed.tmp")));
@@ -1083,12 +1151,21 @@ mod tests {
         assert!(!names.iter().any(|name| name.ends_with("blocked/keep.rs")));
         // A user-supplied positive glob overrides an ignore exclusion.
         let included: Value = serde_json::from_str(
-            &grep_files(root.path(), root.path(),
+            &grep_files(
+                root.path(),
+                root.path(),
                 &json!({"pattern":"needle","glob":"one.tmp",
-                    "output_mode":"files_with_matches"})).unwrap()
-        ).unwrap();
-        assert!(included["filenames"].as_array().unwrap().iter()
-            .filter_map(Value::as_str).any(|name| name.ends_with("one.tmp")));
+                    "output_mode":"files_with_matches"}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(included["filenames"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|name| name.ends_with("one.tmp")));
     }
     #[test]
     fn glob_and_grep_modes_pagination_and_filters() {
