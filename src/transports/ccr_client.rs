@@ -370,6 +370,12 @@ impl CcrClient {
         self.shared.worker_epoch.load(Ordering::SeqCst)
     }
 
+    /// Report actual uploader drops to the remote SDK delivery boundary.
+    /// A successful flush with discarded batches must not count as delivery.
+    pub fn dropped_event_batch_count(&self) -> usize {
+        self.event_uploader.dropped_batch_count()
+    }
+
     /// Source getWorkerState/getWithRetry retries transient failures but
     /// treats exhausted restoration as absent metadata; a failed worker PUT
     /// independently prevents the session from starting.
