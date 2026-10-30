@@ -213,10 +213,11 @@ pub struct CcrClient {
     worker_epoch: AtomicU64,
     heartbeat_interval_ms: u64,
     heartbeat_jitter_fraction: f64,
-    stream_event_buffer: Mutex<Vec<Value>>,
-    accumulator: Mutex<StreamAccumulatorState>,
+    stream_event_buffer: Arc<Mutex<Vec<Value>>>,
+    stream_timer_running: Arc<AtomicBool>,
+    accumulator: Arc<Mutex<StreamAccumulatorState>>,
     worker_state: Arc<WorkerStateUploader>,
-    event_uploader: SerialBatchEventUploader<Value>,
+    event_uploader: Arc<SerialBatchEventUploader<Value>>,
     internal_event_uploader: SerialBatchEventUploader<Value>,
     delivery_uploader: Arc<SerialBatchEventUploader<Value>>,
     http: reqwest::Client,
@@ -318,10 +319,11 @@ impl CcrClient {
             heartbeat_interval_ms: heartbeat_interval_ms.unwrap_or(DEFAULT_HEARTBEAT_INTERVAL_MS),
             heartbeat_jitter_fraction: heartbeat_jitter_fraction
                 .unwrap_or(DEFAULT_HEARTBEAT_JITTER_FRACTION),
-            stream_event_buffer: Mutex::new(Vec::new()),
-            accumulator: Mutex::new(create_stream_accumulator()),
+            stream_event_buffer: Arc::new(Mutex::new(Vec::new())),
+            stream_timer_running: Arc::new(AtomicBool::new(false)),
+            accumulator: Arc::new(Mutex::new(create_stream_accumulator())),
             worker_state: Arc::new(WorkerStateUploader::new(worker_state_send, 1_000, 30_000)),
-            event_uploader: SerialBatchEventUploader::new(client_events_config),
+            event_uploader: Arc::new(SerialBatchEventUploader::new(client_events_config)),
             internal_event_uploader: SerialBatchEventUploader::new(internal_config),
             delivery_uploader: Arc::new(SerialBatchEventUploader::new(delivery_config)),
             shared,
@@ -431,6 +433,26 @@ impl CcrClient {
                     .lock()
                     .expect("stream buffer")
                     .push(message.clone());
+                if !self.stream_timer_running.swap(true, Ordering::SeqCst) {
+                    let buffer = Arc::clone(&self.stream_event_buffer);
+                    let accumulator = Arc::clone(&self.accumulator);
+                    let uploader = Arc::clone(&self.event_uploader);
+                    let timer = Arc::clone(&self.stream_timer_running);
+                    tokio::spawn(async move {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        let batch = std::mem::take(&mut *buffer.lock().expect("stream buffer"));
+                        timer.store(false, Ordering::SeqCst);
+                        if !batch.is_empty() {
+                            let events = {
+                                let mut state = accumulator.lock().expect("accumulator");
+                                accumulate_stream_events(&batch, &mut state)
+                            };
+                            for event in events {
+                                uploader.enqueue(vec![CcrClient::to_client_event(&event)]).await;
+                            }
+                        }
+                    });
+                }
                 return;
             }
             Some("assistant") => {
@@ -452,11 +474,11 @@ impl CcrClient {
             _ => self.flush_stream_event_buffer().await,
         }
         self.event_uploader
-            .enqueue(vec![self.to_client_event(message)])
+            .enqueue(vec![Self::to_client_event(message)])
             .await;
     }
 
-    fn to_client_event(&self, message: &Value) -> Value {
+    fn to_client_event(message: &Value) -> Value {
         let uuid = match message.get("uuid").and_then(Value::as_str) {
             Some(existing) => json!(existing),
             None => json!(uuid::Uuid::new_v4().to_string()),
@@ -479,7 +501,7 @@ impl CcrClient {
         };
         for event in events {
             self.event_uploader
-                .enqueue(vec![self.to_client_event(&event)])
+                .enqueue(vec![Self::to_client_event(&event)])
                 .await;
         }
     }
