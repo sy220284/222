@@ -81,7 +81,7 @@ cargo run -- --provider gemini chat
 | Kimi | `kimi-k3` | `MOONSHOT_API_KEY` |
 | 智谱 GLM | `glm-5.3` | `ZHIPU_API_KEY` |
 | MiniMax | `MiniMax-M3` | `MINIMAX_API_KEY` |
-| OpenAI API | `gpt-4.1-mini`（兼容旧配置） | `OPENAI_API_KEY` |
+| OpenAI API | `gpt-6.1-sol`（全新安装，旧配置仍兼容） | `OPENAI_API_KEY` |
 | ChatGPT 套餐 | `gpt-6.1-sol`（可用型号以账号目录为准） | 通过官方 OAuth 登录，无需 API Key |
 
 **连接和选择模型：**
@@ -101,6 +101,8 @@ cargo run -- --provider deepseek chat
 ```
 
 如果只需临时查询，不想保存密钥，可用 `models discover deepseek --key-stdin` 从标准输入读取。环境变量密钥优先于本地已保存密钥，均不回显。保存在配置文件旁的 `.model-api-keys.json` 具有 Unix 用户独享访问权限（0600），仍属于本地明文密钥文件，请保证机器账号和磁盘受保护；不可提交到 Git。已有配置和自定义供应商优先保留。不同品牌的 Coding 套餐、国际区域、付费 API 可能使用不同的密钥和 URL，允许覆盖同名条目的根地址。
+
+普通 OpenAI API 的新预置型号 `gpt-6.1-sol` 使用官方 Responses API 及命名空间函数工具调用，适配 GPT-6 系列的推理能力；该模式通过 API Key 计费。对于已有 `openai-compatible` 配置，保持旧模型兼容；切换到官方 GPT-6 模型时自动启用 Responses 协议。ChatGPT 套餐登录使用独立 OAuth 凭据与额度，两种身份互不混用。实际可选 GPT-6 型号由账户 API 目录和权限决定。
 
 Gemini 使用官方原生 `models.list` 分页目录、`x-goog-api-key` 鉴权与 `generateContent` 实际调用检测；只列出支持 `generateContent` 的型号。其 `temperature`、`topP`、`maxOutputTokens` 和 `thinkingLevel` 会映射到 Gemini 原生 `generationConfig`，并拒绝不支持的思考档位。`chatgpt` 的模型发现使用登录账户的官方专属目录，`models setup chatgpt` 会启动账号授权，不接受 API Key。
 
