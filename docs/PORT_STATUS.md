@@ -1,3 +1,10 @@
+## 2026-10-30：自定义 CA 证书生产入口接通与跨平台测试竞争修复（源码待完全等价验收）
+
+- **原版依据**：`source/src/utils/caCerts.ts`、`caCertsConfig.ts`。Rust 的 reqwest/rustls 不会读取 Node 的 NODE_EXTRA_CA_CERTS，原生成模块此前只有注册及测试引用。
+- **实际修复**：`src/tls_ca.rs` 将 PEM Bundle 信任根追加到默认根证书集；用户 config.json 的 env.NODE_EXTRA_CA_CERTS 在网络请求前读取；模型、MCP HTTP、MCP Legacy SSE、WebSearch、WebFetch、OAuth、Profile、版本信息及 Bridge 附件客户端共用此入口。项目仓库文件不会在信任审批前注入 CA。
+- **测试与修复**：CA 配置优先级纯函数消除两项单测抢改进程环境变量的 Windows 竞态；新增有效 PEM 和无效 PEM 测试。初次全量回归发现 Doctor 无法检查坏配置，已在后续提交修复。离线 Rust 1.99.1 `cargo check --locked --offline --all-targets`、`cargo fmt --all -- --check`、CA 专项单测及 Doctor 针对测试通过。GitHub 最新 HEAD 的全平台 CI 仍按真实结果独立核验。
+- **保留缺口**：原版系统证书选项及动态证书缓存清理、分开的全局 config 与用户 settings 双来源、所有 HTTPS 客户端证书行为回归仍待补齐。两个原路径均保持部分实现，不新增“已验收”计数。
+
 ## 2026-10-30：Agent 主链 token budget 全链路手工重写（源码已提交、待验收）
 
 - **原版依据**：完整 2.1.88 `source/src/query/{tokenBudget.ts,config.ts,deps.ts}`、`source/src/utils/tokenBudget.ts`，及 `query.ts` 主循环接线段（Stop hook 阻断之后、completed 返回之前）与 `REPL.tsx` 轮首/轮末快照调用现场逐行对照。
