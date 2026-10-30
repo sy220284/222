@@ -1493,7 +1493,7 @@ async fn chat(
             .map(|entry| entry.display)
             .collect();
         let line =
-            match terminal_input::read_prompt(&prompt, &entries, config.editor_mode == "vim")? {
+            match terminal_input::read_prompt(&prompt, &entries)? {
             terminal_input::PromptRead::Line(line) => line,
             terminal_input::PromptRead::Cancelled => continue,
             terminal_input::PromptRead::Eof => break,
