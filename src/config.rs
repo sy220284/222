@@ -246,7 +246,7 @@ fn domestic_api_profiles() -> Vec<ProviderProfile> {
         (
             "kimi",
             "https://api.moonshot.cn/v1",
-            "kimi-k3",
+            "kimi-k3.1-pro",
             "MOONSHOT_API_KEY",
         ),
         (
@@ -736,7 +736,7 @@ mod tests {
             (
                 "kimi",
                 "https://api.moonshot.cn/v1",
-                "kimi-k3",
+                "kimi-k3.1-pro",
                 "MOONSHOT_API_KEY",
             ),
             (
@@ -777,7 +777,7 @@ mod tests {
         assert_eq!(previous.providers.len(), 7);
         previous.default_provider = "kimi".into();
         previous.validate().unwrap();
-        assert_eq!(previous.select(None, None).unwrap().model, "kimi-k3");
+        assert_eq!(previous.select(None, None).unwrap().model, "kimi-k3.1-pro");
 
         let mut custom = previous.select(Some("glm"), None).unwrap();
         custom.model = "my-glm".into();
