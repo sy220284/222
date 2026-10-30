@@ -56,8 +56,12 @@ impl RemoteChannel {
             }
             Self::Sse(stream, url) => stream.write(url, event).await,
             Self::Ccr(ccr) => {
+                let before = ccr.dropped_event_batch_count();
                 ccr.write_event(event).await;
                 ccr.flush().await;
+                if ccr.dropped_event_batch_count() != before {
+                    bail!("CCR worker dropped an outbound event batch");
+                }
                 Ok(())
             }
         }
