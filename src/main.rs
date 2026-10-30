@@ -2961,7 +2961,21 @@ async fn sdk_nested_control(
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow::anyhow!("stop_task requires task_id"))?;
                 let result = agent.stop_background_task(task_id).await?;
-                Ok(json!({"task":serde_json::from_str::<Value>(&result)?}))
+                let stopped: Value = serde_json::from_str(&result)?;
+                // stopTask.ts emits this event separately because suppressing
+                // the noisy shell exit notification would otherwise leave SDK
+                // clients showing a task as running after a successful stop.
+                print_json!(json!({
+                    "type":"system",
+                    "subtype":"task_notification",
+                    "task_id":task_id,
+                    "status":"stopped",
+                    "output_file":"",
+                    "summary":stopped.get("description").and_then(Value::as_str).unwrap_or(""),
+                    "session_id":agent.session_id(),
+                    "uuid":uuid::Uuid::new_v4().to_string()
+                }));
+                Ok(json!({"task":stopped}))
             }
             other if other.starts_with("bridge_") => {
                 bridge_session.dispatch(other, &Value::Object(request.clone()))
