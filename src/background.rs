@@ -104,8 +104,17 @@ fn private_task_directory(root: &Path, session_id: Uuid) -> Result<PathBuf> {
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                fs::create_dir(&path)
-                    .with_context(|| format!("Create task output directory {}", path.display()))?;
+                if let Err(error) = fs::create_dir(&path) {
+                    if error.kind() != std::io::ErrorKind::AlreadyExists {
+                        return Err(error).with_context(|| format!(
+                            "Create task output directory {}", path.display()
+                        ));
+                    }
+                }
+                let meta = fs::symlink_metadata(&path)?;
+                if meta.file_type().is_symlink() || !meta.is_dir() {
+                    bail!("Task output directory was redirected: {}", path.display())
+                }
             }
             Err(error) => return Err(error.into()),
         }
@@ -144,6 +153,26 @@ impl BackgroundTasks {
         // diskOutput.ts::getTaskOutputDir uses a private project temporary
         // directory with a stable session ID. Do not put task output into
         // the repository or regenerate the location during /clear.
+        // Existing Rust sessions kept their task metadata in the workspace.
+        // Preserve access to those records until the session ends instead
+        // of silently losing completed output during an upgrade.
+        let legacy = root.join(".atlas").join("background").join(session_id.to_string());
+        match fs::symlink_metadata(&legacy) {
+            Ok(meta) if meta.file_type().is_symlink() || !meta.is_dir() => {
+                bail!("Previous task output directory is redirected or invalid")
+            }
+            Ok(_) => {
+                if fs::read_dir(&legacy)?.any(|entry| {
+                    entry.as_ref().ok().is_some_and(|entry| {
+                        entry.path().extension().and_then(|ext| ext.to_str()) == Some("json")
+                    })
+                }) {
+                    return Self::in_directory(root, legacy);
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
         let directory = private_task_directory(root, session_id)?;
         Self::in_directory_checked(root, directory, true)
     }
