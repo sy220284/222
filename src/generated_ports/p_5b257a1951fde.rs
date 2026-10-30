@@ -1,7 +1,7 @@
 //! Native Rust port derived from original: src/utils/debug.ts
 //!
 //! Manual source-order rewrite of the debug logging core. Environment names
-//! are provider-neutral (`CLAUDE_CODE_DEBUG_*` -> `ATLAS_DEBUG_*`), matching
+//! are provider-neutral (the vendor-neutral `ATLAS_DEBUG_*` namespace), matching
 //! the repo-wide naming convention. The Node event-loop write chain
 //! (`pendingWrite` promise) becomes a synchronous buffered writer with
 //! drop-flush semantics; `flushIntervalMs` timing becomes max-item/byte
@@ -95,7 +95,7 @@ fn argv() -> Vec<String> {
 
 /// Minimum log level for debug output. Defaults to `debug`, filtering
 /// `verbose` noise. `ATLAS_DEBUG_LOG_LEVEL=verbose` re-enables high-volume
-/// diagnostics (original: CLAUDE_CODE_DEBUG_LOG_LEVEL).
+/// diagnostics (original: ATLAS_DEBUG_LOG_LEVEL).
 pub fn get_min_debug_level() -> DebugLogLevel {
     let raw = std::env::var("ATLAS_DEBUG_LOG_LEVEL")
         .ok()
@@ -182,7 +182,7 @@ pub fn get_has_formatted_output() -> bool {
 }
 
 /// Debug log path resolution: `--debug-file` beats `ATLAS_DEBUG_LOGS_DIR`
-/// (original: CLAUDE_CODE_DEBUG_LOGS_DIR) beats config home `debug/{session}.txt`.
+/// (original: ATLAS_DEBUG_LOGS_DIR) beats config home `debug/{session}.txt`.
 pub fn get_debug_log_path() -> PathBuf {
     if let Some(file) = get_debug_file_path() {
         return PathBuf::from(file);

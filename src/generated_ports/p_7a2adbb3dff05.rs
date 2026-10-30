@@ -73,7 +73,7 @@ pub fn parse_debug_filter(filter_string: Option<&str>) -> Option<DebugFilter> {
 /// - `"category: message"` -> `["category"]`
 /// - `"[CATEGORY] message"` -> `["category"]`
 /// - `"MCP server \"name\": message"` -> `["mcp", "name"]`
-/// - `"[ANT-ONLY] 1P event: tengu_timer"` -> `["ant-only", "1p"]`
+/// - `"[ANT-ONLY] 1P event: timer_started"` -> `["ant-only", "1p"]`
 pub fn extract_debug_categories(message: &str) -> Vec<String> {
     use regex::Regex;
 
@@ -209,7 +209,7 @@ mod tests {
             vec!["mcp", "files"]
         );
         assert_eq!(
-            extract_debug_categories("[ANT-ONLY] 1P event: tengu_timer"),
+            extract_debug_categories("[ANT-ONLY] 1P event: timer_started"),
             vec!["ant-only", "1p"]
         );
         // Secondary category extraction.

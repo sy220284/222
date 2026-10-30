@@ -2,7 +2,7 @@
 //!
 //! Diagnostic logging for container session-ingress monitoring. JSON-lines
 //! appended to `ATLAS_DIAGNOSTICS_FILE` (original:
-//! `CLAUDE_CODE_DIAGNOSTICS_FILE`); directory creation on first append
+//! `ATLAS_DIAGNOSTICS_FILE`); directory creation on first append
 //! failure; timing wrapper logs `{event}_started/_completed/_failed` with
 //! `duration_ms`. **Must never receive PII** — same contract as original.
 #![allow(dead_code, non_snake_case, non_camel_case_types)]

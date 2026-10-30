@@ -5247,7 +5247,12 @@ fn chat_status_reports_live_state_and_never_prints_secrets() {
     assert!(stdout.contains("Model: portable-model"), "{stdout}");
     assert!(stdout.contains("Permission mode: default"), "{stdout}");
     assert!(stdout.contains("MCP servers: 0"), "{stdout}");
-    assert!(stdout.contains(root.path().to_str().unwrap()), "{stdout}");
+    // Windows tempdir can report the extended-length \?\ path, while the
+    // user-facing /status deliberately renders the ordinary Win32 path.
+    let workspace = root.path().to_str().unwrap();
+    #[cfg(windows)]
+    let workspace = workspace.strip_prefix(r"\\?\").unwrap_or(workspace);
+    assert!(stdout.contains(workspace), "{stdout}");
     assert!(!stdout.contains("API_SECRET_NEVER_PRINT"));
     assert!(!stdout.contains("URL_SECRET_NEVER_PRINT"));
     assert!(!stderr.contains("API_SECRET_NEVER_PRINT"));

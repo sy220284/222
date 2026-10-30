@@ -88,13 +88,13 @@ mod tests {
         reset_all_settings_caches();
         assert!(get_session_settings_cache().is_none());
         let doc = SettingsWithErrors {
-            settings: serde_json::json!({"model": "claude"}),
+            settings: serde_json::json!({"model": "portable-model"}),
             errors: vec![],
             file_path: "/tmp/settings.json".into(),
         };
         set_session_settings_cache(Some(doc));
         let got = get_session_settings_cache().unwrap();
-        assert_eq!(got.settings["model"], "claude");
+        assert_eq!(got.settings["model"], "portable-model");
         reset_all_settings_caches();
         assert!(get_session_settings_cache().is_none());
     }
@@ -105,18 +105,18 @@ mod tests {
         let doc = SettingsWithErrors {
             settings: serde_json::json!({"permissions": {}}),
             errors: vec!["bad field".into()],
-            file_path: "/repo/.claude/settings.json".into(),
+            file_path: "/repo/.atlas/settings.json".into(),
         };
-        set_project_settings_cache("projectSettings", "/repo/.claude/settings.json", doc);
+        set_project_settings_cache("projectSettings", "/repo/.atlas/settings.json", doc);
         let got =
-            get_project_settings_cache("projectSettings", "/repo/.claude/settings.json").unwrap();
+            get_project_settings_cache("projectSettings", "/repo/.atlas/settings.json").unwrap();
         assert_eq!(got.errors, vec!["bad field"]);
         assert!(
-            get_project_settings_cache("userSettings", "/repo/.claude/settings.json").is_none()
+            get_project_settings_cache("userSettings", "/repo/.atlas/settings.json").is_none()
         );
         clear_project_settings_cache();
         assert!(
-            get_project_settings_cache("projectSettings", "/repo/.claude/settings.json").is_none()
+            get_project_settings_cache("projectSettings", "/repo/.atlas/settings.json").is_none()
         );
     }
 }
