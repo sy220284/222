@@ -205,7 +205,7 @@ async fn receive_callback(listener: &TcpListener, state: &str) -> Result<(String
             let code = params.get("code").filter(|v| !v.is_empty())
                 .context("OAuth callback has no authorization code")?.to_string();
             let client_id = params.get("client_id").map(ToString::to_string);
-            connection.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 22\r\n\r\nAuthentication received").await?;
+            connection.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 23\r\n\r\nAuthentication received").await?;
             return Ok((code, client_id));
         }
     };
@@ -375,25 +375,34 @@ pub async fn run(action: &AccountAction) -> Result<()> {
         }
         AccountAction::Logout => {
             let mut stored = read_saved()?.context("Not signed in")?;
-            if let Some(session) = &stored.session {
-                let http = new_client()?;
-                let config: Value = http.get(format!("{AUTH}/.well-known/openid-configuration"))
-                    .send().await?.error_for_status()?.json().await?;
-                let endpoint = config.get("revocation_endpoint").and_then(Value::as_str)
-                    .context("OAuth discovery lacks revocation endpoint")?;
-                let endpoint = Url::parse(endpoint)?;
-                if endpoint.scheme() != "https" || endpoint.host_str() != Some("auth.openai.com") {
-                    bail!("Invalid OpenAI revocation endpoint")
+            let revocation = async {
+                if let Some(session) = &stored.session {
+                    let http = new_client()?;
+                    let config: Value = http.get(format!("{AUTH}/.well-known/openid-configuration"))
+                        .send().await?.error_for_status()?.json().await?;
+                    let endpoint = config.get("revocation_endpoint").and_then(Value::as_str)
+                        .context("OAuth discovery lacks revocation endpoint")?;
+                    let endpoint = Url::parse(endpoint)?;
+                    if endpoint.scheme() != "https" || endpoint.host_str() != Some("auth.openai.com") {
+                        bail!("Invalid OpenAI revocation endpoint")
+                    }
+                    http.post(endpoint).form(&[
+                        ("token", session.refresh_token.as_str()),
+                        ("token_type_hint", "refresh_token"),
+                        ("client_id", session.client_id.as_str()),
+                    ]).send().await?.error_for_status()?;
                 }
-                http.post(endpoint).form(&[
-                    ("token", session.refresh_token.as_str()),
-                    ("token_type_hint", "refresh_token"),
-                    ("client_id", session.client_id.as_str()),
-                ]).send().await?.error_for_status()?;
-            }
+                Ok::<(), anyhow::Error>(())
+            }.await;
             stored.session = None;
             write_saved(&stored)?;
-            println!("ChatGPT plan session revoked and local tokens cleared.");
+            match revocation {
+                Ok(()) => println!("ChatGPT session revoked; local credentials cleared."),
+                Err(error) => {
+                    eprintln!("Local ChatGPT credentials cleared; remote revocation was not confirmed: {error:#}");
+                    eprintln!("Disconnect the application from ChatGPT Settings if necessary.");
+                }
+            }
             Ok(())
         }
     }
@@ -536,6 +545,19 @@ fn parse_completed(response: &Value) -> Result<ModelResponse> {
     })
 }
 
+fn next_sse_frame(buffer: &[u8]) -> Option<(usize, usize)> {
+    for (i, byte) in buffer.iter().enumerate() {
+        if *byte == b'\n' {
+            if buffer.get(i + 1) == Some(&b'\n') { return Some((i, 2)); }
+            if buffer.get(i + 1) == Some(&b'\r')
+                && buffer.get(i + 2) == Some(&b'\n') {
+                return Some((i, 3));
+            }
+        }
+    }
+    None
+}
+
 pub async fn complete(
     request: &ModelRequest,
     tuning: &ModelTuning,
@@ -571,8 +593,8 @@ pub async fn complete(
         let chunk = chunk.context("ChatGPT Responses stream interrupted")?;
         buffered.extend_from_slice(&chunk);
         if buffered.len() > 16 * 1024 * 1024 { bail!("Responses SSE frame exceeds limit") }
-        while let Some(end) = buffered.windows(2).position(|v| v == b"\n\n") {
-            let frame = buffered.drain(..end + 2).collect::<Vec<_>>();
+        while let Some((end, delimiter)) = next_sse_frame(&buffered) {
+            let frame = buffered.drain(..end + delimiter).collect::<Vec<_>>();
             let data = String::from_utf8_lossy(&frame);
             let lines = data.lines().filter_map(|line| line.strip_prefix("data:"))
                 .map(str::trim_start).collect::<Vec<_>>();
@@ -589,7 +611,11 @@ pub async fn complete(
                     completed = Some(event.get("response").context("Missing final Responses body")?.clone());
                 }
                 Some("response.failed" | "response.incomplete" | "error") => {
-                    bail!("ChatGPT Responses operation failed: {}",
+                    let code = event.pointer("/response/error/code")
+                        .or_else(|| event.pointer("/error/code"))
+                        .or_else(|| event.get("code"))
+                        .and_then(Value::as_str).unwrap_or("unknown");
+                    bail!("ChatGPT Responses operation failed: {} ({code})",
                         event.get("type").and_then(Value::as_str).unwrap_or("unknown"))
                 }
                 _ => {}
