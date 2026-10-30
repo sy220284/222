@@ -62,6 +62,7 @@ pub struct HybridOutbound {
     auth: HybridAuth,
     stream_event_buffer: Arc<Mutex<Vec<Value>>>,
     timer_running: Arc<AtomicBool>,
+    sequence: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl HybridOutbound {
@@ -123,6 +124,7 @@ impl HybridOutbound {
             auth,
             stream_event_buffer: Arc::new(Mutex::new(Vec::new())),
             timer_running: Arc::new(AtomicBool::new(false)),
+            sequence: Arc::new(tokio::sync::Mutex::new(())),
         })
     }
 
@@ -142,8 +144,11 @@ impl HybridOutbound {
                 let buffer = Arc::clone(&self.stream_event_buffer);
                 let running = Arc::clone(&self.timer_running);
                 let uploader = Arc::clone(&self.uploader);
+                let sequence = Arc::clone(&self.sequence);
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_millis(BATCH_FLUSH_INTERVAL_MS)).await;
+                    // Timer and immediate writes must enqueue in the same order.
+                    let _sequence = sequence.lock().await;
                     let batch = std::mem::take(&mut *buffer.lock().expect("hybrid stream buffer"));
                     running.store(false, Ordering::SeqCst);
                     if !batch.is_empty() {
@@ -153,6 +158,7 @@ impl HybridOutbound {
             }
             return;
         }
+        let _sequence = self.sequence.lock().await;
         let mut events = std::mem::take(
             &mut *self
                 .stream_event_buffer
@@ -165,6 +171,7 @@ impl HybridOutbound {
     }
 
     pub async fn flush(&self) {
+        let _sequence = self.sequence.lock().await;
         let events = std::mem::take(
             &mut *self
                 .stream_event_buffer
