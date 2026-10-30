@@ -74,7 +74,7 @@ fn old_config_lists_domestic_providers_without_modifying_disk() {
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
-        stdout.contains("kimi (default): openai-compatible / kimi-k3"),
+        stdout.contains("kimi (default): openai-compatible / kimi-k3.1-pro"),
         "{stdout}"
     );
     assert!(
@@ -94,7 +94,7 @@ fn old_config_lists_domestic_providers_without_modifying_disk() {
 fn four_domestic_provider_ids_use_existing_authenticated_chat_pipeline() {
     for (id, model) in [
         ("deepseek", "deepseek-flash"),
-        ("kimi", "kimi-k3"),
+        ("kimi", "kimi-k3.1-pro"),
         ("glm", "glm-5.3"),
         ("minimax", "MiniMax-M3"),
     ] {
