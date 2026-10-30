@@ -4649,6 +4649,12 @@ impl Agent {
             }
             if !handled_ids.is_empty() {
                 calls.retain(|call| !handled_ids.contains(&call.id));
+                // Results of streamed tool calls have already been recorded.
+                // The model must consume them before a Stop hook can finish
+                // this turn, even if no unhandled tool calls remain.
+                if calls.is_empty() {
+                    continue;
+                }
             }
             if calls.is_empty() {
                 if self.absorb_team_messages()? {
