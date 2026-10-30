@@ -105,15 +105,18 @@ dependencies = [
  "libc",
  "regex",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "sha2",
  "similar",
  "tempfile",
  "tokio",
+ "tokio-rustls",
  "unicode-normalization",
  "uuid",
  "walkdir",
+ "webpki-roots",
 ]
 
 [[package]]

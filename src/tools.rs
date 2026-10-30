@@ -682,6 +682,40 @@ impl ToolExecutor {
         self
     }
 
+    /// Validate before any PreToolUse hook can launch a subprocess. Serial,
+    /// concurrent and streaming dispatch share this boundary; dispatch still
+    /// validates the effective arguments after hook rewrites.
+    pub fn validate_call_before_hooks(&self, call: &ToolCall) -> Result<()> {
+        let value: Value = serde_json::from_str(&call.function.arguments)
+            .context("Invalid tool arguments JSON")?;
+        if !value.is_object() {
+            bail!("Tool arguments must be a JSON object");
+        }
+        let name = crate::tool_names::canonical_name(&call.function.name);
+        if matches!(call.function.name.as_str(), "Read" | "Edit" | "Write") {
+            let mut normalized = value;
+            crate::semantic_inputs::normalize_source_file_tool(
+                &call.function.name,
+                &mut normalized,
+            )
+            .and_then(|_| crate::semantic_inputs::normalize_tool_fields(name, &mut normalized))
+            .with_context(|| format!("Invalid {} arguments", call.function.name))?;
+        } else if matches!(name, "grep_files" | "glob_files") {
+            crate::search::validate_tool_input(name, &value).context("Invalid search arguments")?;
+        } else if crate::task_graph::handles(&call.function.name) {
+            crate::task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
+                .with_context(|| format!("Invalid {} arguments", call.function.name))?;
+        } else if matches!(name, "task_stop" | "KillShell") {
+            self.validate_task_stop(&value)
+                .context("Invalid TaskStop arguments")?;
+        } else if name == "task_output" {
+            Self::validate_task_output(&value).context("Invalid TaskOutput arguments")?;
+        } else if matches!(name, "run_command" | "PowerShell") {
+            Self::validate_shell_input(name, &value).context("Invalid Shell arguments")?;
+        }
+        Ok(())
+    }
+
     pub async fn execute(&self, call: &ToolCall) -> String {
         let shell = crate::tool_names::canonical_name(&call.function.name) == "run_command"
             || call.function.name == "PowerShell";

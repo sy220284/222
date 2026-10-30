@@ -34,6 +34,18 @@ use std::{
 
 const DEFAULT_SYSTEM: &str = crate::prompt_runtime::BASE_SYSTEM;
 
+/// Model-visible reminder envelope matching utils/messages.ts.
+pub(crate) fn wrap_in_system_reminder(text: &str) -> String {
+    format!("<system-reminder>\n{text}\n</system-reminder>")
+}
+
+/// Preserve completion order when injecting async Stop-hook wake-up events.
+fn append_rewake_messages(messages: &mut Vec<Message>, pending: &[String]) {
+    for message in pending {
+        messages.push(Message::text("user", wrap_in_system_reminder(message)));
+    }
+}
+
 /// Read the metadata scalars used by the on-disk agent editor. Supports
 /// quoted values and YAML folded/literal descriptions without loading the
 /// agent's executable prompt or leaking it through the SDK.
@@ -194,6 +206,10 @@ pub struct Agent {
     session_context: String,
     /// One-shot first user turn supplied by a SessionStart hook in headless mode.
     pending_initial_user_message: Option<String>,
+    /// hooks.ts:237 asyncRewake blocking errors awaiting model wake-up.
+    /// Drained as a task-notification turn when idle, or injected into the
+    /// running conversation between API rounds.
+    pending_rewake_notifications: Vec<String>,
     conversation_context: ConversationContext,
     structured_output: bool,
     child_depth: u8,
@@ -331,6 +347,7 @@ impl Agent {
             hooks: HookRunner::default(),
             session_context: String::new(),
             pending_initial_user_message: None,
+            pending_rewake_notifications: Vec::new(),
             conversation_context,
             structured_output: false,
             child_depth: 0,
@@ -2335,41 +2352,75 @@ impl Agent {
     pub async fn pump_async_hook_events(&mut self) -> Result<usize> {
         let events = crate::hooks::collect_async_hook_responses(&self.session.id.to_string()).await;
         let count = events.len();
+        let mut rewake_notifications: Vec<String> = Vec::new();
+        let mut visible: Vec<String> = Vec::new();
         for event in events {
             self.emit(event.clone());
-            let stdout = event["stdout"]
-                .as_str()
-                .unwrap_or("")
-                .lines()
-                .filter(|line| {
-                    serde_json::from_str::<serde_json::Value>(line.trim())
-                        .ok()
-                        .is_none_or(|value| value.get("async") != Some(&json!(true)))
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            let body = if event["outcome"] == "success" {
-                stdout.trim().to_owned()
-            } else {
-                format!(
-                    "Async hook {}: {}",
-                    event["outcome"].as_str().unwrap_or("failed"),
-                    event["stderr"].as_str().unwrap_or("")
-                )
-            };
-            if !body.trim().is_empty() {
-                self.session.messages.push(Message::text(
-                    "user",
-                    format!(
-                        "[Asynchronous {} hook result]\n{}",
-                        event["hook_event_name"].as_str().unwrap_or("Hook"),
-                        body
-                    ),
+            // hooks.ts:237 asyncRewake hooks bypass the registry entirely:
+            // an exit code 2 result enqueues a task-notification that wakes
+            // the model via the queue processor (idle) or injects mid-query.
+            if event["rewake"].as_bool() == Some(true) {
+                let stderr = event["stderr"].as_str().unwrap_or("");
+                let stdout = event["stdout"].as_str().unwrap_or("");
+                let body = if stderr.is_empty() { stdout } else { stderr };
+                rewake_notifications.push(format!(
+                    "Stop hook blocking error from command \"{}\": {}",
+                    event["command"].as_str().unwrap_or(""),
+                    body
                 ));
-                self.session.save(&self.root)?;
+                continue;
+            }
+            // messages.ts:4026 async_hook_response: only systemMessage and
+            // hookSpecificOutput.additionalContext become model-visible
+            // messages; raw stdout never reaches the conversation.
+            let response = &event["response"];
+            if let Some(message) = response["systemMessage"].as_str().filter(|m| !m.is_empty()) {
+                visible.push(message.to_owned());
+            }
+            if let Some(context) = response["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .filter(|context| !context.is_empty())
+            {
+                visible.push(context.to_owned());
             }
         }
+        if !visible.is_empty() {
+            for text in visible {
+                self.session
+                    .messages
+                    .push(Message::text("user", wrap_in_system_reminder(&text)));
+            }
+            self.session.save(&self.root)?;
+        }
+        if !rewake_notifications.is_empty() {
+            self.pending_rewake_notifications
+                .extend(rewake_notifications);
+        }
         Ok(count)
+    }
+
+    /// Drain queued asyncRewake blocking errors. The SDK idle loop turns the
+    /// first notification into a wake-up turn; the running Agent query injects
+    /// them directly between API rounds.
+    pub fn take_rewake_notifications(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.pending_rewake_notifications)
+    }
+
+    /// Attach completed async Stop-hook blocking errors to the active query.
+    /// A failed session write restores the queue so it can be retried intact.
+    fn inject_rewake_notifications(&mut self) -> Result<usize> {
+        let pending = self.take_rewake_notifications();
+        if pending.is_empty() {
+            return Ok(0);
+        }
+        let prior_count = self.session.messages.len();
+        append_rewake_messages(&mut self.session.messages, &pending);
+        if let Err(error) = self.session.save(&self.root) {
+            self.session.messages.truncate(prior_count);
+            self.pending_rewake_notifications.splice(0..0, pending);
+            return Err(error);
+        }
+        Ok(self.session.messages.len() - prior_count)
     }
 
     pub fn sdk_title_request(&self, description: &str) -> Option<ModelRequest> {
@@ -4314,6 +4365,7 @@ impl Agent {
             // rounds. Attach each completed hook exactly once; emit its
             // outcome to the SDK/UI, without replaying the shell command.
             self.pump_async_hook_events().await?;
+            self.inject_rewake_notifications()?;
             // Resolve the configured second model before exposing advisor;
             // stale provider IDs remain inactive rather than misreporting success.
             let advisor_profile = if self.child_depth == 0 {
@@ -4473,6 +4525,7 @@ impl Agent {
                     executor: executor.clone(),
                     tool_hook_base: self.tool_hook_input(),
                     structured_output: self.structured_output,
+                    interactive: self.interactive,
                     session_id: self.session.id.to_string(),
                     child_depth: self.child_depth,
                     prompt_role: self.prompt_role.clone(),
@@ -4488,13 +4541,9 @@ impl Agent {
                 let shared = std::sync::Arc::new(tokio::sync::Mutex::new(
                     crate::streaming_tool_executor::StreamingExecutor::new(deps),
                 ));
-                let (block_tx, mut block_rx) = tokio::sync::mpsc::unbounded_channel();
-                let pump_shared = shared.clone();
-                let pump = tokio::spawn(async move {
-                    while let Some(call) = block_rx.recv().await {
-                        let _ = pump_shared.lock().await.add_tool(call);
-                    }
-                });
+                let (block_tx, block_rx) = tokio::sync::mpsc::unbounded_channel();
+                let pump =
+                    crate::streaming_tool_executor::ToolBlockPump::spawn(block_rx, shared.clone());
                 (Some(shared), Some(block_tx), Some(pump))
             } else {
                 (None, None, None)
@@ -4546,15 +4595,20 @@ impl Agent {
             // The block pump ends when the transport drops its sink (the SSE
             // finish flush sends every in-flight block first).
             drop(block_tx);
-            if let Some(pump) = block_pump {
-                let _ = pump.await;
+            if let Some(mut pump) = block_pump {
+                if let Err(error) = pump.finish().await {
+                    if let Some(shared) = &streaming_executor {
+                        shared.lock().await.discard().await;
+                    }
+                    return Err(error).context("Streaming tool block dispatch failed");
+                }
             }
             self.session.cost.add_api_duration(api_started.elapsed());
             let response = match response {
                 Ok(response) => response,
                 Err(error) => {
                     if let Some(shared) = &streaming_executor {
-                        shared.lock().await.discard();
+                        shared.lock().await.discard().await;
                     }
                     self.session.cost.add_wall_duration(ask_started.elapsed());
                     self.session.save(&self.root)?;
@@ -4584,7 +4638,7 @@ impl Agent {
                 Some("length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded")
             ) {
                 if let Some(shared) = &streaming_executor {
-                    shared.lock().await.discard();
+                    shared.lock().await.discard().await;
                 }
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
@@ -4606,7 +4660,7 @@ impl Agent {
                 )
             ) {
                 if let Some(shared) = &streaming_executor {
-                    shared.lock().await.discard();
+                    shared.lock().await.discard().await;
                 }
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
@@ -4808,66 +4862,17 @@ impl Agent {
                                 || self.sdk_disallowed_tools.contains(
                                     crate::tool_names::canonical_name(&call.function.name),
                                 );
-                            let invalid_input =
-                                if restricted_by_role {
-                                    Some(format!(
-                                        "Tool {} is unavailable to this agent's tool policy",
-                                        call.function.name
-                                    ))
-                                } else {
-                                    match serde_json::from_str::<serde_json::Value>(
-                                        &call.function.arguments,
-                                    ) {
-                                        Err(error) => {
-                                            Some(format!("Invalid tool arguments JSON: {error}"))
-                                        }
-                                        Ok(value @ serde_json::Value::Object(_)) => {
-                                            if matches!(call.function.name.as_str(), "Read") {
-                                                let mut normalized = value.clone();
-                                                crate::semantic_inputs::normalize_source_file_tool(
-                                                    &call.function.name,
-                                                    &mut normalized,
-                                                )
-                                                .and_then(|_| {
-                                                    crate::semantic_inputs::normalize_tool_fields(
-                                                        crate::tool_names::canonical_name(
-                                                            &call.function.name,
-                                                        ),
-                                                        &mut normalized,
-                                                    )
-                                                })
-                                                .err()
-                                                .map(|error| {
-                                                    format!(
-                                                        "Invalid {} arguments: {error:#}",
-                                                        call.function.name
-                                                    )
-                                                })
-                                            } else if matches!(
-                                                crate::tool_names::canonical_name(
-                                                    &call.function.name
-                                                ),
-                                                "grep_files" | "glob_files"
-                                            ) {
-                                                crate::search::validate_tool_input(
-                                                    crate::tool_names::canonical_name(
-                                                        &call.function.name,
-                                                    ),
-                                                    &value,
-                                                )
-                                                .err()
-                                                .map(|error| {
-                                                    format!("Invalid search arguments: {error:#}")
-                                                })
-                                            } else {
-                                                None
-                                            }
-                                        }
-                                        Ok(_) => {
-                                            Some("Tool arguments must be a JSON object".to_owned())
-                                        }
-                                    }
-                                };
+                            let invalid_input = if restricted_by_role {
+                                Some(format!(
+                                    "Tool {} is unavailable to this agent's tool policy",
+                                    call.function.name
+                                ))
+                            } else {
+                                executor
+                                    .validate_call_before_hooks(&call)
+                                    .err()
+                                    .map(|error| format!("{error:#}"))
+                            };
                             let mut pre_hook_failure = None;
                             let pre = if invalid_input.is_none() {
                                 match self
@@ -4901,42 +4906,11 @@ impl Agent {
                             {
                                 call.function.arguments = serde_json::to_string(updated)?;
                             }
-                            let hook_ask_rejection = if pre
-                                .as_ref()
-                                .and_then(|hook| hook.permission_decision.as_deref())
-                                == Some("ask")
-                            {
-                                if !self.interactive {
-                                    Some("PreToolUse hook requires interactive approval".to_owned())
-                                } else {
-                                    use std::io::Write;
-                                    let answer = (|| -> std::io::Result<bool> {
-                                        eprintln!(
-                                            "PreToolUse hook requests approval for {}",
-                                            call.function.name
-                                        );
-                                        eprint!("Allow once? [y/N] ");
-                                        std::io::stderr().flush()?;
-                                        let mut response = String::new();
-                                        std::io::stdin().read_line(&mut response)?;
-                                        Ok(matches!(
-                                            response.trim().to_ascii_lowercase().as_str(),
-                                            "y" | "yes"
-                                        ))
-                                    })();
-                                    match answer {
-                                        Ok(true) => None,
-                                        Ok(false) => Some(
-                                            "User rejected PreToolUse hook approval".to_owned(),
-                                        ),
-                                        Err(error) => {
-                                            Some(format!("PreToolUse approval failed: {error}"))
-                                        }
-                                    }
-                                }
-                            } else {
-                                None
-                            };
+                            let hook_ask_rejection = pre.as_ref().and_then(|hook| {
+                                hook.require_tool_approval(self.interactive, &call.function.name)
+                                    .err()
+                                    .map(|error| format!("{error:#}"))
+                            });
                             let pre_blocked =
                                 pre.as_ref().and_then(|hook| hook.blocking_reason.clone());
                             // Same synthesized pre-execution errors as the
@@ -5059,74 +5033,10 @@ impl Agent {
                         call.function.name
                     ))
                 } else {
-                    match serde_json::from_str::<serde_json::Value>(&call.function.arguments) {
-                        Err(error) => Some(format!("Invalid tool arguments JSON: {error}")),
-                        Ok(value @ serde_json::Value::Object(_)) => {
-                            if matches!(call.function.name.as_str(), "Read" | "Edit" | "Write") {
-                                let mut normalized = value.clone();
-                                crate::semantic_inputs::normalize_source_file_tool(
-                                    &call.function.name,
-                                    &mut normalized,
-                                )
-                                .and_then(|_| {
-                                    crate::semantic_inputs::normalize_tool_fields(
-                                        crate::tool_names::canonical_name(&call.function.name),
-                                        &mut normalized,
-                                    )
-                                })
-                                .err()
-                                .map(|error| {
-                                    format!("Invalid {} arguments: {error:#}", call.function.name)
-                                })
-                            } else if matches!(
-                                crate::tool_names::canonical_name(&call.function.name),
-                                "grep_files" | "glob_files"
-                            ) {
-                                crate::search::validate_tool_input(
-                                    crate::tool_names::canonical_name(&call.function.name),
-                                    &value,
-                                )
-                                .err()
-                                .map(|error| format!("Invalid search arguments: {error:#}"))
-                            } else if task_graph::handles(&call.function.name) {
-                                task_graph::TaskGraph::validate_tool_input(
-                                    &call.function.name,
-                                    &value,
-                                )
-                                .err()
-                                .map(|error| {
-                                    format!("Invalid {} arguments: {error:#}", call.function.name)
-                                })
-                            } else if matches!(
-                                crate::tool_names::canonical_name(&call.function.name),
-                                "task_stop" | "KillShell"
-                            ) {
-                                executor
-                                    .validate_task_stop(&value)
-                                    .err()
-                                    .map(|error| format!("Invalid TaskStop arguments: {error:#}"))
-                            } else if crate::tool_names::canonical_name(&call.function.name)
-                                == "task_output"
-                            {
-                                ToolExecutor::validate_task_output(&value)
-                                    .err()
-                                    .map(|error| format!("Invalid TaskOutput arguments: {error:#}"))
-                            } else if matches!(
-                                crate::tool_names::canonical_name(&call.function.name),
-                                "run_command" | "PowerShell"
-                            ) {
-                                ToolExecutor::validate_shell_input(
-                                    crate::tool_names::canonical_name(&call.function.name),
-                                    &value,
-                                )
-                                .err()
-                                .map(|error| format!("Invalid Shell arguments: {error:#}"))
-                            } else {
-                                None
-                            }
-                        }
-                        Ok(_) => Some("Tool arguments must be a JSON object".to_owned()),
-                    }
+                    executor
+                        .validate_call_before_hooks(&call)
+                        .err()
+                        .map(|error| format!("{error:#}"))
                 };
                 let mut pre_hook_failure = None;
                 let pre = if invalid_input.is_none() {
@@ -5164,40 +5074,11 @@ impl Agent {
                 }
                 // A hook's explicit ask is a forced permission prompt. It
                 // cannot be bypassed by --approval full or an allow rule.
-                let hook_ask_rejection = if pre
-                    .as_ref()
-                    .and_then(|hook| hook.permission_decision.as_deref())
-                    == Some("ask")
-                {
-                    if !self.interactive {
-                        Some("PreToolUse hook requires interactive approval".to_owned())
-                    } else {
-                        use std::io::Write;
-                        let answer = (|| -> std::io::Result<bool> {
-                            eprintln!(
-                                "PreToolUse hook requests approval for {}",
-                                call.function.name
-                            );
-                            eprint!("Allow once? [y/N] ");
-                            std::io::stderr().flush()?;
-                            let mut response = String::new();
-                            std::io::stdin().read_line(&mut response)?;
-                            Ok(matches!(
-                                response.trim().to_ascii_lowercase().as_str(),
-                                "y" | "yes"
-                            ))
-                        })();
-                        match answer {
-                            Ok(true) => None,
-                            Ok(false) => Some("User rejected PreToolUse hook approval".to_owned()),
-                            Err(error) => Some(format!("PreToolUse approval failed: {error}")),
-                        }
-                    }
-                } else {
-                    None
-                };
-                // A rejected or malformed invocation never executed a tool.
-                // PostToolUse/Failure hooks belong to actual executions only.
+                let hook_ask_rejection = pre.as_ref().and_then(|hook| {
+                    hook.require_tool_approval(self.interactive, &call.function.name)
+                        .err()
+                        .map(|error| format!("{error:#}"))
+                });
                 let pre_blocked = pre.as_ref().and_then(|hook| hook.blocking_reason.clone());
                 let skipped_tool = invalid_input.is_some()
                     || pre_hook_failure.is_some()
@@ -5405,6 +5286,28 @@ fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<S
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn async_rewake_notifications_keep_fifo_order_and_model_reminder_envelope() {
+        let mut messages = Vec::new();
+        append_rewake_messages(
+            &mut messages,
+            &[
+                "first blocking error".to_owned(),
+                "second blocking error".to_owned(),
+            ],
+        );
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages[0].visible_text(),
+            wrap_in_system_reminder("first blocking error")
+        );
+        assert_eq!(
+            messages[1].visible_text(),
+            wrap_in_system_reminder("second blocking error")
+        );
+        assert!(messages.iter().all(|message| message.role == "user"));
+    }
+
     use super::*;
 
     #[test]
@@ -5606,6 +5509,7 @@ mod tests {
             hooks: HookRunner::default(),
             session_context: String::new(),
             pending_initial_user_message: None,
+            pending_rewake_notifications: Vec::new(),
             conversation_context: ConversationContext::capture(dir.path()),
             structured_output: false,
             child_depth: 0,

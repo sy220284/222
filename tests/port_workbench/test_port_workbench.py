@@ -3,13 +3,15 @@ import io
 import json
 import tempfile
 import unittest
+import urllib.error
+from unittest import mock
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from port_workbench import (AuditError, affected_source_paths, check_evidence, collect, label_status,
                             read_matrix, report, resolve_import, verify_counts, current_counts, detect_generated_stubs,
-                            generated_runtime_reachability, verify_github_test_evidence, main)
+                            generated_runtime_reachability, verify_github_test_evidence, github_json, main)
 
 
 class WorkbenchTests(unittest.TestCase):
@@ -166,6 +168,62 @@ class WorkbenchTests(unittest.TestCase):
         (self.repo/'docs/PORT_EVIDENCE.jsonl').write_text(json.dumps(item)+'\n')
         with self.assertRaisesRegex(AuditError,'存在未解决差异'):
             check_evidence(self.repo,read_matrix(self.repo),False)
+
+    def test_github_evidence_retries_transient_failure_and_caches_success(self):
+        github_json.cache_clear()
+        payload = json.dumps({'head_sha':'a'*40, 'conclusion':'success'}).encode()
+        with mock.patch('port_workbench.urllib.request.urlopen') as open_url, \
+             mock.patch('port_workbench.time.sleep') as sleep:
+            open_url.side_effect = [
+                urllib.error.HTTPError('https://api.github.com/test', 503,
+                                      'Unavailable', {}, None),
+                io.BytesIO(payload),
+            ]
+            value = github_json('https://api.github.com/test')
+            self.assertEqual(value['conclusion'], 'success')
+            self.assertEqual(github_json('https://api.github.com/test'), value)
+            self.assertEqual(open_url.call_count, 2)
+            sleep.assert_called_once()
+        github_json.cache_clear()
+
+    def test_github_evidence_recovers_after_multiple_502_errors(self):
+        github_json.cache_clear()
+        payload = json.dumps({'head_sha': 'a'*40, 'conclusion': 'success'}).encode()
+        failures = [
+            urllib.error.HTTPError('https://api.github.com/test', 502,
+                                   'Bad Gateway', {}, None)
+            for _ in range(4)
+        ]
+        with mock.patch('port_workbench.urllib.request.urlopen') as open_url, \
+             mock.patch('port_workbench.time.sleep') as sleep:
+            open_url.side_effect = [*failures, io.BytesIO(payload)]
+            self.assertEqual(
+                github_json('https://api.github.com/test')['conclusion'], 'success')
+            self.assertEqual(open_url.call_count, 5)
+            self.assertEqual(sleep.call_count, 4)
+        github_json.cache_clear()
+
+    def test_github_evidence_still_rejects_persistent_502(self):
+        github_json.cache_clear()
+        with mock.patch('port_workbench.urllib.request.urlopen') as open_url, \
+             mock.patch('port_workbench.time.sleep') as sleep:
+            open_url.side_effect = urllib.error.HTTPError(
+                'https://api.github.com/test', 502, 'Bad Gateway', {}, None)
+            with self.assertRaisesRegex(AuditError, 'HTTP 502'):
+                github_json('https://api.github.com/test')
+            self.assertEqual(open_url.call_count, 7)
+            self.assertEqual(sleep.call_count, 6)
+        github_json.cache_clear()
+
+    def test_github_evidence_never_accepts_permanent_http_errors(self):
+        github_json.cache_clear()
+        with mock.patch('port_workbench.urllib.request.urlopen') as open_url:
+            open_url.side_effect = urllib.error.HTTPError(
+                'https://api.github.com/test', 404, 'Not found', {}, None)
+            with self.assertRaisesRegex(AuditError, 'HTTP 404'):
+                github_json('https://api.github.com/test')
+            self.assertEqual(open_url.call_count, 1)
+        github_json.cache_clear()
 
     def test_verified_evidence_requires_actual_successful_test_job_on_exact_head(self):
         sha = 'a'*40

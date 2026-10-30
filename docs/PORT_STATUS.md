@@ -1,3 +1,34 @@
+## 2026-10-30：按用户指令将 PR #9 的完整变更整合进 PR #6
+
+- **对比范围**：PR #9 `pr7` 起始检查 `1e0e82d2a1d714d3766460caec61d68997491a94`，并继续整合到 `fd1cbdd20db278544a1704361b2f08aa34387ef5`（含 Windows WebSocket 退避关闭测试、Hybrid 消息顺序及 Ping/Pong 协议修复）和全部 28 个变更文件；目标为 PR #6 `fix/manual-source-parity-20261030`，保留目标分支同期修改与本轮已验证的工具链修复。
+- **实际整合**：Agent 异步 Hook 唤醒与失败恢复、Vim 终端状态机、JWT 刷新及 WorkSecret、WebSocket/WSS/SSE/Hybrid/CCR Worker 与上传队列、依赖和验收工具一并保留。工具输入验证、Hook 强制审批、流式中断清理和模型结果回传的原有修复继续保留。
+- **冲突处理**：逐原路径合并迁移矩阵；保留 PR6 的通知/语音生成模块进度，同时登记 PR9 实际 Vim/远程模块；传输选择保留两边代码目标；进度记录保留双方内容；Windows 测试的 accepted socket blocking 修复只保留一份。没有整文件覆盖一边。
+- **实际本地验证**：最终组合 `cargo test --locked --offline --all-targets` 1283 通过、0 失败；25 项 Python 工作台测试通过，联网证据核验通过；1906 条路径保持唯一。Rustfmt、Clippy 正确性/可疑代码门禁及全部目标编译通过。远端 CI 绑定实际合并提交独立核验。
+- **保留验收边界**：此次合并完成代码整合，不把远程模块单测扩大为 CLI/SDK/REPL 完整远程用户链；SDK 复杂配置、全量生产接线和其余源码路径仍按原台账继续开放，PR6 保持 Draft。
+
+## 2026-10-30：PR #9 SSE 无损流处理与 CCR 恢复失败语义修正
+
+- **原版依据**：2.1.88 `source/src/cli/transports/SSETransport.ts` 采用增量 UTF-8 解码和完整事件保活计时；`ccrClient.ts` 的分页读取在失败耗尽后返回失败，不能把部分数据冒充完整结果。
+- **Rust 修复**：`src/transports/sse.rs` 新增跨 HTTP chunk 的 UTF-8 缓冲、截断/无效字节错误及 45 秒完整帧超时；`src/transports/ccr_client.rs` 修复分页游标转义、超时、网络错误显式传播，初始化不再默默吞下读取错误。
+- **验证**：`02fd52e7` 的五项 CI 通过是旧版基线。后续 `be797091` 与本轮提交的新功能及测试必须依据当前 PR HEAD 的全量 Linux、Windows、Rustfmt、Clippy、专项、安全 CI 重新判断；未在当前 HEAD 全绿前继续保持 Draft。
+- **剩余差异**：远程真实生产入口和原版完整 Worker 初始化、令牌生命周期仍待闭环，迁移台账维持“部分实现”，不升级“已验收”。
+
+## 2026-10-30：PR #9 原版函数/真实调用链审计及新增闭环
+
+- **对照来源**：用户原始 Claude Code 2.1.88 源码 `bridge/jwtUtils.ts`、`bridge/workSecret.ts`、`cli/transports/*.ts`、`vim/*.ts`、`utils/hooks.ts` 与 `hooks/useVimInput.ts`。
+- **新增行为**：`src/jwt_utils.rs` 增加按会话 token refresh scheduler（提前五分钟刷新、失败最多三次、无可用令牌一分钟重试、非 JWT 不破坏旧定时器、取消与代际隔离），对应异步测试；`src/agent.rs` 与 `src/main.rs` 补齐 asyncRewake 阻断通知在 Agent 查询中和 SDK 空闲时的消费，并对会话保存失败保留消息。
+- **质量修复**：合并 Rustfmt 格式修复到 `02fd52e7`；该 SHA 的 Linux 编译、单元与集成测试、Rustfmt、Clippy、专项行为及 RustSec 门禁已经通过。之后新增 Hook 行为和本次台账更新须等待各自最新 CI 验证。
+- **保留差异**：新传输模块和令牌刷新逻辑仍缺真实自建 Bridge/SDK 远程入口连接，WebSocket / SSE / Hybrid 完整进出方向、网络恢复、终端/SDK 用户体验尚无三级对照证据。上述原路径仅从“未迁移”调整为“部分实现”，**不增加任何“已验收”数量**；Draft 保持不变。
+## 2026-10-30：工具调用链收敛、流式审批与真实 SDK 中断修复
+
+- **原版依据**：用户 2.1.88 源包的 `services/tools/StreamingToolExecutor.ts`、`toolExecution.ts`、`utils/hooks.ts`，以及 `cli/print.ts` 的 interrupt 路径。对照真实 `Agent::ask`、普通/并发/流式三个调度和 Shell/Hook 进程所有权；保留同期提交的 SDK 双工具续写回归。
+- **统一执行边界**：`ToolExecutor::validate_call_before_hooks` 由三种调度共用；非法 JSON/非对象、搜索、文件别名、任务和 Shell 参数先验证再运行 Hook。`HookOutcome::require_tool_approval` 统一强制 ask；非交互模式即使 full 授权也不得越过 Hook 要求。
+- **模型结果链**：流式保留参数改写、Pre/PostToolUse 附加上下文及 Hook 警告；已执行工具的失败明确回填；非法输入和审批拒绝不进入 PostToolUse。原 `calls` 被流式结果消费后提前结束的问题沿用同期提交的继续模型循环修复。
+- **取消所有权**：`StreamingExecutor::Drop` 中断活动任务；`ToolBlockPump` 与同一 Agent 轮次共同生灭，取消后不再消费缓存块；`discard` 和兄弟 Shell 失败等待已取消任务释放 Hook/Shell 的进程树守卫，避免 JoinHandle 被丢弃后继续写入。
+- **真实回归**：`tests/streaming_tool_hooks_cli.rs` 同时打开/关闭流式调度，以真实 SSE 模型、Hook 子进程和磁盘验证强制审批、参数改写、附加上下文和非法输入；`tests/streaming_tool_calls_cli.rs` 保留双工具恰好一次及模型续写回归，新增 SDK 进程保持存活期间 interrupt 真正终止 Hook 并阻止后续写入。单测另覆盖执行器丢弃、阻塞的块泵、真实 Shell 子进程树取消、重复 drain、Shell 失败和 panic。
+- **同期故障处理**：计数覆盖按原版 JS 字符串存在判断及 parseInt 十进制前缀解析，去掉无依据的布尔门；保留远端新增边界测试并补充溢出等输入。原厂 NPM 清理项从 Rust 维护清单移除，SDK 提示词枚举使用通用名称，旧模型迁移资格接收显式提供方与旧模型集合，不嵌入厂商字符串或偷偷改用户模型。
+- **验收范围**：本地完整测试实跑 1174 项全部通过；合入同期计数解析修复后，其新增边界单测也通过；Rustfmt、Clippy 正确性/可疑代码门禁、全部目标编译和 21 项工作台测试已实际通过。远端最终 CI 须按提交后的真实 HEAD 独立核验。迁移矩阵保持原分类，新增完整原路径验收为 0；SDK initialize 四类复杂配置、真实远程 Bridge、MCP OAuth、完整终端 UI 和大量生成模块生产接线仍未闭环，不能据本次回归提升整个原路径或产品为完整等价。Issue #3 与 Draft 保持开放。
+
 ## 2026-10-30：修复原版 MCP 命名目标的真实 toggle 语义
 
 - **原版证据**：`source/src/commands/mcp/mcp.tsx::MCPToggle` 对命名目标不按 action 过滤状态，直接调用 `toggleMcpServer(name)`；`source/src/services/mcp/useManageMCPConnections.ts` 中 `toggleMcpServer` 对 disabled 执行启用，对所有其它状态执行禁用。此前 Rust 命名目标使用 action 作为期望状态，会让已启用的 `/mcp enable NAME` 保持启用，与原版行为不同。

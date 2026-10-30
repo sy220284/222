@@ -65,7 +65,7 @@
 | `src/bridge/inboundAttachments.ts` | 176 | 6267 | 改造：自建远程连接协议 | `src/bridge_inbound_attachments.rs / src/main.rs` | 部分实现：可信可配置附件服务的 OAuth 风格令牌请求、30秒超时、32MiB分块上限、最多四个并发下载、禁止远程明文凭证及 HTTP 重定向、路径清洗及会话隔离、最后文本块 @引用插入与无附件容错已接入真实 SDK/模型链；上述安全上限是 Rust 额外边界、原版无此限制；上传服务专用协议、重连和所有附件恢复行为仍待等价 |
 | `src/bridge/inboundMessages.ts` | 81 | 2727 | 改造：自建远程连接协议 | `src/multimodal.rs / src/main.rs` | 部分实现：用户消息/UUID 提取、camelCase mediaType 兼容、缺失媒体类型 PNG/JPEG/GIF/WebP 魔数识别已通过 SDK 直接及排队模型 HTTP 测试；远端传输、附件及恢复链仍待迁移 |
 | `src/bridge/initReplBridge.ts` | 570 | 23849 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/jwtUtils.ts` | 257 | 9444 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
+| `src/bridge/jwtUtils.ts` | 257 | 9444 | 改造：自建远程连接协议 | `src/jwt_utils.rs` | 部分实现：已完成 JWT 载荷/到期解析、按会话提前刷新、失效重试、取消和代际隔离并有异步测试；Bridge/REPL 上游令牌获取与真实传输刷新仍未接入，未验收 |
 | `src/bridge/pollConfig.ts` | 111 | 4562 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/pollConfigDefaults.ts` | 83 | 4018 | 改造：自建远程连接协议 | `src/bridge_core.rs` / `src/main.rs` | 已验收：DEFAULT_POLL_CONFIG 原版八项默认值及无额外项精确对照，实际 Bridge SDK 控制调用、会话隔离和不可变配置读取验证通过；证据 bridge_core::tests::source_poll_defaults_are_consistent_for_single_and_multiple_sessions |
 | `src/bridge/remoteBridgeCore.ts` | 1009 | 39434 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
@@ -76,7 +76,7 @@
 | `src/bridge/sessionRunner.ts` | 551 | 18020 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/trustedDevice.ts` | 211 | 7764 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/types.ts` | 263 | 10161 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/workSecret.ts` | 128 | 4672 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
+| `src/bridge/workSecret.ts` | 128 | 4672 | 改造：自建远程连接协议 | `src/work_secret.rs` | 部分实现：版本校验、会话 URL、带标签 ID 比较和 Worker 注册已实现并有单元测试；完整 Bridge 启动及远程鉴权调用链待验收 |
 | `src/buddy/CompanionSprite.tsx` | 371 | 45922 | 重写：保持通用行为 | `src/generated_ports/p_ab10542ccfa4c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/buddy/companion.ts` | 134 | 3715 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/buddy/prompt.ts` | 37 | 1451 | 重写：保持通用行为 | `src/generated_ports/p_bf68628a27ff8.rs`| 部分实现：伙伴介绍文案模板逐字对齐、BUDDY 开关进程级化、已播报去重扫描（历史 attachment 类型与名称匹配、muted 跳过）、registry 兼容导出 companionIntroText，附 2 测试（开关为进程全局，gate 与 dedup 合并顺序单测防并行竞态）|
@@ -94,13 +94,13 @@
 | `src/cli/print.ts` | 5595 | 212735 | 重写：Headless 排队消息合并与会话执行 | `src/queued_prompt_batch.rs` / `src/sdk_queue.rs` / `src/main.rs`；SDK seed_read_state 接入共享会话已读缓存（9743d9bc），源码已提交待验收； | 部分实现：同 workload/meta 提示合并调用和去重计费、结构化 task_notification 系统事件、状态/用量解析；新增按 UUID 原始内容逐条回放（含批次合并与直接 SDK 消息），实际进程+HTTP 验证；原版全输出协议、完整消息确认/生命周期回调、远端 IO 和命令主流程仍未等价；SDK 原生取消待处理 UUID，取消后不会发送模型请求 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；队列同 workload/meta 图文合并单次模型调用及各 UUID 回放已验证；多模态 UI/非图片块仍未等价；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/资源等仍待验证；SDK initialize 已按真实插件/本地技能源文件返回描述和 argumentHint（48e34f9、2da7e57、ffd1056），仅源码提交待验收；排队命令处理、输出协议及取消时序仍未等价；SDK 非排队图文消息现在按原版识别末尾文本块斜杠命令，替换实际模型文本块并保留前置图片（64e2a9b），源码待验收；SDK side_question 独立模型调用已接线（21d3014、e165563），主模型忙碌期间 stdin 控制并发与中断仍缺；队列执行/取消仍缺；SDK 运行中控制：独立 stdin 读取线程和 watch 取消通知已接通 Agent ask、SessionStart、标准及旧版控制响应，SDK interrupt/end_session/now 可唤醒正在执行的主模型（006b2fe8、742656fa，源码已提交待验收）；队列自动调度、子代理取消、恢复时序仍有差异；SDK generate_session_title 现在按原版异步调用独立模型，不阻塞后续 SDK 输入；完成后由 Agent 单一写入口校验原会话 ID 再保存标题、按原始提供商记录 API 耗时与费用（04aa82ba、c0045acb、b2610475、d1449753，源码已提交待验收）；主 Agent 正执行其它模型时的标题回执时序、取消与 5 秒退出排空仍待进一步对齐；SDK 标准控制 rewind_files 已接真实 Agent、文件快照和审批；用户 UUID 经主模型与队列执行传递并支持 dry_run（9a38bb34、69652c1b、4a8bc0d4，源码已提交待验收）；回退响应详细统计/完整异步取消和 SDK 原生 MCP 初始化仍缺 |
 | `src/cli/remoteIO.ts` | 256 | 9946 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/structuredIO.ts` | 860 | 28720 | 重写：保持通用行为 | `src/main.rs / src/agent.rs / src/sse.rs` | 部分实现：NDJSON SDK 多轮、事件和实时文本增量；控制请求体系未全等；SDK 本地控制包络初始化/状态/取消回环，其他协议仍未全等 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；多模态 UI/非图片块仍未等价|
-| `src/cli/transports/HybridTransport.ts` | 283 | 10883 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cli/transports/SSETransport.ts` | 712 | 23758 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cli/transports/SerialBatchEventUploader.ts` | 276 | 9089 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cli/transports/WebSocketTransport.ts` | 801 | 28195 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cli/transports/WorkerStateUploader.ts` | 132 | 3879 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/cli/transports/ccrClient.ts` | 999 | 33775 | 重写：保持通用行为 | `src/generated_ports/p_03ce73c80da6a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/cli/transports/transportUtils.ts` | 46 | 1767 | 重写：保持通用行为 | `src/generated_ports/p_76abc7a665043.rs` | 部分实现：完整等价：传输选择决策核心（CCR_V2→SSE/POST_FOR_SESSION_INGRESS_V2→Hybrid/默认 WS）+v2 流 URL 推导含双单测；具体传输体随各自文件迁移，待验收 |
+| `src/cli/transports/HybridTransport.ts` | 283 | 10883 | 重写：保持通用行为 | `src/transports/hybrid.rs` | 部分实现：WS 读取/POST 上传、合批/重试、100ms 流事件缓冲已有代码与单元测试；SDK/REPL 生产接入、断线恢复、排队交付与关闭回归待验收 |
+| `src/cli/transports/SSETransport.ts` | 712 | 23758 | 重写：保持通用行为 | `src/transports/sse.rs` | 部分实现：已补 SSE 分块 UTF-8 无损解码、错误字节/不完整尾部检测、45 秒无完整帧超时、重连与游标读取，中文单字节分块单测已提交；真实服务网络回归与 SDK/Bridge 生产入口仍待对照验收 |
+| `src/cli/transports/SerialBatchEventUploader.ts` | 276 | 9089 | 重写：保持通用行为 | `src/transports/serial_batch_event_uploader.rs` | 部分实现：批量队列、退避、背压和失败计数已有测试；真实请求送达与并发关闭、重试下的原版行为仍待验收 |
+| `src/cli/transports/WebSocketTransport.ts` | 801 | 28195 | 重写：保持通用行为 | `src/transports/web_socket.rs` | 部分实现：WS/WSS、RFC6455 握手校验、分片组装及重连已有实现；SDK/REPL 实际收发、断线重放/权限隔离与 TLS 网络回归待验收 |
+| `src/cli/transports/WorkerStateUploader.ts` | 132 | 3879 | 重写：保持通用行为 | `src/transports/worker_state_uploader.rs` | 部分实现：状态补丁合并和失败重试已有实现与测试；远程 Worker 状态生产链、关闭与竞态待验收 |
+| `src/cli/transports/ccrClient.ts` | 999 | 33775 | 重写：保持通用行为 | `src/transports/ccr_client.rs / src/generated_ports/p_03ce73c80da6a.rs` / `src/generated_ports/p_03ce73c80da6a.rs` | 部分实现：Worker/HTTP 上传、事件合批、分页游标 URL 转义、30 秒 GET/10 秒写入超时及恢复失败明确传播已提交并有针对性测试；原版初始化 Worker epoch/同步 PUT/心跳/状态恢复与 SDK/Bridge 实际调用链仍未等价 |
+| `src/cli/transports/transportUtils.ts` | 46 | 1767 | 重写：保持通用行为 | `src/transports/mod.rs` / `src/generated_ports/p_76abc7a665043.rs` |部分实现：按环境配置选择 SSE/Hybrid/WebSocket 的路由已有 Rust；SdkOutbound 未使用完整读写协议且尚未进入真实 SDK 调用链，未验收；PR6 原有传输选择与 URL 推导决策及单测保留 |
 | `src/cli/update.ts` | 423 | 14487 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/add-dir/add-dir.tsx` | 126 | 18017 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/add-dir/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/workspace_dirs.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、<path> 参数提示、非即时执行及动态入口全部匹配；CLI 真实目录授权/确认由独立 handler 执行；证据 CI #41041559517 |
@@ -836,7 +836,7 @@
 | `src/hooks/useTurnDiffs.ts` | 214 | 6686 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTypeahead.tsx` | 1385 | 212610 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useUpdateNotification.ts` | 35 | 982 | 重写：终端 UI／交互 | `src/generated_ports/p_e2a7dc8bdd83c.rs` | 部分实现：完整等价：loose semver 三段提取+通知触发比较+状态转移纯函数含双单测；MACRO.VERSION 种子随构建宏，待验收 |
-| `src/hooks/useVimInput.ts` | 317 | 9741 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useVimInput.ts` | 317 | 9741 | 重写：终端 UI／交互 | `src/terminal_input.rs / src/vim/mod.rs` | 部分实现：Vim 键盘状态机接通终端输入，插入、移动、撤销与重复部分可用；原版 Ink 多行输入、粘贴、模式联动及跨平台交互仍待等价 |
 | `src/hooks/useVirtualScroll.ts` | 722 | 35122 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useVoice.ts` | 1145 | 45802 | 重写：终端 UI／交互 | `src/generated_ports/p_5a4cf6e30ce08.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useVoiceEnabled.ts` | 26 | 1134 | 重写：终端 UI／交互 | `src/generated_ports/p_f54a6cc84e937.rs` | 部分实现：完整等价：三输入组合判定（用户意图∧语音授权∧灰度开关）纯函数含单测；OAuth 授权半段随语音链，待验收 |
@@ -902,7 +902,7 @@
 | `src/ink/measure-element.ts` | 24 | 419 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/measure-text.ts` | 48 | 1138 | 重写：终端 UI／交互 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：原始单遍文本宽高测算、尾部空行、非正数/无穷宽度、逐行自动折行已实现；上游所有渲染调用链仍需继续接通 |
 | `src/ink/node-cache.ts` | 55 | 1654 | 重写：终端 UI／交互 | `src/generated_ports/p_965d86a4c90de.rs` | 部分实现：完整等价：CachedLayout 值形状（含 yoga-local top 供视口裁剪）+absolute 待清标志；WeakMap 宿主归 ink DOM，待验收 |
-| `src/ink/optimizer.ts` | 94 | 2588 | 重写：终端 UI／交互 | `src/generated_ports/p_0005dc4d45e8e.rs` | 部分实现：契约记录：diff 单趟优化七规则清单（空 stdout 移除/连续光标合并/零位移去重/相邻 style 拼接/重复超链去重/光标隐藏对取消/零清屏移除）；帧结构随 ink 屏幕层，待验收 |
+| `src/ink/optimizer.ts` | 94 | 2588 | 重写：终端 UI／交互 | 待定 | 未迁移：此前只登记契约，所列 Rust 文件在两分支及历史中均不存在；保留原源码路径，待真实实现与接线 |
 | `src/ink/output.ts` | 798 | 26183 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/parse-keypress.ts` | 802 | 23458 | 重写：终端 UI／交互 | `src/generated_ports/p_22f64b3a15765.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/reconciler.ts` | 513 | 14594 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -912,7 +912,7 @@
 | `src/ink/renderer.ts` | 179 | 7665 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/root.ts` | 185 | 4600 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/screen.ts` | 1487 | 49323 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/searchHighlight.ts` | 94 | 3325 | 重写：终端 UI／交互 | `src/generated_ports/p_8a83436d1ba3a.rs` | 部分实现：AST 转写：屏幕缓冲反色高亮契约（SGR 7+宽字符列映射+黄标叠加分离原注保留）；Screen/StylePool 归 ink 运行时，待验收 |
+| `src/ink/searchHighlight.ts` | 94 | 3325 | 重写：终端 UI／交互 | 待定 | 未迁移：此前只登记契约，所列 Rust 文件在两分支及历史中均不存在；保留原源码路径，待真实实现与接线 |
 | `src/ink/selection.ts` | 918 | 34933 | 重写：终端 UI／交互 | `src/generated_ports/p_9b038cbf2e98a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/squash-text-nodes.ts` | 93 | 2293 | 重写：终端 UI／交互 | `src/generated_ports/p_054fc0ad2fe85.rs` | 部分实现：完整等价：styled segments 树遍历（样式继承合并/最近 hyperlink 传播/文本节点收集）含传播与覆写单测；待验收 |
 | `src/ink/stringWidth.ts` | 223 | 7156 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust DOM 事件传播/键盘事件及 Unicode 宽度路径已编写，完整 TUI 与分割符号待验 |
@@ -963,7 +963,7 @@
 | `src/migrations/migrateBypassPermissionsAcceptedToSettings.ts` | 41 | 1262 | 重写：保持通用行为 | `src/generated_ports/p_8fe3b35097c6f.rs` | 部分实现：完整等价：迁移决策纯函数（未设置早退/未写过才写 settings/幂等）含单测；settings/config 访问器与厂商分析事件（排除）随各自链路接线；待验收 |
 | `src/migrations/migrateEnableAllProjectMcpServersToSettings.ts` | 119 | 3977 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/migrateFennecToOpus.ts` | 46 | 1372 | 重写：保持通用行为 | `src/generated_ports/p_1c5aeb13e35c9.rs` | 部分实现：完整等价：fennec 别名重映射表（四条含 fast 联动）含全表单测；ant 门与 userSettings 限定随原版；待验收 |
-| `src/migrations/migrateLegacyOpusToCurrent.ts` | 58 | 1974 | 重写：保持通用行为 | `src/generated_ports/p_d472ebaa4eeb0.rs` | 部分实现：完整等价：Opus 4.0/4.1 显式串迁移资格门（remap∧1P∧legacy 串）含四分支单测；通知时间戳与 settings 写入随各自链路，待验收 |
+| `src/migrations/migrateLegacyOpusToCurrent.ts` | 58 | 1974 | 重写：保持通用行为 | `src/generated_ports/p_d472ebaa4eeb0.rs` | 部分实现：旧模型资格判定接收显式提供方、迁移目标提供方及旧模型集合；移除专属模型硬编码，不自动改用户模型；通知和配置持久化、生产调用尚未接通，不声称完整等价 |
 | `src/migrations/migrateOpusToOpus1m.ts` | 44 | 1347 | 重写：保持通用行为 | `src/generated_ports/p_9c5d3f64a2870.rs` | 部分实现：完整等价：迁移决策纯函数（仅 eligible 且设置恰为 opus 别名才写，Pro/3P/运行时覆盖跳过语义同款）含单测；模型链访问器接线待验收 |
 | `src/migrations/migrateReplBridgeEnabledToRemoteControlAtStartup.ts` | 23 | 1000 | 重写：保持通用行为 | `src/generated_ports/p_72265c8cdc4d6.rs` | 部分实现：完整等价：replBridgeEnabled→remoteControlAtStartup 迁移决策（拷贝+删旧键+幂等+新键已设跳过）含双单测；saveGlobalConfig 随 settings 链，待验收 |
 | `src/migrations/migrateSonnet1mToSonnet45.ts` | 49 | 1582 | 重写：保持通用行为 | `src/generated_ports/p_2e1b0007c802b.rs` | 部分实现：完整等价：裸 sonnet] 别名钉到显式 4.5 1M 决策纯函数含四分支单测（只动 userSettings 防全局提升）；settings 访问器随 settings 链，待验收 |
@@ -978,7 +978,7 @@
 | `src/outputStyles/loadOutputStylesDir.ts` | 99 | 3438 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/plugins/builtinPlugins.ts` | 160 | 4980 | 重写：保持通用行为 | `src/generated_ports/p_2f9a1e26806ee.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/plugins/bundled/index.ts` | 24 | 843 | 重写：保持通用行为 | `src/generated_ports/p_9800afcbb78b9.rs` | 部分实现：完整等价：init_builtin_plugins 空脚手架与原版一致（含原文档注释）；待验收 |
-| `src/query/config.ts` | 47 | 1808 | 重写：保持通用行为 | `src/query_config.rs` | 部分实现：buildQueryConfig 门快照落地（env 门按仓库中立惯例映射 ATLAS_* 并走 is_env_truthy；streaming tool execution 服务端灰度门在 StreamingToolExecutor 迁移前如实为 false）；快照时序与原版 query() 入口一致，待验收 |
+| `src/query/config.ts` | 47 | 1808 | 重写：保持通用行为 | `src/query_config.rs` | 部分实现：buildQueryConfig 读取 ATLAS_* 门快照；streaming_tool_execution 按进程开关生效并由 Agent 真实调度使用；全部门的原版时序和界面反馈仍待验收 |
 | `src/query/deps.ts` | 41 | 1445 | 重写：保持通用行为 | `src/agent.rs`（既有注入点） | 部分实现：QueryDeps 注入语义由既有 Provider trait 与 Agent 方法注入等价承载，不新增平行结构；待验收 |
 | `src/query/stopHooks.ts` | 474 | 17290 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移；队友完成时在办任务 TaskCompleted→TeammateIdle 原版顺序及阻断继续已接入真实团队执行链（dd67ffc1、984410a6），待验收 |
 | `src/query/tokenBudget.ts` | 94 | 2320 | 重写：保持通用行为 | `src/query_token_budget.rs` | 部分实现：BudgetTracker/checkTokenBudget 逐行还原（0.9 完成阈值、500 双窗口递减判定、Math.round 语义、Intl 千分位续写文案），已接入 agent.rs 主循环完成点（Continue→计数递增与 meta 续写消息，Stop→递减 debug 行）；待验收 |
@@ -1115,8 +1115,8 @@
 | `src/services/tips/tipScheduler.ts` | 59 | 1664 | 重写：保持通用行为 | `src/generated_ports/p_7cdff970345df.rs` | 部分实现：完整等价：selectTipWithLongestTimeSinceShown 选择核心（空返回 None/单元素短路/降序取最长）纯函数含双单测；历史访问器与厂商事件随各自链路接线，待验收 |
 | `src/services/tokenEstimation.ts` | 496 | 16883 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/toolUseSummary/toolUseSummaryGenerator.ts` | 113 | 3376 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | `src/streaming_tool_executor.rs` | 部分实现：流式执行器落地——StreamingDeps 共享快照（hooks/executor/权限输入 Clone+Send+Sync）+ add_tool 并发准入（无 executing 或自身 safe 且 executing 全 safe）+ JoinHandle 注册制排空 + 结果按块序缓冲；OpenAI 兼容流无 per-block 停止信号故以 index 切换+流尾 flush 为块完成边界（sse.rs complete_with_tool_blocks），provider trait 新增 complete_stream_with_tool_blocks 端口（默认聚合后发块，openai 覆写实流式）；Bash/PowerShell 失败经内部 CancelToken 级联取消兄弟任务并合成 Cancelled: parallel tool call 错误（40 字符 tool 描述截断同款）；agent 层独占工具（子代理/团队/任务图/MCP/插件动态名）deferred 回主循环批次路径；主循环 ATLAS_STREAMING_TOOL_EXECUTION 门控接线（对应原 streamingToolExecution 灰度门）。差异：流式 fallback 丢弃（discard）依赖 provider 级降级重试端口未迁移，用户中断合成错误待取消通道贯穿；待验收 |
-| `src/services/tools/toolExecution.ts` | 1746 | 60309 | 重写：工具调用与 Hook 生命周期 | `src/agent.rs / src/hooks.rs / src/tools.rs` | 部分实现：非法输入与 PreToolUse 阻止/失败逐工具回填，跳过实际执行的工具不触发 PostToolUseFailure；已执行工具的 PostToolUse/Failure 获得原版顶层结构化有效输入，失败事件使用 error/is_interrupt 字段；并行调度、取消与完整原版事件时序仍待对照 |
+| `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | `src/streaming_tool_executor.rs` | 部分实现：保序队列、一次性结果、延期独占工具及失败取消已接 Agent；共用输入验证与强制 Hook 审批，保留附加上下文/警告；执行器与块泵受同一模型轮次所有，discard/兄弟失败等待取消清理，SDK interrupt、真实 Shell 进程树和 SSE 回环有回归；中断的完整会话记录、所有提供方 fallback、进度消息和复杂上下文修饰仍待等价 |
+| `src/services/tools/toolExecution.ts` | 1746 | 60309 | 重写：工具调用与 Hook 生命周期 | `src/agent.rs / src/hooks.rs / src/tools.rs` | 部分实现：三种调度共用工具输入验证及 Hook 强制审批；流式有效参数和前后 Hook 上下文/警告进入真实模型回合；非法输入或拒绝不触发执行后 Hook，真实 SSE/文件系统回归已增加；完整原版事件及所有入口仍待等价 |
 | `src/services/tools/toolHooks.ts` | 651 | 22333 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` | 部分实现：PostToolUse 的 MCP 输出替换和连续 Hook 可见性已接入 Agent；完整 Hook 事件/阻断/回调时序仍缺 |
 | `src/services/tools/toolOrchestration.ts` | 189 | 5501 | 重写：保持通用行为 | `src/tool_orchestration.rs` | 部分实现：partitionToolCalls 分区语义（连续只读合批/unsafe 断批/schema 失败与未知工具保守串行）、isConcurrencySafe 表（Read/Glob/Grep/WebFetch/WebSearch 对照原版逐工具核对；Bash 只读条件判定与 task/Agent 类 true 项因 Rust 执行体独占借用保守 false 已记差异）、并发上限 ATLAS_MAX_TOOL_USE_CONCURRENCY（parseInt 非零取值否则 10 语义）已接入 agent.rs 主循环批次调度（safe 批校验/hook 串行+executor.execute 与 PostToolUse hook 并发、结果按块序回填），contextModifier 队列待工具级 modifyContext 端口；待验收 |
 | `src/services/vcr.ts` | 407 | 12166 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1922,11 +1922,11 @@
 | `src/utils/xml.ts` | 17 | 622 | 重写：XML/属性转义函数完整移植 | `src/xml_escape.rs` | 已验收：两种函数字符替换次序、双引号/单引号、Unicode、空输入与多次转义对照；证据 xml_escape::tests |
 | `src/utils/yaml.ts` | 16 | 525 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/zodToJsonSchema.ts` | 24 | 761 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/vim/motions.ts` | 83 | 1902 | 重写：保持通用行为 | `src/generated_ports/p_a3cea9130934b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/vim/operators.ts` | 557 | 15966 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/vim/textObjects.ts` | 187 | 5029 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/vim/transitions.ts` | 491 | 12381 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/vim/types.ts` | 200 | 6332 | 重写：保持通用行为 | `src/generated_ports/p_f4d7ac6b4c8c0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/vim/motions.ts` | 83 | 1902 | 重写：保持通用行为 | `src/vim/motions.rs / src/generated_ports/p_a3cea9130934b.rs` / `src/generated_ports/p_a3cea9130934b.rs` | 部分实现：真实 Rust 小词/大词移动及计数已接线并有测试；边界组合和 Unicode 回归待核验 |
+| `src/vim/operators.ts` | 557 | 15966 | 重写：保持通用行为 | `src/vim/operators.rs` | 部分实现：删除、修改、复制、查找、缩进、合行等操作已有实现；与原版操作范围、寄存器、重复和撤销完整等价待验收 |
+| `src/vim/textObjects.ts` | 187 | 5029 | 重写：保持通用行为 | `src/vim/text_objects.rs` | 部分实现：单词、引号、括号文本对象及嵌套匹配已有测试；实际输入与 Unicode 边界组合待验收 |
+| `src/vim/transitions.ts` | 491 | 12381 | 重写：保持通用行为 | `src/vim/transitions.rs / src/terminal_input.rs` | 部分实现：NORMAL 命令状态机、组合键和计数接通真实终端；完整模式切换、取消及特殊按键序列待验收 |
+| `src/vim/types.ts` | 200 | 6332 | 重写：保持通用行为 | `src/vim/types.rs / src/generated_ports/p_f4d7ac6b4c8c0.rs` / `src/generated_ports/p_f4d7ac6b4c8c0.rs` | 部分实现：状态枚举、光标/操作类型和持久状态已有 Rust；原版完整快捷键、状态生命周期与编辑器体验待验收 |
 | `src/voice/voiceModeEnabled.ts` | 55 | 2332 | 重写：保持通用行为 | `src/generated_ports/p_a176fdc5e2b0c.rs` | 部分实现：语义等价：VOICE_MODE 编译门关闭路径（外部构建行为）——isVoiceGrowthBookEnabled 恒 false 与原版 else 分支逐字一致；auth-only 半段依赖厂商 OAuth 面（排除）已记录；待验收 |
 | `vendor/audio-capture-src/index.ts` | 152 | 4372 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `vendor/image-processor-src/index.ts` | 163 | 4724 | 重写：保持通用行为 | 待定 | 未迁移 |

@@ -20,7 +20,6 @@
 use crate::hooks::HookRunner;
 use crate::protocol::ToolCall;
 use crate::tools::ToolExecutor;
-use futures::stream::StreamExt;
 use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
@@ -127,6 +126,7 @@ pub struct StreamingDeps {
     pub child_depth: u8,
     pub session_id: String,
     pub structured_output: bool,
+    pub interactive: bool,
     pub sdk_allowed_tools: Option<Vec<String>>,
     pub sdk_disallowed_tools: HashSet<String>,
     /// Cancelled when a shell sibling fails; in-flight tasks then return the
@@ -189,6 +189,24 @@ pub struct StreamingExecutor {
     /// `discard()` — a streaming fallback abandons every queued/in-flight
     /// call with the original's synthetic error so old ids never leak.
     discarded: bool,
+    /// Keep aborted tasks owned until their tool/hook/process guards finish.
+    cancelled_tasks: Vec<tokio::task::JoinHandle<ToolOutcomeInternal>>,
+}
+
+impl Drop for StreamingExecutor {
+    fn drop(&mut self) {
+        // SDK interruption drops Agent::ask without entering discard().
+        // A JoinHandle's ordinary Drop would leave its task running.
+        self.deps.bash_cancel.cancel();
+        for tool in &self.tools {
+            if let Some(task) = &tool.join {
+                task.abort();
+            }
+        }
+        for task in &self.cancelled_tasks {
+            task.abort();
+        }
+    }
 }
 
 impl StreamingExecutor {
@@ -198,6 +216,7 @@ impl StreamingExecutor {
             tools: Vec::new(),
             has_errored: false,
             discarded: false,
+            cancelled_tasks: Vec::new(),
         }
     }
 
@@ -298,6 +317,7 @@ impl StreamingExecutor {
         let tracked = &mut self.tools[index];
         if let Some(join) = tracked.join.take() {
             join.abort();
+            self.cancelled_tasks.push(join);
         }
         tracked.status = ToolStatus::Completed;
         tracked.outcome = Some(ToolOutcome {
@@ -399,6 +419,7 @@ impl StreamingExecutor {
                 }
             }
         }
+        self.settle_cancelled_tasks().await;
         let mut outcomes = Vec::new();
         for tracked in &mut self.tools {
             if tracked.status == ToolStatus::Completed {
@@ -413,7 +434,7 @@ impl StreamingExecutor {
 
     /// Cancel queued and in-flight tools when provider streaming fails.
     /// Dropping a JoinHandle alone would detach its dangerous side effects.
-    pub fn discard(&mut self) {
+    pub async fn discard(&mut self) {
         self.discarded = true;
         self.deps.bash_cancel.cancel();
         for index in 0..self.tools.len() {
@@ -426,6 +447,15 @@ impl StreamingExecutor {
                     "ERROR: Streaming fallback - tool execution discarded",
                 );
             }
+        }
+        self.settle_cancelled_tasks().await;
+    }
+
+    async fn settle_cancelled_tasks(&mut self) {
+        for task in self.cancelled_tasks.drain(..) {
+            // Errors are already represented by the single synthetic tool
+            // result. Await here so callers cannot resume before cleanup.
+            let _ = task.await;
         }
     }
 }
@@ -474,55 +504,62 @@ async fn run_streamed_tool(deps: &Arc<StreamingDeps>, mut call: ToolCall) -> Too
         || deps
             .sdk_disallowed_tools
             .contains(crate::tool_names::canonical_name(&call.function.name));
-    let result = if restricted {
+    let mut pre_contexts = Vec::new();
+    let mut post_contexts = Vec::new();
+    let mut result = if restricted {
         format!(
             "ERROR: Tool {} is unavailable to this agent's tool policy",
             call.function.name
         )
+    } else if let Err(error) = deps.executor.validate_call_before_hooks(&call) {
+        format!("ERROR: {error:#}")
     } else {
-        // PreToolUse stage: a failed or blocking hook never executes the
-        // tool, mirroring the serial path's synthesized pre-execution errors.
-        let pre_failure: Option<String> = match deps
+        match deps
             .hooks
             .before_tool_with_context(&call, hook_input.clone())
             .await
         {
-            Err(error) => Some(format!("ERROR: PreToolUse hook failed: {error:#}")),
-            Ok(outcome) => {
-                if let Some(updated) = outcome.updated_input.as_ref() {
-                    call.function.arguments = serde_json::to_string(updated)
-                        .unwrap_or_else(|_| call.function.arguments.clone());
+            Err(error) => format!("ERROR: PreToolUse hook failed: {error:#}"),
+            Ok(pre) => {
+                emit_hook_warnings(deps, &call, "PreToolUse", &pre.non_blocking_errors);
+                pre_contexts = pre.additional_context.clone();
+                if let Some(reason) = &pre.blocking_reason {
+                    format!("ERROR: PreToolUse hook blocked: {reason}")
+                } else if let Err(error) =
+                    pre.require_tool_approval(deps.interactive, &call.function.name)
+                {
+                    format!("ERROR: {error:#}")
+                } else {
+                    if let Some(updated) = pre.updated_input {
+                        // A JSON Value always serializes. Do not silently use
+                        // stale pre-hook arguments if the representation changes.
+                        call.function.arguments = updated.to_string();
+                    }
+                    let raw = deps.executor.execute(&call).await;
+                    let (post, mut output): (crate::hooks::HookOutcome, String) = match deps.hooks
+                        .after_tool_with_context(&call, &raw, hook_input).await {
+                        Ok(outcome) => (outcome, raw),
+                        Err(error) => (Default::default(), format!(
+                            "ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: {raw}")),
+                    };
+                    emit_hook_warnings(deps, &call, "PostToolUse", &post.non_blocking_errors);
+                    if let Some(reason) = post.blocking_reason {
+                        output.push_str(&format!(
+                            "\nPostToolUse hook blocked continuation: {reason}"
+                        ));
+                    }
+                    post_contexts = post.additional_context;
+                    output
                 }
-                outcome
-                    .blocking_reason
-                    .map(|reason| format!("ERROR: PreToolUse hook blocked: {reason}"))
             }
-        };
-        if let Some(reason) = pre_failure {
-            reason
-        } else {
-            let raw = deps.executor.execute(&call).await;
-            let (post, mut result): (crate::hooks::HookOutcome, String) = match deps
-                .hooks
-                .after_tool_with_context(&call, &raw, hook_input)
-                .await
-            {
-                Ok(outcome) => (outcome, raw),
-                Err(error) => (
-                    Default::default(),
-                    format!(
-                        "ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: {raw}"
-                    ),
-                ),
-            };
-            if let Some(reason) = post.blocking_reason {
-                result.push_str(&format!(
-                    "\nPostToolUse hook blocked continuation: {reason}"
-                ));
-            }
-            result
         }
     };
+    for context in pre_contexts {
+        result.push_str(&format!("\n[PreToolUse hook context] {context}"));
+    }
+    for context in post_contexts {
+        result.push_str(&format!("\n[Local hook context] {context}"));
+    }
     let errored = result.starts_with("ERROR:");
     ToolOutcomeInternal {
         call,
@@ -532,13 +569,50 @@ async fn run_streamed_tool(deps: &Arc<StreamingDeps>, mut call: ToolCall) -> Too
     }
 }
 
-/// Consume the live tool-block channel until the response completes.
-pub async fn pump_blocks(
-    mut blocks: UnboundedReceiver<ToolCall>,
-    executor: Arc<Mutex<StreamingExecutor>>,
-) {
-    while let Some(call) = blocks.recv().await {
-        let _ = executor.lock().unwrap().add_tool(call);
+fn emit_hook_warnings(deps: &StreamingDeps, call: &ToolCall, event: &str, warnings: &[String]) {
+    for warning in warnings {
+        eprintln!("{warning}");
+        if deps.structured_output {
+            println!(
+                "{}",
+                crate::ndjson::stringify_value(&serde_json::json!({
+                    "type":"hook_warning", "hook_event_name":event,
+                    "tool_use_id":call.id,"message":warning,"session_id":deps.session_id,
+                }))
+            );
+        }
+    }
+}
+
+/// Own the block reader for exactly one model turn. Dropping an interrupted
+/// Agent future must cancel this task too; otherwise it retains the executor
+/// and can dispatch buffered blocks after their original turn has ended.
+pub struct ToolBlockPump {
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl ToolBlockPump {
+    pub fn spawn(
+        mut blocks: UnboundedReceiver<ToolCall>,
+        executor: Arc<tokio::sync::Mutex<StreamingExecutor>>,
+    ) -> Self {
+        Self {
+            task: tokio::spawn(async move {
+                while let Some(call) = blocks.recv().await {
+                    executor.lock().await.add_tool(call);
+                }
+            }),
+        }
+    }
+
+    pub async fn finish(&mut self) -> Result<(), tokio::task::JoinError> {
+        (&mut self.task).await
+    }
+}
+
+impl Drop for ToolBlockPump {
+    fn drop(&mut self) {
+        self.task.abort();
     }
 }
 
@@ -561,6 +635,7 @@ mod tests {
             child_depth: 0,
             session_id: "audit".to_owned(),
             structured_output: false,
+            interactive: false,
             sdk_allowed_tools: None,
             sdk_disallowed_tools: HashSet::new(),
             bash_cancel: CancelToken::default(),
@@ -605,6 +680,84 @@ mod tests {
             outcome: None,
             join: Some(task),
         }
+    }
+
+    #[tokio::test]
+    async fn dropping_cancelled_agent_turn_cannot_detach_streamed_tools() {
+        let folder = tempfile::tempdir().unwrap();
+        let target = folder.path().join("must_not_exist");
+        let mut executor = StreamingExecutor::new(deps());
+        let pending = call("write_file", "interrupted");
+        let task_call = pending.clone();
+        let task = tokio::spawn(async move {
+            sleep(Duration::from_millis(50)).await;
+            std::fs::write(target, "stale side effect").unwrap();
+            ToolOutcomeInternal {
+                call: task_call,
+                result: "written".to_owned(),
+                errored: false,
+                started: Instant::now(),
+            }
+        });
+        executor.tools.push(executing(pending, task));
+        // SDK interrupt drops Agent::ask rather than calling discard.
+        drop(executor);
+        sleep(Duration::from_millis(100)).await;
+        assert!(!folder.path().join("must_not_exist").exists());
+    }
+
+    #[tokio::test]
+    async fn interrupted_block_pump_cannot_dispatch_buffered_tools() {
+        let folder = tempfile::tempdir().unwrap();
+        let mut dependencies = deps();
+        dependencies.executor =
+            ToolExecutor::new(folder.path().canonicalize().unwrap(), Approval::Full, false);
+        let shared = Arc::new(tokio::sync::Mutex::new(StreamingExecutor::new(
+            dependencies,
+        )));
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let mut write = call("write_file", "buffered");
+        write.function.arguments = json!({"path":"stale-write", "content":"forbidden"}).to_string();
+        sender.send(write).unwrap();
+        // Hold the executor exactly where an in-flight block reader waits.
+        let held = shared.lock().await;
+        let pump = ToolBlockPump::spawn(receiver, shared.clone());
+        tokio::task::yield_now().await;
+        drop(pump);
+        drop(held);
+        drop(shared);
+        drop(sender);
+        sleep(Duration::from_millis(50)).await;
+        assert!(!folder.path().join("stale-write").exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn dropping_executor_stops_real_shell_process_tree() {
+        let folder = tempfile::tempdir().unwrap();
+        let root = folder.path().canonicalize().unwrap();
+        let mut dependencies = deps();
+        dependencies.executor = ToolExecutor::new(root.clone(), Approval::Full, false);
+        let mut executor = StreamingExecutor::new(dependencies);
+        let mut shell = call("run_command", "shell-interrupted");
+        shell.function.arguments = json!({
+            "command":"printf started > started; sleep 0.3; printf forbidden > late-write"
+        })
+        .to_string();
+        executor.add_tool(shell);
+        timeout(Duration::from_secs(3), async {
+            while !root.join("started").exists() {
+                sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("real shell must start before interruption");
+        drop(executor);
+        sleep(Duration::from_millis(400)).await;
+        assert!(
+            !root.join("late-write").exists(),
+            "cancelled shell survived its owner"
+        );
     }
 
     #[tokio::test]
@@ -730,7 +883,7 @@ mod tests {
         });
         let call = call("write_file", "pending_write");
         executor.tools.push(executing(call, task));
-        executor.discard();
+        executor.discard().await;
         sleep(Duration::from_millis(250)).await;
         assert!(!folder.path().join("must_not_exist").exists());
         assert_eq!(executor.drain().await.len(), 1);

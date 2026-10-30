@@ -12,8 +12,8 @@ pub const DELAY_VERY_SLOW_OPERATIONS_MS: u64 = 10 * 60 * 1000;
 pub const FAST_RECURRING_INTERVAL_MS: u64 = 5 * 60 * 1000;
 
 /// Roster entries whose init functions port with their own feature chains.
+/// Vendor NPM cache cleanup is excluded from the independent Rust runtime.
 pub const HOUSEKEEPING_ROSTER: &[&str] = &[
-    "cleanupNpmCacheForProviderPackages",
     "cleanupOldMessageFilesInBackground",
     "cleanupOldVersionsThrottled",
     "cleanupOldVersions",

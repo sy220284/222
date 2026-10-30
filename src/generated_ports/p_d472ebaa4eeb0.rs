@@ -1,24 +1,19 @@
-//! Rust exports derived from original: src/migrations/migrateLegacyOpusToCurrent.ts
+//! Provider-neutral eligibility predicate derived from the legacy-model migration.
 //!
-//! Full equivalence of the eligibility decision: first-party users still
-//! pinned to explicit Opus 4.0/4.1 strings get migrated off them (the
-//! "opus" alias already resolves to 4.6) and a one-time notification
-//! timestamp is set. Gate combination mirrors the original gates.
+//! Migration policy belongs to the configured provider: this module never
+//! embeds a vendor model list or changes a user's selected model implicitly.
+//! Settings persistence and one-time notifications remain separate obligations.
 
-/// Whether the legacy-string migration runs for this user.
 pub fn migration_eligible(
-    legacy_remap_enabled: bool,
+    remap_enabled: bool,
     api_provider: &str,
+    migration_provider: &str,
     saved_model: Option<&str>,
+    legacy_models: &[&str],
 ) -> bool {
-    let is_legacy = matches!(
-        saved_model,
-        Some("vendor-opus-4-0")
-            | Some("vendor-opus-4-1")
-            | Some("vendor-opus-4-0-20250514")
-            | Some("vendor-opus-4-1-20250805")
-    );
-    legacy_remap_enabled && api_provider == "firstParty" && is_legacy
+    remap_enabled
+        && api_provider == migration_provider
+        && saved_model.is_some_and(|model| legacy_models.contains(&model))
 }
 
 #[cfg(test)]
@@ -27,21 +22,49 @@ mod tests {
 
     #[test]
     fn gate_combination() {
-        assert!(migration_eligible(
-            true,
-            "firstParty",
-            Some("vendor-opus-4-1")
-        ));
+        let models = [
+            "legacy-4-0",
+            "legacy-4-1",
+            "legacy-4-20250514",
+            "legacy-4-1-20250805",
+        ];
+        for model in models {
+            assert!(migration_eligible(
+                true,
+                "local",
+                "local",
+                Some(model),
+                &models
+            ));
+            assert!(!migration_eligible(
+                false,
+                "local",
+                "local",
+                Some(model),
+                &models
+            ));
+            assert!(!migration_eligible(
+                true,
+                "other",
+                "local",
+                Some(model),
+                &models
+            ));
+        }
         assert!(!migration_eligible(
-            false,
-            "firstParty",
-            Some("vendor-opus-4-1")
+            true,
+            "local",
+            "local",
+            Some("current"),
+            &models
         ));
+        assert!(!migration_eligible(true, "local", "local", None, &models));
         assert!(!migration_eligible(
             true,
-            "bedrock",
-            Some("vendor-opus-4-1")
+            "local",
+            "local",
+            Some("legacy-4-0"),
+            &[]
         ));
-        assert!(!migration_eligible(true, "firstParty", Some("opus")));
     }
 }

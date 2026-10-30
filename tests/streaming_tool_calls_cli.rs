@@ -180,3 +180,102 @@ fn streamed_tool_calls_execute_once_and_resume_sdk_turn() {
         .contains("contents from B"));
     assert!(String::from_utf8_lossy(&output.stdout).contains("Done"));
 }
+
+#[cfg(unix)]
+#[test]
+fn sdk_interrupt_cancels_in_flight_streamed_hook_before_file_write() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut stream = accept_before(&listener, Instant::now() + Duration::from_secs(10));
+        let request = read_request(&mut stream);
+        assert_eq!(request["stream"], true);
+        // Moving to block 1 admits the complete block 0 while the provider
+        // request is still in progress. Do not send the finish marker.
+        let data = [
+            json!({"choices":[{"delta":{"role":"assistant","tool_calls":[{
+                "index":0,"id":"late-write","type":"function","function":{
+                    "name":"write_file","arguments":json!({"path":"forbidden.txt",
+                        "content":"stale side effect"}).to_string()}}]}}]}),
+            json!({"choices":[{"delta":{"tool_calls":[{"index":1,"id":"next-block",
+                "type":"function","function":{"name":"read_file","arguments":"{}"}}]}}]}),
+        ]
+        .iter()
+        .map(|event| format!("data: {event}\n\n"))
+        .collect::<String>();
+        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\n\r\n{data}",data.len()+1000).unwrap();
+        stream.flush().unwrap();
+        thread::sleep(Duration::from_millis(900));
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock","stream":true,
+            "base_url":format!("http://{addr}/v1")}],"hooks":[{
+            "event":"PreToolUse","matcher":"^write_file$",
+            "command":"printf started > hook-start; sleep 0.4; printf '%s' '{}'"}]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .env("ATLAS_STREAMING_TOOL_EXECUTION", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = child.stdin.take().unwrap();
+    writeln!(input, "{}", json!({"type":"user","content":"Write a file"})).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !root.path().join("hook-start").exists() {
+        assert!(Instant::now() < deadline, "streamed hook never started");
+        thread::sleep(Duration::from_millis(5));
+    }
+    writeln!(
+        input,
+        "{}",
+        json!({"type":"control_request","request_id":"cancel",
+        "request":{"subtype":"interrupt"}})
+    )
+    .unwrap();
+    writeln!(input, "{}", json!({"type":"control","action":"cost"})).unwrap();
+    // Keep the SDK process alive across the old hook completion time. Process
+    // exit must not be what prevents the detached tool from writing.
+    thread::sleep(Duration::from_millis(650));
+    let wrote_after_interrupt = root.path().join("forbidden.txt").exists();
+    drop(input);
+    let output = child.wait_with_output().unwrap();
+    server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !wrote_after_interrupt,
+        "SDK cancellation left a live tool writer"
+    );
+    let wire = String::from_utf8_lossy(&output.stdout);
+    assert!(wire.contains("SDK request interrupted"), "{wire}");
+    let events = wire
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        events
+            .iter()
+            .any(|event| event["action"] == "cost" && event["ok"] == true),
+        "{wire}"
+    );
+}

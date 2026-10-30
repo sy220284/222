@@ -45,7 +45,9 @@ mod tests {
             .unwrap();
         assert_eq!(cfg.session_id, "s1");
         assert_eq!(cfg.server_url, "http://srv");
-        let err = parse_connect_response(&json!({"sessionId": "s1"}), "http://srv").unwrap_err();
+        let err = parse_connect_response(&json!({"sessionId": "s1"}), "http://srv")
+            .err()
+            .expect("missing secret must be rejected");
         assert!(err.contains("apiKey") && err.contains("http://srv"));
     }
 }

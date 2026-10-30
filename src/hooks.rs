@@ -148,6 +148,34 @@ pub struct HookOutcome {
     pub non_blocking_errors: Vec<String>,
 }
 
+impl HookOutcome {
+    /// All tool schedulers must honor an explicit hook `ask`, even when
+    /// ordinary tools are allowed without prompting. This does not replace
+    /// the executor's own permission policy.
+    pub fn require_tool_approval(&self, interactive: bool, tool_name: &str) -> Result<()> {
+        if self.permission_decision.as_deref() != Some("ask") {
+            return Ok(());
+        }
+        if !interactive {
+            bail!("PreToolUse hook requires interactive approval");
+        }
+        use std::io::Write;
+        eprintln!("PreToolUse hook requests approval for {tool_name}");
+        eprint!("Allow once? [y/N] ");
+        std::io::stderr()
+            .flush()
+            .context("PreToolUse approval failed")?;
+        let mut response = String::new();
+        std::io::stdin()
+            .read_line(&mut response)
+            .context("PreToolUse approval failed")?;
+        if !matches!(response.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+            bail!("User rejected PreToolUse hook approval");
+        }
+        Ok(())
+    }
+}
+
 /// Source hook matchers use exact tool names for simple strings, not
 /// substring regexes. A missing event query bypasses matcher filtering.
 #[derive(Clone)]
@@ -596,14 +624,11 @@ fn validate_hook_json(value: &Value, expected: &str) -> Result<()> {
     if !value.is_object() {
         bail!("Hook output must be an object")
     }
-    if let Some(async_field) = value.get("async") {
-        if async_field != true {
-            bail!("async must be literal true");
-        }
-        // Do not misrepresent an asynchronous hook as completed. Its process
-        // registration, wakeup and timeout must be implemented separately.
-        bail!("Async hook registry is not yet implemented");
-    }
+    // `async` / `asyncTimeout` belong to the union's async variant. When one
+    // still reaches the sync validation path (e.g. pretty-printed output the
+    // first-line handshake could not parse), the original falls through to the
+    // non-strict sync schema: both keys are stripped as unknown and the result
+    // is an empty, successful no-op (hooks.ts:2535 outcome 'success').
     for name in ["continue", "suppressOutput"] {
         if value.get(name).is_some_and(|x| !x.is_boolean()) {
             bail!("{name}: expected boolean")
@@ -1594,6 +1619,25 @@ mod tests {
         assert!(result.prevent_continuation);
         assert!(result.blocking_reason.is_none());
         assert!(result.permission_decision.is_none());
+    }
+    #[test]
+    fn async_variant_output_reaching_sync_validation_is_a_stripped_noop() {
+        // types/hooks.ts:171-177 — the hookJSONOutputSchema union validates the
+        // async variant; hooks.ts:2535 then yields plain 'success'. When the
+        // first-line handshake misses the acknowledgement (pretty-printed
+        // JSON), the sync path must not error: unknown union keys are stripped
+        // and every remaining field is absent, so the outcome is a no-op.
+        for output in [
+            json!({"async": true}),
+            json!({"async": true, "asyncTimeout": 30_000}),
+            // Non-literal async values fail the async schema but are stripped
+            // by the non-strict sync schema exactly like any unknown key.
+            json!({"async": false}),
+            json!({"async": "true"}),
+        ] {
+            validate_hook_json(&output, "PreToolUse")
+                .unwrap_or_else(|error| panic!("{output}: {error:#}"));
+        }
     }
     #[test]
     fn agent_tool_hooks_match_the_reachable_rust_spawn_entrypoints() {
