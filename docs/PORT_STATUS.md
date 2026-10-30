@@ -1,3 +1,11 @@
+## 2026-10-29：后台 Shell 输出按原版迁出源码工作区（已提交、待验收）
+
+- **原版依据**：完整 2.1.88 源码 `source/src/utils/task/diskOutput.ts:36–68::getTaskOutputDir` 将后台任务 stdout/stderr 放在 `getProjectTempDir()/sessionId/tasks`，首次访问固定会话目录；`source/src/utils/permissions/filesystem.ts:376::getProjectTempDir` 从项目临时目录生成位置，防止输出进入项目文件树。
+- **原 Rust 缺口**：`src/background.rs::BackgroundTasks::for_session` 将后台输出放在工作区 `.atlas/background/<session>`，会被项目搜索、索引或误提交；新建会话输出与原版临时隔离不符。
+- **实际补齐**：`src/agent.rs` 的会话初始化 → `BackgroundTasks::for_session` → `start_with_shell` → 任务输出/元数据读写，改为系统临时目录下按用户、规范化项目哈希和固定会话 UUID 隔离；Unix 校验目录属主、拒绝符号链接并设置 0700，禁止共享临时目录中的路径重定向。已有旧版 Rust 会话若仍有历史任务记录，继续从原工作区目录读取，避免升级后丢失可见任务输出；并发创建目录时验证已有目录而不吞掉其他错误。
+- **Rust 提交**：`778aaad271d03a03a6d37ab6b792ee27c974d152`、`fb9ea96087f2c7b2f2c9d816a5c6adc5c1c4de20`、`b80f335054023abbe901fbea1e886b01c040d6bd`，涉及 `src/background.rs`。保守计 **1 项独立用户可感知业务功能**，源码已提交、待行为验收；未运行 Cargo、Actions、单元或集成测试。
+- **剩余精确差异**：旧版有记录的会话仍留在旧目录，尚未执行安全迁移；Windows 目录 ACL、系统临时目录清理、跨进程活任务/输出文件恢复、原版 `/clear` 前后任务可达时序及全量任务输出生命周期仍需核对。先行 100 项逐功能双侧确认清单与完整实施方案未完成，本轮 **1/100，余 99**；Issue #3 冻结 362 条保持开放，新增完整等价验收 0。
+
 ## 2026-10-29：超大文件读取失效时清除旧编辑授权（源码已提交、待验收）
 
 - **原版依据**：`source/src/utils/fileStateCache.ts:30–48::FileStateCache.set` 使用 `lru-cache` 的 100 项、25MiB 大小限制；新值超限时同一文件的旧缓存不得继续作为有效读取状态。
