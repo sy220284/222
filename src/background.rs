@@ -65,6 +65,9 @@ pub struct TaskRecord {
     pub error_file: String,
     #[serde(default)]
     pub truncated: bool,
+    /// Persist a user-readable failure cause across session restarts.
+    #[serde(default)]
+    pub failure_reason: Option<String>,
 }
 
 struct Running {
@@ -546,6 +549,7 @@ impl BackgroundTasks {
             output_file: output_path.to_string_lossy().to_string(),
             error_file: stderr_path.to_string_lossy().to_string(),
             truncated: false,
+            failure_reason: None,
         };
         if let Err(error) = Self::save(&self.directory, &record) {
             // A started shell must not survive an unsuccessful task registration.
@@ -555,7 +559,9 @@ impl BackgroundTasks {
                 let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
             }
             #[cfg(windows)]
-            let tree_error = job.terminate().err();
+            let tree_error = crate::shell_runtime::terminate_windows_process_tree(child.id())
+                .await
+                .err();
             let _ = child.kill().await;
             let _ = child.wait().await;
             drop(stdout);
@@ -589,17 +595,25 @@ impl BackgroundTasks {
                 capped: false,
             }));
             let output_limit_reached = Arc::new(Notify::new());
-            let mut stdout_task = tokio::spawn(spool_merged(
+            // If a spooler loses its output file, the other pipe can fill and
+            // block the shell forever. Surface the failure to the supervisor
+            // immediately, then terminate the whole process tree.
+            let output_writer_failed = Arc::new(Notify::new());
+            let mut stdout_task = tokio::spawn(spool_merged_checked(
                 stdout,
                 stdout_file,
                 merged.clone(),
                 output_limit_reached.clone(),
+                output_writer_failed.clone(),
+                "stdout",
             ));
-            let mut stderr_task = tokio::spawn(spool_merged(
+            let mut stderr_task = tokio::spawn(spool_merged_checked(
                 stderr,
                 stderr_file,
                 merged.clone(),
                 output_limit_reached.clone(),
+                output_writer_failed.clone(),
+                "stderr",
             ));
             let process_id = child.id();
             let deadline_at = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
@@ -607,6 +621,7 @@ impl BackgroundTasks {
             tokio::pin!(deadline);
             let mut stop_requested = false;
             let mut killed_for_output_cap = false;
+            let mut failed_for_output_io = false;
             let (mut state, mut code, mut timed_out) = tokio::select! {
                 result = child.wait() => match result {
                     Ok(status) if status.success() => ("completed", status.code(), false),
@@ -643,6 +658,17 @@ impl BackgroundTasks {
                     let _ = child.kill().await;
                     ("failed", Some(137), false)
                 },
+                _ = output_writer_failed.notified() => {
+                    failed_for_output_io = true;
+                    #[cfg(unix)]
+                    if let Some(pid) = child.id() {
+                        let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+                    }
+                    #[cfg(windows)]
+                    let _ = terminate_windows_task_tree(child.id(), Some(&running)).await;
+                    let _ = child.kill().await;
+                    ("failed", None, false)
+                },
                 _ = &mut deadline => {
                     #[cfg(unix)]
                     if let Some(pid) = child.id() {
@@ -660,12 +686,16 @@ impl BackgroundTasks {
             // A stop request must also interrupt output draining. The shell
             // can exit while a descendant keeps its pipes open; waiting for
             // the original 10-minute deadline makes TaskStop falsely time out.
-            let drain_deadline =
-                if timed_out || stop_requested || killed_for_output_cap || state == "killed" {
-                    tokio::time::Instant::now() + Duration::from_secs(1)
-                } else {
-                    deadline_at
-                };
+            let drain_deadline = if timed_out
+                || stop_requested
+                || killed_for_output_cap
+                || failed_for_output_io
+                || state == "killed"
+            {
+                tokio::time::Instant::now() + Duration::from_secs(1)
+            } else {
+                deadline_at
+            };
             let mut cancelled_during_drain = false;
             let output_results = tokio::select! {
                 pair = async { tokio::join!(&mut stdout_task, &mut stderr_task) } => Some(pair),
@@ -676,6 +706,10 @@ impl BackgroundTasks {
                 },
                 _ = output_limit_reached.notified(), if !killed_for_output_cap => {
                     killed_for_output_cap = true;
+                    None
+                },
+                _ = output_writer_failed.notified(), if !failed_for_output_io => {
+                    failed_for_output_io = true;
                     None
                 },
             };
@@ -711,6 +745,11 @@ impl BackgroundTasks {
                     if killed_for_output_cap {
                         state = "failed";
                         code = Some(137);
+                    } else if failed_for_output_io {
+                        // A disk write failure is not a command timeout. Preserve
+                        // the actual failure reason in task status and diagnostics.
+                        state = "failed";
+                        code = None;
                     } else {
                         if cancelled_during_drain {
                             state = "killed";
@@ -725,7 +764,7 @@ impl BackgroundTasks {
                         let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                     }
                     #[cfg(windows)]
-                    if !terminate_windows_task_tree(&job, Some(&running)) {
+                    if !terminate_windows_task_tree(process_id, Some(&running)).await {
                         state = "failed";
                     }
                     stdout_task.abort();
@@ -775,6 +814,24 @@ impl BackgroundTasks {
                 state_record.status = state.into();
                 state_record.exit_code = code;
                 state_record.truncated = out || err;
+                state_record.failure_reason = if killed_for_output_cap {
+                    Some("Background command exceeded the 5 GiB output limit".to_owned())
+                } else if timed_out {
+                    Some(format!(
+                        "Background command timed out after {timeout_ms} milliseconds"
+                    ))
+                } else if state == "killed" {
+                    None
+                } else if failed_for_output_io || stdout_failed || stderr_failed {
+                    Some(
+                        "Background command output could not be saved; the process was terminated"
+                            .to_owned(),
+                    )
+                } else if merged_failed {
+                    Some("Background command combined output could not be saved".to_owned())
+                } else {
+                    None
+                };
                 state_record.clone()
             };
             if let Err(error) = Self::save(&folder, &updated) {
@@ -862,6 +919,7 @@ impl BackgroundTasks {
             "task_id":record.id,"task_type":"local_bash",
             "status":record.status,"description":record.description,
             "output":displayed.content,"exitCode":record.exit_code,
+            "error":record.failure_reason,
             "output_file":result_path.to_string_lossy(),
             "persistenceWarning":self.entries.lock().unwrap().get(id)
                 .and_then(|task| task.persistence_warning.lock().unwrap().clone()),
@@ -931,6 +989,7 @@ impl BackgroundTasks {
                 "description":record.description,
                 "status":record.status,
                 "exitCode":record.exit_code,
+                "error":record.failure_reason,
                 "persistenceWarning":live.get(id)
                     .and_then(|task| task.persistence_warning.lock().unwrap().clone())
             }));
@@ -1175,6 +1234,24 @@ async fn spool_with_limit<R: AsyncRead + Unpin>(
     Ok(truncated)
 }
 
+// Report a failed spool immediately. Waiting until child.wait() returns
+// deadlocks when the shell is blocked on the pipe whose reader has exited.
+async fn spool_merged_checked<R: AsyncRead + Unpin>(
+    stream: R,
+    individual: tokio::fs::File,
+    combined: Arc<AsyncMutex<CombinedLog>>,
+    output_limit_reached: Arc<Notify>,
+    output_writer_failed: Arc<Notify>,
+    stream_name: &'static str,
+) -> Result<bool> {
+    let result = spool_merged(stream, individual, combined, output_limit_reached).await;
+    if let Err(ref error) = result {
+        eprintln!("Background {stream_name} output writer failed: {error:#}");
+        output_writer_failed.notify_one();
+    }
+    result
+}
+
 // Append both pipes to one transcript in chunk arrival order, using a
 // shared 5 GiB cap. Keep the separate files for existing diagnostics.
 async fn spool_merged<R: AsyncRead + Unpin>(
@@ -1195,6 +1272,12 @@ async fn spool_merged<R: AsyncRead + Unpin>(
         if writable > 0 {
             shared.file.write_all(&buffer[..writable]).await?;
             individual.write_all(&buffer[..writable]).await?;
+            // Tokio's file adapter may buffer successful write_all calls.
+            // Flush each chunk to the OS before acknowledging it: otherwise
+            // ENOSPC/EIO can remain hidden while a child blocks on a full pipe.
+            // This is a userspace flush, not a per-chunk fsync to stable media.
+            shared.file.flush().await?;
+            individual.flush().await?;
             shared.size += writable as u64;
         }
         if writable < n {
@@ -1233,7 +1316,7 @@ pub fn definitions() -> Vec<Value> {
             "description":"Read appended stdout by byte offset; defaults to 8MiB, but honors explicit larger ranges; never follows a symlink.",
             "parameters":{"type":"object","properties":{
                 "task_id":{"type":"string"},"from_offset":{"type":"integer","minimum":0},
-                "max_bytes":{"type":"integer","minimum":0,"maximum":LOG_CAP}
+                "max_bytes":{"type":"integer","minimum":0,"maximum":5368709120_i64}
             },"required":["task_id"]}}}),
         json!({"type":"function","function":{"name":"task_stop",
         "description":"Stop a running background shell task by ID. Requires approval.",
@@ -1247,6 +1330,62 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn failed_background_spool_notifies_supervisor_without_waiting_for_eof() {
+        // /dev/full accepts an open but rejects actual writes. Keep the
+        // simulated shell pipe open: a supervisor that only waits for EOF
+        // would hang instead of learning that output persistence has failed.
+        let directory = tempfile::tempdir().unwrap();
+        let combined_file = tokio::fs::File::create(directory.path().join("combined"))
+            .await
+            .unwrap();
+        let individual = tokio::fs::File::from_std(
+            fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/full")
+                .unwrap(),
+        );
+        let merged = Arc::new(AsyncMutex::new(CombinedLog {
+            file: combined_file,
+            size: 0,
+            capped: false,
+        }));
+        let output_limit_reached = Arc::new(Notify::new());
+        let output_writer_failed = Arc::new(Notify::new());
+        let (mut producer, consumer) = tokio::io::duplex(128);
+        let notified = output_writer_failed.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        let task = tokio::spawn(spool_merged_checked(
+            consumer,
+            individual,
+            merged,
+            output_limit_reached,
+            output_writer_failed.clone(),
+            "stdout",
+        ));
+        producer
+            .write_all(b"this output cannot be persisted")
+            .await
+            .unwrap();
+        // Deliberately retain producer so EOF never arrives.
+        timeout(Duration::from_secs(3), notified)
+            .await
+            .expect("background supervisor must be notified on disk write failure");
+        assert!(task.await.unwrap().is_err());
+    }
+
+    #[test]
+    fn task_output_delta_schema_preserves_five_gibibyte_limit() {
+        let definition = definitions()
+            .into_iter()
+            .find(|value| value["function"]["name"].as_str() == Some("task_output_delta"))
+            .expect("task_output_delta tool must be registered");
+        let maximum = &definition["function"]["parameters"]["properties"]["max_bytes"]["maximum"];
+        assert_eq!(maximum.as_i64(), Some(5_i64 * 1024 * 1024 * 1024));
+    }
     #[test]
     fn project_sibling_session_task_logs_are_readable_without_crossing_projects() {
         let root = tempfile::tempdir().unwrap();
@@ -1269,6 +1408,7 @@ mod tests {
                 output_file: output.to_string_lossy().into_owned(),
                 error_file: error.to_string_lossy().into_owned(),
                 truncated: false,
+                failure_reason: None,
             },
         )
         .unwrap();
@@ -1549,6 +1689,7 @@ mod tests {
             output_file: private.to_string_lossy().to_string(),
             error_file: safe_err.to_string_lossy().to_string(),
             truncated: false,
+            failure_reason: None,
         };
         BackgroundTasks::save(&tasks.directory, &forged).unwrap();
         let output: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
@@ -1578,6 +1719,7 @@ mod tests {
             output_file: output.to_string_lossy().to_string(),
             error_file: error.to_string_lossy().to_string(),
             truncated: false,
+            failure_reason: None,
         };
         BackgroundTasks::save(&tasks.directory, &record).unwrap();
         let value: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();

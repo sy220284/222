@@ -16,6 +16,17 @@ struct Assembler {
 
 impl Assembler {
     fn consume(&mut self, value: &Value, deltas: &UnboundedSender<String>) -> Result<()> {
+        // A provider can report a failure inside an already established 200/SSE
+        // stream. Never turn a partial assistant response (or tool call) into
+        // a successful turn after an in-band error.
+        if let Some(error) = value.get("error").filter(|error| !error.is_null()) {
+            let detail = error
+                .get("message")
+                .and_then(Value::as_str)
+                .or_else(|| error.as_str())
+                .unwrap_or("provider reported a streaming error");
+            bail!("Model stream error: {}", detail.chars().take(500).collect::<String>());
+        }
         if let Some(usage) = value.get("usage") {
             if usage.is_object() {
                 let input = usage
@@ -63,6 +74,12 @@ impl Assembler {
             self.finish_reason = Some(reason.into());
         }
         let delta = choice.get("delta").unwrap_or(&Value::Null);
+        // OpenAI-compatible transports can emit a refusal as a dedicated
+        // delta field while the final finish_reason is simply "stop".
+        // Do not silently drop that field and return an empty success.
+        if let Some(refusal) = delta.get("refusal").and_then(Value::as_str) {
+            bail!("Model refused the request: {}", refusal.chars().take(500).collect::<String>());
+        }
         if let Some(text) = delta.get("content").and_then(Value::as_str) {
             self.content.push_str(text);
             let _ = deltas.send(text.into());
@@ -143,7 +160,11 @@ fn consume_frame(
 ) -> Result<bool> {
     let lines = String::from_utf8_lossy(frame);
     let mut data = Vec::new();
+    let mut error_event = false;
     for line in lines.lines() {
+        if line.strip_prefix("event:").is_some_and(|name| name.trim() == "error") {
+            error_event = true;
+        }
         if let Some(body) = line.strip_prefix("data:") {
             data.push(body.trim_start().to_string());
         }
@@ -156,6 +177,13 @@ fn consume_frame(
         return Ok(true);
     }
     let value: Value = serde_json::from_str(&payload).context("Invalid model SSE event")?;
+    if error_event {
+        let detail = value.pointer("/error/message")
+            .or_else(|| value.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or("provider reported an SSE error event");
+        bail!("Model stream error: {}", detail.chars().take(500).collect::<String>());
+    }
     assembler.consume(&value, deltas)?;
     Ok(false)
 }
@@ -166,10 +194,17 @@ pub async fn complete(
     key: Option<&str>,
     request: &ModelRequest,
     deltas: UnboundedSender<String>,
+    response_schema: Option<&Value>,
 ) -> Result<ModelResponse> {
     let mut body = json!({"model":request.model,
         "messages":crate::provider::openai_messages(request)?,
         "stream":true,"stream_options":{"include_usage":true}});
+    // Keep structured-output semantics identical for streaming and ordinary
+    // Chat Completions. Omitting this silently drops the SDK output contract.
+    if let Some(schema) = response_schema {
+        body["response_format"] = json!({"type":"json_schema",
+            "json_schema":{"name":"structured_output","strict":true,"schema":schema}});
+    }
     if !request.tools.is_empty() {
         body["tools"] = json!(request.tools);
         body["tool_choice"] = json!("auto");
@@ -179,8 +214,10 @@ pub async fn complete(
     if let Some(key) = key {
         post = post.bearer_auth(key)
     }
-    let response = crate::provider::send_model_request(post)
+    let idle_timeout = crate::provider::stream_idle_timeout();
+    let response = tokio::time::timeout(idle_timeout, crate::provider::send_model_request(post))
         .await
+        .context("Model stream response headers timed out")?
         .context("Streaming model request failed")?;
     let status = response.status();
     if !status.is_success() {
@@ -198,11 +235,14 @@ pub async fn complete(
     let mut buffered = Vec::new();
     let mut assembler = Assembler::default();
     let mut finished = false;
-    while let Some(part) = stream.next().await {
+    // Reset the watchdog after every received chunk, rather than applying a
+    // total deadline to a healthy multi-minute model generation.
+    while let Some(part) = tokio::time::timeout(idle_timeout, stream.next())
+        .await
+        .context("Model stream idle timeout")? {
         buffered.extend_from_slice(&part?);
-        if buffered.len() > 4_000_000 {
-            bail!("Model SSE frame exceeds maximum size")
-        }
+        // A single network read can contain many valid small SSE frames.
+        // Enforce the bound only on the unconsumed frame after draining.
         while let Some((position, separator)) = boundary(&buffered) {
             let frame = buffered[..position].to_vec();
             buffered.drain(..position + separator);
@@ -213,6 +253,9 @@ pub async fn complete(
         }
         if finished {
             break;
+        }
+        if buffered.len() > 4_000_000 {
+            bail!("Model SSE frame exceeds maximum size")
         }
     }
     if !buffered.is_empty() && !finished {
@@ -305,6 +348,7 @@ mod tests {
                 tools: vec![],
             },
             tx,
+            None,
         )
         .await
         .unwrap();
@@ -355,6 +399,7 @@ mod tests {
                 tools: vec![],
             },
             tx,
+            None,
         )
         .await
         .unwrap();

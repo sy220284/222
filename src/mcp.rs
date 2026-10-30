@@ -379,7 +379,7 @@ fn mcp_tool_metadata(tool: &Value) -> (bool, Option<String>) {
             .and_then(|value| {
                 value
                     .get("alwaysLoad")
-                    .or_else(|| value.get("anthropic/alwaysLoad"))
+                    .or_else(|| value.get("atlas/alwaysLoad"))
             })
             .and_then(Value::as_bool)
             == Some(true);
@@ -389,7 +389,7 @@ fn mcp_tool_metadata(tool: &Value) -> (bool, Option<String>) {
             meta.and_then(|value| {
                 value
                     .get("searchHint")
-                    .or_else(|| value.get("anthropic/searchHint"))
+                    .or_else(|| value.get("atlas/searchHint"))
             })
         })
         .and_then(Value::as_str)

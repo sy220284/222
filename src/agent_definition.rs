@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -143,6 +143,34 @@ pub fn validate(
     result
 }
 
+/// Preserve editor fields that the compact terminal editor does not ask
+/// the user to replace. The original agent file format stores these values
+/// as one-line YAML frontmatter keys.
+pub fn retained_optional_fields(markdown: &str) -> (Option<String>, Option<String>, Option<String>) {
+    let mut color = None;
+    let mut memory = None;
+    let mut effort = None;
+    let mut lines = markdown.lines();
+    if lines.next() != Some("---") {
+        return (color, memory, effort);
+    }
+    for line in lines {
+        if line.trim() == "---" {
+            break;
+        }
+        let Some((key, value)) = line.split_once(':') else { continue; };
+        let value = value.trim();
+        if value.is_empty() { continue; }
+        match key.trim() {
+            "color" => color = Some(value.to_owned()),
+            "memory" => memory = Some(value.to_owned()),
+            "effort" => effort = Some(value.to_owned()),
+            _ => {}
+        }
+    }
+    (color, memory, effort)
+}
+
 pub fn format_as_markdown(agent: &AgentDefinition) -> String {
     let escaped_description = agent
         .when_to_use
@@ -192,7 +220,40 @@ pub fn new_file_path(workspace: &Path, user: bool, agent_type: &str) -> Result<P
     if let Some(error) = validate_agent_type(agent_type) {
         bail!("{error}");
     }
-    Ok(directory(workspace, user)?.join(format!("{agent_type}.md")))
+    let folder = directory(workspace, user)?;
+    if !user {
+        let workspace = workspace.canonicalize()
+            .context("Cannot resolve project workspace")?;
+        // Check the nearest existing parent: an existing .atlas symlink can
+        // otherwise redirect create/edit/delete outside the project.
+        let ancestor = folder.ancestors()
+            .find(|candidate| candidate.exists())
+            .context("Cannot find existing agent directory ancestor")?;
+        let resolved = ancestor.canonicalize()?;
+        if !resolved.starts_with(&workspace) {
+            bail!("Project agent directory escapes the workspace");
+        }
+    }
+    Ok(folder.join(format!("{agent_type}.md")))
+}
+
+/// Open the selected definition without following a symlink swapped in
+/// between the UI's metadata check and the actual file read.
+pub fn read_agent_file(path: &Path) -> Result<String> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let mut file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        bail!("Agent definition is not a regular file");
+    }
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+    Ok(content)
 }
 
 pub fn existing_agent_types(dir: &Path) -> Result<HashSet<String>> {
@@ -262,18 +323,36 @@ pub fn save_agent(
     if replace && fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
         bail!("Cannot replace a symbolic link: {}", path.display());
     }
-    let mut options = OpenOptions::new();
-    options.write(true);
     if replace {
-        options.create(true).truncate(true);
+        // Keep the previous agent definition intact until the replacement
+        // has been fully written and synced. An interrupted editor must not
+        // leave a truncated system prompt or half-written frontmatter.
+        let staged = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+        let result = (|| -> Result<()> {
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options.open(&staged)?;
+            file.write_all(format_as_markdown(agent).as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&staged, &path)?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&staged);
+        }
+        result?;
     } else {
-        options.create_new(true);
+        let mut file = OpenOptions::new().write(true).create_new(true)
+            .open(&path)
+            .with_context(|| format!("Cannot create agent file {}", path.display()))?;
+        file.write_all(format_as_markdown(agent).as_bytes())?;
+        file.sync_data()?;
     }
-    let mut file = options
-        .open(&path)
-        .with_context(|| format!("Cannot write agent file {}", path.display()))?;
-    file.write_all(format_as_markdown(agent).as_bytes())?;
-    file.sync_data()?;
     Ok(path)
 }
 

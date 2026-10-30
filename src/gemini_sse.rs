@@ -15,11 +15,15 @@ struct Accumulator {
     calls: Vec<ToolCall>,
     usage: Option<TokenUsage>,
     finish_reason: Option<String>,
+    saw_done: bool,
 }
 impl Accumulator {
     fn consume(&mut self, v: &Value, deltas: &UnboundedSender<String>) -> Result<()> {
         if let Some(error) = v.get("error") {
             bail!("Streamed provider error: {error}")
+        }
+        if let Some(reason) = v.pointer("/promptFeedback/blockReason").and_then(Value::as_str) {
+            bail!("Model blocked the request: {reason}");
         }
         if let Some(usage) = parse_gemini_usage(v) {
             self.usage = Some(usage);
@@ -108,7 +112,11 @@ fn frame(data: &[u8], assembler: &mut Accumulator, deltas: &UnboundedSender<Stri
         .filter_map(|line| line.strip_prefix("data:").map(str::trim_start))
         .collect::<Vec<_>>()
         .join("\n");
-    if payload.is_empty() || payload == "[DONE]" {
+    if payload.is_empty() {
+        return Ok(());
+    }
+    if payload == "[DONE]" {
+        assembler.saw_done = true;
         return Ok(());
     }
     let value: Value = serde_json::from_str(&payload).context("Invalid JSON Gemini SSE event")?;
@@ -129,8 +137,10 @@ pub async fn complete(
         model
     );
     let response = client.post(url).header("x-goog-api-key", key).json(body);
-    let response = crate::provider::send_model_request(response)
+    let idle_timeout = crate::provider::stream_idle_timeout();
+    let response = tokio::time::timeout(idle_timeout, crate::provider::send_model_request(response))
         .await
+        .context("Gemini stream response headers timed out")?
         .context("Gemini stream request failed")?;
     let status = response.status();
     if !status.is_success() {
@@ -143,19 +153,31 @@ pub async fn complete(
     let mut stream = response.bytes_stream();
     let mut assembler = Accumulator::default();
     let mut pending = Vec::<u8>::new();
-    while let Some(bytes) = stream.next().await {
+    // Preserve long-running streamed reasoning while failing visibly when
+    // the provider stops sending any data for the configured idle interval.
+    while let Some(bytes) = tokio::time::timeout(idle_timeout, stream.next())
+        .await
+        .context("Gemini stream idle timeout")? {
         let chunk = bytes.context("Gemini stream socket failed")?;
         pending.extend_from_slice(&chunk);
-        if pending.len() > 4_194_304 {
-            bail!("Gemini SSE frame exceeds 4 MiB")
-        }
+        // Bound an incomplete SSE frame, not the sum of many complete
+        // frames delivered in one network read.
         while let Some((end, terminator_len)) = frame_boundary(&pending) {
             let event = pending.drain(..end + terminator_len).collect::<Vec<_>>();
             frame(&event[..end], &mut assembler, &deltas)?;
         }
+        if pending.len() > 4_194_304 {
+            bail!("Gemini SSE frame exceeds 4 MiB")
+        }
     }
     if !pending.is_empty() {
         frame(&pending, &mut assembler, &deltas)?;
+    }
+    // A broken connection may leave a plausible-looking partial answer or
+    // function call. Original stream handling requires a terminal stop reason;
+    // Gemini also permits an explicit SSE [DONE] marker.
+    if assembler.finish_reason.is_none() && !assembler.saw_done {
+        bail!("Gemini stream ended before a completion marker");
     }
     Ok(assembler.complete())
 }

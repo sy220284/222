@@ -2273,15 +2273,45 @@ impl Agent {
     }
     /// SDK generate_session_title mirrors sessionTitle.ts without changing
     /// the explicit /rename title or appending a synthetic chat message.
-    pub async fn generate_session_title(
-        &mut self,
-        description: &str,
-        persist: bool,
-    ) -> Result<Option<String>> {
-        let description = description.trim();
-        if description.is_empty() {
-            return Ok(None);
+    /// Build a provider-neutral, tool-free title request. SDK control uses
+    /// this immutable snapshot so model inference never holds the main
+    /// Agent's exclusive state or delays other control messages.
+    /// Consume completed hooks while the SDK is idle and between Agent API
+    /// rounds. Model-visible attachments and UI notifications are once-only.
+    pub async fn pump_async_hook_events(&mut self) -> Result<usize> {
+        let events = crate::hooks::collect_async_hook_responses(
+            &self.session.id.to_string()
+        ).await;
+        let count = events.len();
+        for event in events {
+            self.emit(event.clone());
+            let stdout = event["stdout"].as_str().unwrap_or("").lines()
+                .filter(|line| serde_json::from_str::<serde_json::Value>(line.trim())
+                    .ok().is_none_or(|value| value.get("async") != Some(&json!(true))))
+                .collect::<Vec<_>>().join("\n");
+            let body = if event["outcome"] == "success" {
+                stdout.trim().to_owned()
+            } else {
+                format!("Async hook {}: {}",
+                    event["outcome"].as_str().unwrap_or("failed"),
+                    event["stderr"].as_str().unwrap_or(""))
+            };
+            if !body.trim().is_empty() {
+                self.session.messages.push(Message::text(
+                    "user",
+                    format!("[Asynchronous {} hook result]\n{}",
+                        event["hook_event_name"].as_str().unwrap_or("Hook"),
+                        body),
+                ));
+                self.session.save(&self.root)?;
+            }
         }
+        Ok(count)
+    }
+
+    pub fn sdk_title_request(&self, description: &str) -> Option<ModelRequest> {
+        let description = description.trim();
+        if description.is_empty() { return None; }
         let system = concat!(
             "Generate a concise, sentence-case title (3-7 words) that captures ",
             "the main topic or goal of this coding session. The title should be ",
@@ -2290,16 +2320,62 @@ impl Agent {
             "Return JSON with a single \"title\" field. ",
             "Example: {\"title\":\"Fix login button on mobile\"}."
         );
+        Some(ModelRequest {
+            model: self.profile.model.clone(),
+            system: system.to_owned(),
+            messages: vec![Message::text("user", description)],
+            tools: Vec::new(),
+        })
+    }
+
+    /// Commit an independently completed SDK title request in the main
+    /// session actor. Never charge a later model, or write into a session
+    /// that replaced the original while inference was in flight.
+    pub fn finish_sdk_title(
+        &mut self,
+        requested_session: uuid::Uuid,
+        model: &ProviderProfile,
+        usage: Option<TokenUsage>,
+        title: Option<String>,
+        persist: bool,
+        elapsed: std::time::Duration,
+    ) -> Result<Option<String>> {
+        if self.session.id != requested_session {
+            bail!("SDK title result belongs to a previous session")
+        }
+        self.session.cost.add_api_duration(elapsed);
+        if let Some(usage) = usage {
+            self.session.usage.accumulate(usage);
+            self.session.cost.record(
+                &model.id, &model.model, usage, &self.model_prices,
+            );
+        }
+        if persist {
+            if let Some(value) = title.as_ref() {
+                let previous = self.session.ai_title.replace(value.clone());
+                if let Err(error) = self.session.save(&self.root) {
+                    self.session.ai_title = previous;
+                    return Err(error).context("Unable to persist SDK-generated title");
+                }
+                return Ok(title);
+            }
+        }
+        // Usage is charged even when the model produced invalid title JSON
+        // or persist was explicitly disabled by the SDK caller.
+        self.session.save(&self.root)?;
+        Ok(title)
+    }
+
+    pub async fn generate_session_title(
+        &mut self,
+        description: &str,
+        persist: bool,
+    ) -> Result<Option<String>> {
+        let Some(request) = self.sdk_title_request(description) else {
+            return Ok(None);
+        };
         let started = Instant::now();
-        let response = self
-            .provider
-            .complete(&ModelRequest {
-                model: self.profile.model.clone(),
-                system: system.to_owned(),
-                messages: vec![Message::text("user", description)],
-                tools: Vec::new(),
-            })
-            .await;
+        let response = self.provider.complete(&request).await;
         self.session.cost.add_api_duration(started.elapsed());
         let completion = match response {
             Ok(completion) => completion,
@@ -2344,8 +2420,72 @@ impl Agent {
         Ok(title)
     }
 
+    /// fileHistoryRewind(user_message_id) replays the target and subsequent
+    /// edits backwards, without touching the conversation transcript. Keep
+    /// the original message UUID and all path approvals in the active Agent.
+    /// Queued SDK messages may be merged into one model call. Every
+    /// acknowledged input UUID must resolve to the same file snapshot.
+    pub fn register_sdk_message_aliases(
+        &mut self,
+        primary: uuid::Uuid,
+        aliases: &[uuid::Uuid],
+    ) -> Result<()> {
+        if !self.session.history_message_ids.contains(&primary) {
+            bail!("Cannot register checkpoint aliases for an unsaved message");
+        }
+        let mut candidate = self.session.clone();
+        for id in aliases {
+            if *id != primary {
+                candidate.history_message_aliases.insert(*id, primary);
+            }
+        }
+        candidate.save(&self.root)?;
+        self.session = candidate;
+        Ok(())
+    }
+
+    pub fn sdk_rewind_files(
+        &self,
+        user_message_id: &str,
+        dry_run: bool,
+    ) -> Result<serde_json::Value> {
+        let requested_id = uuid::Uuid::parse_str(user_message_id)
+            .context("rewind_files requires a user message UUID")?;
+        let id = self.session.history_message_aliases
+            .get(&requested_id).copied().unwrap_or(requested_id);
+        let start = self.session.history_message_ids.iter()
+            .position(|saved| *saved == id)
+            .context("User message was not found in session file history")?;
+        if !crate::history::enabled(self.interactive, self.file_checkpointing_enabled) {
+            bail!("File checkpointing is disabled");
+        }
+        let records = crate::history::records_for_message_sequence(
+            &self.root, &self.session.id.to_string(),
+            &self.session.history_message_ids[start..],
+        )?;
+        let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+            .with_session_id(self.session.id.to_string())
+            .with_file_checkpointing(self.file_checkpointing_enabled)
+            .with_permission_rules(self.permission_rules.clone())
+            .with_extra_roots(self.additional_dirs.clone())
+            .with_permission_mode(self.permission_mode);
+        let result = executor.sdk_rewind_message_records(&records, dry_run)?;
+        Ok(json!({
+            "canRewind": true,
+            "dryRun": dry_run,
+            "files": result,
+            "userMessageId": requested_id,
+        }))
+    }
+
     pub fn export_session(&self, filename: Option<&str>) -> Result<std::path::PathBuf> {
         crate::session_control::export(&self.session, &self.root, filename)
+    }
+    pub fn export_dialog_preview(&self) -> (String, String) {
+        let name = crate::session_control::suggested_export_filename(&self.session);
+        let content = crate::session_control::render(&self.session);
+        let preview = content.chars().take(1200).collect::<String>();
+        (name, preview)
     }
     pub fn list_sessions(&self) -> Result<Vec<crate::session_control::SessionItem>> {
         crate::session_control::list(&self.root)
@@ -2423,7 +2563,7 @@ impl Agent {
         if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
             definitions.push(tools::powershell_definition());
         }
-        definitions.extend(task::definitions());
+        // Context usage must count only tools visible in the real model request.
         if task::tasks_v2_enabled(self.interactive) {
             definitions.extend(task_graph::definitions());
         } else {
@@ -2514,9 +2654,80 @@ impl Agent {
         ))
     }
 
+    /// Source components/agents/generateAgent.ts: generate a user-reviewed
+    /// agent definition through a tool-free model request, without changing
+    /// the active conversation transcript or binding to a specific vendor.
+    pub async fn generate_custom_agent_definition(
+        &mut self, description: &str,
+    ) -> Result<crate::agent_definition::AgentDefinition> {
+        if description.trim().is_empty() {
+            bail!("Describe the custom agent you want to create");
+        }
+        let mut system = self.effective_system_prompt()?;
+        self.conversation_context.append_to(&mut system);
+        system.push_str(
+            "\nYou are an expert AI agent architect. Translate the user's request into a complete, reliable autonomous agent configuration. Define its primary purpose, precise triggering conditions, success criteria, boundaries, quality checks, and concrete steps. Consider project instructions and likely edge cases. Produce a concise lowercase kebab-case identifier (2-4 words), a whenToUse description beginning 'Use this agent when...' with concrete examples, and a comprehensive second-person systemPrompt. Return ONLY valid JSON with exactly three string fields: identifier, whenToUse, systemPrompt. Do not include Markdown fences or commentary."
+        );
+        let request = ModelRequest {
+            model: self.profile.model.clone(),
+            system,
+            messages: vec![Message::text(
+                "user",
+                format!("Create an agent configuration based on this request: {}", description.trim()),
+            )],
+            tools: Vec::new(),
+        };
+        let started = Instant::now();
+        let response = self.provider.complete(&request).await;
+        self.session.cost.add_api_duration(started.elapsed());
+        let response = match response {
+            Ok(response) => response,
+            Err(error) => {
+                self.session.save(&self.root)?;
+                return Err(error);
+            }
+        };
+        if let Some(usage) = response.usage {
+            self.record_usage(usage);
+        }
+        self.session.save(&self.root)?;
+        let text = response.message.visible_text();
+        let trimmed = text.trim();
+        let parsed = serde_json::from_str::<serde_json::Value>(trimmed).or_else(|_| {
+            let start = trimmed.find('{').ok_or_else(|| anyhow::anyhow!("No JSON object in agent generation"))?;
+            let end = trimmed.rfind('}').ok_or_else(|| anyhow::anyhow!("Incomplete JSON object in agent generation"))?;
+            Ok::<serde_json::Value, anyhow::Error>(
+                serde_json::from_str(&trimmed[start..=end])?
+            )
+        })?;
+        let field = |key: &str| -> Result<String> {
+            parsed.get(key).and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_owned)
+                .with_context(|| format!("Generated agent is missing {key}"))
+        };
+        let definition = crate::agent_definition::AgentDefinition {
+            agent_type: field("identifier")?,
+            when_to_use: field("whenToUse")?,
+            system_prompt: field("systemPrompt")?,
+            tools: None,
+            color: None,
+            model: None,
+            memory: None,
+            effort: None,
+        };
+        if let Some(error) = crate::agent_definition::validate_agent_type(&definition.agent_type) {
+            bail!("Generated agent name is invalid: {error}");
+        }
+        Ok(definition)
+    }
+
     pub fn copy_response(&self, selection: &str) -> Result<String> {
         let (age, code) = crate::copy_response::parse_selection(selection)?;
         crate::copy_response::copy(&self.session.messages, age, code)
+    }
+    pub fn copy_code_block_choices(&self, age: usize) -> Result<Vec<(String, String)>> {
+        crate::copy_response::code_block_choices(&self.session.messages, age)
     }
 
     /// Source commands/hooks/hooks.tsx: expose the currently active rules.
@@ -3452,8 +3663,110 @@ impl Agent {
         Ok(())
     }
 
-    /// A clear starts a new conversation, preserving the previous transcript for
-    /// resume. The source's SessionEnd and SessionStart hooks bracket the reset.
+    /// Original commands/resume/resume.tsx resumes the selected conversation
+    /// in the current UI. Rebind all session-scoped stores, counters and
+    /// permissions before allowing another model turn.
+    pub fn resumable_sessions(&self) -> Result<Vec<crate::session_control::SessionItem>> {
+        let mut available = Vec::new();
+        for item in crate::session_control::list(&self.root)? {
+            if item.id == self.session.id {
+                continue;
+            }
+            let candidate = crate::session::Session::load(&self.root, &item.id.to_string())?;
+            if candidate.team_name.is_none() && candidate.agent_name.is_none() {
+                available.push(item);
+            }
+        }
+        Ok(available)
+    }
+
+    pub async fn resume_interactive_session(&mut self, query: &str) -> Result<String> {
+        if !self.interactive {
+            bail!("Interactive session switching requires chat mode");
+        }
+        if self.team_name.is_some() || self.agent_name.is_some() {
+            bail!("Cannot switch conversations while a team session is active");
+        }
+        let loaded = crate::session_control::resolve(&self.root, query)?;
+        if loaded.team_name.is_some() || loaded.agent_name.is_some() {
+            bail!("Cannot resume a teammate or team-internal conversation directly");
+        }
+        if loaded.id == self.session.id {
+            return Ok(format!("Already using session {}", loaded.id));
+        }
+        let mode = loaded.permission_mode.as_deref()
+            .map(permission_mode::Mode::from_persisted_string)
+            .unwrap_or(self.permission_mode);
+        if mode == permission_mode::Mode::BypassPermissions && self.approval != Approval::Full {
+            bail!("Saved permission mode exceeds current CLI approval ceiling");
+        }
+        if mode == permission_mode::Mode::AcceptEdits && self.approval == Approval::ReadOnly {
+            bail!("Saved edit permission exceeds read-only approval ceiling");
+        }
+        if mode == permission_mode::Mode::Auto {
+            bail!("Saved automatic permission mode requires a classifier");
+        }
+        let background = Arc::new(BackgroundTasks::for_session(&self.root, loaded.id)?);
+        let graph = task_graph::TaskGraph::new(
+            &self.root, &task_list_id(loaded.id, loaded.team_name.as_deref()),
+        )?;
+        let metrics = Arc::new(ToolMetrics::with_totals(
+            loaded.cost.total_lines_added, loaded.cost.total_lines_removed,
+        ));
+        // Run the old session's exit hook before changing its identity.
+        let end = self.hooks.run(HookEvent::SessionEnd, None, {
+            let mut input = self.base_hook_input();
+            input["reason"] = json!("other");
+            input
+        }).await?;
+        self.report_hook_warnings(HookEvent::SessionEnd, &end);
+        self.session.save(&self.root)?;
+        self.background.stop_all().await;
+        self.session = loaded;
+        self.session_start_source = "resume";
+        self.permission_mode = mode;
+        self.background = background;
+        // /env overrides belong to the previous conversation; a resumed
+        // session starts with the process/configured environment only.
+        self.session_env.clear();
+        self.background.set_environment(&self.session_env);
+        self.graph = graph;
+        self.file_metrics = metrics;
+        self.notebook_reads.lock().unwrap().clear();
+        self.file_reads.lock().unwrap().clear();
+        self.last_context_usage = None;
+        self.last_side_question_request = None;
+        self.last_model_usage = None;
+        self.auto_compact_failures = 0;
+        self.session_context.clear();
+        self.pending_initial_user_message = None;
+        self.transient_mailbox = in_memory_mailbox::Mailbox::new();
+        let start = match self.hooks.run(HookEvent::SessionStart, None, {
+            let mut input = self.base_hook_input();
+            input["source"] = json!("resume");
+            input["model"] = json!(self.profile.model);
+            input
+        }).await {
+            Ok(start) => start,
+            Err(error) => {
+                // Session identity was already changed. Report the hook
+                // failure explicitly without claiming that resume failed.
+                return Ok(format!(
+                    "Resumed session {} (SessionStart hook failed: {error:#})",
+                    self.session.id,
+                ));
+            }
+        };
+        self.report_hook_warnings(HookEvent::SessionStart, &start);
+        for reason in &start.blocking_reasons {
+            eprintln!("SessionStart resume hook blocked (ignored): {reason}");
+        }
+        self.session_context = start.additional_context.join("\n");
+        Ok(format!("Resumed session {}", self.session.id))
+    }
+
+    /// Clear the current transcript into a fresh session. SessionEnd and
+    /// SessionStart hooks bracket the reset.
     pub async fn clear_history(&mut self) -> Result<()> {
         self.hooks
             .run(HookEvent::SessionEnd, None, {
@@ -3528,6 +3841,17 @@ impl Agent {
         &mut self,
         prompt: &str,
         blocks: Option<Vec<serde_json::Value>>,
+    ) -> Result<String> {
+        self.ask_with_blocks_for_message(prompt, blocks, None).await
+    }
+
+    /// SDK user UUID is also the file-history turn identifier, matching
+    /// fileHistoryMakeSnapshot(messageId) in the original QueryEngine.
+    pub async fn ask_with_blocks_for_message(
+        &mut self,
+        prompt: &str,
+        blocks: Option<Vec<serde_json::Value>>,
+        message_id: Option<uuid::Uuid>,
     ) -> Result<String> {
         let ask_started = Instant::now();
         // Original sessionStart.ts + cli/print.ts prepend a one-shot
@@ -3637,7 +3961,10 @@ impl Agent {
         };
         let mut user_message = Message::text("user", &prompt);
         user_message.content_blocks = blocks;
+        // All tools in one user turn share a file-history snapshot identity.
+        let history_message_id = message_id.unwrap_or_else(uuid::Uuid::new_v4);
         self.session.messages.push(user_message);
+        self.session.history_message_ids.push(history_message_id);
         self.session.save(&self.root)?;
         let mut system = self.effective_system_prompt()?;
         let resumed_team_worker = self.team_name.is_some()
@@ -3754,6 +4081,7 @@ impl Agent {
         }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_session_id(self.session.id.to_string())
+            .with_history_message_id(history_message_id)
             .with_file_checkpointing(self.file_checkpointing_enabled)
             .with_metrics(self.file_metrics.clone())
             .with_shared_reads(self.notebook_reads.clone(), self.file_reads.clone())
@@ -3769,13 +4097,21 @@ impl Agent {
         let mut selected_mcp_tools = std::collections::HashSet::new();
         for _ in 0..self.max_steps {
             self.absorb_team_messages()?;
+            // Original QueryEngine checks AsyncHookRegistry between API/tool
+            // rounds. Attach each completed hook exactly once; emit its
+            // outcome to the SDK/UI, without replaying the shell command.
+            self.pump_async_hook_events().await?;
             let mut available_tools = tools::definitions_with_checkpointing(
                 crate::history::enabled(self.interactive, self.file_checkpointing_enabled),
             );
             if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
                 available_tools.push(tools::powershell_definition());
             }
-            available_tools.extend(task::definitions());
+            // The original tools.ts exposes TaskCreate/Get/List/Update only
+            // when V2 tasks are enabled, and TodoWrite only otherwise.
+            // Legacy Rust task_* helpers remain available to older clients
+            // through dispatch, but must not appear in the model's catalog:
+            // publishing both created competing task lists in one session.
             // Original TodoWriteTool is the non-interactive SDK/headless
             // checklist; the V2 shared task graph is interactive by default.
             if task::tasks_v2_enabled(self.interactive) {
@@ -3935,10 +4271,31 @@ impl Agent {
             }));
             self.session.messages.push(response.message);
             self.session.save(&self.root)?;
+            // The original streaming loop treats max_tokens/context-window
+            // exhaustion as an incomplete assistant turn. A partially emitted
+            // tool call must never execute merely because its JSON parses.
+            // Keep the partial message and usage for recovery, but stop before
+            // dispatching any tools or invoking Stop hooks.
+            if matches!(finish.as_deref(), Some(
+                "length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded"
+            )) {
+                self.session.cost.add_wall_duration(ask_started.elapsed());
+                self.session.save(&self.root)?;
+                bail!("Model reached its output limit before completion; session saved")
+            }
+            // The original errors.ts::getErrorMessageIfRefusal surfaces an
+            // explicit refusal instead of treating an empty answer as success.
+            // Keep this provider-neutral and do not dispatch partial tools.
+            if matches!(finish.as_deref(), Some(
+                "refusal" | "content_filter" | "SAFETY" | "PROHIBITED_CONTENT"
+                | "BLOCKLIST" | "RECITATION" | "SPII"
+            )) {
+                self.session.cost.add_wall_duration(ask_started.elapsed());
+                self.session.save(&self.root)?;
+                bail!("Model declined to generate a response ({}); session saved",
+                    finish.as_deref().unwrap_or("refusal"))
+            }
             if calls.is_empty() {
-                if matches!(finish.as_deref(), Some("length" | "MAX_TOKENS")) {
-                    bail!("Model reached its output limit before completion; session saved")
-                }
                 if self.absorb_team_messages()? {
                     continue;
                 }
@@ -4425,9 +4782,7 @@ mod tests {
             .graph
             .create(&json!({"subject":"Verify","description":"Check tests"}))
             .unwrap();
-        agent.hooks = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        agent.hooks = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::TaskCompleted,
             matcher: None,
             command: "printf '{\"decision\":\"block\",\"reason\":\"Tests missing\"}'".into(),
@@ -5897,18 +6252,14 @@ done"#;
         let log_path = root.join("hook-events.log");
         let shell = |event: &str| format!("printf '{}\\n' >> '{}'", event, log_path.display());
         agent.hooks = HookRunner::new(&[
-            HookRule {
-                if_condition: None,
-                plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::SessionEnd,
                 matcher: None,
                 command: shell("end"),
                 shell: None,
                 timeout_seconds: 5,
             },
-            HookRule {
-                if_condition: None,
-                plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::SessionStart,
                 matcher: None,
                 command: shell("start"),

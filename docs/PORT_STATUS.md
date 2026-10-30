@@ -1,3 +1,103 @@
+## 2026-10-30：SDK 消息快照回退、异步 Hook、插件崩溃恢复续接（源码已提交、待验收）
+
+原始源码依据：完整 source/src/utils/fileHistory.ts (fileHistoryMakeSnapshot/fileHistoryRewind/100 snapshots)、source/src/cli/print.ts (SDK rewind_files 控制/用户 UUID)、source/src/utils/hooks.ts (execCommandHook async 首行及配置 async)、source/src/utils/hooks/AsyncHookRegistry.ts (pending/complete/finalize)、source/src/schemas/hooks.ts (async/asyncRewake)、source/src/bridge/replBridgeTransport.ts、source/src/bridge/remoteBridgeCore.ts。此处只记录真实 Rust 入口，不用静态 generated_ports 计数。
+
+- **消息级文件回退**：src/session.rs 保存 history_message_ids 和合并消息 UUID 别名；src/agent.rs::ask_with_blocks_for_message 及 src/main.rs::sdk_interruptible_turn 传入实际 SDK UUID，src/sdk_queue.rs 合并队列消息也登记同一快照。src/history.rs::records_for_message_sequence/preflight_message_rewind 按消息逆序解析文件检查点、核对备份完整性及外部修改冲突；src/tools.rs::sdk_rewind_message_records 复用 Read/Edit 权限、审批及真实恢复，src/main.rs::sdk_nested_control 处理 rewind_files + dry_run。提交 2a12cdcf、c5344b77、9a38bb34、b66aa57e、cd64051a、8c869cde、69652c1b、4a8bc0d4、57bd4caf、005fe52a、7ed62844。仅源码已提交待验收；老会话无 UUID 索引、合并队列时序、跨进程并行恢复和原版 UI 差异尚待核验。
+- **异步 Hook 完成与退出生命周期**：src/hooks.rs 首行解析 {async:true} 后转移 Shell 所有权到按会话隔离的待完成登记簿；配置级 async/asyncRewake 已从本地与插件声明接入；后台完成/超时/取消收集结果，SessionEnd 回收。Agent::pump_async_hook_events 将完成通知投递到真实模型上下文，SDK 500ms 空闲轮询；Windows Hook 取消增加子进程树清理。提交 0c421e0e、58d52fbe、03ab39ed、76cccf83、fb675c9d、8087262f、3e712214、79bcff9b、28caa503、31e20090、7ca28146、88e17f34。完整 asyncRewake 自动触发模型续写、异步结果 hookSpecificOutput 应用和持续进度事件仍未等价。
+- **插件崩溃恢复**：src/plugin_manager.rs 在独占锁内检查 .install-/.update-/.previous-/.failed-update- 目录，拒绝符号链接、只接受 UUID 后缀、恢复缺失目标的旧版本并安全清理中断暂存目录；对无法判断设置提交状态的旧版本保留供恢复，不冒险删除。提交 20d3e46e、c2f96029。完整跨进程安装事务日志/提交点及版本回滚仍缺。
+- **SDK 取消跨平台**：src/tools.rs::ShellCancelTreeGuard 与 src/hooks.rs::HookCancelTreeGuard 为 Windows 添加主动中断和 SessionEnd Drop 进程树清理（taskkill /PID /T /F），在正常完成后解除；提交 eac172f3、7ca28146，待行为验收。脱离原进程树的后台任务仍依赖其独立所有者。
+
+保守按独立用户能力计数，本次新增 **3 条业务链源码补齐**（消息级回退、异步 Hook、插件崩溃恢复），Windows 主动取消作为此前 SDK 中断链补强不重复计数。所有变更仅做源码接线与远端保留核对，按现行要求不运行 cargo fmt/check/clippy/test 或 CI；新增源码完整等价验收 0 项，Issue #3 冻结 362 项不勾选。
+
+**仍未闭环**：SDK initialize 的回调 hooks、SDK 原生 MCP server、JSON Schema 严格约束、提示建议和进度摘要；异步 Hook asyncRewake 完整自动续写及状态/错误事件；插件崩溃事务 commit journal；远程 Bridge 完整认证、SSE/WS 读、批量上传、断线重放游标与权限回传；后台已脱组任务的取消/恢复、跨平台 UI 验收。现有 BridgeSession 仅提供本地 SDK 缓冲控制，不能当成真实远程传输已完成。
+
+## 2026-10-29：AI 辅助生成自定义 Agent 并审核保存（源码已提交、待验收）
+
+原版 source/src/components/agents/generateAgent.ts::generateAgent、new-agent-creation/wizard-steps/GenerateStep.tsx：用户描述目标后，以无工具模型请求生成 identifier/whenToUse/systemPrompt JSON，再预览、校验并由用户确认保存。Rust 原仅支持手工填写 Agent 定义，未接入此流程。
+
+已实现 src/main.rs::chat /agents generate project|user [DESCRIPTION] → Agent::generate_custom_agent_definition → 当前多模型 Provider.complete（工具列表为空，携带项目上下文）→ JSON 严格字段校验与名称校验 → 预览生成内容 → 原有风险警告确认 → agent_definition::save_agent(create_new)。请求用量和 API 耗时归集到当前会话，失败也持久化耗时，生成过程不污染正常对话消息。提交 b95c876b、7a0b1279、a67d674f。已静态核对实际入口。
+
+原版完整生成提示词、取消信号、记忆增强、模型选择 UI、重试和生成内容质量仍需等价验收。**本轮累计12/100，剩余88项**，先行100项独立缺口核查与实施方案未完成；未运行 Cargo/测试/CI，新增完整等价验收0，Issue #3 冻结362项继续开放。
+
+## 2026-10-29：自定义 Agent 创建编辑前风险提醒（源码已提交、待验收）
+
+对照原版 components/agents/AgentEditor.tsx 和 new-agent-creation 向导：无工具、无限制工具、描述过短/过长、系统提示过长等校验警告应向用户展示并取得确认。Rust 原 agent_definition::validate 已计算 warnings，但交互式创建/编辑直接保存，用户看不到风险。现由 src/main.rs::confirm_custom_agent_warnings 复用真实验证结果，先拦截错误，逐条显示非阻断警告并请求 y/N 确认；取消时不创建文件，编辑取消保留旧文件。提交 fb3ab49c650f2bcfc925fe8aee2c03b92310e62e。
+
+本轮新增1项独立用户交互能力，**累计11/100，剩余89项**；源码已提交待行为验收，新增完整等价验收0。未运行 Cargo/测试/CI，Issue #3 冻结362项未核销，100项先行逐函数确认和全量实施方案仍未完成。
+
+## 2026-10-29：/resume 真正切换会话及无参数选择器（源码已提交、待验收）
+
+原版 source/src/commands/resume/resume.tsx::call/ResumeCommand：/resume 无参数打开历史会话选择器，输入 UUID/标题后在当前交互界面恢复该会话。Rust 原 src/main.rs::chat 仅打印重启命令，当前对话未恢复。
+
+已实现 src/main.rs::chat → Agent::resumable_sessions / resume_interactive_session → session_control::resolve / Session::load：无参数列出最近可恢复的非团队会话，支持编号选择和取消；有参数按原有 UUID/标题解析；切换前校验保存的权限模式不超出当前 CLI 授权，执行旧会话结束 Hook，停止旧后台任务，重新绑定会话任务/文件历史/统计/缓存/后台输出隔离，清空旧文件读取授权和临时上下文，再执行恢复会话的 SessionStart Hook，并重新加载对应提示词历史。Hook 失败明确提示当前会话已经切换。提交 898a1a35、cbe890a2、71b0ce56、b761c336。已静态核对入口及跨模块状态。
+
+原版跨工作树/跨项目会话选择、模糊搜索 UI、恢复时后台远程任务的全部生命周期、完整 Hook 时序仍待等价。**本轮累计10/100，剩余90项**，未完成100项先行缺口逐函数核查与全量方案。源码已提交待行为验收，新增完整等价验收0；未运行 Cargo/测试/CI，Issue #3 冻结362项保持开放。
+
+## 2026-10-29：会话导出预览、文件名选择和取消（源码已提交、待验收）
+
+原版 source/src/commands/export/export.tsx::call → ExportDialog：/export 无参数时展示会话内容预览和由首条用户消息/本地时间生成的默认文件名，用户可修改或取消；提供参数时直接写出。Rust 原 src/main.rs::chat 直接调用 Agent::export_session(None)，未提供选择或取消。
+
+已接通 src/session_control.rs::suggested_export_filename → Agent::export_dialog_preview → src/main.rs::chat，输出1200字符预览、默认文件名、可输入新文件名或 q 取消，保留 /export FILE 直接导出。文件写入仍沿用现有路径授权、原子写入和纯文本渲染。提交 9c0823d1、7a30a16e、df1d979a，静态复核真实调用入口；原版 Ink 富文本预览、键盘交互和完整渲染细节待等价。
+
+本轮新增1项，**累计9/100，剩余91项**；先行100项完整问题确认与实施方案仍未完成。未运行 Cargo/测试/CI，新增完整等价验收0项，Issue #3 冻结362项保持开放。
+
+## 2026-10-29：自定义 Agent 详情查看（源码已提交、待验收）
+
+对照原版 source/src/components/agents/AgentsMenu.tsx::view-agent → AgentDetail，补齐 Rust 交互式 /agents show project|user NAME。现在按项目/用户来源定位真实代理定义文件，检查常规文件类型并拒绝符号链接，展示完整定义与系统提示；不再只能列出代理名称。src/main.rs::chat → agent_definition::new_file_path → 文件读取，提交 b7ef373fac597f11fcfac1cb55302c3bc99f6b09。原版富文本详情页、工具展示和内置代理视图仍待等价。
+
+本轮累计 **8/100，剩余92项**；源码已提交待行为验收，新增完整等价验收0。未运行 Cargo/测试/CI，Issue #3 冻结362项未核销，100项先行逐函数缺口清单及方案仍未完成。
+
+## 2026-10-29：交互式自定义 Agent 创建、编辑、删除（源码已提交、待验收）
+
+对照原版 source/src/components/agents/agentFileUtils.ts::saveAgentToFile/updateAgentFile/deleteAgentFromFile、AgentsMenu.tsx、AgentEditor.tsx，Rust 原 src/agent_definition.rs 已有定义校验/持久化函数，但交互式 src/main.rs::chat 的 /agents 只列目录，用户无法在当前应用创建、修改或删除自定义 Agent。
+
+已接入三个独立用户操作：/agents create project|user NAME 提问描述、完整多行系统提示、允许工具和模型，调用原有 AgentDefinition 验证并以 create_new 持久化；/agents edit project|user NAME 读取原文件供参考，收集新定义，保留未展示的 color/memory/effort 元数据，校验后以临时文件同步+原子替换防止编辑失败截断旧内容；/agents delete project|user NAME 检查原文件类型、拒绝符号链接、明确二次确认后删除。当前会话后续代理定义读取直接使用更新的磁盘文件。代码提交 632cabc3、c59693b9、095251a2，静态确认 src/main.rs → agent_definition::save_agent/delete_agent 的实际调用。
+
+原版完整图形化向导、字段原地编辑、复杂 YAML 前置配置解析、工具细粒度权限选择、用户自定义色彩/记忆/思考级别的编辑界面仍未等价；不得标为完整。**本轮新增3项，累计7/100，剩余93项**。未完成先行100项独立缺口核查与全量方案；未运行 Cargo/测试/CI；全部源码已提交待行为验收，新增完整等价验收0，Issue #3 冻结362项保持开放。
+
+## 2026-10-29：交互式 /copy 代码选择与跨会话偏好（已提交、待验收）
+
+原版 source/src/commands/copy/copy.tsx::call/CopyPicker：当回答包含代码块且未开启 copyFullResponse 时，/copy N 提供完整回答、每个代码块和“以后始终复制完整回答”的选择；保存用户偏好，下次免选。Rust 原 src/main.rs::chat 对 /copy 直接调用 Agent::copy_response，只有显式 --code 才能选代码，缺少原版交互。
+
+已接通 src/main.rs::chat → Agent::copy_code_block_choices → copy_response::code_block_choices/copy，按最近20条回答、代码块顺序展示选项；可复制完整回答或指定代码块，取消不写文件，选择“始终完整复制”持久化到本地配置目录，/copy --reset 恢复选择器。源码提交 **1192af69465e8350986a0d1a9ea830687f7c0524**，已推送并静态复查入口。完整 Ink 交互、原版全局配置字段的同路径存储、所有 Markdown lexer 边界仍待等价。
+
+本轮独立业务能力累计 **4/100，剩余96项**（前3项见下文）；未形成100项完整预审与方案，未运行 Cargo/测试/CI；全部源码已提交待行为验收，新增完整等价验收0项，Issue #3 冻结362项不核销。
+
+## 2026-10-29：任务工具目录、消息级文件快照、Markdown 复制（已提交、待验收）
+
+本轮从用户完整原版 ZIP 的 source/src/tools.ts、source/src/utils/tasks.ts、source/src/utils/fileHistory.ts、source/src/commands/copy/copy.tsx 逐函数核对真实 Rust 调用链，**保守计 3 项独立用户可感知业务补齐**，均已推送至 Draft PR #2，未经行为验收：
+
+1. Agent 工具目录：原版仅在 V2 启用时展示 TaskCreate/Get/List/Update，否则展示 TodoWrite。此前 Rust 额外同时暴露旧 task_* 工具，造成两套并存清单；已在 src/agent.rs 移除模型可见的重复旧目录，旧客户端内部入口保留。提交 3121eed3。
+2. 文件编辑历史：同一用户消息的 Write/Edit/NotebookEdit 共享消息 UUID，重复修改同一文件时保留最初的备份、更新最终内容摘要；持久化消息标识，按消息分组限制最近 100 次快照，并用会话级文件锁串行写入。src/agent.rs、src/tools.rs、src/history.rs，提交 e9bd696a。原版按消息生成无编辑快照、SDK rewind_files、多文件回退及 Shell 修改跟踪仍待补齐；同期其他任务的 SDK 消息 UUID 续接不计本轮。
+3. /copy --code：原版 marked.lexer 支持缩进 Markdown 代码块，Rust 此前仅识别反引号/波浪线围栏；现将连续四空格或 Tab 缩进代码段按原有顺序纳入复制选择，保留未闭合围栏识别。src/copy_response.rs，提交 ac72fcbe。完整交互式复制选择器、全量 Markdown lexer 仍待等价。
+
+本轮未完成恰好 100 项预先确认的独立业务缺口清单与全部实施方案；**3/100，余 97 项，A/B 未达标**。未运行 cargo fmt/check/clippy/test、CI 或行为测试；新增完整等价验收 0 项，Issue #3 冻结 362 项不核销，全部保持“部分实现、待验收”。
+
+## 2026-10-30：SDK 标题生成异步请求与会话单一写入口（源码已提交、待验收）
+
+原版：source/src/cli/print.ts:3783-3814::generate_session_title 采用 fire-and-forget 生成标题，不能让模型请求占据 SDK stdin 的控制处理；source/src/utils/sessionTitle.ts 等标题解析规则。Rust 原入口 src/main.rs::sdk_nested_control -> Agent::generate_session_title 等待模型同步完成，主控制队列被长模型请求阻塞。
+
+- 已将 SDK 标题请求构造集中在 Agent::sdk_title_request，沿用原 JSON title 生成提示、当前多模型路由及无工具单轮请求。提交 04aa82ba、d1449753。
+- SDK 收到 generate_session_title 时独立创建 Tokio 模型任务，主消息循环继续处理控制消息；通过 SdkTitleDone 返回单次模型响应。由主 Agent 唯一写入口 Agent::finish_sdk_title 校验发起时 session UUID，防止慢请求覆盖新会话；按发起时 profile 归集输入输出用量及 API 耗时，并保留 persist=false/空标题/失败时 null 的对外结果语义。提交 c0045acb、b2610475。
+- 用户可感知业务能力保守计 1 条：SDK 标题生成不再同步占据主控制队列，结果在当前 Agent 的串行完成事件中落盘并返回。最新远端仅作静态接线核对，状态“源码已提交、待验收”，完整等价验收新增 0。按用户要求没有运行 cargo、测试或 CI。
+- 仍待闭环：主 Agent 当前正在执行长时间模型/工具任务时，title 结果会先缓存，直到控制 Actor 可处理时才回传；原版 title 回执可以独立发送。SDK 中断对后台标题请求本身的取消语义、EOF 后超过五秒仍在运行的标题任务、提供商重试和模型预算仍需验收。冻结 Issue #3 的 362 项独立保留，暂不勾选。
+
+## 2026-10-30：SDK 运行中断贯通 Unix Shell 进程组清理（源码已提交、待验收）
+
+原版源码依据：source/src/cli/print.ts:2807-2816 独立 stdin 处理；2830-2862 interrupt/end_session AbortController 取消；1858-1862 priority=now 抢占；source/src/utils/ShellCommand.ts 的取消树清理。Rust 主链：src/main.rs::sdk -> sdk_interruptible_turn -> Agent::ask_with_blocks -> ToolExecutor::run_command_with_shell。
+
+- 运行中接收标准 SDK control_request(request.subtype=interrupt)、旧版 control.action=interrupt、end_session 和 priority=now；使用独立标准输入线程、FIFO 队列、watch 取消版本，按输入版次防止提前读到的中断错误作用于后续提问。正常/旧版控制确认仍由 SDK 主循环发出。提交 006b2fe8、742656fa。
+- Unix 前台 Shell 在 SDK 取消时，原有 kill_on_drop 只终止父 Shell；现在通过独立进程组 RAII 守卫在 future 被取消时杀掉同组子孙进程，正常退出后解除守卫。提交 a5307caa。
+- 已更新动态矩阵对应 src/cli/print.ts、src/utils/ShellCommand.ts。保守计 1 条用户可感知业务链（SDK 运行中取消及其 Shell 清理），源码已提交、待验收，完整等价验收新增 0；不勾选 Issue #3 冻结 362 项。本轮未运行 Cargo/测试/CI。
+- 仍未闭环：Windows SDK 取消的 Job Object 级进程归属；已经后台化/脱组的任务生命周期；priority=now 排队消息的自动调度与通知；消息 UUID -> 文件快照 -> rewind_files；async:true Hook 的后台登记、完成通知和会话结束清理；SDK 自定义 Hook、JSON Schema 初始化；取消后历史恢复时序。
+
+## 2026-10-29：交互式 /plugin 管理接通原版子命令与实时刷新（源码已提交、待行为验收）
+
+- **原版依据**：完整 2.1.88 的 `source/src/commands/plugin/plugin.tsx::call` 将 `/plugin` 参数传给插件管理界面；`source/src/commands/plugin/parseArgs.ts::parsePluginArgs` 支持安装、卸载、启用、停用、验证、市场管理及别名。
+- **确认的 Rust 差异**：此前 `src/plugin_commands.rs::parse_plugin_args` 与 `src/plugin_manager.rs::execute` 只通过独立 CLI `atlas-agent plugin ...` 可达；交互会话 `src/main.rs::chat` 未分发 `/plugin`，导致原版用户命令进入普通模型消息。
+- **实代码**：`src/main.rs::chat` 接通 `/plugin` 与原版子命令解析器和现有安装管理事务，直接复用托管策略、依赖、安装锁、配置持久化及错误反馈；修改成功后重新读取配置并刷新当前 Agent 的 Hook/MCP/插件命令目录，刷新失败明确报告“管理操作已完成、当前会话刷新失败”，避免误导用户重复安装。提取共享 `reload_live_plugins`，让 `/plugin` 和 `/reload-plugins` 使用同一刷新路径。提交 `580c0586301c1c90d399f40e37fc2296c1476ead`。
+- **保留差异**：原版 `PluginSettings.tsx` 的完整交互菜单/确认/分页与图形界面、远程市场下载、MCPB、LSP/Agent 完整动态刷新未等价；该项保守计 **1 个独立用户可感知的交互式插件管理入口补齐**，源码已提交、待行为验收。连同本轮 `/reload-plugins` 计 **2/100，剩余98项**，A/B 先行100项审查仍未完成，Issue #3 冻结362项不核销；未运行 Cargo、测试或 CI。
+
 ## 2026-10-29：交互式 /reload-plugins 接入实际运行链（源码已提交、待行为验收）
 
 - **原版依据**：完整用户原始 ZIP 的 `source/src/commands/reload-plugins/reload-plugins.ts:13–57::call` 会在会话不中断的情况下刷新插件、Hook、命令及 MCP/LSP，并向用户显示加载结果与错误。

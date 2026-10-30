@@ -144,7 +144,7 @@ macro_rules! print_json {
 }
 
 use agent::Agent;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use config::{canonical_workspace, Config};
 use plugins::PluginSet;
@@ -429,7 +429,7 @@ enum Commands {
 async fn main() -> Result<()> {
     // Run process-wide cleanup even when a command returns early or fails.
     // Session-specific cleanup still runs through Agent::finish().
-    let result = run_cli().await;
+    let result = Box::pin(run_cli()).await;
     let cleanup = cleanup_registry::run_cleanup_functions().await;
     match (result, cleanup) {
         (Err(error), Err(cleanup_error)) => {
@@ -1355,6 +1355,32 @@ async fn reload_live_plugins(agent: &mut Agent, config: &mut Config) -> Result<V
     Ok(status)
 }
 
+/// The original AgentEditor/creation wizard surfaces non-blocking
+/// validation warnings and requires the user to accept them before saving.
+fn confirm_custom_agent_warnings(
+    definition: &agent_definition::AgentDefinition,
+    workspace: &std::path::Path,
+    user: bool,
+) -> Result<bool> {
+    let validation = agent_definition::validate_in_workspace(definition, workspace, user)?;
+    if !validation.errors.is_empty() {
+        bail!("{}", validation.errors.join("; "));
+    }
+    if validation.warnings.is_empty() {
+        return Ok(true);
+    }
+    for warning in &validation.warnings {
+        eprintln!("Agent warning: {warning}");
+    }
+    print!("Save agent despite these warnings? [y/N]: ");
+    io::stdout().flush()?;
+    let mut answer = String::new();
+    if io::stdin().read_line(&mut answer)? == 0 {
+        return Ok(false);
+    }
+    Ok(matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"))
+}
+
 async fn chat(
     agent: &mut Agent,
     config: &mut Config,
@@ -1727,8 +1753,9 @@ async fn chat(
                     "/files                   show files read successfully in this conversation"
                 );
                 println!(
-                    "/copy [N] [--code K]     copy recent assistant text or a fenced code block"
+                    "/copy [N] [--code K]     choose full response or a Markdown code block"
                 );
+                println!("/copy --reset            restore interactive copy selection");
                 println!(
                     "/diff                    view staged, unstaged and untracked Git changes"
                 );
@@ -1738,6 +1765,11 @@ async fn chat(
                     "/reload-plugins          refresh active plugin hooks, MCP and command catalog"
                 );
                 println!("/agents                  list project and user custom agent definitions");
+                println!("/agents show project|user NAME    inspect a custom agent definition");
+                println!("/agents create project|user NAME  create a custom agent interactively");
+                println!("/agents generate project|user [DESCRIPTION]  generate and review an agent");
+                println!("/agents delete project|user NAME  delete a custom agent with confirmation");
+                println!("/agents edit project|user NAME    replace an existing agent after validation");
                 println!("/hooks                   list active hook events, matchers and timeouts");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
@@ -1746,7 +1778,7 @@ async fn chat(
                 println!("/sessions [query]        search saved conversation titles");
                 println!("/sessions --semantic QUERY use model-ranked session search");
                 println!("One-shot model search: atlas-agent semantic-sessions QUERY");
-                println!("/resume TERM             find session, show restart command");
+                println!("/resume [TERM]           pick or directly resume a saved conversation");
                 println!("/rename [NAME]           rename conversation or generate a name using active model");
                 println!("/export [filename]       save full conversation to a local text file");
                 println!("Resume: atlas-agent chat --resume SESSION_ID");
@@ -2095,10 +2127,350 @@ async fn chat(
             onboarding.maybe_mark_complete()?;
             continue;
         }
+        if input.starts_with("/agents show ") {
+            let args = input.trim_start_matches("/agents show ").trim();
+            let outcome = (|| -> Result<String> {
+                let parts = args.split_whitespace().collect::<Vec<_>>();
+                let [scope, name] = parts.as_slice() else {
+                    bail!("Usage: /agents show project|user NAME");
+                };
+                let user = match *scope {
+                    "project" => false,
+                    "user" => true,
+                    _ => bail!("Agent location must be project or user"),
+                };
+                let path = agent_definition::new_file_path(
+                    agent.workspace_root(), user, name,
+                )?;
+                let metadata = std::fs::symlink_metadata(&path)
+                    .with_context(|| format!("Agent definition missing: {}", path.display()))?;
+                if !metadata.is_file() || metadata.file_type().is_symlink() {
+                    bail!("Agent definition must be a regular file");
+                }
+                let content = agent_definition::read_agent_file(&path)?;
+                Ok(format!("{} agent {} ({})\n{}", scope, name, path.display(), content))
+            })();
+            match outcome {
+                Ok(details) => println!("{details}"),
+                Err(error) => eprintln!("Agent details unavailable: {error:#}"),
+            }
+            continue;
+        }
+        if input.starts_with("/agents generate ") {
+            let args = input.trim_start_matches("/agents generate ").trim();
+            let mut pieces = args.splitn(2, ' ');
+            let scope = pieces.next().unwrap_or("");
+            let user = match scope {
+                "project" => false,
+                "user" => true,
+                _ => {
+                    eprintln!("Usage: /agents generate project|user [DESCRIPTION]");
+                    continue;
+                }
+            };
+            let supplied = pieces.next().unwrap_or("").trim();
+            let request = if supplied.is_empty() {
+                print!("Describe the agent to generate: ");
+                io::stdout().flush()?;
+                let mut line = String::new();
+                if io::stdin().read_line(&mut line)? == 0 {
+                    println!("Agent generation cancelled.");
+                    continue;
+                }
+                line.trim().to_owned()
+            } else {
+                supplied.to_owned()
+            };
+            match agent.generate_custom_agent_definition(&request).await {
+                Ok(definition) => {
+                    println!("Generated agent: {}", definition.agent_type);
+                    println!("When to use:\n{}", definition.when_to_use);
+                    println!("System prompt:\n{}", definition.system_prompt);
+                    let decision = (|| -> Result<bool> {
+                        if !confirm_custom_agent_warnings(
+                            &definition, agent.workspace_root(), user,
+                        )? {
+                            return Ok(false);
+                        }
+                        print!("Save generated agent {}? [y/N]: ", definition.agent_type);
+                        io::stdout().flush()?;
+                        let mut answer = String::new();
+                        if io::stdin().read_line(&mut answer)? == 0 {
+                            return Ok(false);
+                        }
+                        Ok(matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"))
+                    })();
+                    match decision {
+                        Ok(true) => match agent_definition::save_agent(
+                            &definition, agent.workspace_root(), user, false,
+                        ) {
+                            Ok(path) => println!("Created generated agent at {}", path.display()),
+                            Err(error) => eprintln!("Cannot save generated agent: {error:#}"),
+                        },
+                        Ok(false) => println!("Generated agent discarded without saving."),
+                        Err(error) => eprintln!("Agent validation failed: {error:#}"),
+                    }
+                }
+                Err(error) => eprintln!("Agent generation failed: {error:#}"),
+            }
+            continue;
+        }
+        if input.starts_with("/agents create ") {
+            let args = input.trim_start_matches("/agents create ").trim();
+            let outcome = (|| -> Result<String> {
+                let parts = args.split_whitespace().collect::<Vec<_>>();
+                let [scope, name] = parts.as_slice() else {
+                    bail!("Usage: /agents create project|user NAME");
+                };
+                let user = match *scope {
+                    "project" => false,
+                    "user" => true,
+                    _ => bail!("Agent location must be project or user"),
+                };
+                if let Some(error) = agent_definition::validate_agent_type(name) {
+                    bail!("{error}");
+                }
+                print!("Agent description (when to use): ");
+                io::stdout().flush()?;
+                let mut description = String::new();
+                if io::stdin().read_line(&mut description)? == 0 {
+                    bail!("Agent creation cancelled: input closed");
+                }
+                println!("Enter the agent system prompt. End with a line containing .end");
+                let mut lines = Vec::new();
+                loop {
+                    let mut line = String::new();
+                    if io::stdin().read_line(&mut line)? == 0 {
+                        bail!("Agent creation cancelled: prompt was not completed");
+                    }
+                    if line.trim_end_matches(['\r', '\n']) == ".end" {
+                        break;
+                    }
+                    lines.push(line.trim_end_matches(['\r', '\n']).to_owned());
+                }
+                print!("Allowed tools (comma-separated, blank for all): ");
+                io::stdout().flush()?;
+                let mut tools = String::new();
+                if io::stdin().read_line(&mut tools)? == 0 {
+                    bail!("Agent creation cancelled: input closed");
+                }
+                print!("Preferred model (blank to inherit): ");
+                io::stdout().flush()?;
+                let mut model = String::new();
+                if io::stdin().read_line(&mut model)? == 0 {
+                    bail!("Agent creation cancelled: input closed");
+                }
+                let tools = tools.split(',').map(str::trim)
+                    .filter(|name| !name.is_empty()).map(str::to_owned)
+                    .collect::<Vec<_>>();
+                let definition = agent_definition::AgentDefinition {
+                    agent_type: (*name).to_owned(),
+                    when_to_use: description.trim().to_owned(),
+                    system_prompt: lines.join("\n"),
+                    tools: (!tools.is_empty()).then_some(tools),
+                    color: None,
+                    model: (!model.trim().is_empty()).then(|| model.trim().to_owned()),
+                    memory: None,
+                    effort: None,
+                };
+                if !confirm_custom_agent_warnings(
+                    &definition, agent.workspace_root(), user,
+                )? {
+                    return Ok("Agent creation cancelled.".into());
+                }
+                let path = agent_definition::save_agent(
+                    &definition, agent.workspace_root(), user, false,
+                )?;
+                Ok(format!("Created agent {} at {}", name, path.display()))
+            })();
+            match outcome {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Agent creation failed: {error:#}"),
+            }
+            continue;
+        }
+        if input.starts_with("/agents edit ") {
+            let args = input.trim_start_matches("/agents edit ").trim();
+            let outcome = (|| -> Result<String> {
+                let parts = args.split_whitespace().collect::<Vec<_>>();
+                let [scope, name] = parts.as_slice() else {
+                    bail!("Usage: /agents edit project|user NAME");
+                };
+                let user = match *scope {
+                    "project" => false,
+                    "user" => true,
+                    _ => bail!("Agent location must be project or user"),
+                };
+                let path = agent_definition::new_file_path(
+                    agent.workspace_root(), user, name,
+                )?;
+                let metadata = std::fs::symlink_metadata(&path)
+                    .with_context(|| format!("Agent definition missing: {}", path.display()))?;
+                if !metadata.is_file() || metadata.file_type().is_symlink() {
+                    bail!("Agent definition must be a regular file, not a symbolic link");
+                }
+                let original = agent_definition::read_agent_file(&path)?;
+                println!("Current agent definition at {}:\n{}", path.display(), original);
+                println!("Enter replacement description and system prompt; invalid input leaves the existing file unchanged.");
+                print!("New description (when to use): ");
+                io::stdout().flush()?;
+                let mut description = String::new();
+                if io::stdin().read_line(&mut description)? == 0 {
+                    bail!("Agent edit cancelled: input closed");
+                }
+                println!("New system prompt (finish with a line containing .end):");
+                let mut lines = Vec::new();
+                loop {
+                    let mut line = String::new();
+                    if io::stdin().read_line(&mut line)? == 0 {
+                        bail!("Agent edit cancelled: prompt incomplete");
+                    }
+                    if line.trim_end_matches(['\r', '\n']) == ".end" {
+                        break;
+                    }
+                    lines.push(line.trim_end_matches(['\r', '\n']).to_owned());
+                }
+                print!("Allowed tools (comma-separated, blank for all): ");
+                io::stdout().flush()?;
+                let mut tools = String::new();
+                if io::stdin().read_line(&mut tools)? == 0 {
+                    bail!("Agent edit cancelled: input closed");
+                }
+                print!("Preferred model (blank to inherit): ");
+                io::stdout().flush()?;
+                let mut model = String::new();
+                if io::stdin().read_line(&mut model)? == 0 {
+                    bail!("Agent edit cancelled: input closed");
+                }
+                let tools = tools.split(',').map(str::trim)
+                    .filter(|tool| !tool.is_empty()).map(str::to_owned)
+                    .collect::<Vec<_>>();
+                let (color, memory, effort) =
+                    agent_definition::retained_optional_fields(&original);
+                let definition = agent_definition::AgentDefinition {
+                    agent_type: (*name).to_owned(),
+                    when_to_use: description.trim().to_owned(),
+                    system_prompt: lines.join("\n"),
+                    tools: (!tools.is_empty()).then_some(tools),
+                    color,
+                    model: (!model.trim().is_empty()).then(|| model.trim().to_owned()),
+                    memory,
+                    effort,
+                };
+                if !confirm_custom_agent_warnings(
+                    &definition, agent.workspace_root(), user,
+                )? {
+                    return Ok("Agent edit cancelled; existing file preserved.".into());
+                }
+                agent_definition::save_agent(
+                    &definition, agent.workspace_root(), user, true,
+                )?;
+                Ok(format!("Updated {} agent {}", scope, name))
+            })();
+            match outcome {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Agent edit failed: {error:#}"),
+            }
+            continue;
+        }
+        if input.starts_with("/agents delete ") {
+            let args = input.trim_start_matches("/agents delete ").trim();
+            let outcome = (|| -> Result<String> {
+                let parts = args.split_whitespace().collect::<Vec<_>>();
+                let [scope, name] = parts.as_slice() else {
+                    bail!("Usage: /agents delete project|user NAME");
+                };
+                let user = match *scope {
+                    "project" => false,
+                    "user" => true,
+                    _ => bail!("Agent location must be project or user"),
+                };
+                let path = agent_definition::new_file_path(
+                    agent.workspace_root(), user, name,
+                )?;
+                match std::fs::symlink_metadata(&path) {
+                    Ok(meta) if meta.file_type().is_symlink() => {
+                        bail!("Refusing to delete redirected agent definition");
+                    }
+                    Ok(meta) if !meta.is_file() => bail!("Agent definition is not a file"),
+                    Ok(_) => {}
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                        bail!("Agent definition does not exist in the selected location");
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+                print!("Delete {} agent {}? [y/N]: ", scope, name);
+                io::stdout().flush()?;
+                let mut answer = String::new();
+                if io::stdin().read_line(&mut answer)? == 0 {
+                    return Ok("Agent deletion cancelled.".into());
+                }
+                if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+                    return Ok("Agent deletion cancelled.".into());
+                }
+                agent_definition::delete_agent(agent.workspace_root(), user, name)?;
+                Ok(format!("Deleted {} agent {}", scope, name))
+            })();
+            match outcome {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Agent deletion failed: {error:#}"),
+            }
+            continue;
+        }
         if input == "/copy" || input.starts_with("/copy ") {
             let selection = input.strip_prefix("/copy").unwrap_or("").trim();
-            match agent.copy_response(selection) {
-                Ok(message) => println!("{message}"),
+            // Original copy.tsx presents full-response/code-block choices
+            // whenever the selected answer contains Markdown code.
+            let outcome = (|| -> Result<Option<String>> {
+                if selection == "--reset" {
+                    copy_response::save_copy_full_preference(false)?;
+                    return Ok(Some("Copy picker restored for future responses.".into()));
+                }
+                let (age, explicit_code) = copy_response::parse_selection(selection)?;
+                let always_full = copy_response::copy_full_preference()?;
+                if explicit_code.is_some() || always_full {
+                    return agent.copy_response(selection).map(Some);
+                }
+                let choices = agent.copy_code_block_choices(age)?;
+                if choices.is_empty() {
+                    return agent.copy_response(selection).map(Some);
+                }
+                println!("Copy response #{age}:");
+                println!("  0) Full response");
+                for (index, (language, preview)) in choices.iter().enumerate() {
+                    println!("  {}) [{}] {}", index + 1, language, preview);
+                }
+                println!("  a) Always copy full responses (saved preference)");
+                println!("  q) Cancel");
+                loop {
+                    print!("Select copy content: ");
+                    io::stdout().flush()?;
+                    let mut choice = String::new();
+                    if io::stdin().read_line(&mut choice)? == 0 {
+                        return Ok(None);
+                    }
+                    let choice = choice.trim();
+                    if choice.eq_ignore_ascii_case("q") {
+                        return Ok(None);
+                    }
+                    if choice.eq_ignore_ascii_case("a") {
+                        copy_response::save_copy_full_preference(true)?;
+                        return agent.copy_response(&age.to_string()).map(Some);
+                    }
+                    if choice == "0" {
+                        return agent.copy_response(&age.to_string()).map(Some);
+                    }
+                    if let Ok(index) = choice.parse::<usize>() {
+                        if index > 0 && index <= choices.len() {
+                            return agent.copy_response(&format!("{age} --code {index}")).map(Some);
+                        }
+                    }
+                    eprintln!("Choose 0-{}, a, or q.", choices.len());
+                }
+            })();
+            match outcome {
+                Ok(Some(message)) => println!("{message}"),
+                Ok(None) => println!("Copy cancelled."),
                 Err(error) => eprintln!("Copy failed: {error:#}"),
             }
             continue;
@@ -2119,12 +2491,50 @@ async fn chat(
         }
         if input == "/resume" || input.starts_with("/resume ") {
             let query = input.trim_start_matches("/resume").trim();
-            match session_control::resolve(agent.workspace_root(), query) {
-                Ok(session) => println!(
-                    "To resume: atlas-agent --workspace . chat --resume {}",
-                    session.id
-                ),
-                Err(err) => eprintln!("{err:#}"),
+            let selection = (|| -> Result<Option<String>> {
+                if !query.is_empty() {
+                    return Ok(Some(query.to_owned()));
+                }
+                // Original /resume with no arguments opens a session picker.
+                // Exclude the current conversation and team sidechains.
+                let sessions = agent.resumable_sessions()?;
+                if sessions.is_empty() {
+                    println!("No conversations found to resume.");
+                    return Ok(None);
+                }
+                println!("Choose a conversation to resume:");
+                for (index, session) in sessions.iter().take(20).enumerate() {
+                    let branch = session.git_branch.as_deref().unwrap_or("");
+                    println!("  {}) {} [{}] {} messages", index + 1,
+                        session.display_title(), branch, session.messages);
+                }
+                print!("Session number (q to cancel): ");
+                io::stdout().flush()?;
+                let mut choice = String::new();
+                if io::stdin().read_line(&mut choice)? == 0
+                    || choice.trim().eq_ignore_ascii_case("q")
+                {
+                    return Ok(None);
+                }
+                let index = choice.trim().parse::<usize>()
+                    .context("Enter a numeric session selection")?;
+                if index == 0 || index > sessions.len().min(20) {
+                    bail!("Session selection is out of range");
+                }
+                Ok(Some(sessions[index - 1].id.to_string()))
+            })();
+            match selection {
+                Ok(Some(selected)) => match agent.resume_interactive_session(&selected).await {
+                    Ok(message) => {
+                        prompt_history = prompt_history::PromptHistory::new(
+                            agent.workspace_root(), &agent.session_id(),
+                        )?;
+                        println!("{message}");
+                    }
+                    Err(error) => eprintln!("Resume failed: {error:#}"),
+                },
+                Ok(None) => println!("Resume cancelled."),
+                Err(error) => eprintln!("Resume selection failed: {error:#}"),
             }
             continue;
         }
@@ -2140,8 +2550,33 @@ async fn chat(
         }
         if input == "/export" || input.starts_with("/export ") {
             let value = input.trim_start_matches("/export").trim();
-            match agent.export_session(if value.is_empty() { None } else { Some(value) }) {
-                Ok(path) => println!("Conversation exported to: {}", path.display()),
+            let outcome = (|| -> Result<Option<std::path::PathBuf>> {
+                if !value.is_empty() {
+                    return agent.export_session(Some(value)).map(Some);
+                }
+                // Match ExportDialog: preview and confirm a filename before
+                // creating the export; the user can rename or cancel.
+                let (suggested, preview) = agent.export_dialog_preview();
+                println!("Export conversation preview:\n{preview}");
+                if preview.chars().count() >= 1200 {
+                    println!("... (preview truncated; full conversation will be exported)");
+                }
+                print!("Export filename [{suggested}] (q to cancel): ");
+                io::stdout().flush()?;
+                let mut chosen = String::new();
+                if io::stdin().read_line(&mut chosen)? == 0 {
+                    return Ok(None);
+                }
+                let chosen = chosen.trim();
+                if chosen.eq_ignore_ascii_case("q") {
+                    return Ok(None);
+                }
+                let filename = if chosen.is_empty() { suggested.as_str() } else { chosen };
+                agent.export_session(Some(filename)).map(Some)
+            })();
+            match outcome {
+                Ok(Some(path)) => println!("Conversation exported to: {}", path.display()),
+                Ok(None) => println!("Export cancelled."),
                 Err(err) => eprintln!("Failed to export conversation: {err:#}"),
             }
             continue;
@@ -2340,6 +2775,7 @@ async fn sdk_interruptible_turn(
     agent: &mut Agent,
     prompt: &str,
     blocks: Option<Vec<Value>>,
+    message_id: Option<uuid::Uuid>,
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
 ) -> Result<String> {
@@ -2357,7 +2793,7 @@ async fn sdk_interruptible_turn(
             }
             bail!("SDK interrupt control channel closed");
         }
-        response = agent.ask_with_blocks(prompt, blocks) => response,
+        response = agent.ask_with_blocks_for_message(prompt, blocks, message_id) => response,
     }
 }
 
@@ -2366,7 +2802,7 @@ async fn sdk_run_initial_turn(
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
 ) {
-    match sdk_interruptible_turn(agent, "", None, interrupts, input_epoch).await {
+    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch).await {
         Ok(answer) => print_json!(json!({
             "type":"result","session_id":agent.session_id(),
             "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -2378,6 +2814,46 @@ async fn sdk_run_initial_turn(
     }
 }
 
+/// An independent SDK title result is committed only by the main Agent
+/// actor, keeping session state and per-model usage as single-writer data.
+struct SdkTitleDone {
+    id: String,
+    session_id: uuid::Uuid,
+    profile: config::ProviderProfile,
+    persist: bool,
+    elapsed: std::time::Duration,
+    outcome: Result<(Option<String>, Option<protocol::TokenUsage>)>,
+}
+
+fn sdk_deliver_title(agent: &mut Agent, done: SdkTitleDone) {
+    let result = match done.outcome {
+        Ok((title, usage)) => agent.finish_sdk_title(
+            done.session_id, &done.profile, usage, title, done.persist, done.elapsed,
+        ),
+        Err(error) => {
+            // The source returns null on title-model failure while still
+            // charging the request duration to the original session.
+            let accounting = agent.finish_sdk_title(
+                done.session_id, &done.profile, None, None, false, done.elapsed,
+            );
+            if let Err(accounting_error) = accounting {
+                Err(accounting_error)
+            } else {
+                eprintln!("Session title generation failed: {error:#}");
+                Ok(None)
+            }
+        }
+    };
+    match result {
+        Ok(title) => print_json!(json!({"type":"control_response","response":{
+            "subtype":"success","request_id":done.id,"response":{"title":title}
+        }})),
+        Err(error) => print_json!(json!({"type":"control_response","response":{
+            "subtype":"error","request_id":done.id,"error":format!("{error:#}")
+        }})),
+    }
+}
+
 async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut queue = message_queue::Queue::default();
     queue.enable_journal(agent.workspace_root(), &agent.session_id())?;
@@ -2386,6 +2862,8 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut sdk_initialized = false;
     let mut sdk_end_requested = false;
     let mut side_question_tasks = Vec::<tokio::task::JoinHandle<()>>::new();
+    let (title_tx, mut title_rx) = tokio::sync::mpsc::unbounded_channel::<SdkTitleDone>();
+    let mut title_pending = 0usize;
     print_json!(json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
@@ -2437,7 +2915,26 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             }
         }
     });
-    while let Some(input) = input_rx.recv().await {
+    loop {
+        // Completed title requests can publish their replies while stdin is
+        // idle; they never wait behind the next SDK control request.
+        let incoming = tokio::select! {
+            biased;
+            Some(done) = title_rx.recv(), if title_pending > 0 => {
+                title_pending -= 1;
+                sdk_deliver_title(agent, done);
+                continue;
+            }
+            input = input_rx.recv() => input,
+            // A hook can finish after its originating model turn. Wake the
+            // SDK event loop even without new stdin, just like the source
+            // AsyncHookRegistry response-delivery path.
+            _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {
+                agent.pump_async_hook_events().await?;
+                continue;
+            }
+        };
+        let Some(input) = incoming else { break };
         let (line, input_epoch) = input?;
         if line.trim().is_empty() {
             continue;
@@ -2587,15 +3084,23 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         sdk_queue::emit_user_replay(prompt_value, uuid, &agent.session_id());
                     }
                 }
+                // The same UUID identifies both the SDK user message and
+                // every file edit performed by its agent/tool execution.
+                let message_id = event.get("uuid").and_then(Value::as_str)
+                    .filter(|id| !id.trim().is_empty())
+                    .map(uuid::Uuid::parse_str)
+                    .transpose();
+                let message_id = match message_id {
+                    Ok(value) => value,
+                    Err(error) => {
+                        print_json!(json!({"type":"error",
+                            "message":format!("SDK user uuid must be valid: {error}")}));
+                        continue;
+                    }
+                };
                 match sdk_interruptible_turn(
-                    agent,
-                    &user.preview,
-                    user.blocks,
-                    &interrupt_rx,
-                    input_epoch,
-                )
-                .await
-                {
+                    agent, &user.preview, user.blocks, message_id, &interrupt_rx, input_epoch,
+                ).await {
                     Ok(answer) => print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
                         "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -2610,6 +3115,76 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             // not create errors or mutate the active conversation.
             "keep_alive" => {}
             "control_request" if event.get("request").is_some() => {
+                // Source cli/print.ts:3783-3814 executes title generation
+                // independently of the SDK control message reader.
+                if event.pointer("/request/subtype").and_then(Value::as_str)
+                    == Some("generate_session_title")
+                {
+                    let prepared: Result<(String, bool, Option<protocol::ModelRequest>)> = (|| {
+                        let id = event.get("request_id").and_then(Value::as_str)
+                            .filter(|id| !id.is_empty())
+                            .ok_or_else(|| anyhow::anyhow!(
+                                "generate_session_title requires request_id"))?;
+                        let description = event.pointer("/request/description")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| anyhow::anyhow!(
+                                "generate_session_title requires description string"))?;
+                        let persist = match event.pointer("/request/persist") {
+                            None => false,
+                            Some(Value::Bool(value)) => *value,
+                            _ => bail!("generate_session_title persist must be a boolean"),
+                        };
+                        Ok((id.to_owned(), persist, agent.sdk_title_request(description)))
+                    })();
+                    match prepared {
+                        Ok((id, persist, Some(request))) => {
+                            let profile = agent.profile().clone();
+                            let session_id = uuid::Uuid::parse_str(&agent.session_id())?;
+                            let sender = title_tx.clone();
+                            title_pending = title_pending.saturating_add(1);
+                            tokio::spawn(async move {
+                                let started = std::time::Instant::now();
+                                let outcome: Result<(Option<String>,
+                                    Option<protocol::TokenUsage>)> = async {
+                                    let client = provider::create(&profile)?;
+                                    let completion = client.complete(&request).await?;
+                                    let usage = completion.usage;
+                                    if completion.message.tool_calls.as_ref()
+                                        .is_some_and(|calls| !calls.is_empty()) {
+                                        return Ok((None, usage));
+                                    }
+                                    let title = serde_json::from_str::<Value>(
+                                        &completion.message.visible_text()
+                                    ).ok()
+                                        .and_then(|value| value.get("title")
+                                            .and_then(Value::as_str).map(str::to_owned))
+                                        .map(|value| value.trim().to_owned())
+                                        .filter(|value| !value.is_empty());
+                                    Ok((title, usage))
+                                }.await;
+                                let _ = sender.send(SdkTitleDone {
+                                    id, session_id, profile, persist,
+                                    elapsed: started.elapsed(), outcome,
+                                });
+                            });
+                        }
+                        Ok((id, _, None)) => print_json!(json!({
+                            "type":"control_response","response":{
+                                "subtype":"success","request_id":id,
+                                "response":{"title":null}
+                            }
+                        })),
+                        Err(error) => print_json!(json!({
+                            "type":"control_response","response":{
+                                "subtype":"error",
+                                "request_id":event.get("request_id")
+                                    .cloned().unwrap_or(Value::Null),
+                                "error":format!("{error:#}")
+                            }
+                        })),
+                    }
+                    continue;
+                }
                 // side_question is fire-and-forget in the original SDK. Its
                 // model request must not hold up subsequent stdin controls.
                 if event.pointer("/request/subtype").and_then(Value::as_str)
@@ -2854,6 +3429,25 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             other => print_json!(json!({"type":"error",
                 "message":format!("Unsupported SDK event {other}")})),
+        }
+    }
+    // Cancel orphaned asynchronous shell hooks on SDK stream shutdown.
+    // The SessionEnd event will also finalize in the normal Agent path.
+    for event in hooks::finalize_async_hooks(&agent.session_id()).await {
+        print_json!(event);
+    }
+    // Bound the post-EOF flush window for accepted background title
+    // requests; persist replies through the main Agent before exiting.
+    let title_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while title_pending > 0 {
+        let remaining = title_deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() { break; }
+        match tokio::time::timeout(remaining, title_rx.recv()).await {
+            Ok(Some(done)) => {
+                title_pending -= 1;
+                sdk_deliver_title(agent, done);
+            }
+            _ => break,
         }
     }
     // A producer may close stdin immediately after issuing a side question.
@@ -3128,6 +3722,19 @@ async fn sdk_nested_control(
             | "mcp_resource_updates"
             | "mcp_poll_resource_updates" => {
                 mcp_control_request(agent, subtype, &Value::Object(request.clone())).await
+            }
+            "rewind_files" => {
+                let id = request.get("user_message_id")
+                    .and_then(Value::as_str)
+                    .filter(|id| !id.trim().is_empty())
+                    .ok_or_else(|| anyhow::anyhow!(
+                        "rewind_files requires user_message_id"))?;
+                let dry_run = match request.get("dry_run") {
+                    None => false,
+                    Some(Value::Bool(value)) => *value,
+                    _ => bail!("rewind_files dry_run must be a boolean"),
+                };
+                agent.sdk_rewind_files(id, dry_run)
             }
             "generate_session_title" => {
                 let description = request

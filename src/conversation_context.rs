@@ -496,7 +496,7 @@ pub fn project_instructions_with_dirs(
         paths
     }
 
-    // Source claudemd.ts excludes user/project/local memory before reading,
+    // Source memory loader excludes user/project/local memory before reading,
     // including files reached through @includes. Absolute globs also need
     // their symlink-resolved variants (e.g. /tmp versus /private/tmp).
     fn build_instruction_excludes(patterns: &[String]) -> anyhow::Result<globset::GlobSet> {

@@ -488,6 +488,7 @@ pub struct ToolExecutor {
     shell_kind: crate::shell_runtime::ShellKind,
     session_env: std::collections::BTreeMap<String, String>,
     session_id: Option<String>,
+    history_message_id: Option<uuid::Uuid>,
     approval: Approval,
     interactive: bool,
     file_checkpointing_enabled: bool,
@@ -509,6 +510,7 @@ impl ToolExecutor {
             shell_kind: crate::shell_runtime::ShellKind::default(),
             session_env: std::collections::BTreeMap::new(),
             session_id: None,
+            history_message_id: None,
             approval,
             interactive,
             file_checkpointing_enabled: true,
@@ -541,6 +543,63 @@ impl ToolExecutor {
     }
     pub fn with_session_id(mut self, session_id: String) -> Self {
         self.session_id = Some(session_id);
+        self
+    }
+    /// Message-level SDK rewind shares the exact same path authorization,
+    /// explicit Edit deny/ask rules and checkpoint integrity checks as the
+    /// user-facing file_revert tool. Check all targets before changing any.
+    pub fn sdk_rewind_message_records(
+        &self,
+        records: &[history::Record],
+        dry_run: bool,
+    ) -> Result<Value> {
+        if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
+            bail!("File checkpointing is disabled");
+        }
+        let mut checked = Vec::with_capacity(records.len());
+        for record in records {
+            let path = self.checked_path(&record.path)?;
+            if dry_run {
+                self.require_read_rules(&record.path, &path)?;
+            } else {
+                let args = json!({
+                    "path": record.path,
+                    "paths": self.file_rule_paths(&record.path)?
+                });
+                match permission_rules::policy_for(&self.permission_rules, "edit_file", &args)? {
+                    Some(permission_rules::Behavior::Deny) => {
+                        bail!(
+                            "Message rewind denied by explicit Edit rule: {}",
+                            record.path
+                        );
+                    }
+                    Some(permission_rules::Behavior::Ask) => {
+                        self.require_approval("edit_file", &args)?;
+                    }
+                    _ => {}
+                }
+                self.require_approval("file_revert", &args)?;
+            }
+            checked.push((record.clone(), path));
+        }
+        history::preflight_message_rewind(&checked)?;
+        if dry_run {
+            return Ok(json!({
+                "can_rewind":true,
+                "files":checked.iter().map(|(record, _)| record.path.clone())
+                    .collect::<Vec<_>>(),
+                "checkpoints":checked.len()
+            }));
+        }
+        let mut restored = Vec::new();
+        for (record, path) in checked {
+            restored.push(history::restore(&record, &path)?);
+        }
+        Ok(json!({"restored":restored,"checkpoints":records.len()}))
+    }
+
+    pub fn with_history_message_id(mut self, id: uuid::Uuid) -> Self {
+        self.history_message_id = Some(id);
         self
     }
     pub fn with_metrics(mut self, metrics: Arc<ToolMetrics>) -> Self {
@@ -730,6 +789,7 @@ impl ToolExecutor {
                             self.session_id.as_deref(),
                             &path,
                             pending,
+                            self.history_message_id,
                         )
                     })
                     .unwrap_or_default();
@@ -808,6 +868,7 @@ impl ToolExecutor {
                             self.session_id.as_deref(),
                             &path,
                             pending,
+                            self.history_message_id,
                         )
                     })
                     .unwrap_or_default();
@@ -826,6 +887,7 @@ impl ToolExecutor {
                             self.session_id.as_deref(),
                             &path,
                             pending,
+                            self.history_message_id,
                         )
                     })
                     .unwrap_or_default();
@@ -1668,7 +1730,7 @@ impl ToolExecutor {
         // Resolve the exact plugin root already validated by skill discovery.
         let rendered = rendered
             .replace("${SKILL_DIR}", &dir)
-            .replace("${CLAUDE_SKILL_DIR}", &dir);
+            .replace("${ATLAS_SKILL_DIR}", &dir);
         let rendered = if let Some((plugin, _)) = name.split_once(':') {
             let root = self
                 .root
@@ -1676,7 +1738,7 @@ impl ToolExecutor {
                 .join(plugin)
                 .canonicalize()?;
             let root = root.to_string_lossy().replace('\\', "/");
-            rendered.replace("${CLAUDE_PLUGIN_ROOT}", &root)
+            rendered.replace("${ATLAS_PLUGIN_ROOT}", &root)
         } else {
             rendered
         };
@@ -1688,7 +1750,7 @@ impl ToolExecutor {
         Ok(match self.session_id.as_deref() {
             Some(id) => rendered
                 .replace("${SESSION_ID}", id)
-                .replace("${CLAUDE_SESSION_ID}", id),
+                .replace("${ATLAS_SESSION_ID}", id),
             None => rendered,
         })
     }
@@ -1959,6 +2021,8 @@ impl ToolExecutor {
         // have completed, so descendants cannot outlive user cancellation.
         #[cfg(unix)]
         let mut cancel_group_guard = ShellCancelGroupGuard(process_id);
+        #[cfg(windows)]
+        let mut cancel_tree_guard = ShellCancelTreeGuard(process_id);
         let stdout = child.stdout.take().context("No command stdout")?;
         let stderr = child.stderr.take().context("No command stderr")?;
         let combined_output_bytes = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -2026,6 +2090,10 @@ impl ToolExecutor {
         {
             cancel_group_guard.0 = None;
         }
+        #[cfg(windows)]
+        {
+            cancel_tree_guard.0 = None;
+        }
         let interpretation = if kind == crate::shell_runtime::ShellKind::Bash {
             let (is_error, note) =
                 crate::shell_runtime::interpret_bash_exit(command, status.code().unwrap_or(-1));
@@ -2078,6 +2146,26 @@ impl Drop for ShellCancelGroupGuard {
     fn drop(&mut self) {
         if let Some(pid) = self.0.filter(|id| *id <= i32::MAX as u32) {
             let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+        }
+    }
+}
+
+/// The Windows equivalent of ShellCancelGroupGuard: process cancellation
+/// drops the model/tool future without running the timeout handler. Invoke
+/// the platform's existing taskkill tree operation synchronously from Drop.
+#[cfg(windows)]
+struct ShellCancelTreeGuard(Option<u32>);
+
+#[cfg(windows)]
+impl Drop for ShellCancelTreeGuard {
+    fn drop(&mut self) {
+        if let Some(pid) = self.0 {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
         }
     }
 }
@@ -2730,7 +2818,7 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn shell_command_respects_output_limit() {
+    async fn shell_command_previews_large_output_without_killing_it() {
         let root = tempfile::tempdir().unwrap();
         let executor = executor(root.path(), Approval::Full);
         let small = ToolCall {
@@ -2750,10 +2838,12 @@ mod tests {
                 arguments: json!({"command":"head -c 200000 /dev/zero"}).to_string(),
             },
         };
-        // The source allows this output below its 5 GiB disk cap and returns
-        // a bounded preview. A preview limit must not kill a healthy command.
-        let result = executor.execute(&large).await;
-        assert!(result.contains("stdout preview only"), "{result}");
+        // 200 KiB exceeds the model preview but remains safely under the
+        // original 5 GiB termination threshold. Preserve command success.
+        let output = executor.execute(&large).await;
+        assert!(output.contains("stdout preview only"), "{output}");
+        assert!(output.contains("Exit: exit status: 0"), "{output}");
+        assert!(!output.contains("Command output exceeded"), "{output}");
     }
 
     #[cfg(target_os = "linux")]
@@ -2790,9 +2880,23 @@ mod tests {
         }
         panic!("Foreground shell timeout left descendant PID {pid} running");
     }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn combined_shell_output_hard_limit_remains_five_gibibytes() {
+        use std::sync::atomic::AtomicU64;
+        use tokio::io::AsyncWriteExt as _;
+        let (mut writer, reader) = tokio::io::duplex(16_384);
+        writer.write_all(&vec![b'x'; 8192]).await.unwrap();
+        drop(writer);
+        let already_consumed = 5_u64 * 1024 * 1024 * 1024 - 4096;
+        let shared = Arc::new(AtomicU64::new(already_consumed));
+        let error = capped_read(reader, 128, shared).await.unwrap_err();
+        assert!(error.to_string().contains("5 GiB"), "{error:#}");
+    }
+
     #[cfg(target_os = "linux")]
     #[tokio::test]
-    async fn foreground_output_cap_terminates_shell_descendants() {
+    async fn foreground_timeout_with_large_output_terminates_shell_descendants() {
         let root = tempfile::tempdir().unwrap();
         let tool = executor(root.path(), Approval::Full);
         let call = ToolCall {
@@ -2802,7 +2906,7 @@ mod tests {
                 name: "run_command".into(),
                 arguments: json!({
                     "command":"sleep 30 & echo $! > oversize.pid; head -c 300000 /dev/zero",
-                    "timeout_seconds":8
+                    "timeout_seconds":1
                 })
                 .to_string(),
             },
@@ -2815,7 +2919,7 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert!(result.contains("Command output exceeded"), "{result}");
+        assert!(result.contains("Command timed out"), "{result}");
         let pid: i32 = fs::read_to_string(root.path().join("oversize.pid"))
             .unwrap()
             .trim()
@@ -2902,7 +3006,7 @@ mod tests {
         .unwrap();
         fs::write(
             skill.join("SKILL.md"),
-            "Review ${CLAUDE_SKILL_DIR} from ${CLAUDE_PLUGIN_ROOT}",
+            "Review ${ATLAS_SKILL_DIR} from ${ATLAS_PLUGIN_ROOT}",
         )
         .unwrap();
         let tool = executor(root.path(), Approval::ReadOnly).with_plugins(vec!["demo".into()]);
@@ -2912,7 +3016,7 @@ mod tests {
             .unwrap();
         assert!(rendered.contains("extra/group/review"), "{rendered}");
         assert!(rendered.contains(".atlas/plugins/demo"), "{rendered}");
-        assert!(!rendered.contains("${CLAUDE_SKILL_DIR}"));
+        assert!(!rendered.contains("${ATLAS_SKILL_DIR}"));
     }
 
     #[test]

@@ -82,6 +82,13 @@ impl HookEvent {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HookRule {
+    /// Original hook configuration: async runs the process in background.
+    #[serde(default, rename = "async")]
+    pub async_background: bool,
+    /// asyncRewake implies async; completion with exit code 2 asks the model
+    /// to continue work on its next wake-up.
+    #[serde(default, rename = "asyncRewake")]
+    pub async_rewake: bool,
     pub event: HookEvent,
     /// Regular expression against tool name for tool events.
     #[serde(default)]
@@ -305,6 +312,9 @@ impl HookRunner {
             if rule.timeout_seconds == 0 {
                 rule.timeout_seconds = default_timeout();
             }
+            if rule.async_rewake {
+                rule.async_background = true;
+            }
             // hooks.ts::matchesPattern treats a malformed regex as a
             // non-match. A broken matcher must not prevent other user hooks
             // from running or stop the Agent from starting.
@@ -511,6 +521,20 @@ impl HookRunner {
             }
             if let Some(reason) = response.stop_reason {
                 outcome.stop_reason = Some(reason);
+            }
+        }
+        // SessionEnd owns all still-running hook commands for this session.
+        // Its 2.1.88 finalizePendingAsyncHooks cancels unfinished processes
+        // before the SDK/CLI exits; never leave a detached hook alive.
+        if event_name == "SessionEnd" {
+            if let Some(session_id) = input.get("session_id").and_then(Value::as_str) {
+                for notification in finalize_async_hooks(session_id).await {
+                    outcome.non_blocking_errors.push(format!(
+                        "Async {} hook {}",
+                        notification["hook_event_name"].as_str().unwrap_or("Hook"),
+                        notification["outcome"].as_str().unwrap_or("cancelled"),
+                    ));
+                }
             }
         }
         Ok(outcome)
@@ -742,6 +766,133 @@ impl Drop for HookProcessGroupGuard {
     }
 }
 
+/// AsyncHookRegistry.ts: after a hook reports {"async":true}, retain
+/// ownership of its still-running process and deliver its final output once.
+/// The registry is session-scoped; a command is never replayed automatically.
+struct PendingAsyncHook {
+    id: String,
+    session_id: String,
+    event: String,
+    command: String,
+    rewake: bool,
+    deadline: std::time::Instant,
+    task: tokio::task::JoinHandle<Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)>>,
+}
+
+fn async_hook_registry() -> &'static std::sync::Mutex<Vec<PendingAsyncHook>> {
+    static REGISTRY: std::sync::OnceLock<std::sync::Mutex<Vec<PendingAsyncHook>>> =
+        std::sync::OnceLock::new();
+    REGISTRY.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// Snapshot completed hooks, releasing the global lock before any async wait.
+pub async fn collect_async_hook_responses(session_id: &str) -> Vec<Value> {
+    let mut completed = Vec::new();
+    {
+        let mut pending = async_hook_registry().lock().unwrap_or_else(|e| e.into_inner());
+        let mut index = 0;
+        while index < pending.len() {
+            if pending[index].session_id == session_id
+                && (pending[index].task.is_finished()
+                    || std::time::Instant::now() >= pending[index].deadline)
+            {
+                completed.push(pending.remove(index));
+            } else {
+                index += 1;
+            }
+        }
+    }
+    let mut responses = Vec::new();
+    for mut hook in completed {
+        let timed_out = std::time::Instant::now() >= hook.deadline
+            && !hook.task.is_finished();
+        if timed_out {
+            hook.task.abort();
+        }
+        let finished = hook.task.await;
+        let (outcome, exit_code, stdout, stderr) = match finished {
+            Ok(Ok((status, out, err))) => (
+                if status.success() { "success" } else { "error" },
+                status.code(),
+                String::from_utf8_lossy(&out).into_owned(),
+                String::from_utf8_lossy(&err).into_owned(),
+            ),
+            Ok(Err(error)) => ("error", None, String::new(), format!("{error:#}")),
+            Err(error) if timed_out || error.is_cancelled() =>
+                ("cancelled", None, String::new(), "Async hook cancelled or timed out".to_owned()),
+            Err(error) => ("error", None, String::new(), format!("{error:#}")),
+        };
+        // The initial async JSON is a handshake; only later JSON lines are
+        // accepted as the final synchronous hook response.
+        let response = stdout.lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line.trim()).ok())
+            .find(|value| value.is_object() && value.get("async").is_none())
+            .unwrap_or_else(|| json!({}));
+        responses.push(json!({
+            "type":"hook_response","hook_id":hook.id,"hook_event_name":hook.event,
+            "command":hook.command,"outcome":outcome,"exit_code":exit_code,
+            "stdout":stdout,"stderr":stderr,"response":response,
+            "rewake":hook.rewake && exit_code == Some(2)
+        }));
+    }
+    responses
+}
+
+/// Mirror finalizePendingAsyncHooks on SDK/REPL teardown: cancel any
+/// outstanding processes and wait for their cleanup without reusing tokens.
+pub async fn finalize_async_hooks(session_id: &str) -> Vec<Value> {
+    let mut removed = Vec::new();
+    {
+        let mut pending = async_hook_registry().lock().unwrap_or_else(|e| e.into_inner());
+        let mut index = 0;
+        while index < pending.len() {
+            if pending[index].session_id == session_id {
+                removed.push(pending.remove(index));
+            } else {
+                index += 1;
+            }
+        }
+    }
+    let mut events = Vec::new();
+    for hook in removed {
+        hook.task.abort();
+        let _ = hook.task.await;
+        events.push(json!({"type":"hook_response","hook_id":hook.id,
+            "hook_event_name":hook.event,"command":hook.command,
+            "outcome":"cancelled"}));
+    }
+    events
+}
+
+struct HookTaskDropGuard {
+    handle: tokio::task::AbortHandle,
+    transferred: bool,
+}
+impl Drop for HookTaskDropGuard {
+    fn drop(&mut self) {
+        if !self.transferred {
+            self.handle.abort();
+        }
+    }
+}
+
+/// SDK interrupt and SessionEnd cancellation must also terminate child
+/// processes spawned by a PowerShell/Git Bash hook on Windows.
+#[cfg(windows)]
+struct HookCancelTreeGuard(Option<u32>);
+
+#[cfg(windows)]
+impl Drop for HookCancelTreeGuard {
+    fn drop(&mut self) {
+        if let Some(pid) = self.0 {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .stdin(Stdio::null()).stdout(Stdio::null())
+                .stderr(Stdio::null()).status();
+        }
+    }
+}
+
 async fn run_command(
     rule: &HookRule,
     payload: &Value,
@@ -769,7 +920,7 @@ async fn run_command(
         let root_text = plugin_root.to_string_lossy().into_owned();
         rule.command
             .replace("${ATLAS_PLUGIN_ROOT}", &root_text)
-            .replace("${CLAUDE_PLUGIN_ROOT}", &root_text)
+            .replace("${ATLAS_PLUGIN_ROOT}", &root_text)
     } else {
         rule.command.clone()
     };
@@ -854,6 +1005,8 @@ async fn run_command(
         .with_context(|| format!("Starting hook '{}'", rule.command))?;
     #[cfg(unix)]
     let mut group_guard = HookProcessGroupGuard(child.id());
+    #[cfg(windows)]
+    let mut windows_tree_guard = HookCancelTreeGuard(child.id());
     let mut stdin = child.stdin.take().context("Hook stdin unavailable")?;
     let mut stdout = child.stdout.take().context("Hook stdout unavailable")?;
     let mut stderr = child.stderr.take().context("Hook stderr unavailable")?;
@@ -864,37 +1017,124 @@ async fn run_command(
     if input.len() > 256_000 {
         bail!("Hook input exceeds 256 KB")
     }
-    let operation = async {
+    // hooks.ts detects the first response line before the hook process
+    // completes. A JSON {"async":true} transfers process ownership to the
+    // registry; ordinary hooks continue waiting for the complete output.
+    let (first_sender, first_receiver) = tokio::sync::oneshot::channel::<Vec<u8>>();
+    let operation = async move {
         let input_future = async move {
-            // Move the pipe into the writer future so it is dropped as soon
-            // as writing finishes. A child such as 'cat' waits for EOF;
-            // shutdown() alone does not reliably close ChildStdin here.
-            // A hook may finish without reading stdin. Closed pipe is not
-            // a hook failure; the exit code and response decide the result.
             if let Err(error) = stdin.write_all(&input).await {
                 if error.kind() != std::io::ErrorKind::BrokenPipe {
-                    return Err(error.into());
+                    return Err(anyhow::Error::from(error));
                 }
             }
             let _ = stdin.shutdown().await;
             drop(stdin);
             Ok::<_, anyhow::Error>(())
         };
-        let output_future = read_limited(&mut stdout, 64_000);
+        let output_future = async move {
+            use tokio::io::AsyncBufReadExt;
+            let mut buffered = tokio::io::BufReader::new(stdout);
+            let mut first = Vec::new();
+            loop {
+                let chunk = buffered.fill_buf().await?;
+                if chunk.is_empty() {
+                    break;
+                }
+                let n = chunk.iter().position(|byte| *byte == b'\n')
+                    .map(|index| index + 1).unwrap_or(chunk.len());
+                if first.len().saturating_add(n) > 64_000 {
+                    bail!("Hook output exceeds 64000 bytes");
+                }
+                let found_newline = chunk[..n].contains(&b'\n');
+                first.extend_from_slice(&chunk[..n]);
+                buffered.consume(n);
+                if found_newline {
+                    break;
+                }
+            }
+            let _ = first_sender.send(first.clone());
+            let mut remaining = read_limited(
+                &mut buffered, 64_000usize.saturating_sub(first.len())
+            ).await?;
+            first.append(&mut remaining);
+            Ok::<_, anyhow::Error>(first)
+        };
         let errors_future = read_limited(&mut stderr, 16_000);
-        let (_, out, err) = tokio::try_join!(input_future, output_future, errors_future)?;
+        let (_, out, err) = tokio::try_join!(
+            input_future, output_future, errors_future
+        )?;
         let status = child.wait().await?;
+        #[cfg(unix)]
+        { group_guard.0 = None; }
+        #[cfg(windows)]
+        { windows_tree_guard.0 = None; }
         Ok::<_, anyhow::Error>((status, out, err))
     };
-    let (status, out, err) = timeout(Duration::from_secs(rule.timeout_seconds), operation)
-        .await
-        .context("Hook timed out")??;
-    #[cfg(unix)]
-    {
-        // The process and its output pipes exited normally. Do not terminate
-        // any independent work that a successful hook intentionally started.
-        group_guard.0 = None;
+    let task = tokio::spawn(operation);
+    let mut drop_guard = HookTaskDropGuard {
+        handle: task.abort_handle(),
+        transferred: false,
+    };
+    let started = tokio::time::Instant::now();
+    let sync_deadline = started + Duration::from_secs(rule.timeout_seconds);
+    if rule.async_background {
+        let session_id = payload.get("session_id").and_then(Value::as_str)
+            .context("Background hook requires session_id")?.to_owned();
+        let mut pending = async_hook_registry()
+            .lock().unwrap_or_else(|e| e.into_inner());
+        if pending.len() >= 128 {
+            bail!("Too many pending asynchronous hooks (maximum 128)");
+        }
+        pending.push(PendingAsyncHook {
+            id: uuid::Uuid::new_v4().to_string(),
+            session_id,
+            event: payload["hook_event_name"].as_str().unwrap_or("").to_owned(),
+            command: rule.command.clone(),
+            rewake: rule.async_rewake,
+            deadline: std::time::Instant::now()
+                + Duration::from_secs(rule.timeout_seconds),
+            task,
+        });
+        drop_guard.transferred = true;
+        return Ok(HookOutcome::default());
     }
+    let first_line = tokio::time::timeout_at(sync_deadline, first_receiver)
+        .await
+        .context("Hook timed out before first output")?
+        .context("Hook exited before output could be inspected")?;
+    if let Ok(hello) = serde_json::from_slice::<Value>(&first_line) {
+        if hello.get("async") == Some(&Value::Bool(true)) {
+            let timeout_ms = hello.get("asyncTimeout")
+                .map(|value| value.as_u64().filter(|v| *v > 0)
+                    .context("asyncTimeout must be a positive millisecond count"))
+                .transpose()?.unwrap_or(15_000);
+            let session_id = payload.get("session_id").and_then(Value::as_str)
+                .context("Asynchronous hook requires session_id")?
+                .to_owned();
+            let mut pending = async_hook_registry()
+                .lock().unwrap_or_else(|e| e.into_inner());
+            if pending.len() >= 128 {
+                bail!("Too many pending asynchronous hooks (maximum 128)");
+            }
+            pending.push(PendingAsyncHook {
+                id: uuid::Uuid::new_v4().to_string(),
+                session_id,
+                event: payload["hook_event_name"].as_str().unwrap_or("").to_owned(),
+                command: rule.command.clone(),
+                rewake: false,
+                deadline: std::time::Instant::now() + Duration::from_millis(timeout_ms),
+                task,
+            });
+            drop_guard.transferred = true;
+            // The first JSON line is an asynchronous acknowledgement. It is
+            // not permission approval or a completed hook response.
+            return Ok(HookOutcome::default());
+        }
+    }
+    let (status, out, err) = tokio::time::timeout_at(sync_deadline, task)
+        .await.context("Hook timed out")?
+        .context("Hook worker was cancelled")??;
     let stderr_text = String::from_utf8_lossy(&err).trim().to_string();
     // Original hooks.ts:2499-2533, 2543-2613, 2647-2695 parses JSON
     // before interpreting the exit status. Valid JSON decisions apply even
@@ -1093,18 +1333,14 @@ mod tests {
     #[tokio::test]
     async fn subagent_matcher_receives_type_and_flattened_agent_identity() {
         let hook = HookRunner::new(&[
-            HookRule {
-                if_condition: None,
-                plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::SubagentStart,
                 matcher: Some("^explore$".into()),
                 command: "cat | grep -q '\"agent_id\":\"worker-1\"'".into(),
                 shell: None,
                 timeout_seconds: 3,
             },
-            HookRule {
-                if_condition: None,
-                plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::SubagentStart,
                 matcher: Some("^plan$".into()),
                 command: "echo 'wrong hook' >&2; exit 2".into(),
@@ -1135,9 +1371,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn subagent_stop_blocking_does_not_mutate_prior_tool_output() {
-        let hook = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let hook = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::SubagentStop,
             matcher: Some("^general$".into()),
             command: "echo 'review not complete' >&2; exit 2".into(),
@@ -1164,11 +1398,11 @@ mod tests {
     #[tokio::test]
     async fn post_tool_mcp_output_is_replaced_before_next_hook() {
         let runner=HookRunner::new(&[
-            HookRule{ if_condition: None, plugin_root: None,event:HookEvent::PostToolUse,
+            HookRule{ async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,event:HookEvent::PostToolUse,
                 matcher:Some("^mcp__mock__secret$".into()),
                 command:r#"printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedMCPToolOutput":{"content":[{"type":"text","text":"REDACTED_MCP_OUTPUT"}]}}}'"#.into(),
                 shell: None, timeout_seconds:3},
-            HookRule{ if_condition: None, plugin_root: None,event:HookEvent::PostToolUse,
+            HookRule{ async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,event:HookEvent::PostToolUse,
                 matcher:Some("^mcp__mock__secret$".into()),
                 command:"cat | grep -q REDACTED_MCP_OUTPUT".into(),
                 shell: None, timeout_seconds:3},
@@ -1194,9 +1428,7 @@ mod tests {
             r#"{"hookSpecificOutput":{"hookEventName":"PostToolUse","permissionDecision":"allow"}}"#,
             r#"{"hookSpecificOutput":{"permissionDecision":"allow"}}"#,
         ] {
-            let runner = HookRunner::new(&[HookRule {
-                if_condition: None,
-                plugin_root: None,
+            let runner = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: format!("printf '%s' '{}'", json_output),
@@ -1220,9 +1452,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn legacy_approve_and_invalid_permission_variants_match_source_contract() {
-        let approved = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let approved = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"decision\":\"approve\"}'".into(),
@@ -1240,9 +1470,7 @@ mod tests {
             r#"{"decision":"unrestricted"}"#,
             r#"{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"unrestricted"}}"#,
         ] {
-            let runner = HookRunner::new(&[HookRule {
-                if_condition: None,
-                plugin_root: None,
+            let runner = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: format!("printf '%s' '{}'", json_output),
@@ -1268,9 +1496,9 @@ mod tests {
         };
         let root = tempfile::tempdir().unwrap();
         let runner=HookRunner::new(&[
-            HookRule { if_condition: None, plugin_root: None,event:HookEvent::PreToolUse,matcher:None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,event:HookEvent::PreToolUse,matcher:None,
                 command:r#"printf '{"decision":"approve","continue":"no"}'; exit 2"#.into(),shell: None, timeout_seconds:3},
-            HookRule { if_condition: None, plugin_root: None,event:HookEvent::PreToolUse,matcher:None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,event:HookEvent::PreToolUse,matcher:None,
                 command:r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"touch hook_schema_ok"}}}'"#.into(),shell: None, timeout_seconds:3},
         ]).unwrap();
         let mut call = ToolCall {
@@ -1295,9 +1523,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn continuation_flag_does_not_become_permission_denial() {
-        let runner = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let runner = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: r#"printf '{"continue":false,"stopReason":"stop requested"}'"#.into(),
@@ -1362,9 +1588,7 @@ mod tests {
     }
     #[test]
     fn validates_hook_configuration() {
-        let invalid = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let invalid = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: Some("[".into()),
             command: "true".into(),
@@ -1374,9 +1598,7 @@ mod tests {
         .unwrap();
         assert!(matches!(&invalid.rules[0].1, HookMatcher::Invalid));
         assert!(!invalid.rules[0].1.matches(Some("Bash")));
-        let zero = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let zero = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::Stop,
             matcher: None,
             command: "true".into(),
@@ -1385,9 +1607,7 @@ mod tests {
         }])
         .unwrap();
         assert_eq!(zero.rules[0].0.timeout_seconds, 600);
-        let extended = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let extended = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::Stop,
             matcher: None,
             command: "true".into(),
@@ -1400,9 +1620,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn blocks_tool_and_rewrites_input() {
-        let blocker = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let blocker = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: Some("^run_command$".into()),
             command: "printf '{\"decision\":\"block\",\"reason\":\"policy\"}'".into(),
@@ -1427,7 +1645,7 @@ mod tests {
                 .as_deref(),
             Some("policy")
         );
-        let updater = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        let updater = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"updatedInput\":{\"path\":\"safe.txt\"}}}'"
@@ -1441,9 +1659,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn exit_code_two_blocks() {
-        let hooks = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let hooks = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::Stop,
             matcher: None,
             command: "echo 'Need tests' >&2; exit 2".into(),
@@ -1463,13 +1679,13 @@ mod tests {
         };
         let root = tempfile::tempdir().unwrap();
         let runner = HookRunner::new(&[
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: Some("^run_command$".into()),
                 command: "echo 'advisory hook failed' >&2; exit 1".into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: Some("^run_command$".into()),
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"touch after_warning"}}}'"#.into(),
@@ -1502,13 +1718,13 @@ mod tests {
     #[tokio::test]
     async fn pretool_hooks_observe_original_input_like_the_source() {
         let runner = HookRunner::new(&[
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"rm sensitive"}}}'"#.into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"cat | grep -q 'echo safe' && { echo 'original input observed' >&2; exit 2; } || { echo 'unexpected rewritten input' >&2; exit 2; }"#.into(),
@@ -1544,18 +1760,14 @@ mod tests {
             )
         };
         let runner = HookRunner::new(&[
-            HookRule {
-                if_condition: None,
-                plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: command(&first, &second),
                 shell: None,
                 timeout_seconds: 5,
             },
-            HookRule {
-                if_condition: None,
-                plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: command(&second, &first),
@@ -1576,19 +1788,19 @@ mod tests {
     #[tokio::test]
     async fn hook_permission_decisions_keep_deny_over_ask_over_allow() {
         let runner = HookRunner::new(&[
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'"#.into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask"}}'"#.into(),
                 shell: None, timeout_seconds: 3,
             },
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: r#"printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}'"#.into(),
@@ -1607,9 +1819,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn command_hook_json_precedes_exit_status_and_invalid_json_is_nonblocking() {
-        let approved = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let approved = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{\"decision\":\"approve\"}'; exit 2".into(),
@@ -1625,18 +1835,14 @@ mod tests {
         assert_eq!(outcome.permission_decision.as_deref(), Some("allow"));
 
         let malformed = HookRunner::new(&[
-            HookRule {
-                if_condition: None,
-                plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: "printf '{not-json'; exit 1".into(),
                 shell: None,
                 timeout_seconds: 3,
             },
-            HookRule {
-                if_condition: None,
-                plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::PreToolUse,
                 matcher: None,
                 command: "printf '{\"decision\":\"approve\"}'".into(),
@@ -1654,9 +1860,7 @@ mod tests {
         assert_eq!(outcome.non_blocking_errors.len(), 1);
         assert!(outcome.non_blocking_errors[0].contains("invalid JSON"));
 
-        let malformed_block = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let malformed_block = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "printf '{not-json'; echo 'blocked syntax' >&2; exit 2".into(),
@@ -1674,9 +1878,7 @@ mod tests {
             Some("blocked syntax")
         );
 
-        let blocked = HookRunner::new(&[HookRule {
-            if_condition: None,
-            plugin_root: None,
+        let blocked = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::PreToolUse,
             matcher: None,
             command: "echo 'explicit denial' >&2; exit 2".into(),

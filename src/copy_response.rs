@@ -56,8 +56,9 @@ struct CodeBlock {
 }
 
 fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
-    // Original copy.tsx strips hidden prompt analysis XML before Markdown
-    // lexing. Keep the full response untouched when copying it directly.
+    // Marked's lexer recognizes both fenced and indented Markdown code.
+    // The latter was missing from /copy --code, so users could only copy
+    // fenced snippets even though the source picker listed both kinds.
     let mut cleaned = markdown.to_owned();
     for tag in [
         "commit_analysis",
@@ -65,22 +66,22 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
         "function_analysis",
         "pr_analysis",
     ] {
-        let pattern = format!(r"(?s)<{tag}>.*?</{tag}>\n?");
+        let pattern = format!(r"(?s)<{tag}>.*?</{tag}>\\n?");
         let matcher = regex::Regex::new(&pattern).expect("fixed XML tag regex");
         cleaned = matcher.replace_all(&cleaned, "").into_owned();
     }
     let mut blocks = Vec::new();
     let mut fence: Option<(char, usize, String, Vec<String>)> = None;
+    let mut indented: Option<Vec<String>> = None;
+    let mut after_blank = true;
     for line in cleaned.lines() {
         let trimmed = line.trim_start_matches(' ');
         let indent = line.len() - trimmed.len();
         let marker = trimmed.chars().next().unwrap_or(' ');
         let run = trimmed.chars().take_while(|c| *c == marker).count();
         if let Some((open_marker, open_len, language, lines)) = fence.as_mut() {
-            if marker == *open_marker
-                && run >= *open_len
-                && trimmed[run..].trim().is_empty()
-                && indent <= 3
+            if marker == *open_marker && run >= *open_len
+                && trimmed[run..].trim().is_empty() && indent <= 3
             {
                 blocks.push(CodeBlock {
                     code: lines.join("\n"),
@@ -90,22 +91,58 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
             } else {
                 lines.push(line.to_owned());
             }
-        } else if indent <= 3 && matches!(marker, '`' | '~') && run >= 3 {
+            after_blank = false;
+            continue;
+        }
+        if line.trim().is_empty() {
+            if let Some(lines) = indented.as_mut() {
+                lines.push(String::new());
+            }
+            after_blank = true;
+            continue;
+        }
+        // CommonMark allows an indented block at document start or after a
+        // blank line. Once started, additional indented lines continue it.
+        let code_line = if line.starts_with('\t') {
+            Some(&line[1..])
+        } else if indent >= 4 {
+            Some(&line[4..])
+        } else {
+            None
+        };
+        if let Some(content) = code_line {
+            if after_blank || indented.is_some() {
+                indented.get_or_insert_with(Vec::new).push(content.to_owned());
+                after_blank = false;
+                continue;
+            }
+        }
+        if let Some(mut lines) = indented.take() {
+            while lines.last().is_some_and(String::is_empty) {
+                lines.pop();
+            }
+            blocks.push(CodeBlock { code: lines.join("\n"), language: String::new() });
+        }
+        if indent <= 3 && matches!(marker, '`' | '~') && run >= 3 {
             let rest = trimmed[run..].trim();
             if marker == '~' || !rest.contains('`') {
                 let language = rest.split_whitespace().next().unwrap_or("");
                 fence = Some((marker, run, language.to_owned(), Vec::new()));
+                after_blank = false;
+                continue;
             }
         }
+        after_blank = false;
     }
-    // marked.lexer returns an unfinished fenced code block at EOF too.
-    // Previously /copy --code silently omitted the last block if the
-    // assistant response was interrupted before the closing fence.
+    if let Some(mut lines) = indented {
+        while lines.last().is_some_and(String::is_empty) {
+            lines.pop();
+        }
+        blocks.push(CodeBlock { code: lines.join("\n"), language: String::new() });
+    }
+    // Marked also returns a code token for an unclosed fenced block.
     if let Some((_, _, language, lines)) = fence {
-        blocks.push(CodeBlock {
-            code: lines.join("\n"),
-            language,
-        });
+        blocks.push(CodeBlock { code: lines.join("\n"), language });
     }
     blocks
 }
@@ -120,6 +157,67 @@ fn extension(language: &str) -> String {
     } else {
         safe
     }
+}
+
+
+pub fn code_block_choices(messages: &[Message], age: usize) -> Result<Vec<(String, String)>> {
+    let texts = recent_assistant_texts(messages);
+    if age == 0 || age > texts.len() {
+        bail!("No assistant response #{age}; {} recent responses available", texts.len());
+    }
+    Ok(code_blocks(&texts[age - 1]).into_iter().map(|block| {
+        let preview = block.code.lines().next().unwrap_or("");
+        let preview = preview.chars().take(76).collect::<String>();
+        (if block.language.is_empty() { "text".into() } else { block.language }, preview)
+    }).collect())
+}
+
+fn preference_path() -> Result<PathBuf> {
+    let config = crate::config::Config::path()?;
+    let parent = config.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    Ok(parent.join("copy-preferences.json"))
+}
+/// A terminal copy picker is optional, but "always copy full response" must
+/// persist across sessions just like the original global copyFullResponse flag.
+pub fn copy_full_preference() -> Result<bool> {
+    let path = preference_path()?;
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    let value: serde_json::Value = serde_json::from_str(&raw)
+        .context("Invalid copy preferences")?;
+    value.get("copyFullResponse").and_then(serde_json::Value::as_bool)
+        .context("copyFullResponse preference must be a boolean")
+}
+pub fn save_copy_full_preference(always: bool) -> Result<()> {
+    let path = preference_path()?;
+    let parent = path.parent().context("Copy preferences directory missing")?;
+    fs::create_dir_all(parent)?;
+    let staged = parent.join(format!(".copy-preferences-{}.tmp", Uuid::new_v4()));
+    let result = (|| -> Result<()> {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&staged)?;
+        file.write_all(serde_json::to_string_pretty(
+            &serde_json::json!({"copyFullResponse":always})
+        )?.as_bytes())?;
+        file.sync_all()?;
+        fs::rename(&staged, &path)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&staged);
+    }
+    result
 }
 
 pub fn parse_selection(args: &str) -> Result<(usize, Option<usize>)> {

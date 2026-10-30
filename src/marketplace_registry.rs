@@ -991,9 +991,13 @@ mod tests {
         execute(project.path(), Some("add"), Some(source_path)).unwrap();
         let registry_before = fs::read(storage(project.path())).unwrap();
         fs::remove_file(legacy_manifest(source.path())).unwrap();
-        let result = execute(project.path(), Some("update"), None).unwrap();
-        assert_eq!(result["updated"], json!([]));
-        assert_eq!(result["failed"][0]["name"], "team-repo");
+        // Bulk refresh isolates broken sources and reports them in "failed";
+        // the stored registry stays unchanged. Targeted refresh still errors.
+        let refresh = execute(project.path(), Some("update"), None).unwrap();
+        assert_eq!(refresh["updated"], json!([]));
+        assert_eq!(refresh["failed"][0]["name"], "team-repo");
+        assert!(refresh["failed"][0]["error"].as_str().is_some_and(|text| !text.is_empty()));
+        assert!(execute(project.path(), Some("update"), Some("team-repo")).is_err());
         assert_eq!(fs::read(storage(project.path())).unwrap(), registry_before);
         assert!(execute(project.path(), Some("remove"), Some("does-not-exist")).is_err());
     }

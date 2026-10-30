@@ -40,9 +40,9 @@ fn checked_component(root: &Path, path: &Path) -> Result<PathBuf> {
 }
 
 /// Original pluginLoader.ts::loadPluginManifest allows a plugin with only
-/// commands, agents or skills, and reads .claude-plugin/plugin.json.
+/// commands, agents or skills, and reads .atlas-plugin/plugin.json.
 fn read_manifest(root: &Path, fallback: &str) -> Result<Manifest> {
-    let standard = root.join(".claude-plugin/plugin.json");
+    let standard = root.join(".atlas-plugin/plugin.json");
     let legacy = root.join("plugin.json");
     let path = if standard.exists() {
         Some(standard)
@@ -113,9 +113,12 @@ pub(crate) fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> 
                     }
                     None => 600,
                 };
-                if hook.get("async").and_then(Value::as_bool) == Some(true) {
-                    bail!("Asynchronous plugin command hooks are not yet supported")
-                }
+                // Plugin command hooks share the same background lifecycle
+                // as local hook configuration; asyncRewake implies async.
+                let async_background = hook.get("async")
+                    .and_then(Value::as_bool).unwrap_or(false);
+                let async_rewake = hook.get("asyncRewake")
+                    .and_then(Value::as_bool).unwrap_or(false);
                 if hook.get("once").and_then(Value::as_bool) == Some(true) {
                     bail!("One-shot plugin command hooks require lifecycle tracking")
                 }
@@ -124,8 +127,8 @@ pub(crate) fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> 
                     .map(|value| serde_json::from_value(value.clone()))
                     .transpose()?;
                 rules.push(HookRule {
-                    event: event.clone(),
-                    matcher: matcher_name.clone(),
+                    async_background, async_rewake,
+                    event: event.clone(), matcher: matcher_name.clone(),
                     if_condition: matcher.get("if").and_then(Value::as_str).map(str::to_owned),
                     plugin_root: Some(root.to_owned()),
                     command: command.to_owned(),
@@ -465,8 +468,8 @@ fn resolve_plugin_mcp_server(
         // loader records them and reports a per-server connection failure.
         Ok(
             crate::compat_helpers::expand_env_vars_with(&substituted, |key| match key {
-                "ATLAS_PLUGIN_ROOT" | "CLAUDE_PLUGIN_ROOT" => Some(plugin_root.clone()),
-                "ATLAS_PLUGIN_DATA" | "CLAUDE_PLUGIN_DATA" => Some(plugin_data.clone()),
+                "ATLAS_PLUGIN_ROOT" => Some(plugin_root.clone()),
+                "ATLAS_PLUGIN_DATA" => Some(plugin_data.clone()),
                 _ => std::env::var(key).ok(),
             })
             .expanded,
@@ -504,7 +507,7 @@ fn resolve_plugin_mcp_server(
 }
 
 /// Validate an unpacked plugin before installing it. The original loader
-/// accepts a directory name when .claude-plugin/plugin.json is absent.
+/// accepts a directory name when .atlas-plugin/plugin.json is absent.
 pub fn validate_local(location: &Path) -> Result<String> {
     let location = location
         .canonicalize()
@@ -516,12 +519,12 @@ pub fn validate_local(location: &Path) -> Result<String> {
         .file_name()
         .and_then(|name| name.to_str())
         .context("Plugin source has no valid directory name")?;
-    // The staging directory may be a random temporary name. When a real
-    // manifest declares a valid identity it takes precedence over the source
-    // folder name; only manifest-less plugins require a valid fallback.
+    // A manifest supplies the installed identity; an unpacked source
+    // directory may legitimately have a temporary name such as ".tmpXXXX".
+    // Only manifest-less plugins use their directory basename as identity.
     let manifest = read_manifest(&location, fallback)?;
-    if !valid_name(&manifest.name) {
-        bail!("Invalid plugin identity")
+    if !valid_name(fallback) && manifest.name == fallback {
+        bail!("Invalid plugin directory name")
     }
     let _ = manifest_hooks(&location, &manifest.hooks, None)?;
     let _ = manifest_servers(&location, &manifest.mcp_servers, None)?;
@@ -1038,13 +1041,13 @@ fn plugin_command_body(
     let root_text = root.to_string_lossy();
     #[cfg(windows)]
     let root_text = root_text.replace('\\', "/");
-    let prompt = prompt.replace("${CLAUDE_PLUGIN_ROOT}", root_text.as_ref());
+    let prompt = prompt.replace("${ATLAS_PLUGIN_ROOT}", root_text.as_ref());
     let prompt = match session_id {
-        Some(id) => prompt.replace("${CLAUDE_SESSION_ID}", id),
+        Some(id) => prompt.replace("${ATLAS_SESSION_ID}", id),
         None => prompt,
     };
-    let prompt = if session_id.is_some() && prompt.contains("${CLAUDE_PLUGIN_DATA}") {
-        prompt.replace("${CLAUDE_PLUGIN_DATA}", &plugin_data_directory(root)?)
+    let prompt = if session_id.is_some() && prompt.contains("${ATLAS_PLUGIN_DATA}") {
+        prompt.replace("${ATLAS_PLUGIN_DATA}", &plugin_data_directory(root)?)
     } else {
         prompt
     };
@@ -1114,7 +1117,7 @@ pub fn command_prompt_with_session(
             .context("Plugin skill command disappeared")?;
         return Ok(Some(
             format!("Base directory for this skill: {dir}\n\n{prompt}")
-                .replace("${CLAUDE_SKILL_DIR}", &dir),
+                .replace("${ATLAS_SKILL_DIR}", &dir),
         ));
     }
 
@@ -1497,7 +1500,7 @@ mod tests {
         let hidden = "---\nuser-invocable: false\n---\nDo not expose";
         assert_eq!(plugin_command_body(hidden, "", root, None).unwrap(), None);
         let visible =
-            "---\nuser-invocable: true\n---\nRead ${CLAUDE_PLUGIN_ROOT}/README.md for $ARGUMENTS";
+            "---\nuser-invocable: true\n---\nRead ${ATLAS_PLUGIN_ROOT}/README.md for $ARGUMENTS";
         assert_eq!(
             plugin_command_body(visible, "notes", root, None)
                 .unwrap()
@@ -1511,7 +1514,7 @@ mod tests {
                 .as_deref(),
             Some("Visible")
         );
-        let session = "Session ${CLAUDE_SESSION_ID}";
+        let session = "Session ${ATLAS_SESSION_ID}";
         assert_eq!(
             plugin_command_body(session, "", root, Some("session-123"))
                 .unwrap()
@@ -1522,7 +1525,7 @@ mod tests {
         let installed = temporary.path().join(".atlas/plugins/demo");
         fs::create_dir_all(&installed).unwrap();
         let data_prompt = plugin_command_body(
-            "Persistent: ${CLAUDE_PLUGIN_DATA}",
+            "Persistent: ${ATLAS_PLUGIN_DATA}",
             "",
             &installed,
             Some("s"),
@@ -1548,7 +1551,7 @@ mod tests {
         .unwrap();
         fs::write(
             skill.join("SKILL.md"),
-            "---\narguments: topic\n---\nReview $topic at ${CLAUDE_SKILL_DIR}",
+            "---\narguments: topic\n---\nReview $topic at ${ATLAS_SKILL_DIR}",
         )
         .unwrap();
         let enabled = vec!["demo".to_owned()];
@@ -1669,6 +1672,8 @@ mod tests {
         let loaded = PluginSet::load(root.path(), &["leak".into()]).unwrap();
         assert!(loaded.hooks.is_empty());
         assert!(loaded.mcp_servers.is_empty());
-        assert!(loaded.errors.iter().any(|error| error.contains("leak")));
+        assert!(loaded.errors.iter().any(|error|
+            error.contains("leak") && (error.contains("symbolic link") || error.contains("workspace"))
+        ), "Unsafe symlink must be reported and must not load: {:?}", loaded.errors);
     }
 }

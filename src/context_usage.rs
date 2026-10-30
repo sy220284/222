@@ -61,7 +61,19 @@ fn block_tokens(block: &Value) -> (u64, u64) {
                     .unwrap_or(0),
             0,
         ),
-        _ => (0, 0),
+        Some("thinking") => (
+            block.get("thinking").and_then(Value::as_str).map(estimate).unwrap_or(0),
+            0,
+        ),
+        Some("redacted_thinking") => (
+            block.get("data").and_then(Value::as_str).map(estimate).unwrap_or(0),
+            0,
+        ),
+        // tokenEstimation.ts::roughTokenCountEstimationForBlock counts
+        // server_tool_use, web_search_tool_result and other text-like blocks
+        // using their serialized form. Treating them as zero underreports the
+        // active context and delays compaction for tool-heavy conversations.
+        _ => (estimate(&block.to_string()), 0),
     }
 }
 

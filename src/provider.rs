@@ -19,6 +19,14 @@ pub trait ModelProvider: Send + Sync {
         }
         Ok(())
     }
+    /// A session-scoped SDK JSON schema must be enforced by the selected
+    /// provider's actual request protocol, not only appended to a prompt.
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        if schema.is_some() {
+            bail!("Selected model provider has no native JSON schema response capability")
+        }
+        Ok(())
+    }
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse>;
     async fn complete_stream(
         &self,
@@ -39,20 +47,26 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
         })?),
         None => None,
     };
+    // A client-wide timeout measures the entire streamed completion. It
+    // aborts healthy long-running generations after 180 seconds even while
+    // tokens are arriving. Streaming adapters enforce per-chunk idle timeouts;
+    // non-streaming requests retain their own bounded deadline.
     let client = Client::builder()
-        .timeout(Duration::from_secs(180))
+        .connect_timeout(Duration::from_secs(30))
         .build()?;
     match profile.kind.as_str() {
         "openai-compatible" => Ok(Box::new(OpenAiCompatible {
             client,
             base_url: profile.base_url.clone(),
             key,
+            response_schema: None,
         })),
         "gemini" => Ok(Box::new(Gemini {
             client,
             base_url: profile.base_url.clone(),
             key: key.context("Gemini endpoint requires an API key")?,
             thinking_budget: None,
+            response_schema: None,
         })),
         other => bail!("Unsupported provider kind: {other}"),
     }
@@ -63,6 +77,15 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
 /// during a retry. HTTP failures with an explicit no-retry header are final.
 /// Once an SSE response has started, its parser owns the stream and we never
 /// replay a partially delivered completion.
+pub(crate) fn stream_idle_timeout() -> Duration {
+    let millis = std::env::var("ATLAS_STREAM_IDLE_TIMEOUT_MS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .filter(|millis| *millis > 0)
+        .unwrap_or(90_000);
+    Duration::from_millis(millis)
+}
+
 pub(crate) async fn send_model_request(
     request: reqwest::RequestBuilder,
 ) -> Result<reqwest::Response> {
@@ -90,8 +113,12 @@ pub(crate) async fn send_model_request(
                         .get(reqwest::header::RETRY_AFTER)
                         .and_then(|v| v.to_str().ok())
                         .and_then(|v| v.trim().parse::<u64>().ok())
-                        .map(|seconds| Duration::from_secs(seconds.min(30)))
-                        .unwrap_or_else(|| Duration::from_millis(200u64 << attempt));
+                        // withRetry.ts::getRetryDelay honors the server's
+                        // Retry-After directive even when it exceeds normal
+                        // exponential backoff. Retrying after only 30 seconds
+                        // on a longer rate-limit window repeatedly fails.
+                        .map(|seconds| Duration::from_secs(seconds.min(6 * 60 * 60)))
+                        .unwrap_or_else(|| Duration::from_millis((500u64 << attempt).min(32_000)));
                     // Drop the failed HTTP response before waiting; do not
                     // retain a busy connection across capacity retries.
                     drop(response);
@@ -132,19 +159,30 @@ struct OpenAiCompatible {
     client: Client,
     base_url: String,
     key: Option<String>,
+    response_schema: Option<Value>,
 }
 
 #[async_trait]
 impl ModelProvider for OpenAiCompatible {
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        self.response_schema = schema;
+        Ok(())
+    }
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         let mut body = json!({"model":request.model,
             "messages":openai_messages(request)?});
+        if let Some(schema) = &self.response_schema {
+            body["response_format"] = json!({"type":"json_schema",
+                "json_schema":{"name":"structured_output","strict":true,"schema":schema}});
+        }
         if !request.tools.is_empty() {
             body["tools"] = json!(request.tools);
             body["tool_choice"] = json!("auto");
         }
         let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
-        let mut post = self.client.post(url).json(&body);
+        let mut post = self.client.post(url)
+            .timeout(Duration::from_secs(180))
+            .json(&body);
         if let Some(key) = &self.key {
             post = post.bearer_auth(key);
         }
@@ -157,6 +195,9 @@ impl ModelProvider for OpenAiCompatible {
             .and_then(Value::as_array)
             .and_then(|a| a.first())
             .context("Model returned no choices")?;
+        if let Some(refusal) = choice.pointer("/message/refusal").and_then(Value::as_str) {
+            bail!("Model refused the request: {}", refusal.chars().take(500).collect::<String>());
+        }
         let mut message: Message = serde_json::from_value(
             choice
                 .get("message")
@@ -191,6 +232,7 @@ impl ModelProvider for OpenAiCompatible {
             self.key.as_deref(),
             request,
             deltas,
+            self.response_schema.as_ref(),
         )
         .await
     }
@@ -272,10 +314,15 @@ struct Gemini {
     base_url: String,
     key: String,
     thinking_budget: Option<u32>,
+    response_schema: Option<Value>,
 }
 
 #[async_trait]
 impl ModelProvider for Gemini {
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        self.response_schema = schema;
+        Ok(())
+    }
     fn set_thinking_budget(&mut self, budget: Option<u32>) -> Result<()> {
         self.thinking_budget = budget;
         Ok(())
@@ -284,7 +331,13 @@ impl ModelProvider for Gemini {
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         let mut body = gemini_request_body(request)?;
         if let Some(budget) = self.thinking_budget {
-            body["generationConfig"] = json!({"thinkingConfig":{"thinkingBudget":budget}});
+            body["generationConfig"]["thinkingConfig"] = json!({"thinkingBudget":budget});
+        }
+        if let Some(schema) = &self.response_schema {
+            // generateContent JSON schema mode, preserving the independent
+            // thinkingConfig set above when both SDK options are enabled.
+            body["generationConfig"]["responseMimeType"] = json!("application/json");
+            body["generationConfig"]["responseJsonSchema"] = schema.clone();
         }
         let model = request
             .model
@@ -298,12 +351,19 @@ impl ModelProvider for Gemini {
         let response = self
             .client
             .post(url)
+            .timeout(Duration::from_secs(180))
             .header("x-goog-api-key", &self.key)
             .json(&body);
         let response = send_model_request(response)
             .await
             .context("Gemini request failed")?;
         let value: Value = read_model_response(response).await?;
+        // Gemini may reject the prompt before producing any candidates.
+        // Preserve the explicit block reason instead of a misleading
+        // "no candidates" error, and never enter the Agent tool loop.
+        if let Some(reason) = value.pointer("/promptFeedback/blockReason").and_then(Value::as_str) {
+            bail!("Model blocked the request: {reason}");
+        }
         let candidate = value
             .get("candidates")
             .and_then(Value::as_array)

@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -33,6 +34,8 @@ pub fn enabled(interactive: bool, user_enabled: bool) -> bool {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Record {
     pub id: Uuid,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<Uuid>,
     pub path: String,
     /// Inline text is retained for checkpoints created by earlier versions.
     pub previous: Option<String>,
@@ -294,12 +297,103 @@ pub fn snapshot_mode(path: &Path) -> Result<Option<u32>> {
     }
 }
 
+const MAX_HISTORY_SNAPSHOTS: usize = 100;
+fn lock_history(folder: &Path) -> Result<fs::File> {
+    let path = folder.join(".checkpoint.lock");
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let file = options
+        .open(&path)
+        .with_context(|| format!("Open checkpoint lock {}", path.display()))?;
+    if !file.metadata()?.is_file() {
+        bail!("Checkpoint lock is not a regular file");
+    }
+    file.lock_exclusive().context("Lock session checkpoints")?;
+    Ok(file)
+}
+/// Match the source's 100 most recent message snapshots, counting all edits
+/// of one turn together. Old Rust checkpoints without a turn ID stand alone.
+fn prune_history(folder: &Path) -> Result<()> {
+    use std::collections::HashMap;
+    use std::time::SystemTime;
+    let mut groups: HashMap<Uuid, (SystemTime, Vec<(PathBuf, Option<PathBuf>)>)> = HashMap::new();
+    for entry in fs::read_dir(folder)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|part| part.to_str()) != Some("json") {
+            continue;
+        }
+        let name = path
+            .file_stem()
+            .and_then(|part| part.to_str())
+            .context("Invalid checkpoint filename")?;
+        let id = Uuid::parse_str(name).context("Checkpoint filename must be a UUID")?;
+        let record: Record = serde_json::from_slice(&read_checkpoint_file(&path)?)
+            .with_context(|| format!("Read checkpoint {}", path.display()))?;
+        if record.id != id {
+            bail!("Checkpoint filename/id mismatch");
+        }
+        let backup = match record.previous_backup {
+            Some(name) if name == format!("{id}.bak") => Some(folder.join(name)),
+            Some(_) => bail!("Invalid checkpoint backup name"),
+            None => None,
+        };
+        let modified = entry.metadata()?.modified()?;
+        let group = groups
+            .entry(record.message_id.unwrap_or(id))
+            .or_insert_with(|| (modified, Vec::new()));
+        if modified < group.0 {
+            group.0 = modified;
+        }
+        group.1.push((path, backup));
+    }
+    if groups.len() <= MAX_HISTORY_SNAPSHOTS {
+        return Ok(());
+    }
+    let mut ordered = groups.into_iter().collect::<Vec<_>>();
+    ordered.sort_by(|a, b| a.1 .0.cmp(&b.1 .0).then_with(|| a.0.cmp(&b.0)));
+    let count = ordered.len() - MAX_HISTORY_SNAPSHOTS;
+    for (_, (_, records)) in ordered.into_iter().take(count) {
+        for (checkpoint, backup) in records {
+            // Remove the index first, so an interrupted cleanup can leave
+            // an orphan backup but never an index pointing at missing bytes.
+            fs::remove_file(&checkpoint)?;
+            if let Some(backup) = backup {
+                match fs::remove_file(&backup) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => {
+                        return Err(error)
+                            .with_context(|| format!("Remove old backup {}", backup.display()))
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn record(
     root: &Path,
     session_id: Option<&str>,
     path: &Path,
     previous: Option<Vec<u8>>,
     previous_mode: Option<u32>,
+) -> Result<Option<Uuid>> {
+    record_for_message(root, session_id, path, previous, previous_mode, None)
+}
+pub fn record_for_message(
+    root: &Path,
+    session_id: Option<&str>,
+    path: &Path,
+    previous: Option<Vec<u8>>,
+    previous_mode: Option<u32>,
+    message_id: Option<Uuid>,
 ) -> Result<Option<Uuid>> {
     let now = fs::read(path)?;
     if previous
@@ -314,6 +408,44 @@ pub fn record(
     let relative = path.strip_prefix(root).unwrap_or(path);
     let id = Uuid::new_v4();
     let folder = storage(root, session_id)?;
+    let _lock = lock_history(&folder)?;
+    // Keep the pre-turn backup even when several Edit/Write calls touch
+    // the same file; only the expected post-edit hash advances.
+    if let Some(turn) = message_id {
+        for entry in fs::read_dir(&folder)? {
+            let entry = entry?;
+            let candidate = entry.path();
+            if candidate.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+            let mut old: Record = serde_json::from_slice(&read_checkpoint_file(&candidate)?)
+                .with_context(|| format!("Read prior turn checkpoint {}", candidate.display()))?;
+            if old.message_id != Some(turn) || old.path != relative.to_string_lossy() {
+                continue;
+            }
+            if candidate.file_stem().and_then(|s| s.to_str()) != Some(old.id.to_string().as_str()) {
+                bail!("Prior turn checkpoint filename/id mismatch");
+            }
+            old.updated_hash = fingerprint(&now);
+            old.updated_mode = updated_mode;
+            let staged = folder.join(format!(".{}.update-{}.tmp", old.id, Uuid::new_v4()));
+            let update = (|| -> Result<()> {
+                let mut file = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&staged)?;
+                file.write_all(&serde_json::to_vec_pretty(&old)?)?;
+                file.sync_all()?;
+                fs::rename(&staged, &candidate)?;
+                Ok(())
+            })();
+            if update.is_err() {
+                let _ = fs::remove_file(&staged);
+            }
+            update?;
+            return Ok(Some(old.id));
+        }
+    }
     let backup_name = previous.as_ref().map(|_| format!("{id}.bak"));
     let backup_path = backup_name.as_ref().map(|name| folder.join(name));
     // A separate binary backup mirrors fileHistory.ts::createBackup: binary
@@ -332,6 +464,7 @@ pub fn record(
     }
     let entry = Record {
         id,
+        message_id,
         path: relative.to_string_lossy().to_string(),
         previous: None,
         previous_backup: backup_name,
@@ -360,6 +493,7 @@ pub fn record(
         }
     }
     outcome?;
+    prune_history(&folder)?;
     Ok(Some(id))
 }
 /// A failed pre-edit backup must not block the actual file edit. Keep the
@@ -395,16 +529,18 @@ pub fn finish_after_edit(
     session_id: Option<&str>,
     path: &Path,
     pending: PendingCheckpoint,
+    message_id: Option<Uuid>,
 ) -> String {
     if let Some(warning) = pending.warning {
         return warning;
     }
-    record_notice(
+    record_notice_for_message(
         root,
         session_id,
         path,
         pending.previous,
         pending.previous_mode,
+        message_id,
     )
 }
 
@@ -418,7 +554,17 @@ pub fn record_notice(
     previous: Option<Vec<u8>>,
     previous_mode: Option<u32>,
 ) -> String {
-    match record(root, session_id, path, previous, previous_mode) {
+    record_notice_for_message(root, session_id, path, previous, previous_mode, None)
+}
+pub fn record_notice_for_message(
+    root: &Path,
+    session_id: Option<&str>,
+    path: &Path,
+    previous: Option<Vec<u8>>,
+    previous_mode: Option<u32>,
+    message_id: Option<Uuid>,
+) -> String {
+    match record_for_message(root, session_id, path, previous, previous_mode, message_id) {
         Ok(Some(id)) => format!("\nCheckpoint: {id}"),
         Ok(None) => String::new(),
         Err(error) => {
@@ -620,6 +766,86 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
         ))
     }
 }
+/// Resolve saved file edits for a user-message suffix in reverse turn order.
+/// Each checkpoint retains its verified pre-edit bytes; the source rewind
+/// replays the tracked-files state across all messages after the target.
+pub fn records_for_message_sequence(
+    root: &Path,
+    session_id: &str,
+    message_ids: &[Uuid],
+) -> Result<Vec<Record>> {
+    use std::collections::HashMap;
+    if message_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let folder = storage(root, Some(session_id))?;
+    let order = message_ids
+        .iter()
+        .enumerate()
+        .map(|(position, id)| (*id, position))
+        .collect::<HashMap<Uuid, usize>>();
+    let mut found = Vec::new();
+    for item in fs::read_dir(&folder)? {
+        let item = item?;
+        let path = item.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(&path)?;
+        if !metadata.file_type().is_file() {
+            bail!("Rewind checkpoint must be a regular file");
+        }
+        let id = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .context("Rewind checkpoint filename is not valid UTF-8")?;
+        let record = load(root, Some(session_id), id)?;
+        if let Some(position) = record.message_id.and_then(|id| order.get(&id).copied()) {
+            found.push((position, metadata.modified()?, record));
+        }
+    }
+    // Descending turn order, newest checkpoint first; sorting by modification
+    // time within a turn avoids overwriting newer state from a parallel edit.
+    found.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| b.1.cmp(&a.1))
+            .then_with(|| b.2.id.cmp(&a.2.id))
+    });
+    Ok(found.into_iter().map(|(_, _, record)| record).collect())
+}
+
+/// Simulate the entire multi-file rewind before the first disk mutation.
+/// Conflicts, corrupt binary backups, and out-of-order writes all fail early;
+/// file edits by another process must never be silently overwritten.
+pub fn preflight_message_rewind(records: &[(Record, PathBuf)]) -> Result<()> {
+    use std::collections::HashMap;
+    let mut simulated = HashMap::<PathBuf, (Option<Vec<u8>>, Option<u32>)>::new();
+    for (record, path) in records {
+        let (current, mode) = if let Some(previous) = simulated.get(path) {
+            previous.clone()
+        } else {
+            (snapshot(path)?, snapshot_mode(path)?)
+        };
+        if let Some(content) = current.as_ref() {
+            if fingerprint(content) != record.updated_hash {
+                bail!(
+                    "File changed after checkpoint; refusing message rewind: {}",
+                    path.display()
+                );
+            }
+            if record.updated_mode.is_some() && mode != record.updated_mode {
+                bail!(
+                    "File permissions changed after checkpoint: {}",
+                    path.display()
+                );
+            }
+        }
+        let backup = previous_bytes(record)?;
+        simulated.insert(path.clone(), (backup, record.previous_mode));
+    }
+    Ok(())
+}
+
 pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
     let folder = storage(root, session_id)?;
     // fileHistory.ts keeps snapshots in insertion order. UUIDv4 lexical
@@ -652,7 +878,7 @@ pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
         results.push((
             modified,
             record.id.to_string(),
-            json!({"id":record.id,"path":record.path}),
+            json!({"id":record.id,"path":record.path,"message_id":record.message_id}),
         ));
     }
     results.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));

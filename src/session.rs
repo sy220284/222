@@ -15,6 +15,12 @@ use uuid::Uuid;
 pub struct Session {
     pub id: Uuid,
     pub messages: Vec<Message>,
+    /// Insertion-ordered user-turn IDs for message-level file snapshots.
+    /// Old sessions simply have no rewindable user-turn index.
+    #[serde(default)]
+    pub history_message_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub history_message_aliases: std::collections::BTreeMap<Uuid, Uuid>,
     #[serde(default)]
     pub summary: Option<String>,
     #[serde(default)]
@@ -63,6 +69,8 @@ impl Session {
         Self {
             id: Uuid::new_v4(),
             messages: Vec::new(),
+            history_message_ids: Vec::new(),
+            history_message_aliases: std::collections::BTreeMap::new(),
             summary: None,
             tasks: Vec::new(),
             todos: Vec::new(),
