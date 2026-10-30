@@ -1,3 +1,12 @@
+## 2026-10-30：SDK 运行中断贯通 Unix Shell 进程组清理（源码已提交、待验收）
+
+原版源码依据：source/src/cli/print.ts:2807-2816 独立 stdin 处理；2830-2862 interrupt/end_session AbortController 取消；1858-1862 priority=now 抢占；source/src/utils/ShellCommand.ts 的取消树清理。Rust 主链：src/main.rs::sdk -> sdk_interruptible_turn -> Agent::ask_with_blocks -> ToolExecutor::run_command_with_shell。
+
+- 运行中接收标准 SDK control_request(request.subtype=interrupt)、旧版 control.action=interrupt、end_session 和 priority=now；使用独立标准输入线程、FIFO 队列、watch 取消版本，按输入版次防止提前读到的中断错误作用于后续提问。正常/旧版控制确认仍由 SDK 主循环发出。提交 006b2fe8、742656fa。
+- Unix 前台 Shell 在 SDK 取消时，原有 kill_on_drop 只终止父 Shell；现在通过独立进程组 RAII 守卫在 future 被取消时杀掉同组子孙进程，正常退出后解除守卫。提交 a5307caa。
+- 已更新动态矩阵对应 src/cli/print.ts、src/utils/ShellCommand.ts。保守计 1 条用户可感知业务链（SDK 运行中取消及其 Shell 清理），源码已提交、待验收，完整等价验收新增 0；不勾选 Issue #3 冻结 362 项。本轮未运行 Cargo/测试/CI。
+- 仍未闭环：Windows SDK 取消的 Job Object 级进程归属；已经后台化/脱组的任务生命周期；priority=now 排队消息的自动调度与通知；消息 UUID -> 文件快照 -> rewind_files；async:true Hook 的后台登记、完成通知和会话结束清理；SDK 自定义 Hook、JSON Schema 初始化；取消后历史恢复时序。
+
 ## 2026-10-29：交互式 /plugin 管理接通原版子命令与实时刷新（源码已提交、待行为验收）
 
 - **原版依据**：完整 2.1.88 的 `source/src/commands/plugin/plugin.tsx::call` 将 `/plugin` 参数传给插件管理界面；`source/src/commands/plugin/parseArgs.ts::parsePluginArgs` 支持安装、卸载、启用、停用、验证、市场管理及别名。
