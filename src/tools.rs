@@ -167,7 +167,7 @@ fn model_task_result(output: String) -> String {
                 upper = middle - 1;
             }
         }
-        return best;
+        return if best.is_empty() { value.to_string() } else { best };
     }
     value.to_string()
 }
