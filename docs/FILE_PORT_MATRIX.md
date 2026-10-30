@@ -164,7 +164,7 @@
 | `src/commands/extra-usage/index.ts` | 32 | 1101 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/fast/fast.tsx` | 269 | 33931 | 重写：保持通用行为 | `src/generated_ports/p_beab21f3c4363.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/fast/index.ts` | 27 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/feedback/feedback.tsx` | 25 | 5095 | 重写：保持通用行为 | `src/generated_ports/p_db7aa9242d70e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/feedback/feedback.tsx` | 25 | 5095 | 重写：保持通用行为 | `src/generated_ports/p_db7aa9242d70e.rs`| 部分实现：/feedback 入口契约（args 作为初始描述默认值、messages/abortSignal/backgroundTasks 透传 Feedback 组件视图），附 2 测试；Feedback 组件本体归组件域|
 | `src/commands/feedback/index.ts` | 27 | 931 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/files/files.ts` | 20 | 688 | 重写：保持通用行为 | `src/files_context.rs / src/agent.rs / src/main.rs` | 部分实现：/files 从真实工具结果重建读、写、编辑、NotebookEdit 的成功文件缓存，按最近使用排序、去重、保留最多 100 项，失败不入缓存，删除后的历史文件仍可跨会话恢复显示；原版独立 FileStateCache 的 25MB 字节淘汰、完整内容/mtime/offset/limit、编辑并发保护、压缩状态及实时失效仍待补齐 |
 | `src/commands/files/index.ts` | 13 | 316 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -225,7 +225,7 @@
 | `src/commands/permissions/index.ts` | 12 | 296 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/permissions/permissions.tsx` | 10 | 2223 | 重写：保持通用行为 | `src/generated_ports/p_f0fb508cfc148.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plan/index.ts` | 12 | 286 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/plan/plan.tsx` | 122 | 13904 | 重写：保持通用行为 | `src/generated_ports/p_bcae150cd625f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plan/plan.tsx` | 122 | 13904 | 重写：保持通用行为 | `src/generated_ports/p_bcae150cd625f.rs`| 部分实现：/plan 状态机编排——进入路径（模式切换+permission setMode 由调用方执行+描述非 open 触发 shouldQuery）、已入路径（计划视图/空计划提示/open 编辑器路由）、PlanDisplay 视图（标题/暗路径/盒装内容/编辑器提示条件渲染），附 4 测试；plans/editor/permissions 服务注入|
 | `src/commands/plugin/AddMarketplace.tsx` | 162 | 21821 | 重写：保持通用行为 | `src/generated_ports/p_100ae039b4f18.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/BrowseMarketplace.tsx` | 802 | 119562 | 重写：保持通用行为 | `src/generated_ports/p_aa9a2fff6266e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/DiscoverPlugins.tsx` | 781 | 106666 | 重写：保持通用行为 | `src/generated_ports/p_b2359c395e89f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |

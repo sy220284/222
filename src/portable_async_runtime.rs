@@ -648,7 +648,11 @@ mod tests {
             ("discontinue", false, false),
             ("Foo go on.", false, true),
         ] {
-            assert_eq!(matches_negative_keyword(input), negative, "negative: {input}");
+            assert_eq!(
+                matches_negative_keyword(input),
+                negative,
+                "negative: {input}"
+            );
             assert_eq!(
                 matches_keep_going_keyword(input),
                 keep_going,
