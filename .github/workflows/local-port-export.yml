@@ -1,23 +1,40 @@
-name: 导出最新本地验收快照
+name: 导出当前 Rust 迁移源码快照
 on:
-  push:
-    branches: [feat/full-rust-parity]
-    paths:
-      - .github/workflows/local-port-export.yml
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-source-export-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   archive:
+    name: 原样导出并校验当前 HEAD
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - name: 制作仅含仓库代码的快照
+      - name: 检出实际提交
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: 制作可校验的源码快照
         run: |
+          set -euo pipefail
           mkdir -p export
           git archive --format=tar.gz HEAD -o export/current.tar.gz
           git rev-parse HEAD > export/source-head.txt
-      - uses: actions/upload-artifact@v4
+          (cd export && sha256sum current.tar.gz > SHA256SUMS)
+          tar -tzf export/current.tar.gz | grep -Fx 'Cargo.toml'
+          test -s export/source-head.txt
+          (cd export && sha256sum -c SHA256SUMS)
+      - name: 保留当前提交的完整源码
+        uses: actions/upload-artifact@v4
         with:
           name: latest-full-rust-port
           path: export/
-          retention-days: 1
+          if-no-files-found: error
+          retention-days: 7

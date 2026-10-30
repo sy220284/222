@@ -2055,6 +2055,14 @@ impl Agent {
         }
     }
 
+    pub fn session_color(&self) -> Option<&str> {
+        self.session.agent_color.as_deref()
+    }
+
+    pub fn set_session_color(&mut self, color: &str) -> Result<String> {
+        crate::session_color::change_color(&mut self.session, &self.root, color)
+    }
+
     pub fn session_id(&self) -> String {
         self.session.id.to_string()
     }
@@ -3473,7 +3481,7 @@ impl Agent {
             bail!("Compaction is disabled by ATLAS_DISABLE_COMPACT")
         }
         if self.session.messages.is_empty() {
-            bail!("No history to compact")
+            bail!("{}", crate::compact_command_source::NO_MESSAGES)
         }
         runtime_contracts::clear_compact_warning_suppression();
         let before = self
@@ -3707,6 +3715,26 @@ impl Agent {
         Ok(available)
     }
 
+    /// Session-scoped cache invalidation shared by /clear and /resume.
+    /// Based on `src/commands/clear/caches.ts::clearSessionCaches`:
+    /// stale file permissions, editor reads, model request prefixes, session
+    /// env overrides and per-session notifications must never survive a
+    /// conversation switch. Background tasks and their mailbox remain owned
+    /// by their own session and are not deleted by this cache reset.
+    fn reset_session_caches(&mut self) {
+        self.notebook_reads.lock().unwrap().clear();
+        self.file_reads.lock().unwrap().clear();
+        self.last_context_usage = None;
+        self.last_side_question_request = None;
+        self.last_model_usage = None;
+        self.auto_compact_failures = 0;
+        self.session_context.clear();
+        self.pending_initial_user_message = None;
+        self.transient_mailbox = in_memory_mailbox::Mailbox::new();
+        self.session_env.clear();
+        self.background.set_environment(&self.session_env);
+    }
+
     pub async fn resume_interactive_session(&mut self, query: &str) -> Result<String> {
         if !self.interactive {
             bail!("Interactive session switching requires chat mode");
@@ -3760,21 +3788,9 @@ impl Agent {
         self.session_start_source = "resume";
         self.permission_mode = mode;
         self.background = background;
-        // /env overrides belong to the previous conversation; a resumed
-        // session starts with the process/configured environment only.
-        self.session_env.clear();
-        self.background.set_environment(&self.session_env);
         self.graph = graph;
         self.file_metrics = metrics;
-        self.notebook_reads.lock().unwrap().clear();
-        self.file_reads.lock().unwrap().clear();
-        self.last_context_usage = None;
-        self.last_side_question_request = None;
-        self.last_model_usage = None;
-        self.auto_compact_failures = 0;
-        self.session_context.clear();
-        self.pending_initial_user_message = None;
-        self.transient_mailbox = in_memory_mailbox::Mailbox::new();
+        self.reset_session_caches();
         let start = match self
             .hooks
             .run(HookEvent::SessionStart, None, {
@@ -3829,20 +3845,9 @@ impl Agent {
         // Prepare the new durable session before swapping the active state.
         next.save(&self.root)?;
         self.session = next;
-        // A new session cannot inherit file-read authorization from the
-        // previous conversation, even when the workspace is unchanged.
-        self.notebook_reads.lock().unwrap().clear();
-        self.file_reads.lock().unwrap().clear();
-        self.last_context_usage = None;
-        self.last_side_question_request = None;
-        self.last_model_usage = None;
-        self.auto_compact_failures = 0;
         self.graph = graph;
-        self.session_context.clear();
-        self.transient_mailbox = in_memory_mailbox::Mailbox::new();
-        self.session_env.clear();
-        self.background.set_environment(&self.session_env);
         self.file_metrics = Arc::new(ToolMetrics::with_totals(0, 0));
+        self.reset_session_caches();
 
         let start = self
             .hooks

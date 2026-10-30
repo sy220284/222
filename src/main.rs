@@ -1,3 +1,4 @@
+mod advisor_command;
 mod agent;
 mod agent_definition;
 mod array_utils;
@@ -11,6 +12,7 @@ mod cleanup_registry;
 mod collections;
 mod command_lifecycle;
 mod command_manifest;
+mod compact_command_source;
 mod compat_helpers;
 mod config;
 mod context_usage;
@@ -71,7 +73,10 @@ mod permission_settings;
 mod plain_text_storage;
 mod platform_source_utilities;
 mod plugin_commands;
+mod plugin_error_messages_source;
 mod plugin_manager;
+mod plugin_pagination_source;
+mod plugin_trust_warning_source;
 mod plugins;
 mod portable_async_runtime;
 mod portable_configuration;
@@ -101,6 +106,7 @@ mod secure_fallback;
 mod semantic_inputs;
 mod semantic_session_search;
 mod session;
+mod session_color;
 mod session_control;
 mod shell_quote;
 mod shell_runtime;
@@ -132,6 +138,7 @@ mod tools;
 mod transcript_search;
 mod unicode_sanitization;
 mod version;
+mod vim_mode_source;
 mod webfetch;
 mod websearch;
 mod workspace_dirs;
@@ -481,6 +488,10 @@ fn sdk_message_id(external: &str, session_id: &str) -> uuid::Uuid {
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     uuid::Uuid::from_bytes(bytes)
 }
+
+// src/commands/output-style/output-style.tsx::call. Keep the legacy
+// command's system notice in one place; config changes apply next session.
+const LEGACY_OUTPUT_STYLE_NOTICE: &str = "/output-style has been deprecated. Use /config to change your output style, or set it in your settings file. Changes take effect on the next session.";
 
 async fn run_cli() -> Result<()> {
     let cli = Cli::parse();
@@ -1467,7 +1478,11 @@ async fn chat(
             println!("Proposed prompt: {suggested}");
             print!("atlas [Enter: use linked prompt; or type replacement]> ");
         } else {
-            print!("atlas> ");
+            use std::io::IsTerminal as _;
+            print!(
+                "{}",
+                session_color::prompt_prefix(agent.session_color(), io::stdout().is_terminal())
+            );
         }
         io::stdout().flush()?;
         let mut line = String::new();
@@ -1495,6 +1510,22 @@ async fn chat(
             Some(format!("/{}{}", command.name, rest))
         });
         let input = normalized.as_deref().unwrap_or(input);
+        if input == "/advisor" || input.starts_with("/advisor ") {
+            let args = input.strip_prefix("/advisor").unwrap_or("").trim();
+            match advisor_command::execute(config, agent.profile(), args) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Cannot change advisor model: {error:#}"),
+            }
+            continue;
+        }
+        if input == "/color" || input.starts_with("/color ") {
+            let color = input.strip_prefix("/color").unwrap_or("").trim();
+            match agent.set_session_color(color) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Cannot set session color: {error:#}"),
+            }
+            continue;
+        }
         if input == "/keybindings" || input.starts_with("/keybindings ") {
             let arg = input.strip_prefix("/keybindings").unwrap_or("").trim();
             let path = keybindings::keybindings_path(&keybindings::config_home()?);
@@ -2038,6 +2069,10 @@ async fn chat(
                 }
                 continue;
             }
+            "/vim" => {
+                println!("{}", vim_mode_source::toggle_editor_mode(config)?);
+                continue;
+            }
             "/mode" => {
                 println!("Permission mode: {}", agent.cycle_permission_mode()?);
                 continue;
@@ -2083,6 +2118,10 @@ async fn chat(
                 println!("{}", version::running_version());
                 continue;
             }
+            "/output-style" => {
+                println!("{}", LEGACY_OUTPUT_STYLE_NOTICE);
+                continue;
+            }
             "/cost" => {
                 println!("{}", agent.cost_summary());
                 continue;
@@ -2108,14 +2147,20 @@ async fn chat(
             }
             "/compact" => {
                 agent.compact_history().await?;
-                println!("Session context compacted.");
+                println!(
+                    "{}",
+                    compact_command_source::build_display_text(false, "ctrl+o", None, None)
+                );
                 continue;
             }
             _ => {}
         }
         if let Some(instructions) = input.strip_prefix("/compact ") {
             agent.compact_history_custom(instructions).await?;
-            println!("Session context compacted.");
+            println!(
+                "{}",
+                compact_command_source::build_display_text(false, "ctrl+o", None, None)
+            );
             continue;
         }
         if input == "/sessions --semantic" || input.starts_with("/sessions --semantic ") {

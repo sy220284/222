@@ -40,11 +40,15 @@ mod parity_tests {
             &json!({"inputState":{"renderedValue":""},"value":"","placeholder":"speak",
             "terminalFocus":true,"showCursor":true,"focus":true}),
         );
-        assert!(normal.text_content().contains("speak"));
+        // The original renderPlaceholder highlights the first letter using ANSI.
+        // Match the rendered terminal output rather than searching across SGR bytes.
+        assert_eq!(normal.text_content(), "\u{1b}[7ms\u{1b}[27m\u{1b}[2mpeak\u{1b}[22m");
         let voice = render_source_view(
             &json!({"inputState":{"renderedValue":""},"value":"","placeholder":"speak",
             "terminalFocus":true,"showCursor":true,"focus":true,"voiceState":"recording"}),
         );
-        assert!(!voice.text_content().contains("speak"));
+        // Recording keeps the cursor cell but hides the placeholder label.
+        assert_eq!(voice.text_content(), "\u{1b}[7m \u{1b}[27m");
+        assert_eq!(voice.unresolved_node_count(), 0);
     }
 }

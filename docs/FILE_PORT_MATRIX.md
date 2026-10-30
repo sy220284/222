@@ -105,7 +105,7 @@
 | `src/commands/add-dir/add-dir.tsx` | 126 | 18017 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/add-dir/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/add-dir/validation.ts` | 111 | 3207 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
-| `src/commands/advisor.ts` | 110 | 3182 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/advisor.ts` | 110 | 3182 | 重写：保持通用行为 | `src/advisor_command.rs / src/config.rs / src/main.rs` | 部分实现：交互式 /advisor 查询、关闭、配置项模型/提供商校验及原子化用户配置保存；通用多模型 reviewer 工具执行链尚未接通，原厂灰度门禁维持排除 |
 | `src/commands/agents/agents.tsx` | 12 | 2500 | 重写：保持通用行为 | `src/generated_ports/p_c014e56745958.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/agents/index.ts` | 11 | 232 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/ant-trace/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -127,11 +127,11 @@
 | `src/commands/clear/clear.ts` | 8 | 254 | 重写：保持通用行为 | `src/agent.rs / src/main.rs` | 部分实现：会话结束/开始 Hook、旧会话保留与新会话 ID、权限模式保留接入实际聊天和 SDK；完整缓存、MCP 热重置与全部后台任务生命周期待验收 |
 | `src/commands/clear/conversation.ts` | 252 | 9325 | 重写：保持通用行为 | `src/agent.rs / src/main.rs` | 部分实现：会话结束/开始 Hook、旧会话保留与新会话 ID、权限模式保留接入实际聊天和 SDK；完整缓存、MCP 热重置与全部后台任务生命周期待验收 |
 | `src/commands/clear/index.ts` | 20 | 603 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/color/color.ts` | 94 | 2712 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/color/color.ts` | 94 | 2712 | 重写：保持通用行为 | `src/session_color.rs / src/session.rs / src/agent.rs / src/main.rs` | 部分实现：/color 注册到交互入口，合法八色、五个重置别名、团队成员拒绝、会话持久化与恢复、ANSI 终端提示文字；原版 Ink 边框与无障碍联动仍待核验 |
 | `src/commands/color/index.ts` | 17 | 417 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/commit-push-pr.ts` | 159 | 6309 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：真实默认分支检测、差异与中文 PR 工作流接入；推送和远端状态完整链待验收 |
 | `src/commands/commit.ts` | 93 | 3492 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：真实 Git 状态与差异生成提交提示，CLI/交互可执行；原版权限特化仍待验收 |
-| `src/commands/compact/compact.ts` | 288 | 10079 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/compact/compact.ts` | 288 | 10079 | 重写：保持通用行为 | `src/compact_command_source.rs / src/agent.rs / src/main.rs` | 部分实现：/compact 保留自定义指令、真实模型摘要、前后 Hook、事务存盘、三次上下文截断重试，并补充原版结果提示和错误语义函数；会话记忆压缩及 reactive 专用分支仍待完整迁移 |
 | `src/commands/compact/index.ts` | 16 | 530 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/config/config.tsx` | 7 | 1408 | 重写：保持通用行为 | `src/generated_ports/p_18a7a03aea84b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/config/index.ts` | 12 | 247 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -218,7 +218,7 @@
 | `src/commands/oauth-refresh/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/onboarding/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/output-style/index.ts` | 12 | 291 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/output-style/output-style.tsx` | 7 | 1343 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/output-style/output-style.tsx` | 7 | 1343 | 重写：保持通用行为 | `src/main.rs` | 部分实现：交互式 /output-style 输出原版完整停用提示并保持会话不追加消息；仍待终端输出回归验证 |
 | `src/commands/passes/index.ts` | 23 | 632 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/passes/passes.tsx` | 24 | 3783 | 重写：保持通用行为 | `src/generated_ports/p_31ab458ab85e0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/perf-issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -231,18 +231,18 @@
 | `src/commands/plugin/DiscoverPlugins.tsx` | 781 | 106666 | 重写：保持通用行为 | `src/generated_ports/p_b2359c395e89f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/ManageMarketplaces.tsx` | 838 | 118912 | 重写：保持通用行为 | `src/generated_ports/p_7337a24f3e0b4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/ManagePlugins.tsx` | 2215 | 321775 | 重写：保持通用行为 | `src/generated_ports/p_9d478e1ba087e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/plugin/PluginErrors.tsx` | 124 | 23316 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plugin/PluginErrors.tsx` | 124 | 23316 | 重写：保持通用行为 | `src/plugin_error_messages_source.rs` | 部分实现：按原版逐类还原插件安装、市场、Git、MCP、Hook、MCPB、LSP、依赖失败的错误消息和操作建议；真实 TUI 消费链待接入 |
 | `src/commands/plugin/PluginOptionsDialog.tsx` | 357 | 34537 | 重写：保持通用行为 | `src/generated_ports/p_24eaf2e46f24a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/PluginOptionsFlow.tsx` | 135 | 18702 | 重写：保持通用行为 | `src/generated_ports/p_8dddb5ec693ee.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/PluginSettings.tsx` | 1072 | 128668 | 重写：保持通用行为 | `src/generated_ports/p_632353e8f57fc.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/plugin/PluginTrustWarning.tsx` | 32 | 3919 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plugin/PluginTrustWarning.tsx` | 32 | 3919 | 重写：保持通用行为 | `src/plugin_trust_warning_source.rs` | 部分实现：政策设置的信任告知、样式和附加提示由 Rust 计算，剔除原厂专属品牌文案；终端实际渲染与权限设置接线待验收 |
 | `src/commands/plugin/UnifiedInstalledCell.tsx` | 565 | 44441 | 重写：保持通用行为 | `src/generated_ports/p_48aef09fe12b8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/ValidatePlugin.tsx` | 98 | 12369 | 重写：保持通用行为 | `src/generated_ports/p_458eb28ef635b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/index.tsx` | 11 | 1337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/plugin/parseArgs.ts` | 104 | 2818 | 重写：保持通用行为 | `src/plugin_commands.rs / src/plugin_manager.rs / src/main.rs` | 部分实现：原版菜单、别名、安装参数、市场动作与完整解析分支已实现；管理命令落地本地插件安装/删除/启停，远程市场和 UI 待补；插件安装入口崩溃残留扫描与安全恢复接入实际 install/manager 独占锁（20d3e46e、c2f96029，待验收）；事务提交日志/全量自动恢复尚缺 |
 | `src/commands/plugin/plugin.tsx` | 7 | 1590 | 重写：保持通用行为 | `src/main.rs / src/plugin_commands.rs / src/plugin_manager.rs` | 部分实现：交互式 /plugin 命令已接通原版子命令解析及真实本地插件管理，修改后刷新当前 Agent Hook/MCP/技能命令目录并显示失败（580c0586，源码已提交待验收）；原版 PluginSettings 全 UI、远程市场、MCPB 和 LSP 动态刷新仍缺；静态生成 JSX 不计完成证据 |
 | `src/commands/plugin/pluginDetailsHelpers.tsx` | 117 | 12424 | 重写：保持通用行为 | `src/generated_ports/p_6c7ca7c1ed900.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/plugin/usePagination.ts` | 172 | 4990 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plugin/usePagination.ts` | 172 | 4990 | 重写：保持通用行为 | `src/plugin_pagination_source.rs` | 部分实现：滚动窗口、连续选择、页数与状态复刻并增加测试；真实插件 UI 依赖待接通 |
 | `src/commands/pr_comments/index.ts` | 51 | 1848 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/privacy-settings/index.ts` | 15 | 399 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/privacy-settings/privacy-settings.tsx` | 58 | 10043 | 重写：保持通用行为 | `src/generated_ports/p_5d2e3ca07cba4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -306,7 +306,7 @@
 | `src/commands/usage/usage.tsx` | 7 | 1403 | 重写：保持通用行为 | `src/generated_ports/p_4c1965fccb05b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | `src/version.rs / src/main.rs` | 部分实现：当前运行二进制版本、可选编译时间、交互 /version 和版本 CLI 已落地；专属用户开关按多模型要求移除，原调用链完整验收待做 |
 | `src/commands/vim/index.ts` | 12 | 273 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/vim/vim.ts` | 39 | 1139 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/vim/vim.ts` | 39 | 1139 | 重写：保持通用行为 | `src/vim_mode_source.rs / src/main.rs / src/config.rs` | 部分实现：/vim 命令切换并持久化 Vim/标准编辑模式、旧 emacs 模式兼容及原版反馈文案；输入处理层须读取偏好才能完成终端等价 |
 | `src/commands/voice/index.ts` | 21 | 482 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/voice/voice.ts` | 151 | 5264 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/components/AgentProgressLine.tsx` | 136 | 14238 | 重写：终端 UI／交互 | `src/generated_ports/p_6df1d1f49fc09.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |

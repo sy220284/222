@@ -71,6 +71,20 @@ pub struct Config {
     )]
     pub file_checkpointing_enabled: bool,
     pub default_provider: String,
+    #[serde(
+        default = "default_editor_mode",
+        rename = "editorMode",
+        alias = "editor_mode"
+    )]
+    pub editor_mode: String,
+    /// User-selected reviewer provider, independent of the main-loop provider.
+    #[serde(
+        default,
+        rename = "advisorModel",
+        alias = "advisor_model",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub advisor_model: Option<String>,
     pub providers: Vec<ProviderProfile>,
     #[serde(default)]
     pub additional_directories: Vec<String>,
@@ -132,6 +146,10 @@ pub struct Config {
     pub model_prices: Vec<ModelPrice>,
 }
 
+fn default_editor_mode() -> String {
+    "normal".into()
+}
+
 fn default_file_checkpointing() -> bool {
     true
 }
@@ -140,6 +158,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             default_provider: "local".into(),
+            editor_mode: default_editor_mode(),
+            advisor_model: None,
             file_checkpointing_enabled: true,
             additional_directories: Vec::new(),
             instruction_excludes: Vec::new(),
