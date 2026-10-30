@@ -60,15 +60,7 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
         &profile.base_url,
         profile.api_key_env.is_some(),
     )?;
-    let key = match &profile.api_key_env {
-        Some(env) => Some(std::env::var(env).with_context(|| {
-            format!(
-                "Provider '{}' requires environment variable {env}",
-                profile.id
-            )
-        })?),
-        None => None,
-    };
+    let key = crate::model_catalog::load_api_key(profile)?;
     // A client-wide timeout measures the entire streamed completion. It
     // aborts healthy long-running generations after 180 seconds even while
     // tokens are arriving. Streaming adapters enforce per-chunk idle timeouts;
@@ -84,6 +76,7 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
             base_url: profile.base_url.clone(),
             key,
             response_schema: None,
+            tuning: profile.tuning.clone(),
         })),
         "gemini" => Ok(Box::new(Gemini {
             client,
@@ -184,6 +177,7 @@ struct OpenAiCompatible {
     base_url: String,
     key: Option<String>,
     response_schema: Option<Value>,
+    tuning: crate::config::ModelTuning,
 }
 
 #[async_trait]
@@ -195,6 +189,7 @@ impl ModelProvider for OpenAiCompatible {
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         let mut body = json!({"model":request.model,
             "messages":openai_messages(request)?});
+        self.tuning.apply_chat_completions(&mut body);
         if let Some(schema) = &self.response_schema {
             body["response_format"] = json!({"type":"json_schema",
                 "json_schema":{"name":"structured_output","strict":true,"schema":schema}});
@@ -262,6 +257,7 @@ impl ModelProvider for OpenAiCompatible {
             request,
             deltas,
             self.response_schema.as_ref(),
+            &self.tuning,
         )
         .await
     }
@@ -279,6 +275,7 @@ impl ModelProvider for OpenAiCompatible {
             deltas,
             self.response_schema.as_ref(),
             Some(tool_blocks),
+            &self.tuning,
         )
         .await
     }
