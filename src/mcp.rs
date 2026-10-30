@@ -1661,13 +1661,13 @@ case "$line" in
     echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
   *'"method":"tools/list"'*)
     echo '{"jsonrpc":"2.0","id":2,"method":"roots/list"}' ;;
-  *'"id":2'*'"roots"'*)
+  *'"id":2'*'"roots"'*|*'"roots"'*'"id":2'*)
     echo '{"jsonrpc":"2.0","id":91,"method":"elicitation/create"}' ;;
-  *'"id":91'*'"cancel"'*)
+  *'"id":91'*'"cancel"'*|*'"cancel"'*'"id":91'*)
     echo '{"jsonrpc":"2.0","id":92,"method":"ping"}' ;;
-  *'"id":92'*'"result":{}'*)
+  *'"id":92'*'"result":{}'*|*'"result":{}'*'"id":92'*)
     echo '{"jsonrpc":"2.0","id":93,"method":"unsupported/request"}' ;;
-  *'"code":-32601'*'"id":93'*)
+  *'"code":-32601'*'"id":93'*|*'"id":93'*'"code":-32601'*)
     echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"ready"}]}}' ;;
 esac
 done"#;
