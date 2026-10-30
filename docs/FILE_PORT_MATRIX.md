@@ -40,7 +40,7 @@
 | `src/main.tsx` | 4684 | 803924 | 重写：CLI／SDK 入口 | `src/main.rs` | 部分实现，多模式与 SDK 未等价 |
 | `src/projectOnboardingState.ts` | 84 | 2337 | 重写：保持通用行为 | `src/project_onboarding.rs / src/main.rs` | 部分实现：工作区是否为空、工程指令文件探测、最多四次提示、按工作区持久化完成标记，接入真实交互 CLI；原版交互式 onboarding 视觉组件未等价 |
 | `src/query.ts` | 1730 | 68683 | 重写：模型／Agent 循环 | `src/agent.rs / src/sse.rs` | 部分实现：多轮循环、SSE 增量和工具回填；原版上下文状态机未全等；模型返回非法 JSON/非对象工具参数时逐工具错误回填，不中断同轮合法兄弟工具及后续模型请求；Pre/PostToolUse 子进程 Hook 异常逐工具回填且保留原操作副作用和后续合法工具 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；SSE 无终止标记时拒绝执行未确认工具；多模态 UI/非图片块仍未等价|
-| `src/replLauncher.tsx` | 23 | 3517 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/replLauncher.tsx` | 23 | 3517 | 重写：保持通用行为 | `src/generated_ports/p_f0ed6c98956f7.rs` | 部分实现：契约记录：REPL 惰性加载组装（App+REPL 动态模块+renderAndRun 注入）；宿主待验收 |
 | `src/setup.ts` | 478 | 20646 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/tasks.ts` | 40 | 1355 | 重写：保持通用行为 | `src/generated_ports/p_1301a5d096c85.rs` | 部分实现：完整等价：getAllTasks 注册表（LocalShell/LocalAgent/RemoteAgent/Dream 常驻+WORKFLOW_SCRIPTS/MONITOR_TOOL 特性门条目，内联数组防循环依赖同款）含单测；具体 Task 类型随各自文件迁移，待验收 |
 | `src/tools.ts` | 390 | 17294 | 重写：保持通用行为 | `src/generated_ports/p_522c7b52c49b4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -195,7 +195,7 @@
 | `src/commands/install-github-app/install-github-app.tsx` | 587 | 87155 | 重写：保持通用行为 | `src/generated_ports/p_a9174729be5dd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/install-github-app/setupGitHubActions.ts` | 326 | 10168 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-slack-app/index.ts` | 13 | 333 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/install-slack-app/install-slack-app.ts` | 31 | 877 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/install-slack-app/install-slack-app.ts` | 31 | 877 | 重写：保持通用行为 | `src/generated_ports/p_bb12be5257a54.rs` | 部分实现：完整等价：点击计数器+双文案逐字；品牌 URL 按隐私门禁不落地（差异记录），browser 接线待验收 |
 | `src/commands/install.tsx` | 300 | 39068 | 重写：保持通用行为 | `src/generated_ports/p_3289389e68d82.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/keybindings/index.ts` | 14 | 448 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -575,13 +575,13 @@
 | `src/components/memory/MemoryUpdateNotification.tsx` | 45 | 5100 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messageActions.tsx` | 450 | 54948 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/AdvisorMessage.tsx` | 158 | 14479 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/AssistantRedactedThinkingMessage.tsx` | 31 | 2603 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/AssistantRedactedThinkingMessage.tsx` | 31 | 2603 | 重写：终端 UI／交互 | `src/generated_ports/p_deade2853be5b.rs` | 部分实现：完整等价：✻ Thinking… 文案+addMargin 缺省 false 决策；JSX 宿主归 ink，待验收 |
 | `src/components/messages/AssistantTextMessage.tsx` | 270 | 30427 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/AssistantThinkingMessage.tsx` | 86 | 8082 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/AssistantToolUseMessage.tsx` | 368 | 45285 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/AttachmentMessage.tsx` | 536 | 71430 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/CollapsedReadSearchContent.tsx` | 484 | 78078 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/CompactBoundaryMessage.tsx` | 18 | 2275 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/CompactBoundaryMessage.tsx` | 18 | 2275 | 重写：终端 UI／交互 | `src/generated_ports/p_a516d1f1cd2db.rs` | 部分实现：完整等价：压缩边界文案构造（快捷键三元组常量+参数化文本）含单测；useShortcutDisplay 接线随键绑定链，待验收 |
 | `src/components/messages/GroupedToolUseContent.tsx` | 58 | 8289 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/HighlightedThinkingText.tsx` | 162 | 14902 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/HookProgressMessage.tsx` | 116 | 10613 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -605,8 +605,8 @@
 | `src/components/messages/UserTeammateMessage.tsx` | 206 | 24126 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserTextMessage.tsx` | 275 | 29051 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserToolResultMessage/RejectedPlanMessage.tsx` | 31 | 3409 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/UserToolResultMessage/RejectedToolUseMessage.tsx` | 16 | 1763 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/UserToolResultMessage/UserToolCanceledMessage.tsx` | 16 | 1777 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/UserToolResultMessage/RejectedToolUseMessage.tsx` | 16 | 1763 | 重写：终端 UI／交互 | `src/generated_ports/p_6e2e32617a685.rs` | 部分实现：完整等价：Tool use rejected 文案+height 1；JSX 宿主归 ink，待验收 |
+| `src/components/messages/UserToolResultMessage/UserToolCanceledMessage.tsx` | 16 | 1777 | 重写：终端 UI／交互 | `src/generated_ports/p_755af08d542a7.rs` | 部分实现：完整等价：height 1+InterruptedByUser 体结构；JSX 宿主归 ink，待验收 |
 | `src/components/messages/UserToolResultMessage/UserToolErrorMessage.tsx` | 103 | 12222 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserToolResultMessage/UserToolRejectMessage.tsx` | 95 | 8570 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserToolResultMessage/UserToolResultMessage.tsx` | 106 | 13742 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -614,7 +614,8 @@
 | `src/components/messages/UserToolResultMessage/utils.tsx` | 44 | 3938 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/nullRenderingAttachments.ts` | 71 | 2257 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/teamMemCollapsed.tsx` | 140 | 13711 | 重写：终端 UI／交互 | `src/generated_ports/p_7ea337b79dc53.rs`| 部分实现：团队记忆折叠计数——三计数判定逐字（read/search/write 任一>0）、动词决策（进行时/过去时×首段大写）、单复数 memory/memories、逗号拼接后缀、无操作返回 null，registry 兼容导出 checkHasTeamMemOps，附 5 测试；React 记忆化脚手架属组件域有意去除|
-| `src/components/messages/teamMemSaved.ts` | 20 | 711 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/teamMemCollapsed.tsx` | 140 | 13711 | 重写：终端 UI／交互 | `src/generated_ports/p_7ea337b79dc53.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/messages/teamMemSaved.ts` | 20 | 711 | 重写：终端 UI／交互 | `src/generated_ports/p_22e1be01ba4e6.rs` | 部分实现：完整等价：团队记忆段构造（0→None/单复数）含单测，原注保留；待验收 |
 | `src/components/permissions/AskUserQuestionPermissionRequest/AskUserQuestionPermissionRequest.tsx` | 645 | 82469 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/AskUserQuestionPermissionRequest/PreviewBox.tsx` | 229 | 25959 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/AskUserQuestionPermissionRequest/PreviewQuestionView.tsx` | 328 | 52983 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -847,7 +848,7 @@
 | `src/ink/colorize.ts` | 232 | 7647 | 重写：终端 UI／交互 | `src/generated_ports/p_36ccb582d72f4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/components/AlternateScreen.tsx` | 80 | 10377 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/App.tsx` | 658 | 98330 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/components/AppContext.ts` | 22 | 523 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/components/AppContext.ts` | 22 | 523 | 重写：终端 UI／交互 | `src/generated_ports/p_d406d78d8ab29.rs` | 部分实现：契约记录：exit 句柄 context（no-op 默认+displayName）归 ink 宿主；待验收 |
 | `src/ink/components/Box.tsx` | 214 | 21652 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/Button.tsx` | 192 | 16523 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/ClockContext.tsx` | 112 | 12091 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -965,12 +966,12 @@
 | `src/migrations/migrateFennecToOpus.ts` | 46 | 1372 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/migrateLegacyOpusToCurrent.ts` | 58 | 1974 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/migrateOpusToOpus1m.ts` | 44 | 1347 | 重写：保持通用行为 | `src/generated_ports/p_9c5d3f64a2870.rs` | 部分实现：完整等价：迁移决策纯函数（仅 eligible 且设置恰为 opus 别名才写，Pro/3P/运行时覆盖跳过语义同款）含单测；模型链访问器接线待验收 |
-| `src/migrations/migrateReplBridgeEnabledToRemoteControlAtStartup.ts` | 23 | 1000 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/migrations/migrateReplBridgeEnabledToRemoteControlAtStartup.ts` | 23 | 1000 | 重写：保持通用行为 | `src/generated_ports/p_72265c8cdc4d6.rs` | 部分实现：完整等价：replBridgeEnabled→remoteControlAtStartup 迁移决策（拷贝+删旧键+幂等+新键已设跳过）含双单测；saveGlobalConfig 随 settings 链，待验收 |
 | `src/migrations/migrateSonnet1mToSonnet45.ts` | 49 | 1582 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/migrateSonnet45ToSonnet46.ts` | 68 | 2055 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/resetAutoModeOptInForDefaultOffer.ts` | 52 | 2106 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/resetProToOpusDefault.ts` | 52 | 1550 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/moreright/useMoreRight.tsx` | 26 | 3535 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/moreright/useMoreRight.tsx` | 26 | 3535 | 重写：保持通用行为 | `src/generated_ports/p_b1e9236cd4884.rs` | 部分实现：完整等价：外部构建空桩与原版逐字语义（onBeforeQuery true/空完成/null 渲染）；内部实现仅内部分发，待验收 |
 | `src/native-ts/color-diff/index.ts` | 1000 | 30042 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/native-ts/file-index/index.ts` | 371 | 12006 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/native-ts/yoga-layout/enums.ts` | 135 | 2823 | 重写：保持通用行为 | `src/generated_ports/p_166b646bc508b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
