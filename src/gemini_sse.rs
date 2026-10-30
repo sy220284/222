@@ -157,12 +157,14 @@ pub async fn complete(
         .context("Gemini stream idle timeout")? {
         let chunk = bytes.context("Gemini stream socket failed")?;
         pending.extend_from_slice(&chunk);
-        if pending.len() > 4_194_304 {
-            bail!("Gemini SSE frame exceeds 4 MiB")
-        }
+        // Bound an incomplete SSE frame, not the sum of many complete
+        // frames delivered in one network read.
         while let Some((end, terminator_len)) = frame_boundary(&pending) {
             let event = pending.drain(..end + terminator_len).collect::<Vec<_>>();
             frame(&event[..end], &mut assembler, &deltas)?;
+        }
+        if pending.len() > 4_194_304 {
+            bail!("Gemini SSE frame exceeds 4 MiB")
         }
     }
     if !pending.is_empty() {
