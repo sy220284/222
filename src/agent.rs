@@ -3741,6 +3741,26 @@ impl Agent {
         let mut selected_mcp_tools = std::collections::HashSet::new();
         for _ in 0..self.max_steps {
             self.absorb_team_messages()?;
+            // Original QueryEngine checks AsyncHookRegistry between API/tool
+            // rounds. Attach each completed hook exactly once; emit its
+            // outcome to the SDK/UI, without replaying the shell command.
+            for event in crate::hooks::collect_async_hook_responses(
+                &self.session.id.to_string()
+            ).await {
+                self.emit(event.clone());
+                if event["outcome"] == "success" {
+                    let stdout = event["stdout"].as_str().unwrap_or("").trim();
+                    if !stdout.is_empty() {
+                        self.session.messages.push(Message::text(
+                            "user",
+                            format!("[Asynchronous {} hook completed]\n{}",
+                                event["hook_event_name"].as_str().unwrap_or("Hook"),
+                                stdout),
+                        ));
+                        self.session.save(&self.root)?;
+                    }
+                }
+            }
             let mut available_tools = tools::definitions_with_checkpointing(
                 crate::history::enabled(self.interactive, self.file_checkpointing_enabled),
             );
