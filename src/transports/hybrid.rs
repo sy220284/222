@@ -19,6 +19,8 @@ pub const BATCH_FLUSH_INTERVAL_MS: u64 = 100;
 /// Per-attempt POST timeout — bounds how long one stuck POST can block the
 /// serialized queue.
 pub const POST_TIMEOUT_MS: u64 = 15_000;
+/// Source close() gives queued uploads a bounded three-second grace period.
+pub const CLOSE_GRACE_MS: u64 = 3_000;
 
 /// Convert a WebSocket URL to the HTTP POST endpoint URL.
 /// From `wss://host/v2/session_ingress/ws/<id>` to
@@ -236,9 +238,12 @@ impl HybridTransport {
     }
 
     pub async fn close(&self) {
-        self.writes.flush().await;
-        self.writes.close();
         self.reads.close();
+        let _ = tokio::time::timeout(
+            Duration::from_millis(CLOSE_GRACE_MS),
+            self.writes.flush(),
+        ).await;
+        self.writes.close();
     }
 }
 
@@ -373,6 +378,20 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn hybrid_close_bounds_unreachable_post_retry_window() {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let hybrid = HybridTransport::new(
+            "ws://127.0.0.1:9/ws/s1".into(),
+            Vec::new(), None, tx, Arc::new(Vec::new),
+        ).unwrap();
+        hybrid.writes.write(&serde_json::json!({"type":"stream_event"})).await;
+        tokio::time::timeout(
+            Duration::from_millis(CLOSE_GRACE_MS + 2_000), hybrid.close(),
+        ).await.expect("Hybrid close must end despite repeated HTTP failures");
+        assert!(hybrid.reads.is_closed());
     }
 
     #[tokio::test]
