@@ -136,10 +136,10 @@ mod task_output_format;
 mod team_mailbox;
 mod team_registry;
 mod terminal_input;
-mod tls_ca;
 mod terminal_launcher;
 #[cfg(test)]
 mod test_http;
+mod tls_ca;
 mod tool_errors;
 mod tool_metrics;
 mod tool_names;
