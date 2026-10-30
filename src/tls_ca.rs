@@ -36,22 +36,53 @@ pub fn client_builder() -> Result<ClientBuilder> {
     client_builder_for_path(path.as_deref().map(Path::new))
 }
 
-/// Only the explicit user's config may affect trust roots before the project
-/// trust dialog. Project files, MCP server configs, and workspace data are not
-/// consulted here.
-pub fn apply_user_startup_config() -> Result<()> {
-    let path = crate::config::Config::path()?;
+/// Only user-owned configuration is consulted before the project trust dialog.
+/// Match 2.1.88 caCertsConfig.ts: user settings take priority over the
+/// global config and an already-set process environment takes priority over
+/// both. Project/local settings must never supply TLS trust roots here.
+fn read_user_ca_env(path: &Path) -> Result<Option<serde_json::Value>> {
     if !path.is_file() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(path)
+        .with_context(|| format!("Read user CA settings at {}", path.display()))?;
+    let settings: serde_json::Value = serde_json::from_str(crate::json_read::strip_bom(&raw))
+        .with_context(|| format!("Parse user CA settings at {}", path.display()))?;
+    Ok(settings.get("env").cloned())
+}
+
+fn user_settings_path() -> Result<std::path::PathBuf> {
+    if let Some(path) = std::env::var_os("ATLAS_USER_SETTINGS") {
+        return Ok(path.into());
+    }
+    Ok(dirs::config_dir()
+        .context("Cannot locate user settings directory")?
+        .join("atlas-agent")
+        .join("settings.json"))
+}
+
+fn startup_ca_from_paths(user_settings: &Path, global_config: &Path) -> Result<Option<String>> {
+    let settings_env = read_user_ca_env(user_settings)?;
+    let global_env = read_user_ca_env(global_config)?;
+    Ok(
+        crate::generated_ports::p_8041a90f0b147::get_extra_certs_path_from_config(
+            settings_env.as_ref(),
+            global_env.as_ref(),
+        ),
+    )
+}
+
+/// Read both independently managed user-owned configuration sources before
+/// any network clients are constructed. No project-supplied data is loaded.
+pub fn apply_user_startup_config() -> Result<()> {
+    if std::env::var_os("NODE_EXTRA_CA_CERTS").is_some_and(|value| !value.is_empty()) {
         return Ok(());
     }
-    let raw = std::fs::read_to_string(&path)
-        .with_context(|| format!("Read user config {}", path.display()))?;
-    let value: serde_json::Value = serde_json::from_str(crate::json_read::strip_bom(&raw))
-        .with_context(|| format!("Parse user config {}", path.display()))?;
-    crate::generated_ports::p_8041a90f0b147::apply_extra_ca_certs_from_config(
-        value.get("env"),
-        None,
-    );
+    let settings_path = user_settings_path()?;
+    let global_path = crate::config::Config::path()?;
+    if let Some(path) = startup_ca_from_paths(&settings_path, &global_path)? {
+        std::env::set_var("NODE_EXTRA_CA_CERTS", path);
+    }
     Ok(())
 }
 
@@ -79,5 +110,36 @@ mod tests {
             .build()
             .is_ok());
         assert!(client_builder_for_path(None).unwrap().build().is_ok());
+    }
+
+    #[test]
+    fn user_settings_override_global_config_without_reading_project_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let global = dir.path().join("global-config.json");
+        let user = dir.path().join("settings.json");
+        std::fs::write(&global, r#"{"env":{"NODE_EXTRA_CA_CERTS":"/global.pem"}}"#).unwrap();
+        std::fs::write(&user, r#"{"env":{"NODE_EXTRA_CA_CERTS":"/user.pem"}}"#).unwrap();
+        assert_eq!(
+            startup_ca_from_paths(&user, &global).unwrap().as_deref(),
+            Some("/user.pem")
+        );
+        std::fs::remove_file(&user).unwrap();
+        assert_eq!(
+            startup_ca_from_paths(&user, &global).unwrap().as_deref(),
+            Some("/global.pem")
+        );
+        std::fs::remove_file(&global).unwrap();
+        assert_eq!(startup_ca_from_paths(&user, &global).unwrap(), None);
+    }
+
+    #[test]
+    fn malformed_user_settings_report_path_without_using_global_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let global = dir.path().join("global.json");
+        let user = dir.path().join("user.json");
+        std::fs::write(&global, r#"{"env":{"NODE_EXTRA_CA_CERTS":"/global.pem"}}"#).unwrap();
+        std::fs::write(&user, "{broken").unwrap();
+        let error = startup_ca_from_paths(&user, &global).unwrap_err();
+        assert!(error.to_string().contains("user.json"), "{error:#}");
     }
 }

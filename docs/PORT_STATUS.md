@@ -1,3 +1,11 @@
+## 2026-10-30：CA 证书按原版恢复双来源与启动优先级
+
+- **原始依据**：2.1.88 \`source/src/utils/caCertsConfig.ts\`：已有 \`NODE_EXTRA_CA_CERTS\` 不覆盖；用户 \`settings.json\` 的 \`env\` 优先于全局 config 的 \`env\`；项目 settings 未批准前不能提供信任根。
+- **Rust 实际入口**：\`run_cli\` → \`tls_ca::apply_user_startup_config\` → \`ATLAS_USER_SETTINGS\` 或用户配置目录 \`settings.json\` → \`Config::path()\` 全局 config → \`p_8041a90f0b147::get_extra_certs_path_from_config\` → 进程环境 → 统一 Rust HTTPS client builder。
+- **新增测试**：\`tls_ca::tests::user_settings_override_global_config_without_reading_project_settings\` 与 \`malformed_user_settings_report_path_without_using_global_fallback\`，分别覆盖用户优先、全局兜底、双来源缺失以及非法 JSON。此前已有环境变量优先级和 PEM 有效性测试。
+- **验收**：固定 Rust 1.99.1 的 \`cargo fmt --all -- --check\` 本地通过。最新 Cargo.lock 的 \`foldhash 0.2.0\` 不在本机离线缓存，其他 Cargo 测试须依据本次提交的实际 GitHub CI，不将旧提交结果作为本次验收。
+- **保留差异**：原版 \`--use-system-ca\`、Node 系统信任存储、CA 缓存失效和复杂 TLS 运行期切换仍待验证；原路径保持部分实现。
+
 ## 2026-10-30：自定义 CA 证书生产入口接通与跨平台测试竞争修复（源码待完全等价验收）
 
 - **原版依据**：`source/src/utils/caCerts.ts`、`caCertsConfig.ts`。Rust 的 reqwest/rustls 不会读取 Node 的 NODE_EXTRA_CA_CERTS，原生成模块此前只有注册及测试引用。

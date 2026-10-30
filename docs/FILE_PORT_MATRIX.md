@@ -1422,7 +1422,7 @@
 | `src/utils/bufferedWriter.ts` | 101 | 2584 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/bundledMode.ts` | 23 | 618 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/caCerts.ts` | 116 | 4401 | 重写：保持通用行为 | `src/tls_ca.rs` / `src/provider.rs` / `src/mcp_http.rs` / `src/mcp_legacy_sse.rs` | 部分实现：Rust rustls TLS 客户端可追加用户 PEM 信任根并保留默认根；模型、MCP、搜索、OAuth、网页与附件出站链调用同一 CA 构建入口，非法 PEM 明确报错；原版系统 CA 标志、动态缓存清理、全部平台证书链等价仍待验收 |
-| `src/utils/caCertsConfig.ts` | 89 | 3608 | 重写：保持通用行为 | `src/generated_ports/p_8041a90f0b147.rs` / `src/tls_ca.rs` / `src/main.rs` | 部分实现：保留已有环境变量优先级，用户配置 env 中的 NODE_EXTRA_CA_CERTS 在出站 TLS 之前加载；纯函数测试消除 Windows 测试竞争，Doctor 仍能诊断损坏配置；原版分开的用户 settings 与全局 config 双来源及完整生效时序待验收 |
+| `src/utils/caCertsConfig.ts` | 89 | 3608 | 重写：保持通用行为 | `src/generated_ports/p_8041a90f0b147.rs` / `src/tls_ca.rs` / `src/main.rs` | 部分实现：保留已有环境变量优先级，用户配置 env 中的 NODE_EXTRA_CA_CERTS 在出站 TLS 之前加载；纯函数测试消除 Windows 测试竞争，Doctor 仍能诊断损坏配置；已按原版从独立用户 settings 与全局 config 双来源加载并保持用户优先、进程已有值优先；新增隔离测试；完整 TLS 生效时序仍待验收 |
 | `src/utils/cachePaths.ts` | 39 | 1411 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/classifierApprovals.ts` | 89 | 2448 | 重写：保持通用行为 | `src/generated_ports/p_3d03f439b2b21.rs`| 部分实现：auto-mode 与 bash 分类器审批双 Map（toolUseID 键）、yolo 审批隔离读取、checking 生命周期信号、全清空，附 5 测试；bundle 编译期 feature 门禁改为进程级开关（默认开=生产构建语义），Signal 接 event_signal 端口|
 | `src/utils/classifierApprovalsHook.ts` | 18 | 531 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
