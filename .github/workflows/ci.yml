@@ -10,9 +10,11 @@ permissions:
   contents: read
   actions: read
 
+# Keep the currently tested SHA alive for signed parity evidence.
+# A new push may replace a queued run, but never cancels running Linux/Windows tests.
 concurrency:
   group: rust-ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   quality:
