@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 use tokio_rustls::{rustls, TlsConnector};
 
 use super::sse::reconnect_delay;
@@ -398,6 +398,7 @@ struct WsShared {
     buffer: Mutex<CircularBuffer<Value>>,
     last_authorization: Mutex<Option<String>>,
     closed: AtomicBool,
+    shutdown: Notify,
 }
 
 /// Type of the auth header provider (fresh credentials per attempt).
@@ -447,6 +448,7 @@ impl WebSocketTransport {
                 buffer: Mutex::new(CircularBuffer::new(DEFAULT_MAX_BUFFER_SIZE)),
                 last_authorization: Mutex::new(None),
                 closed: AtomicBool::new(false),
+                shutdown: Notify::new(),
             }),
             auth,
             outbound_tx,
@@ -535,8 +537,18 @@ impl WebSocketTransport {
                 .min(DEFAULT_MAX_RECONNECT_DELAY_MS);
             exponential
         };
-        tokio::time::sleep(Duration::from_millis(delay)).await;
-        Some(Duration::from_millis(delay))
+        let shutdown = self.shared.shutdown.notified();
+        tokio::pin!(shutdown);
+        shutdown.as_mut().enable();
+        if self.is_closed() {
+            return None;
+        }
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_millis(delay)) => {
+                Some(Duration::from_millis(delay))
+            }
+            _ = &mut shutdown => None,
+        }
     }
 
     /// One full connection lifecycle: handshake, replay, read loop, pings.
@@ -737,6 +749,7 @@ impl WebSocketTransport {
 
     pub fn close(&self) {
         self.shared.closed.store(true, Ordering::SeqCst);
+        self.shared.shutdown.notify_waiters();
         let mut state = self.shared.state.lock().expect("ws state");
         state.state = WsState::Closed;
     }
@@ -1121,6 +1134,25 @@ mod tests {
         assert_eq!(client.handle_connection_error(Some(4003)), ConnectionOutcome::Reconnect);
         assert_eq!(client.handle_connection_error(Some(4003)), ConnectionOutcome::Terminal);
         assert_eq!(client.handle_connection_error(Some(4001)), ConnectionOutcome::Terminal);
+    }
+
+    #[tokio::test]
+    async fn close_interrupts_websocket_reconnect_backoff() {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let transport = Arc::new(WebSocketTransport::new(
+            "ws://127.0.0.1:0/unreachable".into(),
+            Vec::new(), None, tx, true, None,
+        ));
+        let runner = {
+            let transport = Arc::clone(&transport);
+            tokio::spawn(async move { transport.run().await; })
+        };
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert_eq!(transport.state(), WsState::Reconnecting);
+        transport.close();
+        tokio::time::timeout(Duration::from_millis(500), runner)
+            .await.expect("close must cancel reconnect backoff").unwrap();
+        assert_eq!(transport.state(), WsState::Closed);
     }
 
     #[test]
