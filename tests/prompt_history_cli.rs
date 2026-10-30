@@ -32,6 +32,9 @@ fn chat_history_persists_across_real_cli_processes_and_model_http() {
         while received.len() < 2 && Instant::now() < deadline {
             match listener.accept() {
                 Ok((mut socket, _)) => {
+                    // Accepted sockets may inherit the nonblocking listener flag on
+                    // Windows. The HTTP fixture reads a complete request synchronously.
+                    socket.set_nonblocking(false).unwrap();
                     socket
                         .set_read_timeout(Some(Duration::from_secs(4)))
                         .unwrap();
