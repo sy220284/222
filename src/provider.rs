@@ -176,6 +176,9 @@ impl ModelProvider for OpenAiCompatible {
             .and_then(Value::as_array)
             .and_then(|a| a.first())
             .context("Model returned no choices")?;
+        if let Some(refusal) = choice.pointer("/message/refusal").and_then(Value::as_str) {
+            bail!("Model refused the request: {}", refusal.chars().take(500).collect::<String>());
+        }
         let mut message: Message = serde_json::from_value(
             choice
                 .get("message")
