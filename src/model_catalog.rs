@@ -341,7 +341,9 @@ async fn interactive_setup(config: &mut Config, requested: Option<&str>) -> Resu
     };
     let profile = config.select(Some(&brand), None)?;
     let (models, key) = if profile.kind == "chatgpt-plan" {
-        crate::chatgpt_plan::run(&crate::chatgpt_plan::AccountAction::Login).await?;
+        if !crate::chatgpt_plan::has_plan_session()? {
+            crate::chatgpt_plan::run(&crate::chatgpt_plan::AccountAction::Login).await?;
+        }
         (list_models(&profile, "").await?, None)
     } else {
         let key = if let Some(name) = &profile.api_key_env {
