@@ -4,7 +4,7 @@
 - **真实 Rust 缺口 1**：`src/background.rs::start_with_shell_timeout` 的停止分支在 Shell 已退出但后代仍持有 stdout/stderr 时，继续等待原始最长 600 秒截止时间；`stop()` 五秒后报错，甚至在输出排空超时后将用户主动取消覆盖为 `failed` 并写入误导性超时信息。
 - **代码补齐 1**：停止请求可在进程等待和输出排空两个阶段被响应；主动取消后最多短时排空，仍未结束的输出任务被终止，Unix 进程组被清理；保留 `killed`、不伪造超时原因，最终状态继续经现有原子元数据保存及 `TaskOutput` 读取链传递。源码提交 `b0518e98d19d746f42e7d196fda3b33dee090810`。
 - **真实 Rust 缺口 2**：SDK `stop_task` 控制请求只返回 `control_response`，外部 SDK 任务面板收不到原版停止后的 `system/task_notification`，会继续显示正在运行。
-- **代码补齐 2**：`src/background.rs::stop` 在停止结果中保留任务描述，`src/main.rs::handle_sdk_control` 仅在成功停止后额外发出 `status=stopped`、任务 ID、摘要、会话 ID、事件 UUID 的结构化通知，随后保留既有控制响应；失败请求不发虚假通知。源码提交 `3ce328606e636a968520d07826863275b71106ed`、`7d2ae8439dc4e2c50a93f128317af9a3da2b4b1d`。
+- **代码补齐 2**：`src/background.rs::stop_with_description` 单独向 SDK 提供任务描述，`stop` 继续返回原版 TaskStop 工具的既有字段；`src/agent.rs` SDK 专用入口接线，`src/main.rs::handle_sdk_control` 仅在成功停止后额外发出 `status=stopped`、任务 ID、摘要、会话 ID、事件 UUID 的结构化通知，随后保留既有控制响应；失败请求不发虚假通知。源码提交 `3ce328606e636a968520d07826863275b71106ed`、`7d2ae8439dc4e2c50a93f128317af9a3da2b4b1d`、`3def1ab3e6f8f48ce24e034bb7c34a730f6e813b`、`afeaf360045bb2bdc5977ca63d27bcaadff30937`、`e94da73fad091c64ec4ab037cc74ce4a7ebbac52`。
 - **静态复查**：核对原版上述函数、Rust 的 `BackgroundTasks::stop` → `Agent::stop_background_task` → SDK 控制分发，以及后台输出排空后的状态保存路径；迁移矩阵保留“部分实现”。本轮严格按要求未运行 Cargo、测试、Actions CI；**两项均为源码已提交、待行为验收，完整等价验收新增 0**。
 - **仍缺差异**：Windows 完整进程树取消；进程停止与 SDK 通知的全部竞态/重复事件；工具发起的停止对 SDK 的异步广播；跨进程会话恢复、异常中断时任务归属；原版其他任务类型统一停止行为。本轮仅有 **2/100 项**实际独立业务代码补强，尚未完成预先恰好 100 项逐功能核实及覆盖方案，流程 A/B 和数量硬目标未达成；Issue #3 冻结 362 条不核销。
 
