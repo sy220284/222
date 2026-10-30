@@ -169,8 +169,19 @@ fn tags_from_metadata(value: &Value) -> Vec<String> {
     {
         tags.push("工具调用:目录声明".into());
     }
-    if value.get("supports_vision").and_then(Value::as_bool) == Some(true) {
+    if value.get("supports_vision").and_then(Value::as_bool) == Some(true)
+        || value.get("supports_image_in").and_then(Value::as_bool) == Some(true)
+    {
         tags.push("视觉:目录声明".into());
+    }
+    if value.get("supports_video_in").and_then(Value::as_bool) == Some(true) {
+        tags.push("视频输入:目录声明".into());
+    }
+    if value.get("supports_reasoning").and_then(Value::as_bool) == Some(true) {
+        tags.push("深度思考:目录声明".into());
+    }
+    if let Some(default) = value.pointer("/effort/default_level").and_then(Value::as_str) {
+        tags.push(format!("默认思考:{default}"));
     }
     tags
 }
