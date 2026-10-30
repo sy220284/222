@@ -1797,7 +1797,16 @@ impl ToolExecutor {
                 if let Some(pid) = process_id {
                     let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                 }
+                #[cfg(windows)]
+                let tree_error = crate::shell_runtime::terminate_windows_process_tree(process_id)
+                    .await.err();
                 let _ = child.kill().await;
+                #[cfg(windows)]
+                if let Some(tree_error) = tree_error {
+                    return Err(anyhow::anyhow!(
+                        "Command output failed: {error:#}; process-tree termination failed: {tree_error:#}"
+                    ));
+                }
                 return Err(error);
             }
             Err(_) => {
@@ -1805,7 +1814,16 @@ impl ToolExecutor {
                 if let Some(pid) = process_id {
                     let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                 }
+                #[cfg(windows)]
+                let tree_error = crate::shell_runtime::terminate_windows_process_tree(process_id)
+                    .await.err();
                 let _ = child.kill().await;
+                #[cfg(windows)]
+                if let Some(tree_error) = tree_error {
+                    bail!(
+                        "Command timed out after {timeout_ms} milliseconds; process-tree termination failed: {tree_error:#}"
+                    );
+                }
                 bail!("Command timed out after {timeout_ms} milliseconds");
             }
         };
