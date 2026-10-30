@@ -216,17 +216,18 @@ impl SseTransport {
                     }
                 }
             }
-            let now = SystemTime::now();
-            let mut state = self.state.lock().expect("sse state");
-            let started = state.reconnect_started.unwrap_or(now);
-            let elapsed = now.duration_since(started).unwrap_or_default();
-            if elapsed >= Duration::from_millis(RECONNECT_GIVE_UP_MS) {
-                bail!("SSE reconnection budget exhausted after {elapsed:?}");
-            }
-            state.reconnect_attempts += 1;
-            let delay = reconnect_delay(state.reconnect_attempts);
-            state.last_reconnect_attempt = Some(now);
-            drop(state);
+            let delay = {
+                let now = SystemTime::now();
+                let mut state = self.state.lock().expect("sse state");
+                let started = state.reconnect_started.unwrap_or(now);
+                let elapsed = now.duration_since(started).unwrap_or_default();
+                if elapsed >= Duration::from_millis(RECONNECT_GIVE_UP_MS) {
+                    bail!("SSE reconnection budget exhausted after {elapsed:?}");
+                }
+                state.reconnect_attempts += 1;
+                state.last_reconnect_attempt = Some(now);
+                reconnect_delay(state.reconnect_attempts)
+            };
             tokio::time::sleep(delay).await;
         }
     }
