@@ -334,7 +334,7 @@
 | `src/components/CostThresholdDialog.tsx` | 50 | 4336 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/CtrlOToExpand.tsx` | 51 | 6062 | 重写：终端 UI／交互 | `src/generated_ports/p_7fa135c73cbe6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CustomSelect/SelectMulti.tsx` | 213 | 29884 | 重写：终端 UI／交互 | `src/generated_ports/p_1006dc067830f.rs` | 部分实现：手工重写多选可见项、输入项、勾选、焦点、上下滚动和提交按钮动态视图；真实 Ink 回调接线待验收 |
-| `src/components/CustomSelect/index.ts` | 4 | 118 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/CustomSelect/index.ts` | 4 | 118 | 重写：终端 UI／交互 | `src/custom_select_exports.rs` | 部分实现：Rust 统一导出单选、多选、选项映射与输入事件控制器；select.tsx 完整视图待迁移 |
 | `src/components/CustomSelect/option-map.ts` | 51 | 1189 | 重写：终端 UI／交互 | `src/custom_select_source.rs` | 部分实现：Rust 选项 Map 保留顺序、前后链接与同值键覆盖，UI 生命周期尚未接通 |
 | `src/components/CustomSelect/select-input-option.tsx` | 488 | 58172 | 重写：终端 UI／交互 | `src/generated_ports/p_917c310662d72.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CustomSelect/select-option.tsx` | 68 | 5793 | 重写：终端 UI／交互 | `src/generated_ports/p_5937f7d9e3063.rs` | 部分实现：按原版 ListItem 传递焦点、选中、滚动、描述、光标标志与子节点，原 AST 空壳已替换，终端渲染待验收 |
