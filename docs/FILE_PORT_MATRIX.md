@@ -1328,7 +1328,7 @@
 | `src/tools/TeamDeleteTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/TeamDeleteTool/prompt.ts` | 17 | 684 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TodoWriteTool/TodoWriteTool.ts` | 116 | 3881 | 重写：工具行为、参数和权限 | `src/task.rs / src/session.rs / src/agent.rs` | 部分实现：无交互 SDK/单次运行暴露 TodoWrite；严格清单字段与状态校验、整表替换、全部完成自动清空、会话保存恢复；原版 UI 状态与跨会话边界待验收 |
-| `src/tools/TodoWriteTool/constants.ts` | 2 | 48 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/TodoWriteTool/constants.ts` | 2 | 48 | 重写：工具行为、参数和权限 | `src/tool_names.rs` / `src/task.rs` | 已验收：原版唯一导出 TodoWrite 字符串完整对应 Rust 工具名常量，并被任务工具定义、类型识别及分发实际消费；证据 tool_names::tests::names_and_aliases / task.rs |
 | `src/tools/TodoWriteTool/prompt.ts` | 185 | 9527 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ToolSearchTool/ToolSearchTool.ts` | 472 | 14275 | 重写：工具行为、参数和权限 | `src/tool_search.rs / src/agent.rs` | 部分实现：已接入模型可调用工具搜索，精确选择、MCP前缀、关键词权重和必须词、数量限制；新增 MCP 工具名称延迟目录、模型选中后下一轮动态注入 schema、JSON 模式定义回传。CLI→HTTP模型→查询结果→会话保存测试通过；原版 tool_reference 原生协议及更多动态同步场景尚未等价；新增完整工具名回退评分及 searchHint 关键词权重，完整 deferred/tool_reference 协议仍缺 |
 | `src/tools/ToolSearchTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |

@@ -83,8 +83,12 @@ pub fn reset_all_settings_caches() {
 mod tests {
     use super::*;
 
+    // The upstream settings caches are process-global; reset tests must be serialized.
+    static TEST_SERIAL: Mutex<()> = Mutex::new(());
+
     #[test]
     fn session_cache_roundtrip_and_reset() {
+        let _serial = TEST_SERIAL.lock().unwrap();
         reset_all_settings_caches();
         assert!(get_session_settings_cache().is_none());
         let doc = SettingsWithErrors {
@@ -101,6 +105,7 @@ mod tests {
 
     #[test]
     fn project_cache_is_keyed_by_source_and_path() {
+        let _serial = TEST_SERIAL.lock().unwrap();
         reset_all_settings_caches();
         let doc = SettingsWithErrors {
             settings: serde_json::json!({"permissions": {}}),
