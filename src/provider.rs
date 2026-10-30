@@ -39,8 +39,12 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
         })?),
         None => None,
     };
+    // A client-wide timeout measures the entire streamed completion. It
+    // aborts healthy long-running generations after 180 seconds even while
+    // tokens are arriving. Streaming adapters enforce per-chunk idle timeouts;
+    // non-streaming requests retain their own bounded deadline.
     let client = Client::builder()
-        .timeout(Duration::from_secs(180))
+        .connect_timeout(Duration::from_secs(30))
         .build()?;
     match profile.kind.as_str() {
         "openai-compatible" => Ok(Box::new(OpenAiCompatible {
@@ -63,6 +67,15 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
 /// during a retry. HTTP failures with an explicit no-retry header are final.
 /// Once an SSE response has started, its parser owns the stream and we never
 /// replay a partially delivered completion.
+pub(crate) fn stream_idle_timeout() -> Duration {
+    let millis = std::env::var("ATLAS_STREAM_IDLE_TIMEOUT_MS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .filter(|millis| *millis > 0)
+        .unwrap_or(90_000);
+    Duration::from_millis(millis)
+}
+
 pub(crate) async fn send_model_request(
     request: reqwest::RequestBuilder,
 ) -> Result<reqwest::Response> {
@@ -144,7 +157,9 @@ impl ModelProvider for OpenAiCompatible {
             body["tool_choice"] = json!("auto");
         }
         let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
-        let mut post = self.client.post(url).json(&body);
+        let mut post = self.client.post(url)
+            .timeout(Duration::from_secs(180))
+            .json(&body);
         if let Some(key) = &self.key {
             post = post.bearer_auth(key);
         }
@@ -298,6 +313,7 @@ impl ModelProvider for Gemini {
         let response = self
             .client
             .post(url)
+            .timeout(Duration::from_secs(180))
             .header("x-goog-api-key", &self.key)
             .json(&body);
         let response = send_model_request(response)
