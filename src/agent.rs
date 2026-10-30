@@ -2370,6 +2370,12 @@ impl Agent {
     pub fn export_session(&self, filename: Option<&str>) -> Result<std::path::PathBuf> {
         crate::session_control::export(&self.session, &self.root, filename)
     }
+    pub fn export_dialog_preview(&self) -> (String, String) {
+        let name = crate::session_control::suggested_export_filename(&self.session);
+        let content = crate::session_control::render(&self.session);
+        let preview = content.chars().take(1200).collect::<String>();
+        (name, preview)
+    }
     pub fn list_sessions(&self) -> Result<Vec<crate::session_control::SessionItem>> {
         crate::session_control::list(&self.root)
     }
