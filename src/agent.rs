@@ -3447,8 +3447,6 @@ impl Agent {
         Ok(())
     }
 
-    /// A clear starts a new conversation, preserving the previous transcript for
-    /// resume. The source's SessionEnd and SessionStart hooks bracket the reset.
     /// Original commands/resume/resume.tsx resumes the selected conversation
     /// in the current UI. Rebind all session-scoped stores, counters and
     /// permissions before allowing another model turn.
@@ -3524,12 +3522,22 @@ impl Agent {
         self.session_context.clear();
         self.pending_initial_user_message = None;
         self.transient_mailbox = in_memory_mailbox::Mailbox::new();
-        let start = self.hooks.run(HookEvent::SessionStart, None, {
+        let start = match self.hooks.run(HookEvent::SessionStart, None, {
             let mut input = self.base_hook_input();
             input["source"] = json!("resume");
             input["model"] = json!(self.profile.model);
             input
-        }).await?;
+        }).await {
+            Ok(start) => start,
+            Err(error) => {
+                // Session identity was already changed. Report the hook
+                // failure explicitly without claiming that resume failed.
+                return Ok(format!(
+                    "Resumed session {} (SessionStart hook failed: {error:#})",
+                    self.session.id,
+                ));
+            }
+        };
         self.report_hook_warnings(HookEvent::SessionStart, &start);
         for reason in &start.blocking_reasons {
             eprintln!("SessionStart resume hook blocked (ignored): {reason}");
@@ -3538,6 +3546,8 @@ impl Agent {
         Ok(format!("Resumed session {}", self.session.id))
     }
 
+    /// Clear the current transcript into a fresh session. SessionEnd and
+    /// SessionStart hooks bracket the reset.
     pub async fn clear_history(&mut self) -> Result<()> {
         self.hooks
             .run(HookEvent::SessionEnd, None, {
