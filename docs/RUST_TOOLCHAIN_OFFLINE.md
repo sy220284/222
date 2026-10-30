@@ -10,7 +10,7 @@ GitHub Actions -> **222 Rust 1.99.1 离线工具链产物**。可由此 PR 或�
 
 `222-rust-1.99.1-linux-x86_64-offline`
 
-包含：完整 Rust sysroot、rustc、cargo、rustfmt、clippy、Linux x86_64 所需 Cargo registry/git 缓存、SHA256SUMS、安装脚本、版本/来源清单。保留期 30 天。
+包含：完整 Rust sysroot、rustc、cargo、rustfmt、clippy、Linux x86_64 所需 Cargo registry/git 缓存、SHA256SUMS、安装脚本、版本/来源清单。单个工件保留期 30 天。合并至默认分支后，每周日 03:17 UTC 自动重新打包并上传新工件，避免所有可用副本过期；此前的工件仍由 GitHub 按各自期限清理。GitHub Actions 的计划运行可能延迟或偶发跳过，需以最新成功工件时间验证续期状态。
 
 ## 本地使用
 
