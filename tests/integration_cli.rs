@@ -3642,7 +3642,7 @@ fn sdk_mcp_resource_subscriptions_preserve_notifications_and_idempotence() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("mcp-subscriptions.json");
     let script = r#"while IFS= read -r line; do
-id=$(printf '%s\\n' "$line" | sed -n 's/.*"id":\\([0-9][0-9]*\\).*/\\1/p')
+id=$(printf '%s\n' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
 case "$line" in
   *'"method":"initialize"'*)
     echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"capabilities\":{\"resources\":{\"subscribe\":true}}}}" ;;
