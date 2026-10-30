@@ -216,7 +216,7 @@ class WorkbenchTests(unittest.TestCase):
             remaining_gaps=[],
         )
         evidence = self.repo / 'docs/PORT_EVIDENCE.jsonl'
-        evidence.write_text(json.dumps(item) + '\\n')
+        evidence.write_text(json.dumps(item) + '\n')
         result = check_evidence(self.repo, read_matrix(self.repo), False)
         self.assertEqual(result['new_verified'], 1)
         self.assertEqual(result['evidence_records'], 1)
@@ -241,7 +241,7 @@ class WorkbenchTests(unittest.TestCase):
             remaining_gaps=[],
         )
         (self.repo / 'docs/PORT_EVIDENCE.jsonl').write_text(
-            json.dumps(item) + '\\n'
+            json.dumps(item) + '\n'
         )
         with self.assertRaisesRegex(AuditError, 'Rust 测试函数不存在'):
             check_evidence(self.repo, read_matrix(self.repo), False)
