@@ -10,7 +10,9 @@ use std::{
 };
 
 fn read_request(stream: &mut TcpStream) -> (String, Value) {
-    stream.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .unwrap();
     let mut bytes = Vec::new();
     let mut buffer = [0u8; 8192];
     let header_end = loop {
@@ -116,11 +118,9 @@ fn four_domestic_provider_ids_use_existing_authenticated_chat_pipeline() {
                 headers.starts_with("POST /v1/chat/completions HTTP/1.1"),
                 "{headers}"
             );
-            assert!(
-                headers
-                    .to_ascii_lowercase()
-                    .contains("authorization: bearer test-key-123")
-            );
+            assert!(headers
+                .to_ascii_lowercase()
+                .contains("authorization: bearer test-key-123"));
             assert_eq!(body["model"], model);
             assert_eq!(body["messages"][0]["role"], "system");
             assert_eq!(body["messages"][1]["role"], "user");
@@ -162,13 +162,19 @@ fn four_domestic_provider_ids_use_existing_authenticated_chat_pipeline() {
         .unwrap();
         let output = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
             .args([
-                "--workspace", dir.path().to_str().unwrap(),
-                "--provider", id, "--approval", "read-only",
-                "run", "Reply simply",
+                "--workspace",
+                dir.path().to_str().unwrap(),
+                "--provider",
+                id,
+                "--approval",
+                "read-only",
+                "run",
+                "Reply simply",
             ])
             .env("ATLAS_CONFIG", &config)
             .env("TEST_DOMESTIC_API_KEY", "test-key-123")
-            .output().unwrap();
+            .output()
+            .unwrap();
         server.join().unwrap();
         assert!(
             output.status.success(),
@@ -182,7 +188,6 @@ fn four_domestic_provider_ids_use_existing_authenticated_chat_pipeline() {
         );
     }
 }
-
 
 #[test]
 fn deepseek_reasoning_is_replayed_with_tool_result_in_next_api_turn() {
@@ -217,23 +222,24 @@ fn deepseek_reasoning_is_replayed_with_tool_result_in_next_api_turn() {
                 },"finish_reason":"tool_calls"}]})
             } else {
                 let messages = request["messages"].as_array().unwrap();
-                let assistant = messages.iter().find(|m| {
-                    m["role"] == "assistant" && m["tool_calls"].is_array()
-                }).expect("missing prior assistant tool message");
+                let assistant = messages
+                    .iter()
+                    .find(|m| m["role"] == "assistant" && m["tool_calls"].is_array())
+                    .expect("missing prior assistant tool message");
                 assert_eq!(
                     assistant["reasoning_content"],
                     "I will inspect the file before answering"
                 );
                 assert_eq!(assistant["tool_calls"][0]["id"], "deepseek_call_1");
-                let tool_result = messages.iter().find(|m| m["role"] == "tool")
+                let tool_result = messages
+                    .iter()
+                    .find(|m| m["role"] == "tool")
                     .expect("missing tool result");
                 assert_eq!(tool_result["tool_call_id"], "deepseek_call_1");
-                assert!(
-                    tool_result["content"]
-                        .as_str()
-                        .unwrap()
-                        .contains("reasoning-roundtrip-file")
-                );
+                assert!(tool_result["content"]
+                    .as_str()
+                    .unwrap()
+                    .contains("reasoning-roundtrip-file"));
                 json!({"choices":[{"message":{"role":"assistant",
                     "content":"reasoning roundtrip completed"},"finish_reason":"stop"}]})
             };
@@ -260,8 +266,12 @@ fn deepseek_reasoning_is_replayed_with_tool_result_in_next_api_turn() {
     .unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
         .args([
-            "--workspace", dir.path().to_str().unwrap(),
-            "--approval", "read-only", "run", "Inspect sample.txt",
+            "--workspace",
+            dir.path().to_str().unwrap(),
+            "--approval",
+            "read-only",
+            "run",
+            "Inspect sample.txt",
         ])
         .env("ATLAS_CONFIG", &config)
         .env("TEST_DOMESTIC_API_KEY", "test-key-123")
