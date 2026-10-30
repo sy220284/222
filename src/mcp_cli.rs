@@ -426,12 +426,14 @@ async fn health(root: &Path, scope: Scope, server: &McpServerConfig) -> Value {
     let response = tokio::time::timeout(
         std::time::Duration::from_secs(12),
         crate::mcp::McpManager::connect_with_root(std::slice::from_ref(server), root),
-    ).await;
+    )
+    .await;
     match response {
         Ok(Ok(mut manager)) => match manager.statuses() {
-            Ok(statuses) => statuses.into_iter().next().unwrap_or_else(|| {
-                json!({"status":"failed","error":"Missing MCP server status"})
-            }),
+            Ok(statuses) => statuses
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| json!({"status":"failed","error":"Missing MCP server status"})),
             Err(error) => json!({"status":"failed","error":format!("{error:#}")}),
         },
         Ok(Err(error)) => json!({"status":"failed","error":format!("{error:#}")}),
@@ -518,11 +520,18 @@ pub async fn run(root: &Path, command: &McpCommand) -> Result<String> {
             let path = store_server(root, *scope, server)?;
             Ok(format!("Added MCP server {name} to {}", path.display()))
         }
-        McpCommand::Get { name, scope, no_check } => {
+        McpCommand::Get {
+            name,
+            scope,
+            no_check,
+        } => {
             let scope = resolve_scope(root, name, *scope)?;
             let config = get_saved_server(root, name, scope)?;
-            let health = if *no_check { json!({"status":"unchecked"}) }
-                else { health(root, scope, &config).await };
+            let health = if *no_check {
+                json!({"status":"unchecked"})
+            } else {
+                health(root, scope, &config).await
+            };
             let mut json = serde_json::to_value(config)?;
             json.as_object_mut()
                 .context("MCP config serialization is not an object")?
@@ -576,8 +585,11 @@ pub async fn run(root: &Path, command: &McpCommand) -> Result<String> {
                     "scope":scope_name(scope), "name":server.id,
                     "transport":server.transport.as_deref().unwrap_or("stdio")
                 });
-                item["health"] = if *no_check { json!({"status":"unchecked"}) }
-                    else { health(root, scope, &server).await };
+                item["health"] = if *no_check {
+                    json!({"status":"unchecked"})
+                } else {
+                    health(root, scope, &server).await
+                };
                 output.push(item);
             }
             Ok(serde_json::to_string_pretty(&output)?)
