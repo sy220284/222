@@ -100,7 +100,7 @@
 | `src/cli/transports/WebSocketTransport.ts` | 801 | 28195 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/transports/WorkerStateUploader.ts` | 132 | 3879 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/transports/ccrClient.ts` | 999 | 33775 | 重写：保持通用行为 | `src/generated_ports/p_03ce73c80da6a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/cli/transports/transportUtils.ts` | 46 | 1767 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/cli/transports/transportUtils.ts` | 46 | 1767 | 重写：保持通用行为 | `src/generated_ports/p_76abc7a665043.rs` | 部分实现：完整等价：传输选择决策核心（CCR_V2→SSE/POST_FOR_SESSION_INGRESS_V2→Hybrid/默认 WS）+v2 流 URL 推导含双单测；具体传输体随各自文件迁移，待验收 |
 | `src/cli/update.ts` | 423 | 14487 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/add-dir/add-dir.tsx` | 126 | 18017 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/add-dir/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/workspace_dirs.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、<path> 参数提示、非即时执行及动态入口全部匹配；CLI 真实目录授权/确认由独立 handler 执行；证据 CI #41041559517 |
@@ -298,7 +298,7 @@
 | `src/commands/thinkback/index.ts` | 14 | 442 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/thinkback/thinkback.tsx` | 554 | 61993 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/thinkback-play/index.ts` | 18 | 608 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/thinkback-play/thinkback-play.ts` | 44 | 1430 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/thinkback-play/thinkback-play.ts` | 44 | 1430 | 重写：保持通用行为 | `src/generated_ports/p_a71cd9960b7a7.rs` | 部分实现：部分等价：pluginId 构造与缺安装文案完整等价（内部市场名品牌中性化占位，差异记录）；插件管理器与动画加载随插件链，待验收 |
 | `src/commands/ultraplan.tsx` | 471 | 66629 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/upgrade/index.ts` | 17 | 523 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 重写：保持通用行为 | `src/generated_ports/p_ee2b485a76e48.rs`| 部分实现：升级编排——Max20x 双路判定（tokens 订阅类型加限额层、profile 组织类型回退）最高档短路、开浏览器转 Login 视图（上游 starting 文案）、浏览器失败降级访问链接提示；tier 字面值按隐私门禁中性化，附 4 测试|
@@ -572,7 +572,7 @@
 | `src/components/mcp/index.ts` | 10 | 523 | 重写：终端 UI／交互 | `src/generated_ports/p_9ba24aa9d05d7.rs` | 部分实现：完整等价：八组件+三类型 re-export 面清单；待验收 |
 | `src/components/mcp/utils/reconnectHelpers.tsx` | 49 | 5292 | 重写：终端 UI／交互 | `src/generated_ports/p_962b63a53cf13.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/memory/MemoryFileSelector.tsx` | 438 | 48121 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/memory/MemoryUpdateNotification.tsx` | 45 | 5100 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/memory/MemoryUpdateNotification.tsx` | 45 | 5100 | 重写：终端 UI／交互 | `src/generated_ports/p_88d57d5c10a9a.rs` | 部分实现：完整等价：getRelativeMemoryPath 纯函数（~/相对双候选取短，否则绝对）含三分支单测；JSX 宿主归 ink，待验收 |
 | `src/components/messageActions.tsx` | 450 | 54948 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/AdvisorMessage.tsx` | 158 | 14479 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/AssistantRedactedThinkingMessage.tsx` | 31 | 2603 | 重写：终端 UI／交互 | `src/generated_ports/p_deade2853be5b.rs` | 部分实现：完整等价：✻ Thinking… 文案+addMargin 缺省 false 决策；JSX 宿主归 ink，待验收 |
@@ -691,7 +691,7 @@
 | `src/components/teams/TeamStatus.tsx` | 80 | 6897 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/teams/TeamsDialog.tsx` | 715 | 94680 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/ui/OrderedList.tsx` | 71 | 7294 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/ui/OrderedListItem.tsx` | 45 | 3477 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/ui/OrderedListItem.tsx` | 45 | 3477 | 重写：终端 UI／交互 | `src/generated_ports/p_6ba8c68c78e69.rs` | 部分实现：完整等价：marker 序号构造纯函数；dim 渲染与 list context 归 ink 宿主，待验收 |
 | `src/components/ui/TreeSelect.tsx` | 397 | 38964 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/wizard/WizardDialogLayout.tsx` | 65 | 6271 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/wizard/WizardNavigationFooter.tsx` | 24 | 4246 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -776,7 +776,7 @@
 | `src/hooks/useCommandKeybindings.tsx` | 108 | 11023 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useCommandQueue.ts` | 16 | 543 | 重写：终端 UI／交互 | `src/generated_ports/p_9ba2af516748d.rs` | 部分实现：AST 转写：统一命令队列订阅绑定——原版 useSyncExternalStore 双访问器对应本 crate message_queue store（snapshot/subscribe），桩记录绑定不复制存储；交互待验收 |
 | `src/hooks/useCopyOnSelect.ts` | 99 | 4287 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useDeferredHookMessages.ts` | 47 | 1499 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useDeferredHookMessages.ts` | 47 | 1499 | 重写：终端 UI／交互 | `src/generated_ports/p_ccd05ebf3fbe7.rs` | 部分实现：完整等价：延迟注入闩语义（resolved 幂等/首请求前必须 flush）含单测；React 定时器与 promise 接线归宿主，待验收 |
 | `src/hooks/useDiffData.ts` | 111 | 2839 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useDiffInIDE.ts` | 380 | 9867 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useDirectConnect.ts` | 230 | 7504 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -859,7 +859,7 @@
 | `src/ink/components/RawAnsi.tsx` | 57 | 5157 | 重写：终端 UI／交互 | `src/generated_ports/p_0b22de63571f1.rs` | 部分实现：完整等价：RawAnsiProps 契约+join 输出（输出层已按换行切屏缓冲）含单测；Yoga 叶子宿主归 ink，待验收 |
 | `src/ink/components/ScrollBox.tsx` | 237 | 31814 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/Spacer.tsx` | 20 | 1563 | 重写：终端 UI／交互 | `src/generated_ports/p_dd14b320d49cc.rs` | 部分实现：AST 转写：flexGrow=1 布局属性保留给终端渲染宿主；待验收 |
-| `src/ink/components/StdinContext.ts` | 50 | 1678 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/components/StdinContext.ts` | 50 | 1678 | 重写：终端 UI／交互 | `src/generated_ports/p_7a57062d28876.rs` | 部分实现：契约记录：stdin 五能力面（raw 流/setRawMode/支持标记/exitOnCtrlC/终端询问器）归 ink 宿主；待验收 |
 | `src/ink/components/TerminalFocusContext.tsx` | 52 | 5955 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/TerminalSizeContext.tsx` | 7 | 983 | 重写：终端 UI／交互 | `src/generated_ports/p_dd5c8e35720f8.rs` | 部分实现：完整等价：TerminalSize{columns,rows} 视图模型结构；React context 实例归 ink 运行时宿主，待验收 |
 | `src/ink/components/Text.tsx` | 254 | 16811 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -968,7 +968,7 @@
 | `src/migrations/migrateReplBridgeEnabledToRemoteControlAtStartup.ts` | 23 | 1000 | 重写：保持通用行为 | `src/generated_ports/p_72265c8cdc4d6.rs` | 部分实现：完整等价：replBridgeEnabled→remoteControlAtStartup 迁移决策（拷贝+删旧键+幂等+新键已设跳过）含双单测；saveGlobalConfig 随 settings 链，待验收 |
 | `src/migrations/migrateSonnet1mToSonnet45.ts` | 49 | 1582 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/migrateSonnet45ToSonnet46.ts` | 68 | 2055 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/migrations/resetAutoModeOptInForDefaultOffer.ts` | 52 | 2106 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/migrations/resetAutoModeOptInForDefaultOffer.ts` | 52 | 2106 | 重写：保持通用行为 | `src/generated_ports/p_138b407b8bbdb.rs` | 部分实现：完整等价：一次性迁移决策（编译门关早退/仅 enabled 态清 skip/幂等）含四分支单测；settings/config 访问器随各自链路，待验收 |
 | `src/migrations/resetProToOpusDefault.ts` | 52 | 1550 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/moreright/useMoreRight.tsx` | 26 | 3535 | 重写：保持通用行为 | `src/generated_ports/p_b1e9236cd4884.rs` | 部分实现：完整等价：外部构建空桩与原版逐字语义（onBeforeQuery true/空完成/null 渲染）；内部实现仅内部分发，待验收 |
 | `src/native-ts/color-diff/index.ts` | 1000 | 30042 | 重写：保持通用行为 | 待定 | 未迁移 |
