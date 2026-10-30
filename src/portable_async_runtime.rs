@@ -639,10 +639,22 @@ mod tests {
     }
     #[test]
     fn request_id_parse_matches_js_parse_int_prefix_and_rejects_nonnumeric() {
-        assert_eq!(parse_request_id("plan-123tail@worker@team"), Some(("plan".into(), 123, "worker@team".into())));
-        assert_eq!(parse_request_id("stop-+17junk@worker"), Some(("stop".into(), 17, "worker".into())));
-        assert_eq!(parse_request_id("step-0x10@worker"), Some(("step".into(), 0, "worker".into())));
-        assert_eq!(parse_request_id("step- 42.8@worker"), Some(("step".into(), 42, "worker".into())));
+        assert_eq!(
+            parse_request_id("plan-123tail@worker@team"),
+            Some(("plan".into(), 123, "worker@team".into()))
+        );
+        assert_eq!(
+            parse_request_id("stop-+17junk@worker"),
+            Some(("stop".into(), 17, "worker".into()))
+        );
+        assert_eq!(
+            parse_request_id("step-0x10@worker"),
+            Some(("step".into(), 0, "worker".into()))
+        );
+        assert_eq!(
+            parse_request_id("step- 42.8@worker"),
+            Some(("step".into(), 42, "worker".into()))
+        );
         assert!(parse_request_id("step-abc123@worker").is_none());
         assert!(parse_request_id("step-123-no-at-sign").is_none());
     }
