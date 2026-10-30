@@ -143,7 +143,7 @@ fn installed_origin_id(target: &Path) -> Result<Option<String>> {
                 .context("Installed plugin has invalid marketplace identity")?;
             let (name, marketplace) = id.split_once('@')
                 .context("Installed plugin marketplace identity must contain @")?;
-            if !valid_name(name) || !valid_name(marketplace) {
+            if !valid_name(name) || marketplace.is_empty() {
                 bail!("Installed plugin has invalid marketplace identity '{id}'");
             }
             Ok(Some(id.to_owned()))
