@@ -3449,6 +3449,81 @@ impl Agent {
 
     /// A clear starts a new conversation, preserving the previous transcript for
     /// resume. The source's SessionEnd and SessionStart hooks bracket the reset.
+    /// Original commands/resume/resume.tsx resumes the selected conversation
+    /// in the current UI. Rebind all session-scoped stores, counters and
+    /// permissions before allowing another model turn.
+    pub async fn resume_interactive_session(&mut self, query: &str) -> Result<String> {
+        if !self.interactive {
+            bail!("Interactive session switching requires chat mode");
+        }
+        if self.team_name.is_some() || self.agent_name.is_some() {
+            bail!("Cannot switch conversations while a team session is active");
+        }
+        let loaded = crate::session_control::resolve(&self.root, query)?;
+        if loaded.team_name.is_some() || loaded.agent_name.is_some() {
+            bail!("Cannot resume a teammate or team-internal conversation directly");
+        }
+        if loaded.id == self.session.id {
+            return Ok(format!("Already using session {}", loaded.id));
+        }
+        let mode = loaded.permission_mode.as_deref()
+            .map(permission_mode::Mode::from_persisted_string)
+            .unwrap_or(self.permission_mode);
+        if mode == permission_mode::Mode::BypassPermissions && self.approval != Approval::Full {
+            bail!("Saved permission mode exceeds current CLI approval ceiling");
+        }
+        if mode == permission_mode::Mode::AcceptEdits && self.approval == Approval::ReadOnly {
+            bail!("Saved edit permission exceeds read-only approval ceiling");
+        }
+        if mode == permission_mode::Mode::Auto {
+            bail!("Saved automatic permission mode requires a classifier");
+        }
+        let background = Arc::new(BackgroundTasks::for_session(&self.root, loaded.id)?);
+        let graph = task_graph::TaskGraph::new(
+            &self.root, &task_list_id(loaded.id, loaded.team_name.as_deref()),
+        )?;
+        let metrics = Arc::new(ToolMetrics::with_totals(
+            loaded.cost.total_lines_added, loaded.cost.total_lines_removed,
+        ));
+        // Run the old session's exit hook before changing its identity.
+        let end = self.hooks.run(HookEvent::SessionEnd, None, {
+            let mut input = self.base_hook_input();
+            input["reason"] = json!("other");
+            input
+        }).await?;
+        self.report_hook_warnings(HookEvent::SessionEnd, &end);
+        self.session.save(&self.root)?;
+        self.background.stop_all().await;
+        self.session = loaded;
+        self.session_start_source = "resume";
+        self.permission_mode = mode;
+        self.background = background;
+        self.background.set_environment(&self.session_env);
+        self.graph = graph;
+        self.file_metrics = metrics;
+        self.notebook_reads.lock().unwrap().clear();
+        self.file_reads.lock().unwrap().clear();
+        self.last_context_usage = None;
+        self.last_side_question_request = None;
+        self.last_model_usage = None;
+        self.auto_compact_failures = 0;
+        self.session_context.clear();
+        self.pending_initial_user_message = None;
+        self.transient_mailbox = in_memory_mailbox::Mailbox::new();
+        let start = self.hooks.run(HookEvent::SessionStart, None, {
+            let mut input = self.base_hook_input();
+            input["source"] = json!("resume");
+            input["model"] = json!(self.profile.model);
+            input
+        }).await?;
+        self.report_hook_warnings(HookEvent::SessionStart, &start);
+        for reason in &start.blocking_reasons {
+            eprintln!("SessionStart resume hook blocked (ignored): {reason}");
+        }
+        self.session_context = start.additional_context.join("\n");
+        Ok(format!("Resumed session {}", self.session.id))
+    }
+
     pub async fn clear_history(&mut self) -> Result<()> {
         self.hooks
             .run(HookEvent::SessionEnd, None, {
