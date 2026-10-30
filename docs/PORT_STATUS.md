@@ -2029,3 +2029,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **Rust 可达链**：`generated_ports::p_5b257a1951fde`（debug 核心）→ `p_7a2adbb3dff05`（过滤）→ `p_9f04f27b8b4b0`（插件 .md 遍历接 debug）；`p_5579cc6f53028`（Unicode 净化：NFKC+手写 Cf/Co/Cn 范围+JSON 递归）；`p_6aa0ce358bf6a`（ANSI 感知切片：tokenize/reduce/undo/OSC8 + EAW F/W 128 区间表 + isZeroWidth 全表 + stringWidth）；`p_4007591beaebd`（srun 规格）；`p_57eeca3eff1c9`（settings 三缓存）；`p_48282ce751286`（Stream 工具）；`p_ce92b3c05ca1a`（诊断 JSON 行）；`p_13ed07885469b`（后台 bash 通知折叠）。
 - **保守功能计数**：debug 日志核心（级别门控/路径链/缓冲写）、debug 过滤器、插件 Markdown 遍历、Unicode 净化（迭代收敛+递归）、ANSI 切片（含 OSC8 与 EAW 测宽）、srun 规格、settings 缓存、生成器工具、诊断日志时序、后台 bash 通知折叠，共 **10 个独立业务行为**，全部含单元测试（34 个 #[test]）。同一行为的修正提交不重复计数。
 - **尚未实现的准确差异**：debug 的 memoize 缓存身份省略（行为等价）、Windows symlink 差异待验收；sliceAnsi 的 Intl.Segmenter 图素聚类以 scalar+ZWJ 合并近似、原版 control token 拼接 undefined 缺陷已修正（AGENTS.md 统一修正条款）；generators 的 return_value 注入语义未单列；walkPluginMarkdown 的 fsOperations 注入接口待接线；env 名按仓库惯例 CLAUDE_CODE_*→ATLAS_*。**未运行 Cargo/测试/CI（本容器无 Rust 工具链）；全部已提交、待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
+
+
+## 2026-10-30：工具层手工重写批次二（Intl 分割/CA 证书/DXT 清单/pyright 规格）（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 `source/src/utils/{intl.ts,caCertsConfig.ts,dxt/helpers.ts,bash/specs/pyright.ts}` 逐函数对照；Intl.Segmenter 与 upstream MCPB zod schema 的等价策略见桩头说明。
+- **Rust 可达链**：`p_0c2f0671dbf30`（图素/词分割+locale）→ 为 sliceAnsi 等消费方提供共享分割原语；`p_8041a90f0b147`（NODE_EXTRA_CA_CERTS 三级优先，config/settings 端口迁移前由调用方传解析后 env 对象）；`p_f2da3e94e87ce`（MCPB 清单必填校验+扩展 ID sanitize）；`p_bec23e04adcfb`（pyright 19 旗标规格）。
+- **保守功能计数**：图素/词分割原语、first/lastGrapheme、CA 证书路径应用（三优先级+用户源限制）、MCPB 清单校验、扩展 ID 生成、pyright 规格，共 **6 个独立业务行为**，17 个单元测试。
+- **尚未实现的准确差异**：全 UAX#29 图素边界为近似（同 ANSI 切片桩口径）；ICU locale/timezone 以 TZ/LANG 解析替代；zod schema 可选字段细则以必填骨架覆盖；隐私门禁（tests/privacy.rs 品牌扫描）已通过。**未运行 CI（本地 cargo check/test/fmt 已全绿，810 通过 0 失败）；已提交待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。

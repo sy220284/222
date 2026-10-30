@@ -1409,7 +1409,7 @@
 | `src/utils/bash/specs/alias.ts` | 15 | 313 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/utils/bash/specs/index.ts` | 19 | 380 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/utils/bash/specs/nohup.ts` | 14 | 274 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/bash/specs/pyright.ts` | 92 | 2670 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/bash/specs/pyright.ts` | 92 | 2670 | 重写：保持通用行为 | `src/generated_ports/p_bec23e04adcfb.rs`| 部分实现：pyright 规格 19 旗标（watch/project/createstub/typeshedpath/verifytypes/pythonpath/venvpath/outputjson/verbose/stats/dependencies/level/skipunannotated/warnings/threads 等）+variadic files 参数扁平归一，--threads 可选参数语义保留，附 shape 测试；loadFigSpec 动态导入不适用（Node 生态）|
 | `src/utils/bash/specs/sleep.ts` | 14 | 315 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/bash/specs/srun.ts` | 32 | 654 | 重写：保持通用行为 | `src/generated_ports/p_4007591beaebd.rs`| 部分实现：srun 规格登记至 builtin_command_specs 体系（-n/--ntasks、-N/--nodes 双旗标+command 参数），withfig options 结构向本仓 CommandSpec arguments 扁平归一（旗标拼写并入 name），附 shape 测试；loadFigSpec 动态导入不适用（Node 生态），未迁移|
 | `src/utils/bash/specs/time.ts` | 14 | 244 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
@@ -1422,7 +1422,7 @@
 | `src/utils/bufferedWriter.ts` | 101 | 2584 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/bundledMode.ts` | 23 | 618 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/caCerts.ts` | 116 | 4401 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/caCertsConfig.ts` | 89 | 3608 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/caCertsConfig.ts` | 89 | 3608 | 重写：保持通用行为 | `src/generated_ports/p_8041a90f0b147.rs`| 部分实现：NODE_EXTRA_CA_CERTS 三级优先（进程 env 已设即跳过>settings>global config）、仅用户可控源、debug 日志接线，附 4 测试；getGlobalConfig/getSettingsForSource 由调用方传入已解析 env 对象（config/settings 端口迁移前接口），TLS 生效时机行为验收待 CI|
 | `src/utils/cachePaths.ts` | 39 | 1411 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/classifierApprovals.ts` | 89 | 2448 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/classifierApprovalsHook.ts` | 18 | 531 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
@@ -1497,7 +1497,7 @@
 | `src/utils/displayTags.ts` | 52 | 2256 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/doctorContextWarnings.ts` | 266 | 8071 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/doctorDiagnostic.ts` | 626 | 20502 | 重写：保持通用行为 | `src/generated_ports/p_d7010c7ce3c89.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/dxt/helpers.ts` | 89 | 2599 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/dxt/helpers.ts` | 89 | 2599 | 重写：保持通用行为 | `src/generated_ports/p_f2da3e94e87ce.rs`| 部分实现：MCPB 清单必填字段校验（manifestVersion/name/displayName/author.name/version 非空字符串）、扁平化错误格式（field: msg; formErrors）、parseAndValidateManifest 三入口（对象/字节/文本）、generateExtensionId sanitize 正则（非字母数字转连字符+压缩+修剪）与 .dxt 后缀剥离，附 6 测试；zod schema 细则（可选字段类型/嵌套 mcpServers 配置形状）以必填骨架覆盖，记差异|
 | `src/utils/dxt/zip.ts` | 227 | 7704 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/earlyInput.ts` | 192 | 5398 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/editor.ts` | 184 | 6634 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1588,7 +1588,7 @@
 | `src/utils/immediateCommand.ts` | 16 | 547 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/inProcessTeammateHelpers.ts` | 103 | 2988 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ink.ts` | 27 | 921 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/intl.ts` | 95 | 2824 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/intl.ts` | 95 | 2824 | 重写：保持通用行为 | `src/generated_ports/p_0c2f0671dbf30.rs`| 部分实现：图素分割（scalar+组合符/VS/ZWJ 链/区域指示符对近似，全 UAX#29 边界记差异）、first/lastGrapheme、词分割（空白+环绕标点）、TZ/LANG 解析替代 ICU、懒初始化缓存语义保留，附 6 测试；Intl.Segmenter 无 std 对应为记录差异|
 | `src/utils/jetbrains.ts` | 192 | 5805 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/json.ts` | 278 | 9144 | 重写：保持通用行为 | `src/json_runtime.rs / src/keybindings.rs / src/session.rs` | 部分实现：已实现 BOM 安全 JSON、50 条限额缓存、JSONC 注释/尾逗号解析、保留注释的数组追加、容错 JSONL 与 100MB 文件尾部读取，并接入快捷键配置和会话加载；终端设置、其它调用链及源版边界行为仍待完整验收 |
 | `src/utils/jsonRead.ts` | 17 | 657 | 重写：处理 UTF-8 BOM 的 JSON 读取 | `src/json_read.rs` / `src/config.rs` / `src/session.rs` | 已验收：前缀 U+FEFF 精确移除一次、空输入、非前缀保留、跨平台配置和会话读取；证据 json_read::tests / config::tests / session::tests |
