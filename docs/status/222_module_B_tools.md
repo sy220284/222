@@ -1,5 +1,13 @@
 # B 组｜工具、Shell、权限、任务与文件：独立进度与交接
 
+## 2026-10-30 02:27 UTC：CI 失败根因复核与修复续接
+
+- CI `40991132283` 已完成编译（成功），单元测试 **568 通过、1 失败**。失败项是本组新加的 `failed_background_spool_notifies_supervisor_without_waiting_for_eof`，真实 Linux `/dev/full` 测试在 3 秒内未收到失败通知。根因已定位：Tokio 异步文件的 `write_all` 可以先缓冲返回成功，直到 `flush` 才暴露磁盘 I/O 错误。B 组已在 `spool_merged` 每块写入后显式 flush 两份输出，确保错误立即传播，提交 `ea4348e90021fece40f18a305e0b0f8a934d4954`；**修复后的该测试仍待 CI 最终结果，不冒充通过**。
+- 根据 CI `40991051480`、`40991132283` 的 rustfmt 实际差异，本组逐项应用格式修正，涉及 `src/background.rs`、`src/history.rs`、`src/tools.rs`、`src/search.rs`、`src/permission_settings.rs`、`src/shell_runtime.rs`、`src/task_graph.rs`。提交 `17522eb1`、`990408dd`、`58977ac8`、`f3037da5`、`9e3ce84c`、`70c0fd15`、`8f27900b`；格式提交不计业务功能数。CI `40991324765` 的 rustfmt 日志已确认 **B 组拥有文件 0 个差异块**；其他组文件仍有格式差异，归属组须处理。
+- CI `40991324765`：编译全部目标 **成功**，依赖漏洞与来源检查 **成功**；格式检查 **失败（均为其他组文件）**；全量测试仍在执行中，未取得最终结论。原先 A 组 `provider.rs`/`sse.rs` 参数不一致的 E0061 已由 A 组 `5c9c6f1a` 修正并在上述编译中确认消除。
+- 目前 B 组新功能状态仍为 **源码已提交、待行为验收**；继续以最终 CI 运行和实际测试断言作为闭环依据。C/D 组专属登记仍未创建，跨组接线保留开放。
+
+
 > 业务源码独占：`src/tools.rs`、`src/background.rs`、Shell/权限、文件历史、任务/团队、Git/Worktree、搜索与网络工具等 B 组指定文件。共享迁移矩阵、Issue #3 冻结表和 PR 描述仅 C 组可写。此登记按真实用户功能链维护，未通过完整行为验收不计最终等价。
 
 ## 2026-10-29：后台 Shell 输出落盘失败的进程与状态闭环（待 CI / 行为验收）
