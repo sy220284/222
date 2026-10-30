@@ -938,6 +938,7 @@ mod tests {
             let mut body = vec![0; size];
             peer.read_exact(&mut body).await.unwrap();
             for (i, b) in body.iter_mut().enumerate() { *b ^= mask[i % 4]; }
+            assert_eq!(body.last(), Some(&b'\n'), "WebSocket wire requires an NDJSON newline");
             serde_json::from_slice::<Value>(&body).unwrap()
         });
         let (tx, _rx) = mpsc::unbounded_channel();
