@@ -484,6 +484,10 @@ fn sdk_message_id(external: &str, session_id: &str) -> uuid::Uuid {
     uuid::Uuid::from_bytes(bytes)
 }
 
+// src/commands/output-style/output-style.tsx::call. Keep the legacy
+// command's system notice in one place; config changes apply next session.
+const LEGACY_OUTPUT_STYLE_NOTICE: &str = "/output-style has been deprecated. Use /config to change your output style, or set it in your settings file. Changes take effect on the next session.";
+
 async fn run_cli() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
@@ -2095,6 +2099,10 @@ async fn chat(
             }
             "/version" => {
                 println!("{}", version::running_version());
+                continue;
+            }
+            "/output-style" => {
+                println!("{}", LEGACY_OUTPUT_STYLE_NOTICE);
                 continue;
             }
             "/cost" => {
