@@ -54,6 +54,38 @@ impl ModelTuning {
         Ok(())
     }
 
+    /// Check effective API behavior, including provider-specific ignored settings.
+    pub fn validate_for_model(&self, model: &str) -> Result<()> {
+        self.validate()?;
+        let effort = self.reasoning_effort.as_deref();
+        if model.starts_with("deepseek-") {
+            let thinking = effort != Some("none");
+            if thinking && self.temperature.is_some() {
+                bail!("DeepSeek thinking mode ignores temperature; choose reasoning_effort=none before adjusting temperature");
+            }
+            if model == "deepseek-flash" {
+                if thinking && self.top_p.is_some_and(|value| value < 0.95) {
+                    bail!("DeepSeek Flash thinking mode requires top_p >= 0.95");
+                }
+                if !thinking && self.top_p.is_some() {
+                    bail!("DeepSeek Flash non-thinking mode ignores top_p");
+                }
+            }
+            if model == "deepseek-v4-pro" && thinking && self.top_p.is_some() {
+                bail!("DeepSeek V4 Pro thinking mode ignores top_p");
+            }
+        }
+        if matches!(model, "kimi-k3.1-pro" | "kimi-k3.1-pro-highspeed" | "k3.1-pro" | "k3.1-pro-highspeed")
+            && effort == Some("none")
+        {
+            bail!("Kimi K3.1 Pro only supports thinking mode");
+        }
+        if model == "gpt-6.1-sol" && effort == Some("none") {
+            bail!("GPT-6.1 Sol does not support reasoning_effort=none");
+        }
+        Ok(())
+    }
+
     pub fn apply_chat_completions(&self, body: &mut serde_json::Value) {
         if let Some(v) = self.temperature {
             body["temperature"] = serde_json::json!(v);
@@ -412,7 +444,7 @@ impl Config {
         }
         let mut seen = std::collections::HashSet::new();
         for p in &self.providers {
-            p.tuning.validate()?;
+            p.tuning.validate_for_model(&p.model)?;
             if p.id.trim().is_empty() || p.model.trim().is_empty() {
                 bail!("Provider id and model must be nonempty");
             }
@@ -792,6 +824,30 @@ mod tests {
             previous.select(Some("glm"), None).unwrap().base_url,
             "https://custom.example/v1"
         );
+    }
+
+    #[test]
+    fn official_model_parameter_constraints_reject_ignored_options() {
+        let mut tune = ModelTuning {
+            temperature: Some(0.3),
+            ..Default::default()
+        };
+        assert!(tune.validate_for_model("deepseek-flash").is_err());
+        assert!(tune.validate_for_model("glm-5.3").is_ok());
+        tune.reasoning_effort = Some("none".into());
+        assert!(tune.validate_for_model("deepseek-flash").is_ok());
+        tune.top_p = Some(0.9);
+        assert!(tune.validate_for_model("deepseek-flash").is_err());
+        tune.top_p = None;
+        tune.temperature = None;
+        tune.reasoning_effort = Some("high".into());
+        tune.top_p = Some(0.95);
+        assert!(tune.validate_for_model("deepseek-flash").is_ok());
+        assert!(tune.validate_for_model("deepseek-v4-pro").is_err());
+        tune.top_p = None;
+        tune.reasoning_effort = Some("none".into());
+        assert!(tune.validate_for_model("kimi-k3.1-pro").is_err());
+        assert!(tune.validate_for_model("gpt-6.1-sol").is_err());
     }
 
     #[test]
