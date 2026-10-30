@@ -71,6 +71,9 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/PromptInput/HistorySearchInput.tsx" => match export {
+            "view" => serde_json::to_value(super::p_3ed42dc8aa879::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            )).ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInput.tsx" => match export {
@@ -120,6 +123,9 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/SearchBox.tsx" => match export {
+            "view" => serde_json::to_value(super::p_b99a90b93dfe8::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            )).ok(),
             _ => None,
         },
         "src/components/SessionBackgroundHint.tsx" => match export {
@@ -320,12 +326,18 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/design-system/Byline.tsx" => match export {
+            "view" => serde_json::to_value(super::p_d78b4b20e79ce::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            )).ok(),
             _ => None,
         },
         "src/components/design-system/Dialog.tsx" => match export {
             _ => None,
         },
         "src/components/design-system/Divider.tsx" => match export {
+            "view" => serde_json::to_value(super::p_24c4306aaf4fa::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            )).ok(),
             _ => None,
         },
         "src/components/design-system/FuzzyPicker.tsx" => match export {
@@ -344,6 +356,9 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/design-system/ProgressBar.tsx" => match export {
+            "view" => serde_json::to_value(super::p_a9eb5b2575d7c::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            )).ok(),
             _ => None,
         },
         _ => None,
@@ -371,7 +386,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/PackageManagerAutoUpdater.tsx", vec![]),
         ("src/components/PrBadge.tsx", vec!["view"]),
         ("src/components/PressEnterToContinue.tsx", vec![]),
-        ("src/components/PromptInput/HistorySearchInput.tsx", vec![]),
+        ("src/components/PromptInput/HistorySearchInput.tsx", vec!["view"]),
         ("src/components/PromptInput/PromptInput.tsx", vec![]),
         ("src/components/PromptInput/PromptInputFooter.tsx", vec![]),
         (
@@ -401,7 +416,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/RemoteEnvironmentDialog.tsx", vec![]),
         ("src/components/ResumeTask.tsx", vec![]),
         ("src/components/SandboxViolationExpandedView.tsx", vec![]),
-        ("src/components/SearchBox.tsx", vec![]),
+        ("src/components/SearchBox.tsx", vec!["view"]),
         ("src/components/SessionBackgroundHint.tsx", vec![]),
         ("src/components/SessionPreview.tsx", vec![]),
         ("src/components/Settings/Config.tsx", vec![]),
@@ -505,9 +520,9 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/components/agents/new-agent-creation/wizard-steps/TypeStep.tsx",
             vec![],
         ),
-        ("src/components/design-system/Byline.tsx", vec![]),
+        ("src/components/design-system/Byline.tsx", vec!["view"]),
         ("src/components/design-system/Dialog.tsx", vec![]),
-        ("src/components/design-system/Divider.tsx", vec![]),
+        ("src/components/design-system/Divider.tsx", vec!["view"]),
         ("src/components/design-system/FuzzyPicker.tsx", vec![]),
         (
             "src/components/design-system/KeyboardShortcutHint.tsx",
@@ -516,7 +531,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/design-system/ListItem.tsx", vec![]),
         ("src/components/design-system/LoadingState.tsx", vec![]),
         ("src/components/design-system/Pane.tsx", vec![]),
-        ("src/components/design-system/ProgressBar.tsx", vec![]),
+        ("src/components/design-system/ProgressBar.tsx", vec!["view"]),
     ]
 }
 

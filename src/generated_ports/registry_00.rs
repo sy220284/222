@@ -311,8 +311,15 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/utils/stringUtils.ts" => match export {
+            "escapeRegExp" => Some(super::p_33ab1f755c819::escapeRegExp(args)),
             "capitalize" => Some(super::p_33ab1f755c819::capitalize(args)),
             "plural" => Some(super::p_33ab1f755c819::plural(args)),
+            "firstLineOf" => Some(super::p_33ab1f755c819::firstLineOf(args)),
+            "countCharInString" => Some(super::p_33ab1f755c819::countCharInString(args)),
+            "normalizeFullWidthDigits" => Some(super::p_33ab1f755c819::normalizeFullWidthDigits(args)),
+            "normalizeFullWidthSpace" => Some(super::p_33ab1f755c819::normalizeFullWidthSpace(args)),
+            "safeJoinLines" => Some(super::p_33ab1f755c819::safeJoinLines(args)),
+            "truncateToLines" => Some(super::p_33ab1f755c819::truncateToLines(args)),
             _ => None,
         },
         "src/utils/suggestions/commandSuggestions.ts" => match export {
@@ -914,7 +921,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             vec!["getDefaultSubagentModel", "getAgentModelOptions"],
         ),
         ("src/utils/proxy.ts", vec!["getProxyUrl", "getNoProxy"]),
-        ("src/utils/stringUtils.ts", vec!["capitalize", "plural"]),
+        ("src/utils/stringUtils.ts", vec!["escapeRegExp", "capitalize", "plural", "firstLineOf", "countCharInString", "normalizeFullWidthDigits", "normalizeFullWidthSpace", "safeJoinLines", "truncateToLines"]),
         (
             "src/utils/suggestions/commandSuggestions.ts",
             vec!["isCommandInput", "formatCommand"],
