@@ -71,36 +71,61 @@ cargo run -- --provider gemini chat
 
 无需固定账号也可使用自建兼容服务：运行 `cargo run -- init`，编辑配置文件中 `base_url`、`model`、`api_key_env`，或添加新的 `openai-compatible` 配置。配置默认在系统配置目录下的 `atlas-agent/config.json`；可以用环境变量 `ATLAS_CONFIG` 指定位置。
 
-### 国内模型 API：DeepSeek、Kimi、GLM、MiniMax
+### 模型品牌、实时模型目录与能力标签
 
-程序内置四组中国大陆官方 API 配置。新安装直接出现在 `models` 列表中；升级现有的 `config.json` 时，会在内存中补齐缺少的模型，保留已有的同名自定义配置，不会仅因为读取配置就改写磁盘。默认仍为 OpenAI，只有显式选择时才调用其他服务。
+预置 DeepSeek、Kimi（月之暗面）、智谱 GLM、MiniMax、OpenAI API、Gemini 和独立的 ChatGPT 套餐模式。内置型号仅为开箱默认选择；**实际可用模型以用户密钥请求的官方 `/models` 列表为准**，目录内可用的模型型号可以随时更新。目录中的上下文长度、输出长度、输入模态、思考档位和函数调用等元数据会转为能力标签；没有返回的能力明确保持未知。列表可见不保证当前账号具有推理调用权，`probe` 或 `use` 会进行一次实际调用检验，并可能产生少量费用。
+
+| 品牌 | 当前推荐的预置模型 | 密钥环境变量 |
+| --- | --- | --- |
+| DeepSeek | `deepseek-flash`（V4.1 Flash 线上别名） | `DEEPSEEK_API_KEY` |
+| Kimi | `kimi-k3` | `MOONSHOT_API_KEY` |
+| 智谱 GLM | `glm-5.3` | `ZHIPU_API_KEY` |
+| MiniMax | `MiniMax-M3` | `MINIMAX_API_KEY` |
+| OpenAI API | `gpt-4.1-mini`（兼容旧配置） | `OPENAI_API_KEY` |
+| ChatGPT 套餐 | `gpt-6.1-sol`（可用型号以账号目录为准） | 通过官方 OAuth 登录，无需 API Key |
+
+**连接和选择模型：**
 
 ```bash
-export DEEPSEEK_API_KEY="your-api-key"
-cargo run -- --provider deepseek run "检查当前项目"
-
-export MOONSHOT_API_KEY="your-api-key"
-cargo run -- --provider kimi chat
-
-export ZHIPU_API_KEY="your-api-key"
-cargo run -- --provider glm chat
-
-export MINIMAX_API_KEY="your-api-key"
-cargo run -- --provider minimax chat
+cargo run -- models brands
+cargo run -- models connect deepseek
+# 在提示后从标准输入提供密钥；验证 /models 成功后，密钥仅写入本地 0600 文件
+cargo run -- models discover deepseek
+cargo run -- models probe deepseek deepseek-v4-pro
+cargo run -- models use deepseek deepseek-v4-pro
+cargo run -- --provider deepseek chat
 ```
 
-| 提供商 ID | 内置默认模型 | API 根地址 |
-| --- | --- | --- |
-| `deepseek` | `deepseek-flash` | `https://api.deepseek.com` |
-| `kimi` | `kimi-k3` | `https://api.moonshot.cn/v1` |
-| `glm` | `glm-5.3` | `https://open.bigmodel.cn/api/paas/v4` |
-| `minimax` | `MiniMax-M3` | `https://api.minimaxi.com/v1` |
+如果只需临时查询，不想保存密钥，可用 `models discover deepseek --key-stdin` 从标准输入读取。环境变量密钥优先于本地已保存密钥，均不回显。保存在配置文件旁的 `.model-api-keys.json` 具有 Unix 用户独享访问权限（0600），仍属于本地明文密钥文件，请保证机器账号和磁盘受保护；不可提交到 Git。已有配置和自定义供应商优先保留。不同品牌的 Coding 套餐、国际区域、付费 API 可能使用不同的密钥和 URL，允许覆盖同名条目的根地址。
 
-可用 `--model <模型ID>` 覆盖默认模型。海外 API、Coding 套餐或其他服务区域可能使用独立根地址和密钥；在 `config.json` 的 `providers` 中添加同名条目，就可以覆盖上表地址、密钥环境变量、模型和流式选项。
+**调整模型参数：**
 
-四家沿用现有 OpenAI 兼容 Chat Completions、函数工具调用、Token 用量及本地 Agent 工具链。内置项默认 `stream:false`，需要流式时在同名配置中设置 `"stream":true`；请确认该模型支持 SSE 和 `stream_options.include_usage`。推理类专属字段、工具和结构化输出能力随所选模型实际支持情况而异。密钥从进程环境变量读取，不写入默认配置。
+```bash
+cargo run -- models tune deepseek --reasoning-effort high --max-output-tokens 8192 --context-window 1048576
+cargo run -- models tune kimi --reasoning-effort high
+cargo run -- models tune minimax --temperature 0.3 --top-p 0.95
+cargo run -- models tune minimax --reset
+```
 
-官方文档：[DeepSeek](https://api-docs.deepseek.com/) · [Kimi](https://platform.kimi.com/) · [智谱](https://docs.bigmodel.cn/) · [MiniMax](https://platform.minimaxi.com/)。
+默认参数原则是使用官方服务端自身的推荐值，特别是开启思考的模型，temperature/top_p 可能被忽略或被拒绝，**不会虚构通用最优值**。明确调整的参数才会发至 Chat Completions（温度 0–2、Top-P (0,1]、输出 token 上限、reasoning_effort）；`context_window` 为本地设置的上下文容量提示，不会作为不存在的 HTTP 参数发送，具体可用上下文以模型实际限制为准。流式和非流式采用相同设置。使用其他版本可通过 `models use` 或 `--model MODEL_ID` 调整。
+
+### ChatGPT 账号登录使用套餐额度（独立于普通 API）
+
+官方开源/本地应用的 Sign in with ChatGPT 要求用户在系统浏览器授权 `chatgpt.tokens.use.direct`，获得经过签名验证的 OIDC 身份令牌和可轮换 OAuth Token，才能使用 ChatGPT 套餐推理。直接调用公开的 `POST https://api.openai.com/v1/responses`，强制 `store:false` 与 `stream:true`，使用相同凭据获取账号专属模型列表；不使用 ChatGPT 私有 backend-api。
+
+```bash
+cargo run -- chatgpt login
+cargo run -- chatgpt status
+cargo run -- chatgpt models
+cargo run -- --provider chatgpt --model gpt-6.1-sol chat
+cargo run -- chatgpt logout
+```
+
+OAuth 令牌保存在配置目录旁的 `.chatgpt-plan.json`，Unix 权限为 0600，host ID 跨启动保持稳定；每次登录使用新的 state、nonce、PKCE，并通过 OpenAI JWKS 验证 ID Token 的签名、issuer、audience、expiry、nonce 和账号身份。应用运行于本地，浏览器回调只监听 `127.0.0.1`。到期自动续期、退出时撤销会话。用户应在 ChatGPT Settings → Usage 检查官方套餐和应用用量。需拥有支持该功能的 ChatGPT 套餐并明确授权；可见模型仍需通过真实请求确认可用。ChatGPT 套餐与 OpenAI API Key 是两条独立计费与授权路径。
+
+官方参考：[Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/)、
+[OAuth 注册与授权](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)、
+[Responses 推理规范](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)。
 
 ## 本地 Hooks（不上传事件）
 
