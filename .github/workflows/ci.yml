@@ -97,39 +97,11 @@ jobs:
       - name: Linux Rust 单元测试
         timeout-minutes: 8
         run: cargo test --locked --bins
-      - name: Linux 集成测试 - deep_link_banner
-        timeout-minutes: 8
-        run: cargo test --locked --test deep_link_banner
-      - name: Linux 集成测试 - git_state_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test git_state_cli
-      - name: Linux 集成测试 - git_workflows_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test git_workflows_cli
-      - name: Linux 集成测试 - integration_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test integration_cli
-      - name: Linux 集成测试 - integration_hook_lifecycle
-        timeout-minutes: 8
-        run: cargo test --locked --test integration_hook_lifecycle
-      - name: Linux 集成测试 - migration_matrix
-        timeout-minutes: 8
-        run: cargo test --locked --test migration_matrix
-      - name: Linux 集成测试 - partial_source_targets
-        timeout-minutes: 8
-        run: cargo test --locked --test partial_source_targets
-      - name: Linux 集成测试 - privacy
-        timeout-minutes: 8
-        run: cargo test --locked --test privacy
-      - name: Linux 集成测试 - prompt_history_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test prompt_history_cli
-      - name: Linux 集成测试 - queue_journal_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test queue_journal_cli
-      - name: Linux 集成测试 - standalone_utilities
-        timeout-minutes: 8
-        run: cargo test --locked --test standalone_utilities
+      # Automatically discover every integration test target; newly ported SDK,
+      # MCP and CLI behavior must never bypass the Linux/Windows gate.
+      - name: Linux 全部集成测试（自动发现）
+        timeout-minutes: 20
+        run: cargo test --locked --tests
 
 
   windows-check:
@@ -148,39 +120,11 @@ jobs:
       - name: Windows Rust 单元测试
         timeout-minutes: 8
         run: cargo test --locked --bins
-      - name: Windows 集成测试 - deep_link_banner
-        timeout-minutes: 8
-        run: cargo test --locked --test deep_link_banner
-      - name: Windows 集成测试 - git_state_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test git_state_cli
-      - name: Windows 集成测试 - git_workflows_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test git_workflows_cli
-      - name: Windows 集成测试 - integration_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test integration_cli
-      - name: Windows 集成测试 - integration_hook_lifecycle
-        timeout-minutes: 8
-        run: cargo test --locked --test integration_hook_lifecycle
-      - name: Windows 集成测试 - migration_matrix
-        timeout-minutes: 8
-        run: cargo test --locked --test migration_matrix
-      - name: Windows 集成测试 - partial_source_targets
-        timeout-minutes: 8
-        run: cargo test --locked --test partial_source_targets
-      - name: Windows 集成测试 - privacy
-        timeout-minutes: 8
-        run: cargo test --locked --test privacy
-      - name: Windows 集成测试 - prompt_history_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test prompt_history_cli
-      - name: Windows 集成测试 - queue_journal_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test queue_journal_cli
-      - name: Windows 集成测试 - standalone_utilities
-        timeout-minutes: 8
-        run: cargo test --locked --test standalone_utilities
+      # Automatically discover every integration test target; newly ported SDK,
+      # MCP and CLI behavior must never bypass the Linux/Windows gate.
+      - name: Windows 全部集成测试（自动发现）
+        timeout-minutes: 20
+        run: cargo test --locked --tests
 
   security:
     name: 依赖漏洞与来源检查

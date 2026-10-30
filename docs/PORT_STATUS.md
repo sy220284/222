@@ -1,3 +1,11 @@
+## 2026-10-30：SDK initialize 原子生效与集成测试全量自动发现
+
+- **原始源码对照**：2.1.88 `source/src/cli/print.ts::handleInitializeRequest`，初始化同时提交 Agents、JSON Schema 及系统提示。旧 Rust 路径先发布 Agent catalog 再校验 Schema；Schema 错误后会留下未授权的会话状态。
+- **真实修复**：`src/agent.rs` 将 SDK Agent 解析校验与 catalog 安装分离；`src/main.rs::sdk_nested_control` 先完成 Agent 校验，再设置 Provider Schema，然后才发布 Agent catalog 和 prompt。失败的初始化不污染后续请求。
+- **新增集成测试**：`tests/sdk_initialize_atomic_cli.rs` 真实启动 SDK 子进程，依次发送包含 Agent/无效 Schema 的失败请求及有效初始化，验证失败 Agent 不出现在成功请求的公共目录。
+- **根因级测试覆盖**：CI 原先手工点名部分 `tests/*.rs`，可能遗漏新增 SDK、MCP、SSE 测试；现 Linux 与 Windows 使用 `cargo test --locked --tests` 自动发现全部集成测试目标，保留独立 `cargo test --locked --bins`，无需每新增测试再编辑白名单。
+- **待验收**：本轮涉及文件本地 `cargo fmt --all -- --check` 通过。由于离线 Cargo 缓存缺少最新锁定的 `foldhash 0.2.0`，实际编译/集成/Windows 结果以本提交的 GitHub Actions 为准；SDK Hooks、SDK MCP Servers、提示建议等完整等价仍未闭环。
+
 ## 2026-10-30：CA 证书按原版恢复双来源与启动优先级
 
 - **原始依据**：2.1.88 \`source/src/utils/caCertsConfig.ts\`：已有 \`NODE_EXTRA_CA_CERTS\` 不覆盖；用户 \`settings.json\` 的 \`env\` 优先于全局 config 的 \`env\`；项目 settings 未批准前不能提供信任根。
