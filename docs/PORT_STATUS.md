@@ -1,3 +1,9 @@
+## 2026-10-29：自定义 Agent 详情查看（源码已提交、待验收）
+
+对照原版 source/src/components/agents/AgentsMenu.tsx::view-agent → AgentDetail，补齐 Rust 交互式 /agents show project|user NAME。现在按项目/用户来源定位真实代理定义文件，检查常规文件类型并拒绝符号链接，展示完整定义与系统提示；不再只能列出代理名称。src/main.rs::chat → agent_definition::new_file_path → 文件读取，提交 b7ef373fac597f11fcfac1cb55302c3bc99f6b09。原版富文本详情页、工具展示和内置代理视图仍待等价。
+
+本轮累计 **8/100，剩余92项**；源码已提交待行为验收，新增完整等价验收0。未运行 Cargo/测试/CI，Issue #3 冻结362项未核销，100项先行逐函数缺口清单及方案仍未完成。
+
 ## 2026-10-29：交互式自定义 Agent 创建、编辑、删除（源码已提交、待验收）
 
 对照原版 source/src/components/agents/agentFileUtils.ts::saveAgentToFile/updateAgentFile/deleteAgentFromFile、AgentsMenu.tsx、AgentEditor.tsx，Rust 原 src/agent_definition.rs 已有定义校验/持久化函数，但交互式 src/main.rs::chat 的 /agents 只列目录，用户无法在当前应用创建、修改或删除自定义 Agent。
