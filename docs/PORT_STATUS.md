@@ -1,3 +1,11 @@
+## 2026-10-29：后台任务增量输出尊重用户显式读取长度（源码已提交、待验收）
+
+- **原版依据**：`source/src/utils/task/diskOutput.ts:304–333::getTaskOutputDelta` 的 8 MiB 仅是 `maxBytes` 缺省值；用户显式指定更大的 `maxBytes` 时原版直接传给 `source/src/utils/fsOperations.ts:644::readFileRange`，只受实际剩余文件字节数约束。
+- **原 Rust 缺口**：`src/background.rs::output_delta` 对所有请求使用 `max_bytes.min(8MiB)`，即使用户明确要求读取 16 MiB，也只返回前 8 MiB；模型工具定义同时将最大值固定在 8 MiB。
+- **真实补齐**：保留 `src/tools.rs` 调用方缺省 8 MiB 的语义；移除运行时额外截断，工具参数允许显式读取至原版任务磁盘上限 5 GiB，底层读取仍以文件实际剩余字节为界，检查平台地址空间大小并返回明确错误。入口：模型 `task_output_delta` → `ToolExecutor` → `BackgroundTasks::output_delta` → `read_output_range`。
+- **代码提交**：`0920186080b9ec38192e7640f11d2dea590fd951`、`fd9415bc2a76c1ce351de658f95a03a715acfcc4`，涉及 `src/background.rs`。保守计 **1 项独立业务功能**，与后台输出私有目录分别计数；本轮 **2/100，余 98**，仅源码已提交、待行为验收。未运行 Cargo、测试或 CI。
+- **剩余差异**：超大范围请求可能消耗大量内存，原版也使用一次性缓冲；未来仍需按原版精确处理跨 UTF-8 字节边界、外部取消、任务输出合并时序及恢复。Issue #3 冻结 362 项仍开放，新增完整等价验收 0；先行 100 项完整核实清单与方案未完成。
+
 ## 2026-10-29：后台 Shell 输出按原版迁出源码工作区（已提交、待验收）
 
 - **原版依据**：完整 2.1.88 源码 `source/src/utils/task/diskOutput.ts:36–68::getTaskOutputDir` 将后台任务 stdout/stderr 放在 `getProjectTempDir()/sessionId/tasks`，首次访问固定会话目录；`source/src/utils/permissions/filesystem.ts:376::getProjectTempDir` 从项目临时目录生成位置，防止输出进入项目文件树。
