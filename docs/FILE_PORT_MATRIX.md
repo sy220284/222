@@ -182,15 +182,15 @@
 | `src/commands/insights.ts` | 3201 | 115949 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/ApiKeyStep.tsx` | 231 | 23518 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/CheckExistingSecretStep.tsx` | 190 | 18135 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/CheckGitHubStep.tsx` | 15 | 1248 | 重写：保持通用行为 | `src/generated_ports/p_26ba971b8d52d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/install-github-app/CheckGitHubStep.tsx` | 15 | 1248 | 重写：保持通用行为 | `src/generated_ports/p_26ba971b8d52d.rs`| 部分实现：GitHub CLI 可用性检查静态文案+Text 视图，附 1 测试|
 | `src/commands/install-github-app/ChooseRepoStep.tsx` | 211 | 21279 | 重写：保持通用行为 | `src/generated_ports/p_7c4a2c598240c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/install-github-app/CreatingStep.tsx` | 65 | 9266 | 重写：保持通用行为 | `src/generated_ports/p_7a696c359ec3c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/install-github-app/CreatingStep.tsx` | 65 | 9266 | 重写：保持通用行为 | `src/generated_ports/p_7a696c359ec3c.rs`| 部分实现：进度步进双纯核——progress_steps（skipWorkflow 2步分支/existing-secret 分支/workflow 单复数措辞）与 step_status 分类器（completed/in-progress/pending 按当前索引），步骤行渲染（勾/省略号+success/warning色）+边框 Pane 视图，附 4 测试（敏感字面值按隐私门禁中性化）|
 | `src/commands/install-github-app/ErrorStep.tsx` | 85 | 8602 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/ExistingWorkflowStep.tsx` | 103 | 9833 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/InstallAppStep.tsx` | 94 | 9601 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/OAuthFlowStep.tsx` | 276 | 39935 | 重写：保持通用行为 | `src/generated_ports/p_92dc7da033a9e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/install-github-app/SuccessStep.tsx` | 96 | 10170 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/WarningsStep.tsx` | 73 | 9132 | 重写：保持通用行为 | `src/generated_ports/p_c4344a216659f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/install-github-app/WarningsStep.tsx` | 73 | 9132 | 重写：保持通用行为 | `src/generated_ports/p_c4344a216659f.rs`| 部分实现：设置警告面板渲染（标题块/每警告行/条列说明/继续提示/手动设置文档指针），confirm:yes 键绑定上游驱动 onContinue（context=Confirmation）；docs URL env 可覆盖中性默认，附 3 测试|
 | `src/commands/install-github-app/index.ts` | 14 | 471 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/install-github-app/install-github-app.tsx` | 587 | 87155 | 重写：保持通用行为 | `src/generated_ports/p_a9174729be5dd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/install-github-app/setupGitHubActions.ts` | 326 | 10168 | 重写：保持通用行为 | 待定 | 未迁移 |
