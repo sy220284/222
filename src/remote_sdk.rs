@@ -106,7 +106,7 @@ fn read_token(file: Option<&Path>) -> Result<Option<String>> {
     .transpose()
 }
 
-fn start_sdk(cli: &crate::Cli, resume: Option<&str>) -> Result<Child> {
+fn start_sdk(cli: &crate::Cli, session_id: &str, resume: Option<&str>) -> Result<Child> {
     use std::process::Stdio;
     let mut cmd = Command::new(std::env::current_exe()?);
     cmd.arg("--workspace").arg(&cli.workspace)
@@ -128,6 +128,8 @@ fn start_sdk(cli: &crate::Cli, resume: Option<&str>) -> Result<Child> {
     cmd.arg("sdk");
     if let Some(id) = resume {
         cmd.arg("--resume").arg(id);
+    } else {
+        cmd.arg("--remote-session-id").arg(session_id);
     }
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit());
     cmd.spawn().context("Unable to start SDK child")
@@ -277,7 +279,7 @@ pub async fn run(
         }
     };
 
-    let mut child = start_sdk(cli, resume)?;
+    let mut child = start_sdk(cli, session_id, resume)?;
     let mut stdin = child.stdin.take().context("SDK child missing stdin")?;
     let stdout = child.stdout.take().context("SDK child missing stdout")?;
     let mut stdout = BufReader::new(stdout).lines();
