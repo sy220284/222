@@ -72,7 +72,7 @@
 | `src/bridge/replBridge.ts` | 2407 | 100537 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/replBridgeHandle.ts` | 37 | 1473 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/replBridgeTransport.ts` | 371 | 15523 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/sessionIdCompat.ts` | 58 | 2536 | 改造：自建远程连接协议 | `src/bridge_core.rs / src/main.rs` | 部分实现：本地 SDK 控制入口可达；会话标识双向转换与可选兼容门禁已测试；远程服务完整身份调用链仍未贯通 |
+| `src/bridge/sessionIdCompat.ts` | 58 | 2536 | 改造：自建远程连接协议 | `src/bridge_core.rs` / `src/main.rs` | 已验收：原版 setCseShimGate 可替换延迟门禁、cse_/session_ 双向重标记、默认开启、异会话及禁用路径经真实 Bridge SDK 查询与测试通过；证据 bridge_core::tests::registered_cse_shim_gate_is_lazy_replaceable_and_affects_sdk_calls / bridge_core::tests::session_retag_matches_original_shim_contract |
 | `src/bridge/sessionRunner.ts` | 551 | 18020 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/trustedDevice.ts` | 211 | 7764 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/types.ts` | 263 | 10161 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
