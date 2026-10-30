@@ -107,10 +107,12 @@ impl HybridOutbound {
             })
         });
         let mut config = UploaderConfig::new(send);
-        config.max_batch_size = usize::MAX;
+        // 2.1.88 HybridTransport caps every POST at 500 messages and
+        // randomizes retries by up to 1,000 ms.
+        config.max_batch_size = 500;
         config.base_delay_ms = 500;
         config.max_delay_ms = 8_000;
-        config.jitter_ms = 250;
+        config.jitter_ms = 1_000;
         Ok(Self {
             uploader: Arc::new(
                 super::serial_batch_event_uploader::SerialBatchEventUploader::new(config),
