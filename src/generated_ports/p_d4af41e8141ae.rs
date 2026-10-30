@@ -8,8 +8,9 @@
 /// Gate for one clock tick: does the elapsed delta reach the interval?
 /// Mirrors `now - lastUpdate >= intervalMs` with the lastUpdate advance.
 pub fn tick_reaches_interval(last_update_ms: u64, now_ms: u64, interval_ms: u64) -> bool {
-    // Clock rollback / out-of-order ticks read as due (saturated delta 0).
-    now_ms <= last_update_ms || now_ms.saturating_sub(last_update_ms) >= interval_ms
+    // Original JS: now - lastUpdate >= intervalMs. A clock rollback
+    // makes this comparison false for any positive interval.
+    now_ms.saturating_sub(last_update_ms) >= interval_ms
 }
 
 #[cfg(test)]
@@ -20,6 +21,6 @@ mod tests {
     fn interval_gate() {
         assert!(!tick_reaches_interval(100, 149, 50));
         assert!(tick_reaches_interval(100, 150, 50));
-        assert!(tick_reaches_interval(100, 90, 50)); // saturating: 0
+        assert!(!tick_reaches_interval(100, 90, 50)); // time went backwards
     }
 }
