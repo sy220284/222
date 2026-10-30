@@ -67,13 +67,23 @@ fn read_trusted_task_output(path: &Path, args: &Value, source_read: bool) -> Res
     if !file.metadata()?.is_file() {
         bail!("Task output must be a regular file");
     }
-    let start = args.get("start_line").and_then(Value::as_u64).unwrap_or(1).max(1);
-    let count = args.get("line_count").and_then(Value::as_u64)
+    let start = args
+        .get("start_line")
+        .and_then(Value::as_u64)
+        .unwrap_or(1)
+        .max(1);
+    let count = args
+        .get("line_count")
+        .and_then(Value::as_u64)
         .unwrap_or(if source_read { u64::MAX } else { 250 })
         .max(1);
     let count = if source_read { count } else { count.min(500) };
     let end = start.saturating_add(count);
-    let max_bytes = if source_read { 256 * 1024 } else { MAX_FILE_BYTES as usize };
+    let max_bytes = if source_read {
+        256 * 1024
+    } else {
+        MAX_FILE_BYTES as usize
+    };
     let mut reader = io::BufReader::new(file);
     let mut result = String::new();
     let mut number = 0u64;
@@ -109,7 +119,9 @@ fn read_trusted_task_output(path: &Path, args: &Value, source_read: bool) -> Res
         }
         result.push_str(&entry);
         if clipped {
-            result.push_str("\n[Long task output line truncated; use task_output_delta with a byte offset]");
+            result.push_str(
+                "\n[Long task output line truncated; use task_output_delta with a byte offset]",
+            );
             break;
         }
     }
@@ -131,7 +143,9 @@ fn model_task_result(output: String) -> String {
     let content = if let Some(content) = value.get("content").and_then(Value::as_str) {
         Some((content.to_owned(), false))
     } else {
-        value.pointer("/task/output").and_then(Value::as_str)
+        value
+            .pointer("/task/output")
+            .and_then(Value::as_str)
             .map(|content| (content.to_owned(), true))
     };
     if let Some((content, nested)) = content {
@@ -167,7 +181,11 @@ fn model_task_result(output: String) -> String {
                 upper = middle - 1;
             }
         }
-        return if best.is_empty() { value.to_string() } else { best };
+        return if best.is_empty() {
+            value.to_string()
+        } else {
+            best
+        };
     }
     value.to_string()
 }
@@ -175,13 +193,12 @@ fn model_task_result(output: String) -> String {
 fn skill_invocable(path: &Path, for_model: bool) -> Result<bool> {
     let content = fs::read_to_string(path)?;
     if for_model {
-        Ok(!crate::skill_arguments::frontmatter_boolean(
-            &content, "disable-model-invocation",
-        ).unwrap_or(false))
+        Ok(
+            !crate::skill_arguments::frontmatter_boolean(&content, "disable-model-invocation")
+                .unwrap_or(false),
+        )
     } else {
-        Ok(crate::skill_arguments::frontmatter_boolean(
-            &content, "user-invocable",
-        ).unwrap_or(true))
+        Ok(crate::skill_arguments::frontmatter_boolean(&content, "user-invocable").unwrap_or(true))
     }
 }
 
@@ -236,7 +253,9 @@ impl FileReadCache {
         self.entries.insert(path.clone(), state);
         self.recency.push_back(path);
         while self.entries.len() > MAX_ENTRIES || self.bytes > MAX_BYTES {
-            let Some(oldest) = self.recency.pop_front() else { break; };
+            let Some(oldest) = self.recency.pop_front() else {
+                break;
+            };
             if let Some(removed) = self.entries.remove(&oldest) {
                 self.bytes = self.bytes.saturating_sub(removed.content.len().max(1));
             }
@@ -270,12 +289,16 @@ fn actual_edit_text(content: &str, requested: &str) -> Option<String> {
         return None;
     }
     for start in 0..=haystack.len() - needle.len() {
-        if needle.iter().enumerate().all(|(offset, expected)| {
-            normalized_quote(haystack[start + offset].1) == *expected
-        }) {
+        if needle
+            .iter()
+            .enumerate()
+            .all(|(offset, expected)| normalized_quote(haystack[start + offset].1) == *expected)
+        {
             let first = haystack[start].0;
-            let end = haystack.get(start + needle.len())
-                .map(|(index, _)| *index).unwrap_or(content.len());
+            let end = haystack
+                .get(start + needle.len())
+                .map(|(index, _)| *index)
+                .unwrap_or(content.len());
             return Some(content[first..end].to_owned());
         }
     }
@@ -283,8 +306,11 @@ fn actual_edit_text(content: &str, requested: &str) -> Option<String> {
 }
 
 fn opening_quote_context(chars: &[char], index: usize) -> bool {
-    index == 0 || matches!(chars[index - 1], ' ' | '\t' | '\n' | '\r'
-        | '(' | '[' | '{' | '—' | '–')
+    index == 0
+        || matches!(
+            chars[index - 1],
+            ' ' | '\t' | '\n' | '\r' | '(' | '[' | '{' | '—' | '–'
+        )
 }
 
 fn preserve_curly_quotes(requested: &str, actual: &str, replacement: &str) -> String {
@@ -294,24 +320,42 @@ fn preserve_curly_quotes(requested: &str, actual: &str, replacement: &str) -> St
     let double = actual.contains('“') || actual.contains('”');
     let single = actual.contains('‘') || actual.contains('’');
     let chars: Vec<char> = replacement.chars().collect();
-    chars.iter().enumerate().map(|(i, ch)| match *ch {
-        '"' if double => if opening_quote_context(&chars, i) { '“' } else { '”' },
-        '\'' if single => {
-            if i > 0 && i + 1 < chars.len()
-                && chars[i - 1].is_alphabetic() && chars[i + 1].is_alphabetic() {
-                '’'
-            } else if opening_quote_context(&chars, i) { '‘' } else { '’' }
-        }
-        other => other,
-    }).collect()
+    chars
+        .iter()
+        .enumerate()
+        .map(|(i, ch)| match *ch {
+            '"' if double => {
+                if opening_quote_context(&chars, i) {
+                    '“'
+                } else {
+                    '”'
+                }
+            }
+            '\'' if single => {
+                if i > 0
+                    && i + 1 < chars.len()
+                    && chars[i - 1].is_alphabetic()
+                    && chars[i + 1].is_alphabetic()
+                {
+                    '’'
+                } else if opening_quote_context(&chars, i) {
+                    '‘'
+                } else {
+                    '’'
+                }
+            }
+            other => other,
+        })
+        .collect()
 }
 
 /// Keep Markdown hard line breaks, while matching the original edit-input
 /// normalization for ordinary files.
 fn normalize_edit_replacement(path: &Path, replacement: &str) -> String {
-    let markdown = path.extension().and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("md")
-            || ext.eq_ignore_ascii_case("mdx"));
+    let markdown = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("mdx"));
     if markdown {
         return replacement.to_owned();
     }
@@ -319,7 +363,9 @@ fn normalize_edit_replacement(path: &Path, replacement: &str) -> String {
     let mut start = 0;
     let mut chars = replacement.char_indices().peekable();
     while let Some((index, ch)) = chars.next() {
-        if ch != '\r' && ch != '\n' { continue; }
+        if ch != '\r' && ch != '\n' {
+            continue;
+        }
         result.push_str(replacement[start..index].trim_end_matches(char::is_whitespace));
         if ch == '\r' && chars.peek().is_some_and(|(_, next)| *next == '\n') {
             chars.next();
@@ -333,7 +379,6 @@ fn normalize_edit_replacement(path: &Path, replacement: &str) -> String {
     result.push_str(replacement[start..].trim_end_matches(char::is_whitespace));
     result
 }
-
 
 #[derive(Clone, Copy)]
 enum TextEncoding {
@@ -356,19 +401,32 @@ fn read_editable_text(path: &Path) -> Result<EditableText> {
     let (encoding, decoded) = if bytes.starts_with(&[0xff, 0xfe]) {
         let raw = &bytes[2..];
         if raw.len() % 2 != 0 {
-            bail!("UTF-16LE file contains an incomplete code unit: {}", path.display());
+            bail!(
+                "UTF-16LE file contains an incomplete code unit: {}",
+                path.display()
+            );
         }
-        let units = raw.chunks_exact(2)
+        let units = raw
+            .chunks_exact(2)
             .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
             .collect::<Vec<_>>();
-        (TextEncoding::Utf16Le, String::from_utf16(&units)
-            .with_context(|| format!("Invalid UTF-16LE in {}", path.display()))?)
+        (
+            TextEncoding::Utf16Le,
+            String::from_utf16(&units)
+                .with_context(|| format!("Invalid UTF-16LE in {}", path.display()))?,
+        )
     } else if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
-        (TextEncoding::Utf8Bom, String::from_utf8(bytes[3..].to_vec())
-            .with_context(|| format!("Invalid UTF-8 in {}", path.display()))?)
+        (
+            TextEncoding::Utf8Bom,
+            String::from_utf8(bytes[3..].to_vec())
+                .with_context(|| format!("Invalid UTF-8 in {}", path.display()))?,
+        )
     } else {
-        (TextEncoding::Utf8, String::from_utf8(bytes)
-            .with_context(|| format!("Invalid UTF-8 in {}", path.display()))?)
+        (
+            TextEncoding::Utf8,
+            String::from_utf8(bytes)
+                .with_context(|| format!("Invalid UTF-8 in {}", path.display()))?,
+        )
     };
     let sample: String = decoded.chars().take(4096).collect();
     let crlf_count = sample.matches("\r\n").count();
@@ -380,7 +438,12 @@ fn read_editable_text(path: &Path) -> Result<EditableText> {
     })
 }
 
-fn write_editable_text(path: &Path, content: &str, encoding: TextEncoding, crlf: Option<bool>) -> Result<()> {
+fn write_editable_text(
+    path: &Path,
+    content: &str,
+    encoding: TextEncoding,
+    crlf: Option<bool>,
+) -> Result<()> {
     let text = match crlf {
         Some(true) => content.replace("\r\n", "\n").replace('\n', "\r\n"),
         Some(false) => content.replace("\r\n", "\n"),
@@ -503,11 +566,12 @@ impl ToolExecutor {
                     "path": record.path,
                     "paths": self.file_rule_paths(&record.path)?
                 });
-                match permission_rules::policy_for(
-                    &self.permission_rules, "edit_file", &args
-                )? {
+                match permission_rules::policy_for(&self.permission_rules, "edit_file", &args)? {
                     Some(permission_rules::Behavior::Deny) => {
-                        bail!("Message rewind denied by explicit Edit rule: {}", record.path);
+                        bail!(
+                            "Message rewind denied by explicit Edit rule: {}",
+                            record.path
+                        );
                     }
                     Some(permission_rules::Behavior::Ask) => {
                         self.require_approval("edit_file", &args)?;
@@ -575,14 +639,20 @@ impl ToolExecutor {
         }
         let key = path.canonicalize()?;
         let mut reads = self.file_reads.lock().unwrap();
-        if reads.get(&key).is_none_or(|existing| existing.timestamp_ms < disk_ms) {
-            reads.insert(key, FileReadState {
-                content,
-                timestamp_ms: disk_ms,
-                full: true,
-                read_offset: None,
-                read_limit: None,
-            });
+        if reads
+            .get(&key)
+            .is_none_or(|existing| existing.timestamp_ms < disk_ms)
+        {
+            reads.insert(
+                key,
+                FileReadState {
+                    content,
+                    timestamp_ms: disk_ms,
+                    full: true,
+                    read_offset: None,
+                    read_limit: None,
+                },
+            );
         }
         Ok(())
     }
@@ -633,7 +703,12 @@ impl ToolExecutor {
             // Original Read returns the complete requested text slice, with
             // its own file-size/token limits rather than generic tool clipping.
             Ok(output) if call.function.name == "Read" => output,
-            Ok(output) if matches!(call.function.name.as_str(), "task_output" | "task_output_delta") => {
+            Ok(output)
+                if matches!(
+                    call.function.name.as_str(),
+                    "task_output" | "task_output_delta"
+                ) =>
+            {
                 model_task_result(output)
             }
             Ok(output) => truncate(
@@ -707,12 +782,17 @@ impl ToolExecutor {
                 let track = history::enabled(self.interactive, self.file_checkpointing_enabled);
                 let pending = track.then(|| history::capture_before_edit(&path));
                 let result = self.notebook_edit(&args)?;
-                let checkpoint_notice = pending.map(|pending| {
-                    history::finish_after_edit(
-                        &self.root, self.session_id.as_deref(), &path, pending,
-                        self.history_message_id,
-                    )
-                }).unwrap_or_default();
+                let checkpoint_notice = pending
+                    .map(|pending| {
+                        history::finish_after_edit(
+                            &self.root,
+                            self.session_id.as_deref(),
+                            &path,
+                            pending,
+                            self.history_message_id,
+                        )
+                    })
+                    .unwrap_or_default();
                 Ok(format!("{result}{checkpoint_notice}"))
             }
             "list_files" => self.list_files(&args),
@@ -781,12 +861,17 @@ impl ToolExecutor {
                 let track = history::enabled(self.interactive, self.file_checkpointing_enabled);
                 let pending = track.then(|| history::capture_before_edit(&path));
                 let result = self.write_file(&args).await?;
-                let checkpoint_notice = pending.map(|pending| {
-                    history::finish_after_edit(
-                        &self.root, self.session_id.as_deref(), &path, pending,
-                        self.history_message_id,
-                    )
-                }).unwrap_or_default();
+                let checkpoint_notice = pending
+                    .map(|pending| {
+                        history::finish_after_edit(
+                            &self.root,
+                            self.session_id.as_deref(),
+                            &path,
+                            pending,
+                            self.history_message_id,
+                        )
+                    })
+                    .unwrap_or_default();
                 Ok(format!("{result}{checkpoint_notice}"))
             }
             "edit_file" => {
@@ -795,12 +880,17 @@ impl ToolExecutor {
                 let track = history::enabled(self.interactive, self.file_checkpointing_enabled);
                 let pending = track.then(|| history::capture_before_edit(&path));
                 let result = self.edit_file(&args).await?;
-                let checkpoint_notice = pending.map(|pending| {
-                    history::finish_after_edit(
-                        &self.root, self.session_id.as_deref(), &path, pending,
-                        self.history_message_id,
-                    )
-                }).unwrap_or_default();
+                let checkpoint_notice = pending
+                    .map(|pending| {
+                        history::finish_after_edit(
+                            &self.root,
+                            self.session_id.as_deref(),
+                            &path,
+                            pending,
+                            self.history_message_id,
+                        )
+                    })
+                    .unwrap_or_default();
                 Ok(format!("{result}{checkpoint_notice}"))
             }
             "file_history" => {
@@ -808,13 +898,15 @@ impl ToolExecutor {
                     bail!("File checkpointing is disabled")
                 }
                 history::list(&self.root, self.session_id.as_deref())
-            },
+            }
             "file_history_diff" => {
                 if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
                     bail!("File checkpointing is disabled")
                 }
                 let record = history::load(
-                    &self.root, self.session_id.as_deref(), required(&args, "id")?,
+                    &self.root,
+                    self.session_id.as_deref(),
+                    required(&args, "id")?,
                 )?;
                 let path = self.checked_path(&record.path)?;
                 // A diff preview reads the current file. Enforce the same
@@ -826,7 +918,11 @@ impl ToolExecutor {
                 if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
                     bail!("File checkpointing is disabled")
                 }
-                let record = history::load(&self.root, self.session_id.as_deref(), required(&args, "id")?)?;
+                let record = history::load(
+                    &self.root,
+                    self.session_id.as_deref(),
+                    required(&args, "id")?,
+                )?;
                 let path = self.checked_path(&record.path)?;
                 // Rewinding a file is a write. Reject a path-level Edit deny
                 // before showing any approval prompt, including symlink targets.
@@ -834,9 +930,8 @@ impl ToolExecutor {
                     "path": record.path,
                     "paths": self.file_rule_paths(&record.path)?
                 });
-                let edit_decision = permission_rules::policy_for(
-                    &self.permission_rules, "edit_file", &edit_args
-                )?;
+                let edit_decision =
+                    permission_rules::policy_for(&self.permission_rules, "edit_file", &edit_args)?;
                 if edit_decision == Some(permission_rules::Behavior::Deny) {
                     bail!("File revert denied by explicit Edit path rule");
                 }
@@ -927,7 +1022,9 @@ impl ToolExecutor {
     pub fn validate_shell_input(name: &str, args: &Value) -> Result<()> {
         let mut normalized = args.clone();
         crate::semantic_inputs::normalize_tool_fields(name, &mut normalized)?;
-        let fields = normalized.as_object().context("Shell arguments must be an object")?;
+        let fields = normalized
+            .as_object()
+            .context("Shell arguments must be an object")?;
         if let Some(key) = fields.keys().find(|key| {
             !matches!(
                 key.as_str(),
@@ -937,7 +1034,10 @@ impl ToolExecutor {
             bail!("Unrecognized shell parameter {key}");
         }
         required(&normalized, "command")?;
-        if normalized.get("description").is_some_and(|value| !value.is_string()) {
+        if normalized
+            .get("description")
+            .is_some_and(|value| !value.is_string())
+        {
             bail!("Shell description must be a string");
         }
         if normalized
@@ -1302,26 +1402,39 @@ impl ToolExecutor {
         // the same range was already shown and its mtime is unchanged.
         // Edited/written/SDK-seeded cache entries have no read_offset and
         // must never deduplicate against an old tool result.
-        let requested_offset = args.get("start_line").and_then(Value::as_u64)
-            .unwrap_or(1).max(1).min(usize::MAX as u64) as usize;
-        let requested_limit = args.get("line_count").and_then(Value::as_u64)
+        let requested_offset = args
+            .get("start_line")
+            .and_then(Value::as_u64)
+            .unwrap_or(1)
+            .max(1)
+            .min(usize::MAX as u64) as usize;
+        let requested_limit = args
+            .get("line_count")
+            .and_then(Value::as_u64)
             .map(|n| n.min(usize::MAX as u64) as usize);
         if source_read {
             let key = path.canonicalize()?;
             let disk_ms = modified_millis(&metadata)?;
             let prior = self.file_reads.lock().unwrap().get(&key);
-            if prior.is_some_and(|state| state.read_offset == Some(requested_offset)
-                && state.read_limit == requested_limit
-                && state.timestamp_ms == disk_ms) {
+            if prior.is_some_and(|state| {
+                state.read_offset == Some(requested_offset)
+                    && state.read_limit == requested_limit
+                    && state.timestamp_ms == disk_ms
+            }) {
                 return Ok(format!("File unchanged since last read: {requested}"));
             }
         }
-        let max_bytes = if source_read { 256 * 1024 } else { MAX_FILE_BYTES };
+        let max_bytes = if source_read {
+            256 * 1024
+        } else {
+            MAX_FILE_BYTES
+        };
         if metadata.len() > max_bytes {
             bail!("File too large (limit {max_bytes} bytes)");
         }
         let content = read_editable_text(&path)
-            .with_context(|| format!("Reading {}", path.display()))?.content;
+            .with_context(|| format!("Reading {}", path.display()))?
+            .content;
         self.reads
             .lock()
             .unwrap()
@@ -1353,15 +1466,27 @@ impl ToolExecutor {
         let after = fs::metadata(&path)?;
         let before_ms = modified_millis(&metadata)?;
         let unchanged = modified_millis(&after)? == before_ms && after.len() == metadata.len();
-        self.file_reads.lock().unwrap().insert(path.canonicalize()?, FileReadState {
-            full: unchanged && start == 1
-                && content.lines().count() <= count
-                && (source_read || result.chars().count() <= MAX_OUTPUT_CHARS),
-            content,
-            timestamp_ms: before_ms,
-            read_offset: if source_read && unchanged { Some(requested_offset) } else { None },
-            read_limit: if source_read && unchanged { requested_limit } else { None },
-        });
+        self.file_reads.lock().unwrap().insert(
+            path.canonicalize()?,
+            FileReadState {
+                full: unchanged
+                    && start == 1
+                    && content.lines().count() <= count
+                    && (source_read || result.chars().count() <= MAX_OUTPUT_CHARS),
+                content,
+                timestamp_ms: before_ms,
+                read_offset: if source_read && unchanged {
+                    Some(requested_offset)
+                } else {
+                    None
+                },
+                read_limit: if source_read && unchanged {
+                    requested_limit
+                } else {
+                    None
+                },
+            },
+        );
         Ok(result)
     }
 
@@ -1482,16 +1607,16 @@ impl ToolExecutor {
                     continue;
                 }
                 let path = self.checked_path(&format!(".atlas/skills/{name}/SKILL.md"))?;
-                if path.is_file() && self.search_read_allowed(&path)?
-                    && skill_invocable(&path, for_model)? {
+                if path.is_file()
+                    && self.search_read_allowed(&path)?
+                    && skill_invocable(&path, for_model)?
+                {
                     skills.push(name);
                 }
             }
         }
         for name in plugins::list_skills(&self.root, &self.enabled_plugins)? {
-            let resolved = plugins::resolve_skill_path(
-                &self.root, &self.enabled_plugins, &name,
-            )?;
+            let resolved = plugins::resolve_skill_path(&self.root, &self.enabled_plugins, &name)?;
             let path = self.checked_path(&resolved.to_string_lossy())?;
             if self.search_read_allowed(&path)? && skill_invocable(&path, for_model)? {
                 skills.push(name);
@@ -1519,9 +1644,7 @@ impl ToolExecutor {
     fn render_skill(&self, args: &Value, for_model: bool) -> Result<String> {
         let name = required(args, "name")?;
         let (content, skill_dir) = if name.contains(':') {
-            let resolved = plugins::resolve_skill_path(
-                &self.root, &self.enabled_plugins, name,
-            )?;
+            let resolved = plugins::resolve_skill_path(&self.root, &self.enabled_plugins, name)?;
             let raw = resolved.to_string_lossy().into_owned();
             let path = self.checked_path(&raw)?;
             self.require_read_rules(&raw, &path)?;
@@ -1544,14 +1667,14 @@ impl ToolExecutor {
             (fs::read_to_string(path)?, dir)
         };
         if for_model {
-            if crate::skill_arguments::frontmatter_boolean(
-                &content, "disable-model-invocation",
-            ).unwrap_or(false) {
+            if crate::skill_arguments::frontmatter_boolean(&content, "disable-model-invocation")
+                .unwrap_or(false)
+            {
                 bail!("Skill cannot be invoked by the model")
             }
-        } else if !crate::skill_arguments::frontmatter_boolean(
-            &content, "user-invocable",
-        ).unwrap_or(true) {
+        } else if !crate::skill_arguments::frontmatter_boolean(&content, "user-invocable")
+            .unwrap_or(true)
+        {
             bail!("Skill cannot be invoked by the user")
         }
         let raw = args.get("arguments");
@@ -1578,24 +1701,28 @@ impl ToolExecutor {
         );
         // Keep original plugin/skill macros usable with the neutral runtime.
         // Resolve the exact plugin root already validated by skill discovery.
-        let rendered = rendered.replace("${SKILL_DIR}", &dir)
+        let rendered = rendered
+            .replace("${SKILL_DIR}", &dir)
             .replace("${CLAUDE_SKILL_DIR}", &dir);
         let rendered = if let Some((plugin, _)) = name.split_once(':') {
-            let root = self.root.join(".atlas/plugins").join(plugin).canonicalize()?;
+            let root = self
+                .root
+                .join(".atlas/plugins")
+                .join(plugin)
+                .canonicalize()?;
             let root = root.to_string_lossy().replace('\\', "/");
             rendered.replace("${CLAUDE_PLUGIN_ROOT}", &root)
         } else {
             rendered
         };
         let rendered = if name.contains(':') {
-            plugins::expand_skill_user_config(
-                &self.root, &self.enabled_plugins, name, &rendered,
-            )?
+            plugins::expand_skill_user_config(&self.root, &self.enabled_plugins, name, &rendered)?
         } else {
             rendered
         };
         Ok(match self.session_id.as_deref() {
-            Some(id) => rendered.replace("${SESSION_ID}", id)
+            Some(id) => rendered
+                .replace("${SESSION_ID}", id)
                 .replace("${CLAUDE_SESSION_ID}", id),
             None => rendered,
         })
@@ -1665,21 +1792,24 @@ impl ToolExecutor {
         if existed && create_only {
             bail!("File already exists; create_only forbids overwriting it");
         }
-        let before = if existed {
-            let original = read_editable_text(&path)?.content;
-            let key = path.canonicalize()?;
-            let prior = self.file_reads.lock().unwrap().get(&key)
-                .context("File has not been read yet. Read it first before writing to it.")?;
-            if !prior.full {
-                bail!("File was only partially read. Read the complete file before writing");
-            }
-            if original != prior.content {
-                bail!("File has been modified since read. Read it again before writing");
-            }
-            Some(original)
-        } else {
-            None
-        };
+        let before =
+            if existed {
+                let original = read_editable_text(&path)?.content;
+                let key = path.canonicalize()?;
+                let prior =
+                    self.file_reads.lock().unwrap().get(&key).context(
+                        "File has not been read yet. Read it first before writing to it.",
+                    )?;
+                if !prior.full {
+                    bail!("File was only partially read. Read the complete file before writing");
+                }
+                if original != prior.content {
+                    bail!("File has been modified since read. Read it again before writing");
+                }
+                Some(original)
+            } else {
+                None
+            };
         // Keep the final content check and write adjacent. The original
         // FileWriteTool likewise avoids an async suspension in this interval.
         if let Some(parent) = path.parent() {
@@ -1703,13 +1833,16 @@ impl ToolExecutor {
             self.metrics.record_change(before.as_deref(), content);
         }
         let metadata = fs::metadata(&path)?;
-        self.file_reads.lock().unwrap().insert(path.canonicalize()?, FileReadState {
-            content: content.replace("\r\n", "\n"),
-            timestamp_ms: modified_millis(&metadata)?,
-            full: true,
-            read_offset: None,
-            read_limit: None,
-        });
+        self.file_reads.lock().unwrap().insert(
+            path.canonicalize()?,
+            FileReadState {
+                content: content.replace("\r\n", "\n"),
+                timestamp_ms: modified_millis(&metadata)?,
+                full: true,
+                read_offset: None,
+                read_limit: None,
+            },
+        );
         Ok(format!(
             "Wrote {} bytes to {}",
             content.len(),
@@ -1735,7 +1868,11 @@ impl ToolExecutor {
         let original_text = read_editable_text(&path)?;
         let content = original_text.content.as_str();
         let key = path.canonicalize()?;
-        let prior = self.file_reads.lock().unwrap().get(&key)
+        let prior = self
+            .file_reads
+            .lock()
+            .unwrap()
+            .get(&key)
             .context("File has not been read yet. Read it first before writing to it.")?;
         if !prior.full {
             bail!("File was only partially read. Read the complete file before editing");
@@ -1762,16 +1899,24 @@ impl ToolExecutor {
         if updated.len() as u64 > MAX_FILE_BYTES {
             bail!("Updated file too large")
         }
-        write_editable_text(&path, &updated, original_text.encoding, Some(original_text.crlf))?;
+        write_editable_text(
+            &path,
+            &updated,
+            original_text.encoding,
+            Some(original_text.crlf),
+        )?;
         self.metrics.record_change(Some(content), &updated);
         let metadata = fs::metadata(&path)?;
-        self.file_reads.lock().unwrap().insert(key, FileReadState {
-            content: updated,
-            timestamp_ms: modified_millis(&metadata)?,
-            full: true,
-            read_offset: None,
-            read_limit: None,
-        });
+        self.file_reads.lock().unwrap().insert(
+            key,
+            FileReadState {
+                content: updated,
+                timestamp_ms: modified_millis(&metadata)?,
+                full: true,
+                read_offset: None,
+                read_limit: None,
+            },
+        );
         Ok(format!(
             "Replaced {hits} occurrence(s) in {}",
             path.display()
@@ -1806,10 +1951,8 @@ impl ToolExecutor {
         } else {
             default_ms
         };
-        let timeout_ms = requested_ms.clamp(
-            1,
-            crate::portable_source_utils::max_bash_timeout_ms(&env),
-        );
+        let timeout_ms =
+            requested_ms.clamp(1, crate::portable_source_utils::max_bash_timeout_ms(&env));
         Ok(timeout_ms)
     }
 
@@ -1870,7 +2013,8 @@ impl ToolExecutor {
                 }
                 #[cfg(windows)]
                 let tree_error = crate::shell_runtime::terminate_windows_process_tree(process_id)
-                    .await.err();
+                    .await
+                    .err();
                 let _ = child.kill().await;
                 #[cfg(windows)]
                 if let Some(tree_error) = tree_error {
@@ -1887,7 +2031,8 @@ impl ToolExecutor {
                 }
                 #[cfg(windows)]
                 let tree_error = crate::shell_runtime::terminate_windows_process_tree(process_id)
-                    .await.err();
+                    .await
+                    .err();
                 let _ = child.kill().await;
                 #[cfg(windows)]
                 if let Some(tree_error) = tree_error {
@@ -1899,9 +2044,13 @@ impl ToolExecutor {
             }
         };
         #[cfg(unix)]
-        { cancel_group_guard.0 = None; }
+        {
+            cancel_group_guard.0 = None;
+        }
         #[cfg(windows)]
-        { cancel_tree_guard.0 = None; }
+        {
+            cancel_tree_guard.0 = None;
+        }
         let interpretation = if kind == crate::shell_runtime::ShellKind::Bash {
             let (is_error, note) =
                 crate::shell_runtime::interpret_bash_exit(command, status.code().unwrap_or(-1));
@@ -1999,7 +2148,8 @@ async fn capped_read<R: tokio::io::AsyncRead + Unpin>(
             break;
         }
         total = total.saturating_add(n as u64);
-        let combined = combined_bytes.fetch_add(n as u64, Ordering::Relaxed)
+        let combined = combined_bytes
+            .fetch_add(n as u64, Ordering::Relaxed)
             .saturating_add(n as u64);
         if combined > HARD_OUTPUT_LIMIT {
             bail!("Combined command output exceeded the original 5 GiB hard limit");
@@ -2799,12 +2949,21 @@ mod tests {
         let plugin = root.path().join(".atlas/plugins/demo");
         let skill = plugin.join("extra/group/review");
         fs::create_dir_all(&skill).unwrap();
-        fs::write(plugin.join("plugin.json"), r#"{"name":"demo","skills":"extra"}"#).unwrap();
-        fs::write(skill.join("SKILL.md"),
-            "Review ${CLAUDE_SKILL_DIR} from ${CLAUDE_PLUGIN_ROOT}").unwrap();
+        fs::write(
+            plugin.join("plugin.json"),
+            r#"{"name":"demo","skills":"extra"}"#,
+        )
+        .unwrap();
+        fs::write(
+            skill.join("SKILL.md"),
+            "Review ${CLAUDE_SKILL_DIR} from ${CLAUDE_PLUGIN_ROOT}",
+        )
+        .unwrap();
         let tool = executor(root.path(), Approval::ReadOnly).with_plugins(vec!["demo".into()]);
         assert_eq!(tool.list_skills().unwrap(), "demo:group:review");
-        let rendered = tool.read_skill(&json!({"name":"demo:group:review"})).unwrap();
+        let rendered = tool
+            .read_skill(&json!({"name":"demo:group:review"}))
+            .unwrap();
         assert!(rendered.contains("extra/group/review"), "{rendered}");
         assert!(rendered.contains(".atlas/plugins/demo"), "{rendered}");
         assert!(!rendered.contains("${CLAUDE_SKILL_DIR}"));
@@ -2815,8 +2974,11 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let folder = root.path().join(".atlas/skills/manual");
         fs::create_dir_all(&folder).unwrap();
-        fs::write(folder.join("SKILL.md"),
-            "---\ndisable-model-invocation: true\n---\nOnly users can invoke").unwrap();
+        fs::write(
+            folder.join("SKILL.md"),
+            "---\ndisable-model-invocation: true\n---\nOnly users can invoke",
+        )
+        .unwrap();
         let tool = executor(root.path(), Approval::ReadOnly);
         assert!(!tool.list_skills().unwrap().contains("manual"));
         assert!(tool.read_skill(&json!({"name":"manual"})).is_err());
@@ -2827,14 +2989,24 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let folder = root.path().join(".atlas/skills/manual");
         fs::create_dir_all(&folder).unwrap();
-        fs::write(folder.join("SKILL.md"),
-            "---\ndisable-model-invocation: true\n---\nExplain $ARGUMENTS").unwrap();
+        fs::write(
+            folder.join("SKILL.md"),
+            "---\ndisable-model-invocation: true\n---\nExplain $ARGUMENTS",
+        )
+        .unwrap();
         let tool = executor(root.path(), Approval::ReadOnly);
-        assert_eq!(tool.invoke_user_skill("manual", "changes").unwrap()
-            .contains("Explain changes"), true);
+        assert_eq!(
+            tool.invoke_user_skill("manual", "changes")
+                .unwrap()
+                .contains("Explain changes"),
+            true
+        );
         assert!(tool.read_skill(&json!({"name":"manual"})).is_err());
-        fs::write(folder.join("SKILL.md"),
-            "---\nuser-invocable: false\n---\nModel-only").unwrap();
+        fs::write(
+            folder.join("SKILL.md"),
+            "---\nuser-invocable: false\n---\nModel-only",
+        )
+        .unwrap();
         assert!(tool.invoke_user_skill("manual", "").is_err());
         assert!(tool.read_skill(&json!({"name":"manual"})).is_ok());
     }

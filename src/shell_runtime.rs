@@ -120,7 +120,9 @@ pub async fn terminate_windows_process_tree(pid: Option<u32>) -> Result<()> {
     let system_root = env::var_os("SystemRoot")
         .or_else(|| env::var_os("WINDIR"))
         .context("Windows system directory is unavailable for process-tree termination")?;
-    let taskkill = PathBuf::from(system_root).join("System32").join("taskkill.exe");
+    let taskkill = PathBuf::from(system_root)
+        .join("System32")
+        .join("taskkill.exe");
     let mut command = Command::new(taskkill);
     command
         .args(["/F", "/T", "/PID"])

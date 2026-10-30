@@ -550,8 +550,15 @@ impl TaskGraph {
         Self::strict(
             args,
             &[
-                "taskId", "subject", "description", "activeForm", "status",
-                "owner", "addBlocks", "addBlockedBy", "metadata",
+                "taskId",
+                "subject",
+                "description",
+                "activeForm",
+                "status",
+                "owner",
+                "addBlocks",
+                "addBlockedBy",
+                "metadata",
             ],
         )?;
         Self::required(args, "taskId")?;
