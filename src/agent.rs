@@ -2413,7 +2413,7 @@ impl Agent {
         if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
             definitions.push(tools::powershell_definition());
         }
-        definitions.extend(task::definitions());
+        // Context usage must count only tools visible in the real model request.
         if task::tasks_v2_enabled(self.interactive) {
             definitions.extend(task_graph::definitions());
         } else {
