@@ -539,13 +539,19 @@ impl BackgroundTasks {
             let merged = Arc::new(AsyncMutex::new(CombinedLog {
                 file: output_file, size: 0, capped: false,
             }));
-            let mut stdout_task = tokio::spawn(spool_merged(stdout, stdout_file, merged.clone()));
-            let mut stderr_task = tokio::spawn(spool_merged(stderr, stderr_file, merged.clone()));
+            let output_limit_reached = Arc::new(Notify::new());
+            let mut stdout_task = tokio::spawn(spool_merged(
+                stdout, stdout_file, merged.clone(), output_limit_reached.clone()
+            ));
+            let mut stderr_task = tokio::spawn(spool_merged(
+                stderr, stderr_file, merged.clone(), output_limit_reached.clone()
+            ));
             let process_id = child.id();
             let deadline_at = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
             let deadline = tokio::time::sleep_until(deadline_at);
             tokio::pin!(deadline);
             let mut stop_requested = false;
+            let mut killed_for_output_cap = false;
             let (mut state, mut code, mut timed_out) = tokio::select! {
                 result = child.wait() => match result {
                     Ok(status) if status.success() => ("completed", status.code(), false),
@@ -571,6 +577,17 @@ impl BackgroundTasks {
                     #[cfg(not(windows))]
                     ("killed", None, false)
                 },
+                _ = output_limit_reached.notified() => {
+                    killed_for_output_cap = true;
+                    #[cfg(unix)]
+                    if let Some(pid) = child.id() {
+                        let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+                    }
+                    #[cfg(windows)]
+                    let _ = terminate_windows_task_tree(child.id(), Some(&running)).await;
+                    let _ = child.kill().await;
+                    ("failed", Some(137), false)
+                },
                 _ = &mut deadline => {
                     #[cfg(unix)]
                     if let Some(pid) = child.id() {
@@ -588,7 +605,7 @@ impl BackgroundTasks {
             // A stop request must also interrupt output draining. The shell
             // can exit while a descendant keeps its pipes open; waiting for
             // the original 10-minute deadline makes TaskStop falsely time out.
-            let drain_deadline = if timed_out || stop_requested || state == "killed" {
+            let drain_deadline = if timed_out || stop_requested || killed_for_output_cap || state == "killed" {
                 tokio::time::Instant::now() + Duration::from_secs(1)
             } else {
                 deadline_at
@@ -599,6 +616,10 @@ impl BackgroundTasks {
                 _ = tokio::time::sleep_until(drain_deadline) => None,
                 _ = &mut stopped, if !stop_requested && !timed_out && state != "killed" => {
                     cancelled_during_drain = true;
+                    None
+                },
+                _ = output_limit_reached.notified(), if !killed_for_output_cap => {
+                    killed_for_output_cap = true;
                     None
                 },
             };
@@ -630,13 +651,18 @@ impl BackgroundTasks {
                 // User cancellation is a killed task, even if an inherited
                 // pipe must be force-closed. Only an actual deadline failure
                 // receives a timeout notice in the persisted output.
-                if cancelled_during_drain {
-                    state = "killed";
-                } else if !stop_requested && state != "killed" {
-                    timed_out = true;
+                if killed_for_output_cap {
                     state = "failed";
+                    code = Some(137);
+                } else {
+                    if cancelled_during_drain {
+                        state = "killed";
+                    } else if !stop_requested && state != "killed" {
+                        timed_out = true;
+                        state = "failed";
+                    }
+                    code = None;
                 }
-                code = None;
                 #[cfg(unix)]
                 if let Some(pid) = process_id {
                     let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
@@ -672,6 +698,14 @@ impl BackgroundTasks {
                 }
                 failed
             };
+            if out || err {
+                // The original ShellCommand kills a background process when
+                // output exceeds the 5 GiB disk cap; never report success.
+                if state == "completed" {
+                    state = "failed";
+                    code = Some(137);
+                }
+            }
             if stdout_failed || stderr_failed || merged_failed {
                 // A successful shell exit with lost output is a failed task,
                 // not a silently successful command with incomplete evidence.
@@ -1079,6 +1113,7 @@ async fn spool_merged<R: AsyncRead + Unpin>(
     mut stream: R,
     mut individual: tokio::fs::File,
     combined: Arc<AsyncMutex<CombinedLog>>,
+    output_limit_reached: Arc<Notify>,
 ) -> Result<bool> {
     let mut buffer = [0u8; 8192];
     let mut truncated = false;
@@ -1098,6 +1133,9 @@ async fn spool_merged<R: AsyncRead + Unpin>(
                 shared.file.write_all(OUTPUT_CAPPED_NOTICE.as_bytes()).await?;
                 individual.write_all(OUTPUT_CAPPED_NOTICE.as_bytes()).await?;
                 shared.capped = true;
+                // Wake the shell supervisor immediately; draining forever
+                // after the cap would leave a runaway command executing.
+                output_limit_reached.notify_one();
             }
         }
     }
