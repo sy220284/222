@@ -338,6 +338,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stream_events_precede_immediate_result_in_same_http_batch() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut peer, _) = listener.accept().await.unwrap();
+            let mut bytes = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            let end = loop {
+                if let Some(i) = bytes.windows(4).position(|v| v == b"\r\n\r\n") {
+                    break i + 4;
+                }
+                let n = peer.read(&mut chunk).await.unwrap();
+                assert!(n > 0 && bytes.len() < 16384);
+                bytes.extend_from_slice(&chunk[..n]);
+            };
+            let headers = String::from_utf8_lossy(&bytes[..end]);
+            let len: usize = headers.lines().find_map(|line| {
+                line.split_once(':').and_then(|(name, value)| {
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse().unwrap())
+                })
+            }).unwrap();
+            while bytes.len() - end < len {
+                let n = peer.read(&mut chunk).await.unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&chunk[..n]);
+            }
+            let payload: Value = serde_json::from_slice(&bytes[end..end + len]).unwrap();
+            peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+            payload
+        });
+        let outbound = HybridOutbound::new(
+            &format!("ws://127.0.0.1:{port}/ws/s1"), Arc::new(Vec::new),
+        ).unwrap();
+        outbound.write(&serde_json::json!({"type":"stream_event","uuid":"first"})).await;
+        tokio::time::timeout(Duration::from_secs(4), outbound.write(
+            &serde_json::json!({"type":"result","uuid":"second"})
+        )).await.unwrap();
+        let received = server.await.unwrap();
+        assert_eq!(received["events"][0]["uuid"], "first");
+        assert_eq!(received["events"][1]["uuid"], "second");
+        outbound.close();
+    }
+
+    #[tokio::test]
     async fn hybrid_websocket_read_uses_dynamic_authorization_header() {
         use tokio::io::AsyncReadExt;
         use tokio::net::TcpListener;
