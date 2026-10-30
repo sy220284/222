@@ -74,6 +74,8 @@ struct RefreshInner {
 #[derive(Clone)]
 pub struct TokenRefreshScheduler {
     inner: std::sync::Arc<RefreshInner>,
+    // Timers hold Inner while refreshing; only API owners count for shutdown.
+    owners: std::sync::Arc<()>,
 }
 
 impl TokenRefreshScheduler {
@@ -107,6 +109,7 @@ impl TokenRefreshScheduler {
                 deliver: Box::new(on_refresh),
                 buffer,
             }),
+            owners: std::sync::Arc::new(()),
         }
     }
 
@@ -248,7 +251,7 @@ impl TokenRefreshScheduler {
 
 impl Drop for TokenRefreshScheduler {
     fn drop(&mut self) {
-        if std::sync::Arc::strong_count(&self.inner) == 1 {
+        if std::sync::Arc::strong_count(&self.owners) == 1 {
             self.cancel_all();
         }
     }
@@ -344,6 +347,43 @@ mod tests {
             .await
             .unwrap();
         scheduler.cancel("cancelled");
+        unblock.notify_one();
+        tokio::task::yield_now().await;
+        assert_eq!(received.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn dropping_last_scheduler_owner_aborts_inflight_refresh() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        let queried = Arc::new(tokio::sync::Notify::new());
+        let unblock = Arc::new(tokio::sync::Notify::new());
+        let received = Arc::new(AtomicUsize::new(0));
+        let signal = queried.clone();
+        let unblocker = unblock.clone();
+        let delivered = received.clone();
+        let scheduler = TokenRefreshScheduler::new(
+            move || {
+                let signal = signal.clone();
+                let unblocker = unblocker.clone();
+                async move {
+                    signal.notify_one();
+                    unblocker.notified().await;
+                    Ok(Some("token".to_owned()))
+                }
+            },
+            move |_, _| {
+                delivered.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+        let token = format!("x.{}.sig", b64url(&json!({"exp":1})));
+        assert!(scheduler.schedule("session", &token));
+        tokio::time::timeout(std::time::Duration::from_secs(1), queried.notified())
+            .await
+            .unwrap();
+        drop(scheduler);
         unblock.notify_one();
         tokio::task::yield_now().await;
         assert_eq!(received.load(Ordering::SeqCst), 0);
