@@ -1,3 +1,10 @@
+## 2026-10-30：PR #9 原版函数/真实调用链审计及新增闭环
+
+- **对照来源**：用户原始 Claude Code 2.1.88 源码 `bridge/jwtUtils.ts`、`bridge/workSecret.ts`、`cli/transports/*.ts`、`vim/*.ts`、`utils/hooks.ts` 与 `hooks/useVimInput.ts`。
+- **新增行为**：`src/jwt_utils.rs` 增加按会话 token refresh scheduler（提前五分钟刷新、失败最多三次、无可用令牌一分钟重试、非 JWT 不破坏旧定时器、取消与代际隔离），对应异步测试；`src/agent.rs` 与 `src/main.rs` 补齐 asyncRewake 阻断通知在 Agent 查询中和 SDK 空闲时的消费，并对会话保存失败保留消息。
+- **质量修复**：合并 Rustfmt 格式修复到 `02fd52e7`；该 SHA 的 Linux 编译、单元与集成测试、Rustfmt、Clippy、专项行为及 RustSec 门禁已经通过。之后新增 Hook 行为和本次台账更新须等待各自最新 CI 验证。
+- **保留差异**：新传输模块和令牌刷新逻辑仍缺真实自建 Bridge/SDK 远程入口连接，WebSocket / SSE / Hybrid 完整进出方向、网络恢复、终端/SDK 用户体验尚无三级对照证据。上述原路径仅从“未迁移”调整为“部分实现”，**不增加任何“已验收”数量**；Draft 保持不变。
+
 ## 2026-10-30：MCP /mcp 原版批量开关接入真实聊天入口
 
 - **源码依据**：2.1.88 `source/src/commands/mcp/mcp.tsx::call/MCPToggle`；`ide` 不可选择，`all` 启用时仅选 disabled、禁用时仅选非 disabled；命名目标和空选择给出明确结果。

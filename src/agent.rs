@@ -39,6 +39,13 @@ pub(crate) fn wrap_in_system_reminder(text: &str) -> String {
     format!("<system-reminder>\n{text}\n</system-reminder>")
 }
 
+/// Preserve completion order when injecting async Stop-hook wake-up events.
+fn append_rewake_messages(messages: &mut Vec<Message>, pending: &[String]) {
+    for message in pending {
+        messages.push(Message::text("user", wrap_in_system_reminder(message)));
+    }
+}
+
 /// Read the metadata scalars used by the on-disk agent editor. Supports
 /// quoted values and YAML folded/literal descriptions without loading the
 /// agent's executable prompt or leaking it through the SDK.
@@ -2407,15 +2414,10 @@ impl Agent {
             return Ok(0);
         }
         let prior_count = self.session.messages.len();
-        for message in &pending {
-            self.session
-                .messages
-                .push(Message::text("user", wrap_in_system_reminder(message)));
-        }
+        append_rewake_messages(&mut self.session.messages, &pending);
         if let Err(error) = self.session.save(&self.root) {
             self.session.messages.truncate(prior_count);
-            self.pending_rewake_notifications
-                .splice(0..0, pending);
+            self.pending_rewake_notifications.splice(0..0, pending);
             return Err(error);
         }
         Ok(self.session.messages.len() - prior_count)
@@ -5336,6 +5338,25 @@ fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<S
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn async_rewake_notifications_keep_fifo_order_and_model_reminder_envelope() {
+        let mut messages = Vec::new();
+        append_rewake_messages(
+            &mut messages,
+            &["first blocking error".to_owned(), "second blocking error".to_owned()],
+        );
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages[0].visible_text(),
+            wrap_in_system_reminder("first blocking error")
+        );
+        assert_eq!(
+            messages[1].visible_text(),
+            wrap_in_system_reminder("second blocking error")
+        );
+        assert!(messages.iter().all(|message| message.role == "user"));
+    }
+
     use super::*;
 
     #[test]
