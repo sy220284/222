@@ -1,7 +1,7 @@
 //! Session-owned inbound attachments for a configurable remote bridge.
 //! Source semantics: 2.1.88 `src/bridge/inboundAttachments.ts`.
 //! No provider-specific endpoint or implicit network access is retained.
-use futures::{future::join_all, StreamExt};
+use futures::StreamExt;
 use serde_json::{json, Value};
 use std::{
     path::{Path, PathBuf},
@@ -10,6 +10,9 @@ use std::{
 use tokio::{fs, io::AsyncWriteExt};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
+// Bound memory before writing the file: four concurrent 32 MiB downloads at most.
+const MAX_ATTACHMENT_BYTES: usize = 32 * 1024 * 1024;
+const MAX_CONCURRENT_ATTACHMENTS: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attachment {
@@ -82,6 +85,9 @@ async fn download_one(
     root: &Path,
     session: &str,
 ) -> Option<PathBuf> {
+    // The SDK and MCP transport already require TLS for remote credentials.
+    // Inbound bridge attachments must enforce the same rule before any request.
+    crate::config::require_secure_credential_transport(base_url, true).ok()?;
     let mut url = reqwest::Url::parse(base_url).ok()?;
     if !matches!(url.scheme(), "http" | "https") || url.username() != "" || url.password().is_some()
     {
@@ -105,11 +111,16 @@ async fn download_one(
     if response.status() != reqwest::StatusCode::OK {
         return None;
     }
+    if response.content_length().is_some_and(|n| n > MAX_ATTACHMENT_BYTES as u64) {
+        return None;
+    }
     let mut data = Vec::new();
     let mut chunks = response.bytes_stream();
     while let Some(piece) = chunks.next().await {
         let chunk = piece.ok()?;
-        data.extend_from_slice(&chunk);
+        if !append_bounded(&mut data, &chunk, MAX_ATTACHMENT_BYTES) {
+            return None;
+        }
     }
     // The remote bridge cannot use an upload-directory symlink to write
     // outside the current workspace. Validate each parent before creating
@@ -164,6 +175,18 @@ async fn download_one(
     Some(path)
 }
 
+/// Per-chunk check also covers servers that omit or lie about Content-Length.
+fn append_bounded(data: &mut Vec<u8>, chunk: &[u8], limit: usize) -> bool {
+    let Some(next) = data.len().checked_add(chunk.len()) else {
+        return false;
+    };
+    if next > limit || data.try_reserve(chunk.len()).is_err() {
+        return false;
+    }
+    data.extend_from_slice(chunk);
+    true
+}
+
 pub fn prepend_path_refs(content: &Value, prefix: &str) -> Value {
     if prefix.is_empty() {
         return content.clone();
@@ -205,15 +228,22 @@ pub async fn resolve_and_prepend(
     if attachments.is_empty() {
         return content.clone();
     }
-    let client = match reqwest::Client::builder().timeout(TIMEOUT).build() {
+    let client = match reqwest::Client::builder()
+        .timeout(TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+    {
         Ok(client) => client,
         Err(_) => return content.clone(),
     };
-    let results = join_all(
+    // Preserve message attachment order while avoiding unbounded in-flight buffers.
+    let results = futures::stream::iter(
         attachments
             .into_iter()
             .map(|a| download_one(&client, url, token, a, root, session)),
     )
+    .buffered(MAX_CONCURRENT_ATTACHMENTS)
+    .collect::<Vec<_>>()
     .await;
     let paths: Vec<_> = results
         .into_iter()
@@ -237,6 +267,33 @@ mod tests {
         net::TcpListener,
         thread,
     };
+
+    #[test]
+    fn byte_budget_is_atomic_for_unknown_length_streams() {
+        let mut bytes = b"abc".to_vec();
+        assert!(append_bounded(&mut bytes, b"de", 5));
+        assert!(!append_bounded(&mut bytes, b"f", 5));
+        assert_eq!(bytes, b"abcde");
+        assert!(!append_bounded(&mut bytes, b"123456", 5));
+        assert_eq!(bytes, b"abcde");
+    }
+
+    #[tokio::test]
+    async fn remote_cleartext_attachment_credentials_are_rejected_before_network() {
+        let temp = tempfile::tempdir().unwrap();
+        let event = json!({"file_attachments":[{"file_uuid":"test","file_name":"x.txt"}]});
+        let input = json!("keep original request");
+        let result = resolve_and_prepend(
+            &event,
+            &input,
+            temp.path(),
+            "s",
+            Some(("http://example.invalid/bridge", "secret")),
+        )
+        .await;
+        assert_eq!(result, input);
+        assert!(!temp.path().join(".atlas").exists());
+    }
 
     #[test]
     fn rejects_invalid_attachments_without_partial_results() {
