@@ -582,6 +582,7 @@ impl BackgroundTasks {
             "newOffset":from_offset.saturating_add(bytes_read),
             "bytesRead":bytes_read,
             "bytesTotal":total,
+            "output_file":path.to_string_lossy(),
         })
         .to_string())
     }
