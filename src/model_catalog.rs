@@ -10,7 +10,7 @@ use clap::Subcommand;
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::BTreeMap, io, time::Duration};
+use std::{io, time::Duration};
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum ModelAction {
@@ -157,58 +157,128 @@ fn tags_from_metadata(value: &Value) -> Vec<String> {
     tags
 }
 
-pub async fn list_models(profile: &ProviderProfile, key: &str) -> Result<Vec<ListedModel>> {
-    let url = model_url(profile, "models")?;
-    let response = api_client()?.get(url).bearer_auth(key).send().await
-        .context("Model catalog request failed")?;
-    let status = response.status();
-    if !status.is_success() {
-        bail!("{} model catalog returned HTTP {}; use the provider's documented model ID if it does not support /models", profile.id, status)
-    }
-    let bytes = response.bytes().await.context("Read model catalog response")?;
-    if bytes.len() > 2 * 1024 * 1024 {
-        bail!("Model catalog response exceeds 2 MiB");
-    }
-    let body: Value = serde_json::from_slice(&bytes).context("Invalid model catalog JSON")?;
+
+fn parsed_models(body: &Value, kind: &str, output: &mut Vec<ListedModel>) -> Result<()> {
     let items = body.get("data").and_then(Value::as_array)
         .or_else(|| body.get("models").and_then(Value::as_array))
         .context("Model catalog does not contain data or models array")?;
-    let mut models = Vec::new();
     for item in items {
-        let id = item.get("id").or_else(|| item.get("slug")).and_then(Value::as_str);
-        let Some(id) = id.filter(|v| !v.is_empty()) else { continue };
-        if item.get("visibility").and_then(Value::as_str).is_some_and(|v| v != "list") {
+        if item.get("visibility").and_then(Value::as_str).is_some_and(|value| value != "list") {
             continue;
         }
-        models.push(ListedModel {
+        if kind == "gemini" {
+            let available = item.get("supportedGenerationMethods").or_else(|| item.get("supportedActions"))
+                .and_then(Value::as_array);
+            if !available.is_some_and(|values| values.iter().any(|v| v.as_str() == Some("generateContent"))) {
+                continue;
+            }
+        }
+        let id = item.get("id").or_else(|| item.get("slug"))
+            .or_else(|| item.get("name")).and_then(Value::as_str);
+        let Some(id) = id.filter(|id| !id.is_empty()) else { continue };
+        let id = if kind == "gemini" { id.strip_prefix("models/").unwrap_or(id) } else { id };
+        let name = item.get("displayName").or_else(|| item.get("display_name"))
+            .or_else(|| item.get("name")).and_then(Value::as_str).unwrap_or(id);
+        let mut tags = tags_from_metadata(item);
+        if kind == "gemini" {
+            tags.push("文本生成:目录声明".into());
+            if item.pointer("/supportedGenerationMethods").and_then(Value::as_array)
+                .is_some_and(|a| a.iter().any(|v| v.as_str() == Some("generateContent"))) {
+                tags.push("Gemini 原生接口".into());
+            }
+        }
+        output.push(ListedModel {
             id: id.to_owned(),
-            name: item.get("name").or_else(|| item.get("display_name"))
-                .and_then(Value::as_str).unwrap_or(id).to_owned(),
+            name: name.to_owned(),
             context_window: item.get("context_window").or_else(|| item.get("context_length"))
-                .and_then(Value::as_u64),
-            max_output_tokens: item.get("max_output_tokens").and_then(Value::as_u64),
-            tags: tags_from_metadata(item),
+                .or_else(|| item.get("inputTokenLimit")).and_then(Value::as_u64),
+            max_output_tokens: item.get("max_output_tokens")
+                .or_else(|| item.get("outputTokenLimit")).and_then(Value::as_u64),
+            tags,
         });
     }
-    if models.is_empty() { bail!("Model catalog returned no selectable model IDs") }
+    Ok(())
+}
+
+/// Fetch all pages fresh. Never cache an account's authorized model catalog globally.
+pub async fn list_models(profile: &ProviderProfile, key: &str) -> Result<Vec<ListedModel>> {
+    if profile.kind == "chatgpt-plan" {
+        let catalog = crate::chatgpt_plan::model_list().await?;
+        let mut result = Vec::new();
+        parsed_models(&catalog, "chatgpt-plan", &mut result)?;
+        if result.is_empty() { bail!("ChatGPT account has no selectable models") }
+        return Ok(result);
+    }
+    let mut models = Vec::new();
+    let client = api_client()?;
+    let mut page = None::<String>;
+    for _ in 0..100 {
+        let mut url = model_url(profile, "models")?;
+        if profile.kind == "gemini" {
+            url.query_pairs_mut().append_pair("pageSize", "1000");
+            if let Some(value) = &page {
+                url.query_pairs_mut().append_pair("pageToken", value);
+            }
+        } else if page.is_some() {
+            bail!("Unexpected catalog pagination for {} API", profile.id);
+        }
+        let mut get = client.get(url);
+        if profile.kind == "gemini" {
+            get = get.header("x-goog-api-key", key);
+        } else {
+            get = get.bearer_auth(key);
+        }
+        let response = get.send().await.context("Model catalog request failed")?;
+        let status = response.status();
+        if !status.is_success() {
+            bail!("{} model catalog returned HTTP {}; check key permissions and API root URL", profile.id, status)
+        }
+        let bytes = response.bytes().await.context("Read model catalog response")?;
+        if bytes.len() > 4 * 1024 * 1024 { bail!("Model catalog page exceeds 4 MiB") }
+        let body: Value = serde_json::from_slice(&bytes).context("Invalid model catalog JSON")?;
+        parsed_models(&body, &profile.kind, &mut models)?;
+        page = body.get("nextPageToken").and_then(Value::as_str).map(str::to_owned);
+        if page.is_none() { break; }
+    }
+    if page.is_some() { bail!("Model catalog contains more than 100 pages") }
+    if models.is_empty() { bail!("Model catalog returned no selectable inference model IDs") }
     Ok(models)
 }
 
+/// A catalog listing is no substitute for an actual, billable inference request.
 pub async fn probe_model(profile: &ProviderProfile, model: &str, key: &str) -> Result<()> {
-    if model.trim().is_empty() { bail!("Model ID cannot be empty") }
-    let url = model_url(profile, "chat/completions")?;
-    // A successful request confirms availability for this key and model. Small
-    // output limit reduces billable tokens but does not imply the request is free.
-    let mut body = json!({
-        "model":model,
-        "messages":[{"role":"user","content":"Reply OK"}],
-        "max_tokens":32
-    });
-    if profile.id == "deepseek" {
-        body["reasoning_effort"] = json!("none");
+    if model.trim().is_empty() || model.contains('/') && profile.kind != "gemini" {
+        bail!("Invalid model ID");
     }
-    let response = api_client()?.post(url).bearer_auth(key).json(&body)
-        .send().await.context("Model callability probe failed")?;
+    if profile.kind == "chatgpt-plan" {
+        let request = crate::protocol::ModelRequest {
+            model: model.to_owned(),
+            system: "Check model availability".into(),
+            messages: vec![crate::protocol::Message::text("user", "Reply OK")],
+            tools: Vec::new(),
+        };
+        crate::chatgpt_plan::complete(&request, &ModelTuning::default(), None).await?;
+        return Ok(());
+    }
+    let (url, body) = if profile.kind == "gemini" {
+        let id = model.strip_prefix("models/").unwrap_or(model);
+        if id.contains('/') || id.contains(':') { bail!("Invalid Gemini model ID") }
+        (model_url(profile, &format!("models/{id}:generateContent"))?,
+         json!({"contents":[{"role":"user","parts":[{"text":"Reply OK"}]}],
+                "generationConfig":{"maxOutputTokens":32}}))
+    } else {
+        (model_url(profile, "chat/completions")?,
+         json!({"model":model,
+                "messages":[{"role":"user","content":"Reply OK"}],
+                "max_tokens":32}))
+    };
+    let mut post = api_client()?.post(url).json(&body);
+    if profile.kind == "gemini" {
+        post = post.header("x-goog-api-key", key);
+    } else {
+        post = post.bearer_auth(key);
+    }
+    let response = post.send().await.context("Model callability probe failed")?;
     let status = response.status();
     if !status.is_success() {
         bail!("Model '{}' for {} rejected inference with HTTP {}", model, profile.id, status)
@@ -230,7 +300,10 @@ pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
         }
         ModelAction::Discover { brand, key_stdin } => {
             let profile = config.select(Some(brand), None)?;
-            let key = if *key_stdin {
+            let key = if profile.kind == "chatgpt-plan" {
+                if *key_stdin { bail!("ChatGPT plan uses 'chatgpt login' and does not accept an API key") }
+                String::new()
+            } else if *key_stdin {
                 let mut line = String::new();
                 io::stdin().read_line(&mut line)?;
                 line.trim_end().to_owned()
@@ -243,8 +316,8 @@ pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
         }
         ModelAction::Connect { brand } => {
             let profile = config.select(Some(brand), None)?;
-            if profile.kind != "openai-compatible" {
-                bail!("Use API key setup for OpenAI-compatible brands only");
+            if profile.kind == "chatgpt-plan" {
+                bail!("ChatGPT plan uses 'atlas-agent chatgpt login'");
             }
             eprintln!("Enter the API key for {brand} on stdin (the key will be saved in an owner-only local file):");
             let mut key = String::new();
@@ -261,7 +334,11 @@ pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
         }
         ModelAction::Probe { brand, model } | ModelAction::Use { brand, model } => {
             let profile = config.select(Some(brand), None)?;
-            let key = load_api_key(&profile)?.context("Model probe requires API credentials")?;
+            let key = if profile.kind == "chatgpt-plan" {
+                String::new()
+            } else {
+                load_api_key(&profile)?.context("Model probe requires API credentials")?
+            };
             probe_model(&profile, model, &key).await?;
             println!("Verified callable: {brand} / {model}");
             if matches!(action, ModelAction::Use { .. }) {
