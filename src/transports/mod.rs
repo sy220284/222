@@ -71,85 +71,24 @@ pub fn sse_stream_url_for_session(session_url: &str) -> Result<String> {
 /// Resolve which transport a session URL should use (source
 /// `getTransportForUrl`; ws→SSE conversion preserved).
 pub fn get_transport_for_url(url: &str) -> Result<TransportKind> {
-    if is_env_truthy("ATLAS_USE_CCR_V2") {
-        // CCR v2: the session URL becomes an SSE stream URL. Any ws:// or
-        // ws(s) session URL is accepted after scheme conversion.
-        return Ok(TransportKind::Sse);
-    }
-    let lower = url.to_ascii_lowercase();
-    if lower.starts_with("ws://") || lower.starts_with("wss://") {
-        if is_env_truthy("ATLAS_POST_FOR_SESSION_INGRESS_V2") {
-            return Ok(TransportKind::Hybrid);
-        }
-        return Ok(TransportKind::WebSocket);
-    }
-    anyhow::bail!("Unsupported protocol for session URL: {url}")
+    select_transport(
+        url,
+        is_env_truthy("ATLAS_USE_CCR_V2"),
+        is_env_truthy("ATLAS_POST_FOR_SESSION_INGRESS_V2"),
+    )
 }
 
-/// One outbound sink shared by SDK mode: forwards newline-JSON messages to
-/// the chosen transport when configured, otherwise stdout ndjson (default).
-pub enum SdkOutbound {
-    Stdout,
-    Sse(crate::transports::sse::SseTransport, String),
-}
-
-impl SdkOutbound {
-    /// Build from a session URL and env flags; None falls back to stdout.
-    pub fn resolve(transport_url: Option<&str>) -> Result<Self> {
-        let Some(url) = transport_url else {
-            return Ok(Self::Stdout);
-        };
-        match get_transport_for_url(url)? {
-            TransportKind::Sse => {
-                let sse_url = sse_stream_url_for_session(url)?;
-                Ok(Self::Sse(
-                    crate::transports::sse::SseTransport::new(
-                        sse_url.clone(),
-                        Vec::new(),
-                        None,
-                        Arc::new(|| Vec::new()),
-                    ),
-                    crate::transports::sse::convert_sse_url_to_post_url(&sse_url)?,
-                ))
-            }
-            TransportKind::Hybrid | TransportKind::WebSocket => {
-                // WS-family ingress writes POST frames through the hybrid
-                // outbound path; reads arrive on the WS data channel.
-                let sse_url = sse_stream_url_for_session(url)?;
-                Ok(Self::Sse(
-                    crate::transports::sse::SseTransport::new(
-                        sse_url.clone(),
-                        Vec::new(),
-                        None,
-                        Arc::new(|| Vec::new()),
-                    ),
-                    crate::transports::sse::convert_sse_url_to_post_url(&sse_url)?,
-                ))
-            }
-        }
-    }
-
-    /// Emit one stdout message: stdout always (SDK protocol), plus a POST to
-    /// the configured endpoint when a transport is active.
-    pub async fn emit(&self, message: &Value) -> Result<()> {
-        print!("{}", crate::ndjson::stringify_value(message));
-        use std::io::Write;
-        let _ = std::io::stdout().flush();
-        if let Self::Sse(_transport, post_url) = self {
-            let client = reqwest::Client::new();
-            client
-                .post(post_url)
-                .header("Content-Type", "application/json")
-                .body(crate::ndjson::stringify_value(message))
-                .send()
-                .await?
-                .error_for_status()?;
-        }
-        Ok(())
+/// Pure mode selection enables exhaustive tests without mutating process env.
+/// A remote SDK session then constructs and runs the matching live transport.
+fn select_transport(url: &str, use_ccr_v2: bool, post_for_ingress: bool) -> Result<TransportKind> {
+    let parsed = reqwest::Url::parse(url)?;
+    match parsed.scheme() {
+        "ws" | "wss" | "http" | "https" if use_ccr_v2 => Ok(TransportKind::Sse),
+        "ws" | "wss" if post_for_ingress => Ok(TransportKind::Hybrid),
+        "ws" | "wss" => Ok(TransportKind::WebSocket),
+        other => anyhow::bail!("Unsupported protocol for session URL: {other}"),
     }
 }
-
-use std::sync::Arc;
 
 #[cfg(test)]
 mod tests {
@@ -178,6 +117,17 @@ mod tests {
             sse_stream_url_for_session("http://127.0.0.1:9915/sessions/s1/").unwrap(),
             "http://127.0.0.1:9915/sessions/s1/worker/events/stream"
         );
+    }
+
+    #[test]
+    fn source_mode_precedence_and_protocol_errors() {
+        assert_eq!(select_transport("ws://localhost/s", false, false).unwrap(), TransportKind::WebSocket);
+        assert_eq!(select_transport("wss://localhost/s", false, true).unwrap(), TransportKind::Hybrid);
+        assert_eq!(select_transport("wss://localhost/s", true, true).unwrap(), TransportKind::Sse);
+        assert_eq!(select_transport("https://localhost/s", true, false).unwrap(), TransportKind::Sse);
+        assert!(select_transport("https://localhost/s", false, false).is_err());
+        assert!(select_transport("ftp://localhost/s", true, true).is_err());
+        assert!(select_transport("not a url", true, true).is_err());
     }
 
     #[test]
