@@ -978,10 +978,10 @@
 | `src/outputStyles/loadOutputStylesDir.ts` | 99 | 3438 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/plugins/builtinPlugins.ts` | 160 | 4980 | 重写：保持通用行为 | `src/generated_ports/p_2f9a1e26806ee.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/plugins/bundled/index.ts` | 24 | 843 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/query/config.ts` | 47 | 1808 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/query/deps.ts` | 41 | 1445 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/query/config.ts` | 47 | 1808 | 重写：保持通用行为 | `src/query_config.rs` | 部分实现：buildQueryConfig 门快照落地（env 门按仓库中立惯例映射 ATLAS_* 并走 is_env_truthy；streaming tool execution 服务端灰度门在 StreamingToolExecutor 迁移前如实为 false）；快照时序与原版 query() 入口一致，待验收 |
+| `src/query/deps.ts` | 41 | 1445 | 重写：保持通用行为 | `src/agent.rs`（既有注入点） | 部分实现：QueryDeps 注入语义由既有 Provider trait 与 Agent 方法注入等价承载，不新增平行结构；待验收 |
 | `src/query/stopHooks.ts` | 474 | 17290 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移；队友完成时在办任务 TaskCompleted→TeammateIdle 原版顺序及阻断继续已接入真实团队执行链（dd67ffc1、984410a6），待验收 |
-| `src/query/tokenBudget.ts` | 94 | 2320 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/query/tokenBudget.ts` | 94 | 2320 | 重写：保持通用行为 | `src/query_token_budget.rs` | 部分实现：BudgetTracker/checkTokenBudget 逐行还原（0.9 完成阈值、500 双窗口递减判定、Math.round 语义、Intl 千分位续写文案），已接入 agent.rs 主循环完成点（Continue→计数递增与 meta 续写消息，Stop→递减 debug 行）；待验收 |
 | `src/remote/RemoteSessionManager.ts` | 344 | 9320 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/remote/SessionsWebSocket.ts` | 405 | 12505 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/remote/remotePermissionBridge.ts` | 79 | 2378 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
@@ -1892,7 +1892,7 @@
 | `src/utils/timeouts.ts` | 40 | 1410 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/tmuxSocket.ts` | 428 | 13693 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/todo/types.ts` | 19 | 602 | 重写：保持通用行为 | `src/portable_settings_runtime.rs / src/task.rs` | 部分实现：TodoItem content/status/activeForm 实际序列化与输入校验已接无交互 Agent，全部边界待行为验收 |
-| `src/utils/tokenBudget.ts` | 74 | 2675 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
+| `src/utils/tokenBudget.ts` | 74 | 2675 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：解析/定位/续写文案全链接入 agent.rs ask 入口（parse_token_budget + 轮首快照沿用上一轮预算）与主循环完成点；待验收 |
 | `src/utils/tokens.ts` | 262 | 9606 | 重写：保持通用行为 | `src/generated_ports/p_faf3dbb033a1d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/toolErrors.ts` | 133 | 4012 | 重写：保持通用行为 | `src/tool_errors.rs / src/tools.rs` | 部分实现：按原版补充错误头尾保留、Shell 错误字段、JSON 参数校验提示，接入真实工具执行错误输出；原版 Zod Schema 输入与 AbortError 类型传播仍待验收 |
 | `src/utils/toolPool.ts` | 80 | 3136 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |

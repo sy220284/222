@@ -224,6 +224,14 @@ pub struct Agent {
     sdk_append_system_prompt: Option<String>,
     /// None restores provider defaults, zero disables thinking where supported.
     sdk_thinking_budget: Option<u32>,
+    /// `currentTurnTokenBudget` — output-token target for the active turn.
+    turn_budget: Option<f64>,
+    /// `outputTokensAtTurnStart` — cumulative output tokens when the turn began.
+    turn_output_baseline: u64,
+    /// `budgetContinuationCount` — turn continuation counter (bootstrap state).
+    budget_continuation_count: u32,
+    /// Loop-local `BudgetTracker` for the active query turn.
+    budget_tracker: Option<crate::query_token_budget::BudgetTracker>,
     sdk_agent_definitions: std::collections::BTreeMap<String, SdkAgentDefinition>,
     sdk_allowed_tools: Option<std::collections::HashSet<String>>,
     sdk_disallowed_tools: std::collections::HashSet<String>,
@@ -347,6 +355,10 @@ impl Agent {
             sdk_system_prompt: None,
             sdk_append_system_prompt: None,
             sdk_thinking_budget: None,
+            turn_budget: None,
+            turn_output_baseline: 0,
+            budget_continuation_count: 0,
+            budget_tracker: None,
             sdk_agent_definitions: std::collections::BTreeMap::new(),
             sdk_allowed_tools: None,
             sdk_disallowed_tools: std::collections::HashSet::new(),
@@ -2565,6 +2577,15 @@ impl Agent {
     pub fn set_model_prices(&mut self, prices: &[ModelPrice]) {
         self.model_prices = prices.to_vec();
     }
+    /// `snapshotOutputTokensForTurn` — record the cumulative output-token
+    /// baseline, install the turn budget and reset the continuation counter
+    /// (bootstrap/state.ts).
+    fn snapshot_output_tokens_for_turn(&mut self, budget: Option<f64>) {
+        self.turn_output_baseline = self.session.usage.output_tokens;
+        self.turn_budget = budget;
+        self.budget_continuation_count = 0;
+    }
+
     fn record_usage(&mut self, usage: TokenUsage) {
         self.session.usage.accumulate(usage);
         self.session.cost.record(
@@ -3972,6 +3993,15 @@ impl Agent {
         message_id: Option<uuid::Uuid>,
     ) -> Result<String> {
         let ask_started = Instant::now();
+        // Original REPL.tsx parses the raw input for a token budget before
+        // dispatching a turn and snapshotOutputTokensForTurn keeps the
+        // previous budget when the new input carries none. The compile-time
+        // feature gate becomes the established process-level switch.
+        if crate::env_runtime::is_env_truthy(std::env::var("ATLAS_TOKEN_BUDGET").ok().as_deref()) {
+            let parsed_budget = crate::portable_source_utils::parse_token_budget(prompt);
+            self.snapshot_output_tokens_for_turn(parsed_budget.or(self.turn_budget));
+            self.budget_tracker = Some(crate::query_token_budget::create_budget_tracker());
+        }
         // Original sessionStart.ts + cli/print.ts prepend a one-shot
         // initialUserMessage to the headless input stream. Keep it as an
         // actual user turn (not a system instruction or hook attachment).
@@ -4485,6 +4515,70 @@ impl Agent {
                     self.session.save(&self.root)?;
                     continue;
                 }
+                // Original query.ts evaluates the turn token budget after
+                // Stop-hook blocking and before returning 'completed'.
+                // Compute the decision in a scoped borrow of the tracker so
+                // the match arms below can freely mutate session state.
+                let budget_decision = match self.budget_tracker.as_mut() {
+                    Some(tracker) => {
+                        let agent_id = (self.child_depth > 0).then(|| self.session.id.to_string());
+                        let turn_output = self
+                            .session
+                            .usage
+                            .output_tokens
+                            .saturating_sub(self.turn_output_baseline);
+                        Some(crate::query_token_budget::check_token_budget(
+                            tracker,
+                            agent_id.as_deref(),
+                            self.turn_budget,
+                            turn_output as f64,
+                        ))
+                    }
+                    None => None,
+                };
+                if let Some(decision) = budget_decision {
+                    match decision {
+                        crate::query_token_budget::TokenBudgetDecision::Continue(nudge) => {
+                            self.budget_continuation_count =
+                                self.budget_continuation_count.saturating_add(1);
+                            crate::generated_ports::p_5b257a1951fde::log_for_debugging(
+                                &format!(
+                                    "Token budget continuation #{}: {}% ({} / {})",
+                                    nudge.continuation_count,
+                                    nudge.pct,
+                                    crate::query_token_budget::format_token_count(
+                                        nudge.turn_tokens
+                                    ),
+                                    crate::query_token_budget::format_token_count(nudge.budget)
+                                ),
+                                crate::generated_ports::p_5b257a1951fde::DebugLogLevel::debug,
+                            );
+                            self.session
+                                .messages
+                                .push(Message::text("user", nudge.nudge_message));
+                            self.session.save(&self.root)?;
+                            continue;
+                        }
+                        crate::query_token_budget::TokenBudgetDecision::Stop {
+                            completion_event,
+                        } => {
+                            if let Some(event) = completion_event {
+                                if event.diminishing_returns {
+                                    crate::generated_ports::p_5b257a1951fde::log_for_debugging(
+                                        &format!(
+                                            "Token budget early stop: diminishing returns at {}%",
+                                            event.pct
+                                        ),
+                                        crate::generated_ports::p_5b257a1951fde::DebugLogLevel::debug,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                // Original REPL clears the turn budget when a turn finishes
+                // normally (snapshotOutputTokensForTurn(null)).
+                self.snapshot_output_tokens_for_turn(None);
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
                 return Ok(text);
@@ -5113,6 +5207,10 @@ mod tests {
             sdk_system_prompt: None,
             sdk_append_system_prompt: None,
             sdk_thinking_budget: None,
+            turn_budget: None,
+            turn_output_baseline: 0,
+            budget_continuation_count: 0,
+            budget_tracker: None,
             sdk_agent_definitions: std::collections::BTreeMap::new(),
             sdk_allowed_tools: None,
             sdk_disallowed_tools: std::collections::HashSet::new(),
