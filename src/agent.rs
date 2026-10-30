@@ -4185,7 +4185,19 @@ impl Agent {
                     window - window / 4
                 }
             }
-            Err(std::env::VarError::NotPresent) => 25_000,
+            Err(std::env::VarError::NotPresent) => self
+                .profile
+                .tuning
+                .context_window
+                .map(|value| {
+                    let window = value as usize;
+                    if window > 13_000 {
+                        window - 13_000
+                    } else {
+                        window - window / 4
+                    }
+                })
+                .unwrap_or(25_000),
             Err(error) => return Err(error.into()),
         };
         // Match autoCompact.ts: auto-compaction is best-effort, with a
