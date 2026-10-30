@@ -668,7 +668,7 @@
 | `src/components/permissions/utils.ts` | 26 | 660 | 重写：终端 UI／交互 | `src/generated_ports/p_7892b3202fd8a.rs` | 部分实现：完整等价：unary 权限事件 payload 构造（completion_type/event/language_name=none/message_id/platform/hasFeedback 默认 false）与原版元数据形态一致；投递引 unaryLogging 桩，待验收 |
 | `src/components/sandbox/SandboxConfigTab.tsx` | 45 | 16895 | 重写：终端 UI／交互 | `src/generated_ports/p_4096ca3117feb.rs` | 部分实现：完整等价：禁用占位判定+依赖警告可见性纯函数；SandboxManager 与 JSX 归宿主，待验收 |
 | `src/components/sandbox/SandboxDependenciesTab.tsx` | 120 | 17402 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/sandbox/SandboxDoctorSection.tsx` | 46 | 6190 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/sandbox/SandboxDoctorSection.tsx` | 46 | 6190 | 重写：终端 UI／交互 | `src/generated_ports/p_9583089f65539.rs` | 部分实现：完整等价：doctor 可见性决策（平台/设置/双空三重门）与错误/警告分块构造含单测；SandboxManager 与 JSX 归宿主，待验收 |
 | `src/components/sandbox/SandboxOverridesTab.tsx` | 193 | 20473 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/sandbox/SandboxSettings.tsx` | 296 | 29988 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/shell/ExpandShellOutputContext.tsx` | 36 | 3504 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -770,7 +770,7 @@
 | `src/hooks/useBlink.ts` | 35 | 1279 | 重写：终端 UI／交互 | `src/generated_ports/p_c5177f27bae00.rs` | 部分实现：完整等价：BLINK_INTERVAL_MS=600 与同步闪烁推导（偶半周期可见）纯函数含单测；动画帧订阅与失焦暂停归终端运行时宿主，待验收 |
 | `src/hooks/useCanUseTool.tsx` | 204 | 40206 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useCancelRequest.ts` | 277 | 10127 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useChromeExtensionNotification.tsx` | 50 | 6779 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useChromeExtensionNotification.tsx` | 50 | 6779 | 重写：终端 UI／交互 | `src/generated_ports/p_5af7b9ccf8e63.rs` | 部分实现：完整等价：--chrome/--no-chrome argv 优先级解析纯函数含单测；通知本体随厂商扩展面（排除），待验收 |
 | `src/hooks/useClaudeCodeHintRecommendation.tsx` | 129 | 15388 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useClipboardImageHint.ts` | 78 | 2458 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useCommandKeybindings.tsx` | 108 | 11023 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -879,7 +879,7 @@
 | `src/ink/frame.ts` | 125 | 4209 | 重写：终端 UI／交互 | `src/generated_ports/p_f1c981d6e64b5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/get-max-width.ts` | 28 | 1149 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/hit-test.ts` | 131 | 4228 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/hooks/use-animation-frame.ts` | 58 | 1933 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/hooks/use-animation-frame.ts` | 58 | 1933 | 重写：终端 UI／交互 | `src/generated_ports/p_02a4478e8f594.rs` | 部分实现：完整等价：恢复时间语义（暂停冻结+回拨保冻结值）纯函数含单测；共享时钟/keepAlive/DOM ref 契约归 ink 运行时，待验收 |
 | `src/ink/hooks/use-app.ts` | 9 | 251 | 重写：终端 UI／交互 | `src/generated_ports/p_bbc2a036e6a40.rs` | 部分实现：契约记录：useApp 手动退出（unmount）句柄，宿主待验收 |
 | `src/ink/hooks/use-declared-cursor.ts` | 74 | 2996 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-input.ts` | 93 | 3107 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -962,11 +962,11 @@
 | `src/migrations/migrateAutoUpdatesToSettings.ts` | 62 | 1953 | 重写：保持通用行为 | `src/generated_ports/p_fbca9aa4b7085.rs` | 部分实现：完整等价：迁移决策（仅显式用户关闭才迁移、native 保护跳过、幂等早退）纯函数含单测；settings/config 访问器与厂商事件随各自链路接线，待验收 |
 | `src/migrations/migrateBypassPermissionsAcceptedToSettings.ts` | 41 | 1262 | 重写：保持通用行为 | `src/generated_ports/p_8fe3b35097c6f.rs` | 部分实现：完整等价：迁移决策纯函数（未设置早退/未写过才写 settings/幂等）含单测；settings/config 访问器与厂商分析事件（排除）随各自链路接线；待验收 |
 | `src/migrations/migrateEnableAllProjectMcpServersToSettings.ts` | 119 | 3977 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/migrations/migrateFennecToOpus.ts` | 46 | 1372 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/migrations/migrateLegacyOpusToCurrent.ts` | 58 | 1974 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/migrations/migrateFennecToOpus.ts` | 46 | 1372 | 重写：保持通用行为 | `src/generated_ports/p_1c5aeb13e35c9.rs` | 部分实现：完整等价：fennec 别名重映射表（四条含 fast 联动）含全表单测；ant 门与 userSettings 限定随原版；待验收 |
+| `src/migrations/migrateLegacyOpusToCurrent.ts` | 58 | 1974 | 重写：保持通用行为 | `src/generated_ports/p_d472ebaa4eeb0.rs` | 部分实现：完整等价：Opus 4.0/4.1 显式串迁移资格门（remap∧1P∧legacy 串）含四分支单测；通知时间戳与 settings 写入随各自链路，待验收 |
 | `src/migrations/migrateOpusToOpus1m.ts` | 44 | 1347 | 重写：保持通用行为 | `src/generated_ports/p_9c5d3f64a2870.rs` | 部分实现：完整等价：迁移决策纯函数（仅 eligible 且设置恰为 opus 别名才写，Pro/3P/运行时覆盖跳过语义同款）含单测；模型链访问器接线待验收 |
 | `src/migrations/migrateReplBridgeEnabledToRemoteControlAtStartup.ts` | 23 | 1000 | 重写：保持通用行为 | `src/generated_ports/p_72265c8cdc4d6.rs` | 部分实现：完整等价：replBridgeEnabled→remoteControlAtStartup 迁移决策（拷贝+删旧键+幂等+新键已设跳过）含双单测；saveGlobalConfig 随 settings 链，待验收 |
-| `src/migrations/migrateSonnet1mToSonnet45.ts` | 49 | 1582 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/migrations/migrateSonnet1mToSonnet45.ts` | 49 | 1582 | 重写：保持通用行为 | `src/generated_ports/p_2e1b0007c802b.rs` | 部分实现：完整等价：裸 sonnet] 别名钉到显式 4.5 1M 决策纯函数含四分支单测（只动 userSettings 防全局提升）；settings 访问器随 settings 链，待验收 |
 | `src/migrations/migrateSonnet45ToSonnet46.ts` | 68 | 2055 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/resetAutoModeOptInForDefaultOffer.ts` | 52 | 2106 | 重写：保持通用行为 | `src/generated_ports/p_138b407b8bbdb.rs` | 部分实现：完整等价：一次性迁移决策（编译门关早退/仅 enabled 态清 skip/幂等）含四分支单测；settings/config 访问器随各自链路，待验收 |
 | `src/migrations/resetProToOpusDefault.ts` | 52 | 1550 | 重写：保持通用行为 | `src/generated_ports/p_c6c5ea31781a5.rs` | 部分实现：完整等价：迁移资格门（firstParty∧Pro）纯函数含双分支单测；订阅/供应商谓词随各自链路，待验收 |
