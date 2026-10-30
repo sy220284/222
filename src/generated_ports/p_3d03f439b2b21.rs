@@ -158,8 +158,12 @@ pub fn clear_classifier_approvals() {
 mod tests {
     use super::*;
 
+    // The source registry is process-global; tests that clear it must not race.
+    static TEST_SERIAL: Mutex<()> = Mutex::new(());
+
     #[test]
     fn bash_approval_roundtrip_and_kind_isolation() {
+        let _serial = TEST_SERIAL.lock().unwrap();
         clear_classifier_approvals();
         set_classifier_approval("t1", "rule: allow ls");
         assert_eq!(
@@ -174,6 +178,7 @@ mod tests {
 
     #[test]
     fn yolo_approval_roundtrip_and_kind_isolation() {
+        let _serial = TEST_SERIAL.lock().unwrap();
         clear_classifier_approvals();
         set_yolo_classifier_approval("t2", "transcript matched safe read");
         assert_eq!(
@@ -187,6 +192,7 @@ mod tests {
 
     #[test]
     fn checking_lifecycle_and_clear_all() {
+        let _serial = TEST_SERIAL.lock().unwrap();
         clear_classifier_approvals();
         assert!(!is_classifier_checking("t3"));
         set_classifier_checking("t3");
