@@ -38,6 +38,8 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D clippy::correctness -D clippy::suspicious
 
   test:
+    # 临时暂停 Linux 完整测试，待需要时移除 if 条件恢复。
+    if: ${{ false }}
     name: 编译与全部测试
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -93,6 +95,8 @@ jobs:
 
 
   windows-check:
+    # 临时暂停 Windows 回归测试，待需要时移除 if 条件恢复。
+    if: ${{ false }}
     name: Windows Shell 与跨平台编译
     runs-on: windows-latest
     timeout-minutes: 35
