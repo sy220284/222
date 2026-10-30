@@ -13,7 +13,7 @@ pub const FAST_RECURRING_INTERVAL_MS: u64 = 5 * 60 * 1000;
 
 /// Roster entries whose init functions port with their own feature chains.
 pub const HOUSEKEEPING_ROSTER: &[&str] = &[
-    "cleanupNpmCacheForAnthropicPackages",
+    "cleanupNpmCacheForProviderPackages",
     "cleanupOldMessageFilesInBackground",
     "cleanupOldVersionsThrottled",
     "cleanupOldVersions",

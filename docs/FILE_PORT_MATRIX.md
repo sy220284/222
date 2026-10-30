@@ -713,7 +713,7 @@
 | `src/constants/product.ts` | 77 | 2563 | 重写：保持通用行为 | `src/generated_ports/p_9ae508cd79a96.rs`| 部分实现：远程会话环境路由（staging/local 判定 verbatim、本地优先于 staging 的 base URL 决策、cse_ 前缀兼容 shim 重写、会话 URL 构建）；URL 常量按仓库惯例 env 可覆盖+中性默认值，附 5 测试|
 | `src/constants/prompts.ts` | 915 | 54320 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_4573ed881a545.rs` | 部分实现：运行时主 system、来源边界与持续执行原则已实际发给模型；动态条件段落与原版完整指令仍待逐项对照，AST 常量仅供核查 |
 | `src/constants/spinnerVerbs.ts` | 205 | 3453 | 重写：保持通用行为 | `src/generated_ports/p_7763c000d96fd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/constants/system.ts` | 96 | 3859 | 重写：保持通用行为 | `src/generated_ports/p_430f7712d1529.rs` | 部分实现：语义等价：sysprompt 前缀识别决策（SDK preset 变体切换/缺省回退）完整等价含单测；三条品牌前缀串按隐私门禁由 prompt_runtime 运行时注入（差异记录），待验收 |
+| `src/constants/system.ts` | 96 | 3859 | 重写：保持通用行为 | `src/generated_ports/p_430f7712d1529.rs` |部分实现：语义等价：sysprompt 前缀识别决策（SDK preset 变体切换/缺省回退）完整等价含单测；三条品牌前缀串按隐私门禁由 prompt_runtime 运行时注入（差异记录），待验收；原厂品牌标识已采用中性命名，原始字面值差异保留待验收|
 | `src/constants/systemPromptSections.ts` | 69 | 1794 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/constants/toolLimits.ts` | 57 | 2169 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/constants/tools.ts` | 113 | 4690 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1391,7 +1391,7 @@
 | `src/utils/awsAuthStatusManager.ts` | 82 | 2043 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/background/remote/preconditions.ts` | 236 | 7336 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/background/remote/remoteSession.ts` | 99 | 3050 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/backgroundHousekeeping.ts` | 95 | 3213 | 重写：保持通用行为 | `src/generated_ports/p_1af0a0aad0cfe.rs` | 部分实现：完整等价：三档间隔常量（24h/10min/5min）+宿主清单十项（双编译门关闭标注）；初始化函数随各自特性链，待验收 |
+| `src/utils/backgroundHousekeeping.ts` | 95 | 3213 | 重写：保持通用行为 | `src/generated_ports/p_1af0a0aad0cfe.rs` |部分实现：完整等价：三档间隔常量（24h/10min/5min）+宿主清单十项（双编译门关闭标注）；初始化函数随各自特性链，待验收；原厂品牌标识已采用中性命名，原始字面值差异保留待验收|
 | `src/utils/bash/ParsedCommand.ts` | 319 | 9221 | 重写：保持通用行为 | `src/generated_ports/p_46a866ee4d3c1.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/bash/ShellSnapshot.ts` | 583 | 21780 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/ast.ts` | 2680 | 112054 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1674,7 +1674,7 @@
 | `src/utils/permissions/shadowedRuleDetection.ts` | 235 | 8050 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
 | `src/utils/permissions/shellRuleMatching.ts` | 229 | 6409 | 重写：权限判定 | `src/permission_rules.rs` | 部分实现：精确、legacy :* 前缀、通配符及转义星号规则；已对照原版 BashTool 的复合命令授权边界并加入逐段匹配与异常回归；完整 Shell AST、具体适配与大小写行为尚未等价 |
 | `src/utils/permissions/yoloClassifier.ts` | 1496 | 52160 | 重写：权限判定 | `src/tools.rs / src/hooks.rs` | 部分实现，规则与分类未等价 |
-| `src/utils/planModeV2.ts` | 96 | 3051 | 重写：保持通用行为 | `src/generated_ports/p_3abfd5f089cd4.rs` | 部分实现：完整等价：agent 数决策（env 覆盖 1-10 优先/max@20x→3/enterprise 与 team→3/缺省 1）含六分支单测；订阅谓词参数化注入，待验收 |
+| `src/utils/planModeV2.ts` | 96 | 3051 | 重写：保持通用行为 | `src/generated_ports/p_3abfd5f089cd4.rs` |部分实现：完整等价：agent 数决策（env 覆盖 1-10 优先/max@20x→3/enterprise 与 team→3/缺省 1）含六分支单测；订阅谓词参数化注入，待验收；原厂品牌标识已采用中性命名，原始字面值差异保留待验收|
 | `src/utils/plans.ts` | 398 | 12390 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/platform.ts` | 151 | 3801 | 重写：保持通用行为 | `src/generated_ports/p_dbebe9c759444.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/addDirPluginSettings.ts` | 72 | 2320 | 重写：保持通用行为 | `src/generated_ports/p_ec6bb2b819ed0.rs` | 部分实现：完整等价：SETTINGS_FILES 顺序常量+目录内 local 胜/跨目录后序胜合并纯函数含单测；parseSettingsFile 随 settings 链，待验收 |

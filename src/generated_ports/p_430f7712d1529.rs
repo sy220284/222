@@ -11,7 +11,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CliSyspromptPrefix {
     Default,
-    AgentSdkClaudeCodePreset,
+    AgentSdkPreset,
     AgentSdk,
 }
 
@@ -19,7 +19,7 @@ pub enum CliSyspromptPrefix {
 /// variants; everything else falls back to the default.
 pub fn get_cli_sysprompt_prefix(sdk_preset: bool) -> CliSyspromptPrefix {
     if sdk_preset {
-        CliSyspromptPrefix::AgentSdkClaudeCodePreset
+        CliSyspromptPrefix::AgentSdkPreset
     } else {
         CliSyspromptPrefix::Default
     }
@@ -34,7 +34,7 @@ mod tests {
         assert_eq!(get_cli_sysprompt_prefix(false), CliSyspromptPrefix::Default);
         assert_eq!(
             get_cli_sysprompt_prefix(true),
-            CliSyspromptPrefix::AgentSdkClaudeCodePreset
+            CliSyspromptPrefix::AgentSdkPreset
         );
     }
 }

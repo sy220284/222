@@ -28,7 +28,7 @@ pub fn plan_v2_agent_count(
         }
     }
     match (subscription_type, rate_limit_tier) {
-        (Some("max"), Some("default_claude_max_20x")) => 3,
+        (Some("max"), Some("default_max_20x")) => 3,
         (Some("enterprise"), _) | (Some("team"), _) => 3,
         _ => 1,
     }
@@ -41,7 +41,7 @@ mod tests {
     #[test]
     fn tier_mapping_and_env_precedence() {
         assert_eq!(
-            plan_v2_agent_count(None, Some("max"), Some("default_claude_max_20x")),
+            plan_v2_agent_count(None, Some("max"), Some("default_max_20x")),
             3
         );
         assert_eq!(plan_v2_agent_count(None, Some("enterprise"), None), 3);
