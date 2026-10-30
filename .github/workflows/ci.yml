@@ -67,10 +67,18 @@ jobs:
         run: |
           cargo test --locked --bin atlas-agent oversized_json_tool_result_is_bounded_before_body_read
           cargo test --locked --bin atlas-agent streamed_json_tool_result_is_bounded_without_content_length
-      - name: Bridge 队列超限与原子恢复
+      - name: 本地 SDK 队列顺序、通知隔离与取消恢复
         run: |
-          cargo test --locked --bin atlas-agent bridge_queue_rejection_is_atomic_and_recoverable
-          cargo test --locked --bin atlas-agent bridge_queue_message_limit_keeps_previous_batch
+          set -euo pipefail
+          cargo test --locked --bin atlas-agent -- --list > /tmp/available-queue-tests.txt
+          for case in \
+            message_queue::tests::priority_fifo_and_nonmatching_agent_isolation \
+            sdk_queue::tests::background_notifications_cannot_spoof_new_user_commands \
+            query_guard::tests::cancelling_or_forcing_end_invalidates_stale_finally
+          do
+            grep -Fxq "$case: test" /tmp/available-queue-tests.txt
+            cargo test --locked --bin atlas-agent "$case" -- --exact
+          done
       - name: 模型密钥与 Gemini 流式配置
         run: |
           cargo test --locked --bin atlas-agent credentialed_endpoints_require_tls_except_loopback
