@@ -83,7 +83,7 @@ fn cli_initialization_and_model_listing_work_offline() {
         .unwrap();
     assert!(list.status.success());
     let stdout = String::from_utf8(list.stdout).unwrap();
-    assert!(stdout.contains("local (default)"));
+    assert!(stdout.contains("openai (default)"));
     assert!(stdout.contains("gemini"));
 }
 
