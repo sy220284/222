@@ -535,6 +535,11 @@ pub fn render(session: &Session) -> String {
     }
     lines.join("\n")
 }
+/// Propose the source's timestamped export filename before writing any file.
+pub fn suggested_export_filename(session: &Session) -> String {
+    filename(session, None).to_string_lossy().into_owned()
+}
+
 pub fn export(session: &Session, root: &Path, path: Option<&str>) -> Result<PathBuf> {
     let root = root.canonicalize().context("Workspace unavailable")?;
     let requested = filename(session, path);
