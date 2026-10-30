@@ -241,7 +241,7 @@
 | `src/commands/plugin/index.tsx` | 11 | 1337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/plugin/parseArgs.ts` | 104 | 2818 | 重写：保持通用行为 | `src/plugin_commands.rs / src/plugin_manager.rs / src/main.rs` | 部分实现：原版菜单、别名、安装参数、市场动作与完整解析分支已实现；管理命令落地本地插件安装/删除/启停，远程市场和 UI 待补；插件安装入口崩溃残留扫描与安全恢复接入实际 install/manager 独占锁（20d3e46e、c2f96029，待验收）；事务提交日志/全量自动恢复尚缺 |
 | `src/commands/plugin/plugin.tsx` | 7 | 1590 | 重写：保持通用行为 | `src/main.rs / src/plugin_commands.rs / src/plugin_manager.rs` | 部分实现：交互式 /plugin 命令已接通原版子命令解析及真实本地插件管理，修改后刷新当前 Agent Hook/MCP/技能命令目录并显示失败（580c0586，源码已提交待验收）；原版 PluginSettings 全 UI、远程市场、MCPB 和 LSP 动态刷新仍缺；静态生成 JSX 不计完成证据 |
-| `src/commands/plugin/pluginDetailsHelpers.tsx` | 117 | 12424 | 重写：保持通用行为 | `src/generated_ports/p_6c7ca7c1ed900.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/plugin/pluginDetailsHelpers.tsx` | 117 | 12424 | 重写：保持通用行为 | `src/generated_ports/p_6c7ca7c1ed900.rs`| 部分实现：插件详情共享助手——GitHub 仓库提取（source.source==github 取 repo）、范围安装菜单构建（user/project/local 恒有+homepage/github 条件+back 收尾）、选择键提示与 Byline 视图，附 4 测试；InstallablePlugin 为组件域共享类型|
 | `src/commands/plugin/usePagination.ts` | 172 | 4990 | 重写：保持通用行为 | `src/plugin_pagination_source.rs` | 部分实现：滚动窗口、连续选择、页数与状态复刻并增加测试；真实插件 UI 依赖待接通 |
 | `src/commands/pr_comments/index.ts` | 51 | 1848 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/privacy-settings/index.ts` | 15 | 399 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -1365,7 +1365,7 @@
 | `src/utils/ShellCommand.ts` | 466 | 14138 | 重写：保持通用行为 | `src/shell_runtime.rs / src/tools.rs / src/background.rs` | 部分实现：对照原版 tree-kill，前后台 Windows 超时、停止、输出失败使用 taskkill /T /F 清理子进程树，失败明确传播；前台超出预览长度不再提前杀命令且两条输出流共享原版 5GiB 上限（932a5562、d2583409，待验收）；完整输出落盘、前后台自动切换、取消及所有平台进程回收仍未等价（3b48d241、00e588dd、811d93c6、42e70ce7，已提交待验收）；主动 SDK 取消 Unix 前台 Shell：取消时进程组资源守卫清理父子孙进程，防止只关闭父进程（a5307caa，源码已提交待验收）；Windows Job Object、子进程脱组和完整异步通知仍有差异；Windows 用户主动取消增加前台 Shell 进程树 Drop 清理（eac172f3，源码待验收）；脱组进程与跨平台行为仍未完成 |
 | `src/utils/abortController.ts` | 100 | 3364 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/activityManager.ts` | 165 | 4973 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/advisor.ts` | 146 | 5585 | 重写：保持通用行为 | `src/generated_ports/p_f90f0871a04d8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/advisor.ts` | 146 | 5585 | 重写：保持通用行为 | `src/generated_ports/p_f90f0871a04d8.rs`| 部分实现：Advisor 块类型与门禁——AdvisorBlock 双变体 serde tag 分派（server_tool_use/advisor_tool_result）、结果内容三态、isAdvisorBlock 类型守卫、启用门禁三条件链（env 杀开关→一方 beta 资格→实验配置）、用户可配置门控、实验模型对双全才返回、registry 兼容导出，附 4 测试；实验 flag 名按隐私门禁省略|
 | `src/utils/agentContext.ts` | 179 | 6660 | 重写：保持通用行为 | `src/generated_ports/p_9029c5407283f.rs`| 部分实现：AsyncLocalStorage→tokio task_local 等价隔离（并发 agent 不串扰）、双 agent 类型 serde tag 分派（subagent/teammate）、teammate 的 swarmsEnabled 门禁、子代理日志名（built-in 用名/custom 用 user-defined）、invokeRequestId 一次性消费边界语义、env 跨进程约定 ATLAS_AGENT_ID/ATLAS_PARENT_SESSION_ID、registry 兼容导出 isSubagentContext，附 4 测试|
 | `src/utils/agentId.ts` | 100 | 2805 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/agentSwarmsEnabled.ts` | 45 | 1417 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
