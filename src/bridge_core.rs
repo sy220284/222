@@ -9,10 +9,14 @@ use serde_json::{json, Value};
 
 /// A single session owns its pending outbound messages. No process-global queue.
 #[derive(Debug)]
+const MAX_PENDING_BRIDGE_MESSAGES: usize = 16_384;
+const MAX_PENDING_BRIDGE_BYTES: usize = 64 * 1024 * 1024;
+
 pub struct BridgeSession {
     session_id: String,
     active: bool,
     pending: Vec<Value>,
+    pending_bytes: usize,
 }
 
 impl BridgeSession {
@@ -21,6 +25,7 @@ impl BridgeSession {
             session_id,
             active: false,
             pending: Vec::new(),
+            pending_bytes: 0,
         }
     }
 
@@ -46,19 +51,38 @@ impl BridgeSession {
                     .and_then(Value::as_array)
                     .context("bridge_flush_enqueue requires messages array")?;
                 if self.active {
+                    let count = self.pending.len().checked_add(messages.len())
+                        .context("Bridge pending message count overflow")?;
+                    if count > MAX_PENDING_BRIDGE_MESSAGES {
+                        bail!("Bridge message queue full; flush or drain before retrying");
+                    }
+                    // Validate the entire batch before mutating the queue. A rejected
+                    // batch must be retryable without duplicated partial messages.
+                    let mut pending_bytes = self.pending_bytes;
+                    for message in messages {
+                        let message_bytes = serde_json::to_vec(message)?.len();
+                        pending_bytes = pending_bytes.checked_add(message_bytes)
+                            .context("Bridge pending byte count overflow")?;
+                        if pending_bytes > MAX_PENDING_BRIDGE_BYTES {
+                            bail!("Bridge message queue exceeds byte budget; flush before retrying");
+                        }
+                    }
                     self.pending.extend(messages.iter().cloned());
+                    self.pending_bytes = pending_bytes;
                 }
                 Ok(json!({"queued":self.active,"pending_count":self.pending.len()}))
             }
             "bridge_flush_end" => {
                 self.active = false;
                 let messages = std::mem::take(&mut self.pending);
+                self.pending_bytes = 0;
                 Ok(json!({"messages":messages,"pending_count":0,"active":false}))
             }
             "bridge_flush_drop" => {
                 self.active = false;
                 let count = self.pending.len();
                 self.pending.clear();
+                self.pending_bytes = 0;
                 Ok(json!({"dropped":count,"pending_count":0,"active":false}))
             }
             "bridge_flush_deactivate" => {
@@ -122,6 +146,30 @@ pub fn poll_defaults() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bridge_queue_rejection_is_atomic_and_recoverable() {
+        let mut bridge = BridgeSession::new("s".to_owned());
+        bridge.dispatch("bridge_flush_start", &json!({})).unwrap();
+        bridge.dispatch("bridge_flush_enqueue", &json!({"messages":["kept"]})).unwrap();
+        let oversized = "a".repeat(MAX_PENDING_BRIDGE_BYTES);
+        assert!(bridge.dispatch("bridge_flush_enqueue", &json!({"messages":[oversized]})).is_err());
+        assert_eq!(bridge.dispatch("bridge_flush_status", &json!({})).unwrap()["pending_count"], 1);
+        assert_eq!(bridge.dispatch("bridge_flush_end", &json!({})).unwrap()["messages"], json!(["kept"]));
+        assert_eq!(bridge.pending_bytes, 0);
+        bridge.dispatch("bridge_flush_start", &json!({})).unwrap();
+        bridge.dispatch("bridge_flush_enqueue", &json!({"messages":["new"]})).unwrap();
+        assert_eq!(bridge.dispatch("bridge_flush_end", &json!({})).unwrap()["messages"], json!(["new"]));
+    }
+
+    #[test]
+    fn bridge_queue_message_limit_keeps_previous_batch() {
+        let mut bridge = BridgeSession::new("s".to_owned());
+        bridge.dispatch("bridge_flush_start", &json!({})).unwrap();
+        let batch = vec![Value::Null; MAX_PENDING_BRIDGE_MESSAGES + 1];
+        assert!(bridge.dispatch("bridge_flush_enqueue", &json!({"messages":batch})).is_err());
+        assert_eq!(bridge.pending.len(), 0);
+    }
 
     #[test]
     fn flushing_history_preserves_incoming_order_and_only_enqueues_when_active() {

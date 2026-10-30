@@ -80,7 +80,14 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
         .and_then(Value::as_u64)
         .unwrap_or(8)
         .clamp(1, 10);
-    let client = Client::builder().timeout(Duration::from_secs(20)).build()?;
+    crate::config::require_secure_credential_transport(
+        &backend.base_url,
+        backend.kind == "brave" && backend.api_key_env.is_some(),
+    )?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
     let endpoint = Url::parse(&backend.base_url)?;
     if !matches!(endpoint.scheme(), "http" | "https") {
         bail!("Search endpoint must be http(s)")

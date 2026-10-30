@@ -265,6 +265,7 @@ impl Config {
             if !matches!(url.scheme(), "http" | "https") {
                 bail!("Only http(s) endpoints are supported")
             }
+            require_secure_credential_transport(&p.base_url, p.api_key_env.is_some())?;
         }
         let mut server_ids = std::collections::HashSet::new();
         for s in &self.mcp_servers {
@@ -326,6 +327,10 @@ impl Config {
             if !matches!(url.scheme(), "http" | "https") {
                 bail!("Search endpoint requires http(s)");
             }
+            require_secure_credential_transport(
+                &search.base_url,
+                search.kind == "brave" && search.api_key_env.is_some(),
+            )?;
         }
         let mut rate_keys = std::collections::HashSet::new();
         for price in &self.model_prices {
@@ -374,6 +379,21 @@ impl Config {
     }
 }
 
+/// Never send an API credential over cleartext remote HTTP. Provider-neutral
+/// loopback endpoints remain available for local runtimes and development.
+pub(crate) fn require_secure_credential_transport(url: &str, has_credential: bool) -> Result<()> {
+    if !has_credential {
+        return Ok(());
+    }
+    let parsed = reqwest::Url::parse(url)?;
+    if parsed.scheme() == "http"
+        && !matches!(parsed.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+    {
+        bail!("Remote endpoint carrying credentials must use HTTPS");
+    }
+    Ok(())
+}
+
 pub fn canonical_workspace(path: &Path) -> Result<PathBuf> {
     let root = path
         .canonicalize()
@@ -387,6 +407,17 @@ pub fn canonical_workspace(path: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn credentialed_endpoints_require_tls_except_loopback() {
+        for url in ["http://example.com/v1", "http://10.0.0.5:3000/v1", "http://192.168.1.2/v1"] {
+            assert!(require_secure_credential_transport(url, true).is_err(), "{url}");
+            assert!(require_secure_credential_transport(url, false).is_ok(), "{url}");
+        }
+        for url in ["http://localhost:11434/v1", "http://127.0.0.1:11434/v1", "http://[::1]:11434/v1", "https://example.com/v1"] {
+            assert!(require_secure_credential_transport(url, true).is_ok(), "{url}");
+        }
+    }
     #[test]
     fn config_with_utf8_bom_is_parsed_without_loose_json_coercion() {
         let raw = serde_json::to_string(&Config::default()).unwrap();

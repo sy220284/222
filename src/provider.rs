@@ -38,6 +38,10 @@ pub trait ModelProvider: Send + Sync {
 }
 
 pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
+    crate::config::require_secure_credential_transport(
+        &profile.base_url,
+        profile.api_key_env.is_some(),
+    )?;
     let key = match &profile.api_key_env {
         Some(env) => Some(std::env::var(env).with_context(|| {
             format!(
@@ -53,6 +57,8 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
     // non-streaming requests retain their own bounded deadline.
     let client = Client::builder()
         .connect_timeout(Duration::from_secs(30))
+        // Do not follow a TLS-to-HTTP redirect with credentials or tool data.
+        .redirect(reqwest::redirect::Policy::none())
         .build()?;
     match profile.kind.as_str() {
         "openai-compatible" => Ok(Box::new(OpenAiCompatible {
