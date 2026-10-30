@@ -6,6 +6,7 @@ fn every_original_path_is_tracked_once_and_no_partial_work_is_called_complete() 
     let ledger = fs::read_to_string(root.join("docs/FILE_PORT_MATRIX.md")).unwrap();
     let rust_paths = regex::Regex::new(r"src/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.rs").unwrap();
     let mut paths = HashSet::new();
+    let mut excluded_paths = HashSet::new();
     let mut omitted = 0usize;
     let mut tracked = 0usize;
     let mut partial = 0usize;
@@ -25,7 +26,11 @@ fn every_original_path_is_tracked_once_and_no_partial_work_is_called_complete() 
         assert!(!fields[4].is_empty(), "Missing action for {path}");
         assert!(!fields[5].is_empty(), "Missing Rust target for {path}");
         if fields[4].starts_with("排除") {
-            omitted += 1
+            omitted += 1;
+            assert!(
+                excluded_paths.insert(path.trim_matches('`').to_owned()),
+                "Duplicate excluded source path {path}"
+            );
         } else if fields[6].contains("部分实现") || fields[6].contains("部分覆盖") {
             partial += 1;
         } else if fields[6].contains("未迁移") {
@@ -60,7 +65,42 @@ fn every_original_path_is_tracked_once_and_no_partial_work_is_called_complete() 
         tracked, 1906,
         "Original source inventory changed without reconciliation"
     );
-    assert_eq!(omitted, 22, "Explicitly excluded source paths changed");
+    // Verify the exact excluded set rather than a stale hard-coded count:
+    // the frozen original baseline plus individually authorized removals.
+    let baseline: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join("docs/PORT_BASELINE.json")).unwrap(),
+    )
+    .unwrap();
+    let removals: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join("docs/REMOVED_SCOPE.json")).unwrap(),
+    )
+    .unwrap();
+    let original = baseline["statuses"].as_object().unwrap();
+    let mut expected_excluded: HashSet<String> = original
+        .iter()
+        .filter_map(|(path, status)| {
+            (status.as_str() == Some("excluded")).then_some(path.to_owned())
+        })
+        .collect();
+    for item in removals["items"].as_array().unwrap() {
+        let path = item["path"].as_str().expect("Approved removal requires path");
+        assert!(
+            matches!(
+                original.get(path).and_then(serde_json::Value::as_str),
+                Some("partial" | "unported")
+            ),
+            "Removal was already verified or absent from the original baseline: {path}"
+        );
+        assert!(
+            expected_excluded.insert(path.to_owned()),
+            "Duplicate or previously excluded removal: {path}"
+        );
+    }
+    assert_eq!(
+        excluded_paths, expected_excluded,
+        "Source exclusions differ from frozen baseline and approved removal list"
+    );
+    assert_eq!(omitted, expected_excluded.len());
     assert_eq!(
         partial + unported + accepted + omitted,
         tracked,
