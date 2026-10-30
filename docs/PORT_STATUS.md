@@ -1,3 +1,10 @@
+## 2026-10-30：PR #9 SSE 无损流处理与 CCR 恢复失败语义修正
+
+- **原版依据**：2.1.88 `source/src/cli/transports/SSETransport.ts` 采用增量 UTF-8 解码和完整事件保活计时；`ccrClient.ts` 的分页读取在失败耗尽后返回失败，不能把部分数据冒充完整结果。
+- **Rust 修复**：`src/transports/sse.rs` 新增跨 HTTP chunk 的 UTF-8 缓冲、截断/无效字节错误及 45 秒完整帧超时；`src/transports/ccr_client.rs` 修复分页游标转义、超时、网络错误显式传播，初始化不再默默吞下读取错误。
+- **验证**：`02fd52e7` 的五项 CI 通过是旧版基线。后续 `be797091` 与本轮提交的新功能及测试必须依据当前 PR HEAD 的全量 Linux、Windows、Rustfmt、Clippy、专项、安全 CI 重新判断；未在当前 HEAD 全绿前继续保持 Draft。
+- **剩余差异**：远程真实生产入口和原版完整 Worker 初始化、令牌生命周期仍待闭环，迁移台账维持“部分实现”，不升级“已验收”。
+
 ## 2026-10-30：PR #9 原版函数/真实调用链审计及新增闭环
 
 - **对照来源**：用户原始 Claude Code 2.1.88 源码 `bridge/jwtUtils.ts`、`bridge/workSecret.ts`、`cli/transports/*.ts`、`vim/*.ts`、`utils/hooks.ts` 与 `hooks/useVimInput.ts`。

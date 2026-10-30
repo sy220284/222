@@ -5343,7 +5343,10 @@ mod tests {
         let mut messages = Vec::new();
         append_rewake_messages(
             &mut messages,
-            &["first blocking error".to_owned(), "second blocking error".to_owned()],
+            &[
+                "first blocking error".to_owned(),
+                "second blocking error".to_owned(),
+            ],
         );
         assert_eq!(messages.len(), 2);
         assert_eq!(

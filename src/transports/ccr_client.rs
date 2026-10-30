@@ -548,13 +548,14 @@ impl CcrClient {
     }
 
     fn internal_events_path(&self, limit: usize, cursor: Option<&str>) -> Result<String> {
-        let mut url = reqwest::Url::parse(&format!(
-            "{}/worker/internal-events",
-            self.session_base_url
-        ))?;
+        let mut url =
+            reqwest::Url::parse(&format!("{}/worker/internal-events", self.session_base_url))?;
         {
             let mut pairs = url.query_pairs_mut();
-            pairs.append_pair("limit", &limit.min(MAX_INTERNAL_EVENTS_PER_PAGE).to_string());
+            pairs.append_pair(
+                "limit",
+                &limit.min(MAX_INTERNAL_EVENTS_PER_PAGE).to_string(),
+            );
             if let Some(cursor) = cursor {
                 pairs.append_pair("cursor", cursor);
             }
@@ -882,8 +883,13 @@ mod tests {
         let cursor = "page/1?start=二&more=two words";
         let path = client.internal_events_path(100, Some(cursor)).unwrap();
         let url = reqwest::Url::parse(&format!("http://127.0.0.1:9{path}")).unwrap();
-        let params = url.query_pairs().collect::<std::collections::HashMap<_, _>>();
-        assert_eq!(params.get("cursor").map(|value| value.as_ref()), Some(cursor));
+        let params = url
+            .query_pairs()
+            .collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(
+            params.get("cursor").map(|value| value.as_ref()),
+            Some(cursor)
+        );
         assert_eq!(params.get("limit").map(|value| value.as_ref()), Some("100"));
         client.close();
     }
@@ -895,7 +901,9 @@ mod tests {
             .read_internal_events_with_retry_limit(100, None, 1)
             .await
             .expect_err("unreachable ingress must fail recovery");
-        assert!(error.to_string().contains("recovery failed after 1 attempts"));
+        assert!(error
+            .to_string()
+            .contains("recovery failed after 1 attempts"));
         client.close();
     }
 

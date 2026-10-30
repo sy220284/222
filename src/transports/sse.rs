@@ -37,11 +37,7 @@ pub struct SseFrame {
 
 /// Decode a byte stream incrementally, preserving UTF-8 characters that
 /// span network chunks. A lossy conversion per HTTP chunk corrupts CJK text.
-fn append_utf8_chunk(
-    output: &mut String,
-    incomplete: &mut Vec<u8>,
-    chunk: &[u8],
-) -> Result<()> {
+fn append_utf8_chunk(output: &mut String, incomplete: &mut Vec<u8>, chunk: &[u8]) -> Result<()> {
     incomplete.extend_from_slice(chunk);
     match std::str::from_utf8(incomplete) {
         Ok(text) => {

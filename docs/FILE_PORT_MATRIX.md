@@ -95,11 +95,11 @@
 | `src/cli/remoteIO.ts` | 256 | 9946 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/structuredIO.ts` | 860 | 28720 | 重写：保持通用行为 | `src/main.rs / src/agent.rs / src/sse.rs` | 部分实现：NDJSON SDK 多轮、事件和实时文本增量；控制请求体系未全等；SDK 本地控制包络初始化/状态/取消回环，其他协议仍未全等 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；多模态 UI/非图片块仍未等价|
 | `src/cli/transports/HybridTransport.ts` | 283 | 10883 | 重写：保持通用行为 | `src/transports/hybrid.rs` | 部分实现：WS 读取/POST 上传、合批/重试、100ms 流事件缓冲已有代码与单元测试；SDK/REPL 生产接入、断线恢复、排队交付与关闭回归待验收 |
-| `src/cli/transports/SSETransport.ts` | 712 | 23758 | 重写：保持通用行为 | `src/transports/sse.rs` | 部分实现：SSE 帧、HTTP 上传、重连及序号处理已有代码；字节分块 UTF-8、实际网络断线、SDK 读取消费链和关闭语义待验收 |
+| `src/cli/transports/SSETransport.ts` | 712 | 23758 | 重写：保持通用行为 | `src/transports/sse.rs` | 部分实现：已补 SSE 分块 UTF-8 无损解码、错误字节/不完整尾部检测、45 秒无完整帧超时、重连与游标读取，中文单字节分块单测已提交；真实服务网络回归与 SDK/Bridge 生产入口仍待对照验收 |
 | `src/cli/transports/SerialBatchEventUploader.ts` | 276 | 9089 | 重写：保持通用行为 | `src/transports/serial_batch_event_uploader.rs` | 部分实现：批量队列、退避、背压和失败计数已有测试；真实请求送达与并发关闭、重试下的原版行为仍待验收 |
 | `src/cli/transports/WebSocketTransport.ts` | 801 | 28195 | 重写：保持通用行为 | `src/transports/web_socket.rs` | 部分实现：WS/WSS、RFC6455 握手校验、分片组装及重连已有实现；SDK/REPL 实际收发、断线重放/权限隔离与 TLS 网络回归待验收 |
 | `src/cli/transports/WorkerStateUploader.ts` | 132 | 3879 | 重写：保持通用行为 | `src/transports/worker_state_uploader.rs` | 部分实现：状态补丁合并和失败重试已有实现与测试；远程 Worker 状态生产链、关闭与竞态待验收 |
-| `src/cli/transports/ccrClient.ts` | 999 | 33775 | 重写：保持通用行为 | `src/transports/ccr_client.rs / src/generated_ports/p_03ce73c80da6a.rs` | 部分实现：Worker epoch、心跳、事件上传、分页恢复逻辑已有 Rust；初始 Worker 所有权、错误/重连/恢复与 SDK/Bridge 真实调用链待验收 |
+| `src/cli/transports/ccrClient.ts` | 999 | 33775 | 重写：保持通用行为 | `src/transports/ccr_client.rs / src/generated_ports/p_03ce73c80da6a.rs` | 部分实现：Worker/HTTP 上传、事件合批、分页游标 URL 转义、30 秒 GET/10 秒写入超时及恢复失败明确传播已提交并有针对性测试；原版初始化 Worker epoch/同步 PUT/心跳/状态恢复与 SDK/Bridge 实际调用链仍未等价 |
 | `src/cli/transports/transportUtils.ts` | 46 | 1767 | 重写：保持通用行为 | `src/transports/mod.rs` | 部分实现：按环境配置选择 SSE/Hybrid/WebSocket 的路由已有 Rust；SdkOutbound 未使用完整读写协议且尚未进入真实 SDK 调用链，未验收 |
 | `src/cli/update.ts` | 423 | 14487 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/add-dir/add-dir.tsx` | 126 | 18017 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
