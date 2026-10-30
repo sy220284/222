@@ -255,14 +255,23 @@ pub async fn probe_model(profile: &ProviderProfile, model: &str, key: &str) -> R
     if model.trim().is_empty() || model.contains('/') && profile.kind != "gemini" {
         bail!("Invalid model ID");
     }
+    let request = crate::protocol::ModelRequest {
+        model: model.to_owned(),
+        system: "Check model availability".into(),
+        messages: vec![crate::protocol::Message::text("user", "Reply OK")],
+        tools: Vec::new(),
+    };
     if profile.kind == "chatgpt-plan" {
-        let request = crate::protocol::ModelRequest {
-            model: model.to_owned(),
-            system: "Check model availability".into(),
-            messages: vec![crate::protocol::Message::text("user", "Reply OK")],
-            tools: Vec::new(),
-        };
         crate::chatgpt_plan::complete(&request, &ModelTuning::default(), None).await?;
+        return Ok(());
+    }
+    if profile.kind == "openai-responses"
+        || (profile.id == "openai"
+            && profile.base_url.trim_end_matches('/') == "https://api.openai.com/v1"
+            && model.starts_with("gpt-6")) {
+        crate::chatgpt_plan::complete_api(
+            &request, &ModelTuning::default(), None, key, None
+        ).await?;
         return Ok(());
     }
     let (url, body) = if profile.kind == "gemini" {
@@ -368,6 +377,11 @@ async fn interactive_setup(config: &mut Config, requested: Option<&str>) -> Resu
     {
         let selected = profile_mut(config, &brand)?;
         selected.model = model.id.clone();
+        if brand == "openai"
+            && selected.base_url.trim_end_matches('/') == "https://api.openai.com/v1"
+            && model.id.starts_with("gpt-6") {
+            selected.kind = "openai-responses".into();
+        }
         // The live provider catalog owns the actual advertised context size.
         // Selecting a different model replaces stale automatic context metadata.
         selected.tuning.context_window = model.context_window
@@ -451,6 +465,11 @@ pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
                 };
                 let selected = profile_mut(config, brand)?;
                 selected.model = model.clone();
+                if brand == "openai"
+                    && selected.base_url.trim_end_matches('/') == "https://api.openai.com/v1"
+                    && model.starts_with("gpt-6") {
+                    selected.kind = "openai-responses".into();
+                }
                 if selected.model != profile.model {
                     selected.tuning.context_window = context;
                     if selected.tuning.max_output_tokens
