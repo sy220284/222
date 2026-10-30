@@ -561,46 +561,49 @@ pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
     Ok(())
 }
 
-fn type_matches(path: &Path, kind: &str) -> bool {
-    let extension = path.extension().and_then(|v| v.to_str()).unwrap_or("");
-    match kind {
-        "rust" | "rs" => extension == "rs",
-        "js" => matches!(extension, "js" | "jsx" | "mjs" | "cjs" | "vue"),
-        "ts" => matches!(extension, "ts" | "tsx" | "mts" | "cts"),
-        "py" | "python" => matches!(extension, "py" | "pyi"),
-        "json" => matches!(extension, "json" | "sarif")
-            || path.file_name().and_then(|name| name.to_str()) == Some("composer.lock"),
-        "md" => matches!(extension, "markdown" | "md" | "mdown" | "mdwn" | "mdx" | "mkd" | "mkdn"),
-        "go" => extension == "go",
-        "java" => extension == "java",
-        "cpp" | "c++" => matches!(
-            extension,
-            "cpp" | "cc" | "cxx" | "c++" | "hpp" | "hh" | "hxx" | "h"
-        ),
-        "c" => matches!(extension, "c" | "h"),
-        "yaml" => matches!(extension, "yaml" | "yml"),
-        "html" => matches!(extension, "html" | "htm"),
-        "css" => matches!(extension, "css" | "scss" | "sass" | "less"),
-        "sh" | "shell" => matches!(extension, "sh" | "bash" | "zsh" | "fish"),
-        "toml" => extension == "toml",
-        "xml" => matches!(extension, "xml" | "xsl" | "xslt" | "svg"),
-        "web" => matches!(
-            extension,
-            "html"
-                | "htm"
-                | "css"
-                | "scss"
-                | "sass"
-                | "less"
-                | "js"
-                | "jsx"
-                | "mjs"
-                | "cjs"
-                | "ts"
-                | "tsx"
-        ),
-        other => extension == other,
-    }
+
+fn type_matches(path: &Path, kind: &str) -> Result<bool> {
+    use std::{collections::HashMap, process::Command, sync::OnceLock};
+    static TYPES: OnceLock<Result<HashMap<String, Vec<GlobMatcher>>, String>> = OnceLock::new();
+    let types = TYPES.get_or_init(|| {
+        // The original GrepTool delegates --type to ripgrep. Read the
+        // installed ripgrep definitions once, including special filenames.
+        let output = Command::new("rg").arg("--type-list").output()
+            .map_err(|error| format!("Cannot load ripgrep file types: {error}"))?;
+        if !output.status.success() {
+            return Err(format!("ripgrep --type-list failed: {}",
+                String::from_utf8_lossy(&output.stderr)));
+        }
+        let text = String::from_utf8(output.stdout)
+            .map_err(|error| format!("Invalid ripgrep type list: {error}"))?;
+        let mut types = HashMap::new();
+        for entry in text.lines() {
+            let (name, globs) = entry.split_once(": ")
+                .ok_or_else(|| format!("Invalid ripgrep type entry: {entry}"))?;
+            let mut matchers = Vec::new();
+            for pattern in globs.split(", ") {
+                let matcher = Glob::new(pattern)
+                    .map_err(|error| format!("Invalid ripgrep type pattern for {name}: {error}"))?
+                    .compile_matcher();
+                matchers.push(matcher);
+            }
+            types.insert(name.to_owned(), matchers);
+        }
+        Ok(types)
+    });
+    let types = types.as_ref().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let alias = match kind {
+        "rs" => "rust",
+        "python" => "py",
+        "shell" => "sh",
+        "c++" => "cpp",
+        other => other,
+    };
+    let matchers = types.get(alias)
+        .with_context(|| format!("Unknown ripgrep file type: {kind}"))?;
+    let name = path.file_name().context("Search file has no filename")?;
+    Ok(matchers.iter().any(|matcher|
+        matcher.is_match(path) || matcher.is_match(Path::new(name))))
 }
 
 pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
@@ -858,7 +861,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
         // not a whole-file size cap. Large log/source files still need
         // to be searched for matches.
         if let Some(kind) = kind {
-            if !type_matches(&path, kind) {
+            if !type_matches(&path, kind)? {
                 continue;
             }
         }
@@ -1028,7 +1031,7 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
 pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"glob_files",
-            "description":"Find up to 100 paths matching a wildcard glob; returns newest first and indicates truncation.",
+            "description":"Find up to 100 paths matching a wildcard glob; returns oldest first and indicates truncation.",
             "parameters":{"type":"object","properties":{
                 "pattern":{"type":"string"},"path":{"type":"string"}
             },"required":["pattern"]}}}),
@@ -1048,6 +1051,16 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn grep_uses_ripgrep_file_types_for_special_file_names() {
+        assert!(type_matches(Path::new("project/Makefile"), "make").unwrap());
+        assert!(type_matches(Path::new("project/CMakeLists.txt"), "cmake").unwrap());
+        assert!(type_matches(Path::new("project/Dockerfile"), "docker").unwrap());
+        assert!(type_matches(Path::new("project/main.rs"), "rust").unwrap());
+        assert!(!type_matches(Path::new("project/main.ts"), "rust").unwrap());
+        assert!(type_matches(Path::new("project/main.foo"), "invalid_type_222").is_err());
+    }
     #[test]
     fn grep_respects_nested_ripgrep_ignore_files_and_override_priority() {
         let root = tempfile::tempdir().unwrap();
