@@ -394,13 +394,13 @@ mod tests {
     fn word_motions_follow_vim_semantics() {
         let text = "foo bar-baz qux";
         assert_eq!(cursor(text, 0).next_vim_word().offset, 4);
-        assert_eq!(cursor(text, 4).next_vim_word().offset, 8);
+        assert_eq!(cursor(text, 4).next_vim_word().offset, 7);
         // b goes back to word start
         assert_eq!(cursor(text, 5).prev_vim_word().offset, 4);
         assert_eq!(cursor(text, 8).prev_vim_word().offset, 4);
         // e lands on last char of the word
         assert_eq!(cursor(text, 4).end_of_vim_word().offset, 6);
-        assert_eq!(cursor(text, 4).end_of_vim_word().right().offset, 8);
+        assert_eq!(cursor(text, 4).end_of_vim_word().right().offset, 7);
         // CJK counts as word characters
         let cjk = "你好 world";
         assert_eq!(cursor(cjk, 0).next_vim_word().offset, 7);
@@ -432,7 +432,7 @@ mod tests {
         let text = "a1b2c3d4";
         assert_eq!(
             cursor(text, 0).find_character('3', FindType::FForward, 1),
-            Some(6)
+            Some(5)
         );
         assert_eq!(
             cursor(text, 6).find_character('a', FindType::FBackward, 1),
@@ -441,7 +441,7 @@ mod tests {
         // t stops one before
         assert_eq!(
             cursor(text, 0).find_character('3', FindType::TTill, 1),
-            Some(5)
+            Some(4)
         );
         // T stops one after (moving backwards)
         assert_eq!(

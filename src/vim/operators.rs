@@ -189,6 +189,7 @@ pub fn execute_operator_find(
         .right()
         .offset;
     apply_operator(ctx, op, from, to, false);
+    ctx.set_last_find(find_type, target_char);
     ctx.record_change(RecordedChange::OperatorFind {
         op,
         find: find_type,
@@ -546,13 +547,21 @@ pub fn execute_operator_text_obj(
 
 /// `executeOperatorG`: operator to end of file (linewise).
 pub fn execute_operator_g(ctx: &mut VimCtx, op: Operator, count: usize) {
-    let end_cursor = VimCursor::new(&ctx.text, ctx.text.len());
-    let (from, _to, _) = get_operator_range(ctx.offset, &ctx.text, &end_cursor, "G", op, count);
-    apply_operator(ctx, op, from, ctx.text.len(), true);
+    let target = if count <= 1 {
+        ctx.cursor().start_of_last_line()
+    } else {
+        ctx.cursor().go_to_line(count)
+    };
+    if target.offset == ctx.offset {
+        return;
+    }
+    let (from, to, linewise) =
+        get_operator_range(ctx.offset, &ctx.text, &target, "G", op, count);
+    apply_operator(ctx, op, from, to, linewise);
     ctx.record_change(RecordedChange::Operator {
         op,
         motion: "G".into(),
-        count: count.max(1),
+        count,
     });
 }
 

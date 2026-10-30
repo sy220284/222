@@ -38,12 +38,15 @@ pub struct SseFrame {
 /// Parse SSE frames delimited by double newlines; return the leftover
 /// partial frame (source `parseSSEFrames`).
 pub fn parse_sse_frames(buffer: &str) -> (Vec<SseFrame>, String) {
+    // Normalize CRLF event delimiters, retaining incomplete trailing frames
+    // so TCP chunks may split a CRLF pair without losing an event.
+    let normalized = buffer.replace("\r\n", "\n");
     let mut frames = Vec::new();
     let mut pos = 0;
-    let bytes = buffer.as_bytes();
+    let bytes = normalized.as_bytes();
     while let Some(index) = find_double_newline(&bytes[pos..]) {
         let end = pos + index;
-        let raw = &buffer[pos..end];
+        let raw = &normalized[pos..end];
         pos = end + 2;
         if raw.trim().is_empty() {
             continue;
@@ -89,7 +92,7 @@ pub fn parse_sse_frames(buffer: &str) -> (Vec<SseFrame>, String) {
         frame.data = data_lines.join("\n");
         frames.push(frame);
     }
-    (frames, buffer[pos..].to_string())
+    (frames, normalized[pos..].to_string())
 }
 
 fn find_double_newline(bytes: &[u8]) -> Option<usize> {

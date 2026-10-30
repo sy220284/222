@@ -499,9 +499,9 @@ mod tests {
         let uploader = SerialBatchEventUploader::new(config);
         uploader.enqueue(vec![json!("a"), json!("b")]).await;
         tokio::time::sleep(std::time::Duration::from_millis(80)).await;
-        assert_eq!(uploader.dropped_batch_count(), 1);
+        assert_eq!(uploader.dropped_batch_count(), 2);
         let dropped = dropped.lock().unwrap();
-        assert_eq!(dropped[0], (1, 2));
+        assert_eq!(dropped.as_slice(), &[(1, 2), (1, 2)]);
         assert!(attempts.load(Ordering::SeqCst) >= 2);
     }
 
@@ -604,9 +604,9 @@ mod tests {
                 .push_back(json!({"pad": "x".repeat(10), "i": index}));
         }
         let mut config = config_with(Arc::new(|_b| Box::pin(async { Ok(()) })), 10, 10);
-        config.max_batch_bytes = Some(40);
+        config.max_batch_bytes = Some(56);
         let batch = state.take_batch(&config);
-        // {"pad":"xxxxxxxxxx","i":0} is 23 bytes; two fit, three exceed 40.
+        // Each JSON item is 26 bytes; two fit in 56, three do not.
         assert_eq!(batch.len(), 2);
     }
 

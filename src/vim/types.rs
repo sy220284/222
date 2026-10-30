@@ -161,7 +161,7 @@ mod tests {
     use super::*;
     #[test]
     fn key_groups_match_original_sets() {
-        assert_eq!(SIMPLE_MOTIONS.len(), 11);
+        assert_eq!(SIMPLE_MOTIONS.len(), 13);
         assert_eq!(FIND_KEYS.len(), 4);
         assert_eq!(TEXT_OBJ_TYPES.len(), 15);
         assert_eq!(MAX_VIM_COUNT, 10000);

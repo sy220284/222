@@ -33,7 +33,8 @@ pub fn convert_ws_url_to_post_url(ws_url: &str) -> Result<String> {
         Some(index) => (&rest[..index], &rest[index..]),
         None => (rest, "/"),
     };
-    let mut path = tail.replacen("/ws/", "/session/", 1);
+    let (path_part, query) = tail.split_once('?').map_or((tail, ""), |(p, q)| (p, q));
+    let mut path = path_part.replacen("/ws/", "/session/", 1);
     if !path.ends_with("/events") {
         if path.ends_with('/') {
             path.push_str("events");
@@ -41,7 +42,8 @@ pub fn convert_ws_url_to_post_url(ws_url: &str) -> Result<String> {
             path.push_str("/events");
         }
     }
-    Ok(format!("{scheme}//{authority}{path}"))
+    let suffix = if query.is_empty() { String::new() } else { format!("?{query}") };
+    Ok(format!("{scheme}//{authority}{path}{suffix}"))
 }
 
 pub type HybridAuth = Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>;

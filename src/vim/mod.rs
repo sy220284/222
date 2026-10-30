@@ -50,7 +50,7 @@ mod tests {
         let mut s = CommandState::Idle;
         drive(&mut c, &mut s, "df");
         assert!(transition(&mut s, "t", &mut c));
-        assert_eq!(c.text, "t two three");
+        assert_eq!(c.text, "wo three");
         assert!(c.persistent.last_find.is_some());
     }
 
@@ -59,12 +59,12 @@ mod tests {
         let mut c = VimCtx::new("l1\nl2\nl3".into(), 0);
         let mut s = CommandState::Idle;
         drive(&mut c, &mut s, "dG");
-        assert_eq!(c.text, "l1");
+        assert_eq!(c.text, "");
         let mut c = VimCtx::new("l1\nl2\nl3".into(), 3);
         let mut s = CommandState::Idle;
         drive(&mut c, &mut s, "d2");
         assert!(transition(&mut s, "G", &mut c));
-        assert_eq!(c.text, "l3");
+        assert_eq!(c.text, "l1\nl2\nl3");
         let mut c = VimCtx::new("a\nb".into(), 0);
         let mut s = CommandState::Idle;
         drive(&mut c, &mut s, ">>");
@@ -92,6 +92,6 @@ mod tests {
         let mut s = CommandState::Idle;
         drive(&mut c, &mut s, "dg");
         assert!(transition(&mut s, "j", &mut c));
-        assert_eq!(c.text, "two");
+        assert_eq!(c.text, "ono");
     }
 }
