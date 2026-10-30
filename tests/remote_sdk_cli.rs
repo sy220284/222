@@ -122,7 +122,8 @@ fn remote_sdk_process_handles_initialize_and_shutdown_over_real_websocket() {
         let headers = read_headers(&mut peer);
         assert!(headers.contains("Authorization: Bearer test-local-token"));
         assert!(headers.contains(&format!("X-Session-Id: {session}")));
-        let key = headers.lines()
+        let key = headers
+            .lines()
             .find_map(|line| line.strip_prefix("Sec-WebSocket-Key: "))
             .unwrap();
         let reply = format!(
