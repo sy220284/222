@@ -222,11 +222,20 @@ impl StreamingExecutor {
     pub fn add_tool(&mut self, call: ToolCall) {
         let safe = concurrency_safe(&call.function.name);
         let handled = executor_handled(&call.function.name);
+        // Agent-only tools cannot run in the streaming executor. Preserve
+        // their order with every later tool by deferring the entire suffix.
+        let deferred = !handled || self.tools.iter().any(|tool| tool.deferred);
+        // An exclusive tool can be waiting behind an in-flight tool. A later
+        // read-only call must not execute ahead of that queued barrier.
+        let earlier_queued = self
+            .tools
+            .iter()
+            .any(|tool| tool.status == ToolStatus::Queued && !tool.deferred);
         let index = self.tools.len();
         self.tools.push(Tracked {
             call,
             status: ToolStatus::Queued,
-            deferred: !handled,
+            deferred,
             outcome: None,
             join: None,
         });
@@ -235,7 +244,7 @@ impl StreamingExecutor {
                 index,
                 "ERROR: Streaming fallback - tool execution discarded",
             );
-        } else if handled && self.can_execute(safe) {
+        } else if !deferred && !earlier_queued && self.can_execute(safe) {
             self.start(index);
         }
     }
@@ -596,6 +605,43 @@ mod tests {
             outcome: None,
             join: Some(task),
         }
+    }
+
+    #[tokio::test]
+    async fn queued_exclusive_tool_blocks_later_read_only_calls() {
+        let mut executor = StreamingExecutor::new(deps());
+        let earlier = call("run_command", "first");
+        executor
+            .tools
+            .push(executing(earlier.clone(), simulated(earlier, 150, false)));
+        executor.add_tool(call("run_command", "exclusive_queued"));
+        executor.add_tool(call("read_file", "later_read"));
+        assert_eq!(executor.tools.len(), 3);
+        assert_eq!(executor.tools[1].status, ToolStatus::Queued);
+        assert_eq!(executor.tools[2].status, ToolStatus::Queued);
+        assert!(executor.tools[2].join.is_none());
+        let outcomes = timeout(Duration::from_secs(3), executor.drain())
+            .await
+            .expect("all queued calls should terminate");
+        assert_eq!(
+            outcomes.iter().map(|o| o.call.id.as_str()).collect::<Vec<_>>(),
+            ["first", "exclusive_queued", "later_read"]
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_only_dispatch_defers_all_later_calls_in_original_order() {
+        let mut executor = StreamingExecutor::new(deps());
+        executor.add_tool(call("agent", "agent_first"));
+        executor.add_tool(call("write_file", "write_second"));
+        executor.add_tool(call("read_file", "read_third"));
+        assert_eq!(executor.tools.len(), 3);
+        assert!(executor.tools.iter().all(|tool| tool.deferred));
+        assert_eq!(
+            executor.deferred_tools().iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            ["agent_first", "write_second", "read_third"]
+        );
+        assert!(executor.drain().await.is_empty());
     }
 
     #[tokio::test]
