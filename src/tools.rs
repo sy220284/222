@@ -135,17 +135,39 @@ fn model_task_result(output: String) -> String {
             .map(|content| (content.to_owned(), true))
     };
     if let Some((content, nested)) = content {
-        let preview: String = content.chars().take(12_000).collect();
         if nested {
-            value["task"]["output"] = json!(preview);
             value["task"]["contentTruncated"] = json!(true);
         } else {
-            value["content"] = json!(preview);
             value["contentTruncated"] = json!(true);
         }
         value["outputHint"] = json!(
             "Full output remains on disk; use Read on output_file or task_output_delta with a smaller byte range"
         );
+        // JSON escaping expands quotes and control characters. Fit as much
+        // real content as possible under the source tool's result budget,
+        // while preserving parseable metadata and a precise truncation flag.
+        let mut lower = 0usize;
+        let mut upper = content.chars().count().min(MAX_TASK_RESULT_CHARS);
+        let mut best = String::new();
+        while lower <= upper {
+            let middle = lower + (upper - lower) / 2;
+            let preview: String = content.chars().take(middle).collect();
+            if nested {
+                value["task"]["output"] = json!(preview);
+            } else {
+                value["content"] = json!(preview);
+            }
+            let serialized = value.to_string();
+            if serialized.chars().count() <= MAX_TASK_RESULT_CHARS {
+                best = serialized;
+                lower = middle.saturating_add(1);
+            } else if middle == 0 {
+                break;
+            } else {
+                upper = middle - 1;
+            }
+        }
+        return best;
     }
     value.to_string()
 }
