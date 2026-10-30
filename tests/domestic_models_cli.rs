@@ -212,7 +212,7 @@ fn deepseek_reasoning_is_replayed_with_tool_result_in_next_api_turn() {
                     "reasoning_content":"I will inspect the file before answering",
                     "tool_calls":[{
                         "id":"deepseek_call_1","type":"function",
-                        "function":{"name":"read_file","arguments":"{\\"path\\":\\"sample.txt\\"}"}
+                        "function":{"name":"read_file","arguments":r#"{"path":"sample.txt"}"#}
                     }]
                 },"finish_reason":"tool_calls"}]})
             } else {
