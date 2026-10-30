@@ -2921,7 +2921,10 @@ mod tests {
             .await
             .unwrap_err()
             .to_string();
-        assert!(result.contains("Command output exceeded hard limit"), "{result}");
+        assert!(
+            result.contains("Command output exceeded hard limit"),
+            "{result}"
+        );
         let pid: i32 = fs::read_to_string(root.path().join("oversize.pid"))
             .unwrap()
             .trim()
