@@ -475,7 +475,11 @@ impl WebSocketTransport {
 
     fn record_for_replay(&self, message: &Value) {
         if let Some(uuid) = message.get("uuid").and_then(Value::as_str) {
-            self.shared.buffer.lock().expect("ws buffer").add(message.clone());
+            self.shared
+                .buffer
+                .lock()
+                .expect("ws buffer")
+                .add(message.clone());
             self.shared.state.lock().expect("ws state").last_sent_id = Some(uuid.to_owned());
         }
     }
@@ -644,7 +648,11 @@ impl WebSocketTransport {
             tokio::select! {
                 outbound_message = outbound.recv() => {
                     if let Some(message) = outbound_message {
-                        if conn.send_text(&format!("{}\n", crate::ndjson::stringify_value(&message))).await.is_err() {
+                        if conn
+                            .send_text(&format!("{}\n", crate::ndjson::stringify_value(&message)))
+                            .await
+                            .is_err()
+                        {
                             return ConnectionOutcome::Reconnect;
                         }
                     }
@@ -753,7 +761,9 @@ impl WebSocketTransport {
     /// `uuid` for replay bookkeeping (`lastSentId`).
     pub async fn write(&self, connection: &mut MinimalWsClient, message: &Value) -> Result<()> {
         self.record_for_replay(message);
-        connection.send_text(&format!("{}\n", crate::ndjson::stringify_value(message))).await
+        connection
+            .send_text(&format!("{}\n", crate::ndjson::stringify_value(message)))
+            .await
     }
 
     pub fn close(&self) {
@@ -1181,13 +1191,27 @@ mod tests {
     async fn offline_messages_follow_uuid_only_replay_contract() {
         let (tx, _rx) = mpsc::unbounded_channel();
         let transport = WebSocketTransport::new(
-            "ws://127.0.0.1:1/x".into(), Vec::new(), None, tx, false, None,
+            "ws://127.0.0.1:1/x".into(),
+            Vec::new(),
+            None,
+            tx,
+            false,
+            None,
         );
-        transport.queue_message(json!({"type":"transient"})).await.unwrap();
+        transport
+            .queue_message(json!({"type":"transient"}))
+            .await
+            .unwrap();
         assert_eq!(transport.buffered_count(), 0);
-        transport.queue_message(json!({"type":"result","uuid":"persistent"})).await.unwrap();
+        transport
+            .queue_message(json!({"type":"result","uuid":"persistent"}))
+            .await
+            .unwrap();
         assert_eq!(transport.buffered_count(), 1);
-        assert_eq!(transport.shared.buffer.lock().unwrap().to_vec()[0]["uuid"], "persistent");
+        assert_eq!(
+            transport.shared.buffer.lock().unwrap().to_vec()[0]["uuid"],
+            "persistent"
+        );
     }
 
     #[test]
