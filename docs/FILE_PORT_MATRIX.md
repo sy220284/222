@@ -1,5 +1,8 @@
 # 2.1.88 → Rust 逐文件迁移台账（原始清单）
 
+> 2026-10-29 自定义 Agent AI 生成：原版 components/agents/generateAgent.ts / GenerateStep.tsx → src/main.rs::chat → Agent::generate_custom_agent_definition → 多模型 Provider.complete → agent_definition::save_agent，已接通自然语言描述、无工具生成 JSON、名称校验、用户预览、风险确认和本地保存。提交 b95c876b、7a0b1279、a67d674f；**源码已提交待行为验收**，原版完整提示词、取消与重试、记忆/模型选择仍有差异。
+
+
 > 2026-10-29 自定义 Agent 创建/编辑风险确认：原版 components/agents/AgentEditor.tsx、new-agent-creation 向导 → src/main.rs::confirm_custom_agent_warnings + agent_definition::validate_in_workspace，新增工具范围、描述长度和系统提示等非阻断警告展示及保存前明确确认，取消不落盘。提交 fb3ab49c650f2bcfc925fe8aee2c03b92310e62e；**源码已提交待行为验收**，不提升完整等价状态。
 
 
