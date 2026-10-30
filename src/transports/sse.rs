@@ -521,13 +521,13 @@ mod tests {
         assert_eq!(
             convert_sse_url_to_post_url(
                 "https://example.com/sessions/s1/worker/events/stream?token=a%2Fb&mode=1"
-            ).unwrap(),
+            )
+            .unwrap(),
             "https://example.com/sessions/s1/worker/events?token=a%2Fb&mode=1"
         );
         assert_eq!(
-            convert_sse_url_to_post_url(
-                "http://[::1]:9000/s1/worker/events/stream?nonce=7"
-            ).unwrap(),
+            convert_sse_url_to_post_url("http://[::1]:9000/s1/worker/events/stream?nonce=7")
+                .unwrap(),
             "http://[::1]:9000/s1/worker/events?nonce=7"
         );
     }
