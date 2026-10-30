@@ -2055,6 +2055,14 @@ impl Agent {
         }
     }
 
+    pub fn session_color(&self) -> Option<&str> {
+        self.session.agent_color.as_deref()
+    }
+
+    pub fn set_session_color(&mut self, color: &str) -> Result<String> {
+        crate::session_color::change_color(&mut self.session, &self.root, color)
+    }
+
     pub fn session_id(&self) -> String {
         self.session.id.to_string()
     }

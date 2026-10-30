@@ -102,6 +102,7 @@ mod secure_fallback;
 mod semantic_inputs;
 mod semantic_session_search;
 mod session;
+mod session_color;
 mod session_control;
 mod shell_quote;
 mod shell_runtime;
@@ -1468,7 +1469,11 @@ async fn chat(
             println!("Proposed prompt: {suggested}");
             print!("atlas [Enter: use linked prompt; or type replacement]> ");
         } else {
-            print!("atlas> ");
+            use std::io::IsTerminal as _;
+            print!(
+                "{}",
+                session_color::prompt_prefix(agent.session_color(), io::stdout().is_terminal())
+            );
         }
         io::stdout().flush()?;
         let mut line = String::new();
@@ -1496,6 +1501,14 @@ async fn chat(
             Some(format!("/{}{}", command.name, rest))
         });
         let input = normalized.as_deref().unwrap_or(input);
+        if input == "/color" || input.starts_with("/color ") {
+            let color = input.strip_prefix("/color").unwrap_or("").trim();
+            match agent.set_session_color(color) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Cannot set session color: {error:#}"),
+            }
+            continue;
+        }
         if input == "/keybindings" || input.starts_with("/keybindings ") {
             let arg = input.strip_prefix("/keybindings").unwrap_or("").trim();
             let path = keybindings::keybindings_path(&keybindings::config_home()?);

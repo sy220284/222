@@ -127,7 +127,7 @@
 | `src/commands/clear/clear.ts` | 8 | 254 | 重写：保持通用行为 | `src/agent.rs / src/main.rs` | 部分实现：会话结束/开始 Hook、旧会话保留与新会话 ID、权限模式保留接入实际聊天和 SDK；完整缓存、MCP 热重置与全部后台任务生命周期待验收 |
 | `src/commands/clear/conversation.ts` | 252 | 9325 | 重写：保持通用行为 | `src/agent.rs / src/main.rs` | 部分实现：会话结束/开始 Hook、旧会话保留与新会话 ID、权限模式保留接入实际聊天和 SDK；完整缓存、MCP 热重置与全部后台任务生命周期待验收 |
 | `src/commands/clear/index.ts` | 20 | 603 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/color/color.ts` | 94 | 2712 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/color/color.ts` | 94 | 2712 | 重写：保持通用行为 | `src/session_color.rs / src/session.rs / src/agent.rs / src/main.rs` | 部分实现：/color 注册到交互入口，合法八色、五个重置别名、团队成员拒绝、会话持久化与恢复、ANSI 终端提示文字；原版 Ink 边框与无障碍联动仍待核验 |
 | `src/commands/color/index.ts` | 17 | 417 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/commit-push-pr.ts` | 159 | 6309 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：真实默认分支检测、差异与中文 PR 工作流接入；推送和远端状态完整链待验收 |
 | `src/commands/commit.ts` | 93 | 3492 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：真实 Git 状态与差异生成提交提示，CLI/交互可执行；原版权限特化仍待验收 |
