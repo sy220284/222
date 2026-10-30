@@ -370,9 +370,11 @@ impl CcrClient {
                 let uploader = Arc::clone(&delivery);
                 let event_id = event_id.clone();
                 tokio::spawn(async move {
-                    uploader.enqueue(vec![json!({
-                        "eventId": event_id, "status": "received"
-                    })]).await;
+                    uploader
+                        .enqueue(vec![json!({
+                            "eventId": event_id, "status": "received"
+                        })])
+                        .await;
                 });
             }
         }));
