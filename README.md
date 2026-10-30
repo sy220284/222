@@ -92,9 +92,9 @@ cargo run -- --provider minimax chat
 | 提供商 ID | 内置默认模型 | API 根地址 |
 | --- | --- | --- |
 | `deepseek` | `deepseek-flash` | `https://api.deepseek.com` |
-| `kimi` | `kimi-k2.6` | `https://api.moonshot.cn/v1` |
-| `glm` | `glm-4.7` | `https://open.bigmodel.cn/api/paas/v4` |
-| `minimax` | `MiniMax-M2.7` | `https://api.minimaxi.com/v1` |
+| `kimi` | `kimi-k3` | `https://api.moonshot.cn/v1` |
+| `glm` | `glm-5.3` | `https://open.bigmodel.cn/api/paas/v4` |
+| `minimax` | `MiniMax-M3` | `https://api.minimaxi.com/v1` |
 
 可用 `--model <模型ID>` 覆盖默认模型。海外 API、Coding 套餐或其他服务区域可能使用独立根地址和密钥；在 `config.json` 的 `providers` 中添加同名条目，就可以覆盖上表地址、密钥环境变量、模型和流式选项。
 
