@@ -319,7 +319,7 @@
 | `src/components/BaseTextInput.tsx` | 136 | 19313 | 重写：终端 UI／交互 | `src/generated_ports/p_3949a8e5bc4d2.rs / src/terminal_input.rs / src/main.rs` | 部分实现：chat() 真实入口已接入 Unix TTY 逐键编辑、UTF-8 光标退格、历史回退、Bracketed Paste、Ctrl 中断，非 TTY 保留逐行输入；已有 Rust 单元测试；Ink JSX 多行布局、完整键位、焦点及 Windows 交互仍未等价 |
 | `src/components/BashModeProgress.tsx` | 56 | 5675 | 重写：终端 UI／交互 | `src/generated_ports/p_0b29474a0ccd4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/BridgeDialog.tsx` | 401 | 34418 | 重写：终端 UI／交互 | `src/generated_ports/p_21443fd0f496d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/BypassPermissionsModeDialog.tsx` | 87 | 9136 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/BypassPermissionsModeDialog.tsx` | 87 | 9136 | 重写：终端 UI／交互 | `src/generated_ports/p_84f9c1e4e74b8.rs` | 部分实现：完整等价：选择结果（Accept 写设置继续/Cancel 同步优雅关机不返回）含单测；渲染与厂商事件归宿主/排除，待验收 |
 | `src/components/ChannelDowngradeDialog.tsx` | 102 | 8253 | 重写：终端 UI／交互 | `src/generated_ports/p_e842880c14f05.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ClaudeCodeHint/PluginHintMenu.tsx` | 78 | 9341 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/ClaudeInChromeOnboarding.tsx` | 121 | 12151 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -577,7 +577,7 @@
 | `src/components/messages/AdvisorMessage.tsx` | 158 | 14479 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/AssistantRedactedThinkingMessage.tsx` | 31 | 2603 | 重写：终端 UI／交互 | `src/generated_ports/p_deade2853be5b.rs` | 部分实现：完整等价：✻ Thinking… 文案+addMargin 缺省 false 决策；JSX 宿主归 ink，待验收 |
 | `src/components/messages/AssistantTextMessage.tsx` | 270 | 30427 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/AssistantThinkingMessage.tsx` | 86 | 8082 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/AssistantThinkingMessage.tsx` | 86 | 8082 | 重写：终端 UI／交互 | `src/generated_ports/p_d0496f0e84a3f.rs` | 部分实现：完整等价：可见性矩阵（transcript 隐藏/margin 反相/展开提示有文本才显）含四分支单测；Markdown 体归 ink 宿主，待验收 |
 | `src/components/messages/AssistantToolUseMessage.tsx` | 368 | 45285 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/AttachmentMessage.tsx` | 536 | 71430 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/CollapsedReadSearchContent.tsx` | 484 | 78078 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -745,7 +745,7 @@
 | `src/hooks/notifs/useIDEStatusIndicator.tsx` | 186 | 20764 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useInstallMessages.tsx` | 26 | 3180 | 重写：终端 UI／交互 | `src/generated_ports/p_6b3a03148e760.rs` | 部分实现：完整等价：安装消息优先级映射（error/userActionRequired→high、path/alias→medium、余 low）+颜色镜像+key 构造纯函数含单测；checkInstall 随安装器链，待验收 |
 | `src/hooks/notifs/useLspInitializationNotification.tsx` | 143 | 16569 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/notifs/useMcpConnectivityStatus.tsx` | 88 | 14710 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/notifs/useMcpConnectivityStatus.tsx` | 88 | 14710 | 重写：终端 UI／交互 | `src/generated_ports/p_5a9e3ac1aa2d1.rs` | 部分实现：完整等价：连接性警告触发矩阵（present∧从未连接∧非 remote）含四分支单测；通知承载归宿主，待验收 |
 | `src/hooks/notifs/useModelMigrationNotifications.tsx` | 52 | 6988 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useNpmDeprecationNotification.tsx` | 25 | 3602 | 重写：终端 UI／交互 | `src/generated_ports/p_be6edab38a034.rs` | 部分实现：完整等价：守卫链（bundled/DISABLE_INSTALLATION_CHECKS/development 跳过）+payload（15000ms/warning/high）含单测；文案按隐私门禁品牌中性化（差异记录），待验收 |
 | `src/hooks/notifs/usePluginAutoupdateNotification.tsx` | 83 | 9015 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -1450,7 +1450,7 @@
 | `src/utils/commitAttribution.ts` | 962 | 29594 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/completionCache.ts` | 167 | 5654 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/appNames.ts` | 197 | 6575 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/computerUse/cleanup.ts` | 87 | 3298 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/computerUse/cleanup.ts` | 87 | 3298 | 重写：保持通用行为 | `src/generated_ports/p_1a474e1507d88.rs` | 部分实现：完整等价：清理顺序契约（先 bounded unhide 后放锁，5s 宽限原注保留）含单测；原生 Swift 面为厂商依赖（排除记录），待验收 |
 | `src/utils/computerUse/common.ts` | 62 | 2617 | 重写：保持通用行为 | `src/generated_ports/p_94132d04ecb5a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/computerUse/computerUseLock.ts` | 216 | 7135 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/drainRunLoop.ts` | 80 | 2821 | 重写：保持通用行为 | 待定 | 未迁移 |
