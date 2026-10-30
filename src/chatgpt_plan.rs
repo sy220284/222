@@ -822,6 +822,7 @@ async fn complete_with_token(
     response_schema: Option<&Value>,
     base_url: &str,
 ) -> Result<ModelResponse> {
+    tuning.validate_for_model(&request.model)?;
     let mut body = json!({
         "model":request.model,
         "store":false,
