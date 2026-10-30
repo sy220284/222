@@ -10,7 +10,9 @@ use std::{
 };
 
 fn receive(stream: &mut std::net::TcpStream) -> (String, Value) {
-    stream.set_read_timeout(Some(Duration::from_secs(20))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(20)))
+        .unwrap();
     let mut bytes = Vec::new();
     let mut buffer = [0u8; 8192];
     let end = loop {
@@ -22,17 +24,22 @@ fn receive(stream: &mut std::net::TcpStream) -> (String, Value) {
         }
     };
     let headers = String::from_utf8(bytes[..end].to_vec()).unwrap();
-    let length = headers.lines().find_map(|line| {
-        let (name, value) = line.split_once(':')?;
-        name.eq_ignore_ascii_case("content-length")
-            .then(|| value.trim().parse::<usize>().unwrap())
-    }).unwrap_or(0);
+    let length = headers
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().unwrap())
+        })
+        .unwrap_or(0);
     while bytes.len() < end + length {
         let n = stream.read(&mut buffer).unwrap();
         assert!(n > 0);
         bytes.extend_from_slice(&buffer[..n]);
     }
-    let data = if length == 0 { json!({}) } else {
+    let data = if length == 0 {
+        json!({})
+    } else {
         serde_json::from_slice(&bytes[end..end + length]).unwrap()
     };
     (headers, data)
@@ -50,14 +57,19 @@ fn interactive_setup_discovers_and_probes_then_persists_model_and_context() {
                 match listener.accept() {
                     Ok(connection) => break connection,
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        assert!(start.elapsed() < Duration::from_secs(25), "model API not called");
+                        assert!(
+                            start.elapsed() < Duration::from_secs(25),
+                            "model API not called"
+                        );
                         thread::sleep(Duration::from_millis(10));
                     }
                     Err(error) => panic!("model API accept failed: {error}"),
                 }
             };
             let (headers, data) = receive(&mut socket);
-            assert!(headers.to_ascii_lowercase().contains("authorization: bearer local-key-test"));
+            assert!(headers
+                .to_ascii_lowercase()
+                .contains("authorization: bearer local-key-test"));
             let response = if round == 0 {
                 assert!(headers.starts_with("GET /v1/models HTTP/1.1"));
                 json!({"data":[
@@ -80,14 +92,19 @@ fn interactive_setup_discovers_and_probes_then_persists_model_and_context() {
     });
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config.json");
-    fs::write(&config, json!({
-        "default_provider":"custom",
-        "providers":[{
-            "id":"custom","kind":"openai-compatible",
-            "base_url":format!("http://127.0.0.1:{port}/v1"),
-            "model":"older-model","api_key_env":"CUSTOM_MODEL_TEST_KEY",
-        }]
-    }).to_string()).unwrap();
+    fs::write(
+        &config,
+        json!({
+            "default_provider":"custom",
+            "providers":[{
+                "id":"custom","kind":"openai-compatible",
+                "base_url":format!("http://127.0.0.1:{port}/v1"),
+                "model":"older-model","api_key_env":"CUSTOM_MODEL_TEST_KEY",
+            }]
+        })
+        .to_string(),
+    )
+    .unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
         .args(["models", "setup", "custom"])
         .env("ATLAS_CONFIG", &config)
@@ -95,30 +112,59 @@ fn interactive_setup_discovers_and_probes_then_persists_model_and_context() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn().unwrap();
+        .spawn()
+        .unwrap();
     child.stdin.take().unwrap().write_all(b"1\n").unwrap();
     let output = child.wait_with_output().unwrap();
     worker.join().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(String::from_utf8_lossy(&output.stdout).contains("model-new"));
     let persisted: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
-    let selected = persisted["providers"].as_array().unwrap().iter()
-        .find(|item| item["id"] == "custom").unwrap();
+    let selected = persisted["providers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "custom")
+        .unwrap();
     assert_eq!(persisted["default_provider"], "custom");
     assert_eq!(selected["model"], "model-new");
     assert_eq!(selected["tuning"]["context_window"], 200000);
     assert_eq!(selected["tuning"]["max_output_tokens"], Value::Null);
-    assert!(!fs::read_to_string(&config).unwrap().contains("local-key-test"));
+    assert!(!fs::read_to_string(&config)
+        .unwrap()
+        .contains("local-key-test"));
 
     let tune = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
-        .args(["models", "tune", "custom", "--temperature", "0.35",
-               "--top-p", "0.95", "--max-output-tokens", "8192"])
+        .args([
+            "models",
+            "tune",
+            "custom",
+            "--temperature",
+            "0.35",
+            "--top-p",
+            "0.95",
+            "--max-output-tokens",
+            "8192",
+        ])
         .env("ATLAS_CONFIG", &config)
-        .output().unwrap();
-    assert!(tune.status.success(), "{}", String::from_utf8_lossy(&tune.stderr));
+        .output()
+        .unwrap();
+    assert!(
+        tune.status.success(),
+        "{}",
+        String::from_utf8_lossy(&tune.stderr)
+    );
     let updated: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
-    let value = updated["providers"].as_array().unwrap().iter()
-        .find(|item| item["id"] == "custom").unwrap();
+    let value = updated["providers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "custom")
+        .unwrap();
     assert_eq!(value["tuning"]["temperature"], 0.35);
     assert_eq!(value["tuning"]["top_p"], 0.95);
     assert_eq!(value["tuning"]["max_output_tokens"], 8192);
