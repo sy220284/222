@@ -121,10 +121,22 @@ mod tests {
 
     #[test]
     fn source_mode_precedence_and_protocol_errors() {
-        assert_eq!(select_transport("ws://localhost/s", false, false).unwrap(), TransportKind::WebSocket);
-        assert_eq!(select_transport("wss://localhost/s", false, true).unwrap(), TransportKind::Hybrid);
-        assert_eq!(select_transport("wss://localhost/s", true, true).unwrap(), TransportKind::Sse);
-        assert_eq!(select_transport("https://localhost/s", true, false).unwrap(), TransportKind::Sse);
+        assert_eq!(
+            select_transport("ws://localhost/s", false, false).unwrap(),
+            TransportKind::WebSocket
+        );
+        assert_eq!(
+            select_transport("wss://localhost/s", false, true).unwrap(),
+            TransportKind::Hybrid
+        );
+        assert_eq!(
+            select_transport("wss://localhost/s", true, true).unwrap(),
+            TransportKind::Sse
+        );
+        assert_eq!(
+            select_transport("https://localhost/s", true, false).unwrap(),
+            TransportKind::Sse
+        );
         assert!(select_transport("https://localhost/s", false, false).is_err());
         assert!(select_transport("ftp://localhost/s", true, true).is_err());
         assert!(select_transport("not a url", true, true).is_err());
