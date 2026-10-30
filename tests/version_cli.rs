@@ -24,7 +24,5 @@ fn version_cli_prints_running_binary_version_and_optional_build_timestamp() {
         "version flag failed: {}",
         String::from_utf8_lossy(&clap_version.stderr)
     );
-    assert!(
-        String::from_utf8_lossy(&clap_version.stdout).contains(env!("CARGO_PKG_VERSION"))
-    );
+    assert!(String::from_utf8_lossy(&clap_version.stdout).contains(env!("CARGO_PKG_VERSION")));
 }
