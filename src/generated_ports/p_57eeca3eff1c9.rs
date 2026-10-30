@@ -111,9 +111,7 @@ mod tests {
         let got =
             get_project_settings_cache("projectSettings", "/repo/.atlas/settings.json").unwrap();
         assert_eq!(got.errors, vec!["bad field"]);
-        assert!(
-            get_project_settings_cache("userSettings", "/repo/.atlas/settings.json").is_none()
-        );
+        assert!(get_project_settings_cache("userSettings", "/repo/.atlas/settings.json").is_none());
         clear_project_settings_cache();
         assert!(
             get_project_settings_cache("projectSettings", "/repo/.atlas/settings.json").is_none()
