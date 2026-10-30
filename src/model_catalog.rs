@@ -29,19 +29,11 @@ pub enum ModelAction {
         key_stdin: bool,
     },
     /// Read an API key from stdin, verify it against /models, and save it locally.
-    Connect {
-        brand: String,
-    },
+    Connect { brand: String },
     /// Check that an actual inference call succeeds for a particular model.
-    Probe {
-        brand: String,
-        model: String,
-    },
+    Probe { brand: String, model: String },
     /// Verify the exact model with inference, then save it as the active model.
-    Use {
-        brand: String,
-        model: String,
-    },
+    Use { brand: String, model: String },
     /// Change provider sampling limits; omitted values preserve previous settings.
     Tune {
         brand: String,
@@ -79,9 +71,13 @@ fn key_store() -> Result<PlainTextStorage> {
 
 /// Environment variables win over saved credentials; no keys are put in config.json.
 pub fn load_api_key(profile: &ProviderProfile) -> Result<Option<String>> {
-    let Some(name) = &profile.api_key_env else { return Ok(None) };
+    let Some(name) = &profile.api_key_env else {
+        return Ok(None);
+    };
     if let Ok(key) = std::env::var(name) {
-        if key.trim().is_empty() { bail!("API key environment variable {name} is empty") }
+        if key.trim().is_empty() {
+            bail!("API key environment variable {name} is empty")
+        }
         return Ok(Some(key));
     }
     let path = key_store()?.path;
@@ -90,15 +86,23 @@ pub fn load_api_key(profile: &ProviderProfile) -> Result<Option<String>> {
     }
     let raw = std::fs::read(&path).context("Read local model credentials")?;
     let stored: Value = serde_json::from_slice(&raw).context("Parse local model credentials")?;
-    let key = stored.pointer(&format!("/model_api_keys/{}", profile.id))
+    let key = stored
+        .pointer(&format!("/model_api_keys/{}", profile.id))
         .and_then(Value::as_str)
         .filter(|key| !key.trim().is_empty())
-        .with_context(|| format!("No API key for {}; run 'atlas-agent models connect {}'", profile.id, profile.id))?;
+        .with_context(|| {
+            format!(
+                "No API key for {}; run 'atlas-agent models connect {}'",
+                profile.id, profile.id
+            )
+        })?;
     Ok(Some(key.to_owned()))
 }
 
 fn persist_key(brand: &str, key: &str) -> Result<()> {
-    if key.trim().is_empty() { bail!("API key cannot be empty") }
+    if key.trim().is_empty() {
+        bail!("API key cannot be empty")
+    }
     let store = key_store()?;
     let mut data = if store.path.exists() {
         serde_json::from_slice::<Value>(&std::fs::read(&store.path)?)
@@ -106,7 +110,9 @@ fn persist_key(brand: &str, key: &str) -> Result<()> {
     } else {
         json!({"model_api_keys":{}})
     };
-    if !data.is_object() { bail!("Invalid local model credentials") }
+    if !data.is_object() {
+        bail!("Invalid local model credentials")
+    }
     if !data["model_api_keys"].is_object() {
         data["model_api_keys"] = json!({});
     }
@@ -128,7 +134,8 @@ fn api_client() -> Result<Client> {
 fn model_url(profile: &ProviderProfile, route: &str) -> Result<Url> {
     let base = profile.base_url.trim_end_matches('/');
     let url = Url::parse(&format!("{base}/{route}"))?;
-    if url.scheme() != "https" && !matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1")) {
+    if url.scheme() != "https" && !matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"))
+    {
         bail!("Model API requests require HTTPS except loopback test endpoints");
     }
     Ok(url)
@@ -145,13 +152,19 @@ fn tags_from_metadata(value: &Value) -> Vec<String> {
             }
         }
     }
-    if let Some(levels) = value.pointer("/effort/supported_levels").and_then(Value::as_array) {
+    if let Some(levels) = value
+        .pointer("/effort/supported_levels")
+        .and_then(Value::as_array)
+    {
         let levels = levels.iter().filter_map(Value::as_str).collect::<Vec<_>>();
         if !levels.is_empty() {
             tags.push(format!("思考:{}", levels.join("/")));
         }
     }
-    if value.get("supports_function_calling").and_then(Value::as_bool) == Some(true)
+    if value
+        .get("supports_function_calling")
+        .and_then(Value::as_bool)
+        == Some(true)
         || value.get("function_calling").and_then(Value::as_bool) == Some(true)
     {
         tags.push("工具调用:目录声明".into());
@@ -162,43 +175,73 @@ fn tags_from_metadata(value: &Value) -> Vec<String> {
     tags
 }
 
-
 fn parsed_models(body: &Value, kind: &str, output: &mut Vec<ListedModel>) -> Result<()> {
-    let items = body.get("data").and_then(Value::as_array)
+    let items = body
+        .get("data")
+        .and_then(Value::as_array)
         .or_else(|| body.get("models").and_then(Value::as_array))
         .context("Model catalog does not contain data or models array")?;
     for item in items {
-        if item.get("visibility").and_then(Value::as_str).is_some_and(|value| value != "list") {
+        if item
+            .get("visibility")
+            .and_then(Value::as_str)
+            .is_some_and(|value| value != "list")
+        {
             continue;
         }
         if kind == "gemini" {
-            let available = item.get("supportedGenerationMethods").or_else(|| item.get("supportedActions"))
+            let available = item
+                .get("supportedGenerationMethods")
+                .or_else(|| item.get("supportedActions"))
                 .and_then(Value::as_array);
-            if !available.is_some_and(|values| values.iter().any(|v| v.as_str() == Some("generateContent"))) {
+            if !available
+                .is_some_and(|values| values.iter().any(|v| v.as_str() == Some("generateContent")))
+            {
                 continue;
             }
         }
-        let id = item.get("id").or_else(|| item.get("slug"))
-            .or_else(|| item.get("name")).and_then(Value::as_str);
-        let Some(id) = id.filter(|id| !id.is_empty()) else { continue };
-        let id = if kind == "gemini" { id.strip_prefix("models/").unwrap_or(id) } else { id };
-        let name = item.get("displayName").or_else(|| item.get("display_name"))
-            .or_else(|| item.get("name")).and_then(Value::as_str).unwrap_or(id);
+        let id = item
+            .get("id")
+            .or_else(|| item.get("slug"))
+            .or_else(|| item.get("name"))
+            .and_then(Value::as_str);
+        let Some(id) = id.filter(|id| !id.is_empty()) else {
+            continue;
+        };
+        let id = if kind == "gemini" {
+            id.strip_prefix("models/").unwrap_or(id)
+        } else {
+            id
+        };
+        let name = item
+            .get("displayName")
+            .or_else(|| item.get("display_name"))
+            .or_else(|| item.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or(id);
         let mut tags = tags_from_metadata(item);
         if kind == "gemini" {
             tags.push("文本生成:目录声明".into());
-            if item.pointer("/supportedGenerationMethods").and_then(Value::as_array)
-                .is_some_and(|a| a.iter().any(|v| v.as_str() == Some("generateContent"))) {
+            if item
+                .pointer("/supportedGenerationMethods")
+                .and_then(Value::as_array)
+                .is_some_and(|a| a.iter().any(|v| v.as_str() == Some("generateContent")))
+            {
                 tags.push("Gemini 原生接口".into());
             }
         }
         output.push(ListedModel {
             id: id.to_owned(),
             name: name.to_owned(),
-            context_window: item.get("context_window").or_else(|| item.get("context_length"))
-                .or_else(|| item.get("inputTokenLimit")).and_then(Value::as_u64),
-            max_output_tokens: item.get("max_output_tokens")
-                .or_else(|| item.get("outputTokenLimit")).and_then(Value::as_u64),
+            context_window: item
+                .get("context_window")
+                .or_else(|| item.get("context_length"))
+                .or_else(|| item.get("inputTokenLimit"))
+                .and_then(Value::as_u64),
+            max_output_tokens: item
+                .get("max_output_tokens")
+                .or_else(|| item.get("outputTokenLimit"))
+                .and_then(Value::as_u64),
             tags,
         });
     }
@@ -211,7 +254,9 @@ pub async fn list_models(profile: &ProviderProfile, key: &str) -> Result<Vec<Lis
         let catalog = crate::chatgpt_plan::model_list().await?;
         let mut result = Vec::new();
         parsed_models(&catalog, "chatgpt-plan", &mut result)?;
-        if result.is_empty() { bail!("ChatGPT account has no selectable models") }
+        if result.is_empty() {
+            bail!("ChatGPT account has no selectable models")
+        }
         return Ok(result);
     }
     let mut models = Vec::new();
@@ -236,17 +281,35 @@ pub async fn list_models(profile: &ProviderProfile, key: &str) -> Result<Vec<Lis
         let response = get.send().await.context("Model catalog request failed")?;
         let status = response.status();
         if !status.is_success() {
-            bail!("{} model catalog returned HTTP {}; check key permissions and API root URL", profile.id, status)
+            bail!(
+                "{} model catalog returned HTTP {}; check key permissions and API root URL",
+                profile.id,
+                status
+            )
         }
-        let bytes = response.bytes().await.context("Read model catalog response")?;
-        if bytes.len() > 4 * 1024 * 1024 { bail!("Model catalog page exceeds 4 MiB") }
+        let bytes = response
+            .bytes()
+            .await
+            .context("Read model catalog response")?;
+        if bytes.len() > 4 * 1024 * 1024 {
+            bail!("Model catalog page exceeds 4 MiB")
+        }
         let body: Value = serde_json::from_slice(&bytes).context("Invalid model catalog JSON")?;
         parsed_models(&body, &profile.kind, &mut models)?;
-        page = body.get("nextPageToken").and_then(Value::as_str).map(str::to_owned);
-        if page.is_none() { break; }
+        page = body
+            .get("nextPageToken")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        if page.is_none() {
+            break;
+        }
     }
-    if page.is_some() { bail!("Model catalog contains more than 100 pages") }
-    if models.is_empty() { bail!("Model catalog returned no selectable inference model IDs") }
+    if page.is_some() {
+        bail!("Model catalog contains more than 100 pages")
+    }
+    if models.is_empty() {
+        bail!("Model catalog returned no selectable inference model IDs")
+    }
     Ok(models)
 }
 
@@ -268,23 +331,36 @@ pub async fn probe_model(profile: &ProviderProfile, model: &str, key: &str) -> R
     if profile.kind == "openai-responses"
         || (profile.id == "openai"
             && profile.base_url.trim_end_matches('/') == "https://api.openai.com/v1"
-            && model.starts_with("gpt-6")) {
+            && model.starts_with("gpt-6"))
+    {
         crate::chatgpt_plan::complete_api(
-            &request, &ModelTuning::default(), None, key, None, &profile.base_url
-        ).await?;
+            &request,
+            &ModelTuning::default(),
+            None,
+            key,
+            None,
+            &profile.base_url,
+        )
+        .await?;
         return Ok(());
     }
     let (url, body) = if profile.kind == "gemini" {
         let id = model.strip_prefix("models/").unwrap_or(model);
-        if id.contains('/') || id.contains(':') { bail!("Invalid Gemini model ID") }
-        (model_url(profile, &format!("models/{id}:generateContent"))?,
-         json!({"contents":[{"role":"user","parts":[{"text":"Reply OK"}]}],
-                "generationConfig":{"maxOutputTokens":32}}))
+        if id.contains('/') || id.contains(':') {
+            bail!("Invalid Gemini model ID")
+        }
+        (
+            model_url(profile, &format!("models/{id}:generateContent"))?,
+            json!({"contents":[{"role":"user","parts":[{"text":"Reply OK"}]}],
+                "generationConfig":{"maxOutputTokens":32}}),
+        )
     } else {
-        (model_url(profile, "chat/completions")?,
-         json!({"model":model,
+        (
+            model_url(profile, "chat/completions")?,
+            json!({"model":model,
                 "messages":[{"role":"user","content":"Reply OK"}],
-                "max_tokens":32}))
+                "max_tokens":32}),
+        )
     };
     let mut post = api_client()?.post(url).json(&body);
     if profile.kind == "gemini" {
@@ -292,20 +368,35 @@ pub async fn probe_model(profile: &ProviderProfile, model: &str, key: &str) -> R
     } else {
         post = post.bearer_auth(key);
     }
-    let response = post.send().await.context("Model callability probe failed")?;
+    let response = post
+        .send()
+        .await
+        .context("Model callability probe failed")?;
     let status = response.status();
     if !status.is_success() {
-        bail!("Model '{}' for {} rejected inference with HTTP {}", model, profile.id, status)
+        bail!(
+            "Model '{}' for {} rejected inference with HTTP {}",
+            model,
+            profile.id,
+            status
+        )
     }
-    let bytes = response.bytes().await.context("Read model callability response")?;
-    if bytes.len() > 4 * 1024 * 1024 { bail!("Model probe response exceeds 4 MiB") }
+    let bytes = response
+        .bytes()
+        .await
+        .context("Read model callability response")?;
+    if bytes.len() > 4 * 1024 * 1024 {
+        bail!("Model probe response exceeds 4 MiB")
+    }
     let body: Value = serde_json::from_slice(&bytes)
         .context("Model probe returned non-JSON instead of an inference result")?;
     let has_result = if profile.kind == "gemini" {
-        body.get("candidates").and_then(Value::as_array)
+        body.get("candidates")
+            .and_then(Value::as_array)
             .is_some_and(|values| !values.is_empty())
     } else {
-        body.get("choices").and_then(Value::as_array)
+        body.get("choices")
+            .and_then(Value::as_array)
             .is_some_and(|values| !values.is_empty())
     };
     if !has_result {
@@ -315,10 +406,12 @@ pub async fn probe_model(profile: &ProviderProfile, model: &str, key: &str) -> R
 }
 
 fn profile_mut<'a>(config: &'a mut Config, brand: &str) -> Result<&'a mut ProviderProfile> {
-    config.providers.iter_mut().find(|p| p.id == brand)
+    config
+        .providers
+        .iter_mut()
+        .find(|p| p.id == brand)
         .with_context(|| format!("Unknown brand '{brand}'; run 'atlas-agent models'"))
 }
-
 
 fn read_stdin_line(prompt: &str) -> Result<String> {
     eprint!("{prompt}");
@@ -335,9 +428,15 @@ async fn interactive_setup(config: &mut Config, requested: Option<&str>) -> Resu
             eprintln!("  {}. {} ({})", i + 1, profile.id, profile.model);
         }
         let selected = read_stdin_line("Choose model brand (number): ")?;
-        let index = selected.parse::<usize>().context("Brand must be a list number")?;
-        config.providers.get(index.checked_sub(1).context("Brand index starts at 1")?)
-            .context("Brand number is outside list")?.id.clone()
+        let index = selected
+            .parse::<usize>()
+            .context("Brand must be a list number")?;
+        config
+            .providers
+            .get(index.checked_sub(1).context("Brand index starts at 1")?)
+            .context("Brand number is outside list")?
+            .id
+            .clone()
     };
     let profile = config.select(Some(&brand), None)?;
     let (models, key) = if profile.kind == "chatgpt-plan" {
@@ -361,13 +460,25 @@ async fn interactive_setup(config: &mut Config, requested: Option<&str>) -> Resu
         (models, Some(key))
     };
     for (i, model) in models.iter().enumerate() {
-        let context = model.context_window.map(|v| format!(" ctx={v}")).unwrap_or_default();
-        eprintln!("  {}. {} — {}{} [{}]", i + 1, model.id, model.name,
-            context, model.tags.join(", "));
+        let context = model
+            .context_window
+            .map(|v| format!(" ctx={v}"))
+            .unwrap_or_default();
+        eprintln!(
+            "  {}. {} — {}{} [{}]",
+            i + 1,
+            model.id,
+            model.name,
+            context,
+            model.tags.join(", ")
+        );
     }
     let selected = read_stdin_line("Choose an available model (number): ")?;
-    let index = selected.parse::<usize>().context("Model must be a list number")?;
-    let model = models.get(index.checked_sub(1).context("Model index starts at 1")?)
+    let index = selected
+        .parse::<usize>()
+        .context("Model must be a list number")?;
+    let model = models
+        .get(index.checked_sub(1).context("Model index starts at 1")?)
         .context("Model number is outside list")?;
     probe_model(&profile, &model.id, key.as_deref().unwrap_or("")).await?;
     // Verify the selected model works before changing settings or persisting a new key.
@@ -381,17 +492,22 @@ async fn interactive_setup(config: &mut Config, requested: Option<&str>) -> Resu
         selected.model = model.id.clone();
         if brand == "openai"
             && selected.base_url.trim_end_matches('/') == "https://api.openai.com/v1"
-            && model.id.starts_with("gpt-6") {
+            && model.id.starts_with("gpt-6")
+        {
             selected.kind = "openai-responses".into();
         }
         // The live provider catalog owns the actual advertised context size.
         // Selecting a different model replaces stale automatic context metadata.
-        selected.tuning.context_window = model.context_window
+        selected.tuning.context_window = model
+            .context_window
             .and_then(|n| u32::try_from(n).ok())
             .filter(|n| *n >= 1_024);
-        if selected.tuning.max_output_tokens
+        if selected
+            .tuning
+            .max_output_tokens
             .zip(selected.tuning.context_window)
-            .is_some_and(|(output, window)| output > window) {
+            .is_some_and(|(output, window)| output > window)
+        {
             selected.tuning.max_output_tokens = None;
         }
     }
@@ -413,7 +529,9 @@ pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
         ModelAction::Discover { brand, key_stdin } => {
             let profile = config.select(Some(brand), None)?;
             let key = if profile.kind == "chatgpt-plan" {
-                if *key_stdin { bail!("ChatGPT plan uses 'chatgpt login' and does not accept an API key") }
+                if *key_stdin {
+                    bail!("ChatGPT plan uses 'chatgpt login' and does not accept an API key")
+                }
                 String::new()
             } else if *key_stdin {
                 let mut line = String::new();
@@ -456,7 +574,9 @@ pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
             if matches!(action, ModelAction::Use { .. }) {
                 let catalog = list_models(&profile, &key).await;
                 let context = match catalog {
-                    Ok(available) => available.iter().find(|item| item.id == *model)
+                    Ok(available) => available
+                        .iter()
+                        .find(|item| item.id == *model)
                         .and_then(|item| item.context_window)
                         .and_then(|value| u32::try_from(value).ok())
                         .filter(|value| *value >= 1_024),
@@ -469,14 +589,18 @@ pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
                 selected.model = model.clone();
                 if brand == "openai"
                     && selected.base_url.trim_end_matches('/') == "https://api.openai.com/v1"
-                    && model.starts_with("gpt-6") {
+                    && model.starts_with("gpt-6")
+                {
                     selected.kind = "openai-responses".into();
                 }
                 if selected.model != profile.model {
                     selected.tuning.context_window = context;
-                    if selected.tuning.max_output_tokens
+                    if selected
+                        .tuning
+                        .max_output_tokens
                         .zip(selected.tuning.context_window)
-                        .is_some_and(|(out, window)| out > window) {
+                        .is_some_and(|(out, window)| out > window)
+                    {
                         selected.tuning.max_output_tokens = None;
                     }
                 }
@@ -487,16 +611,33 @@ pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
             }
         }
         ModelAction::Tune {
-            brand, temperature, top_p, max_output_tokens,
-            context_window, reasoning_effort, reset,
+            brand,
+            temperature,
+            top_p,
+            max_output_tokens,
+            context_window,
+            reasoning_effort,
+            reset,
         } => {
             let p = profile_mut(config, brand)?;
-            if *reset { p.tuning = ModelTuning::default(); }
-            if let Some(v) = temperature { p.tuning.temperature = Some(*v); }
-            if let Some(v) = top_p { p.tuning.top_p = Some(*v); }
-            if let Some(v) = max_output_tokens { p.tuning.max_output_tokens = Some(*v); }
-            if let Some(v) = context_window { p.tuning.context_window = Some(*v); }
-            if let Some(v) = reasoning_effort { p.tuning.reasoning_effort = Some(v.clone()); }
+            if *reset {
+                p.tuning = ModelTuning::default();
+            }
+            if let Some(v) = temperature {
+                p.tuning.temperature = Some(*v);
+            }
+            if let Some(v) = top_p {
+                p.tuning.top_p = Some(*v);
+            }
+            if let Some(v) = max_output_tokens {
+                p.tuning.max_output_tokens = Some(*v);
+            }
+            if let Some(v) = context_window {
+                p.tuning.context_window = Some(*v);
+            }
+            if let Some(v) = reasoning_effort {
+                p.tuning.reasoning_effort = Some(v.clone());
+            }
             config.validate()?;
             config.save()?;
             println!("Updated {brand} model parameters");
@@ -517,7 +658,12 @@ mod tests {
         });
         assert_eq!(
             tags_from_metadata(&model),
-            vec!["输入:text", "输入:image", "思考:low/high", "工具调用:目录声明"]
+            vec![
+                "输入:text",
+                "输入:image",
+                "思考:low/high",
+                "工具调用:目录声明"
+            ]
         );
         assert!(tags_from_metadata(&json!({"id":"x"})).is_empty());
     }
@@ -543,10 +689,13 @@ mod tests {
                         }
                     };
                     let headers = String::from_utf8_lossy(&received[..end]).to_lowercase();
-                    let length = headers.lines().find_map(|line| {
-                        line.strip_prefix("content-length:")
-                            .map(|v| v.trim().parse::<usize>().unwrap())
-                    }).unwrap_or(0);
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            line.strip_prefix("content-length:")
+                                .map(|v| v.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap_or(0);
                     while received.len() < end + length {
                         let n = socket.read(&mut buffer).await.unwrap();
                         assert!(n > 0);
@@ -560,27 +709,37 @@ mod tests {
                     }
                     let (reply, expected) = if brand_name == "gemini" {
                         match request_index {
-                            0 => (json!({"models":[{"name":"models/gemini-test",
+                            0 => (
+                                json!({"models":[{"name":"models/gemini-test",
                                 "displayName":"Gemini Test", "inputTokenLimit":1000,
                                 "outputTokenLimit":150,"supportedGenerationMethods":["generateContent"]},
                                 {"name":"models/embedding-test",
                                 "supportedGenerationMethods":["embedContent"]}],
                                 "nextPageToken":"page-2"}),
-                                "GET /models?pageSize=1000"),
-                            1 => (json!({"models":[{"name":"models/gemini-test-2",
+                                "GET /models?pageSize=1000",
+                            ),
+                            1 => (
+                                json!({"models":[{"name":"models/gemini-test-2",
                                 "supportedGenerationMethods":["generateContent"]}]}),
-                                "GET /models?pageSize=1000&pageToken=page-2"),
-                            _ => (json!({"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}),
-                                "POST /models/gemini-test:generateContent"),
+                                "GET /models?pageSize=1000&pageToken=page-2",
+                            ),
+                            _ => (
+                                json!({"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}),
+                                "POST /models/gemini-test:generateContent",
+                            ),
                         }
                     } else if request_index == 0 {
-                        (json!({"data":[{"id":"deepseek-v4-pro","name":"DeepSeek Pro",
+                        (
+                            json!({"data":[{"id":"deepseek-v4-pro","name":"DeepSeek Pro",
                             "context_window":1048576,"max_output_tokens":1024,
                             "input_modalities":["text"],"effort":{"supported_levels":["low","high"]}}]}),
-                            "GET /models")
+                            "GET /models",
+                        )
                     } else {
-                        (json!({"choices":[{"message":{"role":"assistant","content":"OK"}}]}),
-                            "POST /chat/completions")
+                        (
+                            json!({"choices":[{"message":{"role":"assistant","content":"OK"}}]}),
+                            "POST /chat/completions",
+                        )
                     };
                     assert!(
                         headers.contains(&expected.to_ascii_lowercase()),
@@ -597,17 +756,22 @@ mod tests {
             profile.base_url = format!("http://{address}");
             let discovered = list_models(&profile, "test-key").await.unwrap();
             if brand == "gemini" {
-                assert_eq!(discovered.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
-                    vec!["gemini-test", "gemini-test-2"]);
+                assert_eq!(
+                    discovered.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+                    vec!["gemini-test", "gemini-test-2"]
+                );
                 assert_eq!(discovered[0].context_window, Some(1000));
                 assert_eq!(discovered[0].max_output_tokens, Some(150));
-                probe_model(&profile, "gemini-test", "test-key").await.unwrap();
+                probe_model(&profile, "gemini-test", "test-key")
+                    .await
+                    .unwrap();
             } else {
                 assert_eq!(discovered.len(), 1);
-                assert_eq!(discovered[0].tags,
-                    vec!["输入:text", "思考:low/high"]);
+                assert_eq!(discovered[0].tags, vec!["输入:text", "思考:low/high"]);
                 assert_eq!(discovered[0].context_window, Some(1048576));
-                probe_model(&profile, "deepseek-v4-pro", "test-key").await.unwrap();
+                probe_model(&profile, "deepseek-v4-pro", "test-key")
+                    .await
+                    .unwrap();
             }
             worker.await.unwrap();
         }
@@ -615,9 +779,24 @@ mod tests {
 
     #[test]
     fn tuning_rejects_invalid_values() {
-        assert!(ModelTuning { temperature: Some(2.1), ..Default::default() }.validate().is_err());
-        assert!(ModelTuning { top_p: Some(0.0), ..Default::default() }.validate().is_err());
-        assert!(ModelTuning { max_output_tokens: Some(900), context_window: Some(800),
-            ..Default::default() }.validate().is_err());
+        assert!(ModelTuning {
+            temperature: Some(2.1),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+        assert!(ModelTuning {
+            top_p: Some(0.0),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+        assert!(ModelTuning {
+            max_output_tokens: Some(900),
+            context_window: Some(800),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
     }
 }
