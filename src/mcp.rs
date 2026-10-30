@@ -281,13 +281,66 @@ impl Client {
     }
 }
 
-fn mcp_tool_alias(server: &str, tool: &str) -> String {
+// src/services/mcp/mcpStringUtils.ts. Keep tool names qualified at the
+// permission and routing boundary so an MCP tool named Read cannot inherit
+// the built-in Read tool's permissions.
+pub fn mcp_info_from_string(value: &str) -> Option<(&str, Option<String>)> {
+    let mut parts = value.split("__");
+    if parts.next()? != "mcp" {
+        return None;
+    }
+    let server = parts.next()?;
+    if server.is_empty() {
+        return None;
+    }
+    let tool_parts = parts.collect::<Vec<_>>();
+    let tool = (!tool_parts.is_empty()).then(|| tool_parts.join("__"));
+    Some((server, tool))
+}
+
+pub fn get_mcp_prefix(server_name: &str) -> String {
+    format!("mcp__{}__", runtime_contracts::normalize_mcp_name(server_name))
+}
+
+pub fn build_mcp_tool_name(server_name: &str, tool_name: &str) -> String {
     format!(
-        "mcp__{}__{}",
-        runtime_contracts::normalize_mcp_name(server),
-        runtime_contracts::normalize_mcp_name(tool)
+        "{}{}",
+        get_mcp_prefix(server_name),
+        runtime_contracts::normalize_mcp_name(tool_name)
     )
 }
+
+pub fn get_tool_name_for_permission_check(
+    name: &str,
+    mcp_info: Option<(&str, &str)>,
+) -> String {
+    match mcp_info {
+        Some((server, tool)) => build_mcp_tool_name(server, tool),
+        None => name.to_owned(),
+    }
+}
+
+pub fn get_mcp_display_name(full_name: &str, server_name: &str) -> String {
+    full_name.replacen(&get_mcp_prefix(server_name), "", 1)
+}
+
+pub fn extract_mcp_tool_display_name(user_facing_name: &str) -> String {
+    let value = user_facing_name.trim_end();
+    let value = value
+        .strip_suffix("(MCP)")
+        .map(str::trim_end)
+        .unwrap_or(value)
+        .trim();
+    if let Some(index) = value.find(" - ") {
+        return value[index + 3..].trim().to_owned();
+    }
+    value.to_owned()
+}
+
+fn mcp_tool_alias(server: &str, tool: &str) -> String {
+    build_mcp_tool_name(server, tool)
+}
+
 
 enum TransportClient {
     Stdio(Client),
@@ -2416,4 +2469,57 @@ mod remote_tests {
         );
         server.await.unwrap();
     }
+    #[test]
+    fn original_mcp_name_string_helpers_and_permission_identity() {
+        assert_eq!(
+            mcp_info_from_string("mcp__docs__search__full"),
+            Some(("docs", Some("search__full".to_owned())))
+        );
+        assert_eq!(
+            mcp_info_from_string("mcp__docs"),
+            Some(("docs", None))
+        );
+        assert_eq!(
+            mcp_info_from_string("mcp__docs__"),
+            Some(("docs", Some(String::new())))
+        );
+        assert_eq!(mcp_info_from_string("mcp____search"), None);
+        assert_eq!(mcp_info_from_string("mytool__docs__search"), None);
+        assert_eq!(mcp_info_from_string("mcp__"), None);
+        assert_eq!(get_mcp_prefix("my server"), "mcp__my_server__");
+        assert_eq!(
+            build_mcp_tool_name("my server", "read.file"),
+            "mcp__my_server__read_file"
+        );
+        assert_eq!(
+            get_tool_name_for_permission_check("Read", Some(("my server", "Read"))),
+            "mcp__my_server__Read"
+        );
+        assert_eq!(get_tool_name_for_permission_check("Read", None), "Read");
+        assert_eq!(
+            get_mcp_display_name("prefix_mcp__my_server__run", "my server"),
+            "prefix_run"
+        );
+        assert_eq!(
+            get_mcp_display_name("mcp__unrelated__run", "my server"),
+            "mcp__unrelated__run"
+        );
+        assert_eq!(
+            extract_mcp_tool_display_name("github - Add comment to issue (MCP)   "),
+            "Add comment to issue"
+        );
+        assert_eq!(
+            extract_mcp_tool_display_name("Add comment (MCP)"),
+            "Add comment"
+        );
+        assert_eq!(
+            extract_mcp_tool_display_name("server -  update - item  "),
+            "update - item"
+        );
+        assert_eq!(
+            extract_mcp_tool_display_name("no suffix"),
+            "no suffix"
+        );
+    }
+
 }
