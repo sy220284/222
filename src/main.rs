@@ -455,6 +455,27 @@ fn main() -> Result<()> {
     }
 }
 
+/// Preserve arbitrary SDK message identifiers without losing the UUID used
+/// for internal file snapshots. External IDs remain unchanged in SDK replies;
+/// non-UUID IDs receive a stable session-scoped, RFC 9562 version-8 UUID.
+fn sdk_message_id(external: &str, session_id: &str) -> uuid::Uuid {
+    if let Ok(uuid) = uuid::Uuid::parse_str(external) {
+        return uuid;
+    }
+    use sha2::{Digest, Sha256};
+    let mut digest = Sha256::new();
+    digest.update(b"atlas-sdk-message-id-v1:");
+    digest.update(session_id.as_bytes());
+    digest.update(b":");
+    digest.update(external.as_bytes());
+    let hash = digest.finalize();
+    let mut bytes = [0_u8; 16];
+    bytes.copy_from_slice(&hash[..16]);
+    bytes[6] = (bytes[6] & 0x0f) | 0x80;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    uuid::Uuid::from_bytes(bytes)
+}
+
 async fn run_cli() -> Result<()> {
     let cli = Cli::parse();
     match &cli.command {
@@ -3146,16 +3167,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     .get("uuid")
                     .and_then(Value::as_str)
                     .filter(|id| !id.trim().is_empty())
-                    .map(uuid::Uuid::parse_str)
-                    .transpose();
-                let message_id = match message_id {
-                    Ok(value) => value,
-                    Err(error) => {
-                        print_json!(json!({"type":"error",
-                            "message":format!("SDK user uuid must be valid: {error}")}));
-                        continue;
-                    }
-                };
+                    .map(|id| sdk_message_id(id, &agent.session_id()));
                 match sdk_interruptible_turn(
                     agent,
                     &user.preview,
