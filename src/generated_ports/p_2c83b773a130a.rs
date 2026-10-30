@@ -3,7 +3,7 @@
 //! Agent management UI state machine types and the AGENT_PATHS constant,
 //! transcribed from the original union/intersection types.
 
-pub const AGENT_PATHS_FOLDER_NAME: &str = ".claude";
+pub const AGENT_PATHS_FOLDER_NAME: &str = ".vendor";
 pub const AGENT_PATHS_AGENTS_DIR: &str = "agents";
 
 /// `SettingSource | 'all' | 'built-in'` — the agent list source filter.

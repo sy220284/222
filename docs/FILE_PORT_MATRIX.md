@@ -944,7 +944,7 @@
 | `src/keybindings/match.ts` | 121 | 3797 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：Ink 等价终端键名归一化、修饰键和 Escape 特例已迁入 Rust；原生 UI 输入派发仍待连接 |
 | `src/keybindings/parser.ts` | 204 | 4972 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：组合键解析、修饰键别名、平台显示以及 bindings 映射已迁入 Rust；复杂终端输入仍需交叉验收 |
 | `src/keybindings/reservedShortcuts.ts` | 128 | 3610 | 重写：保持通用行为 | `src/generated_ports/p_d338e19c29574.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/keybindings/resolver.ts` | 245 | 7087 | 重写：保持通用行为 | `src/generated_ports/p_c7d9aa37cc1b1.rs / src/keybindings.rs / src/terminal_input.rs` | 部分实现：生产终端已使用 KeybindingRuntime 解析用户键位与 Chat 上下文；多段组合键、冲突优先级和全部原版焦点组件仍待验收 |
+| `src/keybindings/resolver.ts` | 245 | 7087 | 重写：保持通用行为 | `src/generated_ports/p_c7d9aa37cc1b1.rs`| 部分实现：按键解析纯核——chord 字符串解析（ctrl/alt/meta/shift/super 修饰符）、单键匹配（活动上下文过滤、最后绑定优先）、Escape 不携带 meta 的 Ink QUIRK、alt/meta 合并而 super 独立的修饰符比较、显示文本反向查找、unbound 动作语义，registry 兼容导出 keystrokesEqual，附 5 测试；match.ts/parser.ts 原语为注入数据|
 | `src/keybindings/schema.ts` | 237 | 6269 | 重写：保持通用行为 | `src/generated_ports/p_212ef30d7fd2c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/keybindings/shortcutFormat.ts` | 64 | 2575 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：可用动作的用户定义快捷键显示已迁入 Rust；缺失快捷键后的原版遥测按用户要求删除 |
 | `src/keybindings/template.ts` | 53 | 1721 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：用户配置模板及保留快捷键过滤、原子排他创建已迁入 Rust；文本编辑器差异待覆盖 |
