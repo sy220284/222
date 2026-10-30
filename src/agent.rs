@@ -3671,7 +3671,11 @@ impl Agent {
             if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
                 available_tools.push(tools::powershell_definition());
             }
-            available_tools.extend(task::definitions());
+            // The original tools.ts exposes TaskCreate/Get/List/Update only
+            // when V2 tasks are enabled, and TodoWrite only otherwise.
+            // Legacy Rust task_* helpers remain available to older clients
+            // through dispatch, but must not appear in the model's catalog:
+            // publishing both created competing task lists in one session.
             // Original TodoWriteTool is the non-interactive SDK/headless
             // checklist; the V2 shared task graph is interactive by default.
             if task::tasks_v2_enabled(self.interactive) {
