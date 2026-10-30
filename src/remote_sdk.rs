@@ -97,7 +97,10 @@ fn validate_url(url: &str, token_present: bool) -> Result<()> {
     let host = parsed.host_str().context("Remote SDK URL has no host")?;
     // IPv6 hosts arrive bracketed ("[::1]"); IpAddr::parse rejects the
     // brackets, so strip them before the loopback check.
-    let unbracketed = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')).unwrap_or(host);
+    let unbracketed = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host);
     let loopback = unbracketed.eq_ignore_ascii_case("localhost")
         || unbracketed
             .parse::<std::net::IpAddr>()
@@ -161,13 +164,19 @@ async fn deliver_input(
     stdin: &mut tokio::process::ChildStdin,
     pending: &mut std::collections::HashMap<String, String>,
 ) -> Result<()> {
-    let id = event.delivery_id.as_deref()
-        .or_else(|| event.payload.get("eventId").or_else(|| event.payload.get("event_id"))
-            .and_then(Value::as_str));
+    let id = event.delivery_id.as_deref().or_else(|| {
+        event
+            .payload
+            .get("eventId")
+            .or_else(|| event.payload.get("event_id"))
+            .and_then(Value::as_str)
+    });
     if let (Some(id), Some(uuid)) = (id, event.payload.get("uuid").and_then(Value::as_str)) {
         pending.insert(uuid.to_owned(), id.to_owned());
     }
-    stdin.write_all(crate::ndjson::stringify_value(&event.payload).as_bytes()).await?;
+    stdin
+        .write_all(crate::ndjson::stringify_value(&event.payload).as_bytes())
+        .await?;
     stdin.write_all(b"\n").await?;
     stdin.flush().await?;
     if let Some(id) = id {
@@ -226,9 +235,14 @@ pub async fn run(
             for line in frame.lines().filter(|s| !s.trim().is_empty()) {
                 match serde_json::from_str::<Value>(line) {
                     Ok(value) => {
-                        if ws_input_tx.send(IncomingEvent {
-                            payload: value, delivery_id: None,
-                        }).await.is_err() {
+                        if ws_input_tx
+                            .send(IncomingEvent {
+                                payload: value,
+                                delivery_id: None,
+                            })
+                            .await
+                            .is_err()
+                        {
                             return;
                         }
                     }
@@ -289,9 +303,14 @@ pub async fn run(
                 let mut receiver = receiver;
                 while let Some(event) = receiver.recv().await {
                     if let Some(payload) = event.payload {
-                        if sse_sender.send(IncomingEvent {
-                            payload, delivery_id: event.event_id,
-                        }).await.is_err() {
+                        if sse_sender
+                            .send(IncomingEvent {
+                                payload,
+                                delivery_id: event.event_id,
+                            })
+                            .await
+                            .is_err()
+                        {
                             return;
                         }
                     }
