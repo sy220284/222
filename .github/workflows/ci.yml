@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, feat/full-rust-parity]
   push:
-    branches: [main]
+    branches: [main, pr7]
 
 permissions:
   contents: read
