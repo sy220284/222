@@ -135,6 +135,7 @@ fn split_field(line: &str) -> Option<(&str, String)> {
 /// `StreamClientEvent`).
 #[derive(Debug, Clone, Default)]
 pub struct StreamClientEvent {
+    pub event_id: Option<String>,
     pub sequence_num: Option<u64>,
     pub payload: Option<Value>,
 }
@@ -142,6 +143,8 @@ pub struct StreamClientEvent {
 pub fn parse_client_event(data: &str) -> Option<StreamClientEvent> {
     let value: Value = serde_json::from_str(data).ok()?;
     Some(StreamClientEvent {
+        event_id: value.get("event_id").or_else(|| value.get("eventId"))
+            .and_then(Value::as_str).map(ToOwned::to_owned),
         sequence_num: value.get("sequence_num").and_then(Value::as_u64),
         payload: value.get("payload").cloned(),
     })
@@ -185,8 +188,9 @@ pub struct SseTransport {
     auth: AuthHeaders,
     state: Mutex<SseStateInner>,
     closed: AtomicBool,
-    event_tx: mpsc::UnboundedSender<Value>,
-    pub event_rx: Mutex<Option<mpsc::UnboundedReceiver<Value>>>,
+    event_tx: mpsc::UnboundedSender<StreamClientEvent>,
+    pub event_rx: Mutex<Option<mpsc::UnboundedReceiver<StreamClientEvent>>>,
+    event_callback: Mutex<Option<Arc<dyn Fn(&StreamClientEvent) + Send + Sync>>>,
 }
 
 impl SseTransport {
@@ -214,7 +218,16 @@ impl SseTransport {
             closed: AtomicBool::new(false),
             event_tx,
             event_rx: Mutex::new(Some(event_rx)),
+            event_callback: Mutex::new(None),
         }
+    }
+
+    /// Must be installed before connect() so early SSE frames are acked.
+    pub fn set_event_callback(
+        &self,
+        callback: Arc<dyn Fn(&StreamClientEvent) + Send + Sync>,
+    ) {
+        *self.event_callback.lock().expect("sse callback lock") = Some(callback);
     }
 
     pub fn get_last_sequence_num(&self) -> u64 {
@@ -325,8 +338,11 @@ impl SseTransport {
                             }
                             state.last_sequence_num = state.last_sequence_num.max(seq);
                         }
-                        if let Some(payload) = event.payload {
-                            let _ = self.event_tx.send(payload);
+                        if let Some(callback) = self.event_callback.lock().expect("sse callback lock").as_ref() {
+                            callback(&event);
+                        }
+                        if event.payload.as_ref().and_then(|payload| payload.get("type")).is_some() {
+                            let _ = self.event_tx.send(event);
                         }
                     }
                 }
@@ -523,6 +539,14 @@ mod tests {
         assert_eq!(event.sequence_num, Some(7));
         assert_eq!(event.payload, Some(json!({"type":"user"})));
         assert!(parse_client_event("not json").is_none());
+    }
+
+    #[test]
+    fn sse_client_event_retains_delivery_id() {
+        let parsed = parse_client_event(r#"{"event_id":"delivery-7","sequence_num":8,"payload":{"type":"user","uuid":"u7"}}"#).unwrap();
+        assert_eq!(parsed.event_id.as_deref(), Some("delivery-7"));
+        assert_eq!(parsed.sequence_num, Some(8));
+        assert_eq!(parsed.payload.unwrap()["uuid"], "u7");
     }
 
     #[test]
