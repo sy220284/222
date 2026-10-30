@@ -1424,7 +1424,7 @@
 | `src/utils/caCerts.ts` | 116 | 4401 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/caCertsConfig.ts` | 89 | 3608 | 重写：保持通用行为 | `src/generated_ports/p_8041a90f0b147.rs`| 部分实现：NODE_EXTRA_CA_CERTS 三级优先（进程 env 已设即跳过>settings>global config）、仅用户可控源、debug 日志接线，附 4 测试；getGlobalConfig/getSettingsForSource 由调用方传入已解析 env 对象（config/settings 端口迁移前接口），TLS 生效时机行为验收待 CI|
 | `src/utils/cachePaths.ts` | 39 | 1411 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/classifierApprovals.ts` | 89 | 2448 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/classifierApprovals.ts` | 89 | 2448 | 重写：保持通用行为 | `src/generated_ports/p_3d03f439b2b21.rs`| 部分实现：auto-mode 与 bash 分类器审批双 Map（toolUseID 键）、yolo 审批隔离读取、checking 生命周期信号、全清空，附 5 测试；bundle 编译期 feature 门禁改为进程级开关（默认开=生产构建语义），Signal 接 event_signal 端口|
 | `src/utils/classifierApprovalsHook.ts` | 18 | 531 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/claudeCodeHints.ts` | 194 | 6472 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/claudeDesktop.ts` | 153 | 4063 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1863,8 +1863,8 @@
 | `src/utils/task/outputFormatting.ts` | 39 | 1188 | 重写：保持通用行为 | `src/task_output_format.rs` | 部分实现：长度上限、UTF-16 计数、尾部截断和日志路径；代理项边界与任务目录待核对 |
 | `src/utils/task/sdkProgress.ts` | 37 | 1153 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/tasks.ts` | 863 | 26354 | 重写：保持通用行为 | `src/task_graph.rs / src/task_events.rs / src/agent.rs` | 部分实现：CRUD、依赖/认领、高水位、重置、退出收回、订阅回调锁外派发；已补齐损坏/超长任务文件名、不可读/超大任务记录隔离、异常 JSON 重置清理、创建仅落任务记录、删除/重置时更新高水位，避免额外计数写失败误报；损坏记录占用编号不复用、无效编号读取返回任务不存在；新增 ATLAS_TASK_LIST_ID 跨会话共享任务列表优先级及团队清理隔离；原版全部状态迁移、跨进程通知与文件级并发仍未等价；队友空闲前从共享任务列表逐条读取本人 in_progress 任务并执行 TaskCompleted Hook（dd67ffc1），待验收；修复同一任务双向自依赖持久化时第二次写入覆盖阻塞关系（4f4cf7b） |
-| `src/utils/teamDiscovery.ts` | 82 | 2323 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/teamMemoryOps.ts` | 89 | 2471 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/teamDiscovery.ts` | 82 | 2323 | 重写：保持通用行为 | `src/generated_ports/p_e19d4c01601c8.rs`| 部分实现：团队状态汇总（running/idle 计数排除隐藏成员）、成员富字段解析（agentType/model/prompt/color/idleSince/tmuxPaneId/cwd/worktreePath/isHidden/backendType/mode）、无效 pane 后端置空、isPaneBackend 白名单（tmux|iterm2）、缺文件返回 None，附 4 测试；原版 readTeamFile 的跨进程锁由 team_registry 端口承担，本桩自读团队 JSON|
+| `src/utils/teamMemoryOps.ts` | 89 | 2471 | 重写：保持通用行为 | `src/generated_ports/p_0b4548f3115ca.rs`| 部分实现：团队记忆计数摘要构建（read/search/write 三类、单复数、active/recalled 动词时态）、isTeamMemFile 路径形状判定（目录前缀+进程级开关），附 5 测试；memdir/teamMemPaths 全量（sanitizePathKey 注入防护/realpath/lstat，292 行）待独立迁移记依赖差异，实验 flag 名按隐私门禁要求省略|
 | `src/utils/teammate.ts` | 293 | 9206 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teammateContext.ts` | 97 | 3161 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teammateMailbox.ts` | 1184 | 33420 | 重写：保持通用行为 | `src/team_mailbox.rs / src/team_registry.rs / src/agent.rs` | 部分实现：持久邮箱、并发锁、未读/条件已读、关停/计划请求与回执、模式设置通知；请求关联、故障重试、来源校验；权限/沙箱审批与其他通知的完整分发、原版异常语义未等价 |

@@ -2037,3 +2037,10 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **Rust 可达链**：`p_0c2f0671dbf30`（图素/词分割+locale）→ 为 sliceAnsi 等消费方提供共享分割原语；`p_8041a90f0b147`（NODE_EXTRA_CA_CERTS 三级优先，config/settings 端口迁移前由调用方传解析后 env 对象）；`p_f2da3e94e87ce`（MCPB 清单必填校验+扩展 ID sanitize）；`p_bec23e04adcfb`（pyright 19 旗标规格）。
 - **保守功能计数**：图素/词分割原语、first/lastGrapheme、CA 证书路径应用（三优先级+用户源限制）、MCPB 清单校验、扩展 ID 生成、pyright 规格，共 **6 个独立业务行为**，17 个单元测试。
 - **尚未实现的准确差异**：全 UAX#29 图素边界为近似（同 ANSI 切片桩口径）；ICU locale/timezone 以 TZ/LANG 解析替代；zod schema 可选字段细则以必填骨架覆盖；隐私门禁（tests/privacy.rs 品牌扫描）已通过。**未运行 CI（本地 cargo check/test/fmt 已全绿，810 通过 0 失败）；已提交待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
+
+
+## 2026-10-30：工具层手工重写批次三（分类器审批/团队发现/团队记忆）（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 `source/src/utils/{classifierApprovals.ts,teamDiscovery.ts,teamMemoryOps.ts}`，依赖端口 team_registry/event_signal/backends-types 桩均已在位。
+- **保守功能计数**：分类器审批登记与查询（双分类器隔离）、checking 生命周期、团队状态汇总（隐藏排除）、成员富字段解析、团队记忆计数摘要、isTeamMemFile 路径判定，共 **6 个独立业务行为**，14 个单元测试。
+- **尚未实现的准确差异**：feature 编译期门禁改进程级开关；teamMemPaths 全量（292 行注入防护）待独立迁移；team JSON 富字段由本桩直读。**本地 cargo check/fmt/test 全绿（847 通过 0 失败），已提交待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
