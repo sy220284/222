@@ -114,15 +114,17 @@ impl Editor {
     }
 }
 
-/// Source vim/types.ts initial state is INSERT. Escape switches to NORMAL;
-/// NORMAL motions and edits are handled before the readline keybindings.
+/// Vim input adapter: the editor owns terminal I/O and undo snapshots,
+/// while src/vim/transitions.rs owns NORMAL-mode command semantics.
 #[derive(Debug)]
 struct VimKeys {
     enabled: bool,
     insert: bool,
-    pending: Option<char>,
+    command: crate::vim::transitions::CommandState,
+    persistent: crate::vim::types::PersistentState,
     register: String,
     undo: Vec<(String, usize)>,
+    inserted_text: String,
 }
 
 impl VimKeys {
@@ -130,9 +132,11 @@ impl VimKeys {
         Self {
             enabled,
             insert: true,
-            pending: None,
+            command: crate::vim::transitions::CommandState::Idle,
+            persistent: crate::vim::types::PersistentState::default(),
             register: String::new(),
             undo: Vec::new(),
+            inserted_text: String::new(),
         }
     }
 
@@ -143,204 +147,114 @@ impl VimKeys {
         }
     }
 
-    fn move_word(editor: &mut Editor, forward: bool) {
-        if forward {
-            let next = &editor.text[editor.cursor..];
-            let mut chars = next.char_indices().peekable();
-            let is_word = chars
-                .peek()
-                .is_some_and(|(_, c)| c.is_alphanumeric() || *c == '_');
-            if is_word {
-                while chars
-                    .peek()
-                    .is_some_and(|(_, c)| c.is_alphanumeric() || *c == '_')
-                {
-                    chars.next();
+    fn execute_repeat(ctx: &mut crate::vim::operators::VimCtx) {
+        use crate::vim::operators::*;
+        use crate::vim::types::RecordedChange;
+        let Some(last) = ctx.persistent.last_change.clone() else { return };
+        match last {
+            RecordedChange::Insert { text } => {
+                if ctx.text.is_char_boundary(ctx.offset) {
+                    ctx.text.insert_str(ctx.offset, &text);
+                    ctx.offset += text.len();
                 }
             }
-            while chars
-                .peek()
-                .is_some_and(|(_, c)| !c.is_alphanumeric() && *c != '_')
-            {
-                chars.next();
-            }
-            editor.cursor += chars.peek().map(|(i, _)| *i).unwrap_or(next.len());
-        } else {
-            let before = &editor.text[..editor.cursor];
-            let mut chars = before.char_indices().rev().peekable();
-            while chars
-                .peek()
-                .is_some_and(|(_, c)| !c.is_alphanumeric() && *c != '_')
-            {
-                chars.next();
-            }
-            let mut beginning = 0;
-            while let Some((i, c)) = chars.peek().copied() {
-                if !c.is_alphanumeric() && c != '_' {
-                    break;
+            RecordedChange::Operator { op, motion, count } => {
+                if motion == op.key().to_string() {
+                    execute_line_op(ctx, op, count);
+                } else if motion == "G" {
+                    execute_operator_g(ctx, op, count);
+                } else if motion == "gg" {
+                    execute_operator_gg(ctx, op, count);
+                } else {
+                    execute_operator_motion(ctx, op, &motion, count);
                 }
-                beginning = i;
-                chars.next();
             }
-            editor.cursor = beginning;
+            RecordedChange::OperatorTextObj { op, obj_type, scope, count } => {
+                execute_operator_text_obj(ctx, op, obj_type, scope, count);
+            }
+            RecordedChange::OperatorFind { op, find, ch, count } => {
+                execute_operator_find(ctx, op, find, ch, count);
+            }
+            RecordedChange::Replace { ch, count } => execute_replace(ctx, ch, count),
+            RecordedChange::X { count } => execute_x(ctx, count),
+            RecordedChange::ToggleCase { count } => execute_toggle_case(ctx, count),
+            RecordedChange::Indent { dir, count } => execute_indent(ctx, dir, count),
+            RecordedChange::OpenLine { below } => execute_open_line(ctx, below),
+            RecordedChange::Join { count } => execute_join(ctx, count),
         }
     }
 
-    fn line_bounds(e: &Editor) -> (usize, usize) {
-        let begin = e.text[..e.cursor].rfind('\n').map(|i| i + 1).unwrap_or(0);
-        let end = e.text[e.cursor..]
-            .find('\n')
-            .map(|i| e.cursor + i)
-            .unwrap_or(e.text.len());
-        (begin, end)
-    }
-
-    fn vertical(e: &mut Editor, down: bool) {
-        let (start, end) = Self::line_bounds(e);
-        let column = e.text[start..e.cursor].chars().count();
-        let target = if down {
-            if end == e.text.len() {
-                return;
-            }
-            let next = end + 1;
-            let last = e.text[next..]
-                .find('\n')
-                .map(|i| next + i)
-                .unwrap_or(e.text.len());
-            (next, last)
-        } else {
-            if start == 0 {
-                return;
-            }
-            let last = start - 1;
-            let next = e.text[..last].rfind('\n').map(|i| i + 1).unwrap_or(0);
-            (next, last)
-        };
-        e.cursor = target.0
-            + e.text[target.0..target.1]
-                .chars()
-                .take(column)
-                .map(char::len_utf8)
-                .sum::<usize>();
-    }
-
-    /// Returns true when a keystroke was consumed by Vim. Terminal submission,
-    /// cancellation, and bracketed paste continue through the outer dispatcher.
-    fn handle(&mut self, e: &mut Editor, key: &Key) -> Result<bool> {
+    /// Escape switches to NORMAL; normal keystrokes use the shared source-
+    /// matched state machine instead of a second simplified Vim parser.
+    fn handle(&mut self, editor: &mut Editor, key: &Key) -> Result<bool> {
         if !self.enabled {
             return Ok(false);
         }
         if *key == Key::Escape {
+            if self.insert && !self.inserted_text.is_empty() {
+                self.persistent.last_change = Some(crate::vim::types::RecordedChange::Insert {
+                    text: std::mem::take(&mut self.inserted_text),
+                });
+            }
             self.insert = false;
-            self.pending = None;
+            self.command = crate::vim::transitions::CommandState::Idle;
             return Ok(true);
         }
         if self.insert {
+            if let Key::Char(ch) = key {
+                self.inserted_text.push(*ch);
+            }
             return Ok(false);
         }
-        let Key::Char(ch) = key else {
-            match key {
-                Key::Left => e.left(),
-                Key::Right => e.right(),
-                Key::Up => Self::vertical(e, false),
-                Key::Down => Self::vertical(e, true),
-                Key::Home => e.cursor = Self::line_bounds(e).0,
-                Key::End => e.cursor = Self::line_bounds(e).1,
-                _ => return Ok(false),
+
+        let input = match key {
+            Key::Char(ch) => ch.to_string(),
+            Key::Backspace | Key::Delete => String::new(),
+            Key::Left | Key::Right | Key::Up | Key::Down | Key::Home | Key::End => {
+                let cursor = crate::vim::cursor::VimCursor::new(&editor.text, editor.cursor);
+                editor.cursor = match key {
+                    Key::Left => cursor.left().offset,
+                    Key::Right => cursor.right().offset,
+                    Key::Up => cursor.up_logical_line().offset,
+                    Key::Down => cursor.down_logical_line().offset,
+                    Key::Home => cursor.start_of_logical_line().offset,
+                    Key::End => cursor.end_of_logical_line().offset,
+                    _ => unreachable!(),
+                };
+                return Ok(true);
             }
-            return Ok(true);
+            _ => return Ok(false),
         };
-        if let Some(op) = self.pending.take() {
-            if *ch == op {
-                let (start, end) = Self::line_bounds(e);
-                match op {
-                    'd' | 'c' => {
-                        self.record(e);
-                        let stop = if end < e.text.len() { end + 1 } else { end };
-                        self.register = e.text[start..stop].to_owned();
-                        e.text.replace_range(start..stop, "");
-                        e.cursor = start.min(e.text.len());
-                        if op == 'c' {
-                            self.insert = true;
-                        }
-                    }
-                    'y' => {
-                        let stop = if end < e.text.len() { end + 1 } else { end };
-                        self.register = e.text[start..stop].to_owned();
-                    }
-                    _ => {}
-                }
-            } else if *ch == '$' && (op == 'd' || op == 'c') {
-                self.record(e);
-                let end = Self::line_bounds(e).1;
-                self.register = e.text[e.cursor..end].to_owned();
-                e.text.replace_range(e.cursor..end, "");
-                if op == 'c' {
-                    self.insert = true;
-                }
+
+        let mut ctx = crate::vim::operators::VimCtx::new(editor.text.clone(), editor.cursor);
+        ctx.persistent = self.persistent.clone();
+        let _handled = crate::vim::transitions::transition(&mut self.command, &input, &mut ctx);
+        if ctx.undo_requested {
+            if let Some((text, cursor)) = self.undo.pop() {
+                editor.text = text;
+                editor.cursor = cursor;
             }
             return Ok(true);
         }
-        match *ch {
-            'i' => {
-                self.record(e);
-                self.insert = true;
-            }
-            'a' => {
-                self.record(e);
-                e.right();
-                self.insert = true;
-            }
-            'I' => {
-                self.record(e);
-                let (start, end) = Self::line_bounds(e);
-                e.cursor = start + e.text[start..end].len() - e.text[start..end].trim_start().len();
-                self.insert = true;
-            }
-            'A' => {
-                self.record(e);
-                e.cursor = Self::line_bounds(e).1;
-                self.insert = true;
-            }
-            'h' => e.left(),
-            'l' => e.right(),
-            'j' => Self::vertical(e, true),
-            'k' => Self::vertical(e, false),
-            '0' => e.cursor = Self::line_bounds(e).0,
-            '$' => e.cursor = Self::line_bounds(e).1,
-            'w' => Self::move_word(e, true),
-            'b' => Self::move_word(e, false),
-            'x' => {
-                self.record(e);
-                self.register = e.text[e.cursor..]
-                    .chars()
-                    .next()
-                    .map(|c| c.to_string())
-                    .unwrap_or_default();
-                e.delete();
-            }
-            'd' | 'c' | 'y' => self.pending = Some(*ch),
-            'p' | 'P' => {
-                if !self.register.is_empty() {
-                    self.record(e);
-                    if *ch == 'p' {
-                        e.right();
-                    }
-                    if e.text.len().saturating_add(self.register.len()) > MAX_INPUT_BYTES {
-                        bail!("Interactive input exceeds 1 MiB");
-                    }
-                    e.text.insert_str(e.cursor, &self.register);
-                    e.cursor += self.register.len();
-                }
-            }
-            'u' => {
-                if let Some((text, cursor)) = self.undo.pop() {
-                    e.text = text;
-                    e.cursor = cursor;
-                }
-            }
-            _ => {}
+        if ctx.dot_repeat_requested {
+            Self::execute_repeat(&mut ctx);
         }
+        if ctx.text.len() > MAX_INPUT_BYTES {
+            bail!("Interactive input exceeds 1 MiB");
+        }
+        if ctx.text != editor.text || ctx.enter_insert {
+            self.record(editor);
+        }
+        editor.text = ctx.text;
+        editor.cursor = ctx.offset;
+        self.persistent = ctx.persistent;
+        self.register = self.persistent.register.clone();
+        if ctx.enter_insert {
+            self.insert = true;
+            self.inserted_text.clear();
+            self.command = crate::vim::transitions::CommandState::Idle;
+        }
+        // An unrecognized NORMAL key must never be inserted as plain text.
         Ok(true)
     }
 }
