@@ -672,7 +672,9 @@ pub fn string_width(s: &str) -> usize {
                 count += 1;
                 j += 1;
             }
-            width += if count == 1 { 1 } else { 2 };
+            // JS Intl.Segmenter produces adjacent pairs and a possible
+            // final single indicator. Each pair is 2 columns, single is 1.
+            width += count;
             i = j;
             continue;
         }
@@ -890,6 +892,15 @@ mod tests {
             end_code: RESET_OPEN.into(),
         };
         assert!(reduce_ansi_codes(&[red, reset]).is_empty());
+    }
+
+    #[test]
+    fn multiple_regional_indicator_graphemes_are_measured_by_pairs() {
+        assert_eq!(string_width("🇺"), 1);
+        assert_eq!(string_width("🇺🇸"), 2);
+        assert_eq!(string_width("🇺🇸🇨"), 3);
+        assert_eq!(string_width("🇺🇸🇨🇳"), 4);
+        assert_eq!(string_width("🇺🇸🇨🇳🇫🇷"), 6);
     }
 
     #[test]

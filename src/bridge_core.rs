@@ -302,10 +302,41 @@ mod tests {
 
     #[test]
     fn source_poll_defaults_are_consistent_for_single_and_multiple_sessions() {
-        let v = poll_defaults();
-        assert_eq!(v["poll_interval_ms_not_at_capacity"], 2000);
-        assert_eq!(v["multisession_poll_interval_ms_partial_capacity"], 2000);
-        assert_eq!(v["poll_interval_ms_at_capacity"], 600000);
-        assert_eq!(v["session_keepalive_interval_v2_ms"], 120000);
+        // Exact eight-field DEFAULT_POLL_CONFIG from source/bridge/pollConfigDefaults.ts.
+        // The exported type declares these eight numbers and no dynamic fields.
+        let expected = json!({
+            "poll_interval_ms_not_at_capacity": 2000,
+            "poll_interval_ms_at_capacity": 600000,
+            "non_exclusive_heartbeat_interval_ms": 0,
+            "multisession_poll_interval_ms_not_at_capacity": 2000,
+            "multisession_poll_interval_ms_partial_capacity": 2000,
+            "multisession_poll_interval_ms_at_capacity": 600000,
+            "reclaim_older_than_ms": 5000,
+            "session_keepalive_interval_v2_ms": 120000
+        });
+        assert_eq!(poll_defaults(), expected);
+        let mut session = BridgeSession::new("session-1".to_owned());
+        assert_eq!(
+            session
+                .dispatch(
+                    "bridge_poll_defaults",
+                    &json!({"session_id": "session-1"})
+                )
+                .unwrap(),
+            expected
+        );
+        // Reading immutable defaults has no effects on session ownership,
+        // flush state or pending outbound message buffers.
+        assert_eq!(
+            session.dispatch("bridge_flush_status", &json!({})).unwrap(),
+            json!({"active": false, "pending_count": 0})
+        );
+        assert!(session
+            .dispatch(
+                "bridge_poll_defaults",
+                &json!({"session_id": "foreign-session"})
+            )
+            .is_err());
+        assert_eq!(poll_defaults(), expected);
     }
 }
