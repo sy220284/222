@@ -383,8 +383,7 @@ impl CcrClient {
         // Recover pending internal events left by prior workers.
         let pending = self
             .read_internal_events(MAX_INTERNAL_EVENTS_PER_PAGE, None)
-            .await
-            .unwrap_or_default();
+            .await?;
         for event in &pending {
             if let Some(event_id) = event.get("event_id").and_then(Value::as_str) {
                 self.report_delivery(event_id, "received");
@@ -536,29 +535,54 @@ impl CcrClient {
         self.internal_event_uploader.pending_count()
     }
 
-    /// Paginated GET of internal events; retries transient failures up to 10
-    /// times with the client-event backoff schedule.
+    /// Source paginatedGet returns null if any page fails after retries.
+    /// Here a Result error serves the same purpose: never return a partial
+    /// event stream as though session recovery completed successfully.
     pub async fn read_internal_events(
         &self,
         limit: usize,
         cursor: Option<&str>,
     ) -> Result<Vec<Value>> {
+        self.read_internal_events_with_retry_limit(limit, cursor, READ_INTERNAL_EVENTS_MAX_RETRIES)
+            .await
+    }
+
+    fn internal_events_path(&self, limit: usize, cursor: Option<&str>) -> Result<String> {
+        let mut url = reqwest::Url::parse(&format!(
+            "{}/worker/internal-events",
+            self.session_base_url
+        ))?;
+        {
+            let mut pairs = url.query_pairs_mut();
+            pairs.append_pair("limit", &limit.min(MAX_INTERNAL_EVENTS_PER_PAGE).to_string());
+            if let Some(cursor) = cursor {
+                pairs.append_pair("cursor", cursor);
+            }
+        }
+        Ok(format!(
+            "/worker/internal-events?{}",
+            url.query().unwrap_or_default()
+        ))
+    }
+
+    async fn read_internal_events_with_retry_limit(
+        &self,
+        limit: usize,
+        cursor: Option<&str>,
+        max_failures: u32,
+    ) -> Result<Vec<Value>> {
         let mut collected: Vec<Value> = Vec::new();
         let mut next_cursor = cursor.map(str::to_string);
         let mut failures = 0_u32;
         loop {
-            let mut path = format!(
-                "/worker/internal-events?limit={}",
-                limit.min(MAX_INTERNAL_EVENTS_PER_PAGE)
-            );
-            if let Some(cursor) = &next_cursor {
-                path.push_str(&format!("&cursor={cursor}"));
-            }
+            let path = self.internal_events_path(limit, next_cursor.as_deref())?;
             match self.shared.request_get(&path).await {
                 Ok(body) => {
                     failures = 0;
-                    if let Some(data) = body.get("data").and_then(Value::as_array) {
-                        collected.extend(data.iter().cloned());
+                    match body.get("data") {
+                        Some(Value::Array(data)) => collected.extend(data.iter().cloned()),
+                        None | Some(Value::Null) => {}
+                        Some(_) => bail!("CCR internal-events response data must be an array"),
                     }
                     next_cursor = body
                         .get("next_cursor")
@@ -568,10 +592,15 @@ impl CcrClient {
                         return Ok(collected);
                     }
                 }
-                Err(_) => {
-                    failures += 1;
-                    if failures >= READ_INTERNAL_EVENTS_MAX_RETRIES {
-                        return Ok(collected);
+                Err(error) => {
+                    failures = failures.saturating_add(1);
+                    if failures >= max_failures {
+                        return Err(error).map_err(|error| {
+                            anyhow!(
+                                "CCR internal-event recovery failed after {failures} attempts; {} uncommitted entries: {error}",
+                                collected.len()
+                            )
+                        });
                     }
                     let delay = super::serial_batch_event_uploader::retry_delay(
                         failures,
@@ -672,7 +701,12 @@ impl CcrShared {
                 .header("Content-Type", "application/json")
                 .body(crate::ndjson::stringify_value(body));
         }
-        let response = request.send().await?;
+        let request_timeout = if method == "GET" {
+            Duration::from_secs(30)
+        } else {
+            Duration::from_secs(10)
+        };
+        let response = request.timeout(request_timeout).send().await?;
         let status = response.status().as_u16();
         if status == 409 {
             (self.on_epoch_mismatch)();
@@ -842,6 +876,29 @@ mod tests {
         assert_eq!(scope_key("s1", None), "s1:");
         assert_eq!(scope_key("s1", Some("agent_1")), "s1:agent_1");
         assert_ne!(scope_key("s1", None), scope_key("s1", Some("agent_1")));
+    }
+
+    #[test]
+    fn internal_event_cursor_is_query_encoded_and_roundtrips() {
+        let client = ccr_client_for_test();
+        let cursor = "page/1?start=二&more=two words";
+        let path = client.internal_events_path(100, Some(cursor)).unwrap();
+        let url = reqwest::Url::parse(&format!("http://127.0.0.1:9{path}")).unwrap();
+        let params = url.query_pairs().collect::<std::collections::HashMap<_, _>>();
+        assert_eq!(params.get("cursor").map(|value| value.as_ref()), Some(cursor));
+        assert_eq!(params.get("limit").map(|value| value.as_ref()), Some("100"));
+        client.close();
+    }
+
+    #[tokio::test]
+    async fn internal_event_recovery_failure_is_never_reported_as_empty_success() {
+        let client = ccr_client_for_test();
+        let error = client
+            .read_internal_events_with_retry_limit(100, None, 1)
+            .await
+            .expect_err("unreachable ingress must fail recovery");
+        assert!(error.to_string().contains("recovery failed after 1 attempts"));
+        client.close();
     }
 
     #[test]
