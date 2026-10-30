@@ -194,10 +194,17 @@ pub async fn complete(
     key: Option<&str>,
     request: &ModelRequest,
     deltas: UnboundedSender<String>,
+    response_schema: Option<&Value>,
 ) -> Result<ModelResponse> {
     let mut body = json!({"model":request.model,
         "messages":crate::provider::openai_messages(request)?,
         "stream":true,"stream_options":{"include_usage":true}});
+    // Keep structured-output semantics identical for streaming and ordinary
+    // Chat Completions. Omitting this silently drops the SDK output contract.
+    if let Some(schema) = response_schema {
+        body["response_format"] = json!({"type":"json_schema",
+            "json_schema":{"name":"structured_output","strict":true,"schema":schema}});
+    }
     if !request.tools.is_empty() {
         body["tools"] = json!(request.tools);
         body["tool_choice"] = json!("auto");
@@ -340,6 +347,7 @@ mod tests {
                 tools: vec![],
             },
             tx,
+            None,
         )
         .await
         .unwrap();
@@ -389,6 +397,7 @@ mod tests {
                 tools: vec![],
             },
             tx,
+            None,
         )
         .await
         .unwrap();
