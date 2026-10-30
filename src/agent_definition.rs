@@ -220,7 +220,21 @@ pub fn new_file_path(workspace: &Path, user: bool, agent_type: &str) -> Result<P
     if let Some(error) = validate_agent_type(agent_type) {
         bail!("{error}");
     }
-    Ok(directory(workspace, user)?.join(format!("{agent_type}.md")))
+    let folder = directory(workspace, user)?;
+    if !user {
+        let workspace = workspace.canonicalize()
+            .context("Cannot resolve project workspace")?;
+        // Check the nearest existing parent: an existing .atlas symlink can
+        // otherwise redirect create/edit/delete outside the project.
+        let ancestor = folder.ancestors()
+            .find(|candidate| candidate.exists())
+            .context("Cannot find existing agent directory ancestor")?;
+        let resolved = ancestor.canonicalize()?;
+        if !resolved.starts_with(&workspace) {
+            bail!("Project agent directory escapes the workspace");
+        }
+    }
+    Ok(folder.join(format!("{agent_type}.md")))
 }
 
 pub fn existing_agent_types(dir: &Path) -> Result<HashSet<String>> {
