@@ -2175,6 +2175,38 @@ impl Agent {
     /// Build a provider-neutral, tool-free title request. SDK control uses
     /// this immutable snapshot so model inference never holds the main
     /// Agent's exclusive state or delays other control messages.
+    /// Consume completed hooks while the SDK is idle and between Agent API
+    /// rounds. Model-visible attachments and UI notifications are once-only.
+    pub async fn pump_async_hook_events(&mut self) -> Result<usize> {
+        let events = crate::hooks::collect_async_hook_responses(
+            &self.session.id.to_string()
+        ).await;
+        let count = events.len();
+        for event in events {
+            self.emit(event.clone());
+            let stdout = event["stdout"].as_str().unwrap_or("").lines()
+                .filter(|line| !line.contains("\"async\":true"))
+                .collect::<Vec<_>>().join("\n");
+            let body = if event["outcome"] == "success" {
+                stdout.trim().to_owned()
+            } else {
+                format!("Async hook {}: {}",
+                    event["outcome"].as_str().unwrap_or("failed"),
+                    event["stderr"].as_str().unwrap_or(""))
+            };
+            if !body.trim().is_empty() {
+                self.session.messages.push(Message::text(
+                    "user",
+                    format!("[Asynchronous {} hook result]\n{}",
+                        event["hook_event_name"].as_str().unwrap_or("Hook"),
+                        body),
+                ));
+                self.session.save(&self.root)?;
+            }
+        }
+        Ok(count)
+    }
+
     pub fn sdk_title_request(&self, description: &str) -> Option<ModelRequest> {
         let description = description.trim();
         if description.is_empty() { return None; }
@@ -3744,23 +3776,7 @@ impl Agent {
             // Original QueryEngine checks AsyncHookRegistry between API/tool
             // rounds. Attach each completed hook exactly once; emit its
             // outcome to the SDK/UI, without replaying the shell command.
-            for event in crate::hooks::collect_async_hook_responses(
-                &self.session.id.to_string()
-            ).await {
-                self.emit(event.clone());
-                if event["outcome"] == "success" {
-                    let stdout = event["stdout"].as_str().unwrap_or("").trim();
-                    if !stdout.is_empty() {
-                        self.session.messages.push(Message::text(
-                            "user",
-                            format!("[Asynchronous {} hook completed]\n{}",
-                                event["hook_event_name"].as_str().unwrap_or("Hook"),
-                                stdout),
-                        ));
-                        self.session.save(&self.root)?;
-                    }
-                }
-            }
+            self.pump_async_hook_events().await?;
             let mut available_tools = tools::definitions_with_checkpointing(
                 crate::history::enabled(self.interactive, self.file_checkpointing_enabled),
             );
