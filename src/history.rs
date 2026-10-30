@@ -456,6 +456,48 @@ pub fn preview(record: &Record, path: &Path) -> Result<String> {
     }))?)
 }
 
+/// Restore verified checkpoint bytes via a same-directory replacement. A failed
+/// write must leave the current user file intact, including on disk-full errors.
+fn publish_verified_restore(path: &Path, bytes: &[u8], mode: Option<u32>) -> Result<()> {
+    let parent = path.parent()
+        .filter(|directory| !directory.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let name = path.file_name().context("History restore target has no filename")?;
+    let temporary = parent.join(format!(
+        ".{}.history-{}.tmp", name.to_string_lossy(), Uuid::new_v4()
+    ));
+    let result = (|| -> Result<()> {
+        let mut file = fs::OpenOptions::new()
+            .write(true).create_new(true).open(&temporary)
+            .with_context(|| format!("Create staged history restore {}", temporary.display()))?;
+        file.write_all(bytes)?;
+        #[cfg(unix)]
+        if let Some(mode) = mode {
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(fs::Permissions::from_mode(mode))?;
+        }
+        #[cfg(not(unix))]
+        let _ = mode;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temporary, path)
+            .with_context(|| format!("Publish history restore {}", path.display()))?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        match fs::remove_file(&temporary) {
+            Ok(()) => Err(error),
+            Err(cleanup) if cleanup.kind() == std::io::ErrorKind::NotFound => Err(error),
+            Err(cleanup) => Err(error.context(format!(
+                "Failed to clean staged history restore {}: {cleanup}", temporary.display()
+            ))),
+        }
+    } else {
+        Ok(())
+    }
+}
+
 pub fn restore(record: &Record, path: &Path) -> Result<String> {
     // Original applySnapshot/restoreBackup can restore a tracked file that was
     // deleted after the snapshot, and recreates missing parent directories.
@@ -483,12 +525,7 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(path, &verified)?;
-        #[cfg(unix)]
-        if let Some(mode) = record.previous_mode {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
-        }
+        publish_verified_restore(path, &verified, record.previous_mode)?;
         Ok(format!("Restored {} to previous version", record.path))
     } else {
         if current.is_some() {
