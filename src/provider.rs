@@ -103,8 +103,12 @@ pub(crate) async fn send_model_request(
                         .get(reqwest::header::RETRY_AFTER)
                         .and_then(|v| v.to_str().ok())
                         .and_then(|v| v.trim().parse::<u64>().ok())
-                        .map(|seconds| Duration::from_secs(seconds.min(30)))
-                        .unwrap_or_else(|| Duration::from_millis(200u64 << attempt));
+                        // withRetry.ts::getRetryDelay honors the server's
+                        // Retry-After directive even when it exceeds normal
+                        // exponential backoff. Retrying after only 30 seconds
+                        // on a longer rate-limit window repeatedly fails.
+                        .map(|seconds| Duration::from_secs(seconds.min(6 * 60 * 60)))
+                        .unwrap_or_else(|| Duration::from_millis((500u64 << attempt).min(32_000)));
                     // Drop the failed HTTP response before waiting; do not
                     // retain a busy connection across capacity retries.
                     drop(response);
