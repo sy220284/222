@@ -64,12 +64,12 @@ mod tests {
         );
         tasks.insert("t2".into(), TaskKind::LocalAgent);
         let s1 = state(Some("t1"), &tasks);
-        assert!(s1.get_viewed_teammate_task().is_some());
+        assert!(get_viewed_teammate_task(&s1).is_some());
         let s2 = state(Some("t2"), &tasks);
-        assert!(s2.get_viewed_teammate_task().is_none());
+        assert!(get_viewed_teammate_task(&s2).is_none());
         let s3 = state(None, &tasks);
-        assert!(s3.get_viewed_teammate_task().is_none());
+        assert!(get_viewed_teammate_task(&s3).is_none());
         let s4 = state(Some("missing"), &tasks);
-        assert!(s4.get_viewed_teammate_task().is_none());
+        assert!(get_viewed_teammate_task(&s4).is_none());
     }
 }

@@ -64,7 +64,10 @@ fn accept_before(listener: &TcpListener, deadline: Instant) -> TcpStream {
         match listener.accept() {
             Ok((stream, _)) => return stream,
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                assert!(Instant::now() < deadline, "model failed to resume after tool results");
+                assert!(
+                    Instant::now() < deadline,
+                    "model failed to resume after tool results"
+                );
                 thread::sleep(Duration::from_millis(10));
             }
             Err(e) => panic!("accept mock request: {e}"),
@@ -98,7 +101,9 @@ fn streamed_tool_calls_execute_once_and_resume_sdk_turn() {
         let next = read_request(&mut second);
         respond_sse(
             &mut second,
-            &[json!({"choices":[{"delta":{"role":"assistant","content":"Done"},"finish_reason":"stop"}]})],
+            &[
+                json!({"choices":[{"delta":{"role":"assistant","content":"Done"},"finish_reason":"stop"}]}),
+            ],
         );
         next
     });
@@ -165,7 +170,13 @@ fn streamed_tool_calls_execute_once_and_resume_sdk_turn() {
     assert_eq!(results.len(), 2, "no duplicate or missing tool results");
     assert_eq!(results[0]["tool_call_id"], "call-read-a");
     assert_eq!(results[1]["tool_call_id"], "call-read-b");
-    assert!(results[0]["content"].as_str().unwrap().contains("contents from A"));
-    assert!(results[1]["content"].as_str().unwrap().contains("contents from B"));
+    assert!(results[0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("contents from A"));
+    assert!(results[1]["content"]
+        .as_str()
+        .unwrap()
+        .contains("contents from B"));
     assert!(String::from_utf8_lossy(&output.stdout).contains("Done"));
 }
