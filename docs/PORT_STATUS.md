@@ -1,3 +1,11 @@
+## 2026-10-30：原版 MCP add 入口与多作用域配置手工重写（源码已完成、全功能未等价）
+
+- **原版基准**：`source/src/commands/mcp/addCommand.ts`（281 行）、`source/src/services/mcp/utils.ts::ensureConfigScope/ensureTransport/parseHeaders`、`source/src/utils/envUtils.ts::parseEnvVars`，来自用户原始 2.1.88 ZIP。
+- **Rust 代码**：`src/mcp_cli.rs` 与 `src/main.rs`。新增 CLI `atlas-agent mcp add|list|remove`，`stdio` 和 `http`、`-s local|project|user`、`-e KEY=VALUE`、`-H 'Header: value'`，支持保留 `=` 后完整 env 值、Header 冒号后文本、持久化、重复检查、错误返回；`--transport sse`、`--client-id`、`--client-secret`、`--callback-port` 暂明确报错，不把未实现协议伪装成功。
+- **真实调用链**：CLI 修改配置 → 原子写入 → Config::validate → Agent 初始化时 active_servers 按作用域加载 → 已有 MCP attach_mcp。项目级 `.mcp.json` 未经本机批准不自动启动；本机批准指纹存于用户配置目录下的 workspace 独立文件，项目修改命令/URL/Header 后即失效，不能由恶意 Git 仓库附带配置文件冒用审批。
+- **本地验收**：`cargo fmt --all -- --check`、`cargo clippy --locked --offline --all-targets -- -D clippy::correctness -D clippy::suspicious`、`cargo test --locked --offline --all-targets` 均返回 0；独立集成测试 `tests/mcp_cli.rs` 通过；`python3 -m unittest discover -s tests/port_workbench` 的 13 项通过，`python3 scripts/port_workbench.py check --repo .` 台账总数 1906、排除 22。
+- **仍缺**：SSE 连接、OAuth/XAA 客户端注册、原版交互密钥获取、MCP 原版信任 UI、完整源 CLI 输出/权限语义。该项仅由“未迁移”改为“部分实现”；其它源码仍继续按总迁移台账，不宣称 1,884 条全部完成。
+
 ## 2026-10-30：SDK 消息快照回退、异步 Hook、插件崩溃恢复续接（源码已提交、待验收）
 
 原始源码依据：完整 source/src/utils/fileHistory.ts (fileHistoryMakeSnapshot/fileHistoryRewind/100 snapshots)、source/src/cli/print.ts (SDK rewind_files 控制/用户 UUID)、source/src/utils/hooks.ts (execCommandHook async 首行及配置 async)、source/src/utils/hooks/AsyncHookRegistry.ts (pending/complete/finalize)、source/src/schemas/hooks.ts (async/asyncRewake)、source/src/bridge/replBridgeTransport.ts、source/src/bridge/remoteBridgeCore.ts。此处只记录真实 Rust 入口，不用静态 generated_ports 计数。
