@@ -329,6 +329,22 @@ async fn active_token() -> Result<String> {
     Ok(session.access_token)
 }
 
+/// Current account-scoped models; never substitute an API-key catalog.
+pub async fn model_list() -> Result<Value> {
+    let token = active_token().await?;
+    let response = new_client()?.get(format!("{RESOURCE}/models"))
+        .bearer_auth(token).send().await?.error_for_status()?;
+    let payload = response.bytes().await?;
+    if payload.len() > 4 * 1024 * 1024 {
+        bail!("ChatGPT model catalog exceeds 4 MiB")
+    }
+    let data: Value = serde_json::from_slice(&payload)?;
+    if !data.get("models").is_some_and(Value::is_array) {
+        bail!("ChatGPT account model catalog unavailable")
+    }
+    Ok(data)
+}
+
 pub async fn run(action: &AccountAction) -> Result<()> {
     match action {
         AccountAction::Login => login().await,
@@ -345,10 +361,7 @@ pub async fn run(action: &AccountAction) -> Result<()> {
             Ok(())
         }
         AccountAction::Models => {
-            let token = active_token().await?;
-            let response = new_client()?.get(format!("{RESOURCE}/models"))
-                .bearer_auth(token).send().await?.error_for_status()?;
-            let body: Value = response.json().await?;
+            let body = model_list().await?;
             let items = body.get("models").and_then(Value::as_array)
                 .context("ChatGPT account model catalog unavailable")?;
             for entry in items {
