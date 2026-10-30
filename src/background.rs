@@ -708,7 +708,9 @@ fn read_output_range(
     let bytes_to_read = (total - offset).min(max_bytes);
     let capacity = usize::try_from(bytes_to_read)
         .context("Requested task output range exceeds addressable memory")?;
-    let mut bytes = Vec::with_capacity(capacity);
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(capacity)
+        .context("Cannot reserve memory for requested task output range")?;
     file.take(bytes_to_read).read_to_end(&mut bytes)?;
     let count = bytes.len() as u64;
     Ok(Some((
