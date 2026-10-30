@@ -229,7 +229,7 @@ impl HybridTransport {
                 session_id,
                 data_tx,
                 true,
-                None,
+                Some(Arc::clone(&auth)),
             ),
             writes: HybridOutbound::new(&ws_url, auth)?,
         })
