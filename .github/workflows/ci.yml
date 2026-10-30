@@ -17,6 +17,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  lock-diagnostic:
+    name: 诊断新增 TLS 依赖锁文件
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 计算可重复依赖锁文件变更
+        run: |
+          cargo metadata --format-version 1 > /dev/null
+          git diff -- Cargo.lock
+          git status --short Cargo.lock
   quality:
     name: 格式与静态分析
     runs-on: ubuntu-latest
