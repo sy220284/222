@@ -1,3 +1,10 @@
+## 2026-10-29：同项目跨会话任务日志 Read 授权（源码已提交、待验收）
+
+- **原版依据**：`source/src/utils/permissions/filesystem.ts:1687–1700` 明确允许读取同一项目临时目录中所有会话的文件，供跨会话任务输出与临时结果检查；`source/src/utils/task/diskOutput.ts:50–54` 将 sessionId 放在项目临时目录下。
+- **原 Rust 差异**：刚迁出的私有任务日志位于 `project-hash/<session>/tasks`，初版 `BackgroundTasks::trusted_output_path` 仅认可当前会话；用户通过 Read 无法打开同项目其他会话返回的任务日志路径。
+- **补齐**：`src/background.rs::trusted_output_path` 现在允许同一规范化项目哈希目录下、合法 UUID 会话的 `tasks/<taskId>.stdout/.stderr`，逐层拒绝符号链接与重定向目录，要求有效任务元数据和常规输出文件；`src/tools.rs::read_file_with_mode` 仍执行 Read deny/ask 并使用有界流式读取，不向 Write/Edit 授权。提交 `9f2b353e604d58ef9847a78a541fce1a2fb61c54`，计 **1 项独立用户可感知跨会话日志读取功能**。
+- **状态**：本轮累计 **5/100 项源码已提交、待行为验收，余 95**；未运行 Cargo、测试或 CI，完整等价验收新增 0，Issue #3 冻结 362 项继续开放。跨进程日志并发更新、旧版路径迁移、跨平台权限、原版临时目录全部文件类型及完整用户交互仍待核对。先行恰好 100 项完整缺口核实清单和实施方案仍未完成。
+
 ## 2026-10-29：Read 读取后台任务日志与 TaskOutput 结构化结果保真（源码已提交、待验收）
 
 - **原版依据**：`source/src/utils/task/diskOutput.ts:36–76::getTaskOutputDir/getTaskOutputPath` 返回项目临时目录内的任务输出文件；`source/src/utils/permissions/filesystem.ts:1691–1692` 对项目临时目录执行专用可读路径判断；`source/src/tools/TaskOutputTool/TaskOutputTool.tsx:144–160` 将任务输出作为完整结构化结果，声明 `maxResultSizeChars: 100_000` 并提示优先使用 Read 读取日志。
