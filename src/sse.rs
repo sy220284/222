@@ -264,6 +264,7 @@ pub async fn complete(
     request: &ModelRequest,
     deltas: UnboundedSender<String>,
     response_schema: Option<&Value>,
+    tuning: &crate::config::ModelTuning,
 ) -> Result<ModelResponse> {
     complete_with_tool_blocks(
         client,
@@ -273,6 +274,7 @@ pub async fn complete(
         deltas,
         response_schema,
         None,
+        tuning,
     )
     .await
 }
@@ -290,10 +292,12 @@ pub async fn complete_with_tool_blocks(
     deltas: UnboundedSender<String>,
     response_schema: Option<&Value>,
     tool_blocks: Option<UnboundedSender<ToolCall>>,
+    tuning: &crate::config::ModelTuning,
 ) -> Result<ModelResponse> {
     let mut body = json!({"model":request.model,
         "messages":crate::provider::openai_messages(request)?,
         "stream":true,"stream_options":{"include_usage":true}});
+    tuning.apply_chat_completions(&mut body);
     // Keep structured-output semantics identical for streaming and ordinary
     // Chat Completions. Omitting this silently drops the SDK output contract.
     if let Some(schema) = response_schema {
@@ -513,6 +517,7 @@ mod tests {
             },
             tx,
             None,
+            &crate::config::ModelTuning::default(),
         )
         .await
         .unwrap();
@@ -564,6 +569,7 @@ mod tests {
             },
             tx,
             None,
+            &crate::config::ModelTuning::default(),
         )
         .await
         .unwrap();
