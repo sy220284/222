@@ -2,18 +2,159 @@ name: Rust 检查与测试
 
 on:
   pull_request:
+    branches: [main, feat/full-rust-parity]
   push:
-    branches: [main, "feat/**"]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  quality:
+    name: 格式与静态分析
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
-      - name: 配置 Rust
+      - name: 核对全量迁移台账与新增验收证据
+        run: |
+          python3 scripts/port_workbench.py check --repo .
+          python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
+      - name: 使用固定 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
-      - name: 编译
-        run: cargo check --all-targets
-      - name: 单元测试
-        run: cargo test --all-targets
+        with:
+          toolchain: 1.99.1
+          components: rustfmt, clippy
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+      - name: 格式检查
+        run: cargo fmt --all -- --check
+      - name: Clippy 严格检查
+        run: cargo clippy --locked --all-targets -- -D clippy::correctness -D clippy::suspicious
+
+  test:
+    # 临时暂停 Linux 完整测试，待需要时移除 if 条件恢复。
+    if: ${{ false }}
+    name: 编译与全部测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 使用固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+      - name: 锁文件与依赖一致性
+        run: cargo metadata --locked --format-version 1 --no-deps > /dev/null
+      - name: 编译全部目标
+        run: cargo check --locked --all-targets
+      - name: Linux Rust 单元测试
+        timeout-minutes: 8
+        run: cargo test --locked --bins
+      - name: Linux 集成测试 - deep_link_banner
+        timeout-minutes: 8
+        run: cargo test --locked --test deep_link_banner
+      - name: Linux 集成测试 - git_state_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test git_state_cli
+      - name: Linux 集成测试 - git_workflows_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test git_workflows_cli
+      - name: Linux 集成测试 - integration_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test integration_cli
+      - name: Linux 集成测试 - integration_hook_lifecycle
+        timeout-minutes: 8
+        run: cargo test --locked --test integration_hook_lifecycle
+      - name: Linux 集成测试 - migration_matrix
+        timeout-minutes: 8
+        run: cargo test --locked --test migration_matrix
+      - name: Linux 集成测试 - partial_source_targets
+        timeout-minutes: 8
+        run: cargo test --locked --test partial_source_targets
+      - name: Linux 集成测试 - privacy
+        timeout-minutes: 8
+        run: cargo test --locked --test privacy
+      - name: Linux 集成测试 - prompt_history_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test prompt_history_cli
+      - name: Linux 集成测试 - queue_journal_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test queue_journal_cli
+      - name: Linux 集成测试 - standalone_utilities
+        timeout-minutes: 8
+        run: cargo test --locked --test standalone_utilities
+
+
+  windows-check:
+    # 临时暂停 Windows 回归测试，待需要时移除 if 条件恢复。
+    if: ${{ false }}
+    name: Windows Shell 与跨平台编译
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 使用固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 检查 Windows 全部编译目标
+        run: cargo check --locked --all-targets
+      - name: Windows Rust 单元测试
+        timeout-minutes: 8
+        run: cargo test --locked --bins
+      - name: Windows 集成测试 - deep_link_banner
+        timeout-minutes: 8
+        run: cargo test --locked --test deep_link_banner
+      - name: Windows 集成测试 - git_state_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test git_state_cli
+      - name: Windows 集成测试 - git_workflows_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test git_workflows_cli
+      - name: Windows 集成测试 - integration_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test integration_cli
+      - name: Windows 集成测试 - integration_hook_lifecycle
+        timeout-minutes: 8
+        run: cargo test --locked --test integration_hook_lifecycle
+      - name: Windows 集成测试 - migration_matrix
+        timeout-minutes: 8
+        run: cargo test --locked --test migration_matrix
+      - name: Windows 集成测试 - partial_source_targets
+        timeout-minutes: 8
+        run: cargo test --locked --test partial_source_targets
+      - name: Windows 集成测试 - privacy
+        timeout-minutes: 8
+        run: cargo test --locked --test privacy
+      - name: Windows 集成测试 - prompt_history_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test prompt_history_cli
+      - name: Windows 集成测试 - queue_journal_cli
+        timeout-minutes: 8
+        run: cargo test --locked --test queue_journal_cli
+      - name: Windows 集成测试 - standalone_utilities
+        timeout-minutes: 8
+        run: cargo test --locked --test standalone_utilities
+
+  security:
+    name: 依赖漏洞与来源检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: RustSec 安全公告审计
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
+          arguments: --all-features

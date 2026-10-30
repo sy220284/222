@@ -1,7 +1,12 @@
 /target/
 /.atlas/sessions/
+/.atlas/history/
+/.atlas/background/
+/.atlas/task-lists/
+/.atlas/memory/
 *.swp
 *.bak
 .env
 .env.*
 !.env.example
+/.port-workbench/

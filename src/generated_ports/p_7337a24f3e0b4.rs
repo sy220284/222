@@ -1,0 +1,129 @@
+//! Native Rust UI structure derived from original: src/commands/plugin/ManageMarketplaces.tsx
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde_json::Value;
+
+use crate::generated_ports::ui::VNode;
+pub fn render_source_view(props: &Value) -> VNode {
+    VNode::Element {
+        tag: "Box".into(),
+        attrs: vec![("flexDirection".into(), Value::String("column".into()))]
+            .into_iter()
+            .collect(),
+        children: vec![
+            VNode::Empty,
+            VNode::Element {
+                tag: "Box".into(),
+                attrs: vec![("marginBottom".into(), serde_json::json!(1))]
+                    .into_iter()
+                    .collect(),
+                children: vec![
+                    VNode::Empty,
+                    VNode::Element {
+                        tag: "Text".into(),
+                        attrs: vec![("bold".into(), Value::Bool(true))]
+                            .into_iter()
+                            .collect(),
+                        children: vec![VNode::Text("Manage marketplaces".into())],
+                    },
+                    VNode::Empty,
+                ],
+            },
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Element {
+                tag: "Box".into(),
+                attrs: vec![
+                    ("flexDirection".into(), Value::String("row".into())),
+                    ("gap".into(), serde_json::json!(1)),
+                    ("marginBottom".into(), serde_json::json!(1)),
+                ]
+                .into_iter()
+                .collect(),
+                children: vec![
+                    VNode::Empty,
+                    VNode::Element {
+                        tag: "Text".into(),
+                        attrs: vec![(
+                            "color".into(),
+                            if crate::generated_ports::runtime::truthy(&Value::Null) {
+                                Value::String("suggestion".into())
+                            } else {
+                                Value::Null
+                            },
+                        )]
+                        .into_iter()
+                        .collect(),
+                        children: vec![
+                            VNode::Empty,
+                            VNode::Value(
+                                if crate::generated_ports::runtime::truthy(&Value::Null) {
+                                    crate::generated_ports::runtime::property(
+                                        &Value::Null,
+                                        "pointer",
+                                    )
+                                } else {
+                                    Value::String(" ".into())
+                                },
+                            ),
+                            VNode::Text("+\n        ".into()),
+                        ],
+                    },
+                    VNode::Empty,
+                    VNode::Element {
+                        tag: "Text".into(),
+                        attrs: vec![
+                            ("bold".into(), Value::Bool(true)),
+                            (
+                                "color".into(),
+                                if crate::generated_ports::runtime::truthy(&Value::Null) {
+                                    Value::String("suggestion".into())
+                                } else {
+                                    Value::Null
+                                },
+                            ),
+                        ]
+                        .into_iter()
+                        .collect(),
+                        children: vec![VNode::Text("Add Marketplace\n        ".into())],
+                    },
+                    VNode::Empty,
+                ],
+            },
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Element {
+                tag: "Box".into(),
+                attrs: vec![("flexDirection".into(), Value::String("column".into()))]
+                    .into_iter()
+                    .collect(),
+                children: vec![VNode::Empty, VNode::Value(Value::Null), VNode::Empty],
+            },
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Value(Value::Null),
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Value(Value::Null),
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Empty,
+            VNode::Value(Value::Null),
+            VNode::Empty,
+            VNode::Element {
+                tag: "ManageMarketplacesKeyHints".into(),
+                attrs: vec![
+                    ("exitState".into(), Value::Null),
+                    ("hasPendingActions".into(), Value::Null),
+                ]
+                .into_iter()
+                .collect(),
+                children: vec![],
+            },
+            VNode::Empty,
+        ],
+    }
+}

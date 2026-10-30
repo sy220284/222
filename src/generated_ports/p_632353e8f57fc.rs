@@ -1,0 +1,235 @@
+//! Native Rust UI structure derived from original: src/commands/plugin/PluginSettings.tsx
+#![allow(dead_code, non_snake_case, non_camel_case_types)]
+use serde_json::Value;
+
+use crate::generated_ports::ui::VNode;
+pub fn render_source_view(props: &Value) -> VNode {
+    VNode::Element {
+        tag: "Box".into(),
+        attrs: vec![("flexDirection".into(), Value::String("column".into()))]
+            .into_iter()
+            .collect(),
+        children: vec![
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![("bold".into(), Value::Bool(true))]
+                    .into_iter()
+                    .collect(),
+                children: vec![VNode::Text("Plugin Command Usage:".into())],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Empty],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![("dimColor".into(), Value::Bool(true))]
+                    .into_iter()
+                    .collect(),
+                children: vec![VNode::Text("Installation:".into())],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text(
+                    "/plugin install - Browse and install plugins".into(),
+                )],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![
+                    VNode::Value(Value::String(" ".into())),
+                    VNode::Value(Value::String(
+                        "/plugin install <marketplace> - Install from specific marketplace".into(),
+                    )),
+                ],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Value(Value::String(
+                    " /plugin install <plugin> - Install specific plugin".into(),
+                ))],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![
+                    VNode::Value(Value::String(" ".into())),
+                    VNode::Value(Value::String(
+                        "/plugin install <plugin>@<market> - Install plugin from marketplace"
+                            .into(),
+                    )),
+                ],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Empty],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![("dimColor".into(), Value::Bool(true))]
+                    .into_iter()
+                    .collect(),
+                children: vec![VNode::Text("Management:".into())],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text(
+                    "/plugin manage - Manage installed plugins".into(),
+                )],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Value(Value::String(
+                    " /plugin enable <plugin> - Enable a plugin".into(),
+                ))],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Value(Value::String(
+                    " /plugin disable <plugin> - Disable a plugin".into(),
+                ))],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Value(Value::String(
+                    " /plugin uninstall <plugin> - Uninstall a plugin".into(),
+                ))],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Empty],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![("dimColor".into(), Value::Bool(true))]
+                    .into_iter()
+                    .collect(),
+                children: vec![VNode::Text("Marketplaces:".into())],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text(
+                    "/plugin marketplace - Marketplace management menu".into(),
+                )],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text(
+                    "/plugin marketplace add - Add a marketplace".into(),
+                )],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![
+                    VNode::Value(Value::String(" ".into())),
+                    VNode::Value(Value::String(
+                        "/plugin marketplace add <path/url> - Add marketplace directly".into(),
+                    )),
+                ],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text(
+                    "/plugin marketplace update - Update marketplaces".into(),
+                )],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![
+                    VNode::Value(Value::String(" ".into())),
+                    VNode::Value(Value::String(
+                        "/plugin marketplace update <name> - Update specific marketplace".into(),
+                    )),
+                ],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text(
+                    "/plugin marketplace remove - Remove a marketplace".into(),
+                )],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![
+                    VNode::Value(Value::String(" ".into())),
+                    VNode::Value(Value::String(
+                        "/plugin marketplace remove <name> - Remove specific marketplace".into(),
+                    )),
+                ],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text(
+                    "/plugin marketplace list - List all marketplaces".into(),
+                )],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Empty],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![("dimColor".into(), Value::Bool(true))]
+                    .into_iter()
+                    .collect(),
+                children: vec![VNode::Text("Validation:".into())],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![
+                    VNode::Value(Value::String(" ".into())),
+                    VNode::Value(Value::String(
+                        "/plugin validate <path> - Validate a manifest file or directory".into(),
+                    )),
+                ],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Empty],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![("dimColor".into(), Value::Bool(true))]
+                    .into_iter()
+                    .collect(),
+                children: vec![VNode::Text("Other:".into())],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text("/plugin - Main plugin menu".into())],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text("/plugin help - Show this help".into())],
+            },
+            VNode::Element {
+                tag: "Text".into(),
+                attrs: vec![].into_iter().collect(),
+                children: vec![VNode::Text("/plugins - Alias for /plugin".into())],
+            },
+        ],
+    }
+}

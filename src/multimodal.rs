@@ -1,0 +1,277 @@
+//! Bounded, provider-neutral SDK text/image input.
+//! Only locally supplied base64 images are accepted; never fetch remote URLs
+//! while parsing a message. Keep originals in session storage, not in logs.
+use anyhow::{bail, Context, Result};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use serde_json::{json, Value};
+const MAX_IMAGE_DATA: usize = 5 * 1024 * 1024;
+const MAX_TOTAL_DATA: usize = 12 * 1024 * 1024;
+const MAX_IMAGES: usize = 8;
+
+pub struct Input {
+    pub preview: String,
+    pub blocks: Option<Vec<Value>>,
+}
+fn media_type(value: &str) -> Result<&str> {
+    match value {
+        "image/png" | "image/jpeg" | "image/webp" | "image/gif" => Ok(value),
+        _ => bail!("Unsupported image media type"),
+    }
+}
+fn validate_base64(data: &str) -> Result<()> {
+    if data.is_empty() || data.len() > MAX_IMAGE_DATA || data.len() % 4 != 0 {
+        bail!("Image base64 data has an invalid length");
+    }
+    let mut padding = false;
+    let mut pad = 0;
+    for c in data.bytes() {
+        if c == b'=' {
+            padding = true;
+            pad += 1;
+            if pad > 2 {
+                bail!("Invalid image padding")
+            }
+        } else if padding || !(c.is_ascii_alphanumeric() || c == b'+' || c == b'/') {
+            bail!("Invalid image base64 encoding");
+        }
+    }
+    Ok(())
+}
+/// Equivalent of the inbound bridge image source normalization in 2.1.88.
+/// Preserve an explicit snake_case MIME, then accept mobile camelCase, and
+/// finally sniff magic bytes when the client omitted both. Validation and
+/// size limits are enforced by the caller before any decoding occurs.
+fn inbound_image_media_type(source: &Value, data: &str) -> Result<String> {
+    if let Some(explicit) = source
+        .get("media_type")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+    {
+        return Ok(media_type(explicit)?.to_owned());
+    }
+    if let Some(camel) = source
+        .get("mediaType")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+    {
+        return Ok(media_type(camel)?.to_owned());
+    }
+    let prefix = data.get(..data.len().min(24)).unwrap_or("");
+    // Prefix decoding may fail when truncated at the 24-character boundary;
+    // all length-limited inputs are already validated by validate_base64.
+    let bytes = STANDARD.decode(prefix).unwrap_or_default();
+    let detected = if bytes.starts_with(&[0x89, 0x50, 0x4e, 0x47]) {
+        "image/png"
+    } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        "image/jpeg"
+    } else if bytes.starts_with(b"GIF") {
+        "image/gif"
+    } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else {
+        // The 2.1.88 imageResizer source also defaults unknown signatures to PNG.
+        "image/png"
+    };
+    Ok(detected.to_owned())
+}
+
+/// Source inboundMessages.ts contract: ignore non-user messages and empty
+/// content, preserve a string UUID and leave payloads for parse() validation.
+pub fn extract_inbound_user_fields(message: &Value) -> Option<(Value, Option<String>)> {
+    if message.get("type")?.as_str()? != "user" {
+        return None;
+    }
+    let content = message.get("message")?.get("content")?;
+    if content.is_null()
+        || content.as_str().is_some_and(str::is_empty)
+        || content.as_array().is_some_and(Vec::is_empty)
+    {
+        return None;
+    }
+    Some((
+        content.clone(),
+        message
+            .get("uuid")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    ))
+}
+
+pub fn parse(value: &Value) -> Result<Input> {
+    if let Some(text) = value.as_str() {
+        if text.len() > MAX_TOTAL_DATA {
+            bail!("SDK text input too large")
+        }
+        return Ok(Input {
+            preview: text.to_owned(),
+            blocks: None,
+        });
+    }
+    let entries = value
+        .as_array()
+        .context("SDK content must be a string or content blocks")?;
+    if entries.is_empty() {
+        bail!("SDK content blocks cannot be empty")
+    }
+    let mut normalized = Vec::new();
+    let mut preview = Vec::new();
+    let mut images = 0usize;
+    let mut size = 0usize;
+    for (index, entry) in entries.iter().enumerate() {
+        match entry.get("type").and_then(Value::as_str) {
+            Some("text") => {
+                let text = entry
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .with_context(|| format!("Content block {index} missing text"))?;
+                size = size.saturating_add(text.len());
+                normalized.push(json!({"type":"text","text":text}));
+                preview.push(text.to_owned());
+            }
+            Some("image") => {
+                let source = entry.get("source").context("Image requires source")?;
+                if source.get("type").and_then(Value::as_str) != Some("base64") {
+                    bail!("SDK image requires a base64 source");
+                }
+                let data = source
+                    .get("data")
+                    .and_then(Value::as_str)
+                    .context("Image missing data")?;
+                validate_base64(data)?;
+                let mime = inbound_image_media_type(source, data)?;
+                images += 1;
+                if images > MAX_IMAGES {
+                    bail!("SDK input contains too many images")
+                }
+                size = size.saturating_add(data.len());
+                normalized.push(json!({"type":"image","mime_type":mime,"data":data}));
+                preview.push(format!("[image: {mime}]"));
+            }
+            _ => bail!("Unsupported SDK content block {index}"),
+        }
+        if size > MAX_TOTAL_DATA {
+            bail!("SDK content exceeds 12 MB")
+        }
+    }
+    Ok(Input {
+        preview: preview.join("\n"),
+        blocks: Some(normalized),
+    })
+}
+pub fn openai(blocks: &[Value]) -> Result<Vec<Value>> {
+    let mut result = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        match block["type"].as_str() {
+            Some("text") => result.push(json!({"type":"text","text":block["text"]})),
+            Some("image") => {
+                let mime = media_type(
+                    block["mime_type"]
+                        .as_str()
+                        .context("Image has no media type")?,
+                )?;
+                let data = block["data"].as_str().context("Image has no data")?;
+                validate_base64(data)?;
+                result.push(json!({"type":"image_url",
+                    "image_url":{"url":format!("data:{mime};base64,{data}")}}));
+            }
+            _ => bail!("Unsupported content block for OpenAI"),
+        }
+    }
+    Ok(result)
+}
+pub fn gemini(blocks: &[Value]) -> Result<Vec<Value>> {
+    let mut result = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        match block["type"].as_str() {
+            Some("text") => result.push(json!({"text":block["text"]})),
+            Some("image") => {
+                let mime = media_type(
+                    block["mime_type"]
+                        .as_str()
+                        .context("Image has no media type")?,
+                )?;
+                let data = block["data"].as_str().context("Image has no data")?;
+                validate_base64(data)?;
+                result.push(json!({"inlineData":{"mimeType":mime,"data":data}}));
+            }
+            _ => bail!("Unsupported content block for Gemini"),
+        }
+    }
+    Ok(result)
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn preserves_text_and_images_without_exposing_binary_in_preview() {
+        let input = parse(&json!([
+            {"type":"text","text":"What is visible?"},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"AQID"}}
+        ]))
+        .unwrap();
+        assert!(input.preview.contains("[image: image/png]"));
+        assert!(!input.preview.contains("AQID"));
+        let blocks = input.blocks.unwrap();
+        assert_eq!(
+            openai(&blocks).unwrap()[1]["image_url"]["url"],
+            "data:image/png;base64,AQID"
+        );
+        assert_eq!(gemini(&blocks).unwrap()[1]["inlineData"]["data"], "AQID");
+    }
+    #[test]
+    fn bridge_inbound_normalizes_ios_media_type_and_sniffs_missing_type() {
+        let cases = [
+            ("iVBORw0KGgo=", "image/png"),
+            ("/9j/AA==", "image/jpeg"),
+            ("R0lGODlh", "image/gif"),
+            ("UklGRgAAAABXRUJQ", "image/webp"),
+            ("AQID", "image/png"),
+        ];
+        for (bytes, want) in cases {
+            let input =
+                parse(&json!([{"type":"image","source":{"type":"base64","data":bytes}}])).unwrap();
+            assert_eq!(input.blocks.as_ref().unwrap()[0]["mime_type"], want);
+        }
+        let explicit = parse(&json!([{"type":"image","source":{"type":"base64",
+            "data":"AQID","mediaType":"image/gif"}}]))
+        .unwrap();
+        assert_eq!(explicit.blocks.unwrap()[0]["mime_type"], "image/gif");
+        let preferred = parse(&json!([{"type":"image","source":{"type":"base64",
+            "data":"AQID","mediaType":"image/gif","media_type":"image/jpeg"}}]))
+        .unwrap();
+        assert_eq!(preferred.blocks.unwrap()[0]["mime_type"], "image/jpeg");
+        assert!(parse(&json!([{"type":"image","source":{"type":"base64",
+            "data":"AQID","mediaType":"application/pdf"}}]))
+        .is_err());
+    }
+
+    #[test]
+    fn inbound_user_field_extraction_preserves_uuid_and_skips_unsupported() {
+        for invalid in [
+            json!({"type":"assistant","message":{"content":"hi"}}),
+            json!({"type":"user","message":{"content":""}}),
+            json!({"type":"user","message":{"content":[]}}),
+            json!({"type":"user","message":{}}),
+        ] {
+            assert!(extract_inbound_user_fields(&invalid).is_none());
+        }
+        let (content, uuid) = extract_inbound_user_fields(&json!({"type":"user","uuid":"id-1",
+            "message":{"content":[{"type":"text","text":"hi"}]}}))
+        .unwrap();
+        assert_eq!(content, json!([{"type":"text","text":"hi"}]));
+        assert_eq!(uuid.as_deref(), Some("id-1"));
+    }
+
+    #[test]
+    fn rejects_bad_payload_before_network_or_queue_mutation() {
+        for input in [
+            json!([{"type":"image","source":{"type":"url","url":"https://example.org/image.png"}}]),
+            json!([{"type":"image","source":{"type":"base64","media_type":"application/pdf","data":"AQID"}}]),
+            json!([{"type":"image","source":{"type":"base64","media_type":"image/png","data":"INVALID!"}}]),
+            json!([{"type":"tool_result","content":"untrusted"}]),
+            json!([]),
+        ] {
+            assert!(parse(&input).is_err(), "{input}");
+        }
+    }
+}
