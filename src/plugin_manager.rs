@@ -195,6 +195,11 @@ fn install_local_with_origin(
     }
     let name = manifest_name(&source)?;
     let home = checked_installed_root(root, true)?;
+    // The staging directory is created under this storage root. Copying a
+    // source that contains it would recursively copy the growing stage.
+    if home.starts_with(&source) {
+        bail!("Plugin source contains the installation storage directory");
+    }
     fs::create_dir_all(&home)?;
     let target = home.join(&name);
     if target.exists() {
@@ -246,6 +251,9 @@ fn replace_local_with_origin(
     if !source.is_dir() { bail!("Plugin source must be a directory"); }
     let name = manifest_name(&source)?;
     let home = checked_installed_root(root, false)?;
+    if home.starts_with(&source) {
+        bail!("Plugin source contains the installation storage directory");
+    }
     let target = home.join(&name);
     let metadata = fs::symlink_metadata(&target)
         .with_context(|| format!("Plugin '{name}' is not installed"))?;
