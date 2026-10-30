@@ -447,8 +447,16 @@ pub(crate) fn require_secure_credential_transport(url: &str, has_credential: boo
             let key = key.to_ascii_lowercase();
             matches!(
                 key.as_str(),
-                "key" | "apikey" | "api_key" | "access_key" | "access_token"
-                    | "auth" | "authorization" | "client_secret" | "password" | "passwd"
+                "key"
+                    | "apikey"
+                    | "api_key"
+                    | "access_key"
+                    | "access_token"
+                    | "auth"
+                    | "authorization"
+                    | "client_secret"
+                    | "password"
+                    | "passwd"
             ) || credential_header(&key, "")
         });
     if (has_credential || url_has_credential)
