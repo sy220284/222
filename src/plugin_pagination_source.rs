@@ -1,6 +1,6 @@
-//! Rust port of src/commands/plugin/usePagination.ts.
-//! The UI owns the selected index; this state retains the source hook's
-//! scroll offset across renders.
+//! Manual Rust migration of src/commands/plugin/usePagination.ts.
+//! The host view owns the selectedIndex state, while this state machine
+//! retains React's useRef scroll offset across successive renders.
 #![allow(dead_code)]
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,15 +26,14 @@ impl PageWindow {
         let to = self.end_index.min(items.len());
         &items[from..to.max(from)]
     }
-
     pub fn to_actual_index(&self, visible_index: usize) -> usize {
         self.start_index + visible_index
     }
-
     pub fn is_on_current_page(&self, actual_index: usize) -> bool {
         actual_index >= self.start_index && actual_index < self.end_index
     }
-
+    /// Continuous scrolling is controlled by selected index. The original
+    /// page navigation handlers intentionally do not change selection.
     pub fn handle_page_navigation(&self) -> bool {
         false
     }
@@ -50,6 +49,7 @@ impl PaginationState {
         Self::default()
     }
 
+    /// Update from the active selection, matching the scrolling useMemo.
     pub fn update(
         &mut self,
         total_items: usize,
@@ -59,6 +59,7 @@ impl PaginationState {
         assert!(max_visible > 0, "maxVisible must be greater than zero");
         let needs_pagination = total_items > max_visible;
         let scroll_offset = if !needs_pagination {
+            // Source useMemo returns 0 without resetting scrollOffsetRef.
             0
         } else if selected_index < self.scroll_offset {
             self.scroll_offset = selected_index;
@@ -83,7 +84,8 @@ impl PaginationState {
             can_scroll_down: scroll_offset.saturating_add(max_visible) < total_items,
         }
     }
-
+    /// Source handleSelectionChange clamps an index to [0, totalItems-1]
+    /// (including the original 0 outcome for an empty collection).
     pub fn handle_selection_change(new_index: i64, total_items: usize) -> usize {
         new_index.max(0).min(total_items.saturating_sub(1) as i64) as usize
     }
@@ -92,6 +94,7 @@ impl PaginationState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn continuous_scroll_keeps_selection_visible_and_retains_offset() {
         let mut p = PaginationState::new();
@@ -127,6 +130,7 @@ mod tests {
         );
         assert!(!small.needs_pagination);
         assert_eq!(small.visible_items(&[42, 43]), &[42, 43]);
+        // The source retains ref across the no-pagination period.
         assert_eq!(p.update(20, 5, 4).start_index, 4);
     }
     #[test]
