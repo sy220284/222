@@ -176,6 +176,7 @@ mod tests {
         Message {
             role: "assistant".into(),
             content: None,
+            reasoning_content: None,
             content_blocks: None,
             tool_calls: Some(vec![call]),
             tool_call_id: None,
@@ -186,6 +187,7 @@ mod tests {
         Message {
             role: "tool".into(),
             content: Some(text.into()),
+            reasoning_content: None,
             content_blocks: None,
             tool_calls: None,
             tool_call_id: Some(id.into()),
