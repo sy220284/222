@@ -754,7 +754,7 @@
 | `src/hooks/notifs/useSettingsErrors.tsx` | 69 | 6756 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useStartupNotification.ts` | 42 | 1278 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useTeammateShutdownNotification.ts` | 79 | 2296 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/renderPlaceholder.ts` | 52 | 1280 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/renderPlaceholder.ts` | 52 | 1280 | 重写：终端 UI／交互 | `src/generated_ports/text_input_semantics.rs` | 部分实现：原版字符范围与渲染主要分支已写 Rust；ANSI 全协议、输入 Hook/交互与原版动态调用链待验收 |
 | `src/hooks/toolPermission/PermissionContext.ts` | 389 | 12768 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/toolPermission/handlers/coordinatorHandler.ts` | 66 | 2374 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/toolPermission/handlers/interactiveHandler.ts` | 537 | 20194 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -830,7 +830,7 @@
 | `src/hooks/useTasksV2.ts` | 251 | 8808 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTeammateViewAutoExit.ts` | 64 | 2189 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTeleportResume.tsx` | 85 | 9840 | 重写：终端 UI／交互 | `src/generated_ports/p_17ee0f10fb33b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/hooks/useTerminalSize.ts` | 16 | 354 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useTerminalSize.ts` | 16 | 354 | 重写：终端 UI／交互 | `src/generated_ports/terminal_context.rs` | 部分实现：上下文读取与缺失错误已手写；React Ink Provider 与终端尺寸事件仍需完整接线验收 |
 | `src/hooks/useTextInput.ts` | 530 | 17027 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTimeout.ts` | 15 | 362 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTurnDiffs.ts` | 214 | 6686 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -1359,7 +1359,7 @@
 | `src/upstreamproxy/relay.ts` | 456 | 14937 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/upstreamproxy/upstreamproxy.ts` | 286 | 9812 | 重写：保持通用行为 | `src/generated_ports/p_456bc58f2042a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/CircularBuffer.ts` | 85 | 1888 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/Cursor.ts` | 1531 | 46663 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/Cursor.ts` | 1531 | 46663 | 重写：保持通用行为 | `src/generated_ports/terminal_kill_ring.rs` | 部分实现：进程级剪切环、连续追加与前置累积、Yank/Alt-Y 循环已按原版实现；Cursor 编辑、Unicode、视口和 Vim 移动仍待移植 |
 | `src/utils/QueryGuard.ts` | 122 | 3597 | 重写：查询排队、预约、运行、取消与代次状态机 | `src/query_guard.rs` / `src/sdk_queue.rs` | 部分实现：同步预约、运行、取消和代次保护有测试；原始信号订阅动态增删、React UI 生命周期及跨模块取消时序未验收；证据 query_guard::tests / integration_cli::sdk_queue_drain_honors_priority_fifo_and_worker_isolation |
 | `src/utils/Shell.ts` | 475 | 16929 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ShellCommand.ts` | 466 | 14138 | 重写：保持通用行为 | `src/shell_runtime.rs / src/tools.rs / src/background.rs` | 部分实现：对照原版 tree-kill，前后台 Windows 超时、停止、输出失败使用 taskkill /T /F 清理子进程树，失败明确传播；前台超出预览长度不再提前杀命令且两条输出流共享原版 5GiB 上限（932a5562、d2583409，待验收）；完整输出落盘、前后台自动切换、取消及所有平台进程回收仍未等价（3b48d241、00e588dd、811d93c6、42e70ce7，已提交待验收）；主动 SDK 取消 Unix 前台 Shell：取消时进程组资源守卫清理父子孙进程，防止只关闭父进程（a5307caa，源码已提交待验收）；Windows Job Object、子进程脱组和完整异步通知仍有差异；Windows 用户主动取消增加前台 Shell 进程树 Drop 清理（eac172f3，源码待验收）；脱组进程与跨平台行为仍未完成 |
@@ -1886,7 +1886,7 @@
 | `src/utils/tempfile.ts` | 32 | 1170 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/terminal.ts` | 132 | 4372 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/terminalPanel.ts` | 192 | 6014 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/textHighlighting.ts` | 167 | 4540 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/textHighlighting.ts` | 167 | 4540 | 重写：保持通用行为 | `src/generated_ports/text_input_semantics.rs` | 部分实现：原版字符范围与渲染主要分支已写 Rust；ANSI 全协议、输入 Hook/交互与原版动态调用链待验收 |
 | `src/utils/theme.ts` | 640 | 26830 | 重写：保持通用行为 | `src/generated_ports/p_0f699233d6b14.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/thinking.ts` | 163 | 5514 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/timeouts.ts` | 40 | 1410 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
@@ -1901,7 +1901,7 @@
 | `src/utils/toolSearch.ts` | 757 | 26606 | 重写：保持通用行为 | `src/generated_ports/p_82c13c954be66.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/transcriptSearch.ts` | 203 | 8039 | 重写：会话可见文本检索（通用化） | `src/transcript_search.rs / src/agent.rs / src/main.rs` | 部分实现：依原版实现用户/助手/工具/附件可见文本抽取、隐藏提醒剔除、大小写归一与缓存索引；已接交互式 /find、离线 transcript-search、inspect-source 和真实 CLI 测试；原版 React/Ink 搜索交互尚未验收 |
 | `src/utils/treeify.ts` | 171 | 5033 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/truncate.ts` | 180 | 5719 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/truncate.ts` | 180 | 5719 | 重写：保持通用行为 | `src/generated_ports/terminal_truncate.rs` | 部分实现：按终端显示宽度的截断、路径中间截断、头尾截断和换行 Rust 实现；全 UAX29 字素规则和 ANSI 边界待完成 |
 | `src/utils/ultraplan/ccrSession.ts` | 350 | 12987 | 重写：保持通用行为 | `src/generated_ports/p_322c9d928a344.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/unaryLogging.ts` | 40 | 1254 | 重写：保持通用行为 | `src/generated_ports/p_5386fc6ccfc1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |

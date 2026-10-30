@@ -405,6 +405,11 @@ mod registry_00;
 mod registry_01;
 mod registry_02;
 mod registry_03;
+mod registry_04;
+pub mod text_input_semantics;
+pub mod terminal_kill_ring;
+pub mod terminal_truncate;
+pub mod terminal_context;
 pub mod runtime;
 pub mod ui;
 pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
@@ -413,6 +418,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
     out.extend(registry_01::catalog());
     out.extend(registry_02::catalog());
     out.extend(registry_03::catalog());
+    out.extend(registry_04::catalog());
     out
 }
 pub fn inspect(
@@ -432,5 +438,5 @@ pub fn inspect(
     if let Some(value) = registry_03::inspect(source, export, args) {
         return Some(value);
     }
-    None
+    registry_04::inspect(source, export, args)
 }
