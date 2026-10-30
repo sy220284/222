@@ -102,6 +102,7 @@ mod protocol;
 mod provider;
 mod query_config;
 mod query_guard;
+mod remote_sdk;
 mod query_token_budget;
 mod queue_journal;
 mod queued_prompt_batch;
@@ -451,6 +452,15 @@ enum Commands {
     Sdk {
         #[arg(long)]
         resume: Option<String>,
+        /// Connect a self-hosted SDK endpoint using the actual remote transport.
+        #[arg(long)]
+        remote_url: Option<String>,
+        /// Remote server session ID; kept separate from a local resume ID.
+        #[arg(long)]
+        remote_session_id: Option<String>,
+        /// Local file containing the session access token (never a CLI argument).
+        #[arg(long)]
+        token_file: Option<PathBuf>,
     },
 }
 
@@ -514,6 +524,26 @@ async fn run_cli() -> Result<()> {
     // Doctor must diagnose malformed user configuration without failing startup.
     if !matches!(cli.command, Commands::Doctor) {
         tls_ca::apply_user_startup_config()?;
+    }
+    if let Commands::Sdk {
+        resume,
+        remote_url: Some(remote_url),
+        remote_session_id,
+        token_file,
+    } = &cli.command
+    {
+        let session_id = remote_session_id
+            .as_deref()
+            .or(resume.as_deref())
+            .ok_or_else(|| anyhow::anyhow!("Remote SDK requires --remote-session-id or --resume"))?;
+        return remote_sdk::run(
+            &cli,
+            remote_url,
+            session_id,
+            resume.as_deref(),
+            token_file.as_deref(),
+        )
+        .await;
     }
     match &cli.command {
         Commands::ReleaseNotes => {
@@ -1251,7 +1281,7 @@ async fn run_cli() -> Result<()> {
         Commands::Chat {
             resume: Some(id), ..
         } => session_control::resolve(&root, id)?,
-        Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
+        Commands::Sdk { resume: Some(id), .. } => Session::load(&root, id)?,
         _ => Session::fresh(),
     };
     // A managed/user disable flag is stronger than a CLI bypass request and
