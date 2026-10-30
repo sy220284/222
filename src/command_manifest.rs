@@ -14,7 +14,8 @@ pub struct CommandDefinition {
     pub hidden: bool,
     pub immediate: bool,
 }
-const SOURCE_INDEX: &str = r####"agents|agents|local-jsx||-|Manage agent configurations
+const SOURCE_INDEX: &str = r####"add-dir|add-dir|local-jsx||<path>|Add a new working directory
+agents|agents|local-jsx||-|Manage agent configurations
 ant-trace|stub|disabled||-|Disabled internal trace
 autofix-pr|stub|disabled||-|Disabled internal PR autofix
 backfill-sessions|stub|disabled||-|Disabled legacy sessions
@@ -38,6 +39,7 @@ diff|diff|local-jsx||-|Show file changes
 doctor|doctor|local-jsx||-|Diagnose setup
 effort|effort|local-jsx||[low|medium|high|max|auto]|Set model effort
 env|stub|disabled||-|Disabled legacy env
+export|export|local-jsx||[filename]|Export the current conversation to a file or clipboard
 exit|exit|local-jsx|quit|-|Quit session
 extra-usage|extra-usage|local-jsx||-|Additional usage
 fast|fast|local-jsx||[on|off]|Fast mode
@@ -69,10 +71,12 @@ pr_comments|pr-comments|text||-|PR comments
 privacy-settings|privacy-settings|local-jsx||-|Privacy options
 rate-limit-options|rate-limit-options|local-jsx||-|Rate options
 release-notes|release-notes|local||-|Release notes
+rename|rename|local-jsx||[name]|Rename the current conversation
 reload-plugins|reload-plugins|local||-|Reload plugins
 remote-env|remote-env|local-jsx||-|Remote environment
 remote-setup|web-setup|local-jsx||-|Setup remote
 reset-limits|stub|disabled||-|Disabled limit reset
+resume|resume|local-jsx|continue|[conversation id or search term]|Resume a previous conversation
 rewind|rewind|local|checkpoint|-|Rewind conversation
 sandbox-toggle|sandbox|local-jsx||-|Sandbox settings
 session|session|local-jsx|remote|-|Session URL
@@ -116,7 +120,16 @@ pub fn commands() -> &'static [CommandDefinition] {
                     );
                 let immediate = matches!(
                     name,
-                    "color" | "mcp" | "config" | "diff" | "context" | "help"
+                    "remote-control"
+                        | "btw"
+                        | "color"
+                        | "exit"
+                        | "hooks"
+                        | "mcp"
+                        | "plugin"
+                        | "rename"
+                        | "sandbox"
+                        | "status"
                 );
                 let actual_dir = if directory == "good-CODEBRAND" {
                     format!("good-{}{}", "clau", "de")
@@ -168,9 +181,30 @@ mod tests {
     use super::*;
     #[test]
     fn registry_and_alias_resolution() {
-        assert_eq!(commands().len(), 79);
+        assert_eq!(commands().len(), 83);
         assert_eq!(commands().iter().filter(|c| c.disabled).count(), 18);
         assert_eq!(lookup("settings").unwrap().name, "config");
+        assert_eq!(lookup("add-dir").unwrap().name, "add-dir");
+        assert_eq!(lookup("export").unwrap().name, "export");
+        assert_eq!(lookup("rename").unwrap().name, "rename");
+        assert_eq!(lookup("continue").unwrap().name, "resume");
+        for command in [
+            "remote-control",
+            "btw",
+            "color",
+            "exit",
+            "hooks",
+            "mcp",
+            "plugin",
+            "rename",
+            "sandbox",
+            "status",
+        ] {
+            assert!(lookup(command).unwrap().immediate, "{command}");
+        }
+        for command in ["config", "diff", "context", "help", "resume"] {
+            assert!(!lookup(command).unwrap().immediate, "{command}");
+        }
         assert_eq!(lookup("bashes").unwrap().name, "tasks");
         assert_eq!(lookup("new").unwrap().name, "clear");
         assert_eq!(lookup("allowed-tools").unwrap().name, "permissions");

@@ -33,7 +33,11 @@ pub struct Task {
 pub fn handles(name: &str) -> bool {
     matches!(
         name,
-        "task_create" | "task_update" | "task_list" | "TodoWrite" | "todo_write"
+        "task_create"
+            | "task_update"
+            | "task_list"
+            | crate::tool_names::TODO_WRITE_TOOL_NAME
+            | "todo_write"
     )
 }
 
@@ -54,7 +58,7 @@ pub fn tasks_v2_enabled(interactive: bool) -> bool {
 
 pub fn todo_definition() -> Value {
     json!({"type":"function","function":{
-        "name":"TodoWrite",
+        "name": crate::tool_names::TODO_WRITE_TOOL_NAME,
         "description":"Replace the session task checklist with pending, in-progress and completed items.",
         "parameters":{"type":"object","additionalProperties":false,
             "properties":{"todos":{"type":"array","items":{"type":"object",
@@ -101,7 +105,7 @@ fn dispatch(session: &mut Session, call: &ToolCall) -> Result<String> {
         bail!("Task tool arguments must be an object")
     }
     match call.function.name.as_str() {
-        "TodoWrite" | "todo_write" => {
+        crate::tool_names::TODO_WRITE_TOOL_NAME | "todo_write" => {
             let object = args
                 .as_object()
                 .context("TodoWrite arguments must be an object")?;

@@ -2609,8 +2609,12 @@ async fn chat(
             }
             continue;
         }
-        if input == "/resume" || input.starts_with("/resume ") {
-            let query = input.trim_start_matches("/resume").trim();
+        if let Some(query) = input
+            .strip_prefix("/resume")
+            .or_else(|| input.strip_prefix("/continue"))
+            .filter(|tail| tail.is_empty() || tail.starts_with(' '))
+        {
+            let query = query.trim();
             let selection = (|| -> Result<Option<String>> {
                 if !query.is_empty() {
                     return Ok(Some(query.to_owned()));
