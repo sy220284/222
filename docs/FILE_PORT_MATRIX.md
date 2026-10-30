@@ -206,7 +206,7 @@
 | `src/commands/logout/logout.tsx` | 82 | 10732 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/mcp/addCommand.ts` | 281 | 9848 | 重写：保持通用行为 | `src/mcp_cli.rs` / `src/main.rs` | 部分实现：MCP add 的 stdio/http、环境变量、Header、local/project/user 配置范围已接入 CLI 和启动加载；项目命令须本机授权并绑定配置指纹。SSE、OAuth、XAA 尚未实现；相应完整等价验收未核销 |
 | `src/commands/mcp/index.ts` | 13 | 280 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/mcp/mcp.tsx` | 85 | 12126 | 重写：保持通用行为 | `src/generated_ports/p_7522da9606aa2.rs`| 部分实现：/mcp 参数路由（no-redirect/设置视图、reconnect <name>、enable|disable [target]）+MCPToggle 目标解析纯核——ide 客户端恒排除、all 按 enable 筛 disabled/disable 筛非 disabled、命名按 name 匹配、空选择 already/not-found 消息、成功计数或单服务器结果；toggle 动作注入，settings/reconnect 视图归组件域，附 5 测试|
+| `src/commands/mcp/mcp.tsx` | 85 | 12126 | 重写：保持通用行为 | `src/generated_ports/p_7522da9606aa2.rs` | 部分实现：/mcp 参数路由（no-redirect/设置视图、reconnect <name>、enable/disable [target]）+MCPToggle 目标解析纯核——ide 客户端恒排除、all 按 enable 筛 disabled/disable 筛非 disabled、命名按 name 匹配、空选择 already/not-found 消息、成功计数或单服务器结果；toggle 动作注入，settings/reconnect 视图归组件域，附 5 测试 |
 | `src/commands/mcp/xaaIdpCommand.ts` | 267 | 10290 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/memory/index.ts` | 11 | 220 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/memory/memory.tsx` | 90 | 12608 | 重写：保持通用行为 | 待定 | 未迁移 |
