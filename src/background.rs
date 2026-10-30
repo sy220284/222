@@ -74,6 +74,56 @@ struct Running {
     completed: Notify,
 }
 
+/// The original diskOutput.ts stores task streams under a per-project,
+/// per-session temporary directory, outside the source checkout. Keeping
+/// stdout/stderr in .atlas/background risks indexing and committing them.
+fn private_task_directory(root: &Path, session_id: Uuid) -> Result<PathBuf> {
+    use sha2::{Digest, Sha256};
+    let project = root.canonicalize().context("Workspace unavailable")?;
+    let temp = std::env::temp_dir().canonicalize().context("Temporary directory unavailable")?;
+    #[cfg(unix)]
+    let owner = format!("atlas-agent-{}", unsafe { libc::geteuid() });
+    #[cfg(not(unix))]
+    let owner = {
+        let home = dirs::home_dir().context("Cannot identify user for private task output")?;
+        let hash = format!("{:x}", Sha256::digest(home.to_string_lossy().as_bytes()));
+        format!("atlas-agent-{}", &hash[..24])
+    };
+    let project_hash = format!("{:x}", Sha256::digest(project.to_string_lossy().as_bytes()));
+    let mut path = temp;
+    for component in [
+        owner,
+        format!("project-{}", &project_hash[..32]),
+        session_id.to_string(),
+        "tasks".to_owned(),
+    ] {
+        path.push(component);
+        match fs::symlink_metadata(&path) {
+            Ok(meta) if meta.file_type().is_symlink() || !meta.is_dir() => {
+                bail!("Task output directory is redirected or invalid: {}", path.display())
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                fs::create_dir(&path)
+                    .with_context(|| format!("Create task output directory {}", path.display()))?;
+            }
+            Err(error) => return Err(error.into()),
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{MetadataExt, PermissionsExt};
+            let meta = fs::symlink_metadata(&path)?;
+            if meta.file_type().is_symlink() || !meta.is_dir()
+                || meta.uid() != unsafe { libc::geteuid() }
+            {
+                bail!("Task output directory is not owned by this user: {}", path.display())
+            }
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+        }
+    }
+    path.canonicalize().context("Private task output directory unavailable")
+}
+
 pub struct BackgroundTasks {
     workspace: PathBuf,
     directory: PathBuf,
@@ -91,22 +141,33 @@ impl BackgroundTasks {
     /// background output. A second session in the same workspace must never
     /// list, stop, or read the first session's live shell tasks.
     pub fn for_session(root: &Path, session_id: Uuid) -> Result<Self> {
-        Self::in_directory(
-            root,
-            root.join(".atlas")
-                .join("background")
-                .join(session_id.to_string()),
-        )
+        // diskOutput.ts::getTaskOutputDir uses a private project temporary
+        // directory with a stable session ID. Do not put task output into
+        // the repository or regenerate the location during /clear.
+        let directory = private_task_directory(root, session_id)?;
+        Self::in_directory_checked(root, directory, true)
     }
 
     fn in_directory(root: &Path, directory: PathBuf) -> Result<Self> {
-        fs::create_dir_all(&directory)?;
-        if !directory.canonicalize()?.starts_with(root) {
+        Self::in_directory_checked(root, directory, false)
+    }
+
+    fn in_directory_checked(root: &Path, directory: PathBuf, private: bool) -> Result<Self> {
+        let workspace = root.canonicalize().context("Workspace unavailable")?;
+        if !private {
+            fs::create_dir_all(&directory)?;
+        }
+        let canonical = directory.canonicalize()?;
+        if private {
+            if !canonical.starts_with(std::env::temp_dir().canonicalize()?) {
+                bail!("Private background task directory escapes temporary storage");
+            }
+        } else if !canonical.starts_with(&workspace) {
             bail!("Background task directory escapes workspace");
         }
         Ok(Self {
-            workspace: root.to_path_buf(),
-            directory,
+            workspace,
+            directory: canonical,
             entries: Mutex::new(HashMap::new()),
             shell_kind: Mutex::new(crate::shell_runtime::ShellKind::default()),
             session_env: Mutex::new(std::collections::BTreeMap::new()),
