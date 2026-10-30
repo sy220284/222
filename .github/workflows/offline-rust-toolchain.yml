@@ -1,0 +1,93 @@
+name: 222 Rust 1.99.1 离线工具链产物
+on:
+  push:
+    branches:
+      - tooling/offline-rust-1-99-1-20261030
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/offline-rust-toolchain.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package-offline-toolchain:
+    name: 打包 Linux x86_64 Rust 工具链
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装固定版本 Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+          rustup default 1.99.1
+          rustc --version
+          cargo --version
+          cargo clippy --version
+      - name: 缓存项目离线 Rust 依赖
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fetch --locked --target x86_64-unknown-linux-gnu
+      - name: 生成可校验离线安装产物
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          tc="1.99.1-x86_64-unknown-linux-gnu"
+          test -x "$HOME/.rustup/toolchains/$tc/bin/rustc"
+          test -x "$HOME/.rustup/toolchains/$tc/bin/cargo"
+          test -x "$HOME/.rustup/toolchains/$tc/bin/rustfmt"
+          test -x "$HOME/.rustup/toolchains/$tc/bin/cargo-clippy"
+          mkdir -p dist
+          tar -C "$HOME" -I 'zstd -T0 -8' -cf dist/222-rust-toolchain-linux-x86_64.tar.zst ".rustup/toolchains/$tc"
+          tar -C "$HOME" -I 'zstd -T0 -8' -cf dist/222-cargo-registry-linux-x86_64.tar.zst ".cargo/registry"
+          git archive HEAD | zstd -T0 -8 -o dist/222-source.tar.zst
+          git rev-parse HEAD > dist/source-head.txt
+          sha256sum dist/*.tar.zst > dist/SHA256SUMS
+          cat > dist/INSTALL.md <<'EOF'
+          # 222 Rust 1.99.1 离线工具链（Linux x86_64）
+
+          下载并解压 GitHub Actions Artifact，进入产物目录：
+
+          ```bash
+          sha256sum -c SHA256SUMS
+          mkdir -p "$HOME/222-offline"
+          tar --zstd -xf 222-rust-toolchain-linux-x86_64.tar.zst -C "$HOME/222-offline"
+          tar --zstd -xf 222-cargo-registry-linux-x86_64.tar.zst -C "$HOME/222-offline"
+          ```
+
+          离线构建（当前终端）：
+
+          ```bash
+          export RUSTUP_HOME="$HOME/222-offline/.rustup"
+          export CARGO_HOME="$HOME/222-offline/.cargo"
+          export PATH="$RUSTUP_HOME/toolchains/1.99.1-x86_64-unknown-linux-gnu/bin:$PATH"
+          export CARGO_NET_OFFLINE=true
+          rustc --version
+          cargo --version
+          mkdir -p "$HOME/222-source"
+          tar --zstd -xf 222-source.tar.zst -C "$HOME/222-source"
+          cd "$HOME/222-source"
+          cargo check --locked --offline --all-targets
+          ```
+
+          如已有最新 222 仓库，可在该仓库运行 Cargo 检查，无需解压源码快照。
+          该工具链仅用于 Linux x86_64。其它系统需另行构建对应发行包。
+          Rust/Cargo 归档和依赖缓存均为 GitHub 托管 runner 当次实际下载结果。
+          EOF
+          test -s dist/SHA256SUMS
+          sha256sum -c dist/SHA256SUMS
+          du -h dist/*
+      - name: 上传 Rust 离线包及源码快照
+        uses: actions/upload-artifact@v4
+        with:
+          name: 222-rust-1.99.1-linux-x86_64-offline
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
