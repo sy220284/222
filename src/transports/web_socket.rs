@@ -238,8 +238,8 @@ impl MinimalWsClient {
         self.send_frame(0x9, b"").await
     }
 
-    pub async fn send_pong(&mut self) -> Result<()> {
-        self.send_frame(0xA, b"").await
+    pub async fn send_pong(&mut self, payload: &[u8]) -> Result<()> {
+        self.send_frame(0xA, payload).await
     }
 
     pub async fn send_close(&mut self, code: u16) -> Result<()> {
@@ -344,7 +344,8 @@ impl MinimalWsClient {
                     return Ok(WsIncoming::Close(code));
                 }
                 0x9 => {
-                    self.send_pong().await?;
+                    // RFC 6455 requires a pong to echo the server ping's payload.
+                    self.send_pong(&payload).await?;
                     return Ok(WsIncoming::Ping);
                 }
                 0xA => return Ok(WsIncoming::Pong),
@@ -919,6 +920,31 @@ mod tests {
         assert_eq!(pending, buffer.to_vec());
         assert_eq!(pending.len(), 2);
         assert_eq!(pending[0]["uuid"], "c");
+    }
+
+    #[tokio::test]
+    async fn websocket_pong_echoes_nonempty_server_ping_payload() {
+        use tokio::io::AsyncReadExt;
+        let (local, mut peer) = tokio::io::duplex(256);
+        let mut conn = MinimalWsClient {
+            stream: Box::new(local),
+            read_buffer: vec![0x89, 0x03, b'a', b'b', b'c'],
+            fragmented: None,
+            server_last_request_id: None,
+        };
+        assert_eq!(conn.read_message().await.unwrap(), WsIncoming::Ping);
+        let mut header = [0_u8; 2];
+        peer.read_exact(&mut header).await.unwrap();
+        assert_eq!(header[0], 0x8A);
+        assert_eq!(header[1], 0x83);
+        let mut mask = [0_u8; 4];
+        peer.read_exact(&mut mask).await.unwrap();
+        let mut payload = [0_u8; 3];
+        peer.read_exact(&mut payload).await.unwrap();
+        for (index, byte) in payload.iter_mut().enumerate() {
+            *byte ^= mask[index % 4];
+        }
+        assert_eq!(&payload, b"abc");
     }
 
     #[test]
