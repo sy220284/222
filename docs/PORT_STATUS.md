@@ -1,3 +1,10 @@
+## 2026-10-29：修复跨会话后台日志读取元数据定位（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 源码 `source/src/utils/permissions/filesystem.ts:1688–1699::checkReadableInternalPath` 明确允许读取同项目其他会话临时目录中的任务日志；`source/src/utils/task/diskOutput.ts:72–74::getTaskOutputPath` 定义后台任务输出路径。
+- **实际缺口**：`src/background.rs::BackgroundTasks::trusted_output_path` 虽然检查同项目相邻会话 UUID 与任务日志路径，但读取任务元数据时始终查当前会话的 `self.directory`，导致同项目其他会话的真实任务日志仍被拒绝，Read 工具入口无法使用。
+- **代码修复**：将任务元数据定位到已验证日志路径所属会话目录 `parent`，沿用原有同项目/UUID/常规文件/符号链接防护及 Read 拒绝规则。新增跨会话 stdout/stderr、跨项目拒绝回归用例；源码提交 `67c4092a54a1b3ee99b15ddf7a482c11868b968a`，修改 `src/background.rs`，经远端静态核对存在。
+- **本轮计数**：保守计 **1 个独立用户可感知修复**，已提交、待行为验收；未运行 Cargo、测试或 CI。仍缺原版统一 .output 输出流、完整任务类型和异步通知/恢复等；Issue #3 冻结 362 项继续开放，新增完整等价验收 0。100 项先行独立缺口与完整实施方案尚未完成，本轮数量目标未达标。
+
 **同一后台任务生命周期附加复核（不重复计数）**：`src/background.rs` 结束任务后若元数据保存失败，现将失败原因写入运行中任务的 `persistenceWarning`，通过 `task_output` 和 `background_list` 真实返回，同时记录错误日志；防止成功/失败状态仅在内存变化却被无声当作持久成功。提交 `cc46faa271901ff4cd7e6c04d260fc3877db08c1`，仍属上述后台任务主链的异常分支，**不增加独立功能数**；跨进程失败恢复仍待补齐，未运行测试。
 
 ## 2026-10-29：同项目跨会话任务日志 Read 授权（源码已提交、待验收）
