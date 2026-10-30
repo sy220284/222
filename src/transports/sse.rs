@@ -178,6 +178,7 @@ struct SseStateInner {
 
 /// Client-event channel payload: deduped, ordered stream payloads.
 pub struct SseTransport {
+    http: reqwest::Client,
     url: String,
     headers: Vec<(String, String)>,
     session_id: Option<String>,
@@ -197,6 +198,7 @@ impl SseTransport {
     ) -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         Self {
+            http: reqwest::Client::new(),
             url,
             headers,
             session_id,
@@ -271,7 +273,7 @@ impl SseTransport {
                 if url.contains('?') { "&" } else { "?" }
             ));
         }
-        let mut request = reqwest::Client::new().get(&url);
+        let mut request = self.http.get(&url);
         for (name, value) in (self.auth)() {
             request = request.header(name, value);
         }
@@ -339,7 +341,7 @@ impl SseTransport {
     /// Send one message through the POST endpoint with up to
     /// `POST_MAX_RETRIES` attempts (4xx except 429 aborts early).
     pub async fn write(&self, post_url: &str, message: &Value) -> Result<()> {
-        let mut request = reqwest::Client::new().post(post_url);
+        let mut request = self.http.post(post_url);
         for (name, value) in (self.auth)() {
             request = request.header(name, value);
         }
