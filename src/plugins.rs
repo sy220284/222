@@ -33,7 +33,7 @@ fn checked_component(root: &Path, path: &Path) -> Result<PathBuf> {
     let canonical = path
         .canonicalize()
         .with_context(|| format!("Cannot read plugin component {}", path.display()))?;
-    if !canonical.starts_with(root) {
+    if !canonical.starts_with(root.canonicalize()?) {
         bail!("Plugin component leaves plugin root: {}", path.display())
     }
     Ok(canonical)
@@ -585,7 +585,7 @@ fn directory(root: &Path, name: &str) -> Result<PathBuf> {
     let real = base
         .canonicalize()
         .with_context(|| format!("Plugin '{name}' is not installed"))?;
-    if !real.starts_with(root) {
+    if !real.starts_with(root.canonicalize()?) {
         bail!("Plugin '{name}' leaves workspace")
     }
     if !real.is_dir() {
@@ -927,7 +927,7 @@ fn plugin_data_directory(plugin_root: &Path) -> Result<String> {
     let base = atlas.join("plugin-data");
     fs::create_dir_all(&base)?;
     let base = base.canonicalize()?;
-    if !base.starts_with(atlas) {
+    if !base.starts_with(atlas.canonicalize()?) {
         bail!("Plugin data directory leaves the workspace")
     }
     let data = base.join(name);
