@@ -1727,7 +1727,7 @@ async fn chat(
                 println!("/sessions [query]        search saved conversation titles");
                 println!("/sessions --semantic QUERY use model-ranked session search");
                 println!("One-shot model search: atlas-agent semantic-sessions QUERY");
-                println!("/resume TERM             find session, show restart command");
+                println!("/resume [TERM]           pick or directly resume a saved conversation");
                 println!("/rename [NAME]           rename conversation or generate a name using active model");
                 println!("/export [filename]       save full conversation to a local text file");
                 println!("Resume: atlas-agent chat --resume SESSION_ID");
@@ -2368,12 +2368,50 @@ async fn chat(
         }
         if input == "/resume" || input.starts_with("/resume ") {
             let query = input.trim_start_matches("/resume").trim();
-            match session_control::resolve(agent.workspace_root(), query) {
-                Ok(session) => println!(
-                    "To resume: atlas-agent --workspace . chat --resume {}",
-                    session.id
-                ),
-                Err(err) => eprintln!("{err:#}"),
+            let selection = (|| -> Result<Option<String>> {
+                if !query.is_empty() {
+                    return Ok(Some(query.to_owned()));
+                }
+                // Original /resume with no arguments opens a session picker.
+                // Exclude the current conversation and team sidechains.
+                let sessions = agent.resumable_sessions()?;
+                if sessions.is_empty() {
+                    println!("No conversations found to resume.");
+                    return Ok(None);
+                }
+                println!("Choose a conversation to resume:");
+                for (index, session) in sessions.iter().take(20).enumerate() {
+                    let branch = session.git_branch.as_deref().unwrap_or("");
+                    println!("  {}) {} [{}] {} messages", index + 1,
+                        session.display_title(), branch, session.messages);
+                }
+                print!("Session number (q to cancel): ");
+                io::stdout().flush()?;
+                let mut choice = String::new();
+                if io::stdin().read_line(&mut choice)? == 0
+                    || choice.trim().eq_ignore_ascii_case("q")
+                {
+                    return Ok(None);
+                }
+                let index = choice.trim().parse::<usize>()
+                    .context("Enter a numeric session selection")?;
+                if index == 0 || index > sessions.len().min(20) {
+                    bail!("Session selection is out of range");
+                }
+                Ok(Some(sessions[index - 1].id.to_string()))
+            })();
+            match selection {
+                Ok(Some(selected)) => match agent.resume_interactive_session(&selected).await {
+                    Ok(message) => {
+                        prompt_history = prompt_history::PromptHistory::new(
+                            agent.workspace_root(), &agent.session_id(),
+                        )?;
+                        println!("{message}");
+                    }
+                    Err(error) => eprintln!("Resume failed: {error:#}"),
+                },
+                Ok(None) => println!("Resume cancelled."),
+                Err(error) => eprintln!("Resume selection failed: {error:#}"),
             }
             continue;
         }
