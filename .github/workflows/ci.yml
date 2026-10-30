@@ -57,6 +57,23 @@ jobs:
       - name: 运行完整单元与集成测试
         run: cargo test --locked --all-targets
 
+
+  windows-check:
+    name: Windows Shell 与跨平台编译
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 使用固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 检查 Windows 全部编译目标
+        run: cargo check --locked --all-targets
+      - name: Windows 进程与工具链回归
+        run: cargo test --locked --all-targets
+
   security:
     name: 依赖漏洞与来源检查
     runs-on: ubuntu-latest
