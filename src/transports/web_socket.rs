@@ -108,6 +108,8 @@ pub struct MinimalWsClient {
     stream: Box<dyn WebSocketIo>,
     read_buffer: Vec<u8>,
     fragmented: Option<Vec<u8>>,
+    /// Server confirmation is read from the RFC 6455 upgrade response.
+    server_last_request_id: Option<String>,
 }
 
 impl MinimalWsClient {
@@ -198,6 +200,7 @@ impl MinimalWsClient {
         let mut upgrade = false;
         let mut connection_upgrade = false;
         let mut accept = None;
+        let mut server_last_request_id = None;
         for line in header.split("\r\n").skip(1) {
             if let Some((header_name, value)) = line.split_once(':') {
                 let value = value.trim();
@@ -209,6 +212,8 @@ impl MinimalWsClient {
                         .any(|part| part.trim().eq_ignore_ascii_case("Upgrade"));
                 } else if header_name.eq_ignore_ascii_case("Sec-WebSocket-Accept") {
                     accept = Some(value);
+                } else if header_name.eq_ignore_ascii_case("X-Last-Request-Id") {
+                    server_last_request_id = Some(value.to_string());
                 }
             }
         }
@@ -220,6 +225,7 @@ impl MinimalWsClient {
             stream,
             read_buffer: response[header_end..].to_vec(),
             fragmented: None,
+            server_last_request_id,
         })
     }
 
@@ -577,6 +583,12 @@ impl WebSocketTransport {
             state.reconnect_attempts = 0;
             state.reconnect_start = None;
         }
+        // Source Node/ws learns the confirmed message ID from upgrade
+        // headers; Bun's no-header branch replays the entire UUID buffer.
+        if self.buffered_count() > 0 {
+            let confirmed = conn.server_last_request_id.clone();
+            self.replay_buffered_messages(&mut conn, confirmed.as_deref()).await;
+        }
         let mut last_ping = Instant::now();
         let mut pong_received = true;
         let mut last_keep_alive = Instant::now();
@@ -600,9 +612,9 @@ impl WebSocketTransport {
                         Ok(WsIncoming::Text(text)) => {
                             last_activity = Instant::now();
                             pong_received = true;
-                            if let Some(outcome) = self.handle_text(&mut conn, &text).await {
-                                return outcome;
-                            }
+                            // The source forwards every data frame unchanged,
+                            // including JSON objects with type="open" or "close".
+                            let _ = self.shared.data_tx.send(text);
                         }
                         Ok(WsIncoming::Pong) => {
                             pong_received = true;
@@ -643,38 +655,6 @@ impl WebSocketTransport {
                         last_keep_alive = Instant::now();
                     }
                 }
-            }
-        }
-    }
-
-    /// Handle one server text frame. Returns Some(outcome) when the
-    /// connection lifecycle ends.
-    async fn handle_text(
-        &self,
-        conn: &mut MinimalWsClient,
-        text: &str,
-    ) -> Option<ConnectionOutcome> {
-        let parsed: Value = match serde_json::from_str(text) {
-            Ok(value) => value,
-            Err(_) => {
-                let _ = self.shared.data_tx.send(text.to_string());
-                return None;
-            }
-        };
-        match parsed.get("type").and_then(Value::as_str) {
-            Some("open") => {
-                let last_id = parsed
-                    .get("lastId")
-                    .and_then(Value::as_str)
-                    .map(str::to_string);
-                self.replay_buffered_messages(conn, last_id.as_deref())
-                    .await;
-                None
-            }
-            Some("close") => Some(ConnectionOutcome::Terminal),
-            _ => {
-                let _ = self.shared.data_tx.send(text.to_string());
-                None
             }
         }
     }
@@ -849,6 +829,7 @@ mod tests {
             stream: Box::new(local),
             read_buffer: vec![0x81, 0x80],
             fragmented: None,
+            server_last_request_id: None,
         };
         let err = socket.read_message().await.unwrap_err();
         assert!(err.to_string().contains("server frames must not be masked"));
