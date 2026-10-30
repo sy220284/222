@@ -558,7 +558,7 @@
 | `src/components/hooks/SelectHookMode.tsx` | 112 | 12907 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/hooks/SelectMatcherMode.tsx` | 144 | 14809 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/hooks/ViewHookMode.tsx` | 199 | 17969 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/mcp/CapabilitiesSection.tsx` | 61 | 4957 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/mcp/CapabilitiesSection.tsx` | 61 | 4957 | 重写：终端 UI／交互 | `src/generated_ports/p_e50a5e3e24347.rs` | 部分实现：完整等价：能力清单构造（tools/resources/prompts 顺序+正数过滤）与 byline 连接（空则不渲染）含单测；待验收 |
 | `src/components/mcp/ElicitationDialog.tsx` | 1169 | 179643 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/MCPAgentServerMenu.tsx` | 183 | 26662 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/MCPListPanel.tsx` | 504 | 58231 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -686,7 +686,7 @@
 | `src/components/tasks/RemoteSessionProgress.tsx` | 243 | 27859 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/tasks/ShellDetailDialog.tsx` | 404 | 39167 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/tasks/ShellProgress.tsx` | 87 | 7004 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/tasks/renderToolActivity.tsx` | 33 | 4414 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/tasks/renderToolActivity.tsx` | 33 | 4414 | 重写：终端 UI／交互 | `src/generated_ports/p_3d8cf7b105951.rs` | 部分实现：完整等价：回退链文本构造（未知工具/解析失败/空名→原名，含参→Name(args)）含四分支单测；inputSchema 解析随各工具桩，待验收 |
 | `src/components/tasks/taskStatusUtils.tsx` | 107 | 13548 | 重写：终端 UI／交互 | `src/generated_ports/p_75dd35b9b8459.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/teams/TeamStatus.tsx` | 80 | 6897 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/teams/TeamsDialog.tsx` | 715 | 94680 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -756,7 +756,7 @@
 | `src/hooks/notifs/useTeammateShutdownNotification.ts` | 79 | 2296 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/renderPlaceholder.ts` | 52 | 1280 | 重写：终端 UI／交互 | `src/generated_ports/text_input_semantics.rs` | 部分实现：原版字符范围与渲染主要分支已写 Rust；占位显示已被 src/terminal_input.rs 生产入口调用；ANSI 全协议、完整输入 Hook 与渲染细节未验收 |
 | `src/hooks/toolPermission/PermissionContext.ts` | 389 | 12768 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/toolPermission/handlers/coordinatorHandler.ts` | 66 | 2374 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/toolPermission/handlers/coordinatorHandler.ts` | 66 | 2374 | 重写：终端 UI／交互 | `src/generated_ports/p_79f965c256edf.rs` | 部分实现：契约记录：协调员 worker 权限流（自动化检查依次通过后才落交互对话框，否则 null 透传）；分类器与钩子检查随各自链路接线，待验收 |
 | `src/hooks/toolPermission/handlers/interactiveHandler.ts` | 537 | 20194 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/toolPermission/handlers/swarmWorkerHandler.ts` | 160 | 5537 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/toolPermission/permissionLogging.ts` | 239 | 7286 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -823,12 +823,12 @@
 | `src/hooks/useSettings.ts` | 18 | 618 | 重写：终端 UI／交互 | `src/generated_ports/p_6a3bbeb50db8c.rs` | 部分实现：AST 转写：AppState.settings 切片订阅契约记录（磁盘变更自动更新语义）；宿主待验收 |
 | `src/hooks/useSettingsChange.ts` | 26 | 946 | 重写：终端 UI／交互 | `src/generated_ports/p_216418895190e.rs` | 部分实现：AST 转写：订阅契约+缓存说明（通知器已清缓存，handler 不再清以免 N 路抖动）行为文档随 settings 检测器链路，待验收 |
 | `src/hooks/useSkillImprovementSurvey.ts` | 106 | 3528 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useSkillsChange.ts` | 63 | 2084 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useSkillsChange.ts` | 63 | 2084 | 重写：终端 UI／交互 | `src/generated_ports/p_cc54ba08f000a.rs` | 部分实现：完整等价：双触发失效决策纯函数（cwd 门+技能变更全清/灰度刷新仅 memo）含单测；缓存清理与 GB 订阅宿主随各自链路，待验收 |
 | `src/hooks/useSwarmInitialization.ts` | 82 | 3151 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useSwarmPermissionPoller.ts` | 331 | 9617 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTaskListWatcher.ts` | 222 | 6822 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTasksV2.ts` | 251 | 8808 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useTeammateViewAutoExit.ts` | 64 | 2189 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useTeammateViewAutoExit.ts` | 64 | 2189 | 重写：终端 UI／交互 | `src/generated_ports/p_870f27ccccd41.rs` | 部分实现：完整等价：自动退出决策纯函数（killed/错误/任务被逐出→退出；completed 留观；未查看即停留）含双单测；AppState 订阅宿主待验收 |
 | `src/hooks/useTeleportResume.tsx` | 85 | 9840 | 重写：终端 UI／交互 | `src/generated_ports/p_17ee0f10fb33b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useTerminalSize.ts` | 16 | 354 | 重写：终端 UI／交互 | `src/generated_ports/terminal_context.rs` | 部分实现：上下文读取与缺失错误已手写；React Ink Provider 与终端尺寸事件仍需完整接线验收 |
 | `src/hooks/useTextInput.ts` | 530 | 17027 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -851,7 +851,7 @@
 | `src/ink/components/Box.tsx` | 214 | 21652 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/Button.tsx` | 192 | 16523 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/ClockContext.tsx` | 112 | 12091 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/components/CursorDeclarationContext.ts` | 33 | 1119 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/components/CursorDeclarationContext.ts` | 33 | 1119 | 重写：终端 UI／交互 | `src/generated_ports/p_f2c8cf79dfd16.rs` | 部分实现：完整等价：光标声明条件清除语义（clearIfNode 匹配才清，兄弟转移焦点互不覆盖）含三态单测；DOM 节点宿主归 ink，待验收 |
 | `src/ink/components/ErrorOverview.tsx` | 109 | 15405 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/Link.tsx` | 42 | 3556 | 重写：终端 UI／交互 | `src/generated_ports/p_afac9c00ba614.rs` | 部分实现：完整等价：OSC-8 超链接/纯文本回退分支决策纯函数（children 缺省取 url、fallback 优先）含三分支单测；supportsHyperlinks 随 ink 检测桩，待验收 |
 | `src/ink/components/Newline.tsx` | 39 | 2356 | 重写：终端 UI／交互 | `src/generated_ports/p_1c19cd8600b42.rs` | 部分实现：完整等价：count 缺省 1 与 repeat 语义纯函数含单测；待验收 |
@@ -883,7 +883,7 @@
 | `src/ink/hooks/use-app.ts` | 9 | 251 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-declared-cursor.ts` | 74 | 2996 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-input.ts` | 93 | 3107 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/hooks/use-interval.ts` | 68 | 1796 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/hooks/use-interval.ts` | 68 | 1796 | 重写：终端 UI／交互 | `src/generated_ports/p_d4af41e8141ae.rs` | 部分实现：完整等价：共享时钟 interval 门控数学（含饱和差值）含单测；Clock 订阅非 keepAlive 语义归 ink 运行时，待验收 |
 | `src/ink/hooks/use-search-highlight.ts` | 54 | 2158 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-selection.ts` | 105 | 4421 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-stdin.ts` | 9 | 232 | 重写：终端 UI／交互 | 待定 | 未迁移 |
