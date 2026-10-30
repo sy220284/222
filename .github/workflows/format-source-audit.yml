@@ -1,0 +1,31 @@
+name: 源码审计分支临时格式整理
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  format-audit:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/222-source-audit-20261030'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+          components: rustfmt
+      - name: 按项目固定工具链整理 Rust 源码
+        run: cargo fmt --all
+      - name: 只将格式化后的 Rust 源码写入当前审计分支
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u -- '*.rs'
+          if ! git diff --cached --quiet; then
+            git commit -m "统一 Rust 源码格式以通过完整静态验收"
+            git push origin HEAD:refs/heads/fix/222-source-audit-20261030
+          fi
