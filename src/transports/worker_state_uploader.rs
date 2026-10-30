@@ -56,6 +56,7 @@ struct WorkerStateShared {
     send: WorkerStateSend,
     base_delay_ms: u64,
     max_delay_ms: u64,
+    jitter_ms: u64,
     state: Mutex<WorkerStateInner>,
     closed: AtomicBool,
 }
@@ -71,11 +72,21 @@ pub struct WorkerStateUploader {
 
 impl WorkerStateUploader {
     pub fn new(send: WorkerStateSend, base_delay_ms: u64, max_delay_ms: u64) -> Self {
+        Self::new_with_jitter(send, base_delay_ms, max_delay_ms, 0)
+    }
+
+    pub fn new_with_jitter(
+        send: WorkerStateSend,
+        base_delay_ms: u64,
+        max_delay_ms: u64,
+        jitter_ms: u64,
+    ) -> Self {
         Self {
             shared: Arc::new(WorkerStateShared {
                 send,
                 base_delay_ms,
                 max_delay_ms,
+                jitter_ms,
                 state: Mutex::new(WorkerStateInner {
                     in_flight: false,
                     pending: None,
@@ -113,6 +124,7 @@ impl WorkerStateUploader {
     /// Stop accepting work; the in-flight attempt finishes on its own.
     pub fn close(&self) {
         self.shared.closed.store(true, Ordering::SeqCst);
+        self.shared.state.lock().expect("worker state").pending = None;
     }
 
     /// Whether an attempt is in flight (test hook parity with the source).
@@ -149,10 +161,17 @@ async fn send_loop(shared: Arc<WorkerStateShared>, mut current: Value) {
             return;
         }
         failures = failures.saturating_add(1);
-        let delay = shared
+        let mut delay = shared
             .base_delay_ms
             .saturating_mul(1_u64 << failures.saturating_sub(1).min(16))
             .min(shared.max_delay_ms);
+        if shared.jitter_ms > 0 {
+            let mut entropy = [0_u8; 8];
+            getrandom::getrandom(&mut entropy)
+                .expect("worker state retry jitter requires OS randomness");
+            let jitter = u64::from_le_bytes(entropy) % shared.jitter_ms;
+            delay = delay.saturating_add(jitter);
+        }
         tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
         let mut state = shared.state.lock().expect("worker state");
         if let Some(pending) = state.pending.take() {
@@ -221,6 +240,17 @@ mod tests {
         assert_eq!(sent[0]["worker_status"], "idle");
         assert_eq!(sent[1]["worker_status"], "running");
         assert_eq!(sent[1]["external_metadata"]["k"], 1);
+    }
+
+    #[test]
+    fn close_clears_pending_metadata_without_leaving_state_queued() {
+        let send: WorkerStateSend = Arc::new(|_| Box::pin(async { true }));
+        let uploader = WorkerStateUploader::new_with_jitter(send, 1_000, 30_000, 1_000);
+        uploader.shared.state.lock().unwrap().pending = Some(json!({
+            "external_metadata": {"secret": "discard on close"}
+        }));
+        uploader.close();
+        assert!(uploader.shared.state.lock().unwrap().pending.is_none());
     }
 
     #[tokio::test]
