@@ -1195,22 +1195,14 @@ impl ToolExecutor {
 
     fn read_file_with_mode(&self, args: &Value, source_read: bool) -> Result<String> {
         let requested = required(args, "path")?;
-        let mut trusted_task_output = false;
-        let path = match self.checked_path(requested) {
-            Ok(path) => path,
-            Err(original_error) => {
-                let approved = match self.background.as_ref() {
-                    Some(background) => background.trusted_output_path(requested)?,
-                    None => None,
-                };
-                match approved {
-                    Some(path) => {
-                        trusted_task_output = true;
-                        path
-                    }
-                    None => return Err(original_error),
-                }
-            }
+        let trusted = match self.background.as_ref() {
+            Some(background) => background.trusted_output_path(requested)?,
+            None => None,
+        };
+        let trusted_task_output = trusted.is_some();
+        let path = match trusted {
+            Some(path) => path,
+            None => self.checked_path(requested)?,
         };
         self.require_read_rules(requested, &path)?;
         if trusted_task_output {
