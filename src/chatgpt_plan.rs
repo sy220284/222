@@ -593,9 +593,14 @@ fn input_items(request: &ModelRequest) -> Result<Vec<Value>> {
                             .context("Invalid stored Responses reasoning items")?;
                         for item in reasoning {
                             if item.get("type").and_then(Value::as_str) != Some("reasoning")
-                                || item.get("encrypted_content").and_then(Value::as_str).is_none()
+                                || item
+                                    .get("encrypted_content")
+                                    .and_then(Value::as_str)
+                                    .is_none()
                             {
-                                bail!("Stored Responses reasoning item is missing encrypted content");
+                                bail!(
+                                    "Stored Responses reasoning item is missing encrypted content"
+                                );
                             }
                             items.push(item);
                         }
@@ -617,7 +622,9 @@ fn input_items(request: &ModelRequest) -> Result<Vec<Value>> {
                             _ => bail!("Unsupported ChatGPT Responses input block"),
                         }
                     }
-                } else if let Some(text) = message.content.as_deref().filter(|text| !text.is_empty()) {
+                } else if let Some(text) =
+                    message.content.as_deref().filter(|text| !text.is_empty())
+                {
                     content.push(json!({
                         "type": if message.role == "assistant" {"output_text"} else {"input_text"},
                         "text":text,
@@ -674,7 +681,11 @@ fn parse_completed(response: &Value) -> Result<ModelResponse> {
     for item in output {
         match item.get("type").and_then(Value::as_str) {
             Some("reasoning") => {
-                if item.get("encrypted_content").and_then(Value::as_str).is_some() {
+                if item
+                    .get("encrypted_content")
+                    .and_then(Value::as_str)
+                    .is_some()
+                {
                     reasoning.push(item.clone());
                 }
             }
