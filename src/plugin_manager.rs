@@ -8,6 +8,43 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+/// Serialize plugin mutations across processes before reading the shared
+/// configuration. The lock file is intentionally retained: unlinking it
+/// would allow two processes to lock different inodes for the same settings.
+fn plugin_operation_lock() -> Result<fs::File> {
+    let config_path = Config::path()?;
+    let parent = config_path.parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)
+        .with_context(|| format!("Cannot create plugin settings directory {}", parent.display()))?;
+    let lock_path = parent.join(".atlas-plugin-operations.lock");
+    match fs::symlink_metadata(&lock_path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            bail!("Plugin settings lock is redirected or invalid: {}", lock_path.display());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let file = options.open(&lock_path)
+        .with_context(|| format!("Cannot open plugin settings lock {}", lock_path.display()))?;
+    if !file.metadata()?.is_file() {
+        bail!("Plugin settings lock is not a regular file");
+    }
+    fs2::FileExt::lock_exclusive(&file)
+        .with_context(|| format!("Cannot acquire plugin settings lock {}", lock_path.display()))?;
+    Ok(file)
+}
+
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -120,6 +157,7 @@ fn copy_local_tree(source: &Path, stage: &Path) -> Result<()> {
 }
 
 pub fn install_local(root: &Path, location: &Path) -> Result<String> {
+    let _lock = plugin_operation_lock()?;
     install_local_with_origin(root, location, None)
 }
 
@@ -140,6 +178,7 @@ fn install_local_with_origin(
         bail!("Plugin '{name}' is already installed");
     }
     let stage = home.join(format!(".install-{}", Uuid::new_v4()));
+    let mut activated = false;
     let result = (|| -> Result<()> {
         copy_local_tree(&source, &stage)?;
         let origin = stage.join(".atlas-plugin-origin.json");
@@ -150,6 +189,7 @@ fn install_local_with_origin(
             fs::write(&origin, serde_json::to_vec(&json!({"pluginId":plugin_id}))?)?;
         }
         fs::rename(&stage, &target)?;
+        activated = true;
         if crate::plugins::plugin_blocked_by_policy(root, &name)? {
             bail!("Plugin '{name}' is disabled by managed policy");
         }
@@ -157,8 +197,16 @@ fn install_local_with_origin(
         Ok(())
     })();
     if let Err(error) = result {
-        let _ = fs::remove_dir_all(&stage);
-        let _ = fs::remove_dir_all(&target);
+        // A failed stage or rename must never erase another installation.
+        // Only remove the final directory after our own rename succeeded.
+        if stage.exists() {
+            fs::remove_dir_all(&stage)
+                .with_context(|| format!("Plugin install failed: {error:#}; staged cleanup failed"))?;
+        }
+        if activated {
+            fs::remove_dir_all(&target)
+                .with_context(|| format!("Plugin install failed: {error:#}; activated rollback failed"))?;
+        }
         return Err(error);
     }
     Ok(name)
@@ -587,6 +635,9 @@ fn dependency_install_plan(
 
 pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
     let root = root.canonicalize()?;
+    // Lock before Config::load: otherwise concurrent installs can overwrite
+    // enabled-plugin settings even when their filesystem copies succeed.
+    let _lock = plugin_operation_lock()?;
     let mut config = Config::load()?;
     match command {
         PluginCommand::Menu | PluginCommand::Manage => installed(&root, &config),
