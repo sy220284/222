@@ -564,6 +564,27 @@ pub async fn complete(
     deltas: Option<UnboundedSender<String>>,
 ) -> Result<ModelResponse> {
     let token = active_token().await?;
+    complete_with_token(request, tuning, deltas, &token, true).await
+}
+
+/// Ordinary OpenAI API keys use the same stateless Responses adapter, with
+/// the public API's model settings rather than subscription restrictions.
+pub async fn complete_api(
+    request: &ModelRequest,
+    tuning: &ModelTuning,
+    deltas: Option<UnboundedSender<String>>,
+    api_key: &str,
+) -> Result<ModelResponse> {
+    complete_with_token(request, tuning, deltas, api_key, false).await
+}
+
+async fn complete_with_token(
+    request: &ModelRequest,
+    tuning: &ModelTuning,
+    deltas: Option<UnboundedSender<String>>,
+    token: &str,
+    subscription: bool,
+) -> Result<ModelResponse> {
     let mut body = json!({
         "model":request.model,
         "store":false,
@@ -573,19 +594,34 @@ pub async fn complete(
     if !request.tools.is_empty() {
         body["tools"] = json!(response_tools(&request.tools)?);
     }
-    // ChatGPT plan usage currently forbids max_output_tokens on Responses.
-    if tuning.max_output_tokens.is_some() {
-        bail!("ChatGPT plan does not accept max_output_tokens; use 'models tune chatgpt --reset'")
+    if subscription {
+        if tuning.max_output_tokens.is_some()
+            || tuning.temperature.is_some()
+            || tuning.top_p.is_some() {
+            bail!("ChatGPT plan disallows max_output_tokens, temperature and top_p")
+        }
+    } else {
+        if let Some(max) = tuning.max_output_tokens {
+            body["max_output_tokens"] = json!(max);
+        }
+        if tuning.temperature.is_some() || tuning.top_p.is_some() {
+            if tuning.reasoning_effort.as_deref() != Some("none") {
+                bail!("OpenAI reasoning models require reasoning_effort=none before custom sampling");
+            }
+            if let Some(value) = tuning.temperature {
+                body["temperature"] = json!(value);
+            }
+            if let Some(value) = tuning.top_p {
+                body["top_p"] = json!(value);
+            }
+        }
     }
     if let Some(effort) = &tuning.reasoning_effort {
         body["reasoning"] = json!({"effort":effort});
     }
-    if tuning.temperature.is_some() || tuning.top_p.is_some() {
-        bail!("ChatGPT plan Responses API does not support custom sampling parameters for this integration")
-    }
     let response = new_client()?.post(format!("{RESOURCE}/responses"))
         .bearer_auth(token).json(&body).send().await?
-        .error_for_status().context("ChatGPT plan inference rejected")?;
+        .error_for_status().context("OpenAI Responses inference rejected")?;
     let mut stream = response.bytes_stream();
     let mut buffered = Vec::new();
     let mut completed = None;
