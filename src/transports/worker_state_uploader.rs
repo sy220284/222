@@ -30,9 +30,7 @@ pub fn coalesce_patches(base: &Value, overlay: &Value) -> Value {
     let mut merged = base_obj.clone();
     for (key, value) in overlay_obj {
         let merges = matches!(key.as_str(), "external_metadata" | "internal_metadata")
-            && merged
-                .get(key)
-                .is_some_and(|existing| existing.is_object())
+            && merged.get(key).is_some_and(|existing| existing.is_object())
             && value.is_object();
         if merges {
             let existing = merged.get(key).unwrap().as_object().unwrap().clone();
@@ -49,8 +47,11 @@ pub fn coalesce_patches(base: &Value, overlay: &Value) -> Value {
     Value::Object(merged)
 }
 
-pub type WorkerStateSend =
-    Arc<dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>> + Send + Sync>;
+pub type WorkerStateSend = Arc<
+    dyn Fn(Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>>
+        + Send
+        + Sync,
+>;
 
 struct WorkerStateShared {
     send: WorkerStateSend,
@@ -156,7 +157,8 @@ async fn send_loop(shared: Arc<WorkerStateShared>, mut failures: Option<u32>) {
             return;
         }
         failures += 1;
-        let delay = (shared.base_delay_ms * (1u64 << (failures - 1).min(5))).min(shared.max_delay_ms);
+        let delay =
+            (shared.base_delay_ms * (1u64 << (failures - 1).min(5))).min(shared.max_delay_ms);
         tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
         if shared.closed.load(Ordering::SeqCst) {
             return;
@@ -184,7 +186,10 @@ mod tests {
         assert_eq!(merged["worker_status"], "running");
         assert_eq!(merged["external_metadata"]["task_summary"], "new");
         assert_eq!(merged["external_metadata"]["extra"], 1);
-        assert_eq!(merged["external_metadata"]["pending_action"], serde_json::Value::Null);
+        assert_eq!(
+            merged["external_metadata"]["pending_action"],
+            serde_json::Value::Null
+        );
     }
 
     #[test]

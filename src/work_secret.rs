@@ -28,15 +28,17 @@ fn default_version() -> u64 {
 /// Decode a base64url-encoded work secret and validate its version.
 /// Mirrors `decodeWorkSecret`.
 pub fn decode_work_secret(secret: &str) -> Result<WorkSecret> {
-    let normalized = secret.trim_end_matches('=').replace('-', "+").replace('_', "/");
+    let normalized = secret
+        .trim_end_matches('=')
+        .replace('-', "+")
+        .replace('_', "/");
     let json = base64::engine::general_purpose::STANDARD
         .decode(normalized.as_bytes())
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .or_else(|| String::from_utf8(secret.as_bytes().to_vec()).ok());
     let parsed: Value = match json {
-        Some(text) => serde_json::from_str(&text)
-            .or_else(|_| serde_json::from_str(secret))?,
+        Some(text) => serde_json::from_str(&text).or_else(|_| serde_json::from_str(secret))?,
         None => bail!("Unsupported work secret version: unknown"),
     };
     let version = parsed.get("version").and_then(Value::as_u64);
@@ -58,16 +60,14 @@ pub fn decode_work_secret(secret: &str) -> Result<WorkSecret> {
     if parsed.get("api_base_url").and_then(Value::as_str).is_none() {
         bail!("Invalid work secret: missing api_base_url");
     }
-    serde_json::from_value(parsed)
-        .map_err(|error| anyhow::anyhow!("Invalid work secret: {error}"))
+    serde_json::from_value(parsed).map_err(|error| anyhow::anyhow!("Invalid work secret: {error}"))
 }
 
 /// Build a WebSocket SDK URL from the API base URL and session ID.
 /// Mirrors `buildSdkUrl`: `/v2/` for localhost (direct ingress) and `/v1/`
 /// otherwise, with `ws://` only for plaintext local testing.
 pub fn build_sdk_url(api_base_url: &str, session_id: &str) -> String {
-    let is_localhost =
-        api_base_url.contains("localhost") || api_base_url.contains("127.0.0.1");
+    let is_localhost = api_base_url.contains("localhost") || api_base_url.contains("127.0.0.1");
     let protocol = if is_localhost { "ws" } else { "wss" };
     let version = if is_localhost { "v2" } else { "v1" };
     let host = api_base_url
@@ -130,10 +130,7 @@ where
 }
 
 /// Production registration path (self-hosted endpoint only).
-pub async fn register_worker(
-    session_url: &str,
-    access_token: &str,
-) -> Result<u64> {
+pub async fn register_worker(session_url: &str, access_token: &str) -> Result<u64> {
     register_worker_with(session_url, access_token, |url, auth| async move {
         let client = reqwest::Client::new();
         let response = client
@@ -159,8 +156,7 @@ mod tests {
     use base64::Engine;
 
     fn encode_secret(value: &Value) -> String {
-        base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .encode(serde_json::to_vec(value).unwrap())
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::to_vec(value).unwrap())
     }
 
     #[test]
@@ -177,7 +173,8 @@ mod tests {
 
     #[test]
     fn rejects_other_versions_and_missing_fields() {
-        let v2 = encode_secret(&json!({"version":2,"session_ingress_token":"t","api_base_url":"u"}));
+        let v2 =
+            encode_secret(&json!({"version":2,"session_ingress_token":"t","api_base_url":"u"}));
         assert!(decode_work_secret(&v2)
             .unwrap_err()
             .to_string()
@@ -229,11 +226,14 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(epoch, 42);
-        let epoch = register_worker_with("u", "t", |_u, _a| async move {
-            Ok(json!({"worker_epoch": 7}))
-        })
-        .await
-        .unwrap();
+        let epoch =
+            register_worker_with(
+                "u",
+                "t",
+                |_u, _a| async move { Ok(json!({"worker_epoch": 7})) },
+            )
+            .await
+            .unwrap();
         assert_eq!(epoch, 7);
         let error = register_worker_with("u", "t", |_u, _a| async move {
             Ok(json!({"worker_epoch": "NaN"}))

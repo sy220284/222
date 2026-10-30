@@ -24,7 +24,10 @@ pub enum UploaderError {
 }
 
 pub type UploaderSend<T> = Arc<
-    dyn Fn(Vec<T>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), UploaderError>> + Send>>
+    dyn Fn(
+            Vec<T>,
+        )
+            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), UploaderError>> + Send>>
         + Send
         + Sync,
 >;
@@ -122,7 +125,12 @@ impl<T: Send + Clone + 'static> SerialBatchEventUploader<T> {
     }
 
     pub fn pending_count(&self) -> usize {
-        self.shared.state.lock().expect("uploader state").pending.len()
+        self.shared
+            .state
+            .lock()
+            .expect("uploader state")
+            .pending
+            .len()
     }
 
     pub fn dropped_batch_count(&self) -> usize {
@@ -315,9 +323,9 @@ fn retry_delay<T>(
 ) -> std::time::Duration {
     let jitter = rand_below(config.jitter_ms);
     let clamped = match retry_after_ms {
-        Some(retry_after) => {
-            retry_after.max(config.base_delay_ms).min(config.max_delay_ms)
-        }
+        Some(retry_after) => retry_after
+            .max(config.base_delay_ms)
+            .min(config.max_delay_ms),
         None => config
             .base_delay_ms
             .saturating_mul(1u64 << (failures.saturating_sub(1)).min(16))
@@ -403,7 +411,9 @@ mod tests {
                         for item in batch {
                             sink.lock().unwrap().push(json!({"failed": item}));
                         }
-                        Err(UploaderError::Retryable { retry_after_ms: None })
+                        Err(UploaderError::Retryable {
+                            retry_after_ms: None,
+                        })
                     } else {
                         sink.lock().unwrap().extend(batch);
                         Ok(())
@@ -440,7 +450,9 @@ mod tests {
                 let counter = counter.clone();
                 Box::pin(async move {
                     counter.fetch_add(1, Ordering::SeqCst);
-                    Err(UploaderError::Retryable { retry_after_ms: None })
+                    Err(UploaderError::Retryable {
+                        retry_after_ms: None,
+                    })
                 })
             }),
             1,
@@ -463,11 +475,7 @@ mod tests {
 
     #[tokio::test]
     async fn retry_after_overrides_backoff_within_clamp() {
-        let mut config = config_with(
-            Arc::new(|_batch| Box::pin(async { Ok(()) })),
-            1,
-            10,
-        );
+        let mut config = config_with(Arc::new(|_batch| Box::pin(async { Ok(()) })), 1, 10);
         config.base_delay_ms = 100;
         config.max_delay_ms = 200;
         config.jitter_ms = 10;
@@ -547,7 +555,9 @@ mod tests {
             waiters: 0,
         };
         for index in 0..3 {
-            state.pending.push_back(json!({"pad": "x".repeat(10), "i": index}));
+            state
+                .pending
+                .push_back(json!({"pad": "x".repeat(10), "i": index}));
         }
         let mut config = config_with(Arc::new(|_b| Box::pin(async { Ok(()) })), 10, 10);
         config.max_batch_bytes = Some(40);

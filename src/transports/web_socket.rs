@@ -115,7 +115,12 @@ pub struct MinimalWsClient {
 
 impl MinimalWsClient {
     /// Perform the HTTP upgrade handshake over a cleartext TCP stream.
-    pub async fn connect(host: &str, port: u16, path: &str, extra_headers: &[(String, String)]) -> Result<Self> {
+    pub async fn connect(
+        host: &str,
+        port: u16,
+        path: &str,
+        extra_headers: &[(String, String)],
+    ) -> Result<Self> {
         let stream = tokio::time::timeout(
             Duration::from_millis(CONNECT_TIMEOUT_MS),
             TcpStream::connect((host, port)),
@@ -231,7 +236,11 @@ impl MinimalWsClient {
             if len > 16 * 1024 * 1024 {
                 bail!("WS frame too large: {len} bytes");
             }
-            let mask = if masked { Some(self.read_exact_vec(4).await?) } else { None };
+            let mask = if masked {
+                Some(self.read_exact_vec(4).await?)
+            } else {
+                None
+            };
             let mut payload = self.read_exact_vec(len as usize).await?;
             if let Some(mask) = mask {
                 for (index, byte) in payload.iter_mut().enumerate() {
@@ -550,7 +559,8 @@ impl WebSocketTransport {
                     .get("lastId")
                     .and_then(Value::as_str)
                     .map(str::to_string);
-                self.replay_buffered_messages(conn, last_id.as_deref()).await;
+                self.replay_buffered_messages(conn, last_id.as_deref())
+                    .await;
                 None
             }
             Some("close") => Some(ConnectionOutcome::Terminal),
@@ -569,9 +579,7 @@ impl WebSocketTransport {
         let start_index = match last_id {
             Some(last_id) => messages
                 .iter()
-                .position(|message| {
-                    message.get("uuid").and_then(Value::as_str) == Some(last_id)
-                })
+                .position(|message| message.get("uuid").and_then(Value::as_str) == Some(last_id))
                 .map(|index| index + 1),
             None => Some(0),
         };

@@ -78,7 +78,10 @@ pub fn scope_key(session_id: &str, parent_tool_use_id: Option<&str>) -> String {
 /// touched block carrying the FULL text from the block start; the snapshot
 /// reuses the first text_delta UUID seen for that block in this flush so
 /// server-side idempotency stays stable across retries.
-pub fn accumulate_stream_events(buffer: &[Value], state: &mut StreamAccumulatorState) -> Vec<Value> {
+pub fn accumulate_stream_events(
+    buffer: &[Value],
+    state: &mut StreamAccumulatorState,
+) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::new();
     let mut touched: HashMap<(String, usize), usize> = HashMap::new();
     for msg in buffer {
@@ -182,8 +185,7 @@ pub fn clear_stream_accumulator_for_message(
 
 /// Decode a JWT expiry for the 401/403 diagnostic path.
 fn jwt_expired_or_invalid(token: &str) -> bool {
-    crate::jwt_utils::decode_jwt_expiry(token)
-        .is_none_or(|exp| exp <= now_unix_secs())
+    crate::jwt_utils::decode_jwt_expiry(token).is_none_or(|exp| exp <= now_unix_secs())
 }
 
 fn now_unix_secs() -> u64 {
@@ -239,7 +241,11 @@ impl CcrClient {
         let sender_shared = shared.clone();
         let client_events_send: UploaderSend<Value> = Arc::new(move |batch| {
             let shared = sender_shared.clone();
-            Box::pin(async move { shared.request_post("/worker/events", &json!({"events": batch.to_vec()})).await })
+            Box::pin(async move {
+                shared
+                    .request_post("/worker/events", &json!({"events": batch.to_vec()}))
+                    .await
+            })
         });
         let mut client_events_config = UploaderConfig::new(client_events_send);
         client_events_config.max_batch_size = usize::MAX;
@@ -253,7 +259,10 @@ impl CcrClient {
             let shared = sender_shared.clone();
             Box::pin(async move {
                 shared
-                    .request_post("/worker/internal-events", &json!({"events": batch.to_vec()}))
+                    .request_post(
+                        "/worker/internal-events",
+                        &json!({"events": batch.to_vec()}),
+                    )
                     .await
             })
         });
@@ -278,7 +287,11 @@ impl CcrClient {
                     })
                 })
                 .collect();
-            Box::pin(async move { shared.request_post("/worker/events/delivery", &json!({"updates": updates})).await })
+            Box::pin(async move {
+                shared
+                    .request_post("/worker/events/delivery", &json!({"updates": updates}))
+                    .await
+            })
         });
         let mut delivery_config = UploaderConfig::new(delivery_send);
         delivery_config.max_batch_size = DELIVERY_MAX_BATCH;
@@ -356,14 +369,13 @@ impl CcrClient {
         self.worker_epoch.store(epoch, Ordering::SeqCst);
 
         // Report idle worker state with cleared metadata.
-        self.worker_state
-            .enqueue(json!({
-                "worker_status": "idle",
-                "external_metadata": {
-                    "pending_action": null,
-                    "task_summary": null,
-                }
-            }));
+        self.worker_state.enqueue(json!({
+            "worker_status": "idle",
+            "external_metadata": {
+                "pending_action": null,
+                "task_summary": null,
+            }
+        }));
         // Recover pending internal events left by prior workers.
         let pending = self
             .read_internal_events(MAX_INTERNAL_EVENTS_PER_PAGE, None)
@@ -424,7 +436,10 @@ impl CcrClient {
                 let mut accumulator = self.accumulator.lock().expect("accumulator");
                 clear_stream_accumulator_for_message(
                     &mut accumulator,
-                    message.get("session_id").and_then(Value::as_str).unwrap_or(""),
+                    message
+                        .get("session_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or(""),
                     message.get("parent_tool_use_id").and_then(Value::as_str),
                     message
                         .pointer("/message/id")
@@ -451,9 +466,8 @@ impl CcrClient {
 
     /// Drain the stream_event delay buffer through the text accumulator.
     pub async fn flush_stream_event_buffer(&self) {
-        let buffered: Vec<Value> = std::mem::take(
-            &mut *self.stream_event_buffer.lock().expect("stream buffer"),
-        );
+        let buffered: Vec<Value> =
+            std::mem::take(&mut *self.stream_event_buffer.lock().expect("stream buffer"));
         if buffered.is_empty() {
             return;
         }
@@ -462,7 +476,9 @@ impl CcrClient {
             accumulate_stream_events(&buffered, &mut accumulator)
         };
         for event in events {
-            self.event_uploader.enqueue(vec![self.to_client_event(&event)]).await;
+            self.event_uploader
+                .enqueue(vec![self.to_client_event(&event)])
+                .await;
         }
     }
 
@@ -505,7 +521,10 @@ impl CcrClient {
         let mut next_cursor = cursor.map(str::to_string);
         let mut failures = 0_u32;
         loop {
-            let mut path = format!("/worker/internal-events?limit={}", limit.min(MAX_INTERNAL_EVENTS_PER_PAGE));
+            let mut path = format!(
+                "/worker/internal-events?limit={}",
+                limit.min(MAX_INTERNAL_EVENTS_PER_PAGE)
+            );
             if let Some(cursor) = &next_cursor {
                 path.push_str(&format!("&cursor={cursor}"));
             }
@@ -559,7 +578,10 @@ impl CcrClient {
     /// events are dropped — call `flush` first if delivery is required.
     pub fn close(&self) {
         self.shared.closed.store(true, Ordering::SeqCst);
-        self.stream_event_buffer.lock().expect("stream buffer").clear();
+        self.stream_event_buffer
+            .lock()
+            .expect("stream buffer")
+            .clear();
         self.event_uploader.close();
         self.internal_event_uploader.close();
         self.delivery_uploader.close();
@@ -568,7 +590,11 @@ impl CcrClient {
 }
 
 impl CcrShared {
-    async fn request_post(&self, path: &str, body: &Value) -> std::result::Result<(), UploaderError> {
+    async fn request_post(
+        &self,
+        path: &str,
+        body: &Value,
+    ) -> std::result::Result<(), UploaderError> {
         self.request_raw("POST", path, Some(body)).await
     }
 
@@ -590,11 +616,18 @@ impl CcrShared {
             .await
             .map_err(|error| match error.downcast::<UploaderError>() {
                 Ok(uploader_error) => uploader_error,
-                Err(_) => UploaderError::Retryable { retry_after_ms: None },
+                Err(_) => UploaderError::Retryable {
+                    retry_after_ms: None,
+                },
             })
     }
 
-    async fn request_raw_value(&self, method: &str, path: &str, body: Option<&Value>) -> Result<Value> {
+    async fn request_raw_value(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<Value> {
         if self.closed.load(Ordering::SeqCst) {
             bail!("CCR client closed");
         }
@@ -626,7 +659,10 @@ impl CcrShared {
             bail!("epoch mismatch (409): a newer worker epoch superseded ours");
         }
         if status == 401 || status == 403 {
-            let failures = self.consecutive_auth_failures.fetch_add(1, Ordering::SeqCst) + 1;
+            let failures = self
+                .consecutive_auth_failures
+                .fetch_add(1, Ordering::SeqCst)
+                + 1;
             let token = (self.auth)()
                 .into_iter()
                 .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
@@ -636,7 +672,10 @@ impl CcrShared {
             if jwt_expired_or_invalid(token) || failures >= AUTH_FAILURE_THRESHOLD as u64 {
                 bail!("auth failures exhausted after {failures} attempts (status {status})");
             }
-            return Err(anyhow::Error::new(UploaderError::Retryable { retry_after_ms: None }).context(format!("auth failure {failures}")));
+            return Err(anyhow::Error::new(UploaderError::Retryable {
+                retry_after_ms: None,
+            })
+            .context(format!("auth failure {failures}")));
         }
         if status == 429 {
             let retry_after = response
@@ -645,7 +684,10 @@ impl CcrShared {
                 .and_then(|value| value.to_str().ok())
                 .and_then(|value| value.parse::<u64>().ok())
                 .map(|secs| secs * 1000);
-            return Err(anyhow::Error::new(UploaderError::Retryable { retry_after_ms: retry_after }).context("rate limited (429)"));
+            return Err(anyhow::Error::new(UploaderError::Retryable {
+                retry_after_ms: retry_after,
+            })
+            .context("rate limited (429)"));
         }
         if (200..300).contains(&status) {
             self.consecutive_auth_failures.store(0, Ordering::SeqCst);
@@ -784,7 +826,10 @@ mod tests {
 
     #[test]
     fn init_failure_reasons_render() {
-        assert_eq!(CcrInitFailReason::NoAuthHeaders.to_string(), "no_auth_headers");
+        assert_eq!(
+            CcrInitFailReason::NoAuthHeaders.to_string(),
+            "no_auth_headers"
+        );
         assert_eq!(CcrInitFailReason::MissingEpoch.to_string(), "missing_epoch");
         assert_eq!(
             CcrInitFailReason::WorkerRegisterFailed.to_string(),
@@ -805,22 +850,9 @@ mod tests {
             .write_event(&stream_event("u1", "s", 0, "hello"))
             .await;
         // Buffer holds the event, nothing enqueued yet.
-        assert_eq!(
-            client
-                .stream_event_buffer
-                .lock()
-                .unwrap()
-                .len(),
-            1
-        );
+        assert_eq!(client.stream_event_buffer.lock().unwrap().len(), 1);
         client.flush_stream_event_buffer().await;
-        assert!(
-            client
-                .stream_event_buffer
-                .lock()
-                .unwrap()
-                .is_empty()
-        );
+        assert!(client.stream_event_buffer.lock().unwrap().is_empty());
         client.close();
     }
 

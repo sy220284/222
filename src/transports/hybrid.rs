@@ -86,7 +86,9 @@ impl HybridOutbound {
                             retry_after_ms: parse_retry_after_status(status),
                         })
                     }
-                    Err(_) => Err(UploaderError::Retryable { retry_after_ms: None }),
+                    Err(_) => Err(UploaderError::Retryable {
+                        retry_after_ms: None,
+                    }),
                 }
             })
         });
@@ -167,7 +169,14 @@ impl HybridTransport {
         auth: HybridAuth,
     ) -> Result<Self> {
         Ok(Self {
-            reads: WebSocketTransport::new(ws_url.clone(), headers, session_id, data_tx, true, None),
+            reads: WebSocketTransport::new(
+                ws_url.clone(),
+                headers,
+                session_id,
+                data_tx,
+                true,
+                None,
+            ),
             writes: HybridOutbound::new(&ws_url, auth)?,
         })
     }
@@ -186,10 +195,8 @@ mod tests {
     #[test]
     fn converts_ws_url_to_post_url() {
         assert_eq!(
-            convert_ws_url_to_post_url(
-                "wss://api.example.com/v2/session_ingress/ws/s1?token=x"
-            )
-            .unwrap(),
+            convert_ws_url_to_post_url("wss://api.example.com/v2/session_ingress/ws/s1?token=x")
+                .unwrap(),
             "https://api.example.com/v2/session_ingress/session/s1/events?token=x"
         );
         assert_eq!(

@@ -16,7 +16,12 @@ pub fn decode_jwt_payload(token: &str) -> Option<Value> {
     let payload = parts.next()?;
     let _signature = parts.next()?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(payload.trim_end_matches('=').replace('-', "+").replace('_', "/"))
+        .decode(
+            payload
+                .trim_end_matches('=')
+                .replace('-', "+")
+                .replace('_', "/"),
+        )
         .ok()?;
     serde_json::from_slice(&bytes).ok()
 }
@@ -47,13 +52,16 @@ mod tests {
     use serde_json::json;
 
     fn b64url(value: &Value) -> String {
-        base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .encode(serde_json::to_vec(value).unwrap())
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::to_vec(value).unwrap())
     }
 
     #[test]
     fn decodes_payload_and_expiry() {
-        let token = format!("{}.{}.sig", b64url(&json!({"alg":"HS256"})), b64url(&json!({"exp":1_700_000_000_u64,"sid":"abc"})));
+        let token = format!(
+            "{}.{}.sig",
+            b64url(&json!({"alg":"HS256"})),
+            b64url(&json!({"exp":1_700_000_000_u64,"sid":"abc"}))
+        );
         assert_eq!(decode_jwt_expiry(&token), Some(1_700_000_000));
         let payload = decode_jwt_payload(&token).unwrap();
         assert_eq!(payload["sid"], "abc");

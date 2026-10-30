@@ -195,8 +195,7 @@ impl SseTransport {
     pub async fn run(&self) -> Result<()> {
         let reconnect_start = {
             let mut state = self.state.lock().expect("sse state");
-            state.reconnect_started
-                .unwrap_or_else(|| SystemTime::now())
+            state.reconnect_started.unwrap_or_else(|| SystemTime::now())
         };
         self.state.lock().expect("sse state").reconnect_started = Some(reconnect_start);
         loop {
@@ -436,7 +435,9 @@ mod tests {
     fn reconnect_backoff_is_clamped_with_jitter() {
         for attempts in 1..30_u32 {
             let delay = reconnect_delay(attempts);
-            assert!(delay.as_millis() <= (RECONNECT_MAX_DELAY_MS as u128 + RECONNECT_MAX_DELAY_MS / 4));
+            assert!(
+                delay.as_millis() <= (RECONNECT_MAX_DELAY_MS as u128 + RECONNECT_MAX_DELAY_MS / 4)
+            );
         }
     }
 }
