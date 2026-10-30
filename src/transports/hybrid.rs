@@ -70,11 +70,12 @@ impl HybridOutbound {
         let post_url = convert_ws_url_to_post_url(ws_url)?;
         let sender_auth = auth.clone();
         let sender_url = post_url.clone();
+        let http = reqwest::Client::new();
         let send: UploaderSend<Value> = Arc::new(move |batch| {
             let post_url = sender_url.clone();
             let auth = sender_auth.clone();
+            let client = http.clone();
             Box::pin(async move {
-                let client = reqwest::Client::new();
                 let mut request = client
                     .post(&post_url)
                     .header("Content-Type", "application/json")
