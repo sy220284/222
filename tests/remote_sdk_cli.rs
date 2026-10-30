@@ -24,10 +24,7 @@ fn read_headers(peer: &mut TcpStream) -> String {
 
 fn ws_accept(key: &str) -> String {
     let source = format!("{}258EAFA5-E914-47DA-95CA-C5AB0DC85B11", key.trim());
-    let digest = ring::digest::digest(
-        &ring::digest::SHA1_FOR_LEGACY_USE_ONLY,
-        source.as_bytes(),
-    );
+    let digest = ring::digest::digest(&ring::digest::SHA1_FOR_LEGACY_USE_ONLY, source.as_bytes());
     base64::engine::general_purpose::STANDARD.encode(digest.as_ref())
 }
 
