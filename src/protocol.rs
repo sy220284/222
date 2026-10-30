@@ -145,7 +145,10 @@ mod tests {
                 "function":{"name":"read_file","arguments":"{}"}}]
         }))
         .unwrap();
-        assert_eq!(message.reasoning_content.as_deref(), Some("First inspect the file"));
+        assert_eq!(
+            message.reasoning_content.as_deref(),
+            Some("First inspect the file")
+        );
         assert_eq!(message.visible_text(), "");
         let restored: Message =
             serde_json::from_value(serde_json::to_value(&message).unwrap()).unwrap();
