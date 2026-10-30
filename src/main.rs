@@ -138,6 +138,7 @@ mod tools;
 mod transcript_search;
 mod unicode_sanitization;
 mod version;
+mod vim_mode_source;
 mod webfetch;
 mod websearch;
 mod workspace_dirs;
@@ -2066,6 +2067,10 @@ async fn chat(
                         item.messages
                     );
                 }
+                continue;
+            }
+            "/vim" => {
+                println!("{}", vim_mode_source::toggle_editor_mode(config)?);
                 continue;
             }
             "/mode" => {
