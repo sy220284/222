@@ -587,7 +587,9 @@ impl WebSocketTransport {
         // headers; Bun's no-header branch replays the entire UUID buffer.
         if self.buffered_count() > 0 {
             let confirmed = conn.server_last_request_id.clone();
-            self.replay_buffered_messages(&mut conn, confirmed.as_deref()).await;
+            if self.replay_buffered_messages(&mut conn, confirmed.as_deref()).await.is_err() {
+                return ConnectionOutcome::Reconnect;
+            }
         }
         let mut last_ping = Instant::now();
         let mut pong_received = true;
@@ -662,26 +664,22 @@ impl WebSocketTransport {
     /// Replay buffered messages newer than `last_id` (source:
     /// `replayBufferedMessages`). Evicted-buffer bookkeeping matches the
     /// source: when the confirm point was already evicted, replay everything.
-    async fn replay_buffered_messages(&self, conn: &mut MinimalWsClient, last_id: Option<&str>) {
+    async fn replay_buffered_messages(
+        &self,
+        conn: &mut MinimalWsClient,
+        last_id: Option<&str>,
+    ) -> Result<()> {
         let (pending, all_confirmed) = {
             let mut buffer = self.shared.buffer.lock().expect("ws buffer");
             pending_after_confirmation(&mut buffer, last_id)
         };
-        // Source resets lastSentId only when the server explicitly confirmed
-        // every message. An unknown ID leaves the entire replay buffer intact.
         if all_confirmed {
             self.shared.state.lock().expect("ws state").last_sent_id = None;
         }
-        // Keep unacknowledged messages buffered until the next server ack.
         for message in &pending {
-            if conn
-                .send_text(&format!("{}\n", crate::ndjson::stringify_value(message)))
-                .await
-                .is_err()
-            {
-                return;
-            }
+            conn.send_text(&format!("{}\n", crate::ndjson::stringify_value(message))).await?;
         }
+        Ok(())
     }
 
     /// Map a dropped connection to terminal vs reconnect, mirroring the
@@ -1029,6 +1027,25 @@ mod tests {
         assert_eq!(client.buffered_count(), 1);
         client.close();
         tokio::time::timeout(Duration::from_secs(5), run).await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn failed_replay_write_surfaces_error_for_reconnect() {
+        let (local, remote) = tokio::io::duplex(32);
+        drop(remote);
+        let mut conn = MinimalWsClient {
+            stream: Box::new(local),
+            read_buffer: Vec::new(),
+            fragmented: None,
+            server_last_request_id: None,
+        };
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let transport = WebSocketTransport::new(
+            "ws://127.0.0.1:1".into(), Vec::new(), None, tx, false, None,
+        );
+        transport.shared.buffer.lock().unwrap().add(json!({"uuid":"unconfirmed"}));
+        assert!(transport.replay_buffered_messages(&mut conn, None).await.is_err());
+        assert_eq!(transport.buffered_count(), 1, "unconfirmed message remains queued");
     }
 
     #[test]
