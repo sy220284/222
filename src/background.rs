@@ -167,9 +167,25 @@ impl BackgroundTasks {
                     let entry = entry?;
                     if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
                         let metadata = fs::symlink_metadata(entry.path())?;
-                        if metadata.file_type().is_symlink() || !metadata.is_file() {
+                        if metadata.file_type().is_symlink() || !metadata.is_file()
+                            || metadata.len() > 1024 * 1024
+                        {
                             bail!("Previous task metadata is redirected or invalid: {}",
                                 entry.path().display());
+                        }
+                        let stem = entry.path().file_stem()
+                            .and_then(|stem| stem.to_str())
+                            .context("Previous task metadata filename is invalid")?
+                            .to_owned();
+                        if canonical_shell_task_id(&stem).is_err() {
+                            continue;
+                        }
+                        let record: TaskRecord = serde_json::from_slice(&fs::read(entry.path())?)
+                            .with_context(|| format!(
+                                "Read previous task metadata {}", entry.path().display()
+                            ))?;
+                        if record.id != stem {
+                            bail!("Previous task metadata ID mismatch: {}", entry.path().display());
                         }
                         has_records = true;
                     }
