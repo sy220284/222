@@ -133,6 +133,7 @@ mod task_output_format;
 mod team_mailbox;
 mod team_registry;
 mod terminal_launcher;
+mod terminal_input;
 #[cfg(test)]
 mod test_http;
 mod tool_errors;
@@ -1479,21 +1480,23 @@ async fn chat(
     }
     let mut initial_prefill = prefill.map(str::to_owned);
     loop {
-        if let Some(ref suggested) = initial_prefill {
+        let prompt = if let Some(ref suggested) = initial_prefill {
             println!("Proposed prompt: {suggested}");
-            print!("atlas [Enter: use linked prompt; or type replacement]> ");
+            "atlas [Enter: use linked prompt; or type replacement]> ".to_owned()
         } else {
             use std::io::IsTerminal as _;
-            print!(
-                "{}",
-                session_color::prompt_prefix(agent.session_color(), io::stdout().is_terminal())
-            );
-        }
-        io::stdout().flush()?;
-        let mut line = String::new();
-        if io::stdin().read_line(&mut line)? == 0 {
-            break;
-        }
+            session_color::prompt_prefix(agent.session_color(), io::stdout().is_terminal())
+        };
+        let entries: Vec<String> = prompt_history
+            .get_history()?
+            .into_iter()
+            .map(|entry| entry.display)
+            .collect();
+        let line = match terminal_input::read_prompt(&prompt, &entries)? {
+            terminal_input::PromptRead::Line(line) => line,
+            terminal_input::PromptRead::Cancelled => continue,
+            terminal_input::PromptRead::Eof => break,
+        };
         let entry = if line.trim().is_empty() {
             initial_prefill.take().unwrap_or_default()
         } else {
