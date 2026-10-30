@@ -56,12 +56,112 @@ pub enum McpCommand {
         #[arg(long)]
         active: bool,
     },
-    /// Remove a server from its saved scope
-    Remove {
+    /// Add MCP server configuration from a JSON object (no network access)
+    AddJson {
         name: String,
+        json: String,
         #[arg(short = 's', long, value_enum, default_value = "local")]
         scope: Scope,
+        #[arg(long)]
+        client_secret: bool,
     },
+    /// Inspect the saved MCP server configuration without launching a process
+    Get {
+        name: String,
+        #[arg(short = 's', long, value_enum)]
+        scope: Option<Scope>,
+    },
+    /// Remove MCP project trust decisions; config is left unchanged
+    ResetProjectChoices,
+    /// Remove an MCP server (require -s if the name exists in multiple scopes)
+    Remove {
+        name: String,
+        #[arg(short = 's', long, value_enum)]
+        scope: Option<Scope>,
+    },
+}
+
+/// Source mcpRemoveHandler/getMcpConfigByName resolve all persisted scopes.
+/// We never launch an unapproved project server merely to enumerate it.
+fn find_scopes(root: &Path, name: &str) -> Result<Vec<Scope>> {
+    let mut scopes = Vec::new();
+    if Config::load()?.mcp_servers.iter().any(|x| x.id == name) {
+        scopes.push(Scope::User);
+    }
+    for scope in [Scope::Project, Scope::Local] {
+        if scoped_servers(root, scope)?.contains_key(name) {
+            scopes.push(scope);
+        }
+    }
+    Ok(scopes)
+}
+
+fn scope_name(scope: Scope) -> &'static str {
+    match scope {
+        Scope::Local => "local",
+        Scope::Project => "project",
+        Scope::User => "user",
+    }
+}
+
+fn get_saved_server(root: &Path, name: &str, scope: Scope) -> Result<McpServerConfig> {
+    let server = match scope {
+        Scope::User => Config::load()?
+            .mcp_servers
+            .into_iter()
+            .find(|s| s.id == name),
+        Scope::Project | Scope::Local => scoped_servers(root, scope)?.remove(name),
+    };
+    server.with_context(|| format!("MCP server {name} not found in {} scope", scope_name(scope)))
+}
+
+fn resolve_scope(root: &Path, name: &str, scope: Option<Scope>) -> Result<Scope> {
+    if let Some(scope) = scope {
+        return Ok(scope);
+    }
+    let scopes = find_scopes(root, name)?;
+    match scopes.as_slice() {
+        [] => bail!("MCP server {name} was not found in any scope"),
+        [scope] => Ok(*scope),
+        _ => bail!(
+            "MCP server {name} exists in multiple scopes; specify --scope local, project, or user"
+        ),
+    }
+}
+
+fn parse_server_json(name: &str, input: &str) -> Result<McpServerConfig> {
+    if !valid_server_name(name) {
+        bail!("MCP server name must contain 1–24 ASCII letters, digits, - or _");
+    }
+    let mut config: Map<String, Value> = serde_json::from_str::<Value>(input)
+        .context("MCP add-json requires valid JSON")?
+        .as_object()
+        .context("MCP add-json requires an object")?
+        .clone();
+    // Refuse unknown and unsupported fields rather than losing credentials or
+    // creating a misleadingly partial server configuration.
+    const ALLOWED: &[&str] = &[
+        "type",
+        "command",
+        "args",
+        "env",
+        "url",
+        "headers",
+        "headersHelper",
+        "headers_helper",
+    ];
+    for field in config.keys() {
+        if !ALLOWED.contains(&field.as_str()) {
+            bail!("Unsupported MCP add-json field: {field}");
+        }
+    }
+    config.insert("id".into(), Value::String(name.to_owned()));
+    let server: McpServerConfig = serde_json::from_value(Value::Object(config))
+        .context("Invalid MCP add-json server fields")?;
+    let mut check = Config::default();
+    check.mcp_servers = vec![server.clone()];
+    check.validate()?;
+    Ok(server)
 }
 
 fn valid_server_name(name: &str) -> bool {
@@ -369,6 +469,44 @@ pub fn run(root: &Path, command: &McpCommand) -> Result<String> {
             let path = store_server(root, *scope, server)?;
             Ok(format!("Added MCP server {name} to {}", path.display()))
         }
+        McpCommand::AddJson {
+            name,
+            json,
+            scope,
+            client_secret,
+        } => {
+            if *client_secret {
+                bail!("Interactive OAuth client secret entry is not yet supported; no configuration was saved");
+            }
+            let server = parse_server_json(name, json)?;
+            let path = store_server(root, *scope, server)?;
+            Ok(format!("Added MCP server {name} to {}", path.display()))
+        }
+        McpCommand::Get { name, scope } => {
+            let scope = resolve_scope(root, name, *scope)?;
+            let config = get_saved_server(root, name, scope)?;
+            let mut json = serde_json::to_value(config)?;
+            json.as_object_mut()
+                .context("MCP config serialization is not an object")?
+                .insert("scope".into(), Value::String(scope_name(scope).to_owned()));
+            Ok(serde_json::to_string_pretty(&json)?)
+        }
+        McpCommand::ResetProjectChoices => {
+            let path = saved_path(root, Scope::Local)?;
+            if !path.exists() {
+                return Ok("No approved project MCP servers to reset".to_owned());
+            }
+            if path.symlink_metadata()?.file_type().is_symlink() {
+                bail!("MCP approval configuration cannot be a symbolic link");
+            }
+            let mut local: Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+            let doc = local
+                .as_object_mut()
+                .context("Local MCP config must be an object")?;
+            doc.remove("approvedProjectServers");
+            atomic_save(&path, &local)?;
+            Ok("All project MCP approvals have been reset".to_owned())
+        }
         McpCommand::List { active } => {
             if *active {
                 let profiles = active_servers(root, &Config::load()?)?;
@@ -396,7 +534,8 @@ pub fn run(root: &Path, command: &McpCommand) -> Result<String> {
             Ok(serde_json::to_string_pretty(&output)?)
         }
         McpCommand::Remove { name, scope } => {
-            let path = saved_path(root, *scope)?;
+            let scope = resolve_scope(root, name, *scope)?;
+            let path = saved_path(root, scope)?;
             if matches!(scope, Scope::User) {
                 let mut config = Config::load()?;
                 let previous = config.mcp_servers.len();
