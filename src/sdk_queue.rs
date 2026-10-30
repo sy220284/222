@@ -316,6 +316,15 @@ pub async fn control(
                 let answer = agent
                     .ask_with_blocks_for_message(&model_prompt, structured.blocks, batch_uuid)
                     .await;
+                if let Some(primary) = batch_uuid {
+                    let aliases = batch.iter().filter_map(|item| {
+                        item.command.uuid.as_deref()
+                            .and_then(|id| uuid::Uuid::parse_str(id).ok())
+                    }).collect::<Vec<_>>();
+                    if let Err(error) = agent.register_sdk_message_aliases(primary, &aliases) {
+                        eprintln!("SDK merged user message history aliases unavailable: {error:#}");
+                    }
+                }
                 let ended = guard.end(generation);
                 if !ended {
                     bail!("Query generation changed during execution")
