@@ -451,7 +451,9 @@ impl WebSocketTransport {
         if self.is_closed() || self.state() == WsState::Closed {
             bail!("WebSocket transport is closed");
         }
-        self.outbound_tx.send(message).await
+        self.outbound_tx
+            .send(message)
+            .await
             .map_err(|_| anyhow!("WebSocket outbound queue is closed"))
     }
 
@@ -924,7 +926,11 @@ mod tests {
                 request.extend_from_slice(&chunk[..n]);
             }
             let head = String::from_utf8(request).unwrap();
-            let key = head.lines().find_map(|l| l.strip_prefix("Sec-WebSocket-Key: ")).unwrap().trim();
+            let key = head
+                .lines()
+                .find_map(|l| l.strip_prefix("Sec-WebSocket-Key: "))
+                .unwrap()
+                .trim();
             let reply = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", websocket_accept(key));
             peer.write_all(reply.as_bytes()).await.unwrap();
             let mut header = [0_u8; 2];
@@ -943,16 +949,36 @@ mod tests {
         });
         let (tx, _rx) = mpsc::unbounded_channel();
         let client = Arc::new(WebSocketTransport::new(
-            format!("ws://127.0.0.1:{port}/session"), Vec::new(), None, tx, false, None,
+            format!("ws://127.0.0.1:{port}/session"),
+            Vec::new(),
+            None,
+            tx,
+            false,
+            None,
         ));
-        client.queue_message(json!({"type":"result","uuid":"live-one"})).await.unwrap();
-        let task = { let client = client.clone(); tokio::spawn(async move { client.run().await }) };
-        let sent = tokio::time::timeout(Duration::from_secs(5), server).await.unwrap().unwrap();
+        client
+            .queue_message(json!({"type":"result","uuid":"live-one"}))
+            .await
+            .unwrap();
+        let task = {
+            let client = client.clone();
+            tokio::spawn(async move { client.run().await })
+        };
+        let sent = tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(sent["uuid"], "live-one");
         client.close();
-        tokio::time::timeout(Duration::from_secs(5), task).await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(5), task)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(client.buffered_count(), 1);
-        assert!(client.queue_message(json!({"uuid":"too-late"})).await.is_err());
+        assert!(client
+            .queue_message(json!({"uuid":"too-late"}))
+            .await
+            .is_err());
     }
 
     #[test]

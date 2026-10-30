@@ -158,8 +158,7 @@ mod tests {
     #[test]
     fn sse_url_derivation_preserves_auth_query_and_ipv6_authority() {
         assert_eq!(
-            sse_stream_url_for_session("wss://example.com/sessions/s1?token=a%2Fb&mode=1")
-                .unwrap(),
+            sse_stream_url_for_session("wss://example.com/sessions/s1?token=a%2Fb&mode=1").unwrap(),
             "https://example.com/sessions/s1/worker/events/stream?token=a%2Fb&mode=1"
         );
         assert_eq!(

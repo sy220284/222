@@ -1034,29 +1034,38 @@ mod tests {
         let (events_tx, mut events_rx) = tokio::sync::mpsc::unbounded_channel();
         let server = tokio::spawn(async move {
             for _ in 0..3 {
-                let (mut socket, _) = tokio::time::timeout(
-                    Duration::from_secs(5),
-                    listener.accept(),
-                ).await.unwrap().unwrap();
+                let (mut socket, _) =
+                    tokio::time::timeout(Duration::from_secs(5), listener.accept())
+                        .await
+                        .unwrap()
+                        .unwrap();
                 let mut request = Vec::new();
                 let mut chunk = [0_u8; 2048];
                 loop {
                     let length = socket.read(&mut chunk).await.unwrap();
                     assert!(length > 0, "HTTP request closed before end of headers/body");
                     request.extend_from_slice(&chunk[..length]);
-                    if let Some(header_end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+                    if let Some(header_end) =
+                        request.windows(4).position(|part| part == b"\r\n\r\n")
+                    {
                         let headers = String::from_utf8_lossy(&request[..header_end]);
-                        let len = headers.lines().find_map(|line| {
-                            let (name, value) = line.split_once(':')?;
-                            name.eq_ignore_ascii_case("Content-Length")
-                                .then(|| value.trim().parse::<usize>().unwrap())
-                        }).unwrap_or(0);
+                        let len = headers
+                            .lines()
+                            .find_map(|line| {
+                                let (name, value) = line.split_once(':')?;
+                                name.eq_ignore_ascii_case("Content-Length")
+                                    .then(|| value.trim().parse::<usize>().unwrap())
+                            })
+                            .unwrap_or(0);
                         if request.len() >= header_end + 4 + len {
                             let request_line = headers.lines().next().unwrap().to_owned();
                             let body = if len == 0 {
                                 Value::Null
                             } else {
-                                serde_json::from_slice(&request[header_end + 4..header_end + 4 + len]).unwrap()
+                                serde_json::from_slice(
+                                    &request[header_end + 4..header_end + 4 + len],
+                                )
+                                .unwrap()
                             };
                             events_tx.send((request_line, body)).unwrap();
                             break;
@@ -1091,10 +1100,11 @@ mod tests {
         let mut init_seen = false;
         let mut heartbeat_seen = false;
         for _ in 0..3 {
-            let (request_line, body) = tokio::time::timeout(
-                Duration::from_secs(5),
-                events_rx.recv(),
-            ).await.unwrap().unwrap();
+            let (request_line, body) =
+                tokio::time::timeout(Duration::from_secs(5), events_rx.recv())
+                    .await
+                    .unwrap()
+                    .unwrap();
             if request_line.starts_with("PUT ") {
                 assert_eq!(body["worker_epoch"], 17);
                 assert_eq!(body["worker_status"], "idle");
@@ -1105,7 +1115,10 @@ mod tests {
                 assert_eq!(body["session_id"], "s1");
                 heartbeat_seen = true;
             } else {
-                assert!(request_line.starts_with("GET "), "unexpected {request_line}");
+                assert!(
+                    request_line.starts_with("GET "),
+                    "unexpected {request_line}"
+                );
             }
         }
         assert!(init_seen && heartbeat_seen);
