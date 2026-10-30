@@ -955,7 +955,7 @@ async fn spool_merged<R: AsyncRead + Unpin>(
         let n = stream.read(&mut buffer).await?;
         if n == 0 { break; }
         let mut shared = combined.lock().await;
-        let writable = n.min(LOG_CAP.saturating_sub(shared.size) as usize);
+        let writable = n.min(LOG_CAP.saturating_sub(shared.size).min(n as u64) as usize);
         if writable > 0 {
             shared.file.write_all(&buffer[..writable]).await?;
             individual.write_all(&buffer[..writable]).await?;
@@ -1171,10 +1171,10 @@ mod tests {
         ).await.unwrap()).unwrap();
         let id = created["task_id"].as_str().unwrap();
         let output: Value = serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
-        assert_eq!(output["task"]["output"], "first\\nsecond\\nthird\\n");
+        assert_eq!(output["task"]["output"], "first\nsecond\nthird\n");
         assert!(created["output_file"].as_str().unwrap().ends_with(".output"));
         let delta: Value = serde_json::from_str(&tasks.output_delta(id, 0, 100).unwrap()).unwrap();
-        assert_eq!(delta["content"], "first\\nsecond\\nthird\\n");
+        assert_eq!(delta["content"], "first\nsecond\nthird\n");
     }
 
     #[cfg(unix)]
