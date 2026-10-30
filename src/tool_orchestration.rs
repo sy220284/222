@@ -21,15 +21,27 @@ use std::sync::OnceLock;
 /// `getMaxToolUseConcurrency` — `parseInt(env) || 10`. Empty strings, non
 /// numbers and zero all fall back to 10 exactly like the JavaScript parse.
 pub fn max_tool_use_concurrency() -> usize {
-    match std::env::var("ATLAS_MAX_TOOL_USE_CONCURRENCY") {
-        Ok(raw) => raw
-            .trim()
-            .parse::<usize>()
-            .ok()
-            .filter(|limit| *limit > 0)
-            .unwrap_or(10),
-        Err(_) => 10,
+    std::env::var("ATLAS_MAX_TOOL_USE_CONCURRENCY")
+        .ok()
+        .map(|raw| parse_js_concurrency(&raw))
+        .unwrap_or(10)
+}
+
+fn parse_js_concurrency(raw: &str) -> usize {
+    // JS parseInt("3threads", 10) returns 3. An empty/non-numeric/zero
+    // value uses the original fallback. Negative/overflow worker counts are
+    // invalid on this Rust executor and retain the safe default.
+    let value = raw.trim_start();
+    let value = value.strip_prefix('+').unwrap_or(value);
+    if value.starts_with('-') {
+        return 10;
     }
+    let digits: String = value.chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits
+        .parse::<usize>()
+        .ok()
+        .filter(|n| *n > 0)
+        .unwrap_or(10)
 }
 
 fn concurrency_safe_tools() -> &'static HashSet<&'static str> {
@@ -101,6 +113,15 @@ mod tests {
                 arguments: "{}".to_owned(),
             },
         }
+    }
+
+    #[test]
+    fn javascript_parse_int_accepts_numeric_prefix() {
+        assert_eq!(parse_js_concurrency("3threads"), 3);
+        assert_eq!(parse_js_concurrency(" +004 trailing"), 4);
+        assert_eq!(parse_js_concurrency("0x10"), 10);
+        assert_eq!(parse_js_concurrency("-5"), 10);
+        assert_eq!(parse_js_concurrency("garbage"), 10);
     }
 
     #[test]
