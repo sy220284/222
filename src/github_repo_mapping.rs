@@ -63,7 +63,8 @@ pub fn validate_repo_at_path(path: &Path, expected_repo: &str) -> bool {
 }
 
 pub fn remove_path_from_repo(config: &mut Config, repo: &str, path: &Path) -> bool {
-    let normalized = path.to_string_lossy();
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let normalized = canonical.to_string_lossy().nfc().collect::<String>();
     let entry = key(repo);
     let Some(paths) = config.github_repo_paths.get_mut(&entry) else {
         return false;
