@@ -6,7 +6,7 @@ use std::{
     net::{TcpListener, TcpStream},
     process::Command,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 fn read_request(stream: &mut TcpStream) -> (String, Value) {
@@ -98,8 +98,19 @@ fn four_domestic_provider_ids_use_existing_authenticated_chat_pipeline() {
     ] {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
+        listener.set_nonblocking(true).unwrap();
         let server = thread::spawn(move || {
-            let (mut client, _) = listener.accept().expect("accept model API call");
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let (mut client, _) = loop {
+                match listener.accept() {
+                    Ok(connection) => break connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "model API was not called");
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("accept model API call: {error}"),
+                }
+            };
             let (headers, body) = read_request(&mut client);
             assert!(
                 headers.starts_with("POST /v1/chat/completions HTTP/1.1"),
