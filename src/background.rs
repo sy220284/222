@@ -240,7 +240,7 @@ impl BackgroundTasks {
         let Some(id) = path.file_stem().and_then(|stem| stem.to_str()) else {
             return Ok(None);
         };
-        if canonical_shell_task_id(id).as_deref() != Ok(id) {
+        if canonical_shell_task_id(id).ok().as_deref() != Some(id) {
             return Ok(None);
         }
         let record = self.directory.join(format!("{id}.json"));
