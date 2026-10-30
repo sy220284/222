@@ -43,7 +43,11 @@ pub fn convert_ws_url_to_post_url(ws_url: &str) -> Result<String> {
             path.push_str("/events");
         }
     }
-    let suffix = if query.is_empty() { String::new() } else { format!("?{query}") };
+    let suffix = if query.is_empty() {
+        String::new()
+    } else {
+        format!("?{query}")
+    };
     Ok(format!("{scheme}//{authority}{path}{suffix}"))
 }
 
@@ -103,7 +107,9 @@ impl HybridOutbound {
         config.max_delay_ms = 8_000;
         config.jitter_ms = 250;
         Ok(Self {
-            uploader: Arc::new(super::serial_batch_event_uploader::SerialBatchEventUploader::new(config)),
+            uploader: Arc::new(
+                super::serial_batch_event_uploader::SerialBatchEventUploader::new(config),
+            ),
             post_url,
             auth,
             stream_event_buffer: Arc::new(Mutex::new(Vec::new())),
@@ -119,7 +125,10 @@ impl HybridOutbound {
     /// queued POSTs are persisted, mirroring HybridTransport.write in 2.1.88.
     pub async fn write(&self, message: &Value) {
         if message.get("type").and_then(Value::as_str) == Some("stream_event") {
-            self.stream_event_buffer.lock().expect("hybrid stream buffer").push(message.clone());
+            self.stream_event_buffer
+                .lock()
+                .expect("hybrid stream buffer")
+                .push(message.clone());
             if !self.timer_running.swap(true, Ordering::SeqCst) {
                 let buffer = Arc::clone(&self.stream_event_buffer);
                 let running = Arc::clone(&self.timer_running);
@@ -135,14 +144,24 @@ impl HybridOutbound {
             }
             return;
         }
-        let mut events = std::mem::take(&mut *self.stream_event_buffer.lock().expect("hybrid stream buffer"));
+        let mut events = std::mem::take(
+            &mut *self
+                .stream_event_buffer
+                .lock()
+                .expect("hybrid stream buffer"),
+        );
         events.push(message.clone());
         self.uploader.enqueue(events).await;
         self.uploader.flush().await;
     }
 
     pub async fn flush(&self) {
-        let events = std::mem::take(&mut *self.stream_event_buffer.lock().expect("hybrid stream buffer"));
+        let events = std::mem::take(
+            &mut *self
+                .stream_event_buffer
+                .lock()
+                .expect("hybrid stream buffer"),
+        );
         if !events.is_empty() {
             self.uploader.enqueue(events).await;
         }
@@ -150,7 +169,10 @@ impl HybridOutbound {
     }
 
     pub fn close(&self) {
-        self.stream_event_buffer.lock().expect("hybrid stream buffer").clear();
+        self.stream_event_buffer
+            .lock()
+            .expect("hybrid stream buffer")
+            .clear();
         self.uploader.close();
     }
 }
@@ -171,9 +193,9 @@ pub async fn run_inbound(
     data_tx: mpsc::UnboundedSender<String>,
 ) -> Result<()> {
     let (host, port, path) = parse_ws_url(ws_url)?;
-    let mut conn = MinimalWsClient::connect(
-        &host, port, &path, &headers, ws_url.starts_with("wss://")
-    ).await?;
+    let mut conn =
+        MinimalWsClient::connect(&host, port, &path, &headers, ws_url.starts_with("wss://"))
+            .await?;
     loop {
         match conn.read_message().await {
             Ok(super::web_socket::WsIncoming::Text(text)) => {
@@ -247,7 +269,9 @@ mod tests {
     async fn outbound_batches_and_flushes() {
         let auth: HybridAuth = Arc::new(|| vec![]);
         let outbound = HybridOutbound::new("ws://127.0.0.1:9/ws/s1", auth).unwrap();
-        outbound.write(&serde_json::json!({"type":"stream_event"})).await;
+        outbound
+            .write(&serde_json::json!({"type":"stream_event"}))
+            .await;
         // A stream event returns before the short batching window expires.
         outbound.close();
     }

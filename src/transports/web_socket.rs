@@ -17,9 +17,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio_rustls::{rustls, TlsConnector};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
+use tokio_rustls::{rustls, TlsConnector};
 
 use super::sse::reconnect_delay;
 
@@ -126,7 +126,8 @@ impl MinimalWsClient {
         .await
         .map_err(|_| anyhow!("WS connect timeout after {CONNECT_TIMEOUT_MS}ms"))??;
         let mut stream: Box<dyn WebSocketIo> = if secure {
-            let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+            let roots =
+                rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
             let config = rustls::ClientConfig::builder()
                 .with_root_certificates(roots)
                 .with_no_client_auth();
@@ -150,7 +151,8 @@ impl MinimalWsClient {
             "GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
         );
         for (name, value) in extra_headers {
-            if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            if name.is_empty()
+                || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
                 || value.contains(['\r', '\n'])
             {
                 bail!("Invalid WebSocket upgrade header");
@@ -179,12 +181,17 @@ impl MinimalWsClient {
                 bail!("WS handshake: oversized response");
             }
         }
-        let header_end = response.windows(4)
+        let header_end = response
+            .windows(4)
             .position(|window| window == b"\r\n\r\n")
-            .ok_or_else(|| anyhow!("WebSocket upgrade response missing terminator"))? + 4;
+            .ok_or_else(|| anyhow!("WebSocket upgrade response missing terminator"))?
+            + 4;
         let header = std::str::from_utf8(&response[..header_end])?;
-        let status = header.lines().next()
-            .and_then(|line| line.split_whitespace().nth(1)).unwrap_or("");
+        let status = header
+            .lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
+            .unwrap_or("");
         if status != "101" {
             bail!("WS handshake failed with status {status}");
         }
@@ -197,7 +204,8 @@ impl MinimalWsClient {
                 if header_name.eq_ignore_ascii_case("Upgrade") {
                     upgrade = value.eq_ignore_ascii_case("websocket");
                 } else if header_name.eq_ignore_ascii_case("Connection") {
-                    connection_upgrade = value.split(',')
+                    connection_upgrade = value
+                        .split(',')
                         .any(|part| part.trim().eq_ignore_ascii_case("Upgrade"));
                 } else if header_name.eq_ignore_ascii_case("Sec-WebSocket-Accept") {
                     accept = Some(value);
@@ -303,14 +311,18 @@ impl MinimalWsClient {
                     self.fragmented = Some(payload);
                 }
                 0x0 => {
-                    let collected = self.fragmented.as_mut()
+                    let collected = self
+                        .fragmented
+                        .as_mut()
                         .ok_or_else(|| anyhow!("WS continuation without initial frame"))?;
                     if collected.len().saturating_add(payload.len()) > 16 * 1024 * 1024 {
                         bail!("WS fragmented message too large");
                     }
                     collected.extend_from_slice(&payload);
                     if fin {
-                        let whole = self.fragmented.take()
+                        let whole = self
+                            .fragmented
+                            .take()
                             .ok_or_else(|| anyhow!("WS continuation state missing"))?;
                         return Ok(WsIncoming::Text(String::from_utf8(whole)?));
                     }
@@ -340,9 +352,12 @@ impl MinimalWsClient {
         out.extend(self.read_buffer.drain(..available));
         if available < len {
             let mut remaining = vec![0_u8; len - available];
-            tokio::time::timeout(Duration::from_secs(45), self.stream.read_exact(&mut remaining))
-                .await
-                .map_err(|_| anyhow!("WS read timeout"))??;
+            tokio::time::timeout(
+                Duration::from_secs(45),
+                self.stream.read_exact(&mut remaining),
+            )
+            .await
+            .map_err(|_| anyhow!("WS read timeout"))??;
             out.extend_from_slice(&remaining);
         }
         Ok(out)
@@ -528,8 +543,14 @@ impl WebSocketTransport {
             }
         }
         let mut conn = match MinimalWsClient::connect(
-            &host, port, &path, &headers, self.shared.url.starts_with("wss://")
-        ).await {
+            &host,
+            port,
+            &path,
+            &headers,
+            self.shared.url.starts_with("wss://"),
+        )
+        .await
+        {
             Ok(conn) => conn,
             Err(_) => return ConnectionOutcome::Reconnect,
         };
@@ -728,9 +749,12 @@ pub fn parse_ws_url(url: &str) -> Result<(String, u16, String)> {
     if !parsed.username().is_empty() || parsed.password().is_some() {
         bail!("Credentials in a WebSocket URL are forbidden");
     }
-    let host = parsed.host_str()
-        .ok_or_else(|| anyhow!("WebSocket URL missing hostname"))?.to_string();
-    let port = parsed.port_or_known_default()
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| anyhow!("WebSocket URL missing hostname"))?
+        .to_string();
+    let port = parsed
+        .port_or_known_default()
         .ok_or_else(|| anyhow!("WebSocket URL missing port"))?;
     let mut path = parsed.path().to_string();
     if let Some(query) = parsed.query() {

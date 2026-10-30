@@ -150,7 +150,9 @@ impl VimKeys {
     fn execute_repeat(ctx: &mut crate::vim::operators::VimCtx) {
         use crate::vim::operators::*;
         use crate::vim::types::RecordedChange;
-        let Some(last) = ctx.persistent.last_change.clone() else { return };
+        let Some(last) = ctx.persistent.last_change.clone() else {
+            return;
+        };
         match last {
             RecordedChange::Insert { text } => {
                 if ctx.text.is_char_boundary(ctx.offset) {
@@ -169,10 +171,20 @@ impl VimKeys {
                     execute_operator_motion(ctx, op, &motion, count);
                 }
             }
-            RecordedChange::OperatorTextObj { op, obj_type, scope, count } => {
+            RecordedChange::OperatorTextObj {
+                op,
+                obj_type,
+                scope,
+                count,
+            } => {
                 execute_operator_text_obj(ctx, op, obj_type, scope, count);
             }
-            RecordedChange::OperatorFind { op, find, ch, count } => {
+            RecordedChange::OperatorFind {
+                op,
+                find,
+                ch,
+                count,
+            } => {
                 execute_operator_find(ctx, op, find, ch, count);
             }
             RecordedChange::Replace { ch, count } => execute_replace(ctx, ch, count),

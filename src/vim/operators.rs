@@ -555,8 +555,7 @@ pub fn execute_operator_g(ctx: &mut VimCtx, op: Operator, count: usize) {
     if target.offset == ctx.offset {
         return;
     }
-    let (from, to, linewise) =
-        get_operator_range(ctx.offset, &ctx.text, &target, "G", op, count);
+    let (from, to, linewise) = get_operator_range(ctx.offset, &ctx.text, &target, "G", op, count);
     apply_operator(ctx, op, from, to, linewise);
     ctx.record_change(RecordedChange::Operator {
         op,

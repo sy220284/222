@@ -448,7 +448,9 @@ impl CcrClient {
                                 accumulate_stream_events(&batch, &mut state)
                             };
                             for event in events {
-                                uploader.enqueue(vec![CcrClient::to_client_event(&event)]).await;
+                                uploader
+                                    .enqueue(vec![CcrClient::to_client_event(&event)])
+                                    .await;
                             }
                         }
                     });
