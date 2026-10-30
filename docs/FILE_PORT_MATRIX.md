@@ -1031,7 +1031,7 @@
 | `src/services/api/usage.ts` | 64 | 1685 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/withRetry.ts` | 823 | 28238 | 重写：模型／Agent 循环 | `src/provider.rs / src/sse.rs / src/gemini_sse.rs / src/agent.rs` | 部分实现：多模型 HTTP/流式建立前的 408/409/429/5xx 与连接超时有限重试，尊重 x-should-retry:false、Retry-After 秒数，失败不执行工具或重复落盘；仍缺原版可取消等待、按查询来源的 529 策略、流中断恢复、模型回退及完整重试事件与自定义预算 |
 | `src/services/autoDream/autoDream.ts` | 325 | 11259 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/autoDream/config.ts` | 22 | 892 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/autoDream/config.ts` | 22 | 892 | 重写：保持通用行为 | `src/generated_ports/p_3f28a74b2c6e6.rs`| 部分实现：autoDream 决策纯函数（用户设置显式值覆盖实验默认，未设时实验值决定），settings/growthbook 读取由调用方传入；实验 flag 名按隐私门禁省略|
 | `src/services/autoDream/consolidationLock.ts` | 141 | 4548 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/autoDream/consolidationPrompt.ts` | 66 | 3225 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/awaySummary.ts` | 75 | 2671 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1751,7 +1751,7 @@
 | `src/utils/screenshotClipboard.ts` | 122 | 3709 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sdkEventQueue.ts` | 135 | 4077 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/secureStorage/fallbackStorage.ts` | 71 | 2362 | 重写：保持通用行为 | `src/secure_fallback.rs / src/main.rs` | 部分实现：主安全存储优先、读取回退、首次主存储成功后删除副本、主失败时避免过期值遮蔽新刷新令牌、同步/异步读和删除已写入并接入凭据命令 |
-| `src/utils/secureStorage/index.ts` | 18 | 559 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/secureStorage/index.ts` | 18 | 559 | 重写：保持通用行为 | `src/generated_ports/p_92f3dc63fc226.rs`| 部分实现：平台安全存储选择器返回 fallback 链（vendor Keychain 按仓库等价范围排除，macOS 分支留安全框架未来移植钩子），读写删回路测试覆盖（delete 后兜底空对象语义对齐 JS || {}）|
 | `src/utils/secureStorage/keychainPrefetch.ts` | 117 | 4755 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/macOsKeychainHelpers.ts` | 112 | 4797 | 重写：保持通用行为 | `src/generated_ports/p_b2a6ef22565e7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/secureStorage/macOsKeychainStorage.ts` | 232 | 8271 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1806,7 +1806,7 @@
 | `src/utils/sideQuery.ts` | 223 | 8184 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sideQuestion.ts` | 156 | 6133 | 重写：保持通用行为 | `src/side_question.rs / src/agent.rs / src/main.rs` | 部分实现：SDK side_question 异步单轮无工具模型调用，继承主 Agent 最近模型上下文，返回独立控制回执；交互终端 /btw 复用独立问答；源码提交 5b7c58a、174c3ed、21d3014、e165563、a4198c6，待行为验收。原版运行中主 Agent 控制并发、思考/缓存、完整取消、费用和 UI 仍未等价 |
 | `src/utils/signal.ts` | 44 | 1447 | 重写：保持通用行为 | `src/event_signal.rs` | 部分实现：事件订阅/注销/去重、清空与 JS Set 实时增删监听迭代已有测试；完整调用方和异常传播仍待核对 |
-| `src/utils/sinks.ts` | 17 | 608 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sinks.ts` | 17 | 608 | 重写：保持通用行为 | `src/generated_ports/p_3257507549930.rs`| 部分实现：错误日志与分析 sink 挂接幂等标志（原子状态），叶子模块保原版防循环结构；sink 服务本体（errorLogSink/analytics sink）待各自端口迁移，注入钩子接口已留|
 | `src/utils/skills/skillChangeDetector.ts` | 312 | 10033 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/slashCommandParsing.ts` | 61 | 1437 | 重写：斜杠命令解析 | `src/slash_command.rs` / `src/main.rs` | 已验收：完整返回结构、MCP 标记、重复空格、无效开头、UTF-8 前后空白及 CLI /model 接入；证据 slash_command::tests |
 | `src/utils/sleep.ts` | 85 | 2882 | 重写：保持通用行为 | `src/sleep_helpers.rs` | 部分实现：中断前及定时中的主动停止、可选择异常拒绝、超时竞赛不取消实际底层任务，配有真实 Tokio 竞争回归；AbortError 类型和 JS unref 细节仍需补齐 |
