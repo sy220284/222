@@ -541,6 +541,22 @@ pub const TURN_COMPLETION_VERBS: &[&str] = &[
 mod tests {
     use super::*;
     #[test]
+    fn source_exported_constants_match_full_original_values() {
+        assert_eq!(TOOL_USE_SUMMARY_GENERATION_FAILED, 344);
+        assert_eq!(NO_CONTENT_MESSAGE, "(no content)");
+        let expected: &[&str] = &[
+            "Baked",
+            "Brewed",
+            "Churned",
+            "Cogitated",
+            "Cooked",
+            "Crunched",
+            "Sautéed",
+            "Worked",
+        ];
+        assert_eq!(TURN_COMPLETION_VERBS, expected);
+    }
+    #[test]
     fn event_propagation_and_click_geometry() {
         let emitter = EventEmitter::default();
         let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
