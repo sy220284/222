@@ -381,7 +381,7 @@ mod tests {
 
         let pyright = get_builtin_command_spec("pyright").unwrap();
         assert_eq!(pyright.description, "Type checker for Python");
-        assert_eq!(pyright.arguments.len(), 22);
+        assert_eq!(pyright.arguments.len(), 22); (批量转写批次一：常量/插件/类型/纯函数钩子十文件（源码已提交待验收）)
         assert!(pyright
             .arguments
             .iter()
