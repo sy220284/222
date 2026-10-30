@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn show_set_disable_and_validate() {
         let mut config = Config::default();
-        let active = config.select(Some("local"), None).unwrap();
+        let active = config.select(None, None).unwrap();
         assert!(
             matches!(resolve(&config, &active, "  "), AdvisorChange::Unchanged(s) if s.contains("not set"))
         );
