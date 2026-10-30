@@ -595,12 +595,10 @@ impl CcrClient {
                 Err(error) => {
                     failures = failures.saturating_add(1);
                     if failures >= max_failures {
-                        return Err(error).map_err(|error| {
-                            anyhow!(
-                                "CCR internal-event recovery failed after {failures} attempts; {} uncommitted entries: {error}",
-                                collected.len()
-                            )
-                        });
+                        bail!(
+                            "CCR internal-event recovery failed after {failures} attempts; {} uncommitted entries: {error}",
+                            collected.len()
+                        );
                     }
                     let delay = super::serial_batch_event_uploader::retry_delay(
                         failures,
