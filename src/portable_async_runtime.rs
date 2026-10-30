@@ -347,28 +347,36 @@ pub fn matches_keep_going_keyword(input: &str) -> bool {
 pub struct ParsedSessionIdentifier {
     pub session_id: String,
     pub ingress_url: Option<String>,
+    pub is_url: bool,
     pub jsonl_file: Option<String>,
+    pub is_jsonl_file: bool,
 }
 pub fn parse_session_identifier(id: &str) -> Option<ParsedSessionIdentifier> {
     if id.to_ascii_lowercase().ends_with(".jsonl") {
         return Some(ParsedSessionIdentifier {
             session_id: Uuid::new_v4().to_string(),
             ingress_url: None,
+            is_url: false,
             jsonl_file: Some(id.into()),
+            is_jsonl_file: true,
         });
     }
     if crate::portable_source_utils::validate_uuid(&json!(id)).is_some() {
         return Some(ParsedSessionIdentifier {
             session_id: id.into(),
             ingress_url: None,
+            is_url: false,
             jsonl_file: None,
+            is_jsonl_file: false,
         });
     }
     let url = reqwest::Url::parse(id).ok()?;
     Some(ParsedSessionIdentifier {
         session_id: Uuid::new_v4().to_string(),
         ingress_url: Some(url.to_string()),
+        is_url: true,
         jsonl_file: None,
+        is_jsonl_file: false,
     })
 }
 
@@ -634,6 +642,37 @@ mod tests {
         assert_eq!(dequeue_ready(&mut q)[0].uuid, "/clear");
         assert_eq!(q.len(), 2);
     }
+    #[test]
+    fn resume_identifier_preserves_source_url_jsonl_and_uuid_flags() {
+        let file = parse_session_identifier(r"C:\Users\User\chat.JSONL").unwrap();
+        assert!(file.is_jsonl_file);
+        assert!(!file.is_url);
+        assert_eq!(file.jsonl_file.as_deref(), Some(r"C:\Users\User\chat.JSONL"));
+        assert!(file.ingress_url.is_none());
+        assert!(Uuid::parse_str(&file.session_id).is_ok());
+
+        let plain = "550e8400-e29b-41d4-a716-446655440000";
+        let uuid = parse_session_identifier(plain).unwrap();
+        assert_eq!(uuid.session_id, plain);
+        assert!(!uuid.is_url);
+        assert!(!uuid.is_jsonl_file);
+        assert!(uuid.jsonl_file.is_none());
+        assert!(uuid.ingress_url.is_none());
+
+        let remote = parse_session_identifier(
+            "HTTPS://EXAMPLE.COM/v1/session_ingress/session?id=1#hash"
+        )
+        .unwrap();
+        assert!(remote.is_url);
+        assert!(!remote.is_jsonl_file);
+        assert_eq!(
+            remote.ingress_url.as_deref(),
+            Some("https://example.com/v1/session_ingress/session?id=1#hash")
+        );
+        assert!(Uuid::parse_str(&remote.session_id).is_ok());
+        assert!(parse_session_identifier("not a url or uuid").is_none());
+    }
+
     #[test]
     fn user_prompt_keyword_boundaries_match_source_javascript_ascii_rules() {
         for (input, negative, keep_going) in [
