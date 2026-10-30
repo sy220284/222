@@ -505,7 +505,10 @@ const LEGACY_OUTPUT_STYLE_NOTICE: &str = "/output-style has been deprecated. Use
 
 async fn run_cli() -> Result<()> {
     let cli = Cli::parse();
-    tls_ca::apply_user_startup_config()?;
+    // Doctor must diagnose malformed user configuration without failing startup.
+    if !matches!(cli.command, Commands::Doctor) {
+        tls_ca::apply_user_startup_config()?;
+    }
     match &cli.command {
         Commands::ReleaseNotes => {
             let home = keybindings::config_home()?;
