@@ -2567,7 +2567,13 @@ impl Agent {
         let started = Instant::now();
         let response = self.provider.complete(&request).await;
         self.session.cost.add_api_duration(started.elapsed());
-        let response = response?;
+        let response = match response {
+            Ok(response) => response,
+            Err(error) => {
+                self.session.save(&self.root)?;
+                return Err(error);
+            }
+        };
         if let Some(usage) = response.usage {
             self.record_usage(usage);
         }
