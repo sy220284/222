@@ -19,6 +19,14 @@ pub trait ModelProvider: Send + Sync {
         }
         Ok(())
     }
+    /// A session-scoped SDK JSON schema must be enforced by the selected
+    /// provider's actual request protocol, not only appended to a prompt.
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        if schema.is_some() {
+            bail!("Selected model provider has no native JSON schema response capability")
+        }
+        Ok(())
+    }
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse>;
     async fn complete_stream(
         &self,
@@ -51,12 +59,14 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
             client,
             base_url: profile.base_url.clone(),
             key,
+            response_schema: None,
         })),
         "gemini" => Ok(Box::new(Gemini {
             client,
             base_url: profile.base_url.clone(),
             key: key.context("Gemini endpoint requires an API key")?,
             thinking_budget: None,
+            response_schema: None,
         })),
         other => bail!("Unsupported provider kind: {other}"),
     }
@@ -149,13 +159,22 @@ struct OpenAiCompatible {
     client: Client,
     base_url: String,
     key: Option<String>,
+    response_schema: Option<Value>,
 }
 
 #[async_trait]
 impl ModelProvider for OpenAiCompatible {
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        self.response_schema = schema;
+        Ok(())
+    }
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         let mut body = json!({"model":request.model,
             "messages":openai_messages(request)?});
+        if let Some(schema) = &self.response_schema {
+            body["response_format"] = json!({"type":"json_schema",
+                "json_schema":{"name":"structured_output","strict":true,"schema":schema}});
+        }
         if !request.tools.is_empty() {
             body["tools"] = json!(request.tools);
             body["tool_choice"] = json!("auto");
@@ -213,6 +232,7 @@ impl ModelProvider for OpenAiCompatible {
             self.key.as_deref(),
             request,
             deltas,
+            self.response_schema.as_ref(),
         )
         .await
     }
@@ -294,10 +314,15 @@ struct Gemini {
     base_url: String,
     key: String,
     thinking_budget: Option<u32>,
+    response_schema: Option<Value>,
 }
 
 #[async_trait]
 impl ModelProvider for Gemini {
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        self.response_schema = schema;
+        Ok(())
+    }
     fn set_thinking_budget(&mut self, budget: Option<u32>) -> Result<()> {
         self.thinking_budget = budget;
         Ok(())
@@ -306,7 +331,13 @@ impl ModelProvider for Gemini {
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         let mut body = gemini_request_body(request)?;
         if let Some(budget) = self.thinking_budget {
-            body["generationConfig"] = json!({"thinkingConfig":{"thinkingBudget":budget}});
+            body["generationConfig"]["thinkingConfig"] = json!({"thinkingBudget":budget});
+        }
+        if let Some(schema) = &self.response_schema {
+            // generateContent JSON schema mode, preserving the independent
+            // thinkingConfig set above when both SDK options are enabled.
+            body["generationConfig"]["responseMimeType"] = json!("application/json");
+            body["generationConfig"]["responseJsonSchema"] = schema.clone();
         }
         let model = request
             .model
