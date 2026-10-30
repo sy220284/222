@@ -328,6 +328,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hybrid_websocket_read_uses_dynamic_authorization_header() {
+        use tokio::io::AsyncReadExt;
+        use tokio::net::TcpListener;
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut peer, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                let n = peer.read(&mut chunk).await.unwrap();
+                assert!(n > 0 && request.len() < 16_384);
+                request.extend_from_slice(&chunk[..n]);
+            }
+            let headers = String::from_utf8(request).unwrap();
+            assert!(headers.lines().any(|line| line == "Authorization: Bearer refreshed"));
+        });
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let transport = Arc::new(HybridTransport::new(
+            format!("ws://127.0.0.1:{port}/ws/worker"),
+            Vec::new(), None, tx,
+            Arc::new(|| vec![("Authorization".into(), "Bearer refreshed".into())]),
+        ).unwrap());
+        let runner = {
+            let transport = transport.clone();
+            tokio::spawn(async move { transport.reads.run().await; })
+        };
+        tokio::time::timeout(Duration::from_secs(3), server).await.unwrap().unwrap();
+        transport.reads.close();
+        tokio::time::timeout(Duration::from_secs(3), runner).await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
     async fn outbound_batches_and_flushes() {
         let auth: HybridAuth = Arc::new(|| vec![]);
         let outbound = HybridOutbound::new("ws://127.0.0.1:9/ws/s1", auth).unwrap();
