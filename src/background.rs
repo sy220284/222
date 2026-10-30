@@ -65,6 +65,9 @@ pub struct TaskRecord {
     pub error_file: String,
     #[serde(default)]
     pub truncated: bool,
+    /// Persist a user-readable failure cause across session restarts.
+    #[serde(default)]
+    pub failure_reason: Option<String>,
 }
 
 struct Running {
@@ -498,6 +501,7 @@ impl BackgroundTasks {
             output_file: output_path.to_string_lossy().to_string(),
             error_file: stderr_path.to_string_lossy().to_string(),
             truncated: false,
+            failure_reason: None,
         };
         if let Err(error) = Self::save(&self.directory, &record) {
             // A started shell must not survive an unsuccessful task registration.
@@ -755,6 +759,17 @@ impl BackgroundTasks {
                 state_record.status = state.into();
                 state_record.exit_code = code;
                 state_record.truncated = out || err;
+                state_record.failure_reason = if stdout_failed || stderr_failed || failed_for_output_io {
+                    Some("Background command output could not be saved; the process was terminated".to_owned())
+                } else if merged_failed {
+                    Some("Background command combined output could not be saved".to_owned())
+                } else if killed_for_output_cap {
+                    Some("Background command exceeded the 5 GiB output limit".to_owned())
+                } else if timed_out {
+                    Some(format!("Background command timed out after {timeout_ms} milliseconds"))
+                } else {
+                    None
+                };
                 state_record.clone()
             };
             if let Err(error) = Self::save(&folder, &updated) {
@@ -837,6 +852,7 @@ impl BackgroundTasks {
             "task_id":record.id,"task_type":"local_bash",
             "status":record.status,"description":record.description,
             "output":displayed.content,"exitCode":record.exit_code,
+            "error":record.failure_reason,
             "output_file":result_path.to_string_lossy(),
             "persistenceWarning":self.entries.lock().unwrap().get(id)
                 .and_then(|task| task.persistence_warning.lock().unwrap().clone()),
@@ -906,6 +922,7 @@ impl BackgroundTasks {
                 "description":record.description,
                 "status":record.status,
                 "exitCode":record.exit_code,
+                "error":record.failure_reason,
                 "persistenceWarning":live.get(id)
                     .and_then(|task| task.persistence_warning.lock().unwrap().clone())
             }));
@@ -1295,6 +1312,7 @@ mod tests {
             command: "printf example".into(), status: "completed".into(),
             exit_code: Some(0), output_file: output.to_string_lossy().into_owned(),
             error_file: error.to_string_lossy().into_owned(), truncated: false,
+            failure_reason: None,
         }).unwrap();
         assert_eq!(
             reader.trusted_output_path(output.to_str().unwrap()).unwrap(),
@@ -1555,6 +1573,7 @@ mod tests {
             output_file: private.to_string_lossy().to_string(),
             error_file: safe_err.to_string_lossy().to_string(),
             truncated: false,
+            failure_reason: None,
         };
         BackgroundTasks::save(&tasks.directory, &forged).unwrap();
         let output: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
@@ -1584,6 +1603,7 @@ mod tests {
             output_file: output.to_string_lossy().to_string(),
             error_file: error.to_string_lossy().to_string(),
             truncated: false,
+            failure_reason: None,
         };
         BackgroundTasks::save(&tasks.directory, &record).unwrap();
         let value: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
