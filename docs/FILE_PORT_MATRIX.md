@@ -475,7 +475,7 @@
 | `src/components/Spinner/TeammateSpinnerTree.tsx` | 272 | 28052 | 重写：终端 UI／交互 | `src/generated_ports/p_024038719ca35.rs` | 部分实现：队友运行状态筛选、排序和领导行已从实际 AppState 输入生成；已接通 TeammateSpinnerLine 动态渲染、导出 inspect/view 和组合回归；终端实时刷新、可交互键盘事件及完整调用链仍待验收 |
 | `src/components/Spinner/index.ts` | 11 | 602 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/Spinner/teammateSelectHint.ts` | 2 | 64 | 重写：终端 UI／交互 | `src/generated_ports/p_9cdb888d4eefe.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/Spinner/useShimmerAnimation.ts` | 32 | 1236 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/Spinner/useShimmerAnimation.ts` | 32 | 1236 | 重写：终端 UI／交互 | `src/generated_ports/p_3597343532377.rs` | 部分实现：完整等价：glimmer 速度（requesting=50 余 200）+周期取模数学（width+20 周期、-10 相位）+stalled=-100 纯函数含单测；动画帧订阅与 DOM ref 归 ink 运行时，待验收 |
 | `src/components/Spinner/useStalledAnimation.ts` | 76 | 2500 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/Spinner/utils.ts` | 85 | 2261 | 重写：终端 UI／交互 | `src/generated_ports/p_43185acc13130.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner.tsx` | 562 | 87940 | 重写：终端 UI／交互 | `src/generated_ports/p_752a76791bf16.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -743,7 +743,7 @@
 | `src/hooks/notifs/useDeprecationWarningNotification.tsx` | 44 | 4605 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useFastModeNotification.tsx` | 162 | 14961 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useIDEStatusIndicator.tsx` | 186 | 20764 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/notifs/useInstallMessages.tsx` | 26 | 3180 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/notifs/useInstallMessages.tsx` | 26 | 3180 | 重写：终端 UI／交互 | `src/generated_ports/p_6b3a03148e760.rs` | 部分实现：完整等价：安装消息优先级映射（error/userActionRequired→high、path/alias→medium、余 low）+颜色镜像+key 构造纯函数含单测；checkInstall 随安装器链，待验收 |
 | `src/hooks/notifs/useLspInitializationNotification.tsx` | 143 | 16569 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useMcpConnectivityStatus.tsx` | 88 | 14710 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useModelMigrationNotifications.tsx` | 52 | 6988 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -781,7 +781,7 @@
 | `src/hooks/useDiffInIDE.ts` | 380 | 9867 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useDirectConnect.ts` | 230 | 7504 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useDoublePress.ts` | 63 | 1651 | 重写：终端 UI／交互 | `src/generated_ports/p_74bc565d88e8d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/hooks/useDynamicConfig.ts` | 23 | 703 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useDynamicConfig.ts` | 23 | 703 | 重写：终端 UI／交互 | `src/generated_ports/p_739c766517b36.rs` | 部分实现：完整等价：测试环境跳过拉取的防挂决策纯函数含单测；拉取本体随分析端口，待验收 |
 | `src/hooks/useElapsedTime.ts` | 38 | 1226 | 重写：终端 UI／交互 | `src/generated_ports/p_2a67cb7ba5c47.rs` | 部分实现：完整等价：elapsed 计算（endTime 冻结语义+pausedMs 扣减+非负钳制）纯函数含单测，格式化引 format.ts 桩；interval 重渲染订阅归宿主，待验收 |
 | `src/hooks/useExitOnCtrlCD.ts` | 96 | 3226 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useExitOnCtrlCDWithKeybindings.ts` | 25 | 948 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -820,8 +820,8 @@
 | `src/hooks/useScheduledTasks.ts` | 140 | 5975 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useSearchInput.ts` | 365 | 10327 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useSessionBackgrounding.ts` | 159 | 4944 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useSettings.ts` | 18 | 618 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useSettingsChange.ts` | 26 | 946 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useSettings.ts` | 18 | 618 | 重写：终端 UI／交互 | `src/generated_ports/p_6a3bbeb50db8c.rs` | 部分实现：AST 转写：AppState.settings 切片订阅契约记录（磁盘变更自动更新语义）；宿主待验收 |
+| `src/hooks/useSettingsChange.ts` | 26 | 946 | 重写：终端 UI／交互 | `src/generated_ports/p_216418895190e.rs` | 部分实现：AST 转写：订阅契约+缓存说明（通知器已清缓存，handler 不再清以免 N 路抖动）行为文档随 settings 检测器链路，待验收 |
 | `src/hooks/useSkillImprovementSurvey.ts` | 106 | 3528 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useSkillsChange.ts` | 63 | 2084 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useSwarmInitialization.ts` | 82 | 3151 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -853,12 +853,12 @@
 | `src/ink/components/ClockContext.tsx` | 112 | 12091 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/CursorDeclarationContext.ts` | 33 | 1119 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/ErrorOverview.tsx` | 109 | 15405 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/components/Link.tsx` | 42 | 3556 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/components/Newline.tsx` | 39 | 2356 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/components/Link.tsx` | 42 | 3556 | 重写：终端 UI／交互 | `src/generated_ports/p_afac9c00ba614.rs` | 部分实现：完整等价：OSC-8 超链接/纯文本回退分支决策纯函数（children 缺省取 url、fallback 优先）含三分支单测；supportsHyperlinks 随 ink 检测桩，待验收 |
+| `src/ink/components/Newline.tsx` | 39 | 2356 | 重写：终端 UI／交互 | `src/generated_ports/p_1c19cd8600b42.rs` | 部分实现：完整等价：count 缺省 1 与 repeat 语义纯函数含单测；待验收 |
 | `src/ink/components/NoSelect.tsx` | 68 | 5899 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/RawAnsi.tsx` | 57 | 5157 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/ScrollBox.tsx` | 237 | 31814 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/components/Spacer.tsx` | 20 | 1563 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/components/Spacer.tsx` | 20 | 1563 | 重写：终端 UI／交互 | `src/generated_ports/p_dd14b320d49cc.rs` | 部分实现：AST 转写：flexGrow=1 布局属性保留给终端渲染宿主；待验收 |
 | `src/ink/components/StdinContext.ts` | 50 | 1678 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/TerminalFocusContext.tsx` | 52 | 5955 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/TerminalSizeContext.tsx` | 7 | 983 | 重写：终端 UI／交互 | 待定 | 未迁移 |
