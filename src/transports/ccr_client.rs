@@ -23,7 +23,7 @@ use super::worker_state_uploader::{WorkerStateSend, WorkerStateUploader};
 
 pub const STREAM_EVENT_FLUSH_INTERVAL_MS: u64 = 100;
 pub const DEFAULT_HEARTBEAT_INTERVAL_MS: u64 = 20_000;
-pub const DEFAULT_HEARTBEAT_JITTER_FRACTION: f64 = 0.1;
+pub const DEFAULT_HEARTBEAT_JITTER_FRACTION: f64 = 0.0;
 pub const AUTH_FAILURE_THRESHOLD: u32 = 10;
 pub const CLIENT_EVENT_BASE_DELAY_MS: u64 = 500;
 pub const CLIENT_EVENT_MAX_DELAY_MS: u64 = 30_000;
@@ -248,15 +248,19 @@ impl CcrClient {
             let shared = sender_shared.clone();
             Box::pin(async move {
                 shared
-                    .request_post("/worker/events", &json!({
-                        "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst),
-                        "events": batch.to_vec()
-                    }))
+                    .request_post(
+                        "/worker/events",
+                        &json!({
+                            "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst),
+                            "events": batch.to_vec()
+                        }),
+                    )
                     .await
             })
         });
         let mut client_events_config = UploaderConfig::new(client_events_send);
-        client_events_config.max_batch_size = usize::MAX;
+        client_events_config.max_batch_size = 100;
+        client_events_config.max_batch_bytes = Some(10 * 1024 * 1024);
         client_events_config.max_queue_size = CLIENT_EVENT_MAX_QUEUE;
         client_events_config.base_delay_ms = CLIENT_EVENT_BASE_DELAY_MS;
         client_events_config.max_delay_ms = CLIENT_EVENT_MAX_DELAY_MS;
@@ -300,10 +304,13 @@ impl CcrClient {
                 .collect();
             Box::pin(async move {
                 shared
-                    .request_post("/worker/events/delivery", &json!({
-                        "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst),
-                        "updates": updates
-                    }))
+                    .request_post(
+                        "/worker/events/delivery",
+                        &json!({
+                            "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst),
+                            "updates": updates
+                        }),
+                    )
                     .await
             })
         });
@@ -383,28 +390,25 @@ impl CcrClient {
         self.shared.worker_epoch.store(epoch, Ordering::SeqCst);
         // The GET may finish before the PUT, but its state is only accepted
         // when the subsequent PUT has succeeded (source: restoredPromise).
+        let initial_state = json!({
+            "worker_status": "idle",
+            "worker_epoch": epoch,
+            "external_metadata": {
+                "pending_action": null,
+                "task_summary": null
+            }
+        });
         let (restore, registered) = tokio::join!(
             self.shared.request_get("/worker"),
-            self.shared.request_put(
-                "/worker",
-                &json!({
-                    "worker_status": "idle",
-                    "worker_epoch": epoch,
-                    "external_metadata": {
-                        "pending_action": null,
-                        "task_summary": null
-                    }
-                }),
-            ),
+            self.shared.request_put("/worker", &initial_state),
         );
-        registered.map_err(|error| {
-            anyhow!("{}: {error}", CcrInitFailReason::WorkerRegisterFailed)
-        })?;
+        registered
+            .map_err(|error| anyhow!("{}: {error}", CcrInitFailReason::WorkerRegisterFailed))?;
         self.session_id = session_id.to_owned();
         self.start_heartbeat();
-        Ok(restore.ok().and_then(|value| {
-            value.pointer("/worker/external_metadata").cloned()
-        }))
+        Ok(restore
+            .ok()
+            .and_then(|value| value.pointer("/worker/external_metadata").cloned()))
     }
 
     /// Heartbeats are owned by this client and are cancelled on close.
@@ -423,21 +427,21 @@ impl CcrClient {
         let jitter_fraction = self.heartbeat_jitter_fraction;
         *task = Some(tokio::spawn(async move {
             loop {
-                let jitter = interval_ms as f64
-                    * jitter_fraction
-                    * (2.0 * rand_unit() - 1.0);
+                let jitter = interval_ms as f64 * jitter_fraction * (2.0 * rand_unit() - 1.0);
                 let duration = (interval_ms as f64 + jitter).max(1.0) as u64;
                 tokio::time::sleep(Duration::from_millis(duration)).await;
                 if shared.closed.load(Ordering::SeqCst) {
                     return;
                 }
-                let _ = shared.request_post(
-                    "/worker/heartbeat",
-                    &json!({
-                        "session_id": session_id,
-                        "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst)
-                    }),
-                ).await;
+                let _ = shared
+                    .request_post(
+                        "/worker/heartbeat",
+                        &json!({
+                            "session_id": session_id,
+                            "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst)
+                        }),
+                    )
+                    .await;
             }
         }));
     }
@@ -651,7 +655,12 @@ impl CcrClient {
     /// events are dropped — call `flush` first if delivery is required.
     pub fn close(&self) {
         self.shared.closed.store(true, Ordering::SeqCst);
-        if let Some(task) = self.heartbeat_task.lock().expect("CCR heartbeat task").take() {
+        if let Some(task) = self
+            .heartbeat_task
+            .lock()
+            .expect("CCR heartbeat task")
+            .take()
+        {
             task.abort();
         }
         self.stream_event_buffer
@@ -990,10 +999,16 @@ mod tests {
             Some(0.0),
         );
         let result = client.initialize("s1", Some(12)).await;
-        assert!(result.is_err(), "worker epoch conflict must fail initialization");
+        assert!(
+            result.is_err(),
+            "worker epoch conflict must fail initialization"
+        );
         assert!(client.heartbeat_task.lock().unwrap().is_none());
         client.close();
-        tokio::time::timeout(Duration::from_secs(3), server).await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(3), server)
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[test]
