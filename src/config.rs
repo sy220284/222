@@ -437,11 +437,22 @@ pub(crate) fn credential_header(name: &str, value: &str) -> bool {
 }
 
 pub(crate) fn require_secure_credential_transport(url: &str, has_credential: bool) -> Result<()> {
-    if !has_credential {
-        return Ok(());
-    }
     let parsed = reqwest::Url::parse(url)?;
-    if parsed.scheme() == "http"
+    // Credentials embedded in a URL are still credentials even if no
+    // api_key_env is configured. A URL can carry Basic auth userinfo or
+    // API keys as query parameters.
+    let url_has_credential = !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query_pairs().any(|(key, _)| {
+            let key = key.to_ascii_lowercase();
+            matches!(
+                key.as_str(),
+                "key" | "apikey" | "api_key" | "access_key" | "access_token"
+                    | "auth" | "authorization" | "client_secret" | "password" | "passwd"
+            ) || credential_header(&key, "")
+        });
+    if (has_credential || url_has_credential)
+        && parsed.scheme() == "http"
         && !matches!(parsed.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
     {
         bail!("Remote endpoint carrying credentials must use HTTPS");
@@ -482,6 +493,16 @@ mod tests {
             assert!(
                 require_secure_credential_transport(url, false).is_ok(),
                 "{url}"
+            );
+        }
+        for url in [
+            "http://user:password@example.com/v1",
+            "http://example.com/v1?api_key=example",
+            "http://example.com/v1?access_token=example",
+        ] {
+            assert!(
+                require_secure_credential_transport(url, false).is_err(),
+                "embedded URL credential must require TLS: {url}"
             );
         }
         for url in [
