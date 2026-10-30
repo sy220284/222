@@ -1,3 +1,10 @@
+## 2026-10-29：前台 Shell 大输出不再误杀正常命令（源码已提交、待行为验收）
+
+- **原版依据**：`source/src/tools/BashTool/BashTool.tsx:636–690,725–749` 使用有限预览和文件输出，`source/src/utils/task/TaskOutput.ts:278–325` 只读取输出开头的显示上限，`source/src/utils/ShellCommand.ts:237–255` 仅在实际输出超过 5GiB 时杀进程。
+- **真实缺口**：`src/tools.rs::run_command_with_shell` 此前对 stdout 超过 `4 × max_output_length`（通常约120KB）或 stderr 超过32KB 直接返回错误并杀死整个进程组。正常生成大量日志的构建、搜索、安装命令因此可能被中途误杀，副作用也被中断。
+- **代码修复**：`src/tools.rs::capped_read` 现仅保留有界输出预览，继续排空管道直至命令结束，记录实际输出字节数和省略提示；stdout 与 stderr 共享原版 5GiB 真正的硬终止上限，只有超过该硬上限、用户超时或真实读取异常才终止进程树。原版退出状态仍由 `run_command_with_shell` 返回。提交 `932a556234c065ae275d9791418f31808511cce1`、`d25834097cfc40f901eaf6891a0c4ddea35b64cb`。
+- **仍缺**：原版将完整前台 Shell 输出落盘并提供可读路径；目前超过预览的字节被明确提示省略，尚无法通过文件恢复。前后台输出合流精确时序、取消/自动后台切换仍待补齐。仅计 **1项独立用户可感知功能已提交、待验收**；本轮合计 **3/100项，剩余97项**。按要求未运行 Cargo、测试或 CI，新增完整等价验收0项，Issue #3 冻结362项不核销。
+
 ## 2026-10-29：Windows Shell 进程树清理与后台 5GiB 输出硬上限（源码已提交、待行为验收）
 
 - **原始依据**：完整用户原始 ZIP 的 `source/src/utils/ShellCommand.ts:337–342::doKill` 调用 `tree-kill` 杀死 Shell 进程树；`ShellCommand.ts:49–54,237–255` 在后台输出超过 `MAX_TASK_OUTPUT_BYTES` 时立即杀死进程；`source/src/tasks/LocalShellTask/killShellTasks.ts:16–45::killTask` 停止后台 Shell，`source/src/utils/task/diskOutput.ts` 维护统一输出日志。
