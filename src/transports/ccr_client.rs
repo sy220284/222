@@ -202,6 +202,7 @@ struct CcrShared {
     session_base_url: String,
     auth: AuthHeaders,
     on_epoch_mismatch: EpochMismatchHandler,
+    worker_epoch: AtomicU64,
     consecutive_auth_failures: AtomicU64,
     closed: AtomicBool,
 }
@@ -210,7 +211,7 @@ pub struct CcrClient {
     shared: Arc<CcrShared>,
     session_base_url: String,
     session_id: String,
-    worker_epoch: AtomicU64,
+    heartbeat_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
     heartbeat_interval_ms: u64,
     heartbeat_jitter_fraction: f64,
     stream_event_buffer: Arc<Mutex<Vec<Value>>>,
@@ -238,6 +239,7 @@ impl CcrClient {
             session_base_url: session_base_url.clone(),
             auth,
             on_epoch_mismatch: on_epoch_mismatch.unwrap_or_else(|| Box::new(|| {})),
+            worker_epoch: AtomicU64::new(0),
             consecutive_auth_failures: AtomicU64::new(0),
             closed: AtomicBool::new(false),
         });
@@ -246,7 +248,10 @@ impl CcrClient {
             let shared = sender_shared.clone();
             Box::pin(async move {
                 shared
-                    .request_post("/worker/events", &json!({"events": batch.to_vec()}))
+                    .request_post("/worker/events", &json!({
+                        "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst),
+                        "events": batch.to_vec()
+                    }))
                     .await
             })
         });
@@ -264,7 +269,10 @@ impl CcrClient {
                 shared
                     .request_post(
                         "/worker/internal-events",
-                        &json!({"events": batch.to_vec()}),
+                        &json!({
+                            "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst),
+                            "events": batch.to_vec()
+                        }),
                     )
                     .await
             })
@@ -292,7 +300,10 @@ impl CcrClient {
                 .collect();
             Box::pin(async move {
                 shared
-                    .request_post("/worker/events/delivery", &json!({"updates": updates}))
+                    .request_post("/worker/events/delivery", &json!({
+                        "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst),
+                        "updates": updates
+                    }))
                     .await
             })
         });
@@ -307,7 +318,16 @@ impl CcrClient {
             let shared = shared.clone();
             Arc::new(move |body| {
                 let shared = shared.clone();
-                Box::pin(async move { shared.request_put("/worker", &body).await.is_ok() })
+                Box::pin(async move {
+                    let mut patch = body;
+                    if let Some(fields) = patch.as_object_mut() {
+                        fields.insert(
+                            "worker_epoch".to_owned(),
+                            json!(shared.worker_epoch.load(Ordering::SeqCst)),
+                        );
+                    }
+                    shared.request_put("/worker", &patch).await.is_ok()
+                })
             })
         };
 
@@ -315,7 +335,7 @@ impl CcrClient {
             http: reqwest::Client::new(),
             session_base_url,
             session_id: String::new(),
-            worker_epoch: AtomicU64::new(0),
+            heartbeat_task: Mutex::new(None),
             heartbeat_interval_ms: heartbeat_interval_ms.unwrap_or(DEFAULT_HEARTBEAT_INTERVAL_MS),
             heartbeat_jitter_fraction: heartbeat_jitter_fraction
                 .unwrap_or(DEFAULT_HEARTBEAT_JITTER_FRACTION),
@@ -335,92 +355,91 @@ impl CcrClient {
     }
 
     pub fn get_worker_epoch(&self) -> u64 {
-        self.worker_epoch.load(Ordering::SeqCst)
+        self.shared.worker_epoch.load(Ordering::SeqCst)
     }
 
-    /// Run the initialization protocol: epoch acquisition, worker PUT, and
-    /// pending internal-event recovery. Mirrors `CCRClient.initialize`.
-    pub async fn initialize(&mut self, session_id: &str, session_url: &str) -> Result<()> {
-        self.session_id = session_id.to_string();
-        let mut headers = (self.shared.auth)();
-        if headers.is_empty() {
+    /// Start only after the parent bridge has registered an epoch. The
+    /// original CCRClient.initialize performs a synchronous worker PUT and
+    /// starts heartbeats only after the server accepts the epoch.
+    pub async fn initialize(
+        &mut self,
+        session_id: &str,
+        epoch: Option<u64>,
+    ) -> Result<Option<Value>> {
+        if (self.shared.auth)().is_empty() {
             bail!("{}", CcrInitFailReason::NoAuthHeaders);
         }
-        let epoch = match std::env::var("ATLAS_WORKER_EPOCH")
-            .ok()
-            .and_then(|raw| raw.parse::<u64>().ok())
-        {
-            Some(epoch) => epoch,
-            None => {
-                let auth_header = headers
-                    .iter()
-                    .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
-                    .map(|(_, value)| value.clone())
-                    .ok_or_else(|| anyhow!("{}", CcrInitFailReason::NoAuthHeaders))?;
-                let token = auth_header
-                    .strip_prefix("Bearer ")
-                    .unwrap_or(&auth_header)
-                    .to_string();
-                let base = session_url.trim_end_matches('/');
-                let epoch = crate::work_secret::register_worker(base, &token)
-                    .await
-                    .map_err(|error| {
-                        anyhow!("{}: {error}", CcrInitFailReason::WorkerRegisterFailed)
-                    })?;
-                epoch
-            }
+        let epoch = match epoch {
+            Some(value) => value,
+            None => std::env::var("ATLAS_WORKER_EPOCH")
+                .ok()
+                .and_then(|raw| raw.parse::<u64>().ok())
+                .ok_or(CcrInitFailReason::MissingEpoch)
+                .map_err(|reason| anyhow!("{reason}"))?,
         };
-        self.worker_epoch.store(epoch, Ordering::SeqCst);
-
-        // Report idle worker state with cleared metadata.
-        self.worker_state.enqueue(json!({
-            "worker_status": "idle",
-            "external_metadata": {
-                "pending_action": null,
-                "task_summary": null,
-            }
-        }));
-        // Recover pending internal events left by prior workers.
-        let pending = self
-            .read_internal_events(MAX_INTERNAL_EVENTS_PER_PAGE, None)
-            .await?;
-        for event in &pending {
-            if let Some(event_id) = event.get("event_id").and_then(Value::as_str) {
-                self.report_delivery(event_id, "received");
-            }
+        if self.shared.closed.load(Ordering::SeqCst) {
+            bail!("CCR client closed");
         }
-        Ok(())
+        self.shared.worker_epoch.store(epoch, Ordering::SeqCst);
+        // The GET may finish before the PUT, but its state is only accepted
+        // when the subsequent PUT has succeeded (source: restoredPromise).
+        let (restore, registered) = tokio::join!(
+            self.shared.request_get("/worker"),
+            self.shared.request_put(
+                "/worker",
+                &json!({
+                    "worker_status": "idle",
+                    "worker_epoch": epoch,
+                    "external_metadata": {
+                        "pending_action": null,
+                        "task_summary": null
+                    }
+                }),
+            ),
+        );
+        registered.map_err(|error| {
+            anyhow!("{}: {error}", CcrInitFailReason::WorkerRegisterFailed)
+        })?;
+        self.session_id = session_id.to_owned();
+        self.start_heartbeat();
+        Ok(restore.ok().and_then(|value| {
+            value.pointer("/worker/external_metadata").cloned()
+        }))
     }
 
-    /// Start the periodic heartbeat task (jittered interval).
-    pub fn start_heartbeat(self: &Arc<Self>) {
-        let client = self.clone();
-        tokio::spawn(async move {
+    /// Heartbeats are owned by this client and are cancelled on close.
+    /// A second start replaces the prior timer instead of leaking a task.
+    pub fn start_heartbeat(&self) {
+        let mut task = self.heartbeat_task.lock().expect("CCR heartbeat task");
+        if let Some(previous) = task.take() {
+            previous.abort();
+        }
+        if self.shared.closed.load(Ordering::SeqCst) {
+            return;
+        }
+        let shared = Arc::clone(&self.shared);
+        let session_id = self.session_id.clone();
+        let interval_ms = self.heartbeat_interval_ms;
+        let jitter_fraction = self.heartbeat_jitter_fraction;
+        *task = Some(tokio::spawn(async move {
             loop {
-                let jitter = client.heartbeat_interval_ms as f64
-                    * client.heartbeat_jitter_fraction
+                let jitter = interval_ms as f64
+                    * jitter_fraction
                     * (2.0 * rand_unit() - 1.0);
-                let interval = client.heartbeat_interval_ms as f64 + jitter;
-                tokio::time::sleep(Duration::from_millis(interval.max(1.0) as u64)).await;
-                if client.shared.closed.load(Ordering::SeqCst) {
+                let duration = (interval_ms as f64 + jitter).max(1.0) as u64;
+                tokio::time::sleep(Duration::from_millis(duration)).await;
+                if shared.closed.load(Ordering::SeqCst) {
                     return;
                 }
-                let _ = client.send_heartbeat().await;
+                let _ = shared.request_post(
+                    "/worker/heartbeat",
+                    &json!({
+                        "session_id": session_id,
+                        "worker_epoch": shared.worker_epoch.load(Ordering::SeqCst)
+                    }),
+                ).await;
             }
-        });
-    }
-
-    async fn send_heartbeat(&self) -> Result<()> {
-        self.shared
-            .request_post(
-                "/worker/heartbeat",
-                &json!({
-                    "session_id": self.session_id,
-                    "worker_epoch": self.worker_epoch.load(Ordering::SeqCst),
-                }),
-            )
-            .await?;
-        Ok(())
+        }));
     }
 
     /// Write one stdout message as a client event. stream_event messages are
@@ -632,6 +651,9 @@ impl CcrClient {
     /// events are dropped — call `flush` first if delivery is required.
     pub fn close(&self) {
         self.shared.closed.store(true, Ordering::SeqCst);
+        if let Some(task) = self.heartbeat_task.lock().expect("CCR heartbeat task").take() {
+            task.abort();
+        }
         self.stream_event_buffer
             .lock()
             .expect("stream buffer")
@@ -905,6 +927,73 @@ mod tests {
             .to_string()
             .contains("recovery failed after 1 attempts"));
         client.close();
+    }
+
+    #[tokio::test]
+    async fn init_rejects_missing_credentials_without_background_heartbeat() {
+        let transport = SseTransport::new(
+            "http://127.0.0.1:9/session/s1/events/stream".to_owned(),
+            vec![],
+            None,
+            Arc::new(Vec::new),
+        );
+        let mut client = CcrClient::new(
+            &transport,
+            "http://127.0.0.1:9/session/s1",
+            Arc::new(Vec::new),
+            None,
+            Some(1),
+            Some(0.0),
+        );
+        let error = client.initialize("s1", Some(9)).await.unwrap_err();
+        assert!(error.to_string().contains("no_auth_headers"));
+        assert!(client.heartbeat_task.lock().unwrap().is_none());
+        client.close();
+    }
+
+    #[tokio::test]
+    async fn rejected_worker_put_does_not_start_heartbeat() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0_u8; 2048];
+                let length = socket.read(&mut request).await.unwrap();
+                let message = String::from_utf8_lossy(&request[..length]);
+                let status = if message.starts_with("PUT ") {
+                    "409 Conflict"
+                } else {
+                    "200 OK"
+                };
+                let body = if status == "200 OK" { "{}" } else { "{}" };
+                let response = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let transport = SseTransport::new(
+            format!("http://{addr}/session/s1/events/stream"),
+            vec![],
+            None,
+            Arc::new(Vec::new),
+        );
+        let mut client = CcrClient::new(
+            &transport,
+            &format!("http://{addr}/session/s1"),
+            Arc::new(|| vec![("Authorization".into(), "Bearer test".into())]),
+            None,
+            Some(10),
+            Some(0.0),
+        );
+        let result = client.initialize("s1", Some(12)).await;
+        assert!(result.is_err(), "worker epoch conflict must fail initialization");
+        assert!(client.heartbeat_task.lock().unwrap().is_none());
+        client.close();
+        tokio::time::timeout(Duration::from_secs(3), server).await.unwrap().unwrap();
     }
 
     #[test]
