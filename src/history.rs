@@ -681,6 +681,74 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
         Ok(format!("Removed newly created {} (if present)", record.path))
     }
 }
+/// Resolve saved file edits for a user-message suffix in reverse turn order.
+/// Each checkpoint retains its verified pre-edit bytes; the source rewind
+/// replays the tracked-files state across all messages after the target.
+pub fn records_for_message_sequence(
+    root: &Path,
+    session_id: &str,
+    message_ids: &[Uuid],
+) -> Result<Vec<Record>> {
+    use std::collections::HashMap;
+    if message_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let folder = storage(root, Some(session_id))?;
+    let order = message_ids.iter().enumerate()
+        .map(|(position, id)| (*id, position))
+        .collect::<HashMap<Uuid, usize>>();
+    let mut found = Vec::new();
+    for item in fs::read_dir(&folder)? {
+        let item = item?;
+        let path = item.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(&path)?;
+        if !metadata.file_type().is_file() {
+            bail!("Rewind checkpoint must be a regular file");
+        }
+        let id = path.file_stem()
+            .and_then(|stem| stem.to_str())
+            .context("Rewind checkpoint filename is not valid UTF-8")?;
+        let record = load(root, Some(session_id), id)?;
+        if let Some(position) = record.message_id.and_then(|id| order.get(&id).copied()) {
+            found.push((position, metadata.modified()?, record));
+        }
+    }
+    // Descending turn order, newest checkpoint first; sorting by modification
+    // time within a turn avoids overwriting newer state from a parallel edit.
+    found.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1))
+        .then_with(|| b.2.id.cmp(&a.2.id)));
+    Ok(found.into_iter().map(|(_, _, record)| record).collect())
+}
+
+/// Simulate the entire multi-file rewind before the first disk mutation.
+/// Conflicts, corrupt binary backups, and out-of-order writes all fail early;
+/// file edits by another process must never be silently overwritten.
+pub fn preflight_message_rewind(records: &[(Record, PathBuf)]) -> Result<()> {
+    use std::collections::HashMap;
+    let mut simulated = HashMap::<PathBuf, (Option<Vec<u8>>, Option<u32>)>::new();
+    for (record, path) in records {
+        let (current, mode) = if let Some(previous) = simulated.get(path) {
+            previous.clone()
+        } else {
+            (snapshot(path)?, snapshot_mode(path)?)
+        };
+        if let Some(content) = current.as_ref() {
+            if fingerprint(content) != record.updated_hash {
+                bail!("File changed after checkpoint; refusing message rewind: {}", path.display());
+            }
+            if record.updated_mode.is_some() && mode != record.updated_mode {
+                bail!("File permissions changed after checkpoint: {}", path.display());
+            }
+        }
+        let backup = previous_bytes(record)?;
+        simulated.insert(path.clone(), (backup, record.previous_mode));
+    }
+    Ok(())
+}
+
 pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
     let folder = storage(root, session_id)?;
     // fileHistory.ts keeps snapshots in insertion order. UUIDv4 lexical
