@@ -81,6 +81,23 @@ struct CombinedLog {
     capped: bool,
 }
 
+/// Propagate Windows descendant-termination failures to the task record.
+/// A killed shell with surviving children must never be reported as stopped.
+#[cfg(windows)]
+async fn terminate_windows_task_tree(pid: Option<u32>, task: Option<&Arc<Running>>) -> bool {
+    match crate::shell_runtime::terminate_windows_process_tree(pid).await {
+        Ok(()) => true,
+        Err(error) => {
+            let warning = format!("Windows background process-tree termination failed: {error:#}");
+            eprintln!("{warning}");
+            if let Some(task) = task {
+                *task.persistence_warning.lock().unwrap() = Some(warning);
+            }
+            false
+        }
+    }
+}
+
 /// The original diskOutput.ts stores task streams under a per-project,
 /// per-session temporary directory, outside the source checkout. Keeping
 /// stdout/stderr in .atlas/background risks indexing and committing them.
@@ -489,6 +506,9 @@ impl BackgroundTasks {
             if let Some(pid) = child.id() {
                 let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
             }
+            #[cfg(windows)]
+            let tree_error = crate::shell_runtime::terminate_windows_process_tree(child.id())
+                .await.err();
             let _ = child.kill().await;
             let _ = child.wait().await;
             drop(stdout);
@@ -497,6 +517,10 @@ impl BackgroundTasks {
             let _ = fs::remove_file(&stdout_path);
             let _ = fs::remove_file(&stderr_path);
             let _ = fs::remove_file(&output_path);
+            #[cfg(windows)]
+            if let Some(tree_error) = tree_error {
+                bail!("Persist background task registration failed: {error:#}; Windows process-tree termination failed: {tree_error:#}");
+            }
             return Err(error).context("Persist background task registration");
         }
         let (stop, mut stopped) = oneshot::channel();
@@ -533,7 +557,16 @@ impl BackgroundTasks {
                         // Kill the whole process group, not only the shell.
                         let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                     }
+                    #[cfg(windows)]
+                    let tree_stopped = terminate_windows_task_tree(child.id(), Some(&running)).await;
                     let _ = child.kill().await;
+                    #[cfg(windows)]
+                    if !tree_stopped {
+                        ("failed", None, false)
+                    } else {
+                        ("killed", None, false)
+                    }
+                    #[cfg(not(windows))]
                     ("killed", None, false)
                 },
                 _ = &mut deadline => {
@@ -541,6 +574,8 @@ impl BackgroundTasks {
                     if let Some(pid) = child.id() {
                         let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                     }
+                    #[cfg(windows)]
+                    let _ = terminate_windows_task_tree(child.id(), Some(&running)).await;
                     let _ = child.kill().await;
                     ("failed", None, true)
                 }
@@ -603,6 +638,10 @@ impl BackgroundTasks {
                 #[cfg(unix)]
                 if let Some(pid) = process_id {
                     let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+                }
+                #[cfg(windows)]
+                if !terminate_windows_task_tree(process_id, Some(&running)).await {
+                    state = "failed";
                 }
                 stdout_task.abort();
                 stderr_task.abort();
