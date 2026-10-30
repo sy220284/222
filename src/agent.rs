@@ -2045,6 +2045,19 @@ impl Agent {
         &self.enabled_plugins
     }
 
+    /// Enforce SDK-provided JSON Schema at the provider protocol boundary.
+    pub fn set_sdk_response_schema(&mut self, schema: Option<serde_json::Value>) -> Result<()> {
+        if let Some(value) = &schema {
+            if !value.is_object() {
+                bail!("initialize jsonSchema must be a JSON Schema object")
+            }
+            if value.get("type").is_none() && value.get("$ref").is_none() {
+                bail!("initialize jsonSchema requires type or $ref")
+            }
+        }
+        self.provider.set_response_schema(schema)
+    }
+
     pub fn set_structured_output(&mut self, enabled: bool) {
         self.structured_output = enabled;
     }
@@ -3885,6 +3898,50 @@ impl Agent {
         Ok(())
     }
 
+    /// Execute the original advisor server tool using a provider-neutral second model.
+    /// The pending tool invocation is excluded so provider protocols never receive
+    /// unmatched tool-call IDs.
+    async fn request_advisor(&mut self, profile: &ProviderProfile, system: &str) -> Result<String> {
+        let pending = self.session.messages.iter().rposition(|message| {
+            message.role == "assistant"
+                && message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty())
+        });
+        let conversation = pending
+            .map(|index| &self.session.messages[..index])
+            .unwrap_or(self.session.messages.as_slice());
+        let mut messages = conversation.to_vec();
+        messages.push(Message::text(
+            "user",
+            "Review the full conversation and identify risks, mistakes and actionable next steps. Do not execute tools. Focus on the user's actual request.",
+        ));
+        let request = ModelRequest {
+            model: profile.model.clone(),
+            system: system.to_owned(),
+            messages,
+            tools: Vec::new(),
+        };
+        let provider = provider::create(profile)?;
+        let started = Instant::now();
+        let result = provider.complete(&request).await;
+        self.session.cost.add_api_duration(started.elapsed());
+        if let Ok(response) = &result {
+            if let Some(usage) = response.usage {
+                self.session.usage.accumulate(usage);
+                self.session.cost.record(&profile.id, &profile.model, usage, &self.model_prices);
+            }
+        }
+        self.session.save(&self.root)?;
+        let response = result?;
+        if response.message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
+            bail!("Advisor provider returned tool calls although no tools were offered")
+        }
+        let advice = response.message.visible_text();
+        if advice.trim().is_empty() {
+            bail!("Advisor provider returned an empty response")
+        }
+        Ok(advice)
+    }
+
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
         self.ask_with_blocks(prompt, None).await
     }
@@ -4152,9 +4209,26 @@ impl Agent {
             // rounds. Attach each completed hook exactly once; emit its
             // outcome to the SDK/UI, without replaying the shell command.
             self.pump_async_hook_events().await?;
+            // Resolve the configured second model before exposing advisor;
+            // stale provider IDs remain inactive rather than misreporting success.
+            let advisor_profile = if self.child_depth == 0 {
+                let settings = crate::config::Config::load()?;
+                settings.advisor_model.as_ref().and_then(|id| {
+                    settings.providers.iter().find(|p| &p.id == id).cloned()
+                })
+            } else {
+                None
+            };
             let mut available_tools = tools::definitions_with_checkpointing(
                 crate::history::enabled(self.interactive, self.file_checkpointing_enabled),
             );
+            if advisor_profile.is_some() {
+                available_tools.push(json!({"type":"function","function":{
+                    "name":"advisor",
+                    "description":"Ask the configured review model for a second opinion. The full conversation is supplied automatically; this tool takes no arguments.",
+                    "parameters":{"type":"object","properties":{},"additionalProperties":false}
+                }}));
+            }
             if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
                 available_tools.push(tools::powershell_definition());
             }
@@ -4603,6 +4677,23 @@ impl Agent {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
                 } else if let Some(reason) = hook_ask_rejection {
                     format!("ERROR: {reason}")
+                } else if call.function.name == "advisor" {
+                    match advisor_profile.as_ref() {
+                        Some(profile) => {
+                            let args = serde_json::from_str::<serde_json::Value>(
+                                &call.function.arguments,
+                            );
+                            if !matches!(args, Ok(serde_json::Value::Object(ref obj)) if obj.is_empty()) {
+                                "ERROR: advisor takes no arguments".to_owned()
+                            } else {
+                                match self.request_advisor(profile, &system).await {
+                                    Ok(advice) => advice,
+                                    Err(error) => format!("ERROR: Advisor request failed: {error:#}"),
+                                }
+                            }
+                        }
+                        None => "ERROR: Advisor is not enabled for this session".to_owned(),
+                    }
                 } else if call.function.name == "ToolSearch" {
                     match serde_json::from_str::<serde_json::Value>(&call.function.arguments)
                         .map_err(anyhow::Error::from)
