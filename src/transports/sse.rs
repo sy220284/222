@@ -150,14 +150,17 @@ pub fn parse_client_event(data: &str) -> Option<StreamClientEvent> {
 /// Convert an SSE URL to its HTTP POST endpoint: same base, `/stream` suffix
 /// removed (source `convertSSEUrlToPostUrl`).
 pub fn convert_sse_url_to_post_url(sse_url: &str) -> Result<String> {
-    let lower = sse_url.to_ascii_lowercase();
-    if !(lower.starts_with("https://") || lower.starts_with("http://")) {
-        bail!("SSE POST URL requires an http(s) endpoint: {sse_url}");
+    let mut url = reqwest::Url::parse(sse_url)?;
+    if !matches!(url.scheme(), "http" | "https") {
+        bail!("SSE POST URL requires an http(s) endpoint");
     }
-    if let Some(stripped) = sse_url.strip_suffix("/stream") {
-        return Ok(stripped.to_string());
+    // The original URL.pathname edit preserves the query string, including
+    // credentials. A raw strip_suffix("/stream") fails whenever ?token=...
+    if let Some(path) = url.path().strip_suffix("/stream") {
+        let target = path.to_owned();
+        url.set_path(&target);
     }
-    Ok(sse_url.to_string())
+    Ok(url.to_string())
 }
 
 type AuthHeaders = Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>;
@@ -493,6 +496,22 @@ mod tests {
             "http://127.0.0.1:9911/events"
         );
         assert!(convert_sse_url_to_post_url("ws://127.0.0.1:9911/events").is_err());
+    }
+
+    #[test]
+    fn post_url_preserves_query_credentials_and_ipv6() {
+        assert_eq!(
+            convert_sse_url_to_post_url(
+                "https://example.com/sessions/s1/worker/events/stream?token=a%2Fb&mode=1"
+            ).unwrap(),
+            "https://example.com/sessions/s1/worker/events?token=a%2Fb&mode=1"
+        );
+        assert_eq!(
+            convert_sse_url_to_post_url(
+                "http://[::1]:9000/s1/worker/events/stream?nonce=7"
+            ).unwrap(),
+            "http://[::1]:9000/s1/worker/events?nonce=7"
+        );
     }
 
     #[test]
