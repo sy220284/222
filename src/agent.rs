@@ -3902,10 +3902,19 @@ impl Agent {
             }));
             self.session.messages.push(response.message);
             self.session.save(&self.root)?;
+            // The original streaming loop treats max_tokens/context-window
+            // exhaustion as an incomplete assistant turn. A partially emitted
+            // tool call must never execute merely because its JSON parses.
+            // Keep the partial message and usage for recovery, but stop before
+            // dispatching any tools or invoking Stop hooks.
+            if matches!(finish.as_deref(), Some(
+                "length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded"
+            )) {
+                self.session.cost.add_wall_duration(ask_started.elapsed());
+                self.session.save(&self.root)?;
+                bail!("Model reached its output limit before completion; session saved")
+            }
             if calls.is_empty() {
-                if matches!(finish.as_deref(), Some("length" | "MAX_TOKENS")) {
-                    bail!("Model reached its output limit before completion; session saved")
-                }
                 if self.absorb_team_messages()? {
                     continue;
                 }
