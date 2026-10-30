@@ -1346,8 +1346,8 @@
 | `src/tools/testing/TestingPermissionTool.tsx` | 74 | 7312 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/utils.ts` | 41 | 1105 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/types/command.ts` | 217 | 7736 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/generated/events_mono/claude_code/v1/claude_code_internal_event.ts` | 866 | 30728 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/generated/events_mono/common/v1/auth.ts` | 101 | 2822 | 重写：保持通用行为 | `src/generated_ports/p_90bb0f65ccd4f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/types/generated/events_mono/claude_code/v1/claude_code_internal_event.ts` | 866 | 30728 | 排除：原厂隐式遥测事件与身份元数据 | — | 按用户要求删除；仅用于原厂 Statsig 内部行为及环境遥测的事件类型；不再跟进 |
+| `src/types/generated/events_mono/common/v1/auth.ts` | 101 | 2822 | 排除：原厂隐式遥测事件与身份元数据 | — | 按用户要求删除；仅为原厂事件遥测服务提供账户组织标签的类型，已无合法消费方；不再跟进 |
 | `src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts` | 224 | 7591 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；原厂实验遥测类型；不再跟进 |
 | `src/types/generated/google/protobuf/timestamp.ts` | 188 | 6565 | 重写：保持通用行为 | `src/generated_ports/p_5144380e07c74.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/types/hooks.ts` | 291 | 9138 | 重写：保持通用行为 | 待定 | 未迁移 |

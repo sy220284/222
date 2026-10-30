@@ -9,7 +9,8 @@
     "原始1,906条路径、源码哈希及原始状态冻结快照不改；新增移除以本文件为授权依据",
     "模型 API 可在本地测试中通过回环 Mock 服务验证，但产品不预置或安装本地模型运行时",
     "第二次源码复核识别出分散的官方云端/远程子入口；全部以逐路径授权并保持本地 SDK、普通 MCP、Git、任务及会话可用。",
-    "第三轮核查进一步剔除原厂订阅额度、营销、托管MCP和实验遥测，保留通用模型API、本地计费、SDK与MCP。"
+    "第三轮核查进一步剔除原厂订阅额度、营销、托管MCP和实验遥测，保留通用模型API、本地计费、SDK与MCP。",
+    "补充事件生成类型审查：原厂环境遥测事件和仅供事件使用的账号标签均删除。"
   ],
   "items": [
     {
@@ -643,6 +644,14 @@
     {
       "path": "src/tools/RemoteTriggerTool/UI.tsx",
       "reason": "云端任务 Trigger"
+    },
+    {
+      "path": "src/types/generated/events_mono/claude_code/v1/claude_code_internal_event.ts",
+      "reason": "仅用于原厂 Statsig 内部行为及环境遥测的事件类型"
+    },
+    {
+      "path": "src/types/generated/events_mono/common/v1/auth.ts",
+      "reason": "仅为原厂事件遥测服务提供账户组织标签的类型，已无合法消费方"
     },
     {
       "path": "src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts",

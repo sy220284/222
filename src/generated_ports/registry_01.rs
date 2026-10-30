@@ -100,9 +100,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "TOOL_PRESETS" => Some(super::p_522c7b52c49b4::TOOL_PRESETS()),
             _ => None,
         },
-        "src/types/generated/events_mono/common/v1/auth.ts" => match export {
-            _ => None,
-        },
         "src/types/generated/google/protobuf/timestamp.ts" => match export {
             _ => None,
         },
@@ -366,10 +363,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             vec!["BUILTIN_MARKETPLACE_NAME"],
         ),
         ("src/tools.ts", vec!["TOOL_PRESETS"]),
-        (
-            "src/types/generated/events_mono/common/v1/auth.ts",
-            vec!["PublicApiAuth"],
-        ),
         (
             "src/types/generated/google/protobuf/timestamp.ts",
             vec!["Timestamp"],
