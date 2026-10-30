@@ -353,7 +353,7 @@
 | `src/components/ExitFlow.tsx` | 48 | 4364 | 重写：终端 UI／交互 | `src/generated_ports/p_96e0a274d18c4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ExportDialog.tsx` | 128 | 19333 | 重写：终端 UI／交互 | `src/generated_ports/p_26e43c0a828cf.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/FallbackToolUseErrorMessage.tsx` | 116 | 12623 | 重写：终端 UI／交互 | `src/generated_ports/p_5b716827434fa.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/FallbackToolUseRejectedMessage.tsx` | 16 | 1754 | 重写：终端 UI／交互 | `src/generated_ports/p_0660c482ad072.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/FallbackToolUseRejectedMessage.tsx` | 16 | 1754 | 重写：终端 UI／交互 | `src/generated_ports/p_0660c482ad072.rs`| 部分实现：回退拒绝视图结构（MessageResponse 高度 1 内嵌 InterruptedByUser），附 1 测试|
 | `src/components/FastIcon.tsx` | 46 | 4627 | 重写：终端 UI／交互 | `src/generated_ports/p_c6fbf2ff82c98.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Feedback.tsx` | 592 | 87696 | 重写：终端 UI／交互 | `src/generated_ports/p_58fbc53b1f78a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/FeedbackSurvey/FeedbackSurvey.tsx` | 174 | 19393 | 重写：终端 UI／交互 | `src/generated_ports/p_cacc692b263f9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -411,7 +411,7 @@
 | `src/components/ManagedSettingsSecurityDialog/utils.ts` | 145 | 3979 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/Markdown.tsx` | 236 | 28160 | 重写：终端 UI／交互 | `src/generated_ports/p_67d9d2b82e9b7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/MarkdownTable.tsx` | 322 | 47567 | 重写：终端 UI／交互 | `src/generated_ports/p_1f8d93c1c6b27.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/MemoryUsageIndicator.tsx` | 37 | 4377 | 重写：终端 UI／交互 | `src/generated_ports/p_4501df2866732.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/MemoryUsageIndicator.tsx` | 37 | 4377 | 重写：终端 UI／交互 | `src/generated_ports/p_4501df2866732.rs`| 部分实现：内存指示门（外部构建/normal 状态 null、warning/warning 色、critical/error 色、堆大小格式化），附 2 测试；10s 轮询钩子属组件域（外部构建从不建立）|
 | `src/components/Message.tsx` | 627 | 79113 | 重写：终端 UI／交互 | `src/generated_ports/p_9f44ff177a927.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/MessageModel.tsx` | 43 | 4110 | 重写：终端 UI／交互 | `src/generated_ports/p_0ae9a8bbc4878.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/MessageResponse.tsx` | 78 | 6933 | 重写：终端 UI／交互 | `src/generated_ports/p_df8523c974296.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -428,9 +428,9 @@
 | `src/components/PackageManagerAutoUpdater.tsx` | 104 | 13907 | 重写：终端 UI／交互 | `src/generated_ports/p_3869eb9c14573.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Passes/Passes.tsx` | 184 | 27380 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/PrBadge.tsx` | 97 | 7703 | 重写：终端 UI／交互 | `src/generated_ports/p_6da763d87b5ad.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/PressEnterToContinue.tsx` | 15 | 1526 | 重写：终端 UI／交互 | `src/generated_ports/p_806f37fa5888a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PressEnterToContinue.tsx` | 15 | 1526 | 重写：终端 UI／交互 | `src/generated_ports/p_806f37fa5888a.rs`| 部分实现：Enter 提示视图（permission 色键与逐字文案含省略号），附 1 测试|
 | `src/components/PromptInput/HistorySearchInput.tsx` | 51 | 5005 | 重写：终端 UI／交互 | `src/generated_ports/p_3ed42dc8aa879.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/PromptInput/IssueFlagBanner.tsx` | 12 | 1914 | 重写：终端 UI／交互 | `src/generated_ports/p_5ca89f5b33dd6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/PromptInput/IssueFlagBanner.tsx` | 12 | 1914 | 重写：终端 UI／交互 | `src/generated_ports/p_5ca89f5b33dd6.rs`| 部分实现：摩擦检测横幅门（ant 构建且检测到摩擦才显示、外部构建 null）、registry 兼容导出，附 2 测试；FLAG_ICON 视图属组件域|
 | `src/components/PromptInput/Notifications.tsx` | 332 | 48104 | 重写：终端 UI／交互 | `src/generated_ports/p_4375034f382f7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/PromptInput/PromptInput.tsx` | 2339 | 355032 | 重写：终端 UI／交互 | `src/generated_ports/p_ee2a843014c61.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/PromptInput/PromptInputFooter.tsx` | 191 | 33176 | 重写：终端 UI／交互 | `src/generated_ports/p_c39f8f63b92a4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -468,7 +468,7 @@
 | `src/components/SkillImprovementSurvey.tsx` | 152 | 15172 | 重写：终端 UI／交互 | `src/generated_ports/p_d7e7ec5a41e23.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/FlashingChar.tsx` | 61 | 6310 | 重写：终端 UI／交互 | `src/generated_ports/p_48b72004b31de.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/GlimmerMessage.tsx` | 328 | 26955 | 重写：终端 UI／交互 | `src/generated_ports/p_50bf5166734f7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/Spinner/ShimmerChar.tsx` | 36 | 3357 | 重写：终端 UI／交互 | `src/generated_ports/p_ec706ec57f4b9.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Spinner/ShimmerChar.tsx` | 36 | 3357 | 重写：终端 UI／交互 | `src/generated_ports/p_ec706ec57f4b9.rs`| 部分实现：微光颜色决策（微光位与相邻位取 shimmer 色、其余取消息色），附 1 测试；文本渲染属组件域|
 | `src/components/Spinner/SpinnerAnimationRow.tsx` | 265 | 42767 | 重写：终端 UI／交互 | `src/generated_ports/p_210fb85258179.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/SpinnerGlyph.tsx` | 80 | 10291 | 重写：终端 UI／交互 | `src/generated_ports/p_3d04352c988c3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/TeammateSpinnerLine.tsx` | 233 | 38859 | 重写：终端 UI／交互 | `src/generated_ports/p_09647f4245ece.rs` | 部分实现：已完成独立队友状态行 Rust 动态渲染（状态、选择、工具用量、消息预览及宽度），通过源码 inspect/view 导出和状态树嵌套消费；已新增真实数据回归，终端生产入口、键盘事件及完整原版交互仍需验收 |

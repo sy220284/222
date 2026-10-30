@@ -1,5 +1,5 @@
 {
-  "count": 209,
+  "count": 198,
   "disclaimer": "仅是自动生成空壳的静态检测，不证明手写代码功能完整。",
   "items": [
     {
@@ -312,14 +312,6 @@
       "rust_lines": 41,
       "source": "src/components/EffortCallout.tsx",
       "source_lines": 265,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 6,
-      "rust": "src/generated_ports/p_45e0c7d37ad4a.rs",
-      "rust_lines": 28,
-      "source": "src/commands/btw/btw.tsx",
-      "source_lines": 243,
       "view_export_unreachable": true
     },
     {
@@ -892,14 +884,6 @@
     },
     {
       "null_expression_count": 2,
-      "rust": "src/generated_ports/p_f500b0cca6994.rs",
-      "rust_lines": 21,
-      "source": "src/commands/rate-limit-options/rate-limit-options.tsx",
-      "source_lines": 210,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
       "rust": "src/generated_ports/p_ce20cba9c18c8.rs",
       "rust_lines": 17,
       "source": "src/components/HighlightedCode/Fallback.tsx",
@@ -1276,14 +1260,6 @@
     },
     {
       "null_expression_count": 0,
-      "rust": "src/generated_ports/p_6c7ca7c1ed900.rs",
-      "rust_lines": 20,
-      "source": "src/commands/plugin/pluginDetailsHelpers.tsx",
-      "source_lines": 117,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 0,
       "rust": "src/generated_ports/p_b53eb6713e37d.rs",
       "rust_lines": 45,
       "source": "src/components/agents/new-agent-creation/wizard-steps/MemoryStep.tsx",
@@ -1296,14 +1272,6 @@
       "rust_lines": 8,
       "source": "src/components/DevChannelsDialog.tsx",
       "source_lines": 105,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 0,
-      "rust": "src/generated_ports/p_458eb28ef635b.rs",
-      "rust_lines": 18,
-      "source": "src/commands/plugin/ValidatePlugin.tsx",
-      "source_lines": 98,
       "view_export_unreachable": true
     },
     {
@@ -1395,14 +1363,6 @@
       "view_export_unreachable": false
     },
     {
-      "null_expression_count": 12,
-      "rust": "src/generated_ports/p_c7d9aa37cc1b1.rs",
-      "rust_lines": 61,
-      "source": "src/keybindings/resolver.ts",
-      "source_lines": 245,
-      "view_export_unreachable": false
-    },
-    {
       "null_expression_count": 7,
       "rust": "src/generated_ports/p_8882c41a85e4f.rs",
       "rust_lines": 87,
@@ -1419,27 +1379,11 @@
       "view_export_unreachable": false
     },
     {
-      "null_expression_count": 7,
-      "rust": "src/generated_ports/p_d37e245605bfe.rs",
-      "rust_lines": 50,
-      "source": "src/utils/suggestions/directoryCompletion.ts",
-      "source_lines": 264,
-      "view_export_unreachable": false
-    },
-    {
       "null_expression_count": 6,
       "rust": "src/generated_ports/p_e0abda6bc6c38.rs",
       "rust_lines": 28,
       "source": "src/utils/proxy.ts",
       "source_lines": 427,
-      "view_export_unreachable": false
-    },
-    {
-      "null_expression_count": 6,
-      "rust": "src/generated_ports/p_7ea337b79dc53.rs",
-      "rust_lines": 58,
-      "source": "src/components/messages/teamMemCollapsed.tsx",
-      "source_lines": 140,
       "view_export_unreachable": false
     },
     {
@@ -1476,14 +1420,6 @@
     },
     {
       "null_expression_count": 4,
-      "rust": "src/generated_ports/p_faf3dbb033a1d.rs",
-      "rust_lines": 34,
-      "source": "src/utils/tokens.ts",
-      "source_lines": 262,
-      "view_export_unreachable": false
-    },
-    {
-      "null_expression_count": 4,
       "rust": "src/generated_ports/p_9ae508cd79a96.rs",
       "rust_lines": 44,
       "source": "src/constants/product.ts",
@@ -1512,14 +1448,6 @@
       "rust_lines": 44,
       "source": "src/components/ScrollKeybindingHandler.tsx",
       "source_lines": 1012,
-      "view_export_unreachable": false
-    },
-    {
-      "null_expression_count": 3,
-      "rust": "src/generated_ports/p_f90f0871a04d8.rs",
-      "rust_lines": 25,
-      "source": "src/utils/advisor.ts",
-      "source_lines": 146,
       "view_export_unreachable": false
     },
     {
@@ -1596,26 +1524,10 @@
     },
     {
       "null_expression_count": 2,
-      "rust": "src/generated_ports/p_2e571c4a5ca80.rs",
-      "rust_lines": 24,
-      "source": "src/utils/frontmatterParser.ts",
-      "source_lines": 371,
-      "view_export_unreachable": false
-    },
-    {
-      "null_expression_count": 2,
       "rust": "src/generated_ports/p_a1327fd797f0d.rs",
       "rust_lines": 34,
       "source": "src/utils/swarm/backends/types.ts",
       "source_lines": 312,
-      "view_export_unreachable": false
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_8478b958d159a.rs",
-      "rust_lines": 16,
-      "source": "src/utils/streamlinedTransform.ts",
-      "source_lines": 202,
       "view_export_unreachable": false
     },
     {
@@ -1676,7 +1588,7 @@
     }
   ],
   "schema": "port-stubs/v1",
-  "total_null_expressions": 971,
-  "unreachable_views": 172,
-  "with_null": 181
+  "total_null_expressions": 927,
+  "unreachable_views": 168,
+  "with_null": 172
 }
