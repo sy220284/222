@@ -297,6 +297,7 @@ pub async fn complete_with_tool_blocks(
     let mut body = json!({"model":request.model,
         "messages":crate::provider::openai_messages(request)?,
         "stream":true,"stream_options":{"include_usage":true}});
+    tuning.validate_for_model(&request.model)?;
     tuning.apply_chat_completions(&mut body);
     // Keep structured-output semantics identical for streaming and ordinary
     // Chat Completions. Omitting this silently drops the SDK output contract.
