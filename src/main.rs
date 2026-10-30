@@ -102,12 +102,12 @@ mod protocol;
 mod provider;
 mod query_config;
 mod query_guard;
-mod remote_sdk;
 mod query_token_budget;
 mod queue_journal;
 mod queued_prompt_batch;
 mod reactive_store;
 mod release_notes;
+mod remote_sdk;
 mod runtime_contracts;
 mod sdk_queue;
 mod search;
@@ -535,7 +535,9 @@ async fn run_cli() -> Result<()> {
         let session_id = remote_session_id
             .as_deref()
             .or(resume.as_deref())
-            .ok_or_else(|| anyhow::anyhow!("Remote SDK requires --remote-session-id or --resume"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("Remote SDK requires --remote-session-id or --resume")
+            })?;
         return remote_sdk::run(
             &cli,
             remote_url,
@@ -1281,14 +1283,19 @@ async fn run_cli() -> Result<()> {
         Commands::Chat {
             resume: Some(id), ..
         } => session_control::resolve(&root, id)?,
-        Commands::Sdk { resume: Some(id), .. } => Session::load(&root, id)?,
+        Commands::Sdk {
+            resume: Some(id), ..
+        } => Session::load(&root, id)?,
         Commands::Sdk {
             resume: None,
             remote_session_id: Some(id),
             ..
         } => {
             let id = uuid::Uuid::parse_str(id).context("Remote session ID must be a UUID")?;
-            let path = root.join(".atlas").join("sessions").join(format!("{id}.json"));
+            let path = root
+                .join(".atlas")
+                .join("sessions")
+                .join(format!("{id}.json"));
             if path.exists() {
                 bail!("Session already exists; use --resume to preserve its history");
             }
