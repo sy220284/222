@@ -181,3 +181,90 @@ fn user_scope_is_separate_and_secret_urls_are_rejected() {
     let user: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
     assert_eq!(user["mcp_servers"].as_array().unwrap().len(), 1);
 }
+
+#[test]
+fn mcp_add_json_get_and_remove_follow_source_scope_resolution() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("global.json");
+    let input =
+        r#"{"type":"stdio","command":"python3","args":["-m","tools"],"env":{"TOKEN":"abc=123"}}"#;
+    let add = run(root.path(), &config, &["add-json", "worker", input]);
+    assert!(
+        add.status.success(),
+        "{}",
+        String::from_utf8_lossy(&add.stderr)
+    );
+    let info = run(root.path(), &config, &["get", "worker"]);
+    assert!(info.status.success());
+    let details: Value = serde_json::from_slice(&info.stdout).unwrap();
+    assert_eq!(details["scope"], "local");
+    assert_eq!(details["command"], "python3");
+    assert_eq!(details["env"]["TOKEN"], "abc=123");
+
+    // Source semantics: omitted --scope removes from sole matching location.
+    let remove = run(root.path(), &config, &["remove", "worker"]);
+    assert!(remove.status.success());
+    assert!(!run(root.path(), &config, &["get", "worker"])
+        .status
+        .success());
+
+    // No silent dropping of unsupported OAuth fields or persisting invalid JSON.
+    let failed = run(
+        root.path(),
+        &config,
+        &[
+            "add-json",
+            "oauth",
+            r#"{"type":"http","url":"https://example.com/mcp","oauth":{"clientId":"abc"}}"#,
+        ],
+    );
+    assert!(!failed.status.success());
+    assert!(String::from_utf8_lossy(&failed.stderr).contains("Unsupported MCP add-json field"));
+    let bad_json = run(root.path(), &config, &["add-json", "bad", "[1,2]"]);
+    assert!(!bad_json.status.success());
+    assert!(!run(root.path(), &config, &["get", "bad"]).status.success());
+}
+
+#[test]
+fn overlapping_scopes_require_explicit_remove_and_reset_revokes_project_approval() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("global.json");
+    let command = ["add-json", "server", r#"{"type":"stdio","command":"echo"}"#];
+    assert!(run(root.path(), &config, &command).status.success());
+    assert!(run(
+        root.path(),
+        &config,
+        &["add-json", "-s", "project", "server", command[2]]
+    )
+    .status
+    .success());
+    let rejected = run(root.path(), &config, &["remove", "server"]);
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("exists in multiple scopes"));
+    assert!(run(
+        root.path(),
+        &config,
+        &["get", "server", "--scope", "project"]
+    )
+    .status
+    .success());
+    assert!(run(root.path(), &config, &["reset-project-choices"])
+        .status
+        .success());
+    let active = run(root.path(), &config, &["list", "--active"]);
+    assert!(active.status.success());
+    let value: Value = serde_json::from_slice(&active.stdout).unwrap();
+    assert_eq!(value.as_array().unwrap().len(), 1);
+    assert!(
+        run(root.path(), &config, &["remove", "server", "-s", "local"])
+            .status
+            .success()
+    );
+    let active = run(root.path(), &config, &["list", "--active"]);
+    let value: Value = serde_json::from_slice(&active.stdout).unwrap();
+    assert!(value.as_array().unwrap().is_empty());
+    // Approval reset must not delete shared project server config.
+    let project: Value =
+        serde_json::from_str(&fs::read_to_string(root.path().join(".mcp.json")).unwrap()).unwrap();
+    assert_eq!(project["mcpServers"]["server"]["command"], "echo");
+}
