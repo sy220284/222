@@ -78,6 +78,9 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
             response_schema: None,
             tuning: profile.tuning.clone(),
         })),
+        "chatgpt-plan" => Ok(Box::new(ChatGptPlan {
+            tuning: profile.tuning.clone(),
+        })),
         "gemini" => Ok(Box::new(Gemini {
             client,
             base_url: profile.base_url.clone(),
@@ -170,6 +173,25 @@ pub(crate) fn openai_messages(request: &ModelRequest) -> Result<Vec<Value>> {
         messages.push(wire);
     }
     Ok(messages)
+}
+
+struct ChatGptPlan {
+    tuning: crate::config::ModelTuning,
+}
+
+#[async_trait]
+impl ModelProvider for ChatGptPlan {
+    async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
+        crate::chatgpt_plan::complete(request, &self.tuning, None).await
+    }
+
+    async fn complete_stream(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+    ) -> Result<ModelResponse> {
+        crate::chatgpt_plan::complete(request, &self.tuning, Some(deltas)).await
+    }
 }
 
 struct OpenAiCompatible {
