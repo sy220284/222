@@ -105,6 +105,13 @@ fn new_client() -> Result<Client> {
         .build()?)
 }
 
+fn inference_client() -> Result<Client> {
+    Ok(crate::tls_ca::client_builder()?
+        .connect_timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?)
+}
+
 fn scope_granted(scope: &str) -> bool {
     scope.split_whitespace().any(|item| item == PERMISSION)
 }
@@ -632,14 +639,22 @@ async fn complete_with_token(
     if let Some(effort) = &tuning.reasoning_effort {
         body["reasoning"] = json!({"effort":effort});
     }
-    let response = new_client()?.post(format!("{}/responses", base_url.trim_end_matches('/')))
-        .bearer_auth(token).json(&body).send().await?
+    let response = tokio::time::timeout(
+        Duration::from_secs(30),
+        inference_client()?.post(format!("{}/responses", base_url.trim_end_matches('/')))
+            .bearer_auth(token).json(&body).send()
+    ).await.context("OpenAI Responses headers timed out")??
         .error_for_status().context("OpenAI Responses inference rejected")?;
     let mut stream = response.bytes_stream();
     let mut buffered = Vec::new();
     let mut completed = None;
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.context("ChatGPT Responses stream interrupted")?;
+    loop {
+        let Some(chunk) = tokio::time::timeout(
+            crate::provider::stream_idle_timeout(), stream.next()
+        ).await.context("OpenAI Responses stream idle timeout")? else {
+            break;
+        };
+        let chunk = chunk.context("OpenAI Responses stream interrupted")?;
         buffered.extend_from_slice(&chunk);
         if buffered.len() > 16 * 1024 * 1024 { bail!("Responses SSE frame exceeds limit") }
         while let Some((end, delimiter)) = next_sse_frame(&buffered) {
