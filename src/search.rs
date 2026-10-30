@@ -813,6 +813,45 @@ fn matching_lines(
     Ok(matched)
 }
 
+/// The original ripgrep subprocess reads search candidates incrementally.
+/// Files-with-matches and count mode need only one line at a time; never
+/// allocate the whole file or build an index of every line for these modes.
+fn stream_search_hits(
+    path: &Path,
+    regex: &regex::Regex,
+    deadline: Instant,
+) -> Result<Option<(usize, bool)>> {
+    use std::io::BufRead;
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(error).with_context(|| format!("Opening search file {}", path.display()));
+        }
+    };
+    let mut input = std::io::BufReader::new(file);
+    let mut line = Vec::new();
+    let mut matching_lines = 0usize;
+    let mut binary = false;
+    loop {
+        check_search_deadline(Some(deadline))?;
+        line.clear();
+        if input.read_until(b'\n', &mut line)
+            .with_context(|| format!("Reading search file {}", path.display()))? == 0 {
+            break;
+        }
+        binary |= line.contains(&0);
+        let text = String::from_utf8_lossy(&line);
+        let text = text.strip_suffix('\n').unwrap_or(&text);
+        let text = text.strip_suffix('\r').unwrap_or(text);
+        if regex.is_match(text) {
+            matching_lines = matching_lines.saturating_add(1);
+        }
+    }
+    check_search_deadline(Some(deadline))?;
+    Ok(Some((matching_lines, binary)))
+}
+
 pub fn grep_files(root: &Path, base: &Path, args: &Value) -> Result<String> {
     grep_files_filtered(root, base, args, &|_| Ok(true))
 }
@@ -925,6 +964,19 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
             continue;
         }
         if !allow_file(&path)? {
+            continue;
+        }
+        if !multiline && matches!(mode, "files_with_matches" | "count") {
+            let Some((hits, binary)) = stream_search_hits(&path, &regex, deadline)? else {
+                continue;
+            };
+            if hits > 0 && !(binary && base.is_dir()) {
+                if mode == "count" {
+                    matches.push(format!("{filename}:{hits}"));
+                } else {
+                    matches.push(filename);
+                }
+            }
             continue;
         }
         // ripgrep searches valid text around malformed UTF-8 bytes. Rejecting
@@ -1104,6 +1156,29 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn grep_scans_large_files_incrementally_for_count_and_file_modes() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("large.log");
+        let mut content = "irrelevant\n".repeat(300_000);
+        content.push_str("needle\n");
+        fs::write(&path, content).unwrap();
+        for mode in ["count", "files_with_matches"] {
+            let result: Value = serde_json::from_str(
+                &grep_files(root.path(), root.path(), &json!({
+                    "pattern":"needle", "output_mode":mode
+                })).unwrap()
+            ).unwrap();
+            assert_eq!(result["numFiles"], 1);
+        }
+        fs::write(&path, b"needle\n\0other").unwrap();
+        let suppressed: Value = serde_json::from_str(
+            &grep_files(root.path(), root.path(), &json!({
+                "pattern":"needle", "output_mode":"files_with_matches"
+            })).unwrap()
+        ).unwrap();
+        assert_eq!(suppressed["numFiles"], 0);
+    }
 
     #[test]
     fn grep_uses_ripgrep_file_types_for_special_file_names() {
