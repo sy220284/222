@@ -9,7 +9,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct ModelTuning {
@@ -24,10 +23,16 @@ pub struct ModelTuning {
 
 impl ModelTuning {
     pub fn validate(&self) -> Result<()> {
-        if self.temperature.is_some_and(|v| !v.is_finite() || !(0.0..=2.0).contains(&v)) {
+        if self
+            .temperature
+            .is_some_and(|v| !v.is_finite() || !(0.0..=2.0).contains(&v))
+        {
             bail!("temperature must be finite and between 0 and 2");
         }
-        if self.top_p.is_some_and(|v| !v.is_finite() || v <= 0.0 || v > 1.0) {
+        if self
+            .top_p
+            .is_some_and(|v| !v.is_finite() || v <= 0.0 || v > 1.0)
+        {
             bail!("top_p must be finite and within (0, 1]");
         }
         if self.max_output_tokens == Some(0) || self.context_window == Some(0) {
@@ -39,7 +44,10 @@ impl ModelTuning {
             }
         }
         if let Some(level) = &self.reasoning_effort {
-            if !matches!(level.as_str(), "none" | "low" | "medium" | "high" | "xhigh" | "max") {
+            if !matches!(
+                level.as_str(),
+                "none" | "low" | "medium" | "high" | "xhigh" | "max"
+            ) {
                 bail!("reasoning_effort must be none, low, medium, high, xhigh or max");
             }
         }
@@ -214,7 +222,6 @@ fn default_file_checkpointing() -> bool {
     true
 }
 
-
 /** Built-in Chinese model API profiles. Credentials are read from environment variables. */
 fn chatgpt_plan_profile() -> ProviderProfile {
     ProviderProfile {
@@ -230,10 +237,30 @@ fn chatgpt_plan_profile() -> ProviderProfile {
 
 fn domestic_api_profiles() -> Vec<ProviderProfile> {
     [
-        ("deepseek", "https://api.deepseek.com", "deepseek-flash", "DEEPSEEK_API_KEY"),
-        ("kimi", "https://api.moonshot.cn/v1", "kimi-k3", "MOONSHOT_API_KEY"),
-        ("glm", "https://open.bigmodel.cn/api/paas/v4", "glm-5.3", "ZHIPU_API_KEY"),
-        ("minimax", "https://api.minimaxi.com/v1", "MiniMax-M3", "MINIMAX_API_KEY"),
+        (
+            "deepseek",
+            "https://api.deepseek.com",
+            "deepseek-flash",
+            "DEEPSEEK_API_KEY",
+        ),
+        (
+            "kimi",
+            "https://api.moonshot.cn/v1",
+            "kimi-k3",
+            "MOONSHOT_API_KEY",
+        ),
+        (
+            "glm",
+            "https://open.bigmodel.cn/api/paas/v4",
+            "glm-5.3",
+            "ZHIPU_API_KEY",
+        ),
+        (
+            "minimax",
+            "https://api.minimaxi.com/v1",
+            "MiniMax-M3",
+            "MINIMAX_API_KEY",
+        ),
     ]
     .into_iter()
     .map(|(id, base_url, model, api_key_env)| ProviderProfile {
@@ -302,8 +329,15 @@ impl Config {
     /// Append bundled APIs to old settings in memory; custom provider IDs win.
     /// The user's config file is not rewritten merely by reading it.
     fn include_domestic_api_profiles(&mut self) {
-        for builtin in domestic_api_profiles().into_iter().chain(std::iter::once(chatgpt_plan_profile())) {
-            if !self.providers.iter().any(|existing| existing.id == builtin.id) {
+        for builtin in domestic_api_profiles()
+            .into_iter()
+            .chain(std::iter::once(chatgpt_plan_profile()))
+        {
+            if !self
+                .providers
+                .iter()
+                .any(|existing| existing.id == builtin.id)
+            {
                 self.providers.push(builtin);
             }
         }
@@ -385,7 +419,10 @@ impl Config {
             if !seen.insert(&p.id) {
                 bail!("Duplicate provider id: {}", p.id);
             }
-            if !matches!(p.kind.as_str(), "openai-compatible" | "openai-responses" | "gemini" | "chatgpt-plan") {
+            if !matches!(
+                p.kind.as_str(),
+                "openai-compatible" | "openai-responses" | "gemini" | "chatgpt-plan"
+            ) {
                 bail!("Unsupported provider kind for {}: {}", p.id, p.kind);
             }
             let url = reqwest::Url::parse(&p.base_url)?;
@@ -690,10 +727,30 @@ mod tests {
         config.validate().unwrap();
         assert_eq!(config.providers.len(), 7);
         for (id, url, model, env) in [
-            ("deepseek", "https://api.deepseek.com", "deepseek-flash", "DEEPSEEK_API_KEY"),
-            ("kimi", "https://api.moonshot.cn/v1", "kimi-k3", "MOONSHOT_API_KEY"),
-            ("glm", "https://open.bigmodel.cn/api/paas/v4", "glm-5.3", "ZHIPU_API_KEY"),
-            ("minimax", "https://api.minimaxi.com/v1", "MiniMax-M3", "MINIMAX_API_KEY"),
+            (
+                "deepseek",
+                "https://api.deepseek.com",
+                "deepseek-flash",
+                "DEEPSEEK_API_KEY",
+            ),
+            (
+                "kimi",
+                "https://api.moonshot.cn/v1",
+                "kimi-k3",
+                "MOONSHOT_API_KEY",
+            ),
+            (
+                "glm",
+                "https://open.bigmodel.cn/api/paas/v4",
+                "glm-5.3",
+                "ZHIPU_API_KEY",
+            ),
+            (
+                "minimax",
+                "https://api.minimaxi.com/v1",
+                "MiniMax-M3",
+                "MINIMAX_API_KEY",
+            ),
         ] {
             let profile = config.select(Some(id), None).unwrap();
             assert_eq!(profile.kind, "openai-compatible");
@@ -702,10 +759,7 @@ mod tests {
             assert_eq!(profile.api_key_env.as_deref(), Some(env));
             assert!(!profile.stream);
             assert_eq!(
-                config
-                    .select(Some(id), Some("custom-model"))
-                    .unwrap()
-                    .model,
+                config.select(Some(id), Some("custom-model")).unwrap().model,
                 "custom-model"
             );
         }
@@ -714,7 +768,9 @@ mod tests {
     #[test]
     fn domestic_profiles_merge_without_clobbering_user_overrides() {
         let mut previous = Config::default();
-        previous.providers.retain(|p| p.id == "openai" || p.id == "gemini");
+        previous
+            .providers
+            .retain(|p| p.id == "openai" || p.id == "gemini");
         assert_eq!(previous.providers.len(), 2);
         previous.include_domestic_api_profiles();
         previous.include_domestic_api_profiles();
@@ -745,9 +801,6 @@ mod tests {
             c.select(Some("openai"), Some("example")).unwrap().model,
             "example"
         );
-        assert_eq!(
-            c.select(Some("openai"), None).unwrap().model,
-            "gpt-6.1-sol"
-        );
+        assert_eq!(c.select(Some("openai"), None).unwrap().model, "gpt-6.1-sol");
     }
 }
