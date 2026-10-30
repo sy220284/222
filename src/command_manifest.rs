@@ -247,6 +247,10 @@ mod tests {
             "session",
             "extra-usage",
             "teleport",
+            "feedback",
+            "passes",
+            "install-github-app",
+            "install-slack-app",
         ] {
             assert!(lookup(removed).is_none(), "removed cloud command: {removed}");
         }

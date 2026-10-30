@@ -118,3 +118,35 @@ fn every_original_path_is_tracked_once_and_no_partial_work_is_called_complete() 
     assert!(!status.contains("当前台账仍标注“未迁移”的文件路径："));
     assert!(!status.contains("非排除项的原始文件级等价验收仍未闭环："));
 }
+
+#[test]
+fn removed_cloud_source_paths_never_reenter_generated_registry() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let generated = root.join("src/generated_ports");
+    let registry = fs::read_dir(&generated)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("registry_") && name.ends_with(".rs"))
+        })
+        .map(|path| fs::read_to_string(path).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let matrix = fs::read_to_string(root.join("docs/FILE_PORT_MATRIX.md")).unwrap();
+    for line in matrix.lines() {
+        if !line.starts_with("| `src/") && !line.starts_with("| `vendor/") {
+            continue;
+        }
+        let cols = line.split('|').map(str::trim).collect::<Vec<_>>();
+        if cols[6].starts_with("按用户要求删除") {
+            let original = cols[1].trim_matches('`');
+            assert!(
+                !registry.contains(&format!("\"{original}\"")),
+                "Excluded cloud or telemetry source reintroduced in generated registry: {original}"
+            );
+        }
+    }
+}
