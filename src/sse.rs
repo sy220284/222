@@ -3,13 +3,14 @@ use anyhow::{bail, Context, Result};
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Default)]
 struct Assembler {
     content: String,
     calls: BTreeMap<u64, ToolCall>,
+    emitted: HashSet<u64>,
     finish_reason: Option<String>,
     usage: Option<TokenUsage>,
     /// Index of the tool call currently accepting argument deltas. The
@@ -107,21 +108,23 @@ impl Assembler {
             // OpenAI-compatible stream has no per-block stop event, so the
             // index switch is the completion boundary. Emit in index order.
             if self.active_tool_index.is_some_and(|active| active != index) {
+                // Dispatch completed blocks once but retain them in the
+                // assistant transcript for SDK replay and model context.
                 let completed: Vec<u64> = self
                     .calls
-                    .keys()
-                    .copied()
-                    .filter(|i| Some(*i) != self.active_tool_index)
-                    .take_while(|i| Some(*i) != Some(index))
+                    .range(..index)
+                    .map(|(i, _)| *i)
+                    .filter(|i| !self.emitted.contains(i))
                     .collect();
                 for done in completed {
-                    if let Some(mut call) = self.calls.remove(&done) {
+                    if let Some(call) = self.calls.get_mut(&done) {
                         if call.id.is_empty() {
                             call.id = uuid::Uuid::new_v4().to_string();
                         }
                         if let Some(sink) = &self.tool_blocks {
-                            let _ = sink.send(call);
+                            let _ = sink.send(call.clone());
                         }
+                        self.emitted.insert(done);
                     }
                 }
             }
@@ -150,15 +153,17 @@ impl Assembler {
         if self.content.is_empty() && self.calls.is_empty() {
             bail!("SSE stream contained no assistant content or tool calls")
         }
-        // End of stream completes any in-flight blocks, still in index order.
-        for (index, mut call) in std::mem::take(&mut self.calls) {
+        // Emit only undispatched blocks. Every call stays in the final
+        // assistant message with the same id used by the live executor.
+        for (index, call) in &mut self.calls {
             if call.id.is_empty() {
                 call.id = uuid::Uuid::new_v4().to_string();
             }
-            if let Some(sink) = &self.tool_blocks {
-                let _ = sink.send(call.clone());
+            if self.emitted.insert(*index) {
+                if let Some(sink) = &self.tool_blocks {
+                    let _ = sink.send(call.clone());
+                }
             }
-            self.calls.insert(index, call);
         }
         let calls = self
             .calls
@@ -402,6 +407,50 @@ mod tests {
         assert_eq!(call.function.name, "read_file");
         assert_eq!(call.function.arguments, "{\"path\":\"a.rs\"}");
     }
+    #[test]
+    fn early_dispatched_tools_remain_in_assistant_transcript_without_duplication() {
+        let (deltas, _ignored) = tokio::sync::mpsc::unbounded_channel();
+        let (blocks, mut incoming) = tokio::sync::mpsc::unbounded_channel();
+        let mut assembler = Assembler {
+            tool_blocks: Some(blocks),
+            ..Default::default()
+        };
+        assembler
+            .consume(
+                &json!({"choices":[{"delta":{"tool_calls":[{
+                    "index":0,"id":"tool_a","function":{"name":"read_file",
+                        "arguments":"{\"file_path\":\"one\"}"}}
+                ]}}]}),
+                &deltas,
+            )
+            .unwrap();
+        assembler
+            .consume(
+                &json!({"choices":[{"delta":{"tool_calls":[{
+            "index":1,"id":"tool_b","function":{"name":"read_file",
+                "arguments":"{\"file_path\":\"two\"}"}}
+        ]},"finish_reason":"tool_calls"}]}),
+                &deltas,
+            )
+            .unwrap();
+        assert_eq!(incoming.try_recv().unwrap().id, "tool_a");
+        assert!(
+            incoming.try_recv().is_err(),
+            "second block is not complete yet"
+        );
+        let result = assembler.finish().unwrap();
+        let calls = result.message.tool_calls.unwrap();
+        assert_eq!(
+            calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            vec!["tool_a", "tool_b"]
+        );
+        assert_eq!(incoming.try_recv().unwrap().id, "tool_b");
+        assert!(
+            incoming.try_recv().is_err(),
+            "tool ids must not be emitted twice"
+        );
+    }
+
     #[tokio::test]
     async fn reads_real_split_sse_http_stream() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
