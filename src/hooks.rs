@@ -758,6 +758,7 @@ struct PendingAsyncHook {
     session_id: String,
     event: String,
     command: String,
+    rewake: bool,
     deadline: std::time::Instant,
     task: tokio::task::JoinHandle<Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>)>>,
 }
@@ -814,7 +815,8 @@ pub async fn collect_async_hook_responses(session_id: &str) -> Vec<Value> {
         responses.push(json!({
             "type":"hook_response","hook_id":hook.id,"hook_event_name":hook.event,
             "command":hook.command,"outcome":outcome,"exit_code":exit_code,
-            "stdout":stdout,"stderr":stderr,"response":response
+            "stdout":stdout,"stderr":stderr,"response":response,
+            "rewake":hook.rewake && exit_code == Some(2)
         }));
     }
     responses
@@ -1051,6 +1053,7 @@ async fn run_command(
             session_id,
             event: payload["hook_event_name"].as_str().unwrap_or("").to_owned(),
             command: rule.command.clone(),
+            rewake: rule.async_rewake,
             deadline: std::time::Instant::now()
                 + Duration::from_secs(rule.timeout_seconds),
             task,
@@ -1081,6 +1084,7 @@ async fn run_command(
                 session_id,
                 event: payload["hook_event_name"].as_str().unwrap_or("").to_owned(),
                 command: rule.command.clone(),
+                rewake: false,
                 deadline: std::time::Instant::now() + Duration::from_millis(timeout_ms),
                 task,
             });
