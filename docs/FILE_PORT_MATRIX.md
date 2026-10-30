@@ -360,7 +360,7 @@
 | `src/components/FeedbackSurvey/FeedbackSurveyView.tsx` | 108 | 10660 | 重写：终端 UI／交互 | `src/generated_ports/p_31d30d3206690.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/FeedbackSurvey/TranscriptSharePrompt.tsx` | 88 | 9933 | 重写：终端 UI／交互 | `src/generated_ports/p_d283d404b97e8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/FeedbackSurvey/submitTranscriptShare.ts` | 113 | 3251 | 重写：终端 UI／交互 | `src/generated_ports/p_9274e52fe3673.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/FeedbackSurvey/useDebouncedDigitInput.ts` | 83 | 2722 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/FeedbackSurvey/useDebouncedDigitInput.ts` | 83 | 2722 | 重写：终端 UI／交互 | `src/generated_ports/p_065c142366c06.rs` | 部分实现：完整等价：400ms 默认防抖+触发门（armed∧未变更∧非 once-fired）纯函数含四分支单测；全角数字归一化随 stringUtils 桩，待验收 |
 | `src/components/FeedbackSurvey/useFeedbackSurvey.tsx` | 296 | 48187 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/FeedbackSurvey/useMemorySurvey.tsx` | 213 | 30418 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/FeedbackSurvey/usePostCompactSurvey.tsx` | 206 | 24071 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -688,7 +688,7 @@
 | `src/components/tasks/ShellProgress.tsx` | 87 | 7004 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/tasks/renderToolActivity.tsx` | 33 | 4414 | 重写：终端 UI／交互 | `src/generated_ports/p_3d8cf7b105951.rs` | 部分实现：完整等价：回退链文本构造（未知工具/解析失败/空名→原名，含参→Name(args)）含四分支单测；inputSchema 解析随各工具桩，待验收 |
 | `src/components/tasks/taskStatusUtils.tsx` | 107 | 13548 | 重写：终端 UI／交互 | `src/generated_ports/p_75dd35b9b8459.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/teams/TeamStatus.tsx` | 80 | 6897 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/teams/TeamStatus.tsx` | 80 | 6897 | 重写：终端 UI／交互 | `src/generated_ports/p_85d97c2a758a8.rs` | 部分实现：完整等价：footer 行矩阵（count/hint 四态组合）纯函数含单测；teammate 过滤与 JSX 归 ink 宿主，待验收 |
 | `src/components/teams/TeamsDialog.tsx` | 715 | 94680 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/ui/OrderedList.tsx` | 71 | 7294 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/ui/OrderedListItem.tsx` | 45 | 3477 | 重写：终端 UI／交互 | `src/generated_ports/p_6ba8c68c78e69.rs` | 部分实现：完整等价：marker 序号构造纯函数；dim 渲染与 list context 归 ink 宿主，待验收 |
@@ -824,7 +824,7 @@
 | `src/hooks/useSettingsChange.ts` | 26 | 946 | 重写：终端 UI／交互 | `src/generated_ports/p_216418895190e.rs` | 部分实现：AST 转写：订阅契约+缓存说明（通知器已清缓存，handler 不再清以免 N 路抖动）行为文档随 settings 检测器链路，待验收 |
 | `src/hooks/useSkillImprovementSurvey.ts` | 106 | 3528 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useSkillsChange.ts` | 63 | 2084 | 重写：终端 UI／交互 | `src/generated_ports/p_cc54ba08f000a.rs` | 部分实现：完整等价：双触发失效决策纯函数（cwd 门+技能变更全清/灰度刷新仅 memo）含单测；缓存清理与 GB 订阅宿主随各自链路，待验收 |
-| `src/hooks/useSwarmInitialization.ts` | 82 | 3151 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useSwarmInitialization.ts` | 82 | 3151 | 重写：终端 UI／交互 | `src/generated_ports/p_00655fd6fbf6c.rs` | 部分实现：完整等价：初始化三态计划（门关跳过/恢复会话重水合/新会话仅钩子）含矩阵单测；teammate 上下文与钩子初始化随 swarm 链，待验收 |
 | `src/hooks/useSwarmPermissionPoller.ts` | 331 | 9617 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTaskListWatcher.ts` | 222 | 6822 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTasksV2.ts` | 251 | 8808 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -845,7 +845,7 @@
 | `src/ink/bidi.ts` | 140 | 4290 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/clearTerminal.ts` | 75 | 1901 | 重写：终端 UI／交互 | `src/platform_source_utilities.rs / src/main.rs` | 部分实现：Win32 传统终端、Windows Terminal、VS Code ConPTY、Mintty 和类 Unix 清屏与 scrollback ANSI 序列已实现并接通 clear-screen CLI；原版全部调用链待完整移植 |
 | `src/ink/colorize.ts` | 232 | 7647 | 重写：终端 UI／交互 | `src/generated_ports/p_36ccb582d72f4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/ink/components/AlternateScreen.tsx` | 80 | 10377 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/components/AlternateScreen.tsx` | 80 | 10377 | 重写：终端 UI／交互 | `src/generated_ports/p_0aaf9c6f1ed25.rs` | 部分实现：完整等价：alt-screen 挂载/卸载序列契约（DEC 1049 进出+SGR 鼠标跟踪 1000-1006 关断）含单测；写入通道与视口约束归 ink 运行时，待验收 |
 | `src/ink/components/App.tsx` | 658 | 98330 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/AppContext.ts` | 22 | 523 | 重写：终端 UI／交互 | `src/generated_ports/p_d406d78d8ab29.rs` | 部分实现：契约记录：exit 句柄 context（no-op 默认+displayName）归 ink 宿主；待验收 |
 | `src/ink/components/Box.tsx` | 214 | 21652 | 重写：终端 UI／交互 | 待定 | 未迁移 |
