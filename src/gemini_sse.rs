@@ -15,6 +15,7 @@ struct Accumulator {
     calls: Vec<ToolCall>,
     usage: Option<TokenUsage>,
     finish_reason: Option<String>,
+    saw_done: bool,
 }
 impl Accumulator {
     fn consume(&mut self, v: &Value, deltas: &UnboundedSender<String>) -> Result<()> {
@@ -108,7 +109,11 @@ fn frame(data: &[u8], assembler: &mut Accumulator, deltas: &UnboundedSender<Stri
         .filter_map(|line| line.strip_prefix("data:").map(str::trim_start))
         .collect::<Vec<_>>()
         .join("\n");
-    if payload.is_empty() || payload == "[DONE]" {
+    if payload.is_empty() {
+        return Ok(());
+    }
+    if payload == "[DONE]" {
+        assembler.saw_done = true;
         return Ok(());
     }
     let value: Value = serde_json::from_str(&payload).context("Invalid JSON Gemini SSE event")?;
@@ -156,6 +161,12 @@ pub async fn complete(
     }
     if !pending.is_empty() {
         frame(&pending, &mut assembler, &deltas)?;
+    }
+    // A broken connection may leave a plausible-looking partial answer or
+    // function call. Original stream handling requires a terminal stop reason;
+    // Gemini also permits an explicit SSE [DONE] marker.
+    if assembler.finish_reason.is_none() && !assembler.saw_done {
+        bail!("Gemini stream ended before a completion marker");
     }
     Ok(assembler.complete())
 }
