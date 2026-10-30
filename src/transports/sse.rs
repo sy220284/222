@@ -35,6 +35,34 @@ pub struct SseFrame {
     pub is_comment: bool,
 }
 
+/// Decode a byte stream incrementally, preserving UTF-8 characters that
+/// span network chunks. A lossy conversion per HTTP chunk corrupts CJK text.
+fn append_utf8_chunk(
+    output: &mut String,
+    incomplete: &mut Vec<u8>,
+    chunk: &[u8],
+) -> Result<()> {
+    incomplete.extend_from_slice(chunk);
+    match std::str::from_utf8(incomplete) {
+        Ok(text) => {
+            output.push_str(text);
+            incomplete.clear();
+        }
+        Err(error) => {
+            let valid = error.valid_up_to();
+            if valid > 0 {
+                let prefix = std::str::from_utf8(&incomplete[..valid])?;
+                output.push_str(prefix);
+                incomplete.drain(..valid);
+            }
+            if error.error_len().is_some() {
+                bail!("SSE stream contains invalid UTF-8");
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Parse SSE frames delimited by double newlines; return the leftover
 /// partial frame (source `parseSSEFrames`).
 pub fn parse_sse_frames(buffer: &str) -> (Vec<SseFrame>, String) {
@@ -267,10 +295,10 @@ impl SseTransport {
             bail!("SSE connect failed with status {status}");
         }
         let mut buffer = String::new();
+        let mut incomplete_utf8 = Vec::new();
         let mut response = response;
         while let Some(chunk) = response.chunk().await? {
-            let text = String::from_utf8_lossy(&chunk);
-            buffer.push_str(&text);
+            append_utf8_chunk(&mut buffer, &mut incomplete_utf8, &chunk)?;
             let (frames, remaining) = parse_sse_frames(&buffer);
             buffer = remaining;
             for frame in frames {
@@ -289,6 +317,9 @@ impl SseTransport {
                     }
                 }
             }
+        }
+        if !incomplete_utf8.is_empty() {
+            bail!("SSE stream ended with an incomplete UTF-8 code point");
         }
         Ok(())
     }
@@ -380,6 +411,31 @@ fn rand_unit() -> f64 {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn chinese_utf8_survives_single_byte_network_chunks() {
+        let text = "event: client_event\\ndata: {\"payload\":{\"text\":\"中文\"}}\\n\\n"
+            .replace("\\n", "\n");
+        let mut output = String::new();
+        let mut incomplete = Vec::new();
+        for chunk in text.as_bytes().chunks(1) {
+            append_utf8_chunk(&mut output, &mut incomplete, chunk).unwrap();
+        }
+        assert!(incomplete.is_empty());
+        let (frames, remaining) = parse_sse_frames(&output);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].data, "{\"payload\":{\"text\":\"中文\"}}");
+        assert!(remaining.is_empty());
+    }
+
+    #[test]
+    fn invalid_utf8_is_rejected_without_silently_replacing_characters() {
+        let mut output = String::new();
+        let mut incomplete = Vec::new();
+        append_utf8_chunk(&mut output, &mut incomplete, &[0xE4]).unwrap();
+        assert_eq!(incomplete, vec![0xE4]);
+        assert!(append_utf8_chunk(&mut output, &mut incomplete, &[0xFF]).is_err());
+    }
 
     #[test]
     fn frames_split_on_double_newline_and_keep_remainder() {
