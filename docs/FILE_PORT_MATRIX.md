@@ -1,5 +1,8 @@
 # 2.1.88 → Rust 逐文件迁移台账（原始清单）
 
+> 2026-10-29 会话 /export 无参数预览与文件名确认：原版 commands/export/export.tsx::call/ExportDialog → src/session_control.rs / src/agent.rs / src/main.rs，新增默认文件名、纯文本预览、改名确认与取消操作，保留直接指定路径导出。提交 9c0823d1、7a30a16e、df1d979a；**源码已提交待行为验收**，原版富文本对话框和渲染细节仍有缺口，迁移状态不升级。
+
+
 > 2026-10-29 交互式 /agents create/edit/delete：原版 components/agents/agentFileUtils.ts、AgentsMenu.tsx、AgentEditor.tsx → Rust src/main.rs::chat + src/agent_definition.rs，已新增用户/项目范围自定义代理的交互创建、原子替换编辑、确认删除，保留未显示的 color/memory/effort 字段。另补齐 `/agents show project|user NAME` 读取并展示完整代理详情（b7ef373fac597f11fcfac1cb55302c3bc99f6b09）；提交 632cabc3、c59693b9、095251a2；**3项源码已提交、待行为验收**，原版完整图形向导及 YAML 全字段编辑仍未等价，不提升路径验收状态。
 
 
