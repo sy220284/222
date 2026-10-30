@@ -307,8 +307,14 @@ pub async fn control(
                 } else {
                     prompt
                 };
+                // Preserve the incoming SDK UUID as the checkpoint ID
+                // instead of assigning a fresh internal turn identifier.
+                // Batches share one model request and its file-edit snapshot.
+                let batch_uuid = batch.iter()
+                    .filter_map(|item| item.command.uuid.as_deref())
+                    .find_map(|text| uuid::Uuid::parse_str(text).ok());
                 let answer = agent
-                    .ask_with_blocks(&model_prompt, structured.blocks)
+                    .ask_with_blocks_for_message(&model_prompt, structured.blocks, batch_uuid)
                     .await;
                 let ended = guard.end(generation);
                 if !ended {
