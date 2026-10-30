@@ -2172,6 +2172,64 @@ impl Agent {
     }
     /// SDK generate_session_title mirrors sessionTitle.ts without changing
     /// the explicit /rename title or appending a synthetic chat message.
+    /// Build a provider-neutral, tool-free title request. SDK control uses
+    /// this immutable snapshot so model inference never holds the main
+    /// Agent's exclusive state or delays other control messages.
+    pub fn sdk_title_request(&self, description: &str) -> Option<ModelRequest> {
+        let description = description.trim();
+        if description.is_empty() { return None; }
+        let system = concat!(
+            "Generate a concise, sentence-case title (3-7 words) that captures ",
+            "the main topic or goal of this coding session. The title should be ",
+            "clear enough that the user recognizes the session in a list. ",
+            "Use sentence case: capitalize only the first word and proper nouns. ",
+            "Return JSON with a single \"title\" field. ",
+            "Example: {\"title\":\"Fix login button on mobile\"}."
+        );
+        Some(ModelRequest {
+            model: self.profile.model.clone(),
+            system: system.to_owned(),
+            messages: vec![Message::text("user", description)],
+            tools: Vec::new(),
+        })
+    }
+
+    /// Commit an independently completed SDK title request in the main
+    /// session actor. Never charge a later model, or write into a session
+    /// that replaced the original while inference was in flight.
+    pub fn finish_sdk_title(
+        &mut self,
+        requested_session: uuid::Uuid,
+        model: &ProviderProfile,
+        usage: Option<TokenUsage>,
+        title: Option<String>,
+        persist: bool,
+    ) -> Result<Option<String>> {
+        if self.session.id != requested_session {
+            bail!("SDK title result belongs to a previous session")
+        }
+        if let Some(usage) = usage {
+            self.session.usage.accumulate(usage);
+            self.session.cost.record(
+                &model.id, &model.model, usage, &self.model_prices,
+            );
+        }
+        if persist {
+            if let Some(value) = title.as_ref() {
+                let previous = self.session.ai_title.replace(value.clone());
+                if let Err(error) = self.session.save(&self.root) {
+                    self.session.ai_title = previous;
+                    return Err(error).context("Unable to persist SDK-generated title");
+                }
+                return Ok(title);
+            }
+        }
+        // Usage is charged even when the model produced invalid title JSON
+        // or persist was explicitly disabled by the SDK caller.
+        self.session.save(&self.root)?;
+        Ok(title)
+    }
+
     pub async fn generate_session_title(
         &mut self,
         description: &str,
