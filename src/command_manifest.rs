@@ -180,6 +180,69 @@ pub fn visible() -> impl Iterator<Item = &'static CommandDefinition> {
 mod tests {
     use super::*;
     #[test]
+    fn original_add_dir_rename_export_resume_index_metadata_and_dispatch() {
+        // Source comparison:
+        // commands/{add-dir,rename,export,resume}/index.ts is only the
+        // lazy registration record; handler implementations have separate
+        // source-path migration rows and real CLI integration regressions.
+        let cases = [
+            (
+                "add-dir",
+                "src/commands/add-dir/index.ts",
+                "local-jsx",
+                "Add a new working directory",
+                Some("<path>"),
+                false,
+                &[][..],
+            ),
+            (
+                "rename",
+                "src/commands/rename/index.ts",
+                "local-jsx",
+                "Rename the current conversation",
+                Some("[name]"),
+                true,
+                &[][..],
+            ),
+            (
+                "export",
+                "src/commands/export/index.ts",
+                "local-jsx",
+                "Export the current conversation to a file or clipboard",
+                Some("[filename]"),
+                false,
+                &[][..],
+            ),
+            (
+                "resume",
+                "src/commands/resume/index.ts",
+                "local-jsx",
+                "Resume a previous conversation",
+                Some("[conversation id or search term]"),
+                false,
+                &["continue"][..],
+            ),
+        ];
+        for (name, source, kind, description, hint, immediate, aliases) in cases {
+            let command = lookup(name).expect("real command must be registered");
+            assert_eq!(command.source, source, "{name} source");
+            assert_eq!(command.name, name);
+            assert_eq!(command.kind, kind);
+            assert_eq!(command.description, description);
+            assert_eq!(command.hint, hint);
+            assert_eq!(command.immediate, immediate);
+            assert_eq!(command.aliases.as_slice(), aliases);
+            assert!(!command.disabled);
+            assert!(!command.hidden);
+        }
+        assert_eq!(lookup("continue").unwrap().name, "resume");
+        assert!(visible().any(|command| command.name == "add-dir"));
+        assert!(visible().any(|command| command.name == "rename"));
+        assert!(visible().any(|command| command.name == "export"));
+        assert!(visible().any(|command| command.name == "resume"));
+    }
+
+    #[test]
     fn registry_and_alias_resolution() {
         assert_eq!(commands().len(), 83);
         assert_eq!(commands().iter().filter(|c| c.disabled).count(), 18);
