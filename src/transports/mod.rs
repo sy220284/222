@@ -47,15 +47,25 @@ fn is_env_truthy(name: &str) -> bool {
 
 /// Derive the SSE stream URL for a session URL (ws(s) → http(s), path gains
 /// `/worker/events/stream`).
-pub fn sse_stream_url_for_session(session_url: &str) -> String {
-    let mut url = session_url
-        .replacen("wss://", "https://", 1)
-        .replacen("ws://", "http://", 1);
-    while url.ends_with('/') {
-        url.pop();
+pub fn sse_stream_url_for_session(session_url: &str) -> Result<String> {
+    let mut url = reqwest::Url::parse(session_url)?;
+    match url.scheme() {
+        "ws" => {
+            url.set_scheme("http")
+                .map_err(|_| anyhow::anyhow!("Invalid SSE URL scheme"))?;
+        }
+        "wss" => {
+            url.set_scheme("https")
+                .map_err(|_| anyhow::anyhow!("Invalid SSE URL scheme"))?;
+        }
+        "http" | "https" => {}
+        other => anyhow::bail!("Unsupported SSE source URL scheme: {other}"),
     }
-    url.push_str("/worker/events/stream");
-    url
+    // URL.pathname in the original transport preserves query parameters.
+    // String concatenation would append /worker/events/stream *after* ?token.
+    let stream_path = format!("{}/worker/events/stream", url.path().trim_end_matches('/'));
+    url.set_path(&stream_path);
+    Ok(url.to_string())
 }
 
 /// Resolve which transport a session URL should use (source
@@ -91,7 +101,7 @@ impl SdkOutbound {
         };
         match get_transport_for_url(url)? {
             TransportKind::Sse => {
-                let sse_url = sse_stream_url_for_session(url);
+                let sse_url = sse_stream_url_for_session(url)?;
                 Ok(Self::Sse(
                     crate::transports::sse::SseTransport::new(
                         sse_url.clone(),
@@ -105,7 +115,7 @@ impl SdkOutbound {
             TransportKind::Hybrid | TransportKind::WebSocket => {
                 // WS-family ingress writes POST frames through the hybrid
                 // outbound path; reads arrive on the WS data channel.
-                let sse_url = sse_stream_url_for_session(url);
+                let sse_url = sse_stream_url_for_session(url)?;
                 Ok(Self::Sse(
                     crate::transports::sse::SseTransport::new(
                         sse_url.clone(),
@@ -146,13 +156,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sse_url_derivation_preserves_auth_query_and_ipv6_authority() {
+        assert_eq!(
+            sse_stream_url_for_session("wss://example.com/sessions/s1?token=a%2Fb&mode=1")
+                .unwrap(),
+            "https://example.com/sessions/s1/worker/events/stream?token=a%2Fb&mode=1"
+        );
+        assert_eq!(
+            sse_stream_url_for_session("ws://[::1]:9912/s1/?nonce=7").unwrap(),
+            "http://[::1]:9912/s1/worker/events/stream?nonce=7"
+        );
+        assert!(sse_stream_url_for_session("file:///tmp/sessions/s1").is_err());
+    }
+
+    #[test]
     fn sse_stream_url_conversion() {
         assert_eq!(
-            sse_stream_url_for_session("wss://api.example.com/v2/sessions/s1"),
+            sse_stream_url_for_session("wss://api.example.com/v2/sessions/s1").unwrap(),
             "https://api.example.com/v2/sessions/s1/worker/events/stream"
         );
         assert_eq!(
-            sse_stream_url_for_session("http://127.0.0.1:9915/sessions/s1/"),
+            sse_stream_url_for_session("http://127.0.0.1:9915/sessions/s1/").unwrap(),
             "http://127.0.0.1:9915/sessions/s1/worker/events/stream"
         );
     }
