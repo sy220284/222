@@ -115,7 +115,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/BaseTextInput.tsx" => match export {
-            "view" => serde_json::to_value(super::p_3949a8e5bc4d2::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
+            "view" => serde_json::to_value(super::p_3949a8e5bc4d2::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/BashModeProgress.tsx" => match export {
