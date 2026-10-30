@@ -269,7 +269,7 @@
 | `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 重写：保持通用行为 | `src/generated_ports/p_c19247cd15a69.rs` | 部分实现：完整等价：未授予灰度路径（null 配置即 false）与原版逐字一致；灰度配置源随遥测链决策，待验收 |
 | `src/commands/review.ts` | 58 | 2188 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：通过真实 Agent 执行 PR 审查任务；原版专属 Ultrareview 远程链仍待改造 |
 | `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/rewind/rewind.ts` | 14 | 376 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/rewind/rewind.ts` | 14 | 376 | 重写：保持通用行为 | `src/generated_ports/p_0be79184937ef.rs` | 部分实现：完整等价：打开消息选择器+返回 skip 结果（不追加消息）含单测；LocalCommandResult 结构对齐 commands 体系，待验收 |
 | `src/commands/sandbox-toggle/index.ts` | 51 | 1520 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/sandbox-toggle/sandbox-toggle.tsx` | 83 | 13157 | 重写：保持通用行为 | `src/generated_ports/p_d71c68a412fbd.rs`| 部分实现：/sandbox 编排——平台支持门禁（WSL 专属提示）→enabledPlatforms 白名单→policy 锁→参数路由（空=设置菜单视图带依赖检查、exclude <pattern>=去引号+设置写路径+cwd 相对消息、未知=错误），设置路径 .atlas/settings.local.json；SandboxManager/设置加载注入，菜单视图归组件域，附 4 测试|
 | `src/commands/security-review.ts` | 244 | 12531 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -747,7 +747,7 @@
 | `src/hooks/notifs/useLspInitializationNotification.tsx` | 143 | 16569 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useMcpConnectivityStatus.tsx` | 88 | 14710 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useModelMigrationNotifications.tsx` | 52 | 6988 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/notifs/useNpmDeprecationNotification.tsx` | 25 | 3602 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/notifs/useNpmDeprecationNotification.tsx` | 25 | 3602 | 重写：终端 UI／交互 | `src/generated_ports/p_be6edab38a034.rs` | 部分实现：完整等价：守卫链（bundled/DISABLE_INSTALLATION_CHECKS/development 跳过）+payload（15000ms/warning/high）含单测；文案按隐私门禁品牌中性化（差异记录），待验收 |
 | `src/hooks/notifs/usePluginAutoupdateNotification.tsx` | 83 | 9015 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/usePluginInstallationStatus.tsx` | 128 | 12012 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useRateLimitWarningNotification.tsx` | 114 | 12250 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -784,8 +784,8 @@
 | `src/hooks/useDynamicConfig.ts` | 23 | 703 | 重写：终端 UI／交互 | `src/generated_ports/p_739c766517b36.rs` | 部分实现：完整等价：测试环境跳过拉取的防挂决策纯函数含单测；拉取本体随分析端口，待验收 |
 | `src/hooks/useElapsedTime.ts` | 38 | 1226 | 重写：终端 UI／交互 | `src/generated_ports/p_2a67cb7ba5c47.rs` | 部分实现：完整等价：elapsed 计算（endTime 冻结语义+pausedMs 扣减+非负钳制）纯函数含单测，格式化引 format.ts 桩；interval 重渲染订阅归宿主，待验收 |
 | `src/hooks/useExitOnCtrlCD.ts` | 96 | 3226 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useExitOnCtrlCDWithKeybindings.ts` | 25 | 948 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useFileHistorySnapshotInit.ts` | 26 | 767 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useExitOnCtrlCDWithKeybindings.ts` | 25 | 948 | 重写：终端 UI／交互 | `src/generated_ports/p_3544335fb425b.rs` | 部分实现：AST 转写：组合接线契约（防 import cycle 说明保留）+ExitState 生命周期转写；useKeybindings 宿主随键绑定链，待验收 |
+| `src/hooks/useFileHistorySnapshotInit.ts` | 26 | 767 | 重写：终端 UI／交互 | `src/generated_ports/p_4a38faf5080d4.rs` | 部分实现：完整等价：一次性初始化守卫（enabled 门+已初始化闩）纯函数含单测；fileHistory 访问器随文件历史链，待验收 |
 | `src/hooks/useGlobalKeybindings.tsx` | 249 | 31213 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useHistorySearch.ts` | 304 | 9488 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useIDEIntegration.tsx` | 70 | 10517 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -835,11 +835,11 @@
 | `src/hooks/useTimeout.ts` | 15 | 362 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTurnDiffs.ts` | 214 | 6686 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTypeahead.tsx` | 1385 | 212610 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useUpdateNotification.ts` | 35 | 982 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useUpdateNotification.ts` | 35 | 982 | 重写：终端 UI／交互 | `src/generated_ports/p_e2a7dc8bdd83c.rs` | 部分实现：完整等价：loose semver 三段提取+通知触发比较+状态转移纯函数含双单测；MACRO.VERSION 种子随构建宏，待验收 |
 | `src/hooks/useVimInput.ts` | 317 | 9741 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useVirtualScroll.ts` | 722 | 35122 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useVoice.ts` | 1145 | 45802 | 重写：终端 UI／交互 | `src/generated_ports/p_5a4cf6e30ce08.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/hooks/useVoiceEnabled.ts` | 26 | 1134 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useVoiceEnabled.ts` | 26 | 1134 | 重写：终端 UI／交互 | `src/generated_ports/p_f54a6cc84e937.rs` | 部分实现：完整等价：三输入组合判定（用户意图∧语音授权∧灰度开关）纯函数含单测；OAuth 授权半段随语音链，待验收 |
 | `src/hooks/useVoiceIntegration.tsx` | 677 | 99464 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/Ansi.tsx` | 292 | 33264 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/bidi.ts` | 140 | 4290 | 重写：终端 UI／交互 | 待定 | 未迁移 |
