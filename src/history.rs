@@ -343,6 +343,10 @@ pub fn load(root: &Path, session_id: Option<&str>, id: &str) -> Result<Record> {
     let id = Uuid::parse_str(id).context("History id must be a UUID")?;
     let folder = storage(root, session_id)?;
     let path = folder.join(format!("{id}.json"));
+    let metadata = fs::symlink_metadata(&path)?;
+    if !metadata.file_type().is_file() {
+        bail!("History checkpoint must be a regular file: {}", path.display());
+    }
     let mut record: Record = serde_json::from_slice(&fs::read(path)?)?;
     if record.id != id {
         bail!("History id mismatch")
@@ -484,6 +488,10 @@ pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
             continue;
         }
         let path = entry.path();
+        let metadata = fs::symlink_metadata(&path)?;
+        if !metadata.file_type().is_file() {
+            bail!("History checkpoint must be a regular file: {}", path.display());
+        }
         let data = fs::read(&path)
             .with_context(|| format!("Read file checkpoint {}", path.display()))?;
         let record: Record = serde_json::from_slice(&data)
@@ -491,7 +499,7 @@ pub fn list(root: &Path, session_id: Option<&str>) -> Result<String> {
         if path.file_stem().and_then(|s| s.to_str()) != Some(record.id.to_string().as_str()) {
             bail!("History checkpoint filename/id mismatch: {}", path.display())
         }
-        let modified = entry.metadata()?.modified()?;
+        let modified = metadata.modified()?;
         results.push((modified, record.id.to_string(),
             json!({"id":record.id,"path":record.path})));
     }
