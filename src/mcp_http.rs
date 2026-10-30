@@ -134,9 +134,13 @@ impl HttpClient {
         }
         crate::config::require_secure_credential_transport(
             url.as_str(),
-            merged
-                .iter()
-                .any(|(name, value)| crate::config::credential_header(name, value)),
+            config
+                .headers_helper
+                .as_deref()
+                .is_some_and(|helper| !helper.trim().is_empty())
+                || merged
+                    .iter()
+                    .any(|(name, value)| crate::config::credential_header(name, value)),
         )?;
         let mut headers = HeaderMap::new();
         for (key, value) in merged {
@@ -992,6 +996,19 @@ mod tests {
             format!("{:#}", HttpClient::connect(&c).await.err().unwrap())
                 .contains("must use HTTPS")
         );
+        c.headers.clear();
+        c.headers.insert("X-Custom".into(), "${SECRET}".into());
+        assert!(
+            format!("{:#}", HttpClient::connect(&c).await.err().unwrap())
+                .contains("must use HTTPS")
+        );
+        c.headers.clear();
+        c.headers_helper = Some("printf '{}'".into());
+        assert!(
+            format!("{:#}", HttpClient::connect(&c).await.err().unwrap())
+                .contains("must use HTTPS")
+        );
+        c.headers_helper = None;
         c.url = Some("http://127.0.0.1:1/mcp".into());
         c.headers.clear();
         c.headers.insert("Mcp-Session-Id".into(), "forged".into());

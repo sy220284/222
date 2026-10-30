@@ -337,9 +337,12 @@ impl Config {
                     }
                     require_secure_credential_transport(
                         &expanded.expanded,
-                        s.headers
-                            .iter()
-                            .any(|(name, value)| credential_header(name, value)),
+                        s.headers_helper
+                            .as_deref()
+                            .is_some_and(|helper| !helper.trim().is_empty())
+                            || s.headers
+                                .iter()
+                                .any(|(name, value)| credential_header(name, value)),
                     )?;
                 }
                 _ => bail!("Unsupported MCP transport; use stdio or http"),
@@ -411,7 +414,11 @@ impl Config {
 /// user secrets cannot be sent to a non-loopback plaintext MCP endpoint.
 pub(crate) fn credential_header(name: &str, value: &str) -> bool {
     let name = name.to_ascii_lowercase();
-    name == "authorization"
+    // Environment interpolation may carry a secret even when the header name
+    // is innocuous (e.g. X-Custom: ${API_TOKEN}). Classify before expansion
+    // so the original secret never has to be logged or inspected.
+    value.contains("${")
+        || name == "authorization"
         || name == "proxy-authorization"
         || name == "cookie"
         || name == "set-cookie"
@@ -461,6 +468,7 @@ mod tests {
         assert!(credential_header("Authorization", "${API_TOKEN}"));
         assert!(credential_header("X-Subscription-Token", "secret"));
         assert!(credential_header("X-Custom", "Bearer token"));
+        assert!(credential_header("X-Custom", "${MY_CREDENTIAL}"));
         assert!(!credential_header("X-Client-Version", "1.0"));
         for url in [
             "http://example.com/v1",
