@@ -286,9 +286,7 @@ impl MinimalWsClient {
                 bytes.copy_from_slice(&ext);
                 len = u64::from_be_bytes(bytes);
             }
-            if len > 16 * 1024 * 1024 {
-                bail!("WS frame too large: {len} bytes");
-            }
+            validate_server_frame(fin, opcode, masked, len)?;
             let mask = if masked {
                 Some(self.read_exact_vec(4).await?)
             } else {
@@ -328,6 +326,9 @@ impl MinimalWsClient {
                     }
                 }
                 0x8 => {
+                    if payload.len() == 1 {
+                        bail!("WS protocol error: close payload cannot contain only one byte");
+                    }
                     let code = if payload.len() >= 2 {
                         Some(u16::from_be_bytes([payload[0], payload[1]]))
                     } else {
@@ -721,6 +722,21 @@ impl WebSocketTransport {
     }
 }
 
+/// The browser/Node WebSocket client rejects masked server frames,
+/// oversized data frames and fragmented control frames per RFC 6455.
+fn validate_server_frame(fin: bool, opcode: u8, masked: bool, len: u64) -> Result<()> {
+    if masked {
+        bail!("WS protocol error: server frames must not be masked");
+    }
+    if len > 16 * 1024 * 1024 {
+        bail!("WS frame too large: {len} bytes");
+    }
+    if opcode >= 0x8 && (!fin || len > 125) {
+        bail!("WS protocol error: control frames must be final and at most 125 bytes");
+    }
+    Ok(())
+}
+
 /// The server's last confirmed UUID is inclusive. Preserve all messages
 /// when the confirmation is absent or its UUID has already been evicted.
 fn pending_after_confirmation(
@@ -793,6 +809,27 @@ mod tests {
         assert_eq!(buffer.to_vec(), vec![json!(2), json!(3), json!(4)]);
         buffer.clear();
         assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn server_frame_validation_rejects_masked_data_and_fragmented_control() {
+        assert!(validate_server_frame(true, 0x1, true, 3).is_err());
+        assert!(validate_server_frame(false, 0x9, false, 1).is_err());
+        assert!(validate_server_frame(true, 0x9, false, 126).is_err());
+        assert!(validate_server_frame(true, 0x1, false, 16 * 1024 * 1024 + 1).is_err());
+        assert!(validate_server_frame(true, 0x9, false, 125).is_ok());
+    }
+
+    #[tokio::test]
+    async fn masked_server_frame_is_rejected_before_reading_payload() {
+        let (local, _peer) = tokio::io::duplex(32);
+        let mut socket = MinimalWsClient {
+            stream: Box::new(local),
+            read_buffer: vec![0x81, 0x80],
+            fragmented: None,
+        };
+        let err = socket.read_message().await.unwrap_err();
+        assert!(err.to_string().contains("server frames must not be masked"));
     }
 
     #[test]
