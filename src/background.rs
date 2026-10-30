@@ -540,11 +540,17 @@ impl BackgroundTasks {
                 file: output_file, size: 0, capped: false,
             }));
             let output_limit_reached = Arc::new(Notify::new());
-            let mut stdout_task = tokio::spawn(spool_merged(
-                stdout, stdout_file, merged.clone(), output_limit_reached.clone()
+            // If a spooler loses its output file, the other pipe can fill and
+            // block the shell forever. Surface the failure to the supervisor
+            // immediately, then terminate the whole process tree.
+            let output_writer_failed = Arc::new(Notify::new());
+            let mut stdout_task = tokio::spawn(spool_merged_checked(
+                stdout, stdout_file, merged.clone(), output_limit_reached.clone(),
+                output_writer_failed.clone(), "stdout",
             ));
-            let mut stderr_task = tokio::spawn(spool_merged(
-                stderr, stderr_file, merged.clone(), output_limit_reached.clone()
+            let mut stderr_task = tokio::spawn(spool_merged_checked(
+                stderr, stderr_file, merged.clone(), output_limit_reached.clone(),
+                output_writer_failed.clone(), "stderr",
             ));
             let process_id = child.id();
             let deadline_at = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
@@ -552,6 +558,7 @@ impl BackgroundTasks {
             tokio::pin!(deadline);
             let mut stop_requested = false;
             let mut killed_for_output_cap = false;
+            let mut failed_for_output_io = false;
             let (mut state, mut code, mut timed_out) = tokio::select! {
                 result = child.wait() => match result {
                     Ok(status) if status.success() => ("completed", status.code(), false),
@@ -588,6 +595,17 @@ impl BackgroundTasks {
                     let _ = child.kill().await;
                     ("failed", Some(137), false)
                 },
+                _ = output_writer_failed.notified() => {
+                    failed_for_output_io = true;
+                    #[cfg(unix)]
+                    if let Some(pid) = child.id() {
+                        let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+                    }
+                    #[cfg(windows)]
+                    let _ = terminate_windows_task_tree(child.id(), Some(&running)).await;
+                    let _ = child.kill().await;
+                    ("failed", None, false)
+                },
                 _ = &mut deadline => {
                     #[cfg(unix)]
                     if let Some(pid) = child.id() {
@@ -605,7 +623,7 @@ impl BackgroundTasks {
             // A stop request must also interrupt output draining. The shell
             // can exit while a descendant keeps its pipes open; waiting for
             // the original 10-minute deadline makes TaskStop falsely time out.
-            let drain_deadline = if timed_out || stop_requested || killed_for_output_cap || state == "killed" {
+            let drain_deadline = if timed_out || stop_requested || killed_for_output_cap || failed_for_output_io || state == "killed" {
                 tokio::time::Instant::now() + Duration::from_secs(1)
             } else {
                 deadline_at
@@ -620,6 +638,10 @@ impl BackgroundTasks {
                 },
                 _ = output_limit_reached.notified(), if !killed_for_output_cap => {
                     killed_for_output_cap = true;
+                    None
+                },
+                _ = output_writer_failed.notified(), if !failed_for_output_io => {
+                    failed_for_output_io = true;
                     None
                 },
             };
@@ -654,6 +676,11 @@ impl BackgroundTasks {
                 if killed_for_output_cap {
                     state = "failed";
                     code = Some(137);
+                } else if failed_for_output_io {
+                    // A disk write failure is not a command timeout. Preserve
+                    // the actual failure reason in task status and diagnostics.
+                    state = "failed";
+                    code = None;
                 } else {
                     if cancelled_during_drain {
                         state = "killed";
@@ -1105,6 +1132,24 @@ async fn spool_with_limit<R: AsyncRead + Unpin>(
     }
     file.flush().await?;
     Ok(truncated)
+}
+
+// Report a failed spool immediately. Waiting until child.wait() returns
+// deadlocks when the shell is blocked on the pipe whose reader has exited.
+async fn spool_merged_checked<R: AsyncRead + Unpin>(
+    stream: R,
+    individual: tokio::fs::File,
+    combined: Arc<AsyncMutex<CombinedLog>>,
+    output_limit_reached: Arc<Notify>,
+    output_writer_failed: Arc<Notify>,
+    stream_name: &'static str,
+) -> Result<bool> {
+    let result = spool_merged(stream, individual, combined, output_limit_reached).await;
+    if let Err(ref error) = result {
+        eprintln!("Background {stream_name} output writer failed: {error:#}");
+        output_writer_failed.notify_one();
+    }
+    result
 }
 
 // Append both pipes to one transcript in chunk arrival order, using a
