@@ -299,7 +299,10 @@ pub fn mcp_info_from_string(value: &str) -> Option<(&str, Option<String>)> {
 }
 
 pub fn get_mcp_prefix(server_name: &str) -> String {
-    format!("mcp__{}__", runtime_contracts::normalize_mcp_name(server_name))
+    format!(
+        "mcp__{}__",
+        runtime_contracts::normalize_mcp_name(server_name)
+    )
 }
 
 pub fn build_mcp_tool_name(server_name: &str, tool_name: &str) -> String {
@@ -310,10 +313,7 @@ pub fn build_mcp_tool_name(server_name: &str, tool_name: &str) -> String {
     )
 }
 
-pub fn get_tool_name_for_permission_check(
-    name: &str,
-    mcp_info: Option<(&str, &str)>,
-) -> String {
+pub fn get_tool_name_for_permission_check(name: &str, mcp_info: Option<(&str, &str)>) -> String {
     match mcp_info {
         Some((server, tool)) => build_mcp_tool_name(server, tool),
         None => name.to_owned(),
@@ -2475,10 +2475,7 @@ mod remote_tests {
             mcp_info_from_string("mcp__docs__search__full"),
             Some(("docs", Some("search__full".to_owned())))
         );
-        assert_eq!(
-            mcp_info_from_string("mcp__docs"),
-            Some(("docs", None))
-        );
+        assert_eq!(mcp_info_from_string("mcp__docs"), Some(("docs", None)));
         assert_eq!(
             mcp_info_from_string("mcp__docs__"),
             Some(("docs", Some(String::new())))
@@ -2516,10 +2513,7 @@ mod remote_tests {
             extract_mcp_tool_display_name("server -  update - item  "),
             "update - item"
         );
-        assert_eq!(
-            extract_mcp_tool_display_name("no suffix"),
-            "no suffix"
-        );
+        assert_eq!(extract_mcp_tool_display_name("no suffix"), "no suffix");
     }
 
 }
