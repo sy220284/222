@@ -1751,7 +1751,7 @@
 | `src/utils/screenshotClipboard.ts` | 122 | 3709 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sdkEventQueue.ts` | 135 | 4077 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/secureStorage/fallbackStorage.ts` | 71 | 2362 | 重写：保持通用行为 | `src/secure_fallback.rs / src/main.rs` | 部分实现：主安全存储优先、读取回退、首次主存储成功后删除副本、主失败时避免过期值遮蔽新刷新令牌、同步/异步读和删除已写入并接入凭据命令 |
-| `src/utils/secureStorage/index.ts` | 18 | 559 | 重写：保持通用行为 | `src/generated_ports/p_92f3dc63fc226.rs`| 部分实现：平台安全存储选择器返回 fallback 链（vendor Keychain 按仓库等价范围排除，macOS 分支留安全框架未来移植钩子），读写删回路测试覆盖（delete 后兜底空对象语义对齐 JS || {}）|
+| `src/utils/secureStorage/index.ts` | 18 | 559 | 重写：保持通用行为 | `src/generated_ports/p_92f3dc63fc226.rs`| 部分实现：平台安全存储选择器返回 fallback 链（vendor Keychain 按仓库等价范围排除，macOS 分支留安全框架未来移植钩子），读写删回路测试覆盖（delete 后兜底空对象语义对齐 JS 空对象兜底）|
 | `src/utils/secureStorage/keychainPrefetch.ts` | 117 | 4755 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/secureStorage/macOsKeychainHelpers.ts` | 112 | 4797 | 重写：保持通用行为 | `src/generated_ports/p_b2a6ef22565e7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/secureStorage/macOsKeychainStorage.ts` | 232 | 8271 | 重写：保持通用行为 | 待定 | 未迁移 |
