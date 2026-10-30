@@ -370,6 +370,7 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         },
         "src/components/PromptInput/PromptInputFooterSuggestions.tsx" => match export {
             "OVERLAY_MAX_ITEMS" => Some(super::p_a680bef86b91f::OVERLAY_MAX_ITEMS()),
+            "view" | "PromptInputFooterSuggestions" => Some(serde_json::to_value(super::p_a680bef86b91f::render_source_view(args.first().unwrap_or(&serde_json::Value::Null))).expect("serialize suggestion view")),
             _ => None,
         },
         "src/components/ScrollKeybindingHandler.tsx" => match export {
@@ -521,6 +522,7 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "FOOTER_TEMPORARY_STATUS_TIMEOUT" => {
                 Some(super::p_4375034f382f7::FOOTER_TEMPORARY_STATUS_TIMEOUT())
             }
+            "view" | "Notifications" => serde_json::to_value(super::p_4375034f382f7::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
             _ => None,
         },
         "src/components/Spinner/utils.ts" => match export {
@@ -985,7 +987,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ),
         (
             "src/components/PromptInput/PromptInputFooterSuggestions.tsx",
-            vec!["OVERLAY_MAX_ITEMS", "SuggestionType"],
+            vec!["OVERLAY_MAX_ITEMS", "SuggestionType", "view", "PromptInputFooterSuggestions"],
         ),
         (
             "src/components/ScrollKeybindingHandler.tsx",
@@ -1109,7 +1111,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ),
         (
             "src/components/PromptInput/Notifications.tsx",
-            vec!["FOOTER_TEMPORARY_STATUS_TIMEOUT"],
+            vec!["FOOTER_TEMPORARY_STATUS_TIMEOUT", "view", "Notifications", "externalEditorHint"],
         ),
         ("src/components/Spinner/utils.ts", vec!["toRGBColor"]),
         (
