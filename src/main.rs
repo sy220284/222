@@ -97,6 +97,7 @@ mod prompt_history;
 mod prompt_runtime;
 mod protocol;
 mod provider;
+mod model_catalog;
 mod query_config;
 mod query_guard;
 mod query_token_budget;
@@ -407,7 +408,10 @@ enum Commands {
     /// Clear screen and supported terminal scrollback
     ClearScreen,
     /// Show configured providers and active default without connecting to them
-    Models,
+    Models {
+        #[command(subcommand)]
+        action: Option<model_catalog::ModelAction>,
+    },
     /// Perform a local PR review through the selected model and GitHub CLI
     Review { pr_number: Option<u64> },
     /// Review staged/unstaged changes and create a new Git commit
@@ -1191,7 +1195,11 @@ async fn run_cli() -> Result<()> {
         }
     }
     let mut config = Config::load()?;
-    if let Commands::Models = &cli.command {
+    if let Commands::Models { action } = &cli.command {
+        if let Some(action) = action {
+            model_catalog::run(action, &mut config).await?;
+            return Ok(());
+        }
         for profile in &config.providers {
             let default = if profile.id == config.default_provider {
                 " (default)"
