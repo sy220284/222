@@ -1,0 +1,84 @@
+name: 222 Rust 1.99.1 离线工具链产物
+on:
+  push:
+    branches:
+      - tooling/222-rust-offline-bundle
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  # 每周重新生成，覆盖 GitHub Actions 工件 30 天保留期；仅默认分支执行计划事件。
+  schedule:
+    - cron: '17 3 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    name: 制作并验证 Linux x86_64 工具链
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: 安装 Rust 1.99.1、rustfmt、clippy
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+          components: rustfmt, clippy
+      - name: Rust 缓存复用
+        uses: Swatinem/rust-cache@v2
+      - name: 预先下载 222 的 Linux 依赖
+        run: |
+          set -euo pipefail
+          cargo fetch --locked --target x86_64-unknown-linux-gnu
+          test -d "$HOME/.cargo/registry"
+          test -f Cargo.lock
+      - name: 打包工具链与离线依赖、记录 SHA256
+        id: package
+        run: |
+          set -euo pipefail
+          triple=x86_64-unknown-linux-gnu
+          rust_dir="$HOME/.rustup/toolchains/1.99.1-$triple"
+          for tool in rustc cargo rustfmt cargo-clippy; do test -x "$rust_dir/bin/$tool"; done
+          mkdir -p dist
+          tar -C "$HOME/.rustup/toolchains" -czf dist/rust-toolchain-linux-x86_64.tar.gz "1.99.1-$triple"
+          if [ -d "$HOME/.cargo/git" ]; then
+            tar -C "$HOME/.cargo" -czf dist/cargo-cache.tar.gz registry git
+          else
+            tar -C "$HOME/.cargo" -czf dist/cargo-cache.tar.gz registry
+          fi
+          cp tools/toolchain/install-bundle.sh dist/install-bundle.sh
+          cat > dist/manifest.txt <<META
+          repo=${{ github.repository }}
+          commit=${{ github.sha }}
+          target=$triple
+          rust=$("$rust_dir/bin/rustc" --version)
+          cargo=$("$rust_dir/bin/cargo" --version)
+          META
+          (cd dist && sha256sum rust-toolchain-linux-x86_64.tar.gz cargo-cache.tar.gz install-bundle.sh manifest.txt > SHA256SUMS)
+      - name: 从工件安装和验证实际 Rust 组件
+        run: |
+          set -euo pipefail
+          bash dist/install-bundle.sh dist "$RUNNER_TEMP/222-rust-installed"
+          source "$RUNNER_TEMP/222-rust-installed/env.sh"
+          rustc --version | grep -F 'rustc 1.99.1 '
+          cargo --version
+          cargo clippy --version
+          cargo fmt --version
+          cargo metadata --locked --offline --format-version 1 --no-deps >/dev/null
+      - name: 无论项目编译是否通过均保留已完成校验的工具链供复查
+        if: ${{ always() && steps.package.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: 222-rust-1.99.1-linux-x86_64-offline
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: 离线验证 222 编译所需全部依赖
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/222-rust-installed/env.sh"
+          cargo check --locked --offline --all-targets
