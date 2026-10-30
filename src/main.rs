@@ -132,8 +132,8 @@ mod task_guards;
 mod task_output_format;
 mod team_mailbox;
 mod team_registry;
-mod terminal_launcher;
 mod terminal_input;
+mod terminal_launcher;
 #[cfg(test)]
 mod test_http;
 mod tool_errors;
