@@ -231,8 +231,39 @@ impl BackgroundTasks {
     /// never authorize another session's file or a symlinked output.
     pub fn trusted_output_path(&self, raw: &str) -> Result<Option<PathBuf>> {
         let path = Path::new(raw);
-        if !path.is_absolute() || path.parent() != Some(self.directory.as_path()) {
+        if !path.is_absolute() {
             return Ok(None);
+        }
+        let Some(parent) = path.parent() else {
+            return Ok(None);
+        };
+        if parent != self.directory {
+            // filesystem.ts::checkReadableInternalPath allows the project
+            // temporary directory across sessions. Limit this exception
+            // to a sibling UUID session's tasks directory, never to an
+            // arbitrary temp path or another project.
+            let Some(project_dir) = self.directory.parent().and_then(Path::parent) else {
+                return Ok(None);
+            };
+            let Some(session_dir) = parent.parent() else {
+                return Ok(None);
+            };
+            if session_dir.parent() != Some(project_dir)
+                || parent.file_name().and_then(|name| name.to_str()) != Some("tasks")
+                || !session_dir.file_name().and_then(|name| name.to_str())
+                    .is_some_and(|name| Uuid::parse_str(name).is_ok())
+            {
+                return Ok(None);
+            }
+            for directory in [session_dir, parent] {
+                let meta = fs::symlink_metadata(directory)?;
+                if meta.file_type().is_symlink() || !meta.is_dir() {
+                    bail!("Task output directory is redirected or invalid");
+                }
+            }
+            if parent.canonicalize()? != parent {
+                bail!("Task output directory is redirected");
+            }
         }
         if !matches!(path.extension().and_then(|ext| ext.to_str()), Some("stdout" | "stderr")) {
             return Ok(None);
