@@ -425,7 +425,7 @@ impl Agent {
             .with_workspace(self.root.clone())
             .with_project_root(self.project_root.clone());
 
-        let mut fixed = config.mcp_servers.clone();
+        let mut fixed = crate::mcp_cli::active_servers(&self.root, config)?;
         fixed.extend(plugin_set.mcp_servers);
         let mut ids = std::collections::HashSet::new();
         for server in &fixed {
