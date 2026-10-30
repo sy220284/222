@@ -73,6 +73,7 @@ mod plain_text_storage;
 mod platform_source_utilities;
 mod plugin_commands;
 mod plugin_manager;
+mod plugin_error_messages_source;
 mod plugin_pagination_source;
 mod plugins;
 mod portable_async_runtime;
