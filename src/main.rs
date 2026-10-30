@@ -1727,7 +1727,8 @@ async fn chat(
         }
         if let Some(raw) = input.strip_prefix("/mcp ") {
             use generated_ports::p_7522da9606aa2::{
-                resolve_toggle, route_args, McpClient, McpRoute, McpToggleOutcome,
+                resolve_toggle, route_args, toggle_enabled_state, McpClient, McpRoute,
+                McpToggleOutcome,
             };
             // Keep the existing manual reconnect-failed shortcut; named
             // reconnects and all enable/disable actions use the 2.1.88
@@ -1750,10 +1751,14 @@ async fn chat(
                             })
                             .collect::<Vec<_>>();
                         let (outcome, names) = resolve_toggle(&action, &target, &clients);
-                        let enabled = action == "enable";
                         let mut succeeded = 0;
                         for name in &names {
-                            match agent.toggle_named_mcp(name, enabled).await {
+                            let client = clients
+                                .iter()
+                                .find(|client| &client.name == name)
+                                .with_context(|| format!("MCP toggle target {name:?} vanished"))?;
+                            let target_enabled = toggle_enabled_state(&action, &target, client);
+                            match agent.toggle_named_mcp(name, target_enabled).await {
                                 Ok(_) => succeeded += 1,
                                 Err(error) => eprintln!("MCP {action} {name} failed: {error:#}"),
                             }

@@ -1,3 +1,10 @@
+## 2026-10-30：修复原版 MCP 命名目标的真实 toggle 语义
+
+- **原版证据**：`source/src/commands/mcp/mcp.tsx::MCPToggle` 对命名目标不按 action 过滤状态，直接调用 `toggleMcpServer(name)`；`source/src/services/mcp/useManageMCPConnections.ts` 中 `toggleMcpServer` 对 disabled 执行启用，对所有其它状态执行禁用。此前 Rust 命名目标使用 action 作为期望状态，会让已启用的 `/mcp enable NAME` 保持启用，与原版行为不同。
+- **修复**：`generated_ports/p_7522da9606aa2.rs::toggle_enabled_state` 使用实时状态推导切换方向；`src/main.rs` 所有选定目标以该结果调用 `Agent::toggle_named_mcp`；all 保持原来的基于 action 的筛选。
+- **测试**：源端口单测覆盖 connected/disabled 在 enable/disable/named/all 的结果；真实聊天集成测试覆盖失败连接状态下命名 enable 实际切换为 disabled 和磁盘持久化。
+- **验收状态**：仍以提交后最新 Linux/Windows CI 为准，Ink UI 等差异继续保留。
+
 ## 2026-10-30：MCP /mcp 原版批量开关接入真实聊天入口
 
 - **源码依据**：2.1.88 `source/src/commands/mcp/mcp.tsx::call/MCPToggle`；`ide` 不可选择，`all` 启用时仅选 disabled、禁用时仅选非 disabled；命名目标和空选择给出明确结果。

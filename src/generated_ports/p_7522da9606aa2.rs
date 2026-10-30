@@ -28,6 +28,18 @@ pub enum McpToggleOutcome {
     ToggledOne { name: String, enabled: bool },
 }
 
+/// The original /mcp command always invokes toggleMcpServer(name).
+/// For a named target the action label does not change the toggle direction:
+/// a currently-disabled server is enabled, every other state is disabled.
+/// For "all", resolve_toggle already filtered the corresponding states.
+pub fn toggle_enabled_state(action: &str, target: &str, client: &McpClient) -> bool {
+    if target == "all" {
+        action == "enable"
+    } else {
+        client.ctype == "disabled"
+    }
+}
+
 /// MCPToggle core: resolve targets and describe the outcome. Actual
 /// toggling is performed by the caller for each returned name.
 pub fn resolve_toggle(
@@ -204,6 +216,24 @@ mod tests {
             already.0,
             McpToggleOutcome::AlreadyAll("All MCP servers are already enabled")
         );
+    }
+
+    #[test]
+    fn named_toggle_follows_live_state_even_when_action_label_differs() {
+        let active = McpClient {
+            name: "a".into(),
+            ctype: "connected".into(),
+        };
+        let disabled = McpClient {
+            name: "a".into(),
+            ctype: "disabled".into(),
+        };
+        assert!(!toggle_enabled_state("enable", "a", &active));
+        assert!(!toggle_enabled_state("disable", "a", &active));
+        assert!(toggle_enabled_state("enable", "a", &disabled));
+        assert!(toggle_enabled_state("disable", "a", &disabled));
+        assert!(toggle_enabled_state("enable", "all", &active));
+        assert!(!toggle_enabled_state("disable", "all", &disabled));
     }
 
     #[test]
