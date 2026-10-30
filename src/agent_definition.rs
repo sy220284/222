@@ -143,6 +143,34 @@ pub fn validate(
     result
 }
 
+/// Preserve editor fields that the compact terminal editor does not ask
+/// the user to replace. The original agent file format stores these values
+/// as one-line YAML frontmatter keys.
+pub fn retained_optional_fields(markdown: &str) -> (Option<String>, Option<String>, Option<String>) {
+    let mut color = None;
+    let mut memory = None;
+    let mut effort = None;
+    let mut lines = markdown.lines();
+    if lines.next() != Some("---") {
+        return (color, memory, effort);
+    }
+    for line in lines {
+        if line.trim() == "---" {
+            break;
+        }
+        let Some((key, value)) = line.split_once(':') else { continue; };
+        let value = value.trim();
+        if value.is_empty() { continue; }
+        match key.trim() {
+            "color" => color = Some(value.to_owned()),
+            "memory" => memory = Some(value.to_owned()),
+            "effort" => effort = Some(value.to_owned()),
+            _ => {}
+        }
+    }
+    (color, memory, effort)
+}
+
 pub fn format_as_markdown(agent: &AgentDefinition) -> String {
     let escaped_description = agent
         .when_to_use

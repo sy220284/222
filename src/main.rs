@@ -2197,15 +2197,17 @@ async fn chat(
                 let tools = tools.split(',').map(str::trim)
                     .filter(|tool| !tool.is_empty()).map(str::to_owned)
                     .collect::<Vec<_>>();
+                let (color, memory, effort) =
+                    agent_definition::retained_optional_fields(&original);
                 let definition = agent_definition::AgentDefinition {
                     agent_type: (*name).to_owned(),
                     when_to_use: description.trim().to_owned(),
                     system_prompt: lines.join("\n"),
                     tools: (!tools.is_empty()).then_some(tools),
-                    color: None,
+                    color,
                     model: (!model.trim().is_empty()).then(|| model.trim().to_owned()),
-                    memory: None,
-                    effort: None,
+                    memory,
+                    effort,
                 };
                 agent_definition::save_agent(
                     &definition, agent.workspace_root(), user, true,
