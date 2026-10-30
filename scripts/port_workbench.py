@@ -321,7 +321,8 @@ def github_json(url: str) -> dict:
     if token:
         headers['Authorization'] = 'Bearer ' + token
     request = urllib.request.Request(url, headers=headers)
-    for attempt in range(3):
+    max_attempts = 7
+    for attempt in range(max_attempts):
         try:
             with urllib.request.urlopen(request, timeout=12) as response:
                 return json.load(response)
@@ -332,18 +333,21 @@ def github_json(url: str) -> dict:
                 or error.headers.get('X-RateLimit-Remaining') == '0'
             ):
                 retryable = True
-            if not retryable or attempt == 2:
+            if not retryable or attempt + 1 == max_attempts:
                 raise AuditError(
                     f'无法核验 GitHub Actions 测试运行证据: HTTP {error.code}, '
                     f'URL={url}'
                 ) from error
         except (urllib.error.URLError, TimeoutError) as error:
-            if attempt == 2:
+            if attempt + 1 == max_attempts:
                 raise AuditError(
                     f'无法核验 GitHub Actions 测试运行证据: '
                     f'{type(error).__name__}, URL={url}'
                 ) from error
-        time.sleep(1 + attempt * 2)
+        # GitHub's historical Actions jobs endpoint can return several
+        # consecutive 502s; maintain strict evidence checks and retry
+        # with capped backoff instead of treating the missing data as success.
+        time.sleep(min(2 ** attempt, 12))
     raise AssertionError('Unreachable: all evidence fetch attempts exhausted')
 
 
