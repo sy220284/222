@@ -113,6 +113,40 @@ fn read_trusted_task_output(path: &Path, args: &Value, source_read: bool) -> Res
     Ok(result)
 }
 
+/// TaskOutputTool returns a structured result, not a truncated JSON
+/// fragment. Keep status, offsets and file path intact when the transcript
+/// exceeds the source tool's 100k-character model result budget.
+fn model_task_result(output: String) -> String {
+    const MAX_TASK_RESULT_CHARS: usize = 100_000;
+    if output.chars().count() <= MAX_TASK_RESULT_CHARS {
+        return output;
+    }
+    let mut value: Value = match serde_json::from_str(&output) {
+        Ok(value) => value,
+        Err(error) => return format!("ERROR: Invalid task result: {error}"),
+    };
+    let content = if let Some(content) = value.get("content").and_then(Value::as_str) {
+        Some((content.to_owned(), false))
+    } else {
+        value.pointer("/task/output").and_then(Value::as_str)
+            .map(|content| (content.to_owned(), true))
+    };
+    if let Some((content, nested)) = content {
+        let preview: String = content.chars().take(12_000).collect();
+        if nested {
+            value["task"]["output"] = json!(preview);
+            value["task"]["contentTruncated"] = json!(true);
+        } else {
+            value["content"] = json!(preview);
+            value["contentTruncated"] = json!(true);
+        }
+        value["outputHint"] = json!(
+            "Full output remains on disk; use Read on output_file or task_output_delta with a smaller byte range"
+        );
+    }
+    value.to_string()
+}
+
 fn skill_invocable(path: &Path, for_model: bool) -> Result<bool> {
     let content = fs::read_to_string(path)?;
     if for_model {
@@ -516,6 +550,9 @@ impl ToolExecutor {
             // Original Read returns the complete requested text slice, with
             // its own file-size/token limits rather than generic tool clipping.
             Ok(output) if call.function.name == "Read" => output,
+            Ok(output) if matches!(call.function.name.as_str(), "task_output" | "task_output_delta") => {
+                model_task_result(output)
+            }
             Ok(output) => truncate(
                 &output,
                 if shell {
