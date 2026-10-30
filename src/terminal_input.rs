@@ -125,6 +125,7 @@ struct VimKeys {
     register: String,
     undo: Vec<(String, usize)>,
     inserted_text: String,
+    insert_session_recorded: bool,
 }
 
 impl VimKeys {
@@ -137,6 +138,7 @@ impl VimKeys {
             register: String::new(),
             undo: Vec::new(),
             inserted_text: String::new(),
+            insert_session_recorded: false,
         }
     }
 
@@ -209,12 +211,23 @@ impl VimKeys {
                 });
             }
             self.insert = false;
+            self.insert_session_recorded = false;
             self.command = crate::vim::transitions::CommandState::Idle;
             return Ok(true);
         }
         if self.insert {
-            if let Key::Char(ch) = key {
-                self.inserted_text.push(*ch);
+            if matches!(key, Key::Char(_) | Key::Backspace | Key::Delete) {
+                if !self.insert_session_recorded {
+                    self.record(editor);
+                    self.insert_session_recorded = true;
+                }
+                match key {
+                    Key::Char(ch) => self.inserted_text.push(*ch),
+                    Key::Backspace => {
+                        self.inserted_text.pop();
+                    }
+                    _ => {}
+                }
             }
             return Ok(false);
         }
@@ -254,7 +267,8 @@ impl VimKeys {
         if ctx.text.len() > MAX_INPUT_BYTES {
             bail!("Interactive input exceeds 1 MiB");
         }
-        if ctx.text != editor.text || ctx.enter_insert {
+        let changed = ctx.text != editor.text;
+        if changed {
             self.record(editor);
         }
         editor.text = ctx.text;
@@ -263,6 +277,7 @@ impl VimKeys {
         self.register = self.persistent.register.clone();
         if ctx.enter_insert {
             self.insert = true;
+            self.insert_session_recorded = changed;
             self.inserted_text.clear();
             self.command = crate::vim::transitions::CommandState::Idle;
         }
@@ -617,6 +632,30 @@ mod vim_tests {
             }
         }
     }
+    #[test]
+    fn vim_first_insert_session_is_undoable_as_one_edit() {
+        let mut vim = VimKeys::new(true);
+        let mut editor = Editor::default();
+        input(&mut editor, &mut vim, "abc");
+        vim.handle(&mut editor, &Key::Escape).unwrap();
+        input(&mut editor, &mut vim, "u");
+        assert_eq!(editor.text, "");
+    }
+
+    #[test]
+    fn vim_insert_backspace_excludes_deleted_character_from_dot_repeat() {
+        let mut vim = VimKeys::new(true);
+        let mut editor = Editor::default();
+        input(&mut editor, &mut vim, "ab");
+        assert!(!vim.handle(&mut editor, &Key::Backspace).unwrap());
+        editor.backspace();
+        input(&mut editor, &mut vim, "c");
+        vim.handle(&mut editor, &Key::Escape).unwrap();
+        assert_eq!(editor.text, "ac");
+        input(&mut editor, &mut vim, ".");
+        assert_eq!(editor.text, "acc");
+    }
+
     #[test]
     fn vim_defaults_to_insert_and_escape_switches_to_normal() {
         let mut vim = VimKeys::new(true);
