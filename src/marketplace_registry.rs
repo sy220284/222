@@ -551,11 +551,19 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
                 .context(
                     "Invalid marketplace source format. Try owner/repo, https://..., or ./path",
                 )?;
-            let (name, file) = inspect_local(&source)?;
             if let Some((existing, _)) = registry.iter().find(|(_, r)| r.source == source) {
                 return Ok(json!({"name":existing,"alreadyMaterialized":true}));
             }
+            let remote = is_remote(&source);
+            let (name, file) = if remote {
+                materialize_remote(root, &source)?
+            } else {
+                inspect_local(&source)?
+            };
             if let Some(existing) = registry.get(&name) {
+                if remote {
+                    fs::remove_dir_all(cached_root(root, &file)?)?;
+                }
                 if existing.source != source {
                     bail!("Marketplace '{name}' is already registered from another source");
                 }
@@ -571,7 +579,13 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
                     registered_at: Some(registered_at),
                 },
             );
-            save(root, &registry)?;
+            if let Err(error) = save(root, &registry) {
+                if remote {
+                    let cached = cached_root(root, &file)?;
+                    fs::remove_dir_all(cached).context("Clean unregistered marketplace cache")?;
+                }
+                return Err(error);
+            }
             Ok(json!({"name":name,"alreadyMaterialized":false}))
         }
         "remove" => {
@@ -626,26 +640,59 @@ pub fn execute(root: &Path, action: Option<&str>, target: Option<&str>) -> Resul
             let single = target.is_some_and(|value| !value.trim().is_empty());
             let mut updated = Vec::new();
             let mut failed = Vec::new();
+            let mut old_cache = Vec::new();
+            let mut new_cache = Vec::new();
             for name in names {
-                let result = inspect_local(&registry[&name].source).and_then(|(actual, _)| {
-                    if actual != name {
-                        bail!("Marketplace name changed from '{name}' to '{actual}'");
-                    }
-                    Ok(())
-                });
+                let record = registry.get(&name)
+                    .context("Marketplace disappeared during update")?.clone();
+                let remote = is_remote(&record.source);
+                let result = if remote {
+                    materialize_remote(root, &record.source)
+                } else {
+                    inspect_registered(root, &record)
+                };
                 match result {
-                    Ok(()) => {
-                        registry.get_mut(&name).expect("marketplace exists").last_updated = now();
+                    Ok((actual, file)) if actual == name => {
+                        if remote {
+                            old_cache.push(cached_root(root, &record.install_location)?);
+                            new_cache.push(cached_root(root, &file)?);
+                            registry.get_mut(&name)
+                                .context("Marketplace update target disappeared")?
+                                .install_location = file;
+                        }
+                        registry.get_mut(&name)
+                            .context("Marketplace update target disappeared")?
+                            .last_updated = now();
                         updated.push(name);
+                    }
+                    Ok((actual, file)) => {
+                        if remote {
+                            fs::remove_dir_all(cached_root(root, &file)?)?;
+                        }
+                        let error = anyhow!("Marketplace name changed from '{name}' to '{actual}'");
+                        if single { return Err(error); }
+                        failed.push(json!({"name":name,"error":format!("{error:#}")}));
                     }
                     Err(error) if single => return Err(error),
                     Err(error) => failed.push(json!({"name":name,"error":format!("{error:#}")})),
                 }
             }
             if !updated.is_empty() {
-                save(root, &registry)?;
+                if let Err(error) = save(root, &registry) {
+                    for path in new_cache {
+                        fs::remove_dir_all(path)
+                            .context("Clean uncommitted marketplace update")?;
+                    }
+                    return Err(error);
+                }
             }
-            Ok(json!({"updated":updated,"failed":failed}))
+            let mut cleanup_warnings = Vec::new();
+            for path in old_cache {
+                if let Err(error) = fs::remove_dir_all(&path) {
+                    cleanup_warnings.push(format!("{}: {error}", path.display()));
+                }
+            }
+            Ok(json!({"updated":updated,"failed":failed,"cleanupWarnings":cleanup_warnings}))
         }
         _ => bail!("Unsupported marketplace action: {action}"),
     }
@@ -790,16 +837,28 @@ mod tests {
         assert!(!project.path().join(".atlas/marketplaces.json").exists());
     }
     #[test]
-    fn remote_source_rejected_before_registry_writes() {
+    fn invalid_remote_source_cannot_write_registry() {
         let (project, _) = fixture();
-        assert!(execute(project.path(), Some("add"), Some("owner/repo#branch")).is_err());
-        assert!(execute(
-            project.path(),
-            Some("add"),
-            Some("https://example.org/marketplace.json")
-        )
-        .is_err());
+        assert!(execute(project.path(), Some("add"), Some("http://example.org/marketplace.json"))
+            .is_err());
         assert!(!project.path().join(".atlas/marketplaces.json").exists());
+    }
+
+    #[test]
+    fn git_marketplace_can_be_cached_and_resolved_without_external_network() {
+        use std::process::Command;
+        let (project, source) = fixture();
+        let init = Command::new("git").args(["init", "-q"])
+            .arg(source.path()).status().unwrap();
+        assert!(init.success());
+        let input = MarketplaceSource::Git {
+            url: source.path().to_string_lossy().into_owned(),
+            r#ref: None,
+        };
+        let (name, path) = materialize_remote(project.path(), &input).unwrap();
+        assert_eq!(name, "team-repo");
+        assert!(path.exists());
+        assert!(cached_root(project.path(), &path).unwrap().is_dir());
     }
     #[test]
     fn update_is_all_or_nothing_and_missing_name_is_an_error() {
