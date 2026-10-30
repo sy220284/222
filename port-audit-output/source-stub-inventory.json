@@ -1,5 +1,5 @@
 {
-  "count": 241,
+  "count": 225,
   "disclaimer": "仅是自动生成空壳的静态检测，不证明手写代码功能完整。",
   "items": [
     {
@@ -196,14 +196,6 @@
     },
     {
       "null_expression_count": 8,
-      "rust": "src/generated_ports/p_100ae039b4f18.rs",
-      "rust_lines": 196,
-      "source": "src/commands/plugin/AddMarketplace.tsx",
-      "source_lines": 162,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 8,
       "rust": "src/generated_ports/p_cce865c493883.rs",
       "rust_lines": 54,
       "source": "src/components/agents/new-agent-creation/wizard-steps/GenerateStep.tsx",
@@ -256,14 +248,6 @@
       "rust_lines": 50,
       "source": "src/components/TeleportProgress.tsx",
       "source_lines": 140,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 7,
-      "rust": "src/generated_ports/p_8dddb5ec693ee.rs",
-      "rust_lines": 34,
-      "source": "src/commands/plugin/PluginOptionsFlow.tsx",
-      "source_lines": 135,
       "view_export_unreachable": true
     },
     {
@@ -563,14 +547,6 @@
       "view_export_unreachable": true
     },
     {
-      "null_expression_count": 5,
-      "rust": "src/generated_ports/p_db7aa9242d70e.rs",
-      "rust_lines": 20,
-      "source": "src/commands/feedback/feedback.tsx",
-      "source_lines": 25,
-      "view_export_unreachable": true
-    },
-    {
       "null_expression_count": 4,
       "rust": "src/generated_ports/p_9ffbccf7a7015.rs",
       "rust_lines": 53,
@@ -676,14 +652,6 @@
     },
     {
       "null_expression_count": 4,
-      "rust": "src/generated_ports/p_8a0b520eb5d3b.rs",
-      "rust_lines": 24,
-      "source": "src/commands/review/UltrareviewOverageDialog.tsx",
-      "source_lines": 96,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 4,
       "rust": "src/generated_ports/p_17e756c76b4c5.rs",
       "rust_lines": 29,
       "source": "src/components/design-system/LoadingState.tsx",
@@ -696,22 +664,6 @@
       "rust_lines": 61,
       "source": "src/components/FeedbackSurvey/TranscriptSharePrompt.tsx",
       "source_lines": 88,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 4,
-      "rust": "src/generated_ports/p_7522da9606aa2.rs",
-      "rust_lines": 28,
-      "source": "src/commands/mcp/mcp.tsx",
-      "source_lines": 85,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 4,
-      "rust": "src/generated_ports/p_c4344a216659f.rs",
-      "rust_lines": 41,
-      "source": "src/commands/install-github-app/WarningsStep.tsx",
-      "source_lines": 73,
       "view_export_unreachable": true
     },
     {
@@ -804,14 +756,6 @@
     },
     {
       "null_expression_count": 3,
-      "rust": "src/generated_ports/p_d3dd9f3d01f73.rs",
-      "rust_lines": 39,
-      "source": "src/utils/autoRunIssue.tsx",
-      "source_lines": 122,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 3,
       "rust": "src/generated_ports/p_4ef6869f716c2.rs",
       "rust_lines": 62,
       "source": "src/components/CompactSummary.tsx",
@@ -900,14 +844,6 @@
     },
     {
       "null_expression_count": 3,
-      "rust": "src/generated_ports/p_5d2e3ca07cba4.rs",
-      "rust_lines": 21,
-      "source": "src/commands/privacy-settings/privacy-settings.tsx",
-      "source_lines": 58,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 3,
       "rust": "src/generated_ports/p_e55bdaf86a903.rs",
       "rust_lines": 17,
       "source": "src/components/App.tsx",
@@ -920,14 +856,6 @@
       "rust_lines": 20,
       "source": "src/components/LogoV2/AnimatedAsterisk.tsx",
       "source_lines": 50,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 3,
-      "rust": "src/generated_ports/p_8028611d439a8.rs",
-      "rust_lines": 18,
-      "source": "src/commands/exit/exit.tsx",
-      "source_lines": 33,
       "view_export_unreachable": true
     },
     {
@@ -1028,26 +956,10 @@
     },
     {
       "null_expression_count": 2,
-      "rust": "src/generated_ports/p_d71c68a412fbd.rs",
-      "rust_lines": 17,
-      "source": "src/commands/sandbox-toggle/sandbox-toggle.tsx",
-      "source_lines": 83,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
       "rust": "src/generated_ports/p_c67bd922d31e8.rs",
       "rust_lines": 18,
       "source": "src/components/design-system/KeyboardShortcutHint.tsx",
       "source_lines": 81,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_7a696c359ec3c.rs",
-      "rust_lines": 18,
-      "source": "src/commands/install-github-app/CreatingStep.tsx",
-      "source_lines": 65,
       "view_export_unreachable": true
     },
     {
@@ -1072,14 +984,6 @@
       "rust_lines": 27,
       "source": "src/components/IdeStatusIndicator.tsx",
       "source_lines": 58,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_cb6d3fa44994c.rs",
-      "rust_lines": 24,
-      "source": "src/commands/theme/theme.tsx",
-      "source_lines": 57,
       "view_export_unreachable": true
     },
     {
@@ -1232,14 +1136,6 @@
       "rust_lines": 35,
       "source": "src/components/LogoV2/Clawd.tsx",
       "source_lines": 240,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 1,
-      "rust": "src/generated_ports/p_bcae150cd625f.rs",
-      "rust_lines": 39,
-      "source": "src/commands/plan/plan.tsx",
-      "source_lines": 122,
       "view_export_unreachable": true
     },
     {
@@ -1588,14 +1484,6 @@
     },
     {
       "null_expression_count": 0,
-      "rust": "src/generated_ports/p_26ba971b8d52d.rs",
-      "rust_lines": 12,
-      "source": "src/commands/install-github-app/CheckGitHubStep.tsx",
-      "source_lines": 15,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 0,
       "rust": "src/generated_ports/p_806f37fa5888a.rs",
       "rust_lines": 24,
       "source": "src/components/PressEnterToContinue.tsx",
@@ -1712,14 +1600,6 @@
       "rust_lines": 34,
       "source": "src/utils/tokens.ts",
       "source_lines": 262,
-      "view_export_unreachable": false
-    },
-    {
-      "null_expression_count": 4,
-      "rust": "src/generated_ports/p_d5db58adb3fd2.rs",
-      "rust_lines": 20,
-      "source": "src/utils/plugins/pluginIdentifier.ts",
-      "source_lines": 124,
       "view_export_unreachable": false
     },
     {
@@ -1908,14 +1788,6 @@
     },
     {
       "null_expression_count": 1,
-      "rust": "src/generated_ports/p_9029c5407283f.rs",
-      "rust_lines": 10,
-      "source": "src/utils/agentContext.ts",
-      "source_lines": 179,
-      "view_export_unreachable": false
-    },
-    {
-      "null_expression_count": 1,
       "rust": "src/generated_ports/p_6ae88763d0d0f.rs",
       "rust_lines": 10,
       "source": "src/utils/aws.ts",
@@ -1932,7 +1804,7 @@
     }
   ],
   "schema": "port-stubs/v1",
-  "total_null_expressions": 1056,
-  "unreachable_views": 200,
-  "with_null": 212
+  "total_null_expressions": 1003,
+  "unreachable_views": 186,
+  "with_null": 197
 }

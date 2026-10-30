@@ -79,7 +79,7 @@
 | `src/bridge/workSecret.ts` | 128 | 4672 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/buddy/CompanionSprite.tsx` | 371 | 45922 | 重写：保持通用行为 | `src/generated_ports/p_ab10542ccfa4c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/buddy/companion.ts` | 134 | 3715 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/buddy/prompt.ts` | 37 | 1451 | 重写：保持通用行为 | `src/generated_ports/p_bf68628a27ff8.rs`| 部分实现：伙伴介绍文案生成（模板逐字对齐）、BUDDY 开关进程级化、已播报去重扫描（历史 attachment 类型+名称匹配），附 3 测试|
+| `src/buddy/prompt.ts` | 37 | 1451 | 重写：保持通用行为 | `src/generated_ports/p_bf68628a27ff8.rs`| 部分实现：伙伴介绍文案模板逐字对齐、BUDDY 开关进程级化、已播报去重扫描（历史 attachment 类型与名称匹配、muted 跳过）、registry 兼容导出 companionIntroText，附 2 测试（开关为进程全局，gate 与 dedup 合并顺序单测防并行竞态）|
 | `src/buddy/sprites.ts` | 515 | 9797 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/buddy/types.ts` | 149 | 3805 | 重写：保持通用行为 | `src/generated_ports/p_0e2477efcdf43.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/buddy/useBuddyNotification.tsx` | 98 | 9959 | 重写：保持通用行为 | `src/generated_ports/p_336c8aa7f1741.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -1351,7 +1351,7 @@
 | `src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts` | 224 | 7591 | 重写：保持通用行为 | `src/generated_ports/p_461ec04c9ec8b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/types/generated/google/protobuf/timestamp.ts` | 188 | 6565 | 重写：保持通用行为 | `src/generated_ports/p_5144380e07c74.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/types/hooks.ts` | 291 | 9138 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/types/ids.ts` | 45 | 1295 | 重写：保持通用行为 | `src/generated_ports/p_87d79f34fe49a.rs`| 部分实现：SessionId/AgentId 品牌类型（Rust newtype 等价 TS 编译期 brand）、as_session_id/as_agent_id、createAgentId（可选标签+16hex 随机）、toAgentId 正则校验（a + 可选label- + 16hex），附 3 测试|
+| `src/types/ids.ts` | 45 | 1295 | 重写：保持通用行为 | `src/generated_ports/p_87d79f34fe49a.rs`| 部分实现：SessionId 与 AgentId 品牌类型（Rust newtype 等价 TS brand）、as_session_id 与 as_agent_id、createAgentId（可选标签加 16 位随机）、toAgentId 校验（a 前缀加可选标签加 16hex，拒绝队友名等格式），registry 兼容导出 asSessionId、asAgentId、toAgentId，附 3 测试|
 | `src/types/logs.ts` | 331 | 11291 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/types/permissions.ts` | 442 | 13145 | 重写：保持通用行为 | `src/generated_ports/p_cf19f3fcff0bf.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/types/plugin.ts` | 364 | 11308 | 重写：保持通用行为 | `src/generated_ports/p_cc2135ed93bfb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
