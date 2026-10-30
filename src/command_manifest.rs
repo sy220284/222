@@ -82,7 +82,7 @@ theme|theme|local-jsx||-|Terminal theme
 thinkback|think-back|local-jsx||-|Historical review
 thinkback-play|thinkback-play|local||-|Historical animation
 usage|usage|local-jsx||-|Usage
-vim|vim|local||-|Toggle Vim mode
+vim|vim|local||-|Toggle Vim mode"####;
 static REGISTRY: OnceLock<Vec<CommandDefinition>> = OnceLock::new();
 pub fn commands() -> &'static [CommandDefinition] {
     REGISTRY.get_or_init(|| {
