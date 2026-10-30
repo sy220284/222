@@ -107,7 +107,9 @@ async fn terminate_windows_task_tree(pid: Option<u32>, task: Option<&Arc<Running
 fn private_task_directory(root: &Path, session_id: Uuid) -> Result<PathBuf> {
     use sha2::{Digest, Sha256};
     let project = root.canonicalize().context("Workspace unavailable")?;
-    let temp = std::env::temp_dir().canonicalize().context("Temporary directory unavailable")?;
+    let temp = std::env::temp_dir()
+        .canonicalize()
+        .context("Temporary directory unavailable")?;
     #[cfg(unix)]
     let owner = format!("atlas-agent-{}", unsafe { libc::geteuid() });
     #[cfg(not(unix))]
@@ -127,15 +129,18 @@ fn private_task_directory(root: &Path, session_id: Uuid) -> Result<PathBuf> {
         path.push(component);
         match fs::symlink_metadata(&path) {
             Ok(meta) if meta.file_type().is_symlink() || !meta.is_dir() => {
-                bail!("Task output directory is redirected or invalid: {}", path.display())
+                bail!(
+                    "Task output directory is redirected or invalid: {}",
+                    path.display()
+                )
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 if let Err(error) = fs::create_dir(&path) {
                     if error.kind() != std::io::ErrorKind::AlreadyExists {
-                        return Err(error).with_context(|| format!(
-                            "Create task output directory {}", path.display()
-                        ));
+                        return Err(error).with_context(|| {
+                            format!("Create task output directory {}", path.display())
+                        });
                     }
                 }
                 let meta = fs::symlink_metadata(&path)?;
@@ -149,15 +154,20 @@ fn private_task_directory(root: &Path, session_id: Uuid) -> Result<PathBuf> {
         {
             use std::os::unix::fs::{MetadataExt, PermissionsExt};
             let meta = fs::symlink_metadata(&path)?;
-            if meta.file_type().is_symlink() || !meta.is_dir()
+            if meta.file_type().is_symlink()
+                || !meta.is_dir()
                 || meta.uid() != unsafe { libc::geteuid() }
             {
-                bail!("Task output directory is not owned by this user: {}", path.display())
+                bail!(
+                    "Task output directory is not owned by this user: {}",
+                    path.display()
+                )
             }
             fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
         }
     }
-    path.canonicalize().context("Private task output directory unavailable")
+    path.canonicalize()
+        .context("Private task output directory unavailable")
 }
 
 pub struct BackgroundTasks {
@@ -183,7 +193,10 @@ impl BackgroundTasks {
         // Existing Rust sessions kept their task metadata in the workspace.
         // Preserve access to those records until the session ends instead
         // of silently losing completed output during an upgrade.
-        let legacy = root.join(".atlas").join("background").join(session_id.to_string());
+        let legacy = root
+            .join(".atlas")
+            .join("background")
+            .join(session_id.to_string());
         match fs::symlink_metadata(&legacy) {
             Ok(meta) if meta.file_type().is_symlink() || !meta.is_dir() => {
                 bail!("Previous task output directory is redirected or invalid")
@@ -194,13 +207,18 @@ impl BackgroundTasks {
                     let entry = entry?;
                     if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
                         let metadata = fs::symlink_metadata(entry.path())?;
-                        if metadata.file_type().is_symlink() || !metadata.is_file()
+                        if metadata.file_type().is_symlink()
+                            || !metadata.is_file()
                             || metadata.len() > 1024 * 1024
                         {
-                            bail!("Previous task metadata is redirected or invalid: {}",
-                                entry.path().display());
+                            bail!(
+                                "Previous task metadata is redirected or invalid: {}",
+                                entry.path().display()
+                            );
                         }
-                        let stem = entry.path().file_stem()
+                        let stem = entry
+                            .path()
+                            .file_stem()
                             .and_then(|stem| stem.to_str())
                             .context("Previous task metadata filename is invalid")?
                             .to_owned();
@@ -208,11 +226,14 @@ impl BackgroundTasks {
                             continue;
                         }
                         let record: TaskRecord = serde_json::from_slice(&fs::read(entry.path())?)
-                            .with_context(|| format!(
-                                "Read previous task metadata {}", entry.path().display()
-                            ))?;
+                            .with_context(|| {
+                            format!("Read previous task metadata {}", entry.path().display())
+                        })?;
                         if record.id != stem {
-                            bail!("Previous task metadata ID mismatch: {}", entry.path().display());
+                            bail!(
+                                "Previous task metadata ID mismatch: {}",
+                                entry.path().display()
+                            );
                         }
                         has_records = true;
                     }
@@ -278,7 +299,9 @@ impl BackgroundTasks {
             };
             if session_dir.parent() != Some(project_dir)
                 || parent.file_name().and_then(|name| name.to_str()) != Some("tasks")
-                || !session_dir.file_name().and_then(|name| name.to_str())
+                || !session_dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
                     .is_some_and(|name| Uuid::parse_str(name).is_ok())
             {
                 return Ok(None);
@@ -293,7 +316,10 @@ impl BackgroundTasks {
                 bail!("Task output directory is redirected");
             }
         }
-        if !matches!(path.extension().and_then(|ext| ext.to_str()), Some("stdout" | "stderr" | "output")) {
+        if !matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("stdout" | "stderr" | "output")
+        ) {
             return Ok(None);
         }
         let Some(id) = path.file_stem().and_then(|stem| stem.to_str()) else {
@@ -407,7 +433,8 @@ impl BackgroundTasks {
         let env = std::env::vars().collect::<HashMap<String, String>>();
         let timeout_ms = crate::portable_source_utils::default_bash_timeout_ms(&env)
             .clamp(1, crate::portable_source_utils::max_bash_timeout_ms(&env));
-        self.start_with_shell_timeout(command, description, kind, timeout_ms).await
+        self.start_with_shell_timeout(command, description, kind, timeout_ms)
+            .await
     }
 
     /// BashTool creates its timed ShellCommand before moving it into the
@@ -512,7 +539,8 @@ impl BackgroundTasks {
             }
             #[cfg(windows)]
             let tree_error = crate::shell_runtime::terminate_windows_process_tree(child.id())
-                .await.err();
+                .await
+                .err();
             let _ = child.kill().await;
             let _ = child.wait().await;
             drop(stdout);
@@ -637,7 +665,12 @@ impl BackgroundTasks {
             // A stop request must also interrupt output draining. The shell
             // can exit while a descendant keeps its pipes open; waiting for
             // the original 10-minute deadline makes TaskStop falsely time out.
-            let drain_deadline = if timed_out || stop_requested || killed_for_output_cap || failed_for_output_io || state == "killed" {
+            let drain_deadline = if timed_out
+                || stop_requested
+                || killed_for_output_cap
+                || failed_for_output_io
+                || state == "killed"
+            {
                 tokio::time::Instant::now() + Duration::from_secs(1)
             } else {
                 deadline_at
@@ -659,65 +692,66 @@ impl BackgroundTasks {
                     None
                 },
             };
-            let (out, stdout_failed, err, stderr_failed) = if let Some((stdout_result, stderr_result)) = output_results {
-                let (out, stdout_failed) = match stdout_result {
-                    Ok(Ok(capped)) => (capped, false),
-                    Ok(Err(error)) => {
-                        eprintln!("Background stdout persistence failed: {error:#}");
-                        (true, true)
-                    }
-                    Err(error) => {
-                        eprintln!("Background stdout writer failed: {error}");
-                        (true, true)
-                    }
-                };
-                let (err, stderr_failed) = match stderr_result {
-                    Ok(Ok(capped)) => (capped, false),
-                    Ok(Err(error)) => {
-                        eprintln!("Background stderr persistence failed: {error:#}");
-                        (true, true)
-                    }
-                    Err(error) => {
-                        eprintln!("Background stderr writer failed: {error}");
-                        (true, true)
-                    }
-                };
-                (out, stdout_failed, err, stderr_failed)
-            } else {
-                // User cancellation is a killed task, even if an inherited
-                // pipe must be force-closed. Only an actual deadline failure
-                // receives a timeout notice in the persisted output.
-                if killed_for_output_cap {
-                    state = "failed";
-                    code = Some(137);
-                } else if failed_for_output_io {
-                    // A disk write failure is not a command timeout. Preserve
-                    // the actual failure reason in task status and diagnostics.
-                    state = "failed";
-                    code = None;
+            let (out, stdout_failed, err, stderr_failed) =
+                if let Some((stdout_result, stderr_result)) = output_results {
+                    let (out, stdout_failed) = match stdout_result {
+                        Ok(Ok(capped)) => (capped, false),
+                        Ok(Err(error)) => {
+                            eprintln!("Background stdout persistence failed: {error:#}");
+                            (true, true)
+                        }
+                        Err(error) => {
+                            eprintln!("Background stdout writer failed: {error}");
+                            (true, true)
+                        }
+                    };
+                    let (err, stderr_failed) = match stderr_result {
+                        Ok(Ok(capped)) => (capped, false),
+                        Ok(Err(error)) => {
+                            eprintln!("Background stderr persistence failed: {error:#}");
+                            (true, true)
+                        }
+                        Err(error) => {
+                            eprintln!("Background stderr writer failed: {error}");
+                            (true, true)
+                        }
+                    };
+                    (out, stdout_failed, err, stderr_failed)
                 } else {
-                    if cancelled_during_drain {
-                        state = "killed";
-                    } else if !stop_requested && state != "killed" {
-                        timed_out = true;
+                    // User cancellation is a killed task, even if an inherited
+                    // pipe must be force-closed. Only an actual deadline failure
+                    // receives a timeout notice in the persisted output.
+                    if killed_for_output_cap {
+                        state = "failed";
+                        code = Some(137);
+                    } else if failed_for_output_io {
+                        // A disk write failure is not a command timeout. Preserve
+                        // the actual failure reason in task status and diagnostics.
+                        state = "failed";
+                        code = None;
+                    } else {
+                        if cancelled_during_drain {
+                            state = "killed";
+                        } else if !stop_requested && state != "killed" {
+                            timed_out = true;
+                            state = "failed";
+                        }
+                        code = None;
+                    }
+                    #[cfg(unix)]
+                    if let Some(pid) = process_id {
+                        let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+                    }
+                    #[cfg(windows)]
+                    if !terminate_windows_task_tree(process_id, Some(&running)).await {
                         state = "failed";
                     }
-                    code = None;
-                }
-                #[cfg(unix)]
-                if let Some(pid) = process_id {
-                    let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
-                }
-                #[cfg(windows)]
-                if !terminate_windows_task_tree(process_id, Some(&running)).await {
-                    state = "failed";
-                }
-                stdout_task.abort();
-                stderr_task.abort();
-                let _ = stdout_task.await;
-                let _ = stderr_task.await;
-                (true, true, true, true)
-            };
+                    stdout_task.abort();
+                    stderr_task.abort();
+                    let _ = stdout_task.await;
+                    let _ = stderr_task.await;
+                    (true, true, true, true)
+                };
             let merged_failed = {
                 let mut log = merged.lock().await;
                 let mut failed = false;
@@ -780,7 +814,8 @@ impl BackgroundTasks {
                 state_record.clone()
             };
             if let Err(error) = Self::save(&folder, &updated) {
-                let warning = format!("Task completed but final state could not be saved: {error:#}");
+                let warning =
+                    format!("Task completed but final state could not be saved: {error:#}");
                 eprintln!("{warning}");
                 *running.persistence_warning.lock().unwrap() = Some(warning);
             }
@@ -824,16 +859,20 @@ impl BackgroundTasks {
         let safe_stderr = self.directory.join(format!("{task_id}.stderr"));
         let combined = self.directory.join(format!("{task_id}.output"));
         let (text, result_path) = match fs::symlink_metadata(&combined) {
-            Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
-                (tail(combined.to_str().context("Invalid output path")?)?, combined)
-            }
+            Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => (
+                tail(combined.to_str().context("Invalid output path")?)?,
+                combined,
+            ),
             Ok(_) => bail!("Combined task output is redirected or invalid"),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 // Older task records stored stdout/stderr separately.
                 let stdout = tail(safe_stdout.to_str().context("Invalid stdout path")?)?;
                 let stderr = tail(safe_stderr.to_str().context("Invalid stderr path")?)?;
-                let legacy = [stdout, stderr].into_iter()
-                    .filter(|part| !part.is_empty()).collect::<Vec<_>>().join("\n");
+                let legacy = [stdout, stderr]
+                    .into_iter()
+                    .filter(|part| !part.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 (legacy, safe_stdout)
             }
             Err(error) => return Err(error.into()),
@@ -956,7 +995,9 @@ impl BackgroundTasks {
     }
 
     pub async fn stop(&self, id: &str) -> Result<String> {
-        self.stop_with_description(id).await.map(|(result, _)| result)
+        self.stop_with_description(id)
+            .await
+            .map(|(result, _)| result)
     }
 
     /// The SDK needs the original task description for its independent
@@ -997,11 +1038,14 @@ impl BackgroundTasks {
         if final_status != "killed" {
             bail!("Task {id} finished before stop took effect (status: {final_status})");
         }
-        Ok((json!({"task_id":id,"task_type":"local_bash",
-            "command":record.command,
-            "message":format!("Successfully stopped task: {id} ({})", record.command)
-        })
-        .to_string(), record.description))
+        Ok((
+            json!({"task_id":id,"task_type":"local_bash",
+                "command":record.command,
+                "message":format!("Successfully stopped task: {id} ({})", record.command)
+            })
+            .to_string(),
+            record.description,
+        ))
     }
 
     pub async fn stop_all(&self) {
@@ -1063,7 +1107,8 @@ fn read_output_range(
     let capacity = usize::try_from(bytes_to_read)
         .context("Requested task output range exceeds addressable memory")?;
     let mut bytes = Vec::new();
-    bytes.try_reserve_exact(capacity)
+    bytes
+        .try_reserve_exact(capacity)
         .context("Cannot reserve memory for requested task output range")?;
     file.take(bytes_to_read).read_to_end(&mut bytes)?;
     let count = bytes.len() as u64;
@@ -1198,7 +1243,9 @@ async fn spool_merged<R: AsyncRead + Unpin>(
     let mut truncated = false;
     loop {
         let n = stream.read(&mut buffer).await?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
         let mut shared = combined.lock().await;
         let writable = n.min(LOG_CAP.saturating_sub(shared.size).min(n as u64) as usize);
         if writable > 0 {
@@ -1209,8 +1256,13 @@ async fn spool_merged<R: AsyncRead + Unpin>(
         if writable < n {
             truncated = true;
             if !shared.capped {
-                shared.file.write_all(OUTPUT_CAPPED_NOTICE.as_bytes()).await?;
-                individual.write_all(OUTPUT_CAPPED_NOTICE.as_bytes()).await?;
+                shared
+                    .file
+                    .write_all(OUTPUT_CAPPED_NOTICE.as_bytes())
+                    .await?;
+                individual
+                    .write_all(OUTPUT_CAPPED_NOTICE.as_bytes())
+                    .await?;
                 shared.capped = true;
                 // Wake the shell supervisor immediately; draining forever
                 // after the cap would leave a runaway command executing.
@@ -1263,7 +1315,10 @@ mod tests {
             .await
             .unwrap();
         let individual = tokio::fs::File::from_std(
-            fs::OpenOptions::new().write(true).open("/dev/full").unwrap(),
+            fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/full")
+                .unwrap(),
         );
         let merged = Arc::new(AsyncMutex::new(CombinedLog {
             file: combined_file,
@@ -1297,9 +1352,10 @@ mod tests {
 
     #[test]
     fn task_output_delta_schema_preserves_five_gibibyte_limit() {
-        let definition = definitions().into_iter().find(|value| {
-            value["function"]["name"].as_str() == Some("task_output_delta")
-        }).expect("task_output_delta tool must be registered");
+        let definition = definitions()
+            .into_iter()
+            .find(|value| value["function"]["name"].as_str() == Some("task_output_delta"))
+            .expect("task_output_delta tool must be registered");
         let maximum = &definition["function"]["parameters"]["properties"]["max_bytes"]["maximum"];
         assert_eq!(maximum.as_i64(), Some(5_i64 * 1024 * 1024 * 1024));
     }
@@ -1314,15 +1370,25 @@ mod tests {
         let error = source.directory.join(format!("{id}.stderr"));
         fs::write(&output, b"output from sibling session").unwrap();
         fs::write(&error, b"").unwrap();
-        BackgroundTasks::save(&source.directory, &TaskRecord {
-            id: id.clone(), description: "Previous session".into(),
-            command: "printf example".into(), status: "completed".into(),
-            exit_code: Some(0), output_file: output.to_string_lossy().into_owned(),
-            error_file: error.to_string_lossy().into_owned(), truncated: false,
-            failure_reason: None,
-        }).unwrap();
+        BackgroundTasks::save(
+            &source.directory,
+            &TaskRecord {
+                id: id.clone(),
+                description: "Previous session".into(),
+                command: "printf example".into(),
+                status: "completed".into(),
+                exit_code: Some(0),
+                output_file: output.to_string_lossy().into_owned(),
+                error_file: error.to_string_lossy().into_owned(),
+                truncated: false,
+                failure_reason: None,
+            },
+        )
+        .unwrap();
         assert_eq!(
-            reader.trusted_output_path(output.to_str().unwrap()).unwrap(),
+            reader
+                .trusted_output_path(output.to_str().unwrap())
+                .unwrap(),
             Some(output.clone()),
         );
         assert_eq!(
@@ -1331,9 +1397,14 @@ mod tests {
         );
         let other_project = tempfile::tempdir().unwrap();
         let outsider = BackgroundTasks::for_session(
-            &other_project.path().canonicalize().unwrap(), Uuid::new_v4(),
-        ).unwrap();
-        assert!(outsider.trusted_output_path(output.to_str().unwrap()).unwrap().is_none());
+            &other_project.path().canonicalize().unwrap(),
+            Uuid::new_v4(),
+        )
+        .unwrap();
+        assert!(outsider
+            .trusted_output_path(output.to_str().unwrap())
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -1471,9 +1542,13 @@ mod tests {
             "Combined shell output", crate::shell_runtime::ShellKind::Bash,
         ).await.unwrap()).unwrap();
         let id = created["task_id"].as_str().unwrap();
-        let output: Value = serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
+        let output: Value =
+            serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
         assert_eq!(output["task"]["output"], "first\nsecond\nthird\n");
-        assert!(created["output_file"].as_str().unwrap().ends_with(".output"));
+        assert!(created["output_file"]
+            .as_str()
+            .unwrap()
+            .ends_with(".output"));
         let delta: Value = serde_json::from_str(&tasks.output_delta(id, 0, 100).unwrap()).unwrap();
         assert_eq!(delta["content"], "first\nsecond\nthird\n");
     }
@@ -1484,28 +1559,35 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let tasks = BackgroundTasks::new(&dir.path().canonicalize().unwrap()).unwrap();
         let started: Value = serde_json::from_str(
-            &tasks.start_with_shell_timeout(
-                "printf 'before timeout\\n'; sleep 3",
-                "Bounded background command",
-                crate::shell_runtime::ShellKind::Bash,
-                100,
-            ).await.unwrap(),
-        ).unwrap();
+            &tasks
+                .start_with_shell_timeout(
+                    "printf 'before timeout\\n'; sleep 3",
+                    "Bounded background command",
+                    crate::shell_runtime::ShellKind::Bash,
+                    100,
+                )
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         let id = started["task_id"].as_str().unwrap();
-        let output: Value = serde_json::from_str(
-            &tasks.output(id, true, 5000).await.unwrap(),
-        ).unwrap();
+        let output: Value =
+            serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
         assert_eq!(output["retrieval_status"], "success");
         assert_eq!(output["task"]["status"], "failed");
-        assert!(output["task"]["output"].as_str().unwrap()
+        assert!(output["task"]["output"]
+            .as_str()
+            .unwrap()
             .contains("background command timed out after 100 milliseconds"));
         // A later read must still show the cause after metadata is persisted.
         let recovered = BackgroundTasks::new(&dir.path().canonicalize().unwrap()).unwrap();
-        let saved: Value = serde_json::from_str(
-            &recovered.output(id, false, 0).await.unwrap(),
-        ).unwrap();
+        let saved: Value =
+            serde_json::from_str(&recovered.output(id, false, 0).await.unwrap()).unwrap();
         assert_eq!(saved["task"]["status"], "failed");
-        assert!(saved["task"]["output"].as_str().unwrap().contains("timed out"));
+        assert!(saved["task"]["output"]
+            .as_str()
+            .unwrap()
+            .contains("timed out"));
     }
 
     #[cfg(unix)]
