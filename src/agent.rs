@@ -3904,7 +3904,10 @@ impl Agent {
     async fn request_advisor(&mut self, profile: &ProviderProfile, system: &str) -> Result<String> {
         let pending = self.session.messages.iter().rposition(|message| {
             message.role == "assistant"
-                && message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty())
+                && message
+                    .tool_calls
+                    .as_ref()
+                    .is_some_and(|calls| !calls.is_empty())
         });
         let conversation = pending
             .map(|index| &self.session.messages[..index])
@@ -3927,12 +3930,19 @@ impl Agent {
         if let Ok(response) = &result {
             if let Some(usage) = response.usage {
                 self.session.usage.accumulate(usage);
-                self.session.cost.record(&profile.id, &profile.model, usage, &self.model_prices);
+                self.session
+                    .cost
+                    .record(&profile.id, &profile.model, usage, &self.model_prices);
             }
         }
         self.session.save(&self.root)?;
         let response = result?;
-        if response.message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
+        if response
+            .message
+            .tool_calls
+            .as_ref()
+            .is_some_and(|calls| !calls.is_empty())
+        {
             bail!("Advisor provider returned tool calls although no tools were offered")
         }
         let advice = response.message.visible_text();
@@ -4213,9 +4223,10 @@ impl Agent {
             // stale provider IDs remain inactive rather than misreporting success.
             let advisor_profile = if self.child_depth == 0 {
                 let settings = crate::config::Config::load()?;
-                settings.advisor_model.as_ref().and_then(|id| {
-                    settings.providers.iter().find(|p| &p.id == id).cloned()
-                })
+                settings
+                    .advisor_model
+                    .as_ref()
+                    .and_then(|id| settings.providers.iter().find(|p| &p.id == id).cloned())
             } else {
                 None
             };
@@ -4680,15 +4691,17 @@ impl Agent {
                 } else if call.function.name == "advisor" {
                     match advisor_profile.as_ref() {
                         Some(profile) => {
-                            let args = serde_json::from_str::<serde_json::Value>(
-                                &call.function.arguments,
-                            );
-                            if !matches!(args, Ok(serde_json::Value::Object(ref obj)) if obj.is_empty()) {
+                            let args =
+                                serde_json::from_str::<serde_json::Value>(&call.function.arguments);
+                            if !matches!(args, Ok(serde_json::Value::Object(ref obj)) if obj.is_empty())
+                            {
                                 "ERROR: advisor takes no arguments".to_owned()
                             } else {
                                 match self.request_advisor(profile, &system).await {
                                     Ok(advice) => advice,
-                                    Err(error) => format!("ERROR: Advisor request failed: {error:#}"),
+                                    Err(error) => {
+                                        format!("ERROR: Advisor request failed: {error:#}")
+                                    }
                                 }
                             }
                         }

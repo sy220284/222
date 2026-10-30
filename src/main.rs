@@ -3800,7 +3800,8 @@ async fn sdk_nested_control(
                     agent.set_sdk_agent_definitions(agents)?;
                 }
                 let agents = agent.sdk_agent_descriptors()?;
-                let schema = request.get("jsonSchema")
+                let schema = request
+                    .get("jsonSchema")
                     .filter(|value| !value.is_null())
                     .cloned();
                 agent.set_sdk_response_schema(schema)?;

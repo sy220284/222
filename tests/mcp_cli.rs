@@ -273,21 +273,54 @@ fn overlapping_scopes_require_explicit_remove_and_reset_revokes_project_approval
 fn mcp_get_checks_real_connection_and_stale_project_approval() {
     let root = tempfile::tempdir().unwrap();
     let config = root.path().join("global.json");
-    let add = run(root.path(), &config, &[
-        "add-json", "does-not-exist", r#"{"type":"stdio","command":"definitely-nonexistent-mcp-executable-123"}"#,
-    ]);
-    assert!(add.status.success(), "{}", String::from_utf8_lossy(&add.stderr));
+    let add = run(
+        root.path(),
+        &config,
+        &[
+            "add-json",
+            "does-not-exist",
+            r#"{"type":"stdio","command":"definitely-nonexistent-mcp-executable-123"}"#,
+        ],
+    );
+    assert!(
+        add.status.success(),
+        "{}",
+        String::from_utf8_lossy(&add.stderr)
+    );
     let get = run(root.path(), &config, &["get", "does-not-exist"]);
-    assert!(get.status.success(), "{}", String::from_utf8_lossy(&get.stderr));
+    assert!(
+        get.status.success(),
+        "{}",
+        String::from_utf8_lossy(&get.stderr)
+    );
     let value: Value = serde_json::from_slice(&get.stdout).unwrap();
     assert_eq!(value["health"]["status"], "failed");
-    assert!(value["health"]["error"].as_str().unwrap().contains("Connection"));
+    assert!(value["health"]["error"]
+        .as_str()
+        .unwrap()
+        .contains("Connection"));
 
-    assert!(run(root.path(), &config, &[
-        "add-json", "--scope", "project", "untrusted", r#"{"type":"stdio","command":"definitely-nonexistent-mcp-executable-123"}"#,
-    ]).status.success());
-    assert!(run(root.path(), &config, &["reset-project-choices"]).status.success());
-    let get = run(root.path(), &config, &["get", "untrusted", "--scope", "project"]);
+    assert!(run(
+        root.path(),
+        &config,
+        &[
+            "add-json",
+            "--scope",
+            "project",
+            "untrusted",
+            r#"{"type":"stdio","command":"definitely-nonexistent-mcp-executable-123"}"#,
+        ]
+    )
+    .status
+    .success());
+    assert!(run(root.path(), &config, &["reset-project-choices"])
+        .status
+        .success());
+    let get = run(
+        root.path(),
+        &config,
+        &["get", "untrusted", "--scope", "project"],
+    );
     let value: Value = serde_json::from_slice(&get.stdout).unwrap();
     assert_eq!(value["health"]["status"], "needs_approval");
 }
