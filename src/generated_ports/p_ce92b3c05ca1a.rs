@@ -153,8 +153,6 @@ use std::future::Future;
 
 #[cfg(test)]
 mod tests {
-    use super::*#[cfg(test)]
-mod tests {
     use super::*;
     use serde_json::json;
 
