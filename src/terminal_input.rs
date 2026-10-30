@@ -653,7 +653,7 @@ mod vim_tests {
         vim.handle(&mut editor, &Key::Escape).unwrap();
         assert_eq!(editor.text, "ac");
         input(&mut editor, &mut vim, ".");
-        assert_eq!(editor.text, "acc");
+        assert_eq!(editor.text, "acac");
     }
 
     #[test]
