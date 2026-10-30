@@ -961,6 +961,94 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn accepted_worker_epoch_is_sent_on_init_and_heartbeat_then_closed() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (events_tx, mut events_rx) = tokio::sync::mpsc::unbounded_channel();
+        let server = tokio::spawn(async move {
+            for _ in 0..3 {
+                let (mut socket, _) = tokio::time::timeout(
+                    Duration::from_secs(5),
+                    listener.accept(),
+                ).await.unwrap().unwrap();
+                let mut request = Vec::new();
+                let mut chunk = [0_u8; 2048];
+                loop {
+                    let length = socket.read(&mut chunk).await.unwrap();
+                    assert!(length > 0, "HTTP request closed before end of headers/body");
+                    request.extend_from_slice(&chunk[..length]);
+                    if let Some(header_end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+                        let headers = String::from_utf8_lossy(&request[..header_end]);
+                        let len = headers.lines().find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("Content-Length")
+                                .then(|| value.trim().parse::<usize>().unwrap())
+                        }).unwrap_or(0);
+                        if request.len() >= header_end + 4 + len {
+                            let request_line = headers.lines().next().unwrap().to_owned();
+                            let body = if len == 0 {
+                                Value::Null
+                            } else {
+                                serde_json::from_slice(&request[header_end + 4..header_end + 4 + len]).unwrap()
+                            };
+                            events_tx.send((request_line, body)).unwrap();
+                            break;
+                        }
+                    }
+                }
+                let body = r#"{"worker":{"external_metadata":{"restored":true}}}"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let transport = SseTransport::new(
+            format!("http://{addr}/session/s1/events/stream"),
+            vec![],
+            Some("s1".to_owned()),
+            Arc::new(Vec::new),
+        );
+        let mut client = CcrClient::new(
+            &transport,
+            &format!("http://{addr}/session/s1"),
+            Arc::new(|| vec![("Authorization".to_owned(), "Bearer test".to_owned())]),
+            None,
+            Some(20),
+            Some(0.0),
+        );
+        let metadata = client.initialize("s1", Some(17)).await.unwrap();
+        assert_eq!(metadata, Some(json!({"restored": true})));
+        assert_eq!(client.get_worker_epoch(), 17);
+        let mut init_seen = false;
+        let mut heartbeat_seen = false;
+        for _ in 0..3 {
+            let (request_line, body) = tokio::time::timeout(
+                Duration::from_secs(5),
+                events_rx.recv(),
+            ).await.unwrap().unwrap();
+            if request_line.starts_with("PUT ") {
+                assert_eq!(body["worker_epoch"], 17);
+                assert_eq!(body["worker_status"], "idle");
+                assert!(body["external_metadata"]["pending_action"].is_null());
+                init_seen = true;
+            } else if request_line.contains("/worker/heartbeat ") {
+                assert_eq!(body["worker_epoch"], 17);
+                assert_eq!(body["session_id"], "s1");
+                heartbeat_seen = true;
+            } else {
+                assert!(request_line.starts_with("GET "), "unexpected {request_line}");
+            }
+        }
+        assert!(init_seen && heartbeat_seen);
+        client.close();
+        assert!(client.heartbeat_task.lock().unwrap().is_none());
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn rejected_worker_put_does_not_start_heartbeat() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
