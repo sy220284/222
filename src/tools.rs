@@ -425,6 +425,7 @@ pub struct ToolExecutor {
     shell_kind: crate::shell_runtime::ShellKind,
     session_env: std::collections::BTreeMap<String, String>,
     session_id: Option<String>,
+    history_message_id: Option<uuid::Uuid>,
     approval: Approval,
     interactive: bool,
     file_checkpointing_enabled: bool,
@@ -446,6 +447,7 @@ impl ToolExecutor {
             shell_kind: crate::shell_runtime::ShellKind::default(),
             session_env: std::collections::BTreeMap::new(),
             session_id: None,
+            history_message_id: None,
             approval,
             interactive,
             file_checkpointing_enabled: true,
@@ -478,6 +480,10 @@ impl ToolExecutor {
     }
     pub fn with_session_id(mut self, session_id: String) -> Self {
         self.session_id = Some(session_id);
+        self
+    }
+    pub fn with_history_message_id(mut self, id: uuid::Uuid) -> Self {
+        self.history_message_id = Some(id);
         self
     }
     pub fn with_metrics(mut self, metrics: Arc<ToolMetrics>) -> Self {
@@ -652,6 +658,7 @@ impl ToolExecutor {
                 let checkpoint_notice = pending.map(|pending| {
                     history::finish_after_edit(
                         &self.root, self.session_id.as_deref(), &path, pending,
+                        self.history_message_id,
                     )
                 }).unwrap_or_default();
                 Ok(format!("{result}{checkpoint_notice}"))
@@ -725,6 +732,7 @@ impl ToolExecutor {
                 let checkpoint_notice = pending.map(|pending| {
                     history::finish_after_edit(
                         &self.root, self.session_id.as_deref(), &path, pending,
+                        self.history_message_id,
                     )
                 }).unwrap_or_default();
                 Ok(format!("{result}{checkpoint_notice}"))
@@ -738,6 +746,7 @@ impl ToolExecutor {
                 let checkpoint_notice = pending.map(|pending| {
                     history::finish_after_edit(
                         &self.root, self.session_id.as_deref(), &path, pending,
+                        self.history_message_id,
                     )
                 }).unwrap_or_default();
                 Ok(format!("{result}{checkpoint_notice}"))

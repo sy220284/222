@@ -3533,6 +3533,8 @@ impl Agent {
         };
         let mut user_message = Message::text("user", &prompt);
         user_message.content_blocks = blocks;
+        // All tools in one user turn share a file-history snapshot identity.
+        let history_message_id = uuid::Uuid::new_v4();
         self.session.messages.push(user_message);
         self.session.save(&self.root)?;
         let mut system = self.effective_system_prompt()?;
@@ -3650,6 +3652,7 @@ impl Agent {
         }
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_session_id(self.session.id.to_string())
+            .with_history_message_id(history_message_id)
             .with_file_checkpointing(self.file_checkpointing_enabled)
             .with_metrics(self.file_metrics.clone())
             .with_shared_reads(self.notebook_reads.clone(), self.file_reads.clone())
