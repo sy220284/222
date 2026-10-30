@@ -35,7 +35,7 @@ use std::{
 const DEFAULT_SYSTEM: &str = crate::prompt_runtime::BASE_SYSTEM;
 
 /// Model-visible reminder envelope matching utils/messages.ts.
-fn wrap_in_system_reminder(text: &str) -> String {
+pub(crate) fn wrap_in_system_reminder(text: &str) -> String {
     format!("<system-reminder>\n{text}\n</system-reminder>")
 }
 
@@ -2399,6 +2399,28 @@ impl Agent {
         std::mem::take(&mut self.pending_rewake_notifications)
     }
 
+    /// Attach completed async Stop-hook blocking errors to the active query.
+    /// A failed session write restores the queue so it can be retried intact.
+    fn inject_rewake_notifications(&mut self) -> Result<usize> {
+        let pending = self.take_rewake_notifications();
+        if pending.is_empty() {
+            return Ok(0);
+        }
+        let prior_count = self.session.messages.len();
+        for message in &pending {
+            self.session
+                .messages
+                .push(Message::text("user", wrap_in_system_reminder(message)));
+        }
+        if let Err(error) = self.session.save(&self.root) {
+            self.session.messages.truncate(prior_count);
+            self.pending_rewake_notifications
+                .splice(0..0, pending);
+            return Err(error);
+        }
+        Ok(self.session.messages.len() - prior_count)
+    }
+
     pub fn sdk_title_request(&self, description: &str) -> Option<ModelRequest> {
         let description = description.trim();
         if description.is_empty() {
@@ -4341,6 +4363,7 @@ impl Agent {
             // rounds. Attach each completed hook exactly once; emit its
             // outcome to the SDK/UI, without replaying the shell command.
             self.pump_async_hook_events().await?;
+            self.inject_rewake_notifications()?;
             // Resolve the configured second model before exposing advisor;
             // stale provider IDs remain inactive rather than misreporting success.
             let advisor_profile = if self.child_depth == 0 {

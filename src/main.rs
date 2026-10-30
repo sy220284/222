@@ -3110,6 +3110,32 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             // AsyncHookRegistry response-delivery path.
             _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {
                 agent.pump_async_hook_events().await?;
+                // The 2.1.88 asyncRewake path injects a task notification
+                // between API rounds, or wakes the model when the SDK is idle.
+                if sdk_initialized && !initial_turn_pending && !sdk_end_requested {
+                    let notifications = agent.take_rewake_notifications();
+                    if !notifications.is_empty() {
+                        let prompt = notifications
+                            .iter()
+                            .map(|message| agent::wrap_in_system_reminder(message))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        let input_epoch = *interrupt_rx.borrow();
+                        match sdk_interruptible_turn(
+                            agent, &prompt, None, None, &interrupt_rx, input_epoch,
+                        ).await {
+                            Ok(answer) => print_json!(json!({
+                                "type":"result","session_id":agent.session_id(),
+                                "content":answer,"usage":agent.usage(),
+                                "cost":agent.cost_ledger()
+                            })),
+                            Err(error) => print_json!(json!({
+                                "type":"error","session_id":agent.session_id(),
+                                "message":format!("{error:#}")
+                            })),
+                        }
+                    }
+                }
                 continue;
             }
         };
