@@ -266,11 +266,20 @@ fn recover_plugin_crash_artifacts(root: &Path) -> Result<Vec<String>> {
                     bail!("Installed plugin changed to unsafe target: {}", target.display());
                 }
                 Ok(_) => {
-                    // The replacement is installed. Retire obsolete backup.
-                    fs::remove_dir_all(&backup)?;
-                    recovered.push(format!("Cleaned previous installation of {plugin}"));
+                    // Without a durable settings-commit marker a crash may
+                    // have happened before Config::save. Retain the original
+                    // bytes for explicit inspection rather than destroy the
+                    // only rollback copy on an ambiguous restart.
+                    recovered.push(format!(
+                        "Retained previous version of {plugin} for recovery inspection"
+                    ));
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    if name.starts_with(".failed-update-") {
+                        bail!(
+                            "Interrupted plugin rollback left failed version of {plugin}; manual recovery required"
+                        )
+                    }
                     fs::rename(&backup, &target).with_context(|| {
                         format!("Restore plugin {plugin} after interrupted update")
                     })?;
