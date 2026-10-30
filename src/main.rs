@@ -1329,6 +1329,15 @@ pub(crate) fn expand_user_skill_prompt(
     Ok(None)
 }
 
+/// Reload the live plugin runtime and the CLI's skill/command catalog as one
+/// operation. The current conversation and model remain untouched.
+async fn reload_live_plugins(agent: &mut Agent, config: &mut Config) -> Result<Value> {
+    let refreshed = Config::load()?;
+    let status = agent.reload_plugins(&refreshed).await?;
+    config.enabled_plugins = refreshed.enabled_plugins;
+    Ok(status)
+}
+
 async fn chat(
     agent: &mut Agent,
     config: &mut Config,
@@ -1483,28 +1492,55 @@ async fn chat(
             }
             continue;
         }
+        if input == "/plugin" || input.starts_with("/plugin ") {
+            let args = input.strip_prefix("/plugin").unwrap_or("").trim();
+            let command = plugin_commands::parse_plugin_args(Some(args));
+            // Keep the source's interactive subcommands on the same installer,
+            // managed-policy gate, dependency transaction and error path as CLI.
+            let changed = match &command {
+                plugin_commands::PluginCommand::Install { .. }
+                | plugin_commands::PluginCommand::Uninstall { .. }
+                | plugin_commands::PluginCommand::Enable { .. }
+                | plugin_commands::PluginCommand::Disable { .. } => true,
+                plugin_commands::PluginCommand::Marketplace { action, .. } =>
+                    action.as_deref() != Some("list"),
+                _ => false,
+            };
+            match plugin_manager::execute(agent.workspace_root(), &command) {
+                Ok(output) => {
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                    if changed {
+                        match reload_live_plugins(agent, config).await {
+                            Ok(status) => println!(
+                                "Live plugin runtime refreshed: {}",
+                                serde_json::to_string(&status)?
+                            ),
+                            Err(error) => eprintln!(
+                                "Plugin command completed, but the live session could not reload: {error:#}. Run /reload-plugins to retry."
+                            ),
+                        }
+                    }
+                }
+                Err(error) => eprintln!("Plugin command failed: {error:#}"),
+            }
+            continue;
+        }
         if input == "/reload-plugins" {
             // The source /reload-plugins command refreshes the live session,
             // without restarting the model or dropping conversation history.
-            match Config::load() {
-                Ok(refreshed) => match agent.reload_plugins(&refreshed).await {
-                    Ok(status) => {
-                        // Skill/command dispatch in this CLI reads this list
-                        // after reload; keep it aligned with the live Agent.
-                        config.enabled_plugins = refreshed.enabled_plugins;
-                        println!(
-                            "Reloaded plugin hooks and MCP services ({} configured plugins).",
-                            config.enabled_plugins.len()
-                        );
-                        println!("{}", serde_json::to_string_pretty(&status)?);
-                        match plugins::list_commands(agent.workspace_root(), &config.enabled_plugins) {
-                            Ok(commands) => println!("Available plugin commands and skills: {}", commands.len()),
-                            Err(error) => eprintln!("Plugin command discovery failed after reload: {error:#}"),
-                        }
+            match reload_live_plugins(agent, config).await {
+                Ok(status) => {
+                    println!(
+                        "Reloaded plugin hooks and MCP services ({} configured plugins).",
+                        config.enabled_plugins.len()
+                    );
+                    println!("{}", serde_json::to_string_pretty(&status)?);
+                    match plugins::list_commands(agent.workspace_root(), &config.enabled_plugins) {
+                        Ok(commands) => println!("Available plugin commands and skills: {}", commands.len()),
+                        Err(error) => eprintln!("Plugin command discovery failed after reload: {error:#}"),
                     }
-                    Err(error) => eprintln!("Plugin reload failed: {error:#}"),
-                },
-                Err(error) => eprintln!("Cannot reload plugin settings: {error:#}"),
+                }
+                Err(error) => eprintln!("Plugin reload failed: {error:#}"),
             }
             continue;
         }
@@ -1675,6 +1711,7 @@ async fn chat(
                     "/diff                    view staged, unstaged and untracked Git changes"
                 );
                 println!("/skills                  list accessible project and plugin skills");
+                println!("/plugin [subcommand]     manage, install, enable, disable and validate plugins");
                 println!("/reload-plugins          refresh active plugin hooks, MCP and command catalog");
                 println!("/agents                  list project and user custom agent definitions");
                 println!("/hooks                   list active hook events, matchers and timeouts");
