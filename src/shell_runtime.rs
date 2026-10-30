@@ -108,6 +108,40 @@ impl ShellKind {
     }
 }
 
+/// Original ShellCommand.ts::doKill uses tree-kill rather than killing only
+/// the shell. On Windows, Child::kill terminates the parent process but leaves
+/// child processes running (and often holding stdout/stderr open). Use the
+/// Windows system taskkill executable with /T to terminate the entire tree.
+#[cfg(windows)]
+pub async fn terminate_windows_process_tree(pid: Option<u32>) -> Result<()> {
+    use std::process::Stdio;
+    use std::time::Duration;
+    let pid = pid.context("Windows shell process ID is unavailable")?;
+    let system_root = env::var_os("SystemRoot")
+        .or_else(|| env::var_os("WINDIR"))
+        .context("Windows system directory is unavailable for process-tree termination")?;
+    let taskkill = PathBuf::from(system_root).join("System32").join("taskkill.exe");
+    let mut command = Command::new(taskkill);
+    command
+        .args(["/F", "/T", "/PID"])
+        .arg(pid.to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    let result = tokio::time::timeout(Duration::from_secs(5), command.output())
+        .await
+        .context("Windows process-tree termination timed out")?
+        .context("Cannot start Windows process-tree terminator")?;
+    if !result.status.success() {
+        bail!(
+            "Windows process-tree termination failed for PID {pid}: {}",
+            String::from_utf8_lossy(&result.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
 /// Resolve a program without invoking a shell or interpreting its contents.
 pub fn which(program: &str) -> Option<PathBuf> {
     which_in(program, env::var_os("PATH").as_deref())
