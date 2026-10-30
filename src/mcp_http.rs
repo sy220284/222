@@ -30,7 +30,7 @@ pub struct HttpClient {
 }
 /// Execute a configured credential helper once when opening a remote MCP connection.
 /// A failed helper must not disable the server: the static headers remain usable.
-async fn load_dynamic_headers(
+pub(crate) async fn load_dynamic_headers(
     config: &McpServerConfig,
     url: &Url,
     root: &Path,

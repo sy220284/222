@@ -315,7 +315,7 @@ impl Config {
                         bail!("MCP stdio server cannot define HTTP url/headers/helper");
                     }
                 }
-                "http" => {
+                "http" | "sse" => {
                     if !s.command.is_empty() || !s.args.is_empty() || !s.env.is_empty() {
                         bail!("MCP HTTP server cannot define stdio command, args or env");
                     }
@@ -345,7 +345,7 @@ impl Config {
                                 .any(|(name, value)| credential_header(name, value)),
                     )?;
                 }
-                _ => bail!("Unsupported MCP transport; use stdio or http"),
+                _ => bail!("Unsupported MCP transport; use stdio, http or sse"),
             }
         }
         if let Some(search) = &self.search_backend {

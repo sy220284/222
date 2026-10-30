@@ -344,6 +344,7 @@ fn mcp_tool_alias(server: &str, tool: &str) -> String {
 enum TransportClient {
     Stdio(Client),
     Http(crate::mcp_http::HttpClient),
+    Sse(crate::mcp_legacy_sse::LegacySseClient),
 }
 impl TransportClient {
     async fn connect(config: &McpServerConfig, root: &Path) -> Result<Self> {
@@ -352,6 +353,9 @@ impl TransportClient {
             "http" => Ok(Self::Http(
                 crate::mcp_http::HttpClient::connect_with_root(config, root).await?,
             )),
+            "sse" => Ok(Self::Sse(
+                crate::mcp_legacy_sse::LegacySseClient::connect_with_root(config, root).await?,
+            )),
             other => bail!("Unsupported MCP transport: {other}"),
         }
     }
@@ -359,42 +363,49 @@ impl TransportClient {
         match self {
             Self::Stdio(c) => c.request(method, params).await,
             Self::Http(c) => c.request(method, params).await,
+            Self::Sse(c) => c.request(method, params).await,
         }
     }
     fn instructions(&self) -> Option<&str> {
         match self {
             Self::Stdio(c) => c.instructions.as_deref(),
             Self::Http(c) => c.instructions.as_deref(),
+            Self::Sse(c) => c.instructions.as_deref(),
         }
     }
     fn capabilities(&self) -> Option<&Value> {
         match self {
             Self::Stdio(c) => c.capabilities.as_ref(),
             Self::Http(c) => c.capabilities.as_ref(),
+            Self::Sse(c) => c.capabilities.as_ref(),
         }
     }
     fn take_resource_updates(&mut self) -> Vec<Value> {
         match self {
             Self::Stdio(c) => std::mem::take(&mut c.resource_updates),
             Self::Http(c) => c.drain_resource_updates(),
+            Self::Sse(c) => c.drain_resource_updates(),
         }
     }
     fn take_tools_changed(&mut self) -> bool {
         match self {
             Self::Stdio(c) => std::mem::take(&mut c.tools_changed),
             Self::Http(c) => std::mem::take(&mut c.tools_changed),
+            Self::Sse(c) => std::mem::take(&mut c.tools_changed),
         }
     }
     fn mark_tools_changed(&mut self) {
         match self {
             Self::Stdio(c) => c.tools_changed = true,
             Self::Http(c) => c.tools_changed = true,
+            Self::Sse(c) => c.tools_changed = true,
         }
     }
     fn server_info(&self) -> Option<Value> {
         match self {
             Self::Stdio(c) => c.server_info.clone(),
             Self::Http(c) => c.server_info.clone(),
+            Self::Sse(c) => c.server_info.clone(),
         }
     }
     fn failed_process(&mut self) -> Result<Option<String>> {
@@ -403,7 +414,7 @@ impl TransportClient {
                 ._child
                 .try_wait()?
                 .map(|status| format!("MCP process exited: {status}"))),
-            Self::Http(_) => Ok(None),
+            Self::Http(_) | Self::Sse(_) => Ok(None),
         }
     }
 }
@@ -1524,6 +1535,7 @@ impl McpManager {
             }
             let outcome = match &mut self.clients[client_index] {
                 TransportClient::Http(client) => Some(client.poll_notifications(remaining).await),
+                TransportClient::Sse(client) => Some(client.poll_notifications(remaining).await),
                 TransportClient::Stdio(_) => None,
             };
             if let Some(Err(error)) = outcome {

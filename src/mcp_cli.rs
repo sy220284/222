@@ -501,19 +501,23 @@ pub async fn run(root: &Path, command: &McpCommand) -> Result<String> {
                         eprintln!("Warning: URL-like command is configured as stdio; use --transport http for HTTP MCP");
                     }
                 }
-                Transport::Http => {
+                Transport::Http | Transport::Sse => {
                     if !args.is_empty() {
                         bail!("HTTP MCP servers cannot have stdio arguments");
                     }
                     if !env.is_empty() {
                         bail!("--env only applies to stdio MCP servers");
                     }
-                    server.transport = Some("http".to_owned());
+                    server.transport = Some(
+                        match transport {
+                            Transport::Http => "http",
+                            Transport::Sse => "sse",
+                            Transport::Stdio => unreachable!(),
+                        }
+                        .to_owned(),
+                    );
                     server.url = Some(command_or_url.clone());
                     server.headers = key_value(header, ':', "HTTP header")?;
-                }
-                Transport::Sse => {
-                    bail!("SSE MCP transport is not yet supported by the Rust HTTP connector")
                 }
             }
             let path = store_server(root, *scope, server)?;
