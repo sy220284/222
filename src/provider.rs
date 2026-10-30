@@ -71,6 +71,20 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
     match profile.kind.as_str() {
+        "openai-responses" => Ok(Box::new(OpenAiResponses {
+            key: key.context("OpenAI Responses requires an API key")?,
+            tuning: profile.tuning.clone(),
+            response_schema: None,
+        })),
+        "openai-compatible" if profile.id == "openai"
+            && profile.model.starts_with("gpt-6")
+            && profile.base_url.trim_end_matches('/') == "https://api.openai.com/v1" => {
+            Ok(Box::new(OpenAiResponses {
+                key: key.context("OpenAI Responses requires an API key")?,
+                tuning: profile.tuning.clone(),
+                response_schema: None,
+            }))
+        }
         "openai-compatible" => Ok(Box::new(OpenAiCompatible {
             client,
             base_url: profile.base_url.clone(),
@@ -174,6 +188,36 @@ pub(crate) fn openai_messages(request: &ModelRequest) -> Result<Vec<Value>> {
         messages.push(wire);
     }
     Ok(messages)
+}
+
+struct OpenAiResponses {
+    key: String,
+    tuning: crate::config::ModelTuning,
+    response_schema: Option<Value>,
+}
+
+#[async_trait]
+impl ModelProvider for OpenAiResponses {
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        self.response_schema = schema;
+        Ok(())
+    }
+
+    async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
+        crate::chatgpt_plan::complete_api(
+            request, &self.tuning, None, &self.key, self.response_schema.as_ref()
+        ).await
+    }
+
+    async fn complete_stream(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+    ) -> Result<ModelResponse> {
+        crate::chatgpt_plan::complete_api(
+            request, &self.tuning, Some(deltas), &self.key, self.response_schema.as_ref()
+        ).await
+    }
 }
 
 struct ChatGptPlan {
