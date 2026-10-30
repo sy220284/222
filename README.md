@@ -1,12 +1,19 @@
 # Atlas Agent
 
-**独立 Rust 多模型编程智能体**。不需要特定厂商登录，不捆绑官方 SDK、专有 API、品牌资源或账号体系。使用自己的模型接口或本地模型即可。
+**独立 Rust 多模型编程智能体**。不需要特定厂商登录，不捆绑官方 SDK、专有 API、品牌资源或账号体系。仅使用用户指定的模型 API，不再包含本地推理模型和远程云端控制。
 
 本项目从零编写 Rust 代码，用通用 Agent 概念实现对话、工具调用、工作区操作、审批与会话恢复。**当前为可运行核心版本，不是任何第三方产品的全功能等价移植。**
 
+## 运行范围（2026-10-30 用户确认）
+
+- 只通过模型 API 推理，取消默认 Ollama 配置；存量配置指向 11434 端口会明确报错。
+- 移除跨设备 Bridge、远程 SDK、云端 Trigger、云端专项审查/规划、官方账号权益及团队云端同步。
+- 保留普通本地 SDK、Agent、模型 API、HTTP MCP、WebSearch/WebFetch、本地文件、任务、设置与记忆。
+- 逐文件排除清单见 [docs/REMOVED_SCOPE.json](docs/REMOVED_SCOPE.json)，已列入移除范围的项目不再跟进。
+
 ## 已实现
 
-- 多模型提供商：OpenAI 兼容 Chat Completions（OpenAI、OpenRouter、DeepSeek、Qwen、vLLM、LM Studio 等需各自兼容函数调用）；Ollama 本地兼容接口；Gemini 原生 generateContent。
+- 多模型提供商：OpenAI 兼容 Chat Completions（OpenAI、OpenRouter、DeepSeek、Qwen 等需各自兼容函数调用）；Gemini 原生 generateContent。
 - 通用模型消息格式，支持模型请求多次工具调用、工具结果回填与继续决策。
 - 文件读取、递归文件列表、正则全文检索、文件写入、唯一文本替换、带超时的 Shell 命令；以及 Git 只读工具。
 - 项目技能（`.atlas/skills/<名称>/SKILL.md`）列表与加载，模型可选择使用相关指导。
@@ -52,15 +59,7 @@ cargo run -- models
 cargo run -- init
 ```
 
-默认使用本地 Ollama。准备模型（需要支持函数调用）：
-
-```bash
-ollama serve
-ollama pull qwen2.5-coder:7b
-cargo run -- chat
-```
-
-选择其他模型：
+默认使用 OpenAI API（需要配置密钥）；也可以选择其他模型 API：
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
@@ -129,7 +128,7 @@ Hook 经 stdin 接收 JSON，返回 JSON（`decision:block`、`hookSpecificOutpu
 {"type":"user","content":"检查当前项目"}
 ```
 
-返回以 `system`、`assistant`、`tool_result`、`result` 等事件组成的 NDJSON。支持 `{"type":"control","action":"model","provider":"local","model":"..."}`、`clear`、`compact`，无需私有 SDK 或账号登录。SDK 默认非交互，写入类工具需要明确 `--approval full`。
+返回以 `system`、`assistant`、`tool_result`、`result` 等事件组成的 NDJSON。支持 `{"type":"control","action":"model","provider":"openai","model":"..."}`、`clear`、`compact`，无需私有 SDK 或账号登录。SDK 默认非交互，写入类工具需要明确 `--approval full`。
 
 ## MCP 本地工具
 
@@ -182,7 +181,7 @@ cargo run -- chat --resume <上次输出的UUID>
 | 并发 Agent 团队任务 | 已实现基础 1—4 成员执行与结果汇总 |
 | 团队持久通信、后台任务和取消 | 未实现 |
 | SDK JSON Lines 标准输入输出 | 已实现基础多轮交互、工具及控制消息 |
-| 完整终端 UI、完整 SDK 控制协议、远程桥接、语音和 IDE | 未实现 |
+| 完整终端 UI、完整 SDK 控制协议和 IDE | 待完整验收；远程桥接和官方语音服务已移除 |
 
 具体分层及迁移清单见 `docs/MIGRATION.md`。
 

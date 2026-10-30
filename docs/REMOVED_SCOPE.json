@@ -1,0 +1,322 @@
+{
+  "schema": "user-approved-removal-scope/v1",
+  "date": "2026-10-30",
+  "authorization": "用户明确取消本地模型、远程功能、云端专属功能；模型仅接入API，能本地执行的通用能力保留",
+  "policy": [
+    "只移除明确登记的远程与厂商云端专属路径，不按前缀动态扩大排除",
+    "保留模型 API、WebSearch/WebFetch、标准本地 SDK、文件、会话、Agent、MCP、Hooks、本地任务、项目记忆和设置",
+    "普通 /review、本地规划和本地任务保留；远程专项审查、跨设备同步、云端定时 Trigger、官方权益服务移除",
+    "原始1,906条路径、源码哈希及原始状态冻结快照不改；新增移除以本文件为授权依据",
+    "模型 API 可在本地测试中通过回环 Mock 服务验证，但产品不预置或安装本地模型运行时"
+  ],
+  "items": [
+    {
+      "path": "src/bridge/bridgeApi.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeConfig.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeDebug.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeEnabled.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeMain.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeMessaging.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgePermissionCallbacks.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgePointer.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeStatusUtil.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeUI.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/capacityWake.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/codeSessionApi.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/createSession.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/debugUtils.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/envLessBridgeConfig.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/flushGate.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/inboundAttachments.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/inboundMessages.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/initReplBridge.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/jwtUtils.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/pollConfig.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/pollConfigDefaults.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/remoteBridgeCore.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/replBridge.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/replBridgeHandle.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/replBridgeTransport.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/sessionIdCompat.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/sessionRunner.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/trustedDevice.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/types.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/workSecret.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/cli/transports/HybridTransport.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/SSETransport.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/SerialBatchEventUploader.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/WebSocketTransport.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/WorkerStateUploader.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/ccrClient.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/transportUtils.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/commands/login/index.ts",
+      "reason": "原厂账号登录"
+    },
+    {
+      "path": "src/commands/login/login.tsx",
+      "reason": "原厂账号登录"
+    },
+    {
+      "path": "src/commands/logout/index.ts",
+      "reason": "原厂账号退出"
+    },
+    {
+      "path": "src/commands/logout/logout.tsx",
+      "reason": "原厂账号退出"
+    },
+    {
+      "path": "src/commands/rate-limit-options/index.ts",
+      "reason": "原厂订阅额度"
+    },
+    {
+      "path": "src/commands/rate-limit-options/rate-limit-options.tsx",
+      "reason": "原厂订阅额度"
+    },
+    {
+      "path": "src/commands/review/UltrareviewOverageDialog.tsx",
+      "reason": "云端专项审查（保留普通本地审查）"
+    },
+    {
+      "path": "src/commands/review/reviewRemote.ts",
+      "reason": "云端专项审查（保留普通本地审查）"
+    },
+    {
+      "path": "src/commands/review/ultrareviewCommand.tsx",
+      "reason": "云端专项审查（保留普通本地审查）"
+    },
+    {
+      "path": "src/commands/review/ultrareviewEnabled.ts",
+      "reason": "云端专项审查（保留普通本地审查）"
+    },
+    {
+      "path": "src/commands/ultraplan.tsx",
+      "reason": "云端专项规划（保留本地规划）"
+    },
+    {
+      "path": "src/commands/upgrade/index.ts",
+      "reason": "原厂订阅升级"
+    },
+    {
+      "path": "src/commands/upgrade/upgrade.tsx",
+      "reason": "原厂订阅升级"
+    },
+    {
+      "path": "src/remote/RemoteSessionManager.ts",
+      "reason": "远程会话与权限桥接"
+    },
+    {
+      "path": "src/remote/SessionsWebSocket.ts",
+      "reason": "远程会话与权限桥接"
+    },
+    {
+      "path": "src/remote/remotePermissionBridge.ts",
+      "reason": "远程会话与权限桥接"
+    },
+    {
+      "path": "src/remote/sdkMessageAdapter.ts",
+      "reason": "远程会话与权限桥接"
+    },
+    {
+      "path": "src/server/createDirectConnectSession.ts",
+      "reason": "云端直连会话"
+    },
+    {
+      "path": "src/server/directConnectManager.ts",
+      "reason": "云端直连会话"
+    },
+    {
+      "path": "src/server/types.ts",
+      "reason": "云端直连会话"
+    },
+    {
+      "path": "src/services/api/filesApi.ts",
+      "reason": "原厂云端文件服务（保留本地文件）"
+    },
+    {
+      "path": "src/services/api/referral.ts",
+      "reason": "原厂推荐奖励"
+    },
+    {
+      "path": "src/services/settingsSync/index.ts",
+      "reason": "设置云端同步（保留本地设置）"
+    },
+    {
+      "path": "src/services/settingsSync/types.ts",
+      "reason": "设置云端同步（保留本地设置）"
+    },
+    {
+      "path": "src/services/teamMemorySync/index.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/teamMemorySync/secretScanner.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/teamMemorySync/teamMemSecretGuard.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/teamMemorySync/types.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/teamMemorySync/watcher.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/voice.ts",
+      "reason": "厂商语音流服务"
+    },
+    {
+      "path": "src/services/voiceKeyterms.ts",
+      "reason": "厂商语音流服务"
+    },
+    {
+      "path": "src/services/voiceStreamSTT.ts",
+      "reason": "厂商语音流服务"
+    },
+    {
+      "path": "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts",
+      "reason": "云端任务 Trigger"
+    },
+    {
+      "path": "src/tools/RemoteTriggerTool/UI.tsx",
+      "reason": "云端任务 Trigger"
+    },
+    {
+      "path": "src/tools/RemoteTriggerTool/prompt.ts",
+      "reason": "云端任务 Trigger"
+    },
+    {
+      "path": "src/upstreamproxy/relay.ts",
+      "reason": "远程代理转发"
+    },
+    {
+      "path": "src/upstreamproxy/upstreamproxy.ts",
+      "reason": "远程代理转发"
+    },
+    {
+      "path": "src/utils/autoUpdater.ts",
+      "reason": "原厂更新服务"
+    },
+    {
+      "path": "src/voice/voiceModeEnabled.ts",
+      "reason": "厂商语音模式授权"
+    }
+  ]
+}

@@ -37,7 +37,7 @@ EXPORT_PATTERN = re.compile(
     re.MULTILINE,
 )
 EXPECTED_TOTAL = 1906
-EXPECTED_EXCLUDED = 22
+EXPECTED_EXCLUDED = 99
 ENTRYPOINTS = ['src/main.rs', 'src/agent.rs', 'src/tools.rs', 'src/mcp.rs', 'src/sdk_queue.rs']
 CRITICAL = {'agent': 7, 'commands': 6, 'bridge': 8, 'cli': 6, 'services': 7,
             'tools': 7, 'tasks': 7, 'hooks': 6, 'ink': 6, 'components': 5,
@@ -386,6 +386,19 @@ def verify_github_test_evidence(item: dict, repository: str | None = None,
     raise AuditError('没有实际执行成功的 Rust 测试作业，跳过的 Linux/Windows 测试不能用于验收')
 
 
+def approved_removed_paths(repo: Path) -> set[str]:
+    scope = repo / 'docs/REMOVED_SCOPE.json'
+    if not scope.is_file():
+        return set()
+    content = json.loads(scope.read_text(encoding='utf-8'))
+    if content.get('schema') != 'user-approved-removal-scope/v1':
+        raise AuditError('移除范围授权文件版本无效')
+    paths = [entry['path'] for entry in content['items']]
+    if len(paths) != len(set(paths)):
+        raise AuditError('移除范围授权路径重复')
+    return set(paths)
+
+
 def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
     counts = verify_counts(rows, strict=strict)
     baseline_path = repo / BASELINE
@@ -446,9 +459,12 @@ def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
             raise AuditError(f'{path}: tested_commit 必须是有效完整提交 SHA')
         if strict:
             verify_github_test_evidence(item)
-    returned = [p for p,r in rows.items() if r['status']=='excluded' and previous[p]!='excluded']
-    if returned:
-        raise AuditError('新增排除项需人工审批并重置基线: '+', '.join(returned))
+    returned = {p for p,r in rows.items() if r['status']=='excluded' and previous[p]!='excluded'}
+    approved = approved_removed_paths(repo)
+    if returned != approved:
+        raise AuditError('新增排除项需人工审批并逐项登记；未获授权: ' +
+                         ', '.join(sorted(returned - approved)) +
+                         '；授权未应用: ' + ', '.join(sorted(approved - returned)))
     return dict(total=len(rows), counts=dict(counts), new_verified=len(newly_verified),
                 evidence_records=len(proof), excluded=counts['excluded'])
 

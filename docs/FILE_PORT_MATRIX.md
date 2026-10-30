@@ -46,37 +46,37 @@
 | `src/tools.ts` | 390 | 17294 | 重写：保持通用行为 | `src/generated_ports/p_522c7b52c49b4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/assistant/sessionHistory.ts` | 88 | 2503 | 重写：保持通用行为 | `src/generated_ports/p_3532178887ef5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/bootstrap/state.ts` | 1759 | 56109 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/bridge/bridgeApi.ts` | 540 | 18066 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/bridgeConfig.ts` | 49 | 1695 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/bridgeDebug.ts` | 136 | 4926 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/bridgeEnabled.ts` | 203 | 8442 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/bridgeMain.ts` | 3000 | 115571 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/bridgeMessaging.ts` | 462 | 15703 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/bridgePermissionCallbacks.ts` | 44 | 1411 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/bridgePointer.ts` | 211 | 7611 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/bridgeStatusUtil.ts` | 164 | 5143 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/bridgeUI.ts` | 531 | 16780 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/capacityWake.ts` | 57 | 1841 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/codeSessionApi.ts` | 169 | 4840 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/createSession.ts` | 385 | 12157 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/debugUtils.ts` | 142 | 4240 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/envLessBridgeConfig.ts` | 166 | 7250 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/flushGate.ts` | 72 | 1981 | 改造：自建远程连接协议 | `src/bridge_core.rs / src/main.rs` | 部分实现：本地 SDK 控制入口可达；初始历史回放中的出站消息有序排队、传输替换保留、永久关闭清除与隔离测试已通过；远程 HTTP/WebSocket 实际发送仍未贯通 |
-| `src/bridge/inboundAttachments.ts` | 176 | 6267 | 改造：自建远程连接协议 | `src/bridge_inbound_attachments.rs / src/main.rs` | 部分实现：可信可配置附件服务的 OAuth 风格令牌请求、30秒超时、32MiB分块上限、最多四个并发下载、禁止远程明文凭证及 HTTP 重定向、路径清洗及会话隔离、最后文本块 @引用插入与无附件容错已接入真实 SDK/模型链；上述安全上限是 Rust 额外边界、原版无此限制；上传服务专用协议、重连和所有附件恢复行为仍待等价 |
-| `src/bridge/inboundMessages.ts` | 81 | 2727 | 改造：自建远程连接协议 | `src/multimodal.rs / src/main.rs` | 部分实现：用户消息/UUID 提取、camelCase mediaType 兼容、缺失媒体类型 PNG/JPEG/GIF/WebP 魔数识别已通过 SDK 直接及排队模型 HTTP 测试；远端传输、附件及恢复链仍待迁移 |
-| `src/bridge/initReplBridge.ts` | 570 | 23849 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/jwtUtils.ts` | 257 | 9444 | 改造：自建远程连接协议 | `src/jwt_utils.rs` | 部分实现：已完成 JWT 载荷/到期解析、按会话提前刷新、失效重试、取消和代际隔离并有异步测试；Bridge/REPL 上游令牌获取与真实传输刷新仍未接入，未验收 |
-| `src/bridge/pollConfig.ts` | 111 | 4562 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/pollConfigDefaults.ts` | 83 | 4018 | 改造：自建远程连接协议 | `src/bridge_core.rs` / `src/main.rs` | 已验收：DEFAULT_POLL_CONFIG 原版八项默认值及无额外项精确对照，实际 Bridge SDK 控制调用、会话隔离和不可变配置读取验证通过；证据 bridge_core::tests::source_poll_defaults_are_consistent_for_single_and_multiple_sessions |
-| `src/bridge/remoteBridgeCore.ts` | 1009 | 39434 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/replBridge.ts` | 2407 | 100537 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/replBridgeHandle.ts` | 37 | 1473 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/replBridgeTransport.ts` | 371 | 15523 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/sessionIdCompat.ts` | 58 | 2536 | 改造：自建远程连接协议 | `src/bridge_core.rs` / `src/main.rs` | 已验收：原版 setCseShimGate 可替换延迟门禁、cse_/session_ 双向重标记、默认开启、异会话及禁用路径经真实 Bridge SDK 查询与测试通过；证据 bridge_core::tests::registered_cse_shim_gate_is_lazy_replaceable_and_affects_sdk_calls / bridge_core::tests::session_retag_matches_original_shim_contract |
-| `src/bridge/sessionRunner.ts` | 551 | 18020 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/trustedDevice.ts` | 211 | 7764 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/types.ts` | 263 | 10161 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/bridge/workSecret.ts` | 128 | 4672 | 改造：自建远程连接协议 | `src/work_secret.rs` | 部分实现：版本校验、会话 URL、带标签 ID 比较和 Worker 注册已实现并有单元测试；完整 Bridge 启动及远程鉴权调用链待验收 |
+| `src/bridge/bridgeApi.ts` | 540 | 18066 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/bridgeConfig.ts` | 49 | 1695 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/bridgeDebug.ts` | 136 | 4926 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/bridgeEnabled.ts` | 203 | 8442 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/bridgeMain.ts` | 3000 | 115571 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/bridgeMessaging.ts` | 462 | 15703 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/bridgePermissionCallbacks.ts` | 44 | 1411 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/bridgePointer.ts` | 211 | 7611 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/bridgeStatusUtil.ts` | 164 | 5143 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/bridgeUI.ts` | 531 | 16780 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/capacityWake.ts` | 57 | 1841 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/codeSessionApi.ts` | 169 | 4840 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/createSession.ts` | 385 | 12157 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/debugUtils.ts` | 142 | 4240 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/envLessBridgeConfig.ts` | 166 | 7250 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/flushGate.ts` | 72 | 1981 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/inboundAttachments.ts` | 176 | 6267 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/inboundMessages.ts` | 81 | 2727 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/initReplBridge.ts` | 570 | 23849 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/jwtUtils.ts` | 257 | 9444 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/pollConfig.ts` | 111 | 4562 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/pollConfigDefaults.ts` | 83 | 4018 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/remoteBridgeCore.ts` | 1009 | 39434 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/replBridge.ts` | 2407 | 100537 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/replBridgeHandle.ts` | 37 | 1473 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/replBridgeTransport.ts` | 371 | 15523 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/sessionIdCompat.ts` | 58 | 2536 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/sessionRunner.ts` | 551 | 18020 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/trustedDevice.ts` | 211 | 7764 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/types.ts` | 263 | 10161 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
+| `src/bridge/workSecret.ts` | 128 | 4672 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；跨设备远程 Bridge；不再跟进，通用本地能力保留 |
 | `src/buddy/CompanionSprite.tsx` | 371 | 45922 | 重写：保持通用行为 | `src/generated_ports/p_ab10542ccfa4c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/buddy/companion.ts` | 134 | 3715 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/buddy/prompt.ts` | 37 | 1451 | 重写：保持通用行为 | `src/generated_ports/p_bf68628a27ff8.rs`| 部分实现：伙伴介绍文案模板逐字对齐、BUDDY 开关进程级化、已播报去重扫描（历史 attachment 类型与名称匹配、muted 跳过）、registry 兼容导出 companionIntroText，附 2 测试（开关为进程全局，gate 与 dedup 合并顺序单测防并行竞态）|
@@ -94,13 +94,13 @@
 | `src/cli/print.ts` | 5595 | 212735 | 重写：Headless 排队消息合并与会话执行 | `src/queued_prompt_batch.rs` / `src/sdk_queue.rs` / `src/main.rs`；SDK seed_read_state 接入共享会话已读缓存（9743d9bc），源码已提交待验收； | 部分实现：同 workload/meta 提示合并调用和去重计费、结构化 task_notification 系统事件、状态/用量解析；新增按 UUID 原始内容逐条回放（含批次合并与直接 SDK 消息），实际进程+HTTP 验证；原版全输出协议、完整消息确认/生命周期回调、远端 IO 和命令主流程仍未等价；SDK 原生取消待处理 UUID，取消后不会发送模型请求 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；队列同 workload/meta 图文合并单次模型调用及各 UUID 回放已验证；多模态 UI/非图片块仍未等价；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/资源等仍待验证；SDK initialize 已按真实插件/本地技能源文件返回描述和 argumentHint（48e34f9、2da7e57、ffd1056），仅源码提交待验收；排队命令处理、输出协议及取消时序仍未等价；SDK 非排队图文消息现在按原版识别末尾文本块斜杠命令，替换实际模型文本块并保留前置图片（64e2a9b），源码待验收；SDK side_question 独立模型调用已接线（21d3014、e165563），主模型忙碌期间 stdin 控制并发与中断仍缺；队列执行/取消仍缺；SDK 运行中控制：独立 stdin 读取线程和 watch 取消通知已接通 Agent ask、SessionStart、标准及旧版控制响应，SDK interrupt/end_session/now 可唤醒正在执行的主模型（006b2fe8、742656fa，源码已提交待验收）；队列自动调度、子代理取消、恢复时序仍有差异；SDK generate_session_title 现在按原版异步调用独立模型，不阻塞后续 SDK 输入；完成后由 Agent 单一写入口校验原会话 ID 再保存标题、按原始提供商记录 API 耗时与费用（04aa82ba、c0045acb、b2610475、d1449753，源码已提交待验收）；主 Agent 正执行其它模型时的标题回执时序、取消与 5 秒退出排空仍待进一步对齐；SDK 标准控制 rewind_files 已接真实 Agent、文件快照和审批；用户 UUID 经主模型与队列执行传递并支持 dry_run（9a38bb34、69652c1b、4a8bc0d4，源码已提交待验收）；回退响应详细统计/完整异步取消和 SDK 原生 MCP 初始化仍缺 |
 | `src/cli/remoteIO.ts` | 256 | 9946 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/structuredIO.ts` | 860 | 28720 | 重写：保持通用行为 | `src/main.rs / src/agent.rs / src/sse.rs` | 部分实现：NDJSON SDK 多轮、事件和实时文本增量；控制请求体系未全等；SDK 本地控制包络初始化/状态/取消回环，其他协议仍未全等 ；SDK 文本+base64 图片混合块经 Agent 传递到多模型、SSE 与会话恢复；多模态 UI/非图片块仍未等价|
-| `src/cli/transports/HybridTransport.ts` | 283 | 10883 | 重写：保持通用行为 | `src/transports/hybrid.rs` | 部分实现：WS 读取/POST 上传、合批/重试、100ms 流事件缓冲已有代码与单元测试；SDK/REPL 生产接入、断线恢复、排队交付与关闭回归待验收 |
-| `src/cli/transports/SSETransport.ts` | 712 | 23758 | 重写：保持通用行为 | `src/transports/sse.rs` | 部分实现：已补 SSE 分块 UTF-8 无损解码、错误字节/不完整尾部检测、45 秒无完整帧超时、重连与游标读取，中文单字节分块单测已提交；真实服务网络回归与 SDK/Bridge 生产入口仍待对照验收 |
-| `src/cli/transports/SerialBatchEventUploader.ts` | 276 | 9089 | 重写：保持通用行为 | `src/transports/serial_batch_event_uploader.rs` | 部分实现：批量队列、退避、背压和失败计数已有测试；真实请求送达与并发关闭、重试下的原版行为仍待验收 |
-| `src/cli/transports/WebSocketTransport.ts` | 801 | 28195 | 重写：保持通用行为 | `src/transports/web_socket.rs` | 部分实现：WS/WSS、RFC6455 握手校验、分片组装及重连已有实现；SDK/REPL 实际收发、断线重放/权限隔离与 TLS 网络回归待验收 |
-| `src/cli/transports/WorkerStateUploader.ts` | 132 | 3879 | 重写：保持通用行为 | `src/transports/worker_state_uploader.rs` | 部分实现：状态补丁合并和失败重试已有实现与测试；远程 Worker 状态生产链、关闭与竞态待验收 |
-| `src/cli/transports/ccrClient.ts` | 999 | 33775 | 重写：保持通用行为 | `src/transports/ccr_client.rs / src/generated_ports/p_03ce73c80da6a.rs` / `src/generated_ports/p_03ce73c80da6a.rs` | 部分实现：Worker/HTTP 上传、事件合批、分页游标 URL 转义、30 秒 GET/10 秒写入超时及恢复失败明确传播已提交并有针对性测试；原版初始化 Worker epoch/同步 PUT/心跳/状态恢复与 SDK/Bridge 实际调用链仍未等价 |
-| `src/cli/transports/transportUtils.ts` | 46 | 1767 | 重写：保持通用行为 | `src/transports/mod.rs` / `src/generated_ports/p_76abc7a665043.rs` |部分实现：按环境配置选择 SSE/Hybrid/WebSocket 的路由已有 Rust；SdkOutbound 未使用完整读写协议且尚未进入真实 SDK 调用链，未验收；PR6 原有传输选择与 URL 推导决策及单测保留 |
+| `src/cli/transports/HybridTransport.ts` | 283 | 10883 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程 SDK 专属传输；不再跟进，通用本地能力保留 |
+| `src/cli/transports/SSETransport.ts` | 712 | 23758 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程 SDK 专属传输；不再跟进，通用本地能力保留 |
+| `src/cli/transports/SerialBatchEventUploader.ts` | 276 | 9089 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程 SDK 专属传输；不再跟进，通用本地能力保留 |
+| `src/cli/transports/WebSocketTransport.ts` | 801 | 28195 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程 SDK 专属传输；不再跟进，通用本地能力保留 |
+| `src/cli/transports/WorkerStateUploader.ts` | 132 | 3879 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程 SDK 专属传输；不再跟进，通用本地能力保留 |
+| `src/cli/transports/ccrClient.ts` | 999 | 33775 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程 SDK 专属传输；不再跟进，通用本地能力保留 |
+| `src/cli/transports/transportUtils.ts` | 46 | 1767 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程 SDK 专属传输；不再跟进，通用本地能力保留 |
 | `src/cli/update.ts` | 423 | 14487 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/add-dir/add-dir.tsx` | 126 | 18017 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/add-dir/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/workspace_dirs.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、<path> 参数提示、非即时执行及动态入口全部匹配；CLI 真实目录授权/确认由独立 handler 执行；证据 CI #41041559517 |
@@ -200,10 +200,10 @@
 | `src/commands/issue/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/keybindings/index.ts` | 14 | 448 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/keybindings/keybindings.ts` | 54 | 1645 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：CLI keybindings 子命令和聊天 /keybindings 实际创建、校验、查询与编辑器入口已落地 Rust；终端配置编辑体验待验收 |
-| `src/commands/login/index.ts` | 15 | 489 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
-| `src/commands/login/login.tsx` | 104 | 16109 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
-| `src/commands/logout/index.ts` | 11 | 341 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
-| `src/commands/logout/logout.tsx` | 82 | 10732 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
+| `src/commands/login/index.ts` | 15 | 489 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂账号登录；不再跟进，通用本地能力保留 |
+| `src/commands/login/login.tsx` | 104 | 16109 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂账号登录；不再跟进，通用本地能力保留 |
+| `src/commands/logout/index.ts` | 11 | 341 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂账号退出；不再跟进，通用本地能力保留 |
+| `src/commands/logout/logout.tsx` | 82 | 10732 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂账号退出；不再跟进，通用本地能力保留 |
 | `src/commands/mcp/addCommand.ts` | 281 | 9848 | 重写：保持通用行为 | `src/mcp_cli.rs` / `src/main.rs` | 部分实现：MCP add 的 stdio/http、环境变量、Header、local/project/user 配置范围已接入 CLI 和启动加载；项目命令须本机授权并绑定配置指纹。SSE、OAuth、XAA 尚未实现；相应完整等价验收未核销 |
 | `src/commands/mcp/index.ts` | 13 | 280 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/mcp/mcp.tsx` | 85 | 12126 | 重写：保持通用行为 | `src/generated_ports/p_7522da9606aa2.rs` | 部分实现：/mcp 原版参数路由已接真实 chat 入口，支持 enable/disable all、状态过滤、命名目标和持久化（附真实 CLI 回归）；原有 /mcp 参数路由（no-redirect/设置视图、reconnect <name>、enable/disable [target]）+MCPToggle 目标解析纯核——ide 客户端恒排除、all 按 enable 筛 disabled/disable 筛非 disabled、命名按 name 匹配、空选择 already/not-found 消息、成功计数或单服务器结果；toggle 动作注入，settings/reconnect 视图归组件域，附 5 测试 |
@@ -246,8 +246,8 @@
 | `src/commands/pr_comments/index.ts` | 51 | 1848 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/privacy-settings/index.ts` | 15 | 399 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/privacy-settings/privacy-settings.tsx` | 58 | 10043 | 重写：保持通用行为 | `src/generated_ports/p_5d2e3ca07cba4.rs`| 部分实现：/privacy-settings 编排功能化——资格门禁→terms 判定路由（首次 GroveDialog/已接受 PrivacySettingsDialog）→onDecision 独立处理（accept/decline 走更新检查+toggle 埋点门禁，escape/defer 关闭提示）；config 失败无专有分支（上游同语义，归 terms 未知路径）；grove API 端点由调用方注入，对话框视图归组件域，附 5 测试|
-| `src/commands/rate-limit-options/index.ts` | 20 | 511 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/rate-limit-options/rate-limit-options.tsx` | 210 | 23749 | 重写：保持通用行为 | `src/generated_ports/p_f500b0cca6994.rs`| 部分实现：限额选项菜单决策核——订阅/档位门（max/max-20x/团队企业）、extra-usage 选项（管理员请求与自助标签四态、组织额度耗尽隐藏管理员请求、超额状态 Request more）、upgrade 选项（max-20x 与团队企业排除）、原序选项列表+cancel 收尾，附 4 测试；实验 flag 名按隐私门禁省略，Select/Dialog 渲染属组件域|
+| `src/commands/rate-limit-options/index.ts` | 20 | 511 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂订阅额度；不再跟进，通用本地能力保留 |
+| `src/commands/rate-limit-options/rate-limit-options.tsx` | 210 | 23749 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂订阅额度；不再跟进，通用本地能力保留 |
 | `src/commands/release-notes/index.ts` | 12 | 268 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/release-notes/release-notes.ts` | 51 | 1524 | 重写：保持通用行为 | `src/release_notes.rs / src/main.rs` | 部分实现：版本更新日志解析、500ms 下载、缓存及 CLI/交互调用已实现；自动通知仍缺 |
 | `src/commands/reload-plugins/index.ts` | 19 | 653 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -263,10 +263,10 @@
 | `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/resume/index.ts` | 13 | 303 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/session.rs` / `src/session_control.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、[conversation id or search term] 参数提示、continue 别名及非即时执行完整对应，真实恢复入口已接线；证据 CI #41041559517 |
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
-| `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | `src/generated_ports/p_8a0b520eb5d3b.rs`| 部分实现：超额计费对话框状态机——proceed 置 Launching 并执行回调（回调拒绝时回 Idle 可重试，上游承诺失败永不调 onDone）、cancel 与 Escape 先中止在途信号再回调（防已取消仍跑仍计费）、选项文案与对话框属性 verbatim；Dialog 与 Select 组件本体归组件域，附 5 测试|
-| `src/commands/review/reviewRemote.ts` | 317 | 11926 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 重写：保持通用行为 | `src/generated_ports/p_2a0eb439f5a02.rs`| 部分实现：ultrareview 门禁编排——超额门禁四分支（未启用/低余额带金额/需确认对话框/直接执行）、launch 完成语义（中止返回 None 跳过 onDone 防写入死会话槽且不持久化确认标记、结果映射 content blocks 拼接、空结果为连接性失败提示）、contentBlocksToString 逐字纯函数，附 5 测试|
-| `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 重写：保持通用行为 | `src/generated_ports/p_c19247cd15a69.rs` | 部分实现：完整等价：未授予灰度路径（null 配置即 false）与原版逐字一致；灰度配置源随遥测链决策，待验收 |
+| `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
+| `src/commands/review/reviewRemote.ts` | 317 | 11926 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
+| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
+| `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
 | `src/commands/review.ts` | 58 | 2188 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：通过真实 Agent 执行 PR 审查任务；原版专属 Ultrareview 远程链仍待改造 |
 | `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/rewind/rewind.ts` | 14 | 376 | 重写：保持通用行为 | `src/generated_ports/p_0be79184937ef.rs` | 部分实现：完整等价：打开消息选择器+返回 skip 结果（不追加消息）含单测；LocalCommandResult 结构对齐 commands 体系，待验收 |
@@ -299,9 +299,9 @@
 | `src/commands/thinkback/thinkback.tsx` | 554 | 61993 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/thinkback-play/index.ts` | 18 | 608 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/thinkback-play/thinkback-play.ts` | 44 | 1430 | 重写：保持通用行为 | `src/generated_ports/p_a71cd9960b7a7.rs` | 部分实现：部分等价：pluginId 构造与缺安装文案完整等价（内部市场名品牌中性化占位，差异记录）；插件管理器与动画加载随插件链，待验收 |
-| `src/commands/ultraplan.tsx` | 471 | 66629 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/upgrade/index.ts` | 17 | 523 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 重写：保持通用行为 | `src/generated_ports/p_ee2b485a76e48.rs`| 部分实现：升级编排——Max20x 双路判定（tokens 订阅类型加限额层、profile 组织类型回退）最高档短路、开浏览器转 Login 视图（上游 starting 文案）、浏览器失败降级访问链接提示；tier 字面值按隐私门禁中性化，附 4 测试|
+| `src/commands/ultraplan.tsx` | 471 | 66629 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项规划（保留本地规划）；不再跟进，通用本地能力保留 |
+| `src/commands/upgrade/index.ts` | 17 | 523 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂订阅升级；不再跟进，通用本地能力保留 |
+| `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂订阅升级；不再跟进，通用本地能力保留 |
 | `src/commands/usage/index.ts` | 10 | 233 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/usage/usage.tsx` | 7 | 1403 | 重写：保持通用行为 | `src/generated_ports/p_4c1965fccb05b.rs`| 部分实现：入口路由 Settings 视图（defaultTab=Usage），附 1 测试|
 | `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | `src/version.rs` / `src/main.rs` | 已验收：仅本原路径完整等价；现有运行二进制版本及可选构建时间输出与原始源码一致，CLI/交互版本生产入口均复用此函数；专属 USER_TYPE gate 按明确的多模型/去品牌要求删除；证据 CI #41041559517 |
@@ -982,17 +982,17 @@
 | `src/query/deps.ts` | 41 | 1445 | 重写：保持通用行为 | `src/agent.rs`（既有注入点） | 部分实现：QueryDeps 注入语义由既有 Provider trait 与 Agent 方法注入等价承载，不新增平行结构；待验收 |
 | `src/query/stopHooks.ts` | 474 | 17290 | 重写：Hooks 事件与生命周期 | `src/hooks.rs` | 部分实现，复杂子类型仍未迁移；队友完成时在办任务 TaskCompleted→TeammateIdle 原版顺序及阻断继续已接入真实团队执行链（dd67ffc1、984410a6），待验收 |
 | `src/query/tokenBudget.ts` | 94 | 2320 | 重写：保持通用行为 | `src/query_token_budget.rs` | 部分实现：BudgetTracker/checkTokenBudget 逐行还原（0.9 完成阈值、500 双窗口递减判定、Math.round 语义、Intl 千分位续写文案），已接入 agent.rs 主循环完成点（Continue→计数递增与 meta 续写消息，Stop→递减 debug 行）；待验收 |
-| `src/remote/RemoteSessionManager.ts` | 344 | 9320 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/remote/SessionsWebSocket.ts` | 405 | 12505 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/remote/remotePermissionBridge.ts` | 79 | 2378 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
-| `src/remote/sdkMessageAdapter.ts` | 303 | 9060 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
+| `src/remote/RemoteSessionManager.ts` | 344 | 9320 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程会话与权限桥接；不再跟进，通用本地能力保留 |
+| `src/remote/SessionsWebSocket.ts` | 405 | 12505 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程会话与权限桥接；不再跟进，通用本地能力保留 |
+| `src/remote/remotePermissionBridge.ts` | 79 | 2378 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程会话与权限桥接；不再跟进，通用本地能力保留 |
+| `src/remote/sdkMessageAdapter.ts` | 303 | 9060 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程会话与权限桥接；不再跟进，通用本地能力保留 |
 | `src/schemas/hooks.ts` | 223 | 7884 | 重写：保持通用行为 | `src/hooks.rs / src/plugins.rs` | 部分实现；部分实现：HookRule serde 原生支持 async/asyncRewake，插件配置 Hook 解析已接运行时后台执行（3e712214、79bcff9b，待验收）；once、复杂回调及完整 schema 仍缺 |
 | `src/screens/Doctor.tsx` | 575 | 73277 | 重写：终端 UI／交互 | `src/diagnostics.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：原版 Doctor 诊断中可移植部分落地为实际可运行命令，支持真实 MCP 状态/上下文大小/配置错误报告；新增 Bash/后台任务输出长度环境变量的非法值与上限截断诊断，以及 40,000 UTF-16 字符超大指令文件警告，源码已提交待行为验收；修复 PATH 中不可执行文件被误判为可用程序；仍缺原版 React/Ink UI、自动更新、版本锁与完整环境安装诊断 |
 | `src/screens/REPL.tsx` | 5006 | 895850 | 重写：终端 UI／交互 | `src/generated_ports/p_fe5e0a874b3c2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/screens/ResumeConversation.tsx` | 399 | 59682 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/server/createDirectConnectSession.ts` | 89 | 2193 | 重写：保持通用行为 | `src/generated_ports/p_34db4849f32f1.rs` | 部分实现：完整等价：连接响应校验核心（sessionId/apiKey 缺失错误携带 url）含双分支单测；HTTP 投递与错误类型随 server 链，待验收 |
-| `src/server/directConnectManager.ts` | 214 | 5898 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/server/types.ts` | 58 | 1466 | 重写：保持通用行为 | `src/generated_ports/p_0409a449c853a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/server/createDirectConnectSession.ts` | 89 | 2193 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端直连会话；不再跟进，通用本地能力保留 |
+| `src/server/directConnectManager.ts` | 214 | 5898 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端直连会话；不再跟进，通用本地能力保留 |
+| `src/server/types.ts` | 58 | 1466 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端直连会话；不再跟进，通用本地能力保留 |
 | `src/services/AgentSummary/agentSummary.ts` | 180 | 6407 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/MagicDocs/magicDocs.ts` | 255 | 7683 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/MagicDocs/prompts.ts` | 128 | 5595 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1018,14 +1018,14 @@
 | `src/services/api/emptyUsage.ts` | 23 | 712 | 重写：模型／Agent 循环 | `src/runtime_contracts.rs` | 已验收：零用量结构字段与嵌套默认值的完整静态对照；证据 runtime_contracts::tests::empty_usage_has_the_entire_original_schema |
 | `src/services/api/errorUtils.ts` | 261 | 8405 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/errors.ts` | 1208 | 41735 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/services/api/filesApi.ts` | 749 | 21494 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
+| `src/services/api/filesApi.ts` | 749 | 21494 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂云端文件服务（保留本地文件）；不再跟进，通用本地能力保留 |
 | `src/services/api/firstTokenDate.ts` | 61 | 1765 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/grove.ts` | 358 | 11543 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/logging.ts` | 789 | 24191 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/metricsOptOut.ts` | 160 | 5355 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/overageCreditGrant.ts` | 138 | 4913 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/promptCacheBreakDetection.ts` | 728 | 26288 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/services/api/referral.ts` | 282 | 7985 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
+| `src/services/api/referral.ts` | 282 | 7985 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂推荐奖励；不再跟进，通用本地能力保留 |
 | `src/services/api/sessionIngress.ts` | 515 | 17055 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/ultrareviewQuota.ts` | 39 | 1219 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/usage.ts` | 64 | 1685 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
@@ -1103,13 +1103,13 @@
 | `src/services/remoteManagedSettings/syncCache.ts` | 113 | 4229 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/remoteManagedSettings/syncCacheState.ts` | 97 | 4004 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/remoteManagedSettings/types.ts` | 32 | 1060 | 重写：保持通用行为 | `src/generated_ports/p_dba9ae467f282.rs` | 部分实现：完整等价：响应结构（uuid/checksum/宽松 settings 记录防循环依赖）+is_valid 逐字段校验（zod 等价）+FetchResult 含 304 语义与 skipRetry，含单测；待验收 |
-| `src/services/settingsSync/index.ts` | 582 | 17924 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/settingsSync/types.ts` | 68 | 1668 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/teamMemorySync/index.ts` | 1257 | 44153 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/teamMemorySync/secretScanner.ts` | 325 | 9458 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/teamMemorySync/teamMemSecretGuard.ts` | 45 | 1552 | 重写：保持通用行为 | `src/generated_ports/p_e70f749bbb240.rs` | 部分实现：AST 转写：checkTeamMemSecrets 契约骨架（TEAMMEM 门关闭即惰性路径同原版，默认安全 None）；isTeamMemPath/scanForSecrets 依赖随各自文件迁移后接线；待验收 |
-| `src/services/teamMemorySync/types.ts` | 157 | 4906 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/teamMemorySync/watcher.ts` | 388 | 13405 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/settingsSync/index.ts` | 582 | 17924 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；设置云端同步（保留本地设置）；不再跟进，通用本地能力保留 |
+| `src/services/settingsSync/types.ts` | 68 | 1668 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；设置云端同步（保留本地设置）；不再跟进，通用本地能力保留 |
+| `src/services/teamMemorySync/index.ts` | 1257 | 44153 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；团队记忆云端同步（保留本地记忆）；不再跟进，通用本地能力保留 |
+| `src/services/teamMemorySync/secretScanner.ts` | 325 | 9458 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；团队记忆云端同步（保留本地记忆）；不再跟进，通用本地能力保留 |
+| `src/services/teamMemorySync/teamMemSecretGuard.ts` | 45 | 1552 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；团队记忆云端同步（保留本地记忆）；不再跟进，通用本地能力保留 |
+| `src/services/teamMemorySync/types.ts` | 157 | 4906 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；团队记忆云端同步（保留本地记忆）；不再跟进，通用本地能力保留 |
+| `src/services/teamMemorySync/watcher.ts` | 388 | 13405 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；团队记忆云端同步（保留本地记忆）；不再跟进，通用本地能力保留 |
 | `src/services/tips/tipHistory.ts` | 18 | 601 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/services/tips/tipRegistry.ts` | 687 | 23154 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/tips/tipScheduler.ts` | 59 | 1664 | 重写：保持通用行为 | `src/generated_ports/p_7cdff970345df.rs` | 部分实现：完整等价：selectTipWithLongestTimeSinceShown 选择核心（空返回 None/单元素短路/降序取最长）纯函数含双单测；历史访问器与厂商事件随各自链路接线，待验收 |
@@ -1120,9 +1120,9 @@
 | `src/services/tools/toolHooks.ts` | 651 | 22333 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` | 部分实现：PostToolUse 的 MCP 输出替换和连续 Hook 可见性已接入 Agent；完整 Hook 事件/阻断/回调时序仍缺 |
 | `src/services/tools/toolOrchestration.ts` | 189 | 5501 | 重写：保持通用行为 | `src/tool_orchestration.rs` | 部分实现：partitionToolCalls 分区语义（连续只读合批/unsafe 断批/schema 失败与未知工具保守串行）、isConcurrencySafe 表（Read/Glob/Grep/WebFetch/WebSearch 对照原版逐工具核对；Bash 只读条件判定与 task/Agent 类 true 项因 Rust 执行体独占借用保守 false 已记差异）、并发上限 ATLAS_MAX_TOOL_USE_CONCURRENCY（parseInt 非零取值否则 10 语义）已接入 agent.rs 主循环批次调度（safe 批校验/hook 串行+executor.execute 与 PostToolUse hook 并发、结果按块序回填），contextModifier 队列待工具级 modifyContext 端口；待验收 |
 | `src/services/vcr.ts` | 407 | 12166 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/voice.ts` | 526 | 17116 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/voiceKeyterms.ts` | 107 | 3462 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/voiceStreamSTT.ts` | 545 | 21375 | 重写：保持通用行为 | `src/generated_ports/p_5bf6ce115b634.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/services/voice.ts` | 526 | 17116 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；厂商语音流服务；不再跟进，通用本地能力保留 |
+| `src/services/voiceKeyterms.ts` | 107 | 3462 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；厂商语音流服务；不再跟进，通用本地能力保留 |
+| `src/services/voiceStreamSTT.ts` | 545 | 21375 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；厂商语音流服务；不再跟进，通用本地能力保留 |
 | `src/skills/bundled/batch.ts` | 125 | 7177 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/claudeApi.ts` | 197 | 6323 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
 | `src/skills/bundled/claudeApiContent.ts` | 76 | 4280 | 重写：技能及加载机制 | `src/tools.rs` | 部分实现，尚未完全等价 |
@@ -1284,9 +1284,9 @@
 | `src/tools/ReadMcpResourceTool/ReadMcpResourceTool.ts` | 159 | 4654 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ReadMcpResourceTool/UI.tsx` | 37 | 6109 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ReadMcpResourceTool/prompt.ts` | 17 | 544 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/RemoteTriggerTool/RemoteTriggerTool.ts` | 162 | 4715 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/RemoteTriggerTool/UI.tsx` | 17 | 3096 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/RemoteTriggerTool/prompt.ts` | 16 | 697 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/RemoteTriggerTool/RemoteTriggerTool.ts` | 162 | 4715 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端任务 Trigger；不再跟进，通用本地能力保留 |
+| `src/tools/RemoteTriggerTool/UI.tsx` | 17 | 3096 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端任务 Trigger；不再跟进，通用本地能力保留 |
+| `src/tools/RemoteTriggerTool/prompt.ts` | 16 | 697 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端任务 Trigger；不再跟进，通用本地能力保留 |
 | `src/tools/ScheduleCronTool/CronCreateTool.ts` | 158 | 5710 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ScheduleCronTool/CronDeleteTool.ts` | 96 | 2616 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ScheduleCronTool/CronListTool.ts` | 98 | 2888 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1356,8 +1356,8 @@
 | `src/types/permissions.ts` | 442 | 13145 | 重写：保持通用行为 | `src/generated_ports/p_cf19f3fcff0bf.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/types/plugin.ts` | 364 | 11308 | 重写：保持通用行为 | `src/generated_ports/p_cc2135ed93bfb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/types/textInputTypes.ts` | 388 | 11628 | 重写：保持通用行为 | `src/generated_ports/p_1b3d61a277808.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/upstreamproxy/relay.ts` | 456 | 14937 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/upstreamproxy/upstreamproxy.ts` | 286 | 9812 | 重写：保持通用行为 | `src/generated_ports/p_456bc58f2042a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/upstreamproxy/relay.ts` | 456 | 14937 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程代理转发；不再跟进，通用本地能力保留 |
+| `src/upstreamproxy/upstreamproxy.ts` | 286 | 9812 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；远程代理转发；不再跟进，通用本地能力保留 |
 | `src/utils/CircularBuffer.ts` | 85 | 1888 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/Cursor.ts` | 1531 | 46663 | 重写：保持通用行为 | `src/generated_ports/terminal_kill_ring.rs` | 部分实现：进程级剪切环、连续追加与前置累积、Yank/Alt-Y 循环已按原版实现；Cursor 编辑、Unicode、视口和 Vim 移动仍待移植 |
 | `src/utils/QueryGuard.ts` | 122 | 3597 | 重写：查询排队、预约、运行、取消与代次状态机 | `src/query_guard.rs` / `src/sdk_queue.rs` | 部分实现：同步预约、运行、取消和代次保护有测试；原始信号订阅动态增删、React UI 生命周期及跨模块取消时序未验收；证据 query_guard::tests / integration_cli::sdk_queue_drain_honors_priority_fifo_and_worker_isolation |
@@ -1386,7 +1386,7 @@
 | `src/utils/authPortable.ts` | 20 | 674 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/autoModeDenials.ts` | 27 | 720 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/autoRunIssue.tsx` | 122 | 10579 | 重写：保持通用行为 | `src/generated_ports/p_d3dd9f3d01f73.rs`| 部分实现：auto-run 通知视图（粗体运行头+Esc 取消提示+reason 行，confirm:no 键绑定、effect 单次触发 ref 守卫语义注释）、shouldAutoRunIssue 门禁 verbatim（外部用户类型恒 false、枚举 reason 全 false 结构保留）、ANT-ONLY 命令解析（外部用户 None），附 3 测试|
-| `src/utils/autoUpdater.ts` | 562 | 18012 | 重写：保持通用行为 | `src/generated_ports/p_276b14dd2f617.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/autoUpdater.ts` | 562 | 18012 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂更新服务；不再跟进，通用本地能力保留 |
 | `src/utils/aws.ts` | 75 | 2305 | 重写：保持通用行为 | `src/generated_ports/p_6ae88763d0d0f.rs`| 部分实现：AwsStsOutput 类型守卫（Credentials 三字段非空字符串验证）、isAwsCredentialsProviderError 名称判定，附 2 测试；checkStsCallerIdentity/clearAwsIniCache 依赖 AWS SDK（crate 无等价依赖）以钩子形式记录待 Bedrock 端口|
 | `src/utils/awsAuthStatusManager.ts` | 82 | 2043 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/background/remote/preconditions.ts` | 236 | 7336 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1927,7 +1927,7 @@
 | `src/vim/textObjects.ts` | 187 | 5029 | 重写：保持通用行为 | `src/vim/text_objects.rs` | 部分实现：单词、引号、括号文本对象及嵌套匹配已有测试；实际输入与 Unicode 边界组合待验收 |
 | `src/vim/transitions.ts` | 491 | 12381 | 重写：保持通用行为 | `src/vim/transitions.rs / src/terminal_input.rs` | 部分实现：NORMAL 命令状态机、组合键和计数接通真实终端；完整模式切换、取消及特殊按键序列待验收 |
 | `src/vim/types.ts` | 200 | 6332 | 重写：保持通用行为 | `src/vim/types.rs / src/generated_ports/p_f4d7ac6b4c8c0.rs` / `src/generated_ports/p_f4d7ac6b4c8c0.rs` | 部分实现：状态枚举、光标/操作类型和持久状态已有 Rust；原版完整快捷键、状态生命周期与编辑器体验待验收 |
-| `src/voice/voiceModeEnabled.ts` | 55 | 2332 | 重写：保持通用行为 | `src/generated_ports/p_a176fdc5e2b0c.rs` | 部分实现：语义等价：VOICE_MODE 编译门关闭路径（外部构建行为）——isVoiceGrowthBookEnabled 恒 false 与原版 else 分支逐字一致；auth-only 半段依赖厂商 OAuth 面（排除）已记录；待验收 |
+| `src/voice/voiceModeEnabled.ts` | 55 | 2332 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；厂商语音模式授权；不再跟进，通用本地能力保留 |
 | `vendor/audio-capture-src/index.ts` | 152 | 4372 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `vendor/image-processor-src/index.ts` | 163 | 4724 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `vendor/modifiers-napi-src/index.ts` | 68 | 1605 | 重写：保持通用行为 | 待定 | 未迁移 |

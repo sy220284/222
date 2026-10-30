@@ -5,8 +5,6 @@ mod array_utils;
 mod ask_user_question;
 mod background;
 mod bash_permission_suggestions;
-mod bridge_core;
-mod bridge_inbound_attachments;
 mod browser_launcher;
 mod cleanup_registry;
 mod collections;
@@ -50,7 +48,6 @@ mod in_memory_mailbox;
 mod ink_constants;
 mod json_read;
 mod json_runtime;
-mod jwt_utils;
 mod keybindings;
 mod lsp;
 mod marketplace_registry;
@@ -107,7 +104,6 @@ mod queue_journal;
 mod queued_prompt_batch;
 mod reactive_store;
 mod release_notes;
-mod remote_sdk;
 mod runtime_contracts;
 mod sdk_queue;
 mod search;
@@ -150,14 +146,12 @@ mod tool_orchestration;
 mod tool_search;
 mod tools;
 mod transcript_search;
-mod transports;
 mod unicode_sanitization;
 mod version;
 mod vim;
 mod vim_mode_source;
 mod webfetch;
 mod websearch;
-mod work_secret;
 mod workspace_dirs;
 mod worktree;
 mod xml_escape;
@@ -452,15 +446,6 @@ enum Commands {
     Sdk {
         #[arg(long)]
         resume: Option<String>,
-        /// Connect a self-hosted SDK endpoint using the actual remote transport.
-        #[arg(long)]
-        remote_url: Option<String>,
-        /// Remote server session ID; kept separate from a local resume ID.
-        #[arg(long)]
-        remote_session_id: Option<String>,
-        /// Local file containing the session access token (never a CLI argument).
-        #[arg(long)]
-        token_file: Option<PathBuf>,
     },
 }
 
@@ -524,28 +509,6 @@ async fn run_cli() -> Result<()> {
     // Doctor must diagnose malformed user configuration without failing startup.
     if !matches!(cli.command, Commands::Doctor) {
         tls_ca::apply_user_startup_config()?;
-    }
-    if let Commands::Sdk {
-        resume,
-        remote_url: Some(remote_url),
-        remote_session_id,
-        token_file,
-    } = &cli.command
-    {
-        let session_id = remote_session_id
-            .as_deref()
-            .or(resume.as_deref())
-            .ok_or_else(|| {
-                anyhow::anyhow!("Remote SDK requires --remote-session-id or --resume")
-            })?;
-        return remote_sdk::run(
-            &cli,
-            remote_url,
-            session_id,
-            resume.as_deref(),
-            token_file.as_deref(),
-        )
-        .await;
     }
     match &cli.command {
         Commands::ReleaseNotes => {
@@ -1286,23 +1249,6 @@ async fn run_cli() -> Result<()> {
         Commands::Sdk {
             resume: Some(id), ..
         } => Session::load(&root, id)?,
-        Commands::Sdk {
-            resume: None,
-            remote_session_id: Some(id),
-            ..
-        } => {
-            let id = uuid::Uuid::parse_str(id).context("Remote session ID must be a UUID")?;
-            let path = root
-                .join(".atlas")
-                .join("sessions")
-                .join(format!("{id}.json"));
-            if path.exists() {
-                bail!("Session already exists; use --resume to preserve its history");
-            }
-            let mut fresh = Session::fresh();
-            fresh.id = id;
-            fresh
-        }
         _ => Session::fresh(),
     };
     // A managed/user disable flag is stronger than a CLI bypass request and
@@ -3097,7 +3043,6 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut queue = message_queue::Queue::default();
     queue.enable_journal(agent.workspace_root(), &agent.session_id())?;
     let mut query_guard = query_guard::QueryGuard::default();
-    let mut bridge_session = bridge_core::BridgeSession::new(agent.session_id());
     let mut sdk_initialized = false;
     let mut sdk_end_requested = false;
     let mut side_question_tasks = Vec::<tokio::task::JoinHandle<()>>::new();
@@ -3221,11 +3166,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     initial_turn_pending = false;
                     sdk_run_initial_turn(agent, &interrupt_rx, input_epoch).await;
                 }
-                // Keep bridge user content and UUID on the validated SDK path.
-                let bridge_user = multimodal::extract_inbound_user_fields(&event);
-                let prompt_value = event
-                    .get("content")
-                    .or_else(|| bridge_user.as_ref().map(|(content, _)| content));
+                let prompt_value = event.get("content");
                 let Some(prompt_value) = prompt_value else {
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
@@ -3233,17 +3174,6 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 // First SDK user message implicitly initializes the stream,
                 // matching the original print.ts user-message path.
                 sdk_initialized = true;
-                let attachment_base = std::env::var("ATLAS_BRIDGE_ATTACHMENT_BASE_URL").ok();
-                let attachment_token = std::env::var("ATLAS_BRIDGE_ATTACHMENT_TOKEN").ok();
-                let resolved_content = bridge_inbound_attachments::resolve_and_prepend(
-                    &event,
-                    prompt_value,
-                    agent.workspace_root(),
-                    &agent.session_id(),
-                    attachment_base.as_deref().zip(attachment_token.as_deref()),
-                )
-                .await;
-                let prompt_value = &resolved_content;
                 if event.get("queued").and_then(Value::as_bool) == Some(true) {
                     let mut command: message_queue::Command = match serde_json::from_value(json!({
                         "value":prompt_value,"mode":"prompt","priority":event.get("priority")
@@ -3535,7 +3465,6 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     config,
                     &event,
                     &mut queue,
-                    &mut bridge_session,
                     &mut sdk_initialized,
                     &mut sdk_end_requested,
                 )
@@ -3568,16 +3497,6 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 if action == "interrupt" {
                     send_control!(json!({"type":"control_response",
                         "action":"interrupt","ok":true}));
-                    continue;
-                }
-                if action.starts_with("bridge_") {
-                    let outcome = bridge_session.dispatch(action, &event);
-                    match outcome {
-                        Ok(result) => send_control!(json!({"type":"control_response",
-                            "action":action,"ok":true,"result":result})),
-                        Err(error) => send_control!(json!({"type":"control_response",
-                            "action":action,"ok":false,"error":format!("{error:#}")})),
-                    }
                     continue;
                 }
                 if action.starts_with("queue_") {
@@ -3835,7 +3754,6 @@ async fn sdk_nested_control(
     config: &Config,
     event: &Value,
     queue: &mut message_queue::Queue,
-    bridge_session: &mut bridge_core::BridgeSession,
     sdk_initialized: &mut bool,
     sdk_end_requested: &mut bool,
 ) -> Value {
@@ -4150,9 +4068,6 @@ async fn sdk_nested_control(
                 // print.ts::stop_task acknowledges with an empty object;
                 // the task's lifecycle is delivered by the event above.
                 Ok(json!({}))
-            }
-            other if other.starts_with("bridge_") => {
-                bridge_session.dispatch(other, &Value::Object(request.clone()))
             }
             other => bail!("Unsupported SDK control subtype: {other}"),
         }

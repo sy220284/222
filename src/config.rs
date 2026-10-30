@@ -161,7 +161,7 @@ fn default_file_checkpointing() -> bool {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            default_provider: "local".into(),
+            default_provider: "openai".into(),
             env: std::collections::HashMap::new(),
             editor_mode: default_editor_mode(),
             advisor_model: None,
@@ -175,14 +175,6 @@ impl Default for Config {
             default_shell: None,
             deep_link_terminal: None,
             providers: vec![
-                ProviderProfile {
-                    id: "local".into(),
-                    kind: "openai-compatible".into(),
-                    base_url: "http://127.0.0.1:11434/v1".into(),
-                    model: "qwen2.5-coder:7b".into(),
-                    api_key_env: None,
-                    stream: false,
-                },
                 ProviderProfile {
                     id: "openai".into(),
                     kind: "openai-compatible".into(),
@@ -287,6 +279,13 @@ impl Config {
                 bail!("Unsupported provider kind for {}: {}", p.id, p.kind);
             }
             let url = reqwest::Url::parse(&p.base_url)?;
+            // Reject the removed Ollama default in persisted configurations.
+            // Keep loopback endpoints available for API protocol integration tests.
+            if matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "::1"))
+                && url.port_or_known_default() == Some(11434)
+            {
+                bail!("The local model endpoint was removed; configure an API provider");
+            }
             if !matches!(url.scheme(), "http" | "https") {
                 bail!("Only http(s) endpoints are supported")
             }
@@ -567,15 +566,23 @@ mod tests {
         Config::default().validate().unwrap();
     }
     #[test]
+    fn api_only_default_rejects_discontinued_local_model() {
+        let mut c = Config::default();
+        assert_eq!(c.default_provider, "openai");
+        assert!(c.providers.iter().all(|p| !p.base_url.contains(":11434")));
+        c.providers[0].base_url = "http://127.0.0.1:11434/v1".into();
+        assert!(c.validate().is_err());
+    }
+    #[test]
     fn selecting_custom_model_does_not_mutate_config() {
         let c = Config::default();
         assert_eq!(
-            c.select(Some("local"), Some("example")).unwrap().model,
+            c.select(Some("openai"), Some("example")).unwrap().model,
             "example"
         );
         assert_eq!(
-            c.select(Some("local"), None).unwrap().model,
-            "qwen2.5-coder:7b"
+            c.select(Some("openai"), None).unwrap().model,
+            "gpt-4.1-mini"
         );
     }
 }

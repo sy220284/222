@@ -310,6 +310,18 @@ class WorkbenchTests(unittest.TestCase):
         with self.assertRaisesRegex(AuditError,'新增排除项'):
             check_evidence(self.repo,read_matrix(self.repo),False)
 
+    def test_user_approved_exclusions_are_scope_locked(self):
+        self.baseline()
+        self.write_matrix(status1='按用户要求删除')
+        scope={'schema':'user-approved-removal-scope/v1',
+               'items':[{'path':'src/cli.ts','reason':'用户取消云端范围'}]}
+        (self.repo/'docs/REMOVED_SCOPE.json').write_text(json.dumps(scope))
+        self.assertEqual(check_evidence(self.repo,read_matrix(self.repo),False)['excluded'],1)
+        scope['items'].append({'path':'src/lib.ts','reason':'未经执行'})
+        (self.repo/'docs/REMOVED_SCOPE.json').write_text(json.dumps(scope))
+        with self.assertRaisesRegex(AuditError,'授权未应用'):
+            check_evidence(self.repo,read_matrix(self.repo),False)
+
     def test_relative_dependency_climb_and_filename_resolution(self):
         self.assertEqual(resolve_import('src/components/x/a.ts','../../lib.js',{'src/lib.ts'}),'src/lib.ts')
         self.assertIsNone(resolve_import('src/a.ts','../../../evil',{'evil.ts'}))
