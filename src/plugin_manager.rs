@@ -825,7 +825,20 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
             }
             config.enabled_plugins.push(name.clone());
             config.save()?;
-            Ok(json!({"enabled":name}))
+            let (active, runtime_errors) =
+                crate::plugins::active_plugin_names(&root, &config.enabled_plugins);
+            let prefix = format!("Plugin '{name}' ");
+            let mut warnings = runtime_errors.into_iter()
+                .filter(|error| error.starts_with(&prefix)).collect::<Vec<_>>();
+            let runnable = active.contains(name);
+            if !runnable {
+                warnings.push(format!(
+                    "Plugin '{name}' is enabled in settings but cannot run in this session"
+                ));
+            }
+            warnings.sort();
+            warnings.dedup();
+            Ok(json!({"enabled":name,"active":runnable,"warnings":warnings}))
         }
         PluginCommand::Disable { plugin } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
