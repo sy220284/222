@@ -17,6 +17,7 @@ pub const SEND_MESSAGE_TOOL_NAME: &str = "SendMessage";
 pub const SKILL_TOOL_NAME: &str = "Skill";
 pub const POWERSHELL_TOOL_NAME: &str = "PowerShell";
 pub const TOOL_SEARCH_TOOL_NAME: &str = "ToolSearch";
+pub const TODO_WRITE_TOOL_NAME: &str = "TodoWrite";
 pub const EXIT_PLAN_MODE_V2_TOOL_NAME: &str = EXIT_PLAN_MODE_TOOL_NAME;
 pub fn canonical_name(name: &str) -> &str {
     match name {
@@ -58,8 +59,9 @@ mod tests {
             (SKILL_TOOL_NAME, "Skill"),
             (POWERSHELL_TOOL_NAME, "PowerShell"),
             (TOOL_SEARCH_TOOL_NAME, "ToolSearch"),
+            (TODO_WRITE_TOOL_NAME, "TodoWrite"),
         ];
-        assert_eq!(cases.len(), 18);
+        assert_eq!(cases.len(), 19);
         for (actual, expected) in cases {
             assert_eq!(actual, expected);
         }
