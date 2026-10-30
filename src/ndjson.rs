@@ -25,10 +25,9 @@ mod tests {
     }
     #[test]
     fn sdk_wire_retains_javascript_object_insertion_order_and_literal_escapes() {
-        let input: Value = serde_json::from_str(
-            r#"{"z":1,"a":"\u2028","\u2029field":"value","m":"\\u2028"}"#,
-        )
-        .unwrap();
+        let input: Value =
+            serde_json::from_str(r#"{"z":1,"a":"\u2028","\u2029field":"value","m":"\\u2028"}"#)
+                .unwrap();
         let line = stringify_value(&input);
         assert!(!line.contains('\u{2028}'));
         assert!(!line.contains('\u{2029}'));
