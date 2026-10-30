@@ -226,8 +226,87 @@ fn copy_local_tree(source: &Path, stage: &Path) -> Result<()> {
     Ok(())
 }
 
+/// A crash after staging/renaming a plugin leaves a hidden directory.
+/// Recover it under the same exclusive plugin-operation lock before any new
+/// mutation. Never follow redirected folders or overwrite a newer install.
+fn recover_plugin_crash_artifacts(root: &Path) -> Result<Vec<String>> {
+    let home = checked_installed_root(root, false)?;
+    if !home.exists() {
+        return Ok(Vec::new());
+    }
+    let mut recovered = Vec::new();
+    let mut entries = fs::read_dir(&home)?.collect::<std::io::Result<Vec<_>>>()?;
+    entries.sort_by_key(|item| item.file_name());
+    // Backups are restored before discarding incomplete staging directories.
+    // This handles a process killed between target -> backup and stage -> target.
+    for item in &entries {
+        let name = item.file_name().to_string_lossy().into_owned();
+        let (recover_backup, suffix) =
+            if let Some(id) = name.strip_prefix(".previous-") {
+                (true, id)
+            } else if let Some(id) = name.strip_prefix(".failed-update-") {
+                (true, id)
+            } else { continue };
+        if Uuid::parse_str(suffix).is_err() { continue; }
+        let backup = item.path();
+        let metadata = fs::symlink_metadata(&backup)?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            bail!("Plugin crash recovery entry is redirected: {}", backup.display());
+        }
+        if recover_backup {
+            // Derive the only permissible restoration destination from the
+            // original validated manifest, never from uncontrolled filenames.
+            let plugin = manifest_name(&backup)?;
+            if !valid_name(&plugin) {
+                bail!("Plugin backup has invalid manifest identity");
+            }
+            let target = home.join(&plugin);
+            match fs::symlink_metadata(&target) {
+                Ok(current) if current.file_type().is_symlink() || !current.is_dir() => {
+                    bail!("Installed plugin changed to unsafe target: {}", target.display());
+                }
+                Ok(_) => {
+                    // The replacement is installed. Retire obsolete backup.
+                    fs::remove_dir_all(&backup)?;
+                    recovered.push(format!("Cleaned previous installation of {plugin}"));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    fs::rename(&backup, &target).with_context(|| {
+                        format!("Restore plugin {plugin} after interrupted update")
+                    })?;
+                    recovered.push(format!("Restored {plugin} after interrupted update"));
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+    for item in entries {
+        let name = item.file_name().to_string_lossy().into_owned();
+        let suffix = name.strip_prefix(".install-")
+            .or_else(|| name.strip_prefix(".update-"));
+        let Some(suffix) = suffix else { continue; };
+        if Uuid::parse_str(suffix).is_err() { continue; }
+        let stage = item.path();
+        match fs::symlink_metadata(&stage) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                bail!("Plugin staging entry is redirected: {}", stage.display());
+            }
+            Ok(_) => {
+                fs::remove_dir_all(&stage)?;
+                recovered.push(format!("Cleaned interrupted plugin staging {name}"));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(recovered)
+}
+
 pub fn install_local(root: &Path, location: &Path) -> Result<String> {
     let _lock = plugin_operation_lock()?;
+    for report in recover_plugin_crash_artifacts(root)? {
+        eprintln!("Plugin recovery: {report}");
+    }
     install_local_with_origin(root, location, None)
 }
 
@@ -708,6 +787,11 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
         _ => true,
     };
     let _lock = if mutating { Some(plugin_operation_lock()?) } else { None };
+    if mutating {
+        for report in recover_plugin_crash_artifacts(&root)? {
+            eprintln!("Plugin recovery: {report}");
+        }
+    }
     let mut config = Config::load()?;
     match command {
         PluginCommand::Menu | PluginCommand::Manage => installed(&root, &config),
