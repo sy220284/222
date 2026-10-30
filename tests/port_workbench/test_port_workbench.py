@@ -186,6 +186,35 @@ class WorkbenchTests(unittest.TestCase):
             sleep.assert_called_once()
         github_json.cache_clear()
 
+    def test_github_evidence_recovers_after_multiple_502_errors(self):
+        github_json.cache_clear()
+        payload = json.dumps({'head_sha': 'a'*40, 'conclusion': 'success'}).encode()
+        failures = [
+            urllib.error.HTTPError('https://api.github.com/test', 502,
+                                   'Bad Gateway', {}, None)
+            for _ in range(4)
+        ]
+        with mock.patch('port_workbench.urllib.request.urlopen') as open_url, \
+             mock.patch('port_workbench.time.sleep') as sleep:
+            open_url.side_effect = [*failures, io.BytesIO(payload)]
+            self.assertEqual(
+                github_json('https://api.github.com/test')['conclusion'], 'success')
+            self.assertEqual(open_url.call_count, 5)
+            self.assertEqual(sleep.call_count, 4)
+        github_json.cache_clear()
+
+    def test_github_evidence_still_rejects_persistent_502(self):
+        github_json.cache_clear()
+        with mock.patch('port_workbench.urllib.request.urlopen') as open_url, \
+             mock.patch('port_workbench.time.sleep') as sleep:
+            open_url.side_effect = urllib.error.HTTPError(
+                'https://api.github.com/test', 502, 'Bad Gateway', {}, None)
+            with self.assertRaisesRegex(AuditError, 'HTTP 502'):
+                github_json('https://api.github.com/test')
+            self.assertEqual(open_url.call_count, 7)
+            self.assertEqual(sleep.call_count, 6)
+        github_json.cache_clear()
+
     def test_github_evidence_never_accepts_permanent_http_errors(self):
         github_json.cache_clear()
         with mock.patch('port_workbench.urllib.request.urlopen') as open_url:
