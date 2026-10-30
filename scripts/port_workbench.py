@@ -237,6 +237,46 @@ def report(rows: dict[str, dict], repo: Path, source: Path, output: Path, strict
             'priority_top': [r['path'] for r in priority[:15]]}
 
 
+def generated_runtime_reachability(repo: Path, rows: dict[str, dict]) -> dict:
+    """Classify generated adapters by *external code references*, not parity.
+
+    The registry and InspectSource CLI are intentionally excluded: a registry
+    export is inspectable data, not proof that the user-facing runtime calls it.
+    This is a static search and may include references in unreachable code.
+    """
+    base = repo / 'src/generated_ports'
+    modules = sorted(base.glob('p_*.rs')) if base.is_dir() else []
+    references: dict[str, set[str]] = defaultdict(set)
+    pattern = re.compile(r'\b(p_[0-9a-f]{8,16})\s*::')
+    root = repo / 'src'
+    for file in sorted(root.rglob('*.rs')):
+        if base in file.parents:
+            continue
+        text = file.read_text(encoding='utf-8')
+        for name in set(pattern.findall(text)):
+            references[name].add(str(file.relative_to(repo)))
+    mapping: dict[str, list[str]] = defaultdict(list)
+    for row in rows.values():
+        for target in rust_targets(row['rust_mapping']):
+            if target.startswith('src/generated_ports/p_'):
+                mapping[Path(target).stem].append(row['path'])
+    entries = []
+    for module in modules:
+        name = module.stem
+        callers = sorted(references.get(name, ()))
+        source_paths = sorted(mapping.get(name, ()))
+        entries.append(dict(module=str(module.relative_to(repo)),
+                            source_paths=source_paths,
+                            non_registry_references=callers,
+                            classification='outside_reference' if callers else 'inspect_only'))
+    return dict(schema='generated-reachability/v1',
+                disclaimer='静态模块引用不是业务可达性或等价验收证明；inspect_only 仅表示只可经 registry/InspectSource 路径查询。',
+                generated_modules=len(entries),
+                inspect_only=sum(e['classification']=='inspect_only' for e in entries),
+                outside_reference=sum(e['classification']=='outside_reference' for e in entries),
+                entries=entries)
+
+
 def affected_source_paths(entries: list[dict], changed_files: list[str]) -> dict:
     """Find source paths and their direct/transitive import consumers to recheck."""
     by_path = {row['path']: row for row in entries}
@@ -338,7 +378,7 @@ def current_counts(rows: dict[str, dict], strict: bool = True) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('scan', 'check', 'freeze-baseline', 'impact', 'counts'))
+    parser.add_argument('command', choices=('scan', 'check', 'freeze-baseline', 'impact', 'counts', 'reachability'))
     parser.add_argument('--repo', type=Path, default=Path('.'))
     parser.add_argument('--source', type=Path, help='解压后的 2.1.88 原始源码根目录')
     parser.add_argument('--output', type=Path, default=Path('port-audit-output'))
@@ -350,6 +390,12 @@ def main(argv: list[str] | None = None) -> int:
         counts = verify_counts(rows, strict=not args.allow_fixture)
         if args.command == 'counts':
             result = current_counts(rows, strict=not args.allow_fixture)
+        elif args.command == 'reachability':
+            result = generated_runtime_reachability(args.repo, rows)
+            output_file = args.output / 'generated-reachability.json'
+            json_dump(output_file, result)
+            result = {k: v for k, v in result.items() if k != 'entries'}
+            result['report'] = str(output_file)
         elif args.command == 'impact':
             if args.source is None or not args.changed:
                 raise AuditError('impact 必须提供 --source 和至少一项 --changed')

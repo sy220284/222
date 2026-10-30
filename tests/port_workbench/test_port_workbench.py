@@ -8,7 +8,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from port_workbench import (AuditError, affected_source_paths, check_evidence, collect, label_status,
-                            read_matrix, report, resolve_import, verify_counts, current_counts, main)
+                            read_matrix, report, resolve_import, verify_counts, current_counts,
+                            generated_runtime_reachability, main)
 
 
 class WorkbenchTests(unittest.TestCase):
@@ -44,6 +45,33 @@ class WorkbenchTests(unittest.TestCase):
         (self.repo / 'docs/PORT_BASELINE.json').write_text(json.dumps({
             'statuses':{p: r['status'] for p,r in rows.items()},
             'source_hashes':{p:__import__('hashlib').sha256((self.src/p).read_bytes()).hexdigest() for p in rows}}))
+
+    def test_generated_only_exports_are_not_counted_as_runtime_connected(self):
+        generated = self.repo / 'src/generated_ports'
+        generated.mkdir()
+        (generated / 'p_deadbeef01.rs').write_text('pub fn only_inspect() {}')
+        (generated / 'p_cafebeef02.rs').write_text('pub fn actual() {}')
+        (generated / 'registry_00.rs').write_text('p_deadbeef01::only_inspect();')
+        (self.repo / 'src/agent.rs').write_text('fn call() { crate::generated_ports::p_cafebeef02::actual(); }')
+        rows = read_matrix(self.repo)
+        rows['src/lib.ts']['rust_mapping'] = '\u0060src/generated_ports/p_deadbeef01.rs\u0060'
+        result = generated_runtime_reachability(self.repo, rows)
+        self.assertEqual(result['generated_modules'], 2)
+        self.assertEqual(result['inspect_only'], 1)
+        self.assertEqual(result['outside_reference'], 1)
+        self.assertEqual(result['entries'][1]['non_registry_references'], [])
+        self.assertEqual(result['entries'][0]['non_registry_references'], ['src/agent.rs'])
+
+    def test_reachability_cli_writes_complete_json_report(self):
+        (self.repo / 'src/generated_ports').mkdir()
+        (self.repo / 'src/generated_ports/p_deadbeef01.rs').write_text('pub fn sample() {}')
+        output = Path(self.tmp.name) / 'reachability'
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(['reachability', '--repo', str(self.repo),
+                                   '--allow-fixture', '--output', str(output)]), 0)
+        report = json.loads((output/'generated-reachability.json').read_text())
+        self.assertEqual(report['inspect_only'], 1)
+        self.assertEqual(report['entries'][0]['classification'], 'inspect_only')
 
     def test_counts_command_tracks_matrix_changes_without_manual_copying(self):
         initial = current_counts(read_matrix(self.repo), strict=False)
