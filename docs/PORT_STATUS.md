@@ -1,3 +1,11 @@
+## 2026-10-29：会话导出预览、文件名选择和取消（源码已提交、待验收）
+
+原版 source/src/commands/export/export.tsx::call → ExportDialog：/export 无参数时展示会话内容预览和由首条用户消息/本地时间生成的默认文件名，用户可修改或取消；提供参数时直接写出。Rust 原 src/main.rs::chat 直接调用 Agent::export_session(None)，未提供选择或取消。
+
+已接通 src/session_control.rs::suggested_export_filename → Agent::export_dialog_preview → src/main.rs::chat，输出1200字符预览、默认文件名、可输入新文件名或 q 取消，保留 /export FILE 直接导出。文件写入仍沿用现有路径授权、原子写入和纯文本渲染。提交 9c0823d1、7a30a16e、df1d979a，静态复核真实调用入口；原版 Ink 富文本预览、键盘交互和完整渲染细节待等价。
+
+本轮新增1项，**累计9/100，剩余91项**；先行100项完整问题确认与实施方案仍未完成。未运行 Cargo/测试/CI，新增完整等价验收0项，Issue #3 冻结362项保持开放。
+
 ## 2026-10-29：自定义 Agent 详情查看（源码已提交、待验收）
 
 对照原版 source/src/components/agents/AgentsMenu.tsx::view-agent → AgentDetail，补齐 Rust 交互式 /agents show project|user NAME。现在按项目/用户来源定位真实代理定义文件，检查常规文件类型并拒绝符号链接，展示完整定义与系统提示；不再只能列出代理名称。src/main.rs::chat → agent_definition::new_file_path → 文件读取，提交 b7ef373fac597f11fcfac1cb55302c3bc99f6b09。原版富文本详情页、工具展示和内置代理视图仍待等价。
