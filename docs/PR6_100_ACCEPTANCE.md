@@ -2,13 +2,13 @@
 
 **核对基准**：GitHub PR #6 提取时 HEAD `bd9844bc9f23617bef6574466097070228b62a46`，原始 Claude Code 2.1.88 源路径与 `docs/PORT_BASELINE.json` 冻结 SHA-256。原始 1,906 个源码文件已经在本地逐一独立 SHA-256 验证，**1,906/1,906 一致**。
 
-本清单跟踪 **100 条不同原路径（已验收 3 条，仍待完整等价验收 97 条）**，优先选取本 PR 实际修改所关联的 Rust 生产模块，并覆盖 Bridge、SDK/CLI、TUI、工具/MCP、命令与 Agent。用于后续修复、逐项验收与反复核查。表中“部分实现/未迁移”准确表示当前尚无完整等价证据，不能作为 100 条通过的证明。
+本清单跟踪 **100 条不同原路径（已验收 4 条，仍待完整等价验收 96 条）**，优先选取本 PR 实际修改所关联的 Rust 生产模块，并覆盖 Bridge、SDK/CLI、TUI、工具/MCP、命令与 Agent。用于后续修复、逐项验收与反复核查。表中“部分实现/未迁移”准确表示当前尚无完整等价证据，不能作为 100 条通过的证明。
 
 每条源路径只有同时达到以下标准才可转为 `已验收`：原始 SHA-256 一致；全部必要函数/类型和行为语义覆盖；生产入口真实调用；正常、错误、权限、取消、并发、恢复等适用测试实际执行；`docs/PORT_EVIDENCE.jsonl` 绑定通过的 tested_commit / workflow_run_id；原路径剩余差异为空。已跳过作业或静态源码匹配不得用于升格。
 
-- 本次独立追踪：**100 条（已验收 3、仍未验收 97）**；源文件哈希均有冻结基线（并已对完整原始包复核）。
-- 本轮新增完整等价验收：**3 条**，已同时更新矩阵及逐路径证据；其余 97 条不凭单测/映射/CI 绿灯冒充独立原路径闭环。
-- 历史基线已验收：**29 条**；本轮新增 3 条，动态台账当前总计 **32 条**。
+- 本次独立追踪：**100 条（已验收 4、仍未验收 96）**；源文件哈希均有冻结基线（并已对完整原始包复核）。
+- 本轮新增完整等价验收：**4 条**，已同时更新矩阵及逐路径证据；其余 96 条不凭单测/映射/CI 绿灯冒充独立原路径闭环。
+- 历史基线已验收：**29 条**；本轮新增 4 条，动态台账当前总计 **33 条**。
 - 本轮已落地修正：`src/portable_async_runtime.rs` 修复 JS `parseInt` 请求 ID 解析差异；`src/portable_ink_core.rs` 增加完整常量断言；`src/tool_names.rs` 补充 `TodoWrite` 原版工具名与测试。对应最新提交/CI 仍须按最新 PR HEAD 动态复核。
 
 | # | 类别 | 原始路径 | Rust 映射 | 现有状态 | 验收缺口（须继续闭环） |
@@ -80,7 +80,7 @@
 | 65 | 工具/MCP | `src/services/mcp/vscodeSdkMcp.ts` | src/mcp.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现，仅基础 stdio |
 | 66 | 工具/MCP | `src/tools/TodoWriteTool/TodoWriteTool.ts` | src/task.rs / src/session.rs / src/agent.rs | 部分实现 | SDK 回调、状态、取消与流事件时序需源码对照；原台账：部分实现：无交互 SDK/单次运行暴露 TodoWrite；严格清单字段与状态校验、整表替换、全部完成自动清空、会话保存恢复；原版 UI 状态与跨会话边界待验收 |
 | 67 | 工具/MCP | `src/tools/TaskStopTool/TaskStopTool.ts` | src/background.rs / src/tools.rs / src/main.rs | 部分实现 | SDK 回调、状态、取消与流事件时序需源码对照；原台账：部分实现：task_id、shell_id、KillShell、成功返回和异常状态对齐；停止与自然完成竞态及停止前实时状态核对已补；新增输出排空期取消和 SDK stop_task 的 task_no |
-| 68 | 工具/MCP | `src/services/mcp/mcpStringUtils.ts` | src/mcp.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现：已按 mcp__server__tool 实现命名/路由，并在权限匹配中补 server-wide / wildcard 规则；字符串解析全部函数及全链路仍待逐项验收 |
+| 68 | 工具/MCP | `src/services/mcp/mcpStringUtils.ts` | src/mcp.rs | **已验收** | 原版六函数、真实 MCP 注册路由及权限名隔离测试通过；[CI #41032938553](https://github.com/sy220284/222/actions/runs/41032938553)、`docs/PORT_EVIDENCE.jsonl` |
 | 69 | 工具/MCP | `src/tools/TeamDeleteTool/TeamDeleteTool.ts` | src/team_registry.rs / src/agent.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现：活跃成员阻止清理、目录删除、任务图恢复；原版工作树/窗格清理未等价 |
 | 70 | 工具/MCP | `src/tools/AgentTool/built-in/planAgent.ts` | src/prompt_runtime.rs / src/agent.rs / src/tools.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现：规划角色 system 和只读工具约束已进入真实执行链；原版完整计划流程仍待逐项验收 |
 | 71 | 工具/MCP | `src/services/mcp/SdkControlTransport.ts` | src/mcp.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现，仅基础 stdio |

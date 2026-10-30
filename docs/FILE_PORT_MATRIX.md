@@ -1072,7 +1072,7 @@
 | `src/services/mcp/elicitationHandler.ts` | 314 | 10166 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/envExpansion.ts` | 39 | 1047 | 重写：多模型通用 MCP | `src/compat_helpers.rs` | 已验收：环境变量展开、默认值、缺失列表及重复缺失项的纯函数语义对照；证据 compat_helpers::tests::source_env_expansion_cases |
 | `src/services/mcp/headersHelper.ts` | 139 | 4718 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、故障隔离、资源/提示订阅及重连、MCP Prompt 命令发现/位置参数绑定/服务端取回/进入真实模型请求；多模态 Prompt、OAuth、独立 SSE GET/退避、其他传输及完整回调/UI 仍未等价；动态请求头助手已接入 HTTP 握手、10 秒超时、JSON 校验、静态头回退及覆盖，尚未行为测试，项目/本地信任门禁和其他传输仍缺 |
-| `src/services/mcp/mcpStringUtils.ts` | 107 | 3968 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现：已按 mcp__server__tool 实现命名/路由，并在权限匹配中补 server-wide / wildcard 规则；字符串解析全部函数及全链路仍待逐项验收 |
+| `src/services/mcp/mcpStringUtils.ts` | 107 | 3968 | 重写：多模型通用 MCP | `src/mcp.rs` / `src/runtime_contracts.rs` | 已验收：原版六个公开字符串工具函数的无效格式、完整双下划线工具名、前缀、权限名隔离与用户显示名行为逐项对照；真实 MCP 注册与分发调用统一名称生成；证据 mcp::tests::original_mcp_name_string_helpers_and_permission_identity |
 | `src/services/mcp/normalization.ts` | 24 | 879 | 重写：多模型通用 MCP | `src/runtime_contracts.rs / src/mcp.rs` | 部分实现：已迁移通用 ASCII 名称归一化；原厂服务名前缀专有规则按要求移除 |
 | `src/services/mcp/oauthPort.ts` | 79 | 2325 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/officialRegistry.ts` | 73 | 2013 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
