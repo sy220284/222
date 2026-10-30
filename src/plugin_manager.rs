@@ -754,9 +754,32 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                     warnings.push(format!("Previous plugin version could not be cleaned: {error}"));
                 }
             }
+            // Installation can succeed while the runtime loader reports
+            // broken hooks, missing components, or dependency demotion.
+            // Surface those diagnostics instead of reporting a silent success.
+            let (active, runtime_errors) =
+                crate::plugins::active_plugin_names(&root, &config.enabled_plugins);
+            for name in &installed_names {
+                if !active.contains(name) {
+                    warnings.push(format!(
+                        "Plugin '{name}' is installed and enabled but is not currently runnable"
+                    ));
+                }
+                let prefix = format!("Plugin '{name}' ");
+                warnings.extend(runtime_errors.iter()
+                    .filter(|error| error.starts_with(&prefix)).cloned());
+            }
+            warnings.sort();
+            warnings.dedup();
+            let root_active = active.contains(&actual_name);
             let dependencies = installed_names.into_iter()
                 .filter(|name| name != &actual_name).collect::<Vec<_>>();
-            Ok(json!({"installed":actual_name,"dependencies":dependencies,"warnings":warnings}))
+            Ok(json!({
+                "installed":actual_name,
+                "active":root_active,
+                "dependencies":dependencies,
+                "warnings":warnings
+            }))
         }
         PluginCommand::Enable { plugin } => {
             let name = plugin.as_ref().context("Plugin name is required")?;
