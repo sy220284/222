@@ -2,13 +2,13 @@
 
 **核对基准**：GitHub PR #6 提取时 HEAD `bd9844bc9f23617bef6574466097070228b62a46`，原始 Claude Code 2.1.88 源路径与 `docs/PORT_BASELINE.json` 冻结 SHA-256。原始 1,906 个源码文件已经在本地逐一独立 SHA-256 验证，**1,906/1,906 一致**。
 
-本清单跟踪 **100 条不同原路径（已验收 10 条，仍待完整等价验收 90 条）**，优先选取本 PR 实际修改所关联的 Rust 生产模块，并覆盖 Bridge、SDK/CLI、TUI、工具/MCP、命令与 Agent。用于后续修复、逐项验收与反复核查。表中“部分实现/未迁移”准确表示当前尚无完整等价证据，不能作为 100 条通过的证明。
+本清单跟踪 **100 条不同原路径（已验收 11 条，仍待完整等价验收 89 条）**，优先选取本 PR 实际修改所关联的 Rust 生产模块，并覆盖 Bridge、SDK/CLI、TUI、工具/MCP、命令与 Agent。用于后续修复、逐项验收与反复核查。表中“部分实现/未迁移”准确表示当前尚无完整等价证据，不能作为 100 条通过的证明。
 
 每条源路径只有同时达到以下标准才可转为 `已验收`：原始 SHA-256 一致；全部必要函数/类型和行为语义覆盖；生产入口真实调用；正常、错误、权限、取消、并发、恢复等适用测试实际执行；`docs/PORT_EVIDENCE.jsonl` 绑定通过的 tested_commit / workflow_run_id；原路径剩余差异为空。已跳过作业或静态源码匹配不得用于升格。
 
-- 本次独立追踪：**100 条（已验收 10、仍未验收 90）**；源文件哈希均有冻结基线（并已对完整原始包复核）。
-- 本轮新增完整等价验收：**10 条**，已同时更新矩阵及逐路径证据；其余 90 条不凭单测/映射/CI 绿灯冒充独立原路径闭环。
-- 历史基线已验收：**29 条**；本轮新增 10 条，动态台账当前总计 **39 条**。
+- 本次独立追踪：**100 条（已验收 11、仍未验收 89）**；源文件哈希均有冻结基线（并已对完整原始包复核）。
+- 本轮新增完整等价验收：**11 条**，已同时更新矩阵及逐路径证据；其余 89 条不凭单测/映射/CI 绿灯冒充独立原路径闭环。
+- 历史基线已验收：**29 条**；本轮新增 11 条，动态台账当前总计 **40 条**。
 - 本轮已落地修正：`src/portable_async_runtime.rs` 修复 JS `parseInt` 请求 ID 解析差异；`src/portable_ink_core.rs` 增加完整常量断言；`src/tool_names.rs` 补充 `TodoWrite` 原版工具名与测试。对应最新提交/CI 仍须按最新 PR HEAD 动态复核。
 
 | # | 类别 | 原始路径 | Rust 映射 | 现有状态 | 验收缺口（须继续闭环） |
@@ -89,7 +89,7 @@
 | 74 | Agent/其他 | `src/constants/turnCompletionVerbs.ts` | src/portable_ink_core.rs | 部分实现 | TUI 实际交互/渲染与状态回调待完整验收；原台账：部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | 75 | Agent/其他 | `src/constants/errorIds.ts` | src/portable_ink_core.rs | 部分实现 | TUI 实际交互/渲染与状态回调待完整验收；原台账：部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | 76 | Agent/其他 | `src/services/claudeAiLimitsHook.ts` | src/provider.rs / src/config.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分覆盖，原路径仍需逐条核对 |
-| 77 | Agent/其他 | `src/services/oauth/crypto.ts` | src/oauth_crypto.rs / src/main.rs | 部分实现 | SDK 回调、状态、取消与流事件时序需源码对照；原台账：部分实现：32 字节系统级安全随机数、无填充 Base64URL、SHA-256 PKCE challenge 和独立 state 已有原生 Rust、RFC 7636 向量及真实 CLI 测试；OA |
+| 77 | Agent/其他 | `src/services/oauth/crypto.ts` | `src/oauth_crypto.rs` / `src/main.rs` | **已验收** | 已核对 2.1.88 唯一三个公开函数；生产 `oauth-pkce` CLI 测试两轮安全随机数、UTF-8 SHA-256 和 Base64URL 完整通过；独立状态和 RFC 7636 失败边界；成功 [CI #41050621304](https://github.com/sy220284/222/actions/runs/41050621304)；证据 `docs/PORT_EVIDENCE.jsonl` |
 | 78 | Agent/其他 | `src/services/compact/compactWarningHook.ts` | src/agent.rs / src/session.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现，长期记忆未等价 |
 | 79 | Agent/其他 | `src/services/compact/compactWarningState.ts` | src/runtime_contracts.rs / src/agent.rs | 部分实现 | TUI 实际交互/渲染与状态回调待完整验收；原台账：部分实现：默认 false、压缩抑制、清除与重复赋值不通知已验证；证据 runtime_contracts::tests::compact_warning_state_and_subscription |
 | 80 | Agent/其他 | `src/services/autoDream/config.ts` | src/generated_ports/p_3f28a74b2c6e6.rs | 部分实现 | 生成模块代码存在，完整事件回调/真实入口/组件行为未获证明；原台账：部分实现：autoDream 决策纯函数（用户设置显式值覆盖实验默认，未设时实验值决定），settings/growthbook 读取由调用方传入；实验 flag 名按隐私门禁省略 |

@@ -381,11 +381,16 @@ mod tests {
 
         let pyright = get_builtin_command_spec("pyright").unwrap();
         assert_eq!(pyright.description, "Type checker for Python");
+<<<<<<< HEAD
         assert_eq!(pyright.arguments.len(), 20);
         assert!(pyright
             .arguments
             .iter()
             .any(|arg| arg.name == "--threads <N>"));
+=======
+        assert_eq!(pyright.arguments.len(), 22);
+        assert!(pyright.arguments.iter().any(|arg| arg.name == "--threads <N>"));
+>>>>>>> origin/fix/manual-source-parity-20261030
         assert_eq!(pyright.arguments.last().unwrap().name, "files");
         assert!(pyright.arguments.last().unwrap().variadic);
     }

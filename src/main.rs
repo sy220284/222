@@ -1940,6 +1940,9 @@ async fn chat(
             "/shell-spec" => {
                 for spec in portable_missing_utilities::builtin_command_specs() {
                     println!("{} — {}", spec.name, spec.description);
+                    for argument in spec.arguments {
+                        println!("  {} — {}", argument.name, argument.description);
+                    }
                 }
                 continue;
             }

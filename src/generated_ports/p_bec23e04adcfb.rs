@@ -66,8 +66,14 @@ pub fn pyright_spec() -> CommandSpec {
                 "Ignore external imports for --verifytypes",
             ),
             flag_with_arg("--pythonpath", "Path to the Python interpreter", "FILE"),
+            flag_with_arg("--pythonplatform", "Analyze for platform", "PLATFORM"),
             flag_with_arg(
-                "--venvpath",
+                "--pythonversion",
+                "Analyze for Python version",
+                "VERSION",
+            ),
+            flag_with_arg(
+                "--venvpath, -v",
                 "Directory that contains virtual environments",
                 "DIRECTORY",
             ),
@@ -110,13 +116,16 @@ mod tests {
     fn pyright_spec_shape() {
         let spec = pyright_spec();
         assert_eq!(spec.name, "pyright");
-        // 19 option flags + variadic files argument.
-        assert_eq!(spec.arguments.len(), 20);
+        // 21 option flags + variadic files argument.
+        assert_eq!(spec.arguments.len(), 22);
         let files = spec.arguments.last().unwrap();
         assert_eq!(files.name, "files");
         assert!(files.variadic && files.optional);
         assert!(spec.arguments.iter().any(|a| a.name.contains("--watch")));
         assert!(spec.arguments.iter().any(|a| a.name.contains("--project")));
+        assert!(spec.arguments.iter().any(|a| a.name == "--pythonplatform <PLATFORM>"));
+        assert!(spec.arguments.iter().any(|a| a.name == "--pythonversion <VERSION>"));
+        assert!(spec.arguments.iter().any(|a| a.name == "--venvpath, -v <DIRECTORY>"));
         // --threads has optional arg but is itself a flag.
         let threads = spec
             .arguments
