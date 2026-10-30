@@ -106,6 +106,8 @@ cargo run -- --provider deepseek chat
 
 Gemini 使用官方原生 `models.list` 分页目录、`x-goog-api-key` 鉴权与 `generateContent` 实际调用检测；只列出支持 `generateContent` 的型号。其 `temperature`、`topP`、`maxOutputTokens` 和 `thinkingLevel` 会映射到 Gemini 原生 `generationConfig`，并拒绝不支持的思考档位。`chatgpt` 的模型发现使用登录账户的官方专属目录，`models setup chatgpt` 会启动账号授权，不接受 API Key。
 
+官方参数差异已在模型调用前校验：DeepSeek 默认开启思考，此时 `temperature` 不生效；Flash 思考模式的 `top_p` 最低有效值为 0.95，非思考模式的 `top_p` 不生效。Kimi K3.1 Pro（含高速版）仅支持开启思考；GPT-6.1 Sol 不接受 `reasoning_effort=none`。这些无效组合会明确报错，避免界面显示设置成功、实际被服务端忽略。可以使用 `models tune deepseek --reasoning-effort none --temperature 0.3` 选择 DeepSeek 非思考模式下可生效的温度参数。
+
 **调整模型参数：**
 
 ```bash
