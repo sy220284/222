@@ -394,7 +394,10 @@ mod tests {
             "{report}"
         );
         assert!(report.contains("MCP: missing-tool: command"), "{report}");
-        assert!(report.contains("Provider: 3 model profile"), "{report}");
+        assert!(
+            report.contains(&format!("Provider: {} model profile", config.providers.len())),
+            "{report}"
+        );
         assert!(!report.contains("nonexistent-secret"));
     }
 
