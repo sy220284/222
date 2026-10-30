@@ -21,7 +21,6 @@ use uuid::Uuid;
 // Original diskOutput.ts allows up to 5 GiB of task output per stream.
 // Keep the cap in bytes (u64), not characters, to preserve large outputs.
 const LOG_CAP: u64 = 5 * 1024 * 1024 * 1024;
-const DEFAULT_DELTA_READ_BYTES: u64 = 8 * 1024 * 1024;
 const OUTPUT_CAPPED_NOTICE: &str = "\n[output truncated: exceeded 5GB disk cap]\n";
 const DISPLAY_CAP: usize = 8 * 1024 * 1024;
 
