@@ -53,13 +53,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             }
             _ => None,
         },
-        "src/hooks/useTeleportResume.tsx" => match export {
-            _ => None,
-        },
-        "src/hooks/useVoice.ts" => match export {
-            "FIRST_PRESS_FALLBACK_MS" => Some(super::p_5a4cf6e30ce08::FIRST_PRESS_FALLBACK_MS()),
-            _ => None,
-        },
         "src/ink/colorize.ts" => match export {
             _ => None,
         },
@@ -103,9 +96,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "BUILTIN_MARKETPLACE_NAME" => Some(super::p_2f9a1e26806ee::BUILTIN_MARKETPLACE_NAME()),
             _ => None,
         },
-        "src/server/types.ts" => match export {
-            _ => None,
-        },
         "src/tools.ts" => match export {
             "TOOL_PRESETS" => Some(super::p_522c7b52c49b4::TOOL_PRESETS()),
             _ => None,
@@ -124,14 +114,7 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         "src/types/plugin.ts" => match export {
             _ => None,
         },
-        "src/upstreamproxy/upstreamproxy.ts" => match export {
-            "SESSION_TOKEN_PATH" => Some(super::p_456bc58f2042a::SESSION_TOKEN_PATH()),
-            _ => None,
-        },
         "src/utils/api.ts" => match export {
-            _ => None,
-        },
-        "src/utils/autoUpdater.ts" => match export {
             _ => None,
         },
         "src/utils/bash/ParsedCommand.ts" => match export {
@@ -274,9 +257,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         "src/commands/agents/agents.tsx" => match export {
             _ => None,
         },
-        "src/commands/bridge/bridge.tsx" => match export {
-            _ => None,
-        },
         "src/commands/btw/btw.tsx" => match export {
             _ => None,
         },
@@ -304,13 +284,7 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         "src/commands/exit/exit.tsx" => match export {
             _ => None,
         },
-        "src/commands/extra-usage/extra-usage.tsx" => match export {
-            _ => None,
-        },
         "src/commands/fast/fast.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/feedback/feedback.tsx" => match export {
             _ => None,
         },
         "src/commands/help/help.tsx" => match export {
@@ -320,24 +294,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/commands/ide/ide.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/install-github-app/CheckGitHubStep.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/install-github-app/ChooseRepoStep.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/install-github-app/CreatingStep.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/install-github-app/OAuthFlowStep.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/install-github-app/WarningsStep.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/install-github-app/install-github-app.tsx" => match export {
             _ => None,
         },
         "src/commands/install.tsx" => match export {
@@ -390,8 +346,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/hooks/useNotifyAfterTimeout.ts",
             vec!["DEFAULT_INTERACTION_THRESHOLD_MS"],
         ),
-        ("src/hooks/useTeleportResume.tsx", vec!["TeleportSource"]),
-        ("src/hooks/useVoice.ts", vec!["FIRST_PRESS_FALLBACK_MS"]),
         ("src/ink/colorize.ts", vec!["ColorType"]),
         ("src/ink/dom.ts", vec!["ElementNames"]),
         (
@@ -416,7 +370,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/plugins/builtinPlugins.ts",
             vec!["BUILTIN_MARKETPLACE_NAME"],
         ),
-        ("src/server/types.ts", vec!["SessionState"]),
         ("src/tools.ts", vec!["TOOL_PRESETS"]),
         (
             "src/types/generated/events_mono/common/v1/auth.ts",
@@ -431,12 +384,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             vec!["Timestamp"],
         ),
         ("src/types/plugin.ts", vec!["PluginComponent"]),
-        (
-            "src/upstreamproxy/upstreamproxy.ts",
-            vec!["SESSION_TOKEN_PATH"],
-        ),
         ("src/utils/api.ts", vec!["CacheScope"]),
-        ("src/utils/autoUpdater.ts", vec!["InstallStatus"]),
         ("src/utils/bash/ParsedCommand.ts", vec!["IParsedCommand"]),
         ("src/utils/bash/parser.ts", vec!["ParsedCommandData"]),
         (
@@ -520,7 +468,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/buddy/useBuddyNotification.tsx", vec![]),
         ("src/cli/handlers/mcp.tsx", vec![]),
         ("src/commands/agents/agents.tsx", vec![]),
-        ("src/commands/bridge/bridge.tsx", vec![]),
         ("src/commands/btw/btw.tsx", vec![]),
         ("src/commands/config/config.tsx", vec![]),
         ("src/commands/context/context.tsx", vec![]),
@@ -530,24 +477,10 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/commands/doctor/doctor.tsx", vec![]),
         ("src/commands/effort/effort.tsx", vec![]),
         ("src/commands/exit/exit.tsx", vec![]),
-        ("src/commands/extra-usage/extra-usage.tsx", vec![]),
         ("src/commands/fast/fast.tsx", vec![]),
-        ("src/commands/feedback/feedback.tsx", vec![]),
         ("src/commands/help/help.tsx", vec![]),
         ("src/commands/hooks/hooks.tsx", vec![]),
         ("src/commands/ide/ide.tsx", vec![]),
-        (
-            "src/commands/install-github-app/CheckGitHubStep.tsx",
-            vec![],
-        ),
-        ("src/commands/install-github-app/ChooseRepoStep.tsx", vec![]),
-        ("src/commands/install-github-app/CreatingStep.tsx", vec![]),
-        ("src/commands/install-github-app/OAuthFlowStep.tsx", vec![]),
-        ("src/commands/install-github-app/WarningsStep.tsx", vec![]),
-        (
-            "src/commands/install-github-app/install-github-app.tsx",
-            vec![],
-        ),
         ("src/commands/install.tsx", vec![]),
         ("src/commands/mcp/mcp.tsx", vec![]),
     ]

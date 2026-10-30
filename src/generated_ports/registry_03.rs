@@ -133,21 +133,7 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             .ok(),
             _ => None,
         },
-        "src/components/PromptInput/VoiceIndicator.tsx" => match export {
-            "view" | "VoiceIndicator" => serde_json::to_value(
-                super::p_92d31b9e1cfc8::render_source_view(args.first().unwrap_or(&Value::Null)),
-            )
-            .ok(),
-            "warmupHint" | "VoiceWarmupHint" => serde_json::to_value(
-                super::p_92d31b9e1cfc8::voice_warmup_hint(args.first().unwrap_or(&Value::Null)),
-            )
-            .ok(),
-            _ => None,
-        },
         "src/components/QuickOpenDialog.tsx" => match export {
-            _ => None,
-        },
-        "src/components/RemoteEnvironmentDialog.tsx" => match export {
             _ => None,
         },
         "src/components/ResumeTask.tsx" => match export {
@@ -242,15 +228,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
                 args.first().unwrap_or(&Value::Null),
             ))
             .ok(),
-            _ => None,
-        },
-        "src/components/TeleportProgress.tsx" => match export {
-            _ => None,
-        },
-        "src/components/TeleportResumeWrapper.tsx" => match export {
-            _ => None,
-        },
-        "src/components/TeleportStash.tsx" => match export {
             _ => None,
         },
         "src/components/TextInput.tsx" => match export {
@@ -469,12 +446,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/components/PromptInput/ShimmeredInput.tsx",
             vec!["view", "HighlightedInput"],
         ),
-        (
-            "src/components/PromptInput/VoiceIndicator.tsx",
-            vec!["view", "VoiceIndicator", "warmupHint", "VoiceWarmupHint"],
-        ),
         ("src/components/QuickOpenDialog.tsx", vec![]),
-        ("src/components/RemoteEnvironmentDialog.tsx", vec![]),
         ("src/components/ResumeTask.tsx", vec![]),
         ("src/components/SandboxViolationExpandedView.tsx", vec![]),
         ("src/components/SearchBox.tsx", vec!["view"]),
@@ -507,9 +479,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/TagTabs.tsx", vec![]),
         ("src/components/TaskListV2.tsx", vec![]),
         ("src/components/TeammateViewHeader.tsx", vec!["view"]),
-        ("src/components/TeleportProgress.tsx", vec![]),
-        ("src/components/TeleportResumeWrapper.tsx", vec![]),
-        ("src/components/TeleportStash.tsx", vec![]),
         ("src/components/TextInput.tsx", vec!["view"]),
         ("src/components/ThemePicker.tsx", vec![]),
         ("src/components/ThinkingToggle.tsx", vec![]),

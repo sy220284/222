@@ -3,13 +3,7 @@
 use serde_json::Value;
 pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
     match source {
-        "src/commands/mobile/mobile.tsx" => match export {
-            _ => None,
-        },
         "src/commands/model/model.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/passes/passes.tsx" => match export {
             _ => None,
         },
         "src/commands/permissions/permissions.tsx" => match export {
@@ -57,18 +51,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         "src/commands/privacy-settings/privacy-settings.tsx" => match export {
             _ => None,
         },
-        "src/commands/rate-limit-options/rate-limit-options.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/remote-env/remote-env.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/review/UltrareviewOverageDialog.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/review/ultrareviewCommand.tsx" => match export {
-            _ => None,
-        },
         "src/commands/sandbox-toggle/sandbox-toggle.tsx" => match export {
             _ => None,
         },
@@ -88,9 +70,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/commands/theme/theme.tsx" => match export {
-            _ => None,
-        },
-        "src/commands/upgrade/upgrade.tsx" => match export {
             _ => None,
         },
         "src/commands/usage/usage.tsx" => match export {
@@ -122,9 +101,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/BashModeProgress.tsx" => match export {
-            _ => None,
-        },
-        "src/components/BridgeDialog.tsx" => match export {
             _ => None,
         },
         "src/components/ClickableImageRef.tsx" => match export {
@@ -328,9 +304,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         "src/components/LogoV2/Opus1mMergeNotice.tsx" => match export {
             _ => None,
         },
-        "src/components/LogoV2/VoiceModeNotice.tsx" => match export {
-            _ => None,
-        },
         "src/components/LogoV2/WelcomeV2.tsx" => match export {
             _ => None,
         },
@@ -359,9 +332,7 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
 }
 pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
     vec![
-        ("src/commands/mobile/mobile.tsx", vec![]),
         ("src/commands/model/model.tsx", vec![]),
-        ("src/commands/passes/passes.tsx", vec![]),
         ("src/commands/permissions/permissions.tsx", vec![]),
         ("src/commands/plan/plan.tsx", vec![]),
         ("src/commands/plugin/AddMarketplace.tsx", vec![]),
@@ -377,13 +348,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/commands/plugin/plugin.tsx", vec![]),
         ("src/commands/plugin/pluginDetailsHelpers.tsx", vec![]),
         ("src/commands/privacy-settings/privacy-settings.tsx", vec![]),
-        (
-            "src/commands/rate-limit-options/rate-limit-options.tsx",
-            vec![],
-        ),
-        ("src/commands/remote-env/remote-env.tsx", vec![]),
-        ("src/commands/review/UltrareviewOverageDialog.tsx", vec![]),
-        ("src/commands/review/ultrareviewCommand.tsx", vec![]),
         ("src/commands/sandbox-toggle/sandbox-toggle.tsx", vec![]),
         ("src/commands/skills/skills.tsx", vec![]),
         ("src/commands/stats/stats.tsx", vec![]),
@@ -391,7 +355,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/commands/tag/tag.tsx", vec![]),
         ("src/commands/tasks/tasks.tsx", vec![]),
         ("src/commands/theme/theme.tsx", vec![]),
-        ("src/commands/upgrade/upgrade.tsx", vec![]),
         ("src/commands/usage/usage.tsx", vec![]),
         ("src/components/AgentProgressLine.tsx", vec![]),
         ("src/components/App.tsx", vec![]),
@@ -401,7 +364,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/AwsAuthStatusBox.tsx", vec![]),
         ("src/components/BaseTextInput.tsx", vec!["view"]),
         ("src/components/BashModeProgress.tsx", vec![]),
-        ("src/components/BridgeDialog.tsx", vec![]),
         ("src/components/ClickableImageRef.tsx", vec![]),
         ("src/components/CompactSummary.tsx", vec![]),
         ("src/components/ConfigurableShortcutHint.tsx", vec![]),
@@ -470,7 +432,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/LogoV2/Feed.tsx", vec![]),
         ("src/components/LogoV2/FeedColumn.tsx", vec![]),
         ("src/components/LogoV2/Opus1mMergeNotice.tsx", vec![]),
-        ("src/components/LogoV2/VoiceModeNotice.tsx", vec![]),
         ("src/components/LogoV2/WelcomeV2.tsx", vec![]),
         (
             "src/components/LspRecommendation/LspRecommendationMenu.tsx",
