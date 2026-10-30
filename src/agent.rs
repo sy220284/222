@@ -3510,6 +3510,9 @@ impl Agent {
         self.session_start_source = "resume";
         self.permission_mode = mode;
         self.background = background;
+        // /env overrides belong to the previous conversation; a resumed
+        // session starts with the process/configured environment only.
+        self.session_env.clear();
         self.background.set_environment(&self.session_env);
         self.graph = graph;
         self.file_metrics = metrics;
