@@ -2341,6 +2341,46 @@ async fn sdk_run_initial_turn(
     }
 }
 
+/// An independent SDK title result is committed only by the main Agent
+/// actor, keeping session state and per-model usage as single-writer data.
+struct SdkTitleDone {
+    id: String,
+    session_id: uuid::Uuid,
+    profile: config::ProviderProfile,
+    persist: bool,
+    elapsed: std::time::Duration,
+    outcome: Result<(Option<String>, Option<protocol::TokenUsage>)>,
+}
+
+fn sdk_deliver_title(agent: &mut Agent, done: SdkTitleDone) {
+    let result = match done.outcome {
+        Ok((title, usage)) => agent.finish_sdk_title(
+            done.session_id, &done.profile, usage, title, done.persist, done.elapsed,
+        ),
+        Err(error) => {
+            // The source returns null on title-model failure while still
+            // charging the request duration to the original session.
+            let accounting = agent.finish_sdk_title(
+                done.session_id, &done.profile, None, None, false, done.elapsed,
+            );
+            if let Err(accounting_error) = accounting {
+                Err(accounting_error)
+            } else {
+                eprintln!("Session title generation failed: {error:#}");
+                Ok(None)
+            }
+        }
+    };
+    match result {
+        Ok(title) => print_json!(json!({"type":"control_response","response":{
+            "subtype":"success","request_id":done.id,"response":{"title":title}
+        }})),
+        Err(error) => print_json!(json!({"type":"control_response","response":{
+            "subtype":"error","request_id":done.id,"error":format!("{error:#}")
+        }})),
+    }
+}
+
 async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut queue = message_queue::Queue::default();
     queue.enable_journal(agent.workspace_root(), &agent.session_id())?;
@@ -2349,6 +2389,8 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut sdk_initialized = false;
     let mut sdk_end_requested = false;
     let mut side_question_tasks = Vec::<tokio::task::JoinHandle<()>>::new();
+    let (title_tx, mut title_rx) = tokio::sync::mpsc::unbounded_channel::<SdkTitleDone>();
+    let mut title_pending = 0usize;
     print_json!(json!({"type":"system","subtype":"init",
         "session_id":agent.session_id(),"provider":agent.profile().id,
         "model":agent.profile().model,
@@ -2399,7 +2441,19 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             }
         }
     });
-    while let Some(input) = input_rx.recv().await {
+    loop {
+        // Completed title requests can publish their replies while stdin is
+        // idle; they never wait behind the next SDK control request.
+        let incoming = tokio::select! {
+            biased;
+            Some(done) = title_rx.recv(), if title_pending > 0 => {
+                title_pending -= 1;
+                sdk_deliver_title(agent, done);
+                continue;
+            }
+            input = input_rx.recv() => input,
+        };
+        let Some(input) = incoming else { break };
         let (line, input_epoch) = input?;
         if line.trim().is_empty() {
             continue;
@@ -2558,6 +2612,76 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             // not create errors or mutate the active conversation.
             "keep_alive" => {}
             "control_request" if event.get("request").is_some() => {
+                // Source cli/print.ts:3783-3814 executes title generation
+                // independently of the SDK control message reader.
+                if event.pointer("/request/subtype").and_then(Value::as_str)
+                    == Some("generate_session_title")
+                {
+                    let prepared: Result<(String, bool, Option<protocol::ModelRequest>)> = (|| {
+                        let id = event.get("request_id").and_then(Value::as_str)
+                            .filter(|id| !id.is_empty())
+                            .ok_or_else(|| anyhow::anyhow!(
+                                "generate_session_title requires request_id"))?;
+                        let description = event.pointer("/request/description")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| anyhow::anyhow!(
+                                "generate_session_title requires description string"))?;
+                        let persist = match event.pointer("/request/persist") {
+                            None => false,
+                            Some(Value::Bool(value)) => *value,
+                            _ => bail!("generate_session_title persist must be a boolean"),
+                        };
+                        Ok((id.to_owned(), persist, agent.sdk_title_request(description)))
+                    })();
+                    match prepared {
+                        Ok((id, persist, Some(request))) => {
+                            let profile = agent.profile().clone();
+                            let session_id = uuid::Uuid::parse_str(&agent.session_id())?;
+                            let sender = title_tx.clone();
+                            title_pending = title_pending.saturating_add(1);
+                            tokio::spawn(async move {
+                                let started = std::time::Instant::now();
+                                let outcome: Result<(Option<String>,
+                                    Option<protocol::TokenUsage>)> = async {
+                                    let client = provider::create(&profile)?;
+                                    let completion = client.complete(&request).await?;
+                                    let usage = completion.usage;
+                                    if completion.message.tool_calls.as_ref()
+                                        .is_some_and(|calls| !calls.is_empty()) {
+                                        return Ok((None, usage));
+                                    }
+                                    let title = serde_json::from_str::<Value>(
+                                        &completion.message.visible_text()
+                                    ).ok()
+                                        .and_then(|value| value.get("title")
+                                            .and_then(Value::as_str).map(str::to_owned))
+                                        .map(|value| value.trim().to_owned())
+                                        .filter(|value| !value.is_empty());
+                                    Ok((title, usage))
+                                }.await;
+                                let _ = sender.send(SdkTitleDone {
+                                    id, session_id, profile, persist,
+                                    elapsed: started.elapsed(), outcome,
+                                });
+                            });
+                        }
+                        Ok((id, _, None)) => print_json!(json!({
+                            "type":"control_response","response":{
+                                "subtype":"success","request_id":id,
+                                "response":{"title":null}
+                            }
+                        })),
+                        Err(error) => print_json!(json!({
+                            "type":"control_response","response":{
+                                "subtype":"error",
+                                "request_id":event.get("request_id")
+                                    .cloned().unwrap_or(Value::Null),
+                                "error":format!("{error:#}")
+                            }
+                        })),
+                    }
+                    continue;
+                }
                 // side_question is fire-and-forget in the original SDK. Its
                 // model request must not hold up subsequent stdin controls.
                 if event.pointer("/request/subtype").and_then(Value::as_str)
@@ -2783,6 +2907,20 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             }
             other => print_json!(json!({"type":"error",
                 "message":format!("Unsupported SDK event {other}")})),
+        }
+    }
+    // Bound the post-EOF flush window for accepted background title
+    // requests; persist replies through the main Agent before exiting.
+    let title_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while title_pending > 0 {
+        let remaining = title_deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() { break; }
+        match tokio::time::timeout(remaining, title_rx.recv()).await {
+            Ok(Some(done)) => {
+                title_pending -= 1;
+                sdk_deliver_title(agent, done);
+            }
+            _ => break,
         }
     }
     // A producer may close stdin immediately after issuing a side question.
