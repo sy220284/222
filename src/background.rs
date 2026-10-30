@@ -226,6 +226,37 @@ impl BackgroundTasks {
         })
     }
 
+    /// FileReadTool may read a task's own output under the original
+    /// project temporary directory. This is a narrow read-only exception:
+    /// never authorize another session's file or a symlinked output.
+    pub fn trusted_output_path(&self, raw: &str) -> Result<Option<PathBuf>> {
+        let path = Path::new(raw);
+        if !path.is_absolute() || path.parent() != Some(self.directory.as_path()) {
+            return Ok(None);
+        }
+        if !matches!(path.extension().and_then(|ext| ext.to_str()), Some("stdout" | "stderr")) {
+            return Ok(None);
+        }
+        let Some(id) = path.file_stem().and_then(|stem| stem.to_str()) else {
+            return Ok(None);
+        };
+        if canonical_shell_task_id(id).as_deref() != Ok(id) {
+            return Ok(None);
+        }
+        let record = self.directory.join(format!("{id}.json"));
+        let record_meta = fs::symlink_metadata(&record)
+            .with_context(|| format!("Inspect task record {}", record.display()))?;
+        if record_meta.file_type().is_symlink() || !record_meta.is_file() {
+            bail!("Task record is redirected or invalid");
+        }
+        let output_meta = fs::symlink_metadata(path)
+            .with_context(|| format!("Inspect task output {}", path.display()))?;
+        if output_meta.file_type().is_symlink() || !output_meta.is_file() {
+            bail!("Task output is redirected or invalid");
+        }
+        Ok(Some(path.to_path_buf()))
+    }
+
     pub fn set_environment(&self, variables: &std::collections::BTreeMap<String, String>) {
         *self.session_env.lock().unwrap() = variables.clone();
     }
