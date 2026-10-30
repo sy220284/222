@@ -201,8 +201,10 @@ pub async fn complete(
     if let Some(key) = key {
         post = post.bearer_auth(key)
     }
-    let response = crate::provider::send_model_request(post)
+    let idle_timeout = crate::provider::stream_idle_timeout();
+    let response = tokio::time::timeout(idle_timeout, crate::provider::send_model_request(post))
         .await
+        .context("Model stream response headers timed out")?
         .context("Streaming model request failed")?;
     let status = response.status();
     if !status.is_success() {
@@ -220,7 +222,11 @@ pub async fn complete(
     let mut buffered = Vec::new();
     let mut assembler = Assembler::default();
     let mut finished = false;
-    while let Some(part) = stream.next().await {
+    // Reset the watchdog after every received chunk, rather than applying a
+    // total deadline to a healthy multi-minute model generation.
+    while let Some(part) = tokio::time::timeout(idle_timeout, stream.next())
+        .await
+        .context("Model stream idle timeout")? {
         buffered.extend_from_slice(&part?);
         if buffered.len() > 4_000_000 {
             bail!("Model SSE frame exceeds maximum size")
