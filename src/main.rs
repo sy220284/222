@@ -49,6 +49,7 @@ mod lsp;
 mod marketplace_registry;
 mod marketplace_source;
 mod mcp;
+mod mcp_cli;
 mod mcp_http;
 mod mcp_policy;
 mod mcp_prompt;
@@ -262,6 +263,11 @@ enum Commands {
     Init,
     /// Inspect local installation, settings, Git and MCP availability offline
     Doctor,
+    /// Manage MCP server configuration without connecting to the server
+    Mcp {
+        #[command(subcommand)]
+        action: mcp_cli::McpCommand,
+    },
     /// Set up project instructions, skills and hooks through guided model tools
     ProjectInit,
     /// Validate or save a user-defined multi-model agent from JSON
@@ -539,6 +545,11 @@ async fn run_cli() -> Result<()> {
                 ),
                 _ => bail!("Credential action must be read, write, delete, or status"),
             }
+            return Ok(());
+        }
+        Commands::Mcp { action } => {
+            let root = canonical_workspace(&cli.workspace)?;
+            println!("{}", mcp_cli::run(&root, action)?);
             return Ok(());
         }
         Commands::Plugin { args } => {
@@ -1261,7 +1272,7 @@ async fn run_cli() -> Result<()> {
     agent.set_model_prices(&config.model_prices);
     agent.set_permission_rules(&active_permission_rules)?;
     agent.set_search_backend(config.search_backend.clone());
-    let mut mcp_profiles = config.mcp_servers.clone();
+    let mut mcp_profiles = mcp_cli::active_servers(agent.workspace_root(), &config)?;
     mcp_profiles.extend(plugins.mcp_servers);
     agent.attach_mcp(&mcp_profiles).await?;
     agent.attach_lsp(&config.lsp_servers).await?;
