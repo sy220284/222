@@ -1138,7 +1138,7 @@
 | `src/tasks/LocalMainSessionTask.ts` | 480 | 15136 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/LocalShellTask/LocalShellTask.tsx` | 523 | 66306 | 重写：任务调度 | `src/background.rs / src/tools.rs` | 部分实现：进程启动、磁盘输出、停止和状态回填；UI 和完整通知时序未等价；新增统一 .output 任务日志，stdout/stderr 按读取块到达顺序合并，合并流共享 5GiB 上限，TaskOutput、增量读取和 Read 均可达，旧分离日志仍可读取（4aa001f5、ea67020f，已提交待验收）；跨流调度精确时序、全部任务类型和完整输出生命周期仍待等价；后台超时与输出管道等待使用同一截止时间，超时结束进程组并保留可读错误日志（3e893596、c9eeb5f、1edf5f2，源码已提交待验收） |
 | `src/tasks/LocalShellTask/guards.ts` | 42 | 1552 | 重写：任务调度 | `src/task_guards.rs` | 已验收：isLocalShellTask 对 object/null/array/类型字段和附加字段的行为对照；证据 task_guards::tests |
-| `src/tasks/LocalShellTask/killShellTasks.ts` | 77 | 2565 | 重写：任务调度 | `src/background.rs` | 部分实现：Shell 进程组停止；取消状态和外部子进程边界未全等 |
+| `src/tasks/LocalShellTask/killShellTasks.ts` | 77 | 2565 | 重写：任务调度 | `src/background.rs` | 部分实现：补齐停止请求在输出排空阶段的取消传播、短时强制排空及 killed 状态保持，源码已提交待验收；Windows 进程树、SDK/终端全生命周期仍未等价 |
 | `src/tasks/RemoteAgentTask/RemoteAgentTask.tsx` | 856 | 126389 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/pillLabel.ts` | 83 | 2898 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
 | `src/tasks/stopTask.ts` | 101 | 2894 | 重写：任务调度 | `src/task.rs` | 部分实现，后台与依赖未等价 |
@@ -1295,7 +1295,7 @@
 | `src/tools/TaskListTool/prompt.ts` | 50 | 2066 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskOutputTool/TaskOutputTool.tsx` | 584 | 66568 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs` | 部分实现：阻塞/非阻塞输出、超时和状态；Agent/远程输出尚未覆盖；原版严格参数/semanticBoolean 统一预校验，在 PreToolUse 前拒绝无效请求（0bb6043），待验收；长任务输出保持结构化 JSON/状态与输出路径，不再被通用16k截断（8f59c4b0），源码已提交待验收；新增统一 .output 任务日志，stdout/stderr 按读取块到达顺序合并，合并流共享 5GiB 上限，TaskOutput、增量读取和 Read 均可达，旧分离日志仍可读取（4aa001f5、ea67020f，已提交待验收）；跨流调度精确时序、全部任务类型和完整输出生命周期仍待等价 |
 | `src/tools/TaskOutputTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
-| `src/tools/TaskStopTool/TaskStopTool.ts` | 132 | 3935 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs` | 部分实现：task_id、shell_id、KillShell、成功返回和异常状态对齐；新增停止与自然完成竞态结果核对，源码已提交待验收；其余任务类型/完整生命周期待验收；停止前核对实时状态、旧 shell_id 与严格参数，阻止不存在/已完成任务触发权限与 Hook（9008bf3、9b0a7fe），待验收 |
+| `src/tools/TaskStopTool/TaskStopTool.ts` | 132 | 3935 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs / src/main.rs` | 部分实现：task_id、shell_id、KillShell、成功返回和异常状态对齐；停止与自然完成竞态及停止前实时状态核对已补；新增输出排空期取消和 SDK stop_task 的 task_notification 终止事件（源码已提交、待验收）；其他任务类型、完整异步通知和重启生命周期仍未等价 |
 | `src/tools/TaskStopTool/UI.tsx` | 41 | 5672 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskStopTool/prompt.ts` | 9 | 280 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/TaskUpdateTool/TaskUpdateTool.ts` | 407 | 12161 | 重写：工具行为、参数和权限 | `src/task_graph.rs / src/agent.rs / src/team_mailbox.rs` | 部分实现：状态/所有者/元数据、双向依赖与删除级联、TaskCompleted hook 阻断、队员启动任务自动认领及负责人邮箱通知；队员完成任务后收到领取下一任务的提示；验证提醒、UI 与完整时序未等价；完成 Hook 前校验全部 TaskUpdate 字段，非法参数不触发副作用（809afb、06c65cc） |
