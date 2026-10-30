@@ -44,18 +44,21 @@ mod tests {
             plan_v2_agent_count(None, Some("max"), Some("default_claude_max_20x")),
             3
         );
-        assert_eq!(
-            plan_v2_agent_count(None, Some("enterprise"), None),
-            3
-        );
+        assert_eq!(plan_v2_agent_count(None, Some("enterprise"), None), 3);
         assert_eq!(plan_v2_agent_count(None, Some("pro"), None), 1);
         assert_eq!(plan_v2_agent_count(Some("5"), Some("pro"), None), 5);
         assert_eq!(plan_v2_agent_count(Some("11"), Some("pro"), None), 1);
         assert_eq!(plan_v2_agent_count(Some("0"), Some("pro"), None), 1);
-        assert_eq!(plan_v2_agent_count(Some("  +5agents"), Some("pro"), None), 5);
+        assert_eq!(
+            plan_v2_agent_count(Some("  +5agents"), Some("pro"), None),
+            5
+        );
         assert_eq!(plan_v2_agent_count(Some("10.5"), Some("pro"), None), 10);
         assert_eq!(plan_v2_agent_count(Some("0x10"), Some("pro"), None), 1);
         assert_eq!(plan_v2_agent_count(Some("-5"), Some("pro"), None), 1);
-        assert_eq!(plan_v2_agent_count(Some("not-a-number"), Some("team"), None), 3);
+        assert_eq!(
+            plan_v2_agent_count(Some("not-a-number"), Some("team"), None),
+            3
+        );
     }
 }
