@@ -265,7 +265,7 @@
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
 | `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | `src/generated_ports/p_8a0b520eb5d3b.rs`| 部分实现：超额计费对话框状态机——proceed 置 Launching 并执行回调（回调拒绝时回 Idle 可重试，上游承诺失败永不调 onDone）、cancel 与 Escape 先中止在途信号再回调（防已取消仍跑仍计费）、选项文案与对话框属性 verbatim；Dialog 与 Select 组件本体归组件域，附 5 测试|
 | `src/commands/review/reviewRemote.ts` | 317 | 11926 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 重写：保持通用行为 | `src/generated_ports/p_2a0eb439f5a02.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 重写：保持通用行为 | `src/generated_ports/p_2a0eb439f5a02.rs`| 部分实现：ultrareview 门禁编排——超额门禁四分支（未启用/低余额带金额/需确认对话框/直接执行）、launch 完成语义（中止返回 None 跳过 onDone 防写入死会话槽且不持久化确认标记、结果映射 content blocks 拼接、空结果为连接性失败提示）、contentBlocksToString 逐字纯函数，附 5 测试|
 | `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/review.ts` | 58 | 2188 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：通过真实 Agent 执行 PR 审查任务；原版专属 Ultrareview 远程链仍待改造 |
 | `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -301,7 +301,7 @@
 | `src/commands/thinkback-play/thinkback-play.ts` | 44 | 1430 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/ultraplan.tsx` | 471 | 66629 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/upgrade/index.ts` | 17 | 523 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 重写：保持通用行为 | `src/generated_ports/p_fa4cf9bf81ae4.rs`| 部分实现：与 extra-usage 同入口编排复用（升级流程走 Login 视图与完成消息）|
+| `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 重写：保持通用行为 | `src/generated_ports/p_ee2b485a76e48.rs`| 部分实现：升级编排——Max20x 双路判定（tokens 订阅类型加限额层、profile 组织类型回退）最高档短路、开浏览器转 Login 视图（上游 starting 文案）、浏览器失败降级访问链接提示；tier 字面值按隐私门禁中性化，附 4 测试|
 | `src/commands/usage/index.ts` | 10 | 233 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/usage/usage.tsx` | 7 | 1403 | 重写：保持通用行为 | `src/generated_ports/p_4c1965fccb05b.rs`| 部分实现：入口路由 Settings 视图（defaultTab=Usage），附 1 测试|
 | `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | `src/version.rs` / `src/main.rs` | 已验收：仅本原路径完整等价；现有运行二进制版本及可选构建时间输出与原始源码一致，CLI/交互版本生产入口均复用此函数；专属 USER_TYPE gate 按明确的多模型/去品牌要求删除；证据 CI #41041559517 |
@@ -1099,7 +1099,7 @@
 | `src/services/rateLimitMessages.ts` | 345 | 10858 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/services/rateLimitMocking.ts` | 145 | 4420 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/services/remoteManagedSettings/index.ts` | 639 | 20911 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/remoteManagedSettings/securityCheck.tsx` | 74 | 10513 | 重写：保持通用行为 | `src/generated_ports/p_8985ba0623d61.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/services/remoteManagedSettings/securityCheck.tsx` | 74 | 10513 | 重写：保持通用行为 | `src/generated_ports/p_8985ba0623d61.rs`| 部分实现：托管设置安全门三短路判定（无危险设置/危险未变/非交互→no_check_needed）否则阻断对话框；危险设置提取与 diff 谓词由调用方注入布尔结果，对话框归组件域，埋点保留调用形态注释，附 4 测试|
 | `src/services/remoteManagedSettings/syncCache.ts` | 113 | 4229 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/remoteManagedSettings/syncCacheState.ts` | 97 | 4004 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/remoteManagedSettings/types.ts` | 32 | 1060 | 重写：保持通用行为 | 待定 | 未迁移 |
