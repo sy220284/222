@@ -4553,6 +4553,9 @@ impl Agent {
             let response = match response {
                 Ok(response) => response,
                 Err(error) => {
+                    if let Some(shared) = &streaming_executor {
+                        shared.lock().await.discard();
+                    }
                     self.session.cost.add_wall_duration(ask_started.elapsed());
                     self.session.save(&self.root)?;
                     return Err(error);
@@ -4571,6 +4574,47 @@ impl Agent {
             }));
             self.session.messages.push(response.message);
             self.session.save(&self.root)?;
+            // The original streaming loop treats max_tokens/context-window
+            // exhaustion as an incomplete assistant turn. A partially emitted
+            // tool call must never execute merely because its JSON parses.
+            // Keep the partial message and usage for recovery, but stop before
+            // dispatching any tools or invoking Stop hooks.
+            if matches!(
+                finish.as_deref(),
+                Some("length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded")
+            ) {
+                if let Some(shared) = &streaming_executor {
+                    shared.lock().await.discard();
+                }
+                self.session.cost.add_wall_duration(ask_started.elapsed());
+                self.session.save(&self.root)?;
+                bail!("Model reached its output limit before completion; session saved")
+            }
+            // The original errors.ts::getErrorMessageIfRefusal surfaces an
+            // explicit refusal instead of treating an empty answer as success.
+            // Keep this provider-neutral and do not dispatch partial tools.
+            if matches!(
+                finish.as_deref(),
+                Some(
+                    "refusal"
+                        | "content_filter"
+                        | "SAFETY"
+                        | "PROHIBITED_CONTENT"
+                        | "BLOCKLIST"
+                        | "RECITATION"
+                        | "SPII"
+                )
+            ) {
+                if let Some(shared) = &streaming_executor {
+                    shared.lock().await.discard();
+                }
+                self.session.cost.add_wall_duration(ask_started.elapsed());
+                self.session.save(&self.root)?;
+                bail!(
+                    "Model declined to generate a response ({}); session saved",
+                    finish.as_deref().unwrap_or("refusal")
+                )
+            }
             // Drain the streaming executor after the assistant message is on
             // the transcript, so tool_results follow their tool_use blocks.
             // Calls the executor could not carry (agent-layer dispatch:
@@ -4605,41 +4649,6 @@ impl Agent {
             }
             if !handled_ids.is_empty() {
                 calls.retain(|call| !handled_ids.contains(&call.id));
-            }
-            // The original streaming loop treats max_tokens/context-window
-            // exhaustion as an incomplete assistant turn. A partially emitted
-            // tool call must never execute merely because its JSON parses.
-            // Keep the partial message and usage for recovery, but stop before
-            // dispatching any tools or invoking Stop hooks.
-            if matches!(
-                finish.as_deref(),
-                Some("length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded")
-            ) {
-                self.session.cost.add_wall_duration(ask_started.elapsed());
-                self.session.save(&self.root)?;
-                bail!("Model reached its output limit before completion; session saved")
-            }
-            // The original errors.ts::getErrorMessageIfRefusal surfaces an
-            // explicit refusal instead of treating an empty answer as success.
-            // Keep this provider-neutral and do not dispatch partial tools.
-            if matches!(
-                finish.as_deref(),
-                Some(
-                    "refusal"
-                        | "content_filter"
-                        | "SAFETY"
-                        | "PROHIBITED_CONTENT"
-                        | "BLOCKLIST"
-                        | "RECITATION"
-                        | "SPII"
-                )
-            ) {
-                self.session.cost.add_wall_duration(ask_started.elapsed());
-                self.session.save(&self.root)?;
-                bail!(
-                    "Model declined to generate a response ({}); session saved",
-                    finish.as_deref().unwrap_or("refusal")
-                )
             }
             if calls.is_empty() {
                 if self.absorb_team_messages()? {
