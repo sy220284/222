@@ -80,8 +80,10 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
         let marker = trimmed.chars().next().unwrap_or(' ');
         let run = trimmed.chars().take_while(|c| *c == marker).count();
         if let Some((open_marker, open_len, language, lines)) = fence.as_mut() {
-            if marker == *open_marker && run >= *open_len
-                && trimmed[run..].trim().is_empty() && indent <= 3
+            if marker == *open_marker
+                && run >= *open_len
+                && trimmed[run..].trim().is_empty()
+                && indent <= 3
             {
                 blocks.push(CodeBlock {
                     code: lines.join("\n"),
@@ -112,7 +114,9 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
         };
         if let Some(content) = code_line {
             if after_blank || indented.is_some() {
-                indented.get_or_insert_with(Vec::new).push(content.to_owned());
+                indented
+                    .get_or_insert_with(Vec::new)
+                    .push(content.to_owned());
                 after_blank = false;
                 continue;
             }
@@ -121,7 +125,10 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
             while lines.last().is_some_and(String::is_empty) {
                 lines.pop();
             }
-            blocks.push(CodeBlock { code: lines.join("\n"), language: String::new() });
+            blocks.push(CodeBlock {
+                code: lines.join("\n"),
+                language: String::new(),
+            });
         }
         if indent <= 3 && matches!(marker, '`' | '~') && run >= 3 {
             let rest = trimmed[run..].trim();
@@ -138,11 +145,17 @@ fn code_blocks(markdown: &str) -> Vec<CodeBlock> {
         while lines.last().is_some_and(String::is_empty) {
             lines.pop();
         }
-        blocks.push(CodeBlock { code: lines.join("\n"), language: String::new() });
+        blocks.push(CodeBlock {
+            code: lines.join("\n"),
+            language: String::new(),
+        });
     }
     // Marked also returns a code token for an unclosed fenced block.
     if let Some((_, _, language, lines)) = fence {
-        blocks.push(CodeBlock { code: lines.join("\n"), language });
+        blocks.push(CodeBlock {
+            code: lines.join("\n"),
+            language,
+        });
     }
     blocks
 }
@@ -159,22 +172,35 @@ fn extension(language: &str) -> String {
     }
 }
 
-
 pub fn code_block_choices(messages: &[Message], age: usize) -> Result<Vec<(String, String)>> {
     let texts = recent_assistant_texts(messages);
     if age == 0 || age > texts.len() {
-        bail!("No assistant response #{age}; {} recent responses available", texts.len());
+        bail!(
+            "No assistant response #{age}; {} recent responses available",
+            texts.len()
+        );
     }
-    Ok(code_blocks(&texts[age - 1]).into_iter().map(|block| {
-        let preview = block.code.lines().next().unwrap_or("");
-        let preview = preview.chars().take(76).collect::<String>();
-        (if block.language.is_empty() { "text".into() } else { block.language }, preview)
-    }).collect())
+    Ok(code_blocks(&texts[age - 1])
+        .into_iter()
+        .map(|block| {
+            let preview = block.code.lines().next().unwrap_or("");
+            let preview = preview.chars().take(76).collect::<String>();
+            (
+                if block.language.is_empty() {
+                    "text".into()
+                } else {
+                    block.language
+                },
+                preview,
+            )
+        })
+        .collect())
 }
 
 fn preference_path() -> Result<PathBuf> {
     let config = crate::config::Config::path()?;
-    let parent = config.parent()
+    let parent = config
+        .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| std::path::Path::new("."));
     Ok(parent.join("copy-preferences.json"))
@@ -188,14 +214,18 @@ pub fn copy_full_preference() -> Result<bool> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
         Err(error) => return Err(error.into()),
     };
-    let value: serde_json::Value = serde_json::from_str(&raw)
-        .context("Invalid copy preferences")?;
-    value.get("copyFullResponse").and_then(serde_json::Value::as_bool)
+    let value: serde_json::Value =
+        serde_json::from_str(&raw).context("Invalid copy preferences")?;
+    value
+        .get("copyFullResponse")
+        .and_then(serde_json::Value::as_bool)
         .context("copyFullResponse preference must be a boolean")
 }
 pub fn save_copy_full_preference(always: bool) -> Result<()> {
     let path = preference_path()?;
-    let parent = path.parent().context("Copy preferences directory missing")?;
+    let parent = path
+        .parent()
+        .context("Copy preferences directory missing")?;
     fs::create_dir_all(parent)?;
     let staged = parent.join(format!(".copy-preferences-{}.tmp", Uuid::new_v4()));
     let result = (|| -> Result<()> {
@@ -207,9 +237,10 @@ pub fn save_copy_full_preference(always: bool) -> Result<()> {
             options.mode(0o600);
         }
         let mut file = options.open(&staged)?;
-        file.write_all(serde_json::to_string_pretty(
-            &serde_json::json!({"copyFullResponse":always})
-        )?.as_bytes())?;
+        file.write_all(
+            serde_json::to_string_pretty(&serde_json::json!({"copyFullResponse":always}))?
+                .as_bytes(),
+        )?;
         file.sync_all()?;
         fs::rename(&staged, &path)?;
         Ok(())

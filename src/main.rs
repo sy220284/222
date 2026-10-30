@@ -1378,7 +1378,10 @@ fn confirm_custom_agent_warnings(
     if io::stdin().read_line(&mut answer)? == 0 {
         return Ok(false);
     }
-    Ok(matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"))
+    Ok(matches!(
+        answer.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 async fn chat(
@@ -1752,9 +1755,7 @@ async fn chat(
                 println!(
                     "/files                   show files read successfully in this conversation"
                 );
-                println!(
-                    "/copy [N] [--code K]     choose full response or a Markdown code block"
-                );
+                println!("/copy [N] [--code K]     choose full response or a Markdown code block");
                 println!("/copy --reset            restore interactive copy selection");
                 println!(
                     "/diff                    view staged, unstaged and untracked Git changes"
@@ -1767,9 +1768,15 @@ async fn chat(
                 println!("/agents                  list project and user custom agent definitions");
                 println!("/agents show project|user NAME    inspect a custom agent definition");
                 println!("/agents create project|user NAME  create a custom agent interactively");
-                println!("/agents generate project|user [DESCRIPTION]  generate and review an agent");
-                println!("/agents delete project|user NAME  delete a custom agent with confirmation");
-                println!("/agents edit project|user NAME    replace an existing agent after validation");
+                println!(
+                    "/agents generate project|user [DESCRIPTION]  generate and review an agent"
+                );
+                println!(
+                    "/agents delete project|user NAME  delete a custom agent with confirmation"
+                );
+                println!(
+                    "/agents edit project|user NAME    replace an existing agent after validation"
+                );
                 println!("/hooks                   list active hook events, matchers and timeouts");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
@@ -2139,16 +2146,20 @@ async fn chat(
                     "user" => true,
                     _ => bail!("Agent location must be project or user"),
                 };
-                let path = agent_definition::new_file_path(
-                    agent.workspace_root(), user, name,
-                )?;
+                let path = agent_definition::new_file_path(agent.workspace_root(), user, name)?;
                 let metadata = std::fs::symlink_metadata(&path)
                     .with_context(|| format!("Agent definition missing: {}", path.display()))?;
                 if !metadata.is_file() || metadata.file_type().is_symlink() {
                     bail!("Agent definition must be a regular file");
                 }
                 let content = agent_definition::read_agent_file(&path)?;
-                Ok(format!("{} agent {} ({})\n{}", scope, name, path.display(), content))
+                Ok(format!(
+                    "{} agent {} ({})\n{}",
+                    scope,
+                    name,
+                    path.display(),
+                    content
+                ))
             })();
             match outcome {
                 Ok(details) => println!("{details}"),
@@ -2188,7 +2199,9 @@ async fn chat(
                     println!("System prompt:\n{}", definition.system_prompt);
                     let decision = (|| -> Result<bool> {
                         if !confirm_custom_agent_warnings(
-                            &definition, agent.workspace_root(), user,
+                            &definition,
+                            agent.workspace_root(),
+                            user,
                         )? {
                             return Ok(false);
                         }
@@ -2198,11 +2211,17 @@ async fn chat(
                         if io::stdin().read_line(&mut answer)? == 0 {
                             return Ok(false);
                         }
-                        Ok(matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"))
+                        Ok(matches!(
+                            answer.trim().to_ascii_lowercase().as_str(),
+                            "y" | "yes"
+                        ))
                     })();
                     match decision {
                         Ok(true) => match agent_definition::save_agent(
-                            &definition, agent.workspace_root(), user, false,
+                            &definition,
+                            agent.workspace_root(),
+                            user,
+                            false,
                         ) {
                             Ok(path) => println!("Created generated agent at {}", path.display()),
                             Err(error) => eprintln!("Cannot save generated agent: {error:#}"),
@@ -2260,8 +2279,11 @@ async fn chat(
                 if io::stdin().read_line(&mut model)? == 0 {
                     bail!("Agent creation cancelled: input closed");
                 }
-                let tools = tools.split(',').map(str::trim)
-                    .filter(|name| !name.is_empty()).map(str::to_owned)
+                let tools = tools
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_owned)
                     .collect::<Vec<_>>();
                 let definition = agent_definition::AgentDefinition {
                     agent_type: (*name).to_owned(),
@@ -2273,14 +2295,11 @@ async fn chat(
                     memory: None,
                     effort: None,
                 };
-                if !confirm_custom_agent_warnings(
-                    &definition, agent.workspace_root(), user,
-                )? {
+                if !confirm_custom_agent_warnings(&definition, agent.workspace_root(), user)? {
                     return Ok("Agent creation cancelled.".into());
                 }
-                let path = agent_definition::save_agent(
-                    &definition, agent.workspace_root(), user, false,
-                )?;
+                let path =
+                    agent_definition::save_agent(&definition, agent.workspace_root(), user, false)?;
                 Ok(format!("Created agent {} at {}", name, path.display()))
             })();
             match outcome {
@@ -2301,16 +2320,18 @@ async fn chat(
                     "user" => true,
                     _ => bail!("Agent location must be project or user"),
                 };
-                let path = agent_definition::new_file_path(
-                    agent.workspace_root(), user, name,
-                )?;
+                let path = agent_definition::new_file_path(agent.workspace_root(), user, name)?;
                 let metadata = std::fs::symlink_metadata(&path)
                     .with_context(|| format!("Agent definition missing: {}", path.display()))?;
                 if !metadata.is_file() || metadata.file_type().is_symlink() {
                     bail!("Agent definition must be a regular file, not a symbolic link");
                 }
                 let original = agent_definition::read_agent_file(&path)?;
-                println!("Current agent definition at {}:\n{}", path.display(), original);
+                println!(
+                    "Current agent definition at {}:\n{}",
+                    path.display(),
+                    original
+                );
                 println!("Enter replacement description and system prompt; invalid input leaves the existing file unchanged.");
                 print!("New description (when to use): ");
                 io::stdout().flush()?;
@@ -2342,11 +2363,13 @@ async fn chat(
                 if io::stdin().read_line(&mut model)? == 0 {
                     bail!("Agent edit cancelled: input closed");
                 }
-                let tools = tools.split(',').map(str::trim)
-                    .filter(|tool| !tool.is_empty()).map(str::to_owned)
+                let tools = tools
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|tool| !tool.is_empty())
+                    .map(str::to_owned)
                     .collect::<Vec<_>>();
-                let (color, memory, effort) =
-                    agent_definition::retained_optional_fields(&original);
+                let (color, memory, effort) = agent_definition::retained_optional_fields(&original);
                 let definition = agent_definition::AgentDefinition {
                     agent_type: (*name).to_owned(),
                     when_to_use: description.trim().to_owned(),
@@ -2357,14 +2380,10 @@ async fn chat(
                     memory,
                     effort,
                 };
-                if !confirm_custom_agent_warnings(
-                    &definition, agent.workspace_root(), user,
-                )? {
+                if !confirm_custom_agent_warnings(&definition, agent.workspace_root(), user)? {
                     return Ok("Agent edit cancelled; existing file preserved.".into());
                 }
-                agent_definition::save_agent(
-                    &definition, agent.workspace_root(), user, true,
-                )?;
+                agent_definition::save_agent(&definition, agent.workspace_root(), user, true)?;
                 Ok(format!("Updated {} agent {}", scope, name))
             })();
             match outcome {
@@ -2385,9 +2404,7 @@ async fn chat(
                     "user" => true,
                     _ => bail!("Agent location must be project or user"),
                 };
-                let path = agent_definition::new_file_path(
-                    agent.workspace_root(), user, name,
-                )?;
+                let path = agent_definition::new_file_path(agent.workspace_root(), user, name)?;
                 match std::fs::symlink_metadata(&path) {
                     Ok(meta) if meta.file_type().is_symlink() => {
                         bail!("Refusing to delete redirected agent definition");
@@ -2462,7 +2479,9 @@ async fn chat(
                     }
                     if let Ok(index) = choice.parse::<usize>() {
                         if index > 0 && index <= choices.len() {
-                            return agent.copy_response(&format!("{age} --code {index}")).map(Some);
+                            return agent
+                                .copy_response(&format!("{age} --code {index}"))
+                                .map(Some);
                         }
                     }
                     eprintln!("Choose 0-{}, a, or q.", choices.len());
@@ -2505,8 +2524,13 @@ async fn chat(
                 println!("Choose a conversation to resume:");
                 for (index, session) in sessions.iter().take(20).enumerate() {
                     let branch = session.git_branch.as_deref().unwrap_or("");
-                    println!("  {}) {} [{}] {} messages", index + 1,
-                        session.display_title(), branch, session.messages);
+                    println!(
+                        "  {}) {} [{}] {} messages",
+                        index + 1,
+                        session.display_title(),
+                        branch,
+                        session.messages
+                    );
                 }
                 print!("Session number (q to cancel): ");
                 io::stdout().flush()?;
@@ -2516,7 +2540,9 @@ async fn chat(
                 {
                     return Ok(None);
                 }
-                let index = choice.trim().parse::<usize>()
+                let index = choice
+                    .trim()
+                    .parse::<usize>()
                     .context("Enter a numeric session selection")?;
                 if index == 0 || index > sessions.len().min(20) {
                     bail!("Session selection is out of range");
@@ -2527,7 +2553,8 @@ async fn chat(
                 Ok(Some(selected)) => match agent.resume_interactive_session(&selected).await {
                     Ok(message) => {
                         prompt_history = prompt_history::PromptHistory::new(
-                            agent.workspace_root(), &agent.session_id(),
+                            agent.workspace_root(),
+                            &agent.session_id(),
                         )?;
                         println!("{message}");
                     }
@@ -2571,7 +2598,11 @@ async fn chat(
                 if chosen.eq_ignore_ascii_case("q") {
                     return Ok(None);
                 }
-                let filename = if chosen.is_empty() { suggested.as_str() } else { chosen };
+                let filename = if chosen.is_empty() {
+                    suggested.as_str()
+                } else {
+                    chosen
+                };
                 agent.export_session(Some(filename)).map(Some)
             })();
             match outcome {
@@ -2828,13 +2859,23 @@ struct SdkTitleDone {
 fn sdk_deliver_title(agent: &mut Agent, done: SdkTitleDone) {
     let result = match done.outcome {
         Ok((title, usage)) => agent.finish_sdk_title(
-            done.session_id, &done.profile, usage, title, done.persist, done.elapsed,
+            done.session_id,
+            &done.profile,
+            usage,
+            title,
+            done.persist,
+            done.elapsed,
         ),
         Err(error) => {
             // The source returns null on title-model failure while still
             // charging the request duration to the original session.
             let accounting = agent.finish_sdk_title(
-                done.session_id, &done.profile, None, None, false, done.elapsed,
+                done.session_id,
+                &done.profile,
+                None,
+                None,
+                false,
+                done.elapsed,
             );
             if let Err(accounting_error) = accounting {
                 Err(accounting_error)
@@ -3086,7 +3127,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 }
                 // The same UUID identifies both the SDK user message and
                 // every file edit performed by its agent/tool execution.
-                let message_id = event.get("uuid").and_then(Value::as_str)
+                let message_id = event
+                    .get("uuid")
+                    .and_then(Value::as_str)
                     .filter(|id| !id.trim().is_empty())
                     .map(uuid::Uuid::parse_str)
                     .transpose();
@@ -3099,8 +3142,15 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     }
                 };
                 match sdk_interruptible_turn(
-                    agent, &user.preview, user.blocks, message_id, &interrupt_rx, input_epoch,
-                ).await {
+                    agent,
+                    &user.preview,
+                    user.blocks,
+                    message_id,
+                    &interrupt_rx,
+                    input_epoch,
+                )
+                .await
+                {
                     Ok(answer) => print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
                         "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -3121,21 +3171,29 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     == Some("generate_session_title")
                 {
                     let prepared: Result<(String, bool, Option<protocol::ModelRequest>)> = (|| {
-                        let id = event.get("request_id").and_then(Value::as_str)
-                            .filter(|id| !id.is_empty())
-                            .ok_or_else(|| anyhow::anyhow!(
-                                "generate_session_title requires request_id"))?;
-                        let description = event.pointer("/request/description")
+                        let id = event
+                            .get("request_id")
                             .and_then(Value::as_str)
-                            .ok_or_else(|| anyhow::anyhow!(
-                                "generate_session_title requires description string"))?;
+                            .filter(|id| !id.is_empty())
+                            .ok_or_else(|| {
+                                anyhow::anyhow!("generate_session_title requires request_id")
+                            })?;
+                        let description = event
+                            .pointer("/request/description")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "generate_session_title requires description string"
+                                )
+                            })?;
                         let persist = match event.pointer("/request/persist") {
                             None => false,
                             Some(Value::Bool(value)) => *value,
                             _ => bail!("generate_session_title persist must be a boolean"),
                         };
                         Ok((id.to_owned(), persist, agent.sdk_title_request(description)))
-                    })();
+                    })(
+                    );
                     match prepared {
                         Ok((id, persist, Some(request))) => {
                             let profile = agent.profile().clone();
@@ -3144,27 +3202,43 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                             title_pending = title_pending.saturating_add(1);
                             tokio::spawn(async move {
                                 let started = std::time::Instant::now();
-                                let outcome: Result<(Option<String>,
-                                    Option<protocol::TokenUsage>)> = async {
+                                let outcome: Result<(
+                                    Option<String>,
+                                    Option<protocol::TokenUsage>,
+                                )> = async {
                                     let client = provider::create(&profile)?;
                                     let completion = client.complete(&request).await?;
                                     let usage = completion.usage;
-                                    if completion.message.tool_calls.as_ref()
-                                        .is_some_and(|calls| !calls.is_empty()) {
+                                    if completion
+                                        .message
+                                        .tool_calls
+                                        .as_ref()
+                                        .is_some_and(|calls| !calls.is_empty())
+                                    {
                                         return Ok((None, usage));
                                     }
                                     let title = serde_json::from_str::<Value>(
-                                        &completion.message.visible_text()
-                                    ).ok()
-                                        .and_then(|value| value.get("title")
-                                            .and_then(Value::as_str).map(str::to_owned))
-                                        .map(|value| value.trim().to_owned())
-                                        .filter(|value| !value.is_empty());
+                                        &completion.message.visible_text(),
+                                    )
+                                    .ok()
+                                    .and_then(|value| {
+                                        value
+                                            .get("title")
+                                            .and_then(Value::as_str)
+                                            .map(str::to_owned)
+                                    })
+                                    .map(|value| value.trim().to_owned())
+                                    .filter(|value| !value.is_empty());
                                     Ok((title, usage))
-                                }.await;
+                                }
+                                .await;
                                 let _ = sender.send(SdkTitleDone {
-                                    id, session_id, profile, persist,
-                                    elapsed: started.elapsed(), outcome,
+                                    id,
+                                    session_id,
+                                    profile,
+                                    persist,
+                                    elapsed: started.elapsed(),
+                                    outcome,
                                 });
                             });
                         }
@@ -3441,7 +3515,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let title_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while title_pending > 0 {
         let remaining = title_deadline.saturating_duration_since(std::time::Instant::now());
-        if remaining.is_zero() { break; }
+        if remaining.is_zero() {
+            break;
+        }
         match tokio::time::timeout(remaining, title_rx.recv()).await {
             Ok(Some(done)) => {
                 title_pending -= 1;
@@ -3724,11 +3800,11 @@ async fn sdk_nested_control(
                 mcp_control_request(agent, subtype, &Value::Object(request.clone())).await
             }
             "rewind_files" => {
-                let id = request.get("user_message_id")
+                let id = request
+                    .get("user_message_id")
                     .and_then(Value::as_str)
                     .filter(|id| !id.trim().is_empty())
-                    .ok_or_else(|| anyhow::anyhow!(
-                        "rewind_files requires user_message_id"))?;
+                    .ok_or_else(|| anyhow::anyhow!("rewind_files requires user_message_id"))?;
                 let dry_run = match request.get("dry_run") {
                     None => false,
                     Some(Value::Bool(value)) => *value,

@@ -2279,29 +2279,38 @@ impl Agent {
     /// Consume completed hooks while the SDK is idle and between Agent API
     /// rounds. Model-visible attachments and UI notifications are once-only.
     pub async fn pump_async_hook_events(&mut self) -> Result<usize> {
-        let events = crate::hooks::collect_async_hook_responses(
-            &self.session.id.to_string()
-        ).await;
+        let events = crate::hooks::collect_async_hook_responses(&self.session.id.to_string()).await;
         let count = events.len();
         for event in events {
             self.emit(event.clone());
-            let stdout = event["stdout"].as_str().unwrap_or("").lines()
-                .filter(|line| serde_json::from_str::<serde_json::Value>(line.trim())
-                    .ok().is_none_or(|value| value.get("async") != Some(&json!(true))))
-                .collect::<Vec<_>>().join("\n");
+            let stdout = event["stdout"]
+                .as_str()
+                .unwrap_or("")
+                .lines()
+                .filter(|line| {
+                    serde_json::from_str::<serde_json::Value>(line.trim())
+                        .ok()
+                        .is_none_or(|value| value.get("async") != Some(&json!(true)))
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
             let body = if event["outcome"] == "success" {
                 stdout.trim().to_owned()
             } else {
-                format!("Async hook {}: {}",
+                format!(
+                    "Async hook {}: {}",
                     event["outcome"].as_str().unwrap_or("failed"),
-                    event["stderr"].as_str().unwrap_or(""))
+                    event["stderr"].as_str().unwrap_or("")
+                )
             };
             if !body.trim().is_empty() {
                 self.session.messages.push(Message::text(
                     "user",
-                    format!("[Asynchronous {} hook result]\n{}",
+                    format!(
+                        "[Asynchronous {} hook result]\n{}",
                         event["hook_event_name"].as_str().unwrap_or("Hook"),
-                        body),
+                        body
+                    ),
                 ));
                 self.session.save(&self.root)?;
             }
@@ -2311,7 +2320,9 @@ impl Agent {
 
     pub fn sdk_title_request(&self, description: &str) -> Option<ModelRequest> {
         let description = description.trim();
-        if description.is_empty() { return None; }
+        if description.is_empty() {
+            return None;
+        }
         let system = concat!(
             "Generate a concise, sentence-case title (3-7 words) that captures ",
             "the main topic or goal of this coding session. The title should be ",
@@ -2346,9 +2357,9 @@ impl Agent {
         self.session.cost.add_api_duration(elapsed);
         if let Some(usage) = usage {
             self.session.usage.accumulate(usage);
-            self.session.cost.record(
-                &model.id, &model.model, usage, &self.model_prices,
-            );
+            self.session
+                .cost
+                .record(&model.id, &model.model, usage, &self.model_prices);
         }
         if persist {
             if let Some(value) = title.as_ref() {
@@ -2451,16 +2462,24 @@ impl Agent {
     ) -> Result<serde_json::Value> {
         let requested_id = uuid::Uuid::parse_str(user_message_id)
             .context("rewind_files requires a user message UUID")?;
-        let id = self.session.history_message_aliases
-            .get(&requested_id).copied().unwrap_or(requested_id);
-        let start = self.session.history_message_ids.iter()
+        let id = self
+            .session
+            .history_message_aliases
+            .get(&requested_id)
+            .copied()
+            .unwrap_or(requested_id);
+        let start = self
+            .session
+            .history_message_ids
+            .iter()
             .position(|saved| *saved == id)
             .context("User message was not found in session file history")?;
         if !crate::history::enabled(self.interactive, self.file_checkpointing_enabled) {
             bail!("File checkpointing is disabled");
         }
         let records = crate::history::records_for_message_sequence(
-            &self.root, &self.session.id.to_string(),
+            &self.root,
+            &self.session.id.to_string(),
             &self.session.history_message_ids[start..],
         )?;
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
@@ -2658,7 +2677,8 @@ impl Agent {
     /// agent definition through a tool-free model request, without changing
     /// the active conversation transcript or binding to a specific vendor.
     pub async fn generate_custom_agent_definition(
-        &mut self, description: &str,
+        &mut self,
+        description: &str,
     ) -> Result<crate::agent_definition::AgentDefinition> {
         if description.trim().is_empty() {
             bail!("Describe the custom agent you want to create");
@@ -2673,7 +2693,10 @@ impl Agent {
             system,
             messages: vec![Message::text(
                 "user",
-                format!("Create an agent configuration based on this request: {}", description.trim()),
+                format!(
+                    "Create an agent configuration based on this request: {}",
+                    description.trim()
+                ),
             )],
             tools: Vec::new(),
         };
@@ -2694,14 +2717,18 @@ impl Agent {
         let text = response.message.visible_text();
         let trimmed = text.trim();
         let parsed = serde_json::from_str::<serde_json::Value>(trimmed).or_else(|_| {
-            let start = trimmed.find('{').ok_or_else(|| anyhow::anyhow!("No JSON object in agent generation"))?;
-            let end = trimmed.rfind('}').ok_or_else(|| anyhow::anyhow!("Incomplete JSON object in agent generation"))?;
-            Ok::<serde_json::Value, anyhow::Error>(
-                serde_json::from_str(&trimmed[start..=end])?
-            )
+            let start = trimmed
+                .find('{')
+                .ok_or_else(|| anyhow::anyhow!("No JSON object in agent generation"))?;
+            let end = trimmed
+                .rfind('}')
+                .ok_or_else(|| anyhow::anyhow!("Incomplete JSON object in agent generation"))?;
+            Ok::<serde_json::Value, anyhow::Error>(serde_json::from_str(&trimmed[start..=end])?)
         })?;
         let field = |key: &str| -> Result<String> {
-            parsed.get(key).and_then(serde_json::Value::as_str)
+            parsed
+                .get(key)
+                .and_then(serde_json::Value::as_str)
                 .filter(|value| !value.trim().is_empty())
                 .map(str::to_owned)
                 .with_context(|| format!("Generated agent is missing {key}"))
@@ -3694,7 +3721,9 @@ impl Agent {
         if loaded.id == self.session.id {
             return Ok(format!("Already using session {}", loaded.id));
         }
-        let mode = loaded.permission_mode.as_deref()
+        let mode = loaded
+            .permission_mode
+            .as_deref()
             .map(permission_mode::Mode::from_persisted_string)
             .unwrap_or(self.permission_mode);
         if mode == permission_mode::Mode::BypassPermissions && self.approval != Approval::Full {
@@ -3708,17 +3737,22 @@ impl Agent {
         }
         let background = Arc::new(BackgroundTasks::for_session(&self.root, loaded.id)?);
         let graph = task_graph::TaskGraph::new(
-            &self.root, &task_list_id(loaded.id, loaded.team_name.as_deref()),
+            &self.root,
+            &task_list_id(loaded.id, loaded.team_name.as_deref()),
         )?;
         let metrics = Arc::new(ToolMetrics::with_totals(
-            loaded.cost.total_lines_added, loaded.cost.total_lines_removed,
+            loaded.cost.total_lines_added,
+            loaded.cost.total_lines_removed,
         ));
         // Run the old session's exit hook before changing its identity.
-        let end = self.hooks.run(HookEvent::SessionEnd, None, {
-            let mut input = self.base_hook_input();
-            input["reason"] = json!("other");
-            input
-        }).await?;
+        let end = self
+            .hooks
+            .run(HookEvent::SessionEnd, None, {
+                let mut input = self.base_hook_input();
+                input["reason"] = json!("other");
+                input
+            })
+            .await?;
         self.report_hook_warnings(HookEvent::SessionEnd, &end);
         self.session.save(&self.root)?;
         self.background.stop_all().await;
@@ -3741,12 +3775,16 @@ impl Agent {
         self.session_context.clear();
         self.pending_initial_user_message = None;
         self.transient_mailbox = in_memory_mailbox::Mailbox::new();
-        let start = match self.hooks.run(HookEvent::SessionStart, None, {
-            let mut input = self.base_hook_input();
-            input["source"] = json!("resume");
-            input["model"] = json!(self.profile.model);
-            input
-        }).await {
+        let start = match self
+            .hooks
+            .run(HookEvent::SessionStart, None, {
+                let mut input = self.base_hook_input();
+                input["source"] = json!("resume");
+                input["model"] = json!(self.profile.model);
+                input
+            })
+            .await
+        {
             Ok(start) => start,
             Err(error) => {
                 // Session identity was already changed. Report the hook
@@ -4276,9 +4314,10 @@ impl Agent {
             // tool call must never execute merely because its JSON parses.
             // Keep the partial message and usage for recovery, but stop before
             // dispatching any tools or invoking Stop hooks.
-            if matches!(finish.as_deref(), Some(
-                "length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded"
-            )) {
+            if matches!(
+                finish.as_deref(),
+                Some("length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded")
+            ) {
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
                 bail!("Model reached its output limit before completion; session saved")
@@ -4286,14 +4325,24 @@ impl Agent {
             // The original errors.ts::getErrorMessageIfRefusal surfaces an
             // explicit refusal instead of treating an empty answer as success.
             // Keep this provider-neutral and do not dispatch partial tools.
-            if matches!(finish.as_deref(), Some(
-                "refusal" | "content_filter" | "SAFETY" | "PROHIBITED_CONTENT"
-                | "BLOCKLIST" | "RECITATION" | "SPII"
-            )) {
+            if matches!(
+                finish.as_deref(),
+                Some(
+                    "refusal"
+                        | "content_filter"
+                        | "SAFETY"
+                        | "PROHIBITED_CONTENT"
+                        | "BLOCKLIST"
+                        | "RECITATION"
+                        | "SPII"
+                )
+            ) {
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
-                bail!("Model declined to generate a response ({}); session saved",
-                    finish.as_deref().unwrap_or("refusal"))
+                bail!(
+                    "Model declined to generate a response ({}); session saved",
+                    finish.as_deref().unwrap_or("refusal")
+                )
             }
             if calls.is_empty() {
                 if self.absorb_team_messages()? {
@@ -4782,7 +4831,11 @@ mod tests {
             .graph
             .create(&json!({"subject":"Verify","description":"Check tests"}))
             .unwrap();
-        agent.hooks = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
+        agent.hooks = HookRunner::new(&[HookRule {
+            async_background: false,
+            async_rewake: false,
+            if_condition: None,
+            plugin_root: None,
             event: HookEvent::TaskCompleted,
             matcher: None,
             command: "printf '{\"decision\":\"block\",\"reason\":\"Tests missing\"}'".into(),
@@ -6252,14 +6305,22 @@ done"#;
         let log_path = root.join("hook-events.log");
         let shell = |event: &str| format!("printf '{}\\n' >> '{}'", event, log_path.display());
         agent.hooks = HookRunner::new(&[
-            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
+            HookRule {
+                async_background: false,
+                async_rewake: false,
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::SessionEnd,
                 matcher: None,
                 command: shell("end"),
                 shell: None,
                 timeout_seconds: 5,
             },
-            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
+            HookRule {
+                async_background: false,
+                async_rewake: false,
+                if_condition: None,
+                plugin_root: None,
                 event: HookEvent::SessionStart,
                 matcher: None,
                 command: shell("start"),

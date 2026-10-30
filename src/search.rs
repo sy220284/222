@@ -610,51 +610,45 @@ pub fn validate_tool_input(name: &str, args: &Value) -> Result<()> {
     Ok(())
 }
 
-fn type_matches(path: &Path, kind: &str) -> bool {
-    let extension = path.extension().and_then(|v| v.to_str()).unwrap_or("");
-    match kind {
-        "rust" | "rs" => extension == "rs",
-        "js" => matches!(extension, "js" | "jsx" | "mjs" | "cjs" | "vue"),
-        "ts" => matches!(extension, "ts" | "tsx" | "mts" | "cts"),
-        "py" | "python" => matches!(extension, "py" | "pyi"),
-        "json" => {
-            matches!(extension, "json" | "sarif")
-                || path.file_name().and_then(|name| name.to_str()) == Some("composer.lock")
+fn type_matches(path: &Path, kind: &str) -> Result<bool> {
+    use std::{collections::HashMap, sync::OnceLock};
+    static TYPES: OnceLock<Result<HashMap<String, Vec<GlobMatcher>>, String>> = OnceLock::new();
+    let types = TYPES.get_or_init(|| {
+        // Bundle ripgrep's official default type table. The 2.1.88 Grep
+        // tool accepts its --type names without requiring an external rg
+        // binary at runtime.
+        let text = include_str!("ripgrep_types.txt");
+        let mut types = HashMap::new();
+        for entry in text.lines() {
+            let (name, globs) = entry
+                .split_once(": ")
+                .ok_or_else(|| format!("Invalid ripgrep type entry: {entry}"))?;
+            let mut matchers = Vec::new();
+            for pattern in globs.split(", ") {
+                let matcher = Glob::new(pattern)
+                    .map_err(|error| format!("Invalid ripgrep type pattern for {name}: {error}"))?
+                    .compile_matcher();
+                matchers.push(matcher);
+            }
+            types.insert(name.to_owned(), matchers);
         }
-        "md" => matches!(
-            extension,
-            "markdown" | "md" | "mdown" | "mdwn" | "mdx" | "mkd" | "mkdn"
-        ),
-        "go" => extension == "go",
-        "java" => extension == "java",
-        "cpp" | "c++" => matches!(
-            extension,
-            "cpp" | "cc" | "cxx" | "c++" | "hpp" | "hh" | "hxx" | "h"
-        ),
-        "c" => matches!(extension, "c" | "h"),
-        "yaml" => matches!(extension, "yaml" | "yml"),
-        "html" => matches!(extension, "html" | "htm"),
-        "css" => matches!(extension, "css" | "scss" | "sass" | "less"),
-        "sh" | "shell" => matches!(extension, "sh" | "bash" | "zsh" | "fish"),
-        "toml" => extension == "toml",
-        "xml" => matches!(extension, "xml" | "xsl" | "xslt" | "svg"),
-        "web" => matches!(
-            extension,
-            "html"
-                | "htm"
-                | "css"
-                | "scss"
-                | "sass"
-                | "less"
-                | "js"
-                | "jsx"
-                | "mjs"
-                | "cjs"
-                | "ts"
-                | "tsx"
-        ),
-        other => extension == other,
-    }
+        Ok(types)
+    });
+    let types = types.as_ref().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let alias = match kind {
+        "rs" => "rust",
+        "python" => "py",
+        "shell" => "sh",
+        "c++" => "cpp",
+        other => other,
+    };
+    let matchers = types
+        .get(alias)
+        .with_context(|| format!("Unknown ripgrep file type: {kind}"))?;
+    let name = path.file_name().context("Search file has no filename")?;
+    Ok(matchers
+        .iter()
+        .any(|matcher| matcher.is_match(path) || matcher.is_match(Path::new(name))))
 }
 
 pub fn glob_files(root: &Path, base: &Path, args: &Value) -> Result<String> {

@@ -331,17 +331,23 @@ pub async fn control(
                 // Preserve the incoming SDK UUID as the checkpoint ID
                 // instead of assigning a fresh internal turn identifier.
                 // Batches share one model request and its file-edit snapshot.
-                let batch_uuid = batch.iter()
+                let batch_uuid = batch
+                    .iter()
                     .filter_map(|item| item.command.uuid.as_deref())
                     .find_map(|text| uuid::Uuid::parse_str(text).ok());
                 let answer = agent
                     .ask_with_blocks_for_message(&model_prompt, structured.blocks, batch_uuid)
                     .await;
                 if let Some(primary) = batch_uuid {
-                    let aliases = batch.iter().filter_map(|item| {
-                        item.command.uuid.as_deref()
-                            .and_then(|id| uuid::Uuid::parse_str(id).ok())
-                    }).collect::<Vec<_>>();
+                    let aliases = batch
+                        .iter()
+                        .filter_map(|item| {
+                            item.command
+                                .uuid
+                                .as_deref()
+                                .and_then(|id| uuid::Uuid::parse_str(id).ok())
+                        })
+                        .collect::<Vec<_>>();
                     if let Err(error) = agent.register_sdk_message_aliases(primary, &aliases) {
                         eprintln!("SDK merged user message history aliases unavailable: {error:#}");
                     }

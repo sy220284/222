@@ -665,7 +665,7 @@ impl BackgroundTasks {
                         let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                     }
                     #[cfg(windows)]
-                    let _ = terminate_windows_task_tree(child.id(), Some(&running)).await;
+                    let _ = terminate_windows_task_tree(&job, Some(&running));
                     let _ = child.kill().await;
                     ("failed", None, false)
                 },
@@ -764,7 +764,7 @@ impl BackgroundTasks {
                         let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                     }
                     #[cfg(windows)]
-                    if !terminate_windows_task_tree(process_id, Some(&running)).await {
+                    if !terminate_windows_task_tree(&job, Some(&running)) {
                         state = "failed";
                     }
                     stdout_task.abort();

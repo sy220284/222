@@ -146,7 +146,9 @@ pub fn validate(
 /// Preserve editor fields that the compact terminal editor does not ask
 /// the user to replace. The original agent file format stores these values
 /// as one-line YAML frontmatter keys.
-pub fn retained_optional_fields(markdown: &str) -> (Option<String>, Option<String>, Option<String>) {
+pub fn retained_optional_fields(
+    markdown: &str,
+) -> (Option<String>, Option<String>, Option<String>) {
     let mut color = None;
     let mut memory = None;
     let mut effort = None;
@@ -158,9 +160,13 @@ pub fn retained_optional_fields(markdown: &str) -> (Option<String>, Option<Strin
         if line.trim() == "---" {
             break;
         }
-        let Some((key, value)) = line.split_once(':') else { continue; };
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
         let value = value.trim();
-        if value.is_empty() { continue; }
+        if value.is_empty() {
+            continue;
+        }
         match key.trim() {
             "color" => color = Some(value.to_owned()),
             "memory" => memory = Some(value.to_owned()),
@@ -222,11 +228,13 @@ pub fn new_file_path(workspace: &Path, user: bool, agent_type: &str) -> Result<P
     }
     let folder = directory(workspace, user)?;
     if !user {
-        let workspace = workspace.canonicalize()
+        let workspace = workspace
+            .canonicalize()
             .context("Cannot resolve project workspace")?;
         // Check the nearest existing parent: an existing .atlas symlink can
         // otherwise redirect create/edit/delete outside the project.
-        let ancestor = folder.ancestors()
+        let ancestor = folder
+            .ancestors()
             .find(|candidate| candidate.exists())
             .context("Cannot find existing agent directory ancestor")?;
         let resolved = ancestor.canonicalize()?;
@@ -347,7 +355,9 @@ pub fn save_agent(
         }
         result?;
     } else {
-        let mut file = OpenOptions::new().write(true).create_new(true)
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
             .open(&path)
             .with_context(|| format!("Cannot create agent file {}", path.display()))?;
         file.write_all(format_as_markdown(agent).as_bytes())?;

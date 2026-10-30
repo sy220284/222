@@ -272,17 +272,23 @@ fn recover_plugin_crash_artifacts(root: &Path) -> Result<Vec<String>> {
     // This handles a process killed between target -> backup and stage -> target.
     for item in &entries {
         let name = item.file_name().to_string_lossy().into_owned();
-        let (recover_backup, suffix) =
-            if let Some(id) = name.strip_prefix(".previous-") {
-                (true, id)
-            } else if let Some(id) = name.strip_prefix(".failed-update-") {
-                (true, id)
-            } else { continue };
-        if Uuid::parse_str(suffix).is_err() { continue; }
+        let (recover_backup, suffix) = if let Some(id) = name.strip_prefix(".previous-") {
+            (true, id)
+        } else if let Some(id) = name.strip_prefix(".failed-update-") {
+            (true, id)
+        } else {
+            continue;
+        };
+        if Uuid::parse_str(suffix).is_err() {
+            continue;
+        }
         let backup = item.path();
         let metadata = fs::symlink_metadata(&backup)?;
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            bail!("Plugin crash recovery entry is redirected: {}", backup.display());
+            bail!(
+                "Plugin crash recovery entry is redirected: {}",
+                backup.display()
+            );
         }
         if recover_backup {
             // Derive the only permissible restoration destination from the
@@ -304,7 +310,10 @@ fn recover_plugin_crash_artifacts(root: &Path) -> Result<Vec<String>> {
             let target = home.join(&plugin);
             match fs::symlink_metadata(&target) {
                 Ok(current) if current.file_type().is_symlink() || !current.is_dir() => {
-                    bail!("Installed plugin changed to unsafe target: {}", target.display());
+                    bail!(
+                        "Installed plugin changed to unsafe target: {}",
+                        target.display()
+                    );
                 }
                 Ok(_) => {
                     // Without a durable settings-commit marker a crash may
@@ -332,10 +341,15 @@ fn recover_plugin_crash_artifacts(root: &Path) -> Result<Vec<String>> {
     }
     for item in entries {
         let name = item.file_name().to_string_lossy().into_owned();
-        let suffix = name.strip_prefix(".install-")
+        let suffix = name
+            .strip_prefix(".install-")
             .or_else(|| name.strip_prefix(".update-"));
-        let Some(suffix) = suffix else { continue; };
-        if Uuid::parse_str(suffix).is_err() { continue; }
+        let Some(suffix) = suffix else {
+            continue;
+        };
+        if Uuid::parse_str(suffix).is_err() {
+            continue;
+        }
         let stage = item.path();
         match fs::symlink_metadata(&stage) {
             Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
@@ -933,7 +947,11 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
         }
         _ => true,
     };
-    let _lock = if mutating { Some(plugin_operation_lock()?) } else { None };
+    let _lock = if mutating {
+        Some(plugin_operation_lock()?)
+    } else {
+        None
+    };
     if mutating {
         for report in recover_plugin_crash_artifacts(&root)? {
             eprintln!("Plugin recovery: {report}");

@@ -115,10 +115,11 @@ pub(crate) fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> 
                 };
                 // Plugin command hooks share the same background lifecycle
                 // as local hook configuration; asyncRewake implies async.
-                let async_background = hook.get("async")
-                    .and_then(Value::as_bool).unwrap_or(false);
-                let async_rewake = hook.get("asyncRewake")
-                    .and_then(Value::as_bool).unwrap_or(false);
+                let async_background = hook.get("async").and_then(Value::as_bool).unwrap_or(false);
+                let async_rewake = hook
+                    .get("asyncRewake")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
                 if hook.get("once").and_then(Value::as_bool) == Some(true) {
                     bail!("One-shot plugin command hooks require lifecycle tracking")
                 }
@@ -127,8 +128,10 @@ pub(crate) fn source_hooks(root: &Path, value: &Value) -> Result<Vec<HookRule>> 
                     .map(|value| serde_json::from_value(value.clone()))
                     .transpose()?;
                 rules.push(HookRule {
-                    async_background, async_rewake,
-                    event: event.clone(), matcher: matcher_name.clone(),
+                    async_background,
+                    async_rewake,
+                    event: event.clone(),
+                    matcher: matcher_name.clone(),
                     if_condition: matcher.get("if").and_then(Value::as_str).map(str::to_owned),
                     plugin_root: Some(root.to_owned()),
                     command: command.to_owned(),
@@ -1672,8 +1675,11 @@ mod tests {
         let loaded = PluginSet::load(root.path(), &["leak".into()]).unwrap();
         assert!(loaded.hooks.is_empty());
         assert!(loaded.mcp_servers.is_empty());
-        assert!(loaded.errors.iter().any(|error|
-            error.contains("leak") && (error.contains("symbolic link") || error.contains("workspace"))
-        ), "Unsafe symlink must be reported and must not load: {:?}", loaded.errors);
+        assert!(
+            loaded.errors.iter().any(|error| error.contains("leak")
+                && (error.contains("symbolic link") || error.contains("workspace"))),
+            "Unsafe symlink must be reported and must not load: {:?}",
+            loaded.errors
+        );
     }
 }

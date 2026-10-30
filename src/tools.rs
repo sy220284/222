@@ -2890,8 +2890,10 @@ mod tests {
         drop(writer);
         let already_consumed = 5_u64 * 1024 * 1024 * 1024 - 4096;
         let shared = Arc::new(AtomicU64::new(already_consumed));
-        let error = capped_read(reader, 128, shared).await.unwrap_err();
-        assert!(error.to_string().contains("5 GiB"), "{error:#}");
+        let error = capped_read(reader, 128, shared, 5_u64 * 1024 * 1024 * 1024)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("5368709120 bytes"), "{error:#}");
     }
 
     #[cfg(target_os = "linux")]

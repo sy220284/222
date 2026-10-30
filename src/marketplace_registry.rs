@@ -996,7 +996,9 @@ mod tests {
         let refresh = execute(project.path(), Some("update"), None).unwrap();
         assert_eq!(refresh["updated"], json!([]));
         assert_eq!(refresh["failed"][0]["name"], "team-repo");
-        assert!(refresh["failed"][0]["error"].as_str().is_some_and(|text| !text.is_empty()));
+        assert!(refresh["failed"][0]["error"]
+            .as_str()
+            .is_some_and(|text| !text.is_empty()));
         assert!(execute(project.path(), Some("update"), Some("team-repo")).is_err());
         assert_eq!(fs::read(storage(project.path())).unwrap(), registry_before);
         assert!(execute(project.path(), Some("remove"), Some("does-not-exist")).is_err());
