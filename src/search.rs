@@ -836,8 +836,11 @@ fn stream_search_hits(
     loop {
         check_search_deadline(Some(deadline))?;
         line.clear();
-        if input.read_until(b'\n', &mut line)
-            .with_context(|| format!("Reading search file {}", path.display()))? == 0 {
+        if input
+            .read_until(b'\n', &mut line)
+            .with_context(|| format!("Reading search file {}", path.display()))?
+            == 0
+        {
             break;
         }
         binary |= line.contains(&0);
@@ -1165,18 +1168,30 @@ mod tests {
         fs::write(&path, content).unwrap();
         for mode in ["count", "files_with_matches"] {
             let result: Value = serde_json::from_str(
-                &grep_files(root.path(), root.path(), &json!({
-                    "pattern":"needle", "output_mode":mode
-                })).unwrap()
-            ).unwrap();
+                &grep_files(
+                    root.path(),
+                    root.path(),
+                    &json!({
+                        "pattern":"needle", "output_mode":mode
+                    }),
+                )
+                .unwrap(),
+            )
+            .unwrap();
             assert_eq!(result["numFiles"], 1);
         }
         fs::write(&path, b"needle\n\0other").unwrap();
         let suppressed: Value = serde_json::from_str(
-            &grep_files(root.path(), root.path(), &json!({
-                "pattern":"needle", "output_mode":"files_with_matches"
-            })).unwrap()
-        ).unwrap();
+            &grep_files(
+                root.path(),
+                root.path(),
+                &json!({
+                    "pattern":"needle", "output_mode":"files_with_matches"
+                }),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(suppressed["numFiles"], 0);
     }
 

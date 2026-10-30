@@ -697,7 +697,9 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
-            crate::test_http::consume_request(&mut stream).await.unwrap();
+            crate::test_http::consume_request(&mut stream)
+                .await
+                .unwrap();
             let location = "http://localhost:9/do-not-fetch";
             let response=format!("HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             stream.write_all(response.as_bytes()).await.unwrap();
@@ -733,7 +735,9 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.unwrap();
-            crate::test_http::consume_request(&mut stream).await.unwrap();
+            crate::test_http::consume_request(&mut stream)
+                .await
+                .unwrap();
             stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 18\r\nConnection: close\r\n\r\n<h1>Web hello</h1>").await.unwrap();
         });
         let url = format!("http://{address}/test");

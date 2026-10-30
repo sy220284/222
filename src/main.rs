@@ -121,6 +121,8 @@ mod task_output_format;
 mod team_mailbox;
 mod team_registry;
 mod terminal_launcher;
+#[cfg(test)]
+mod test_http;
 mod tool_errors;
 mod tool_metrics;
 mod tool_names;
@@ -129,8 +131,6 @@ mod tools;
 mod transcript_search;
 mod unicode_sanitization;
 mod version;
-#[cfg(test)]
-mod test_http;
 mod webfetch;
 mod websearch;
 mod workspace_dirs;

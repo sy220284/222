@@ -279,7 +279,9 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
             let (mut connection, _) = listener.accept().await.unwrap();
-            crate::test_http::consume_request(&mut connection).await.unwrap();
+            crate::test_http::consume_request(&mut connection)
+                .await
+                .unwrap();
             let payload=concat!(
                 "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\n",
                 "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\n\n",
@@ -323,7 +325,9 @@ mod tests {
         let server = tokio::spawn(async move {
             for attempt in 0..2 {
                 let (mut socket, _) = listener.accept().await.unwrap();
-                crate::test_http::consume_request(&mut socket).await.unwrap();
+                crate::test_http::consume_request(&mut socket)
+                    .await
+                    .unwrap();
                 let (status, body) = if attempt == 0 {
                     (
                         "503 Service Unavailable",

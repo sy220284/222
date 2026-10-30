@@ -50,7 +50,10 @@ mod tests {
         assert_eq!(tag, "Link");
         let url = attrs.get("url").and_then(Value::as_str).unwrap();
         assert!(url.starts_with("file:///"), "{url}");
-        assert!(url.ends_with("/tmp/a%20b%23100%25%E4%B8%AD%E6%96%87.txt"), "{url}");
+        assert!(
+            url.ends_with("/tmp/a%20b%23100%25%E4%B8%AD%E6%96%87.txt"),
+            "{url}"
+        );
     }
 
     #[test]

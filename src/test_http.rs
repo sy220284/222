@@ -13,7 +13,9 @@ pub async fn consume_request(socket: &mut TcpStream) -> io::Result<()> {
             let headers = String::from_utf8_lossy(&received[..marker]);
             let mut length = 0usize;
             for line in headers.lines() {
-                let Some((name, value)) = line.split_once(':') else { continue };
+                let Some((name, value)) = line.split_once(':') else {
+                    continue;
+                };
                 if name.eq_ignore_ascii_case("Content-Length") {
                     length = value.trim().parse::<usize>().map_err(|_| {
                         io::Error::new(io::ErrorKind::InvalidData, "Invalid Content-Length")
@@ -21,25 +23,35 @@ pub async fn consume_request(socket: &mut TcpStream) -> io::Result<()> {
                 }
             }
             if length > 10 * 1024 * 1024 {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "Oversized test request"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Oversized test request",
+                ));
             }
             while received.len().saturating_sub(body_start) < length {
                 let n = socket.read(&mut block).await?;
                 if n == 0 {
-                    return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-                        "HTTP test request ended before its body"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "HTTP test request ended before its body",
+                    ));
                 }
                 received.extend_from_slice(&block[..n]);
             }
             return Ok(());
         }
         if received.len() > 128 * 1024 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Oversized test HTTP header"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Oversized test HTTP header",
+            ));
         }
         let n = socket.read(&mut block).await?;
         if n == 0 {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof,
-                "HTTP test request ended before its headers"));
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "HTTP test request ended before its headers",
+            ));
         }
         received.extend_from_slice(&block[..n]);
     }
