@@ -438,10 +438,13 @@ pub fn validate_local(location: &Path) -> Result<String> {
     }
     let fallback = location.file_name().and_then(|name| name.to_str())
         .context("Plugin source has no valid directory name")?;
-    if !valid_name(fallback) {
-        bail!("Invalid plugin directory name")
-    }
+    // The staging directory may be a random temporary name. When a real
+    // manifest declares a valid identity it takes precedence over the source
+    // folder name; only manifest-less plugins require a valid fallback.
     let manifest = read_manifest(&location, fallback)?;
+    if !valid_name(&manifest.name) {
+        bail!("Invalid plugin identity")
+    }
     let _ = manifest_hooks(&location, &manifest.hooks, None)?;
     let _ = manifest_servers(&location, &manifest.mcp_servers, None)?;
     let _ = skill_roots(&location, &manifest)?;
