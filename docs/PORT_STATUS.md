@@ -1,3 +1,12 @@
+## 2026-10-30：SDK 标题生成异步请求与会话单一写入口（源码已提交、待验收）
+
+原版：source/src/cli/print.ts:3783-3814::generate_session_title 采用 fire-and-forget 生成标题，不能让模型请求占据 SDK stdin 的控制处理；source/src/utils/sessionTitle.ts 等标题解析规则。Rust 原入口 src/main.rs::sdk_nested_control -> Agent::generate_session_title 等待模型同步完成，主控制队列被长模型请求阻塞。
+
+- 已将 SDK 标题请求构造集中在 Agent::sdk_title_request，沿用原 JSON title 生成提示、当前多模型路由及无工具单轮请求。提交 04aa82ba、d1449753。
+- SDK 收到 generate_session_title 时独立创建 Tokio 模型任务，主消息循环继续处理控制消息；通过 SdkTitleDone 返回单次模型响应。由主 Agent 唯一写入口 Agent::finish_sdk_title 校验发起时 session UUID，防止慢请求覆盖新会话；按发起时 profile 归集输入输出用量及 API 耗时，并保留 persist=false/空标题/失败时 null 的对外结果语义。提交 c0045acb、b2610475。
+- 用户可感知业务能力保守计 1 条：SDK 标题生成不再同步占据主控制队列，结果在当前 Agent 的串行完成事件中落盘并返回。最新远端仅作静态接线核对，状态“源码已提交、待验收”，完整等价验收新增 0。按用户要求没有运行 cargo、测试或 CI。
+- 仍待闭环：主 Agent 当前正在执行长时间模型/工具任务时，title 结果会先缓存，直到控制 Actor 可处理时才回传；原版 title 回执可以独立发送。SDK 中断对后台标题请求本身的取消语义、EOF 后超过五秒仍在运行的标题任务、提供商重试和模型预算仍需验收。冻结 Issue #3 的 362 项独立保留，暂不勾选。
+
 ## 2026-10-30：SDK 运行中断贯通 Unix Shell 进程组清理（源码已提交、待验收）
 
 原版源码依据：source/src/cli/print.ts:2807-2816 独立 stdin 处理；2830-2862 interrupt/end_session AbortController 取消；1858-1862 priority=now 抢占；source/src/utils/ShellCommand.ts 的取消树清理。Rust 主链：src/main.rs::sdk -> sdk_interruptible_turn -> Agent::ask_with_blocks -> ToolExecutor::run_command_with_shell。
