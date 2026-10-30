@@ -693,7 +693,7 @@ impl WebSocketTransport {
         // Keep unacknowledged messages buffered until the next server ack.
         for message in &pending {
             if conn
-                .send_text(&crate::ndjson::stringify_value(message))
+                .send_text(&format!("{}\n", crate::ndjson::stringify_value(message)))
                 .await
                 .is_err()
             {
@@ -720,15 +720,13 @@ impl WebSocketTransport {
             .get("uuid")
             .and_then(Value::as_str)
             .map(str::to_string);
-        {
-            let mut buffer = self.shared.buffer.lock().expect("ws buffer");
-            buffer.add(message.clone());
-        }
         if let Some(uuid) = uuid {
+            // The original WebSocket transport replays only messages with a UUID.
+            self.shared.buffer.lock().expect("ws buffer").add(message.clone());
             self.shared.state.lock().expect("ws state").last_sent_id = Some(uuid);
         }
         connection
-            .send_text(&crate::ndjson::stringify_value(message))
+            .send_text(&format!("{}\n", crate::ndjson::stringify_value(message)))
             .await
     }
 
