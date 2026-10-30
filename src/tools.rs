@@ -482,6 +482,58 @@ impl ToolExecutor {
         self.session_id = Some(session_id);
         self
     }
+    /// Message-level SDK rewind shares the exact same path authorization,
+    /// explicit Edit deny/ask rules and checkpoint integrity checks as the
+    /// user-facing file_revert tool. Check all targets before changing any.
+    pub fn sdk_rewind_message_records(
+        &self,
+        records: &[history::Record],
+        dry_run: bool,
+    ) -> Result<Value> {
+        if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
+            bail!("File checkpointing is disabled");
+        }
+        let mut checked = Vec::with_capacity(records.len());
+        for record in records {
+            let path = self.checked_path(&record.path)?;
+            if dry_run {
+                self.require_read_rules(&record.path, &path)?;
+            } else {
+                let args = json!({
+                    "path": record.path,
+                    "paths": self.file_rule_paths(&record.path)?
+                });
+                match permission_rules::policy_for(
+                    &self.permission_rules, "edit_file", &args
+                )? {
+                    Some(permission_rules::Behavior::Deny) => {
+                        bail!("Message rewind denied by explicit Edit rule: {}", record.path);
+                    }
+                    Some(permission_rules::Behavior::Ask) => {
+                        self.require_approval("edit_file", &args)?;
+                    }
+                    _ => {}
+                }
+                self.require_approval("file_revert", &args)?;
+            }
+            checked.push((record.clone(), path));
+        }
+        history::preflight_message_rewind(&checked)?;
+        if dry_run {
+            return Ok(json!({
+                "can_rewind":true,
+                "files":checked.iter().map(|(record, _)| record.path.clone())
+                    .collect::<Vec<_>>(),
+                "checkpoints":checked.len()
+            }));
+        }
+        let mut restored = Vec::new();
+        for (record, path) in checked {
+            restored.push(history::restore(&record, &path)?);
+        }
+        Ok(json!({"restored":restored,"checkpoints":records.len()}))
+    }
+
     pub fn with_history_message_id(mut self, id: uuid::Uuid) -> Self {
         self.history_message_id = Some(id);
         self
