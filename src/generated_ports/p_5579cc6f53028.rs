@@ -74,7 +74,10 @@ fn is_dangerous_category(code: char) -> bool {
 
 /// Primary defense: strip dangerous Unicode categories.
 fn strip_property_classes(input: &str) -> String {
-    input.chars().filter(|c| !is_dangerous_category(*c)).collect()
+    input
+        .chars()
+        .filter(|c| !is_dangerous_category(*c))
+        .collect()
 }
 
 /// Fallback: explicit known dangerous ranges, kept verbatim from the
@@ -140,14 +143,17 @@ pub fn recursively_sanitize_unicode_value(value: &serde_json::Value) -> serde_js
         serde_json::Value::String(s) => serde_json::Value::String(
             partially_sanitize_unicode(s).unwrap_or_else(|_| s.to_string()),
         ),
-        serde_json::Value::Array(items) => {
-            serde_json::Value::Array(items.iter().map(recursively_sanitize_unicode_value).collect())
-        }
+        serde_json::Value::Array(items) => serde_json::Value::Array(
+            items
+                .iter()
+                .map(recursively_sanitize_unicode_value)
+                .collect(),
+        ),
         serde_json::Value::Object(map) => {
             let mut out = serde_json::Map::new();
             for (key, val) in map {
-                let sanitized_key = partially_sanitize_unicode(key)
-                    .unwrap_or_else(|_| key.to_string());
+                let sanitized_key =
+                    partially_sanitize_unicode(key).unwrap_or_else(|_| key.to_string());
                 out.insert(sanitized_key, recursively_sanitize_unicode_value(val));
             }
             serde_json::Value::Object(out)

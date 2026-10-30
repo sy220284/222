@@ -33,10 +33,7 @@ pub fn extract_tag(text: &str, tag: &str) -> Option<String> {
 /// Renderable message: the subset of fields this module touches.
 /// `message.content[0].text` of a `user` message carries the XML tags.
 fn user_first_text(msg: &Value) -> Option<&str> {
-    let role = msg
-        .get("message")?
-        .get("role")?
-        .as_str()?;
+    let role = msg.get("message")?.get("role")?.as_str()?;
     if role != "user" {
         return None;
     }
@@ -165,9 +162,18 @@ mod tests {
 
     #[test]
     fn passthrough_when_verbose_or_not_fullscreen() {
-        let msgs = vec![bash_completion("Background command a"), bash_completion("Background command b")];
-        assert_eq!(collapse_background_bash_notifications(&msgs, true, true).len(), 2);
-        assert_eq!(collapse_background_bash_notifications(&msgs, false, false).len(), 2);
+        let msgs = vec![
+            bash_completion("Background command a"),
+            bash_completion("Background command b"),
+        ];
+        assert_eq!(
+            collapse_background_bash_notifications(&msgs, true, true).len(),
+            2
+        );
+        assert_eq!(
+            collapse_background_bash_notifications(&msgs, false, false).len(),
+            2
+        );
     }
 
     #[test]

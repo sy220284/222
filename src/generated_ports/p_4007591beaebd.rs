@@ -28,7 +28,12 @@ pub fn srun_spec() -> CommandSpec {
         description: "Run a command on SLURM cluster nodes".to_string(),
         arguments: vec![
             argument("-n, --ntasks <count>", "Number of tasks", true, false),
-            argument("-N, --nodes <count>", "Number of nodes to allocate", true, false),
+            argument(
+                "-N, --nodes <count>",
+                "Number of nodes to allocate",
+                true,
+                false,
+            ),
             argument("command", "Command to run on the cluster", false, true),
         ],
     }

@@ -73,8 +73,7 @@ where
 {
     let cap = concurrency_cap.max(1);
     let mut queued = streams.into_iter();
-    let mut active: SelectAll<Pin<Box<dyn Stream<Item = MergeEvent<T>> + Send>>> =
-        SelectAll::new();
+    let mut active: SelectAll<Pin<Box<dyn Stream<Item = MergeEvent<T>> + Send>>> = SelectAll::new();
     for _ in 0..cap {
         let Some(stream) = queued.next() else { break };
         active.push(source_events(stream));
