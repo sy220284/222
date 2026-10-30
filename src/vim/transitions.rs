@@ -55,7 +55,8 @@ enum Outcome {
 /// Backspace/Delete reaching literal-char states). Returns `true` when the
 /// input was recognized or consumed.
 pub fn transition(state: &mut CommandState, input: &str, ctx: &mut VimCtx) -> bool {
-    match state {
+    let snapshot = state.clone();
+    match &snapshot {
         CommandState::Idle => from_idle(state, input, ctx),
         CommandState::Count { digits } => from_count(state, digits, input, ctx),
         CommandState::Operator { op, count } => {

@@ -6,7 +6,7 @@ use super::cursor::VimCursor;
 
 /// Resolve a motion to a target cursor position (repeat `count` times,
 /// stopping early when the cursor stops moving).
-pub fn resolve_motion(key: &str, cursor: &VimCursor<'_>, count: usize) -> VimCursor<'_> {
+pub fn resolve_motion<'a>(key: &str, cursor: &VimCursor<'a>, count: usize) -> VimCursor<'a> {
     let mut result = VimCursor::new(cursor.text, cursor.offset);
     let count = count.max(1);
     for _ in 0..count {
@@ -20,7 +20,7 @@ pub fn resolve_motion(key: &str, cursor: &VimCursor<'_>, count: usize) -> VimCur
 }
 
 /// Apply a single motion step.
-fn apply_single_motion(key: &str, cursor: &VimCursor<'_>) -> VimCursor<'_> {
+fn apply_single_motion<'a>(key: &str, cursor: &VimCursor<'a>) -> VimCursor<'a> {
     match key {
         "h" => cursor.left(),
         "l" => cursor.right(),

@@ -439,7 +439,7 @@ mod tests {
         for attempts in 1..30_u32 {
             let delay = reconnect_delay(attempts);
             assert!(
-                delay.as_millis() <= (RECONNECT_MAX_DELAY_MS as u128 + RECONNECT_MAX_DELAY_MS / 4)
+                delay.as_millis() <= ((RECONNECT_MAX_DELAY_MS + RECONNECT_MAX_DELAY_MS / 4) as u128)
             );
         }
     }

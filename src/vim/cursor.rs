@@ -185,7 +185,7 @@ impl<'a> VimCursor<'a> {
         }
     }
     fn is_word(&self) -> bool {
-        matches!(Self::class(char_at(self.text, self.offset)), 1 | 2)
+        matches!(Self::class(char_at(self.text, self.offset).map(|(ch, _)| ch)), 1 | 2)
     }
     /// `w` — start of next vim word (words are word/punct runs; whitespace skipped).
     pub fn next_vim_word(&self) -> VimCursor<'a> {
@@ -193,14 +193,14 @@ impl<'a> VimCursor<'a> {
         if cursor.is_at_end() {
             return cursor;
         }
-        let start_class = Self::class(char_at(cursor.text, cursor.offset));
+        let start_class = Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch));
         if start_class != 0 {
             let class = start_class;
-            while !cursor.is_at_end() && Self::class(char_at(cursor.text, cursor.offset)) == class {
+            while !cursor.is_at_end() && Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == class {
                 cursor = cursor.right();
             }
         }
-        while !cursor.is_at_end() && Self::class(char_at(cursor.text, cursor.offset)) == 0 {
+        while !cursor.is_at_end() && Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == 0 {
             cursor = cursor.right();
         }
         cursor
@@ -250,7 +250,7 @@ impl<'a> VimCursor<'a> {
         }
     }
     fn is_word_big(&self) -> bool {
-        matches!(Self::class_word(char_at(self.text, self.offset)), 1)
+        matches!(Self::class_word(char_at(self.text, self.offset).map(|(ch, _)| ch)), 1)
     }
     /// `W` — start of next WORD (runs of non-whitespace).
     pub fn next_word_big(&self) -> VimCursor<'a> {
@@ -258,13 +258,13 @@ impl<'a> VimCursor<'a> {
         if cursor.is_at_end() {
             return cursor;
         }
-        let start_class = Self::class_word(char_at(cursor.text, cursor.offset));
+        let start_class = Self::class_word(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch));
         if start_class != 0 {
-            while !cursor.is_at_end() && Self::class_word(char_at(cursor.text, cursor.offset)) == start_class {
+            while !cursor.is_at_end() && Self::class_word(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == start_class {
                 cursor = cursor.right();
             }
         }
-        while !cursor.is_at_end() && Self::class_word(char_at(cursor.text, cursor.offset)) == 0 {
+        while !cursor.is_at_end() && Self::class_word(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch)) == 0 {
             cursor = cursor.right();
         }
         cursor

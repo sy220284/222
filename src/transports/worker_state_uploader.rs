@@ -88,25 +88,25 @@ impl WorkerStateUploader {
     /// Enqueue one patch. Coalesces into the pending slot while a PUT is in
     /// flight; otherwise sends immediately on a spawned task.
     pub fn enqueue(&self, patch: Value) {
-        let kick = {
+        let first = {
             let mut state = self.shared.state.lock().expect("worker state");
             if self.shared.closed.load(Ordering::SeqCst) {
                 return;
             }
-            state.pending = Some(match state.pending.take() {
-                Some(previous) => coalesce_patches(&previous, &patch),
-                None => patch,
-            });
             if state.in_flight {
-                false
+                state.pending = Some(match state.pending.take() {
+                    Some(previous) => coalesce_patches(&previous, &patch),
+                    None => patch,
+                });
+                None
             } else {
                 state.in_flight = true;
-                true
+                Some(patch)
             }
         };
-        if kick {
+        if let Some(first) = first {
             let shared = Arc::clone(&self.shared);
-            tokio::spawn(async move { send_loop(shared).await });
+            tokio::spawn(async move { send_loop(shared, first).await });
         }
     }
 
@@ -121,41 +121,41 @@ impl WorkerStateUploader {
     }
 }
 
-async fn send_loop(shared: Arc<WorkerStateShared>) {
+async fn send_loop(shared: Arc<WorkerStateShared>, mut current: Value) {
     let mut failures = 0_u32;
     loop {
-        let mut current = {
-            let mut state = shared.state.lock().expect("worker state");
-            if shared.closed.load(Ordering::SeqCst) {
-                state.in_flight = false;
-                return;
-            }
-            match state.pending.take() {
-                Some(patch) => patch,
-                None => {
+        if shared.closed.load(Ordering::SeqCst) {
+            shared.state.lock().expect("worker state").in_flight = false;
+            return;
+        }
+        if (shared.send)(current.clone()).await {
+            failures = 0;
+            let next = {
+                let mut state = shared.state.lock().expect("worker state");
+                if shared.closed.load(Ordering::SeqCst) {
                     state.in_flight = false;
-                    return;
+                    None
+                } else if let Some(pending) = state.pending.take() {
+                    Some(pending)
+                } else {
+                    state.in_flight = false;
+                    None
                 }
+            };
+            if let Some(pending) = next {
+                current = pending;
+                continue;
             }
-        };
-        loop {
-            if shared.closed.load(Ordering::SeqCst) {
-                shared.state.lock().expect("worker state").in_flight = false;
-                return;
-            }
-            if (shared.send)(current.clone()).await {
-                failures = 0;
-                break;
-            }
-            failures = failures.saturating_add(1);
-            let delay = shared.base_delay_ms.saturating_mul(
-                1_u64 << failures.saturating_sub(1).min(16)
-            ).min(shared.max_delay_ms);
-            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-            let mut state = shared.state.lock().expect("worker state");
-            if let Some(pending) = state.pending.take() {
-                current = coalesce_patches(&current, &pending);
-            }
+            return;
+        }
+        failures = failures.saturating_add(1);
+        let delay = shared.base_delay_ms
+            .saturating_mul(1_u64 << failures.saturating_sub(1).min(16))
+            .min(shared.max_delay_ms);
+        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+        let mut state = shared.state.lock().expect("worker state");
+        if let Some(pending) = state.pending.take() {
+            current = coalesce_patches(&current, &pending);
         }
     }
 }
@@ -163,6 +163,7 @@ async fn send_loop(shared: Arc<WorkerStateShared>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicUsize;
     use serde_json::json;
 
     #[test]

@@ -119,13 +119,13 @@ fn get_operator_range(
             word_cursor = if motion == "w" {
                 word_cursor.next_vim_word()
             } else {
-                word_cursor.next_word()
+                word_cursor.next_word_big()
             };
         }
         let word_end = if motion == "w" {
             word_cursor.end_of_vim_word()
         } else {
-            word_cursor.end_of_word()
+            word_cursor.end_of_word_big()
         };
         to = word_end.right().offset;
     } else if is_linewise_motion(motion) {
@@ -190,7 +190,8 @@ pub fn execute_repeat_find(ctx: &mut VimCtx, reverse: bool, count: usize) {
 /// `executeLineOp`: dd/cy/yy linewise operation over `count` lines.
 pub fn execute_line_op(ctx: &mut VimCtx, op: Operator, count: usize) {
     let current_line = ctx.line_of(ctx.offset);
-    let lines: Vec<&str> = ctx.text.split('\n').collect();
+    let original_text = ctx.text.clone();
+    let lines: Vec<&str> = original_text.split('\n').collect();
     let lines_to_affect = count.max(1).min(lines.len() - current_line);
     let line_start = ctx.cursor().start_of_logical_line().offset;
     let mut line_end = line_start;
@@ -304,7 +305,7 @@ pub fn execute_toggle_case(ctx: &mut VimCtx, count: usize) {
         };
         let upper: String = grapheme.to_uppercase().collect();
         let lower: String = grapheme.to_lowercase().collect();
-        let replacement = if grapheme == upper { lower } else { upper };
+        let replacement = if grapheme.to_string() == upper { lower } else { upper };
         // Caseless graphemes re-insert unchanged (matches the JS fallback).
         new_text.replace_range(offset..offset + grapheme.len_utf8(), &replacement);
         offset += replacement.len();
@@ -471,7 +472,7 @@ pub fn execute_operator_text_obj(
     apply_operator(ctx, op, start, end, false);
     ctx.record_change(RecordedChange::OperatorTextObj {
         op,
-        obj_type: obj_type.to_string(),
+        obj_type,
         scope,
         count: count.max(1),
     });
@@ -479,7 +480,7 @@ pub fn execute_operator_text_obj(
 
 /// `executeOperatorG`: operator to end of file (linewise).
 pub fn execute_operator_g(ctx: &mut VimCtx, op: Operator, count: usize) {
-    let end_cursor = ctx.cursor().end_of_file();
+    let end_cursor = VimCursor::new(&ctx.text, ctx.text.len());
     let (from, _to, _) = get_operator_range(ctx.offset, &ctx.text, &end_cursor, "G", op, count);
     apply_operator(ctx, op, from, ctx.text.len(), true);
     ctx.record_change(RecordedChange::Operator { op, motion: "G".into(), count: count.max(1) });

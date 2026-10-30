@@ -218,7 +218,7 @@ pub struct CcrClient {
     worker_state: Arc<WorkerStateUploader>,
     event_uploader: SerialBatchEventUploader<Value>,
     internal_event_uploader: SerialBatchEventUploader<Value>,
-    delivery_uploader: SerialBatchEventUploader<Value>,
+    delivery_uploader: Arc<SerialBatchEventUploader<Value>>,
     http: reqwest::Client,
 }
 
@@ -323,7 +323,7 @@ impl CcrClient {
             worker_state: Arc::new(WorkerStateUploader::new(worker_state_send, 1_000, 30_000)),
             event_uploader: SerialBatchEventUploader::new(client_events_config),
             internal_event_uploader: SerialBatchEventUploader::new(internal_config),
-            delivery_uploader: SerialBatchEventUploader::new(delivery_config),
+            delivery_uploader: Arc::new(SerialBatchEventUploader::new(delivery_config)),
             shared,
         }
     }
@@ -342,7 +342,7 @@ impl CcrClient {
         self.session_id = session_id.to_string();
         let mut headers = (self.shared.auth)();
         if headers.is_empty() {
-            bail!("{CcrInitFailReason::NoAuthHeaders}");
+            bail!("{}", CcrInitFailReason::NoAuthHeaders);
         }
         let epoch = match std::env::var("CLAUDE_CODE_WORKER_EPOCH")
             .ok()
@@ -354,7 +354,7 @@ impl CcrClient {
                     .iter()
                     .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
                     .map(|(_, value)| value.clone())
-                    .ok_or_else(|| anyhow!("{CcrInitFailReason::NoAuthHeaders}"))?;
+                    .ok_or_else(|| anyhow!("{}", CcrInitFailReason::NoAuthHeaders))?;
                 let token = auth_header
                     .strip_prefix("Bearer ")
                     .unwrap_or(&auth_header)
@@ -363,7 +363,7 @@ impl CcrClient {
                 let epoch = crate::work_secret::register_worker(base, &token)
                     .await
                     .map_err(|error| {
-                        anyhow!("{CcrInitFailReason::WorkerRegisterFailed}: {error}")
+                        anyhow!("{}: {error}", CcrInitFailReason::WorkerRegisterFailed)
                     })?;
                 epoch
             }
@@ -418,8 +418,8 @@ impl CcrClient {
                     "worker_epoch": self.worker_epoch.load(Ordering::SeqCst),
                 }),
             )
-            .await
-            .map(|_| ())
+            .await?;
+        Ok(())
     }
 
     /// Write one stdout message as a client event. stream_event messages are
@@ -567,7 +567,7 @@ impl CcrClient {
         let event_id = event_id.to_string();
         let status = status.to_string();
         tokio::spawn({
-            let uploader = &self.delivery_uploader;
+            let uploader = Arc::clone(&self.delivery_uploader);
             async move {
                 uploader
                     .enqueue(vec![json!({"eventId": event_id, "status": status})])
@@ -616,6 +616,7 @@ impl CcrShared {
     ) -> std::result::Result<(), UploaderError> {
         self.request_raw_value(method, path, body)
             .await
+            .map(|_| ())
             .map_err(|error| match error.downcast::<UploaderError>() {
                 Ok(uploader_error) => uploader_error,
                 Err(_) => UploaderError::Retryable {

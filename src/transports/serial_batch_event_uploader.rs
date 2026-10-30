@@ -240,13 +240,18 @@ async fn drain_loop<T: serde::Serialize + Send + Clone + 'static>(shared: Arc<Sh
         let batch = {
             let mut state = shared.state.lock().expect("uploader state");
             if state.closed {
-                break;
+                state.draining = false;
+                release_waiters(&shared, &mut state);
+                return;
             }
-            state.take_batch(&shared.config)
+            let batch = state.take_batch(&shared.config);
+            if batch.is_empty() {
+                state.draining = false;
+                release_waiters(&shared, &mut state);
+                return;
+            }
+            batch
         };
-        if batch.is_empty() {
-            break;
-        }
         let batch_size = batch.len();
         match (shared.config.send)(batch.clone()).await {
             Ok(()) => {
@@ -290,7 +295,7 @@ async fn drain_loop<T: serde::Serialize + Send + Clone + 'static>(shared: Arc<Sh
                 // Backoff sleep is not interruptible — matching the source's
                 // plain `setTimeout`; close() takes effect on the next loop
                 // head via the closed check below.
-                let delay = retry_delay(failures, retry_after_ms, &shared.config);
+                let delay = retry_delay(failures, retry_after_ms, shared.config.base_delay_ms, shared.config.max_delay_ms, shared.config.jitter_ms);
                 tokio::time::sleep(delay).await;
                 if shared.closed.load(Ordering::SeqCst) {
                     break;
@@ -298,21 +303,9 @@ async fn drain_loop<T: serde::Serialize + Send + Clone + 'static>(shared: Arc<Sh
             }
         }
     }
-    // Drain finished: clear the flag, restart if new work arrived while the
-    // final batch was in flight (mirrors flush()'s kick semantics).
-    let mut need_restart = false;
-    {
-        let mut state = shared.state.lock().expect("uploader state");
-        state.draining = false;
-        if !state.pending.is_empty() && !state.closed {
-            state.draining = true;
-            need_restart = true;
-        }
-        release_waiters(&shared, &mut state);
-    }
-    if need_restart {
-        tokio::spawn(drain_loop(shared));
-    }
+    let mut state = shared.state.lock().expect("uploader state");
+    state.draining = false;
+    release_waiters(&shared, &mut state);
 }
 
 fn release_waiters<T>(shared: &Arc<Shared<T>>, state: &mut UploaderState<T>) {
@@ -340,22 +333,19 @@ fn spawn_drain<T: serde::Serialize + Send + Clone + 'static>(shared: Arc<Shared<
 /// Mirror the source's delay math: Retry-After (clamped to
 /// `[base_delay_ms, max_delay_ms]`) or exponential backoff
 /// (`base * 2^(failures-1)` clamped), plus uniform jitter.
-fn retry_delay<T>(
+pub(super) fn retry_delay(
     failures: u32,
     retry_after_ms: Option<u64>,
-    config: &UploaderConfig<T>,
+    base_delay_ms: u64,
+    max_delay_ms: u64,
+    jitter_ms: u64,
 ) -> std::time::Duration {
-    let jitter = rand_below(config.jitter_ms);
+    let jitter = rand_below(jitter_ms);
     let clamped = match retry_after_ms {
-        Some(retry_after) => retry_after
-            .max(config.base_delay_ms)
-            .min(config.max_delay_ms),
-        None => config
-            .base_delay_ms
-            .saturating_mul(1u64 << (failures.saturating_sub(1)).min(16))
-            .min(config.max_delay_ms),
+        Some(retry_after) => retry_after.max(base_delay_ms).min(max_delay_ms),
+        None => base_delay_ms.saturating_mul(1u64 << failures.saturating_sub(1).min(16)).min(max_delay_ms),
     };
-    std::time::Duration::from_millis(clamped + jitter)
+    std::time::Duration::from_millis(clamped.saturating_add(jitter))
 }
 
 fn rand_below(range: u64) -> u64 {
@@ -515,7 +505,7 @@ mod tests {
         let gate = Arc::new(tokio::sync::Notify::new());
         let gate_for_send = gate.clone();
         let in_flight_for_send = in_flight.clone();
-        let uploader = SerialBatchEventUploader::new(UploaderConfig {
+        let uploader = Arc::new(SerialBatchEventUploader::new(UploaderConfig {
             max_batch_size: 1,
             max_batch_bytes: None,
             max_queue_size: 2,
@@ -534,9 +524,9 @@ mod tests {
                     Ok(())
                 })
             }),
-        });
+        }));
         let enqueue_task = {
-            let uploader = &uploader;
+            let uploader = Arc::clone(&uploader);
             async move {
                 uploader.enqueue(vec![json!(1), json!(2), json!(3)]).await;
             }

@@ -5514,6 +5514,7 @@ mod tests {
             hooks: HookRunner::default(),
             session_context: String::new(),
             pending_initial_user_message: None,
+            pending_rewake_notifications: Vec::new(),
             conversation_context: ConversationContext::capture(dir.path()),
             structured_output: false,
             child_depth: 0,
