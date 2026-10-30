@@ -2960,9 +2960,8 @@ async fn sdk_nested_control(
                     .get("task_id")
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow::anyhow!("stop_task requires task_id"))?;
-                let (result, description) =
+                let (_tool_result, description) =
                     agent.stop_background_task_for_sdk(task_id).await?;
-                let stopped: Value = serde_json::from_str(&result)?;
                 // stopTask.ts emits this event separately because suppressing
                 // the noisy shell exit notification would otherwise leave SDK
                 // clients showing a task as running after a successful stop.
