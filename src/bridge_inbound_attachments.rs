@@ -111,7 +111,10 @@ async fn download_one(
     if response.status() != reqwest::StatusCode::OK {
         return None;
     }
-    if response.content_length().is_some_and(|n| n > MAX_ATTACHMENT_BYTES as u64) {
+    if response
+        .content_length()
+        .is_some_and(|n| n > MAX_ATTACHMENT_BYTES as u64)
+    {
         return None;
     }
     let mut data = Vec::new();
