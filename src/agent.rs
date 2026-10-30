@@ -2204,10 +2204,12 @@ impl Agent {
         usage: Option<TokenUsage>,
         title: Option<String>,
         persist: bool,
+        elapsed: std::time::Duration,
     ) -> Result<Option<String>> {
         if self.session.id != requested_session {
             bail!("SDK title result belongs to a previous session")
         }
+        self.session.cost.add_api_duration(elapsed);
         if let Some(usage) = usage {
             self.session.usage.accumulate(usage);
             self.session.cost.record(
