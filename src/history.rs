@@ -659,6 +659,119 @@ pub fn discard_copied_session(root: &Path, new_session: &str) -> Result<()> {
     Ok(())
 }
 
+
+#[derive(Clone)]
+pub struct RewindEntry {
+    pub path: String,
+    before: Option<Vec<u8>>,
+    before_mode: Option<u32>,
+    after: Option<Vec<u8>>,
+    after_mode: Option<u32>,
+}
+
+pub struct RewindPlan {
+    pub entries: Vec<RewindEntry>,
+}
+
+/// Reconstruct a full filesystem state using all later edits. This mirrors
+/// fileHistory.ts::applySnapshot (which restores every tracked file), while
+/// retaining Rust's existing per-edit checkpoint format and old backups.
+/// The caller must authorize every affected path before apply_rewind.
+pub fn plan_rewind(root: &Path, session_id: Option<&str>, id: &str) -> Result<RewindPlan> {
+    use std::collections::BTreeMap;
+    let checkpoint = Uuid::parse_str(id).context("Rewind target must be a UUID")?;
+    let folder = storage(root, session_id)?;
+    let mut history = Vec::new();
+    for entry in fs::read_dir(&folder)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let modified = fs::symlink_metadata(&path)?.modified()?;
+        let id = path.file_stem().and_then(|name| name.to_str())
+            .context("Invalid checkpoint filename")?;
+        history.push((modified, id.to_owned()));
+    }
+    history.sort();
+    let target = history.iter().position(|(_, current)| current == &checkpoint.to_string())
+        .context("Requested file rewind checkpoint was not found")?;
+    let mut changes: BTreeMap<String, RewindEntry> = BTreeMap::new();
+    for (_, checkpoint_id) in history[target..].iter().rev() {
+        let record = load(root, session_id, checkpoint_id)?;
+        let path = root.join(&record.path);
+        let previous = previous_bytes(&record)?;
+        let current = snapshot(&path)?;
+        if let Some(entry) = changes.get_mut(&record.path) {
+            if entry.after.as_ref().map(|bytes| fingerprint(bytes))
+                != Some(record.updated_hash.clone()) {
+                bail!("File history diverged between checkpoints for {}", record.path);
+            }
+            entry.after = previous;
+            entry.after_mode = record.previous_mode;
+        } else {
+            if current.as_ref().is_some_and(|bytes|
+                fingerprint(bytes) != record.updated_hash) {
+                bail!("File changed after its last checkpoint: {}", record.path);
+            }
+            let entry = RewindEntry {
+                path: record.path.clone(),
+                before: current,
+                before_mode: snapshot_mode(&path)?,
+                after: previous,
+                after_mode: record.previous_mode,
+            };
+            changes.insert(record.path, entry);
+        }
+    }
+    Ok(RewindPlan { entries: changes.into_values().collect() })
+}
+
+fn publish_rewind_entry(path: &Path, bytes: Option<&[u8]>, mode: Option<u32>) -> Result<()> {
+    if let Some(bytes) = bytes {
+        publish_verified_restore(path, bytes, mode)
+    } else {
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+}
+
+/// All changes are validated before the first write. If any subsequent write
+/// fails, restore already changed files instead of leaving a half-rewound turn.
+pub fn apply_rewind(root: &Path, plan: &RewindPlan) -> Result<String> {
+    for entry in &plan.entries {
+        let actual = snapshot(&root.join(&entry.path))?;
+        if actual != entry.before {
+            bail!("File changed during rewind planning: {}", entry.path);
+        }
+    }
+    let mut committed: Vec<&RewindEntry> = Vec::new();
+    for entry in &plan.entries {
+        if let Err(error) = publish_rewind_entry(
+            &root.join(&entry.path), entry.after.as_deref(), entry.after_mode
+        ) {
+            let mut failures = Vec::new();
+            for done in committed.into_iter().rev() {
+                if let Err(rollback) = publish_rewind_entry(
+                    &root.join(&done.path), done.before.as_deref(), done.before_mode
+                ) {
+                    failures.push(format!("{}: {rollback:#}", done.path));
+                }
+            }
+            if failures.is_empty() {
+                return Err(error).context("Multi-file rewind rolled back");
+            }
+            bail!("Multi-file rewind failed: {error:#}; rollback failures: {}",
+                failures.join("; "));
+        }
+        committed.push(entry);
+    }
+    Ok(format!("Restored {} files to checkpoint state", plan.entries.len()))
+}
+
 pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"file_history",
@@ -666,6 +779,9 @@ pub fn definitions() -> Vec<Value> {
             "parameters":{"type":"object","properties":{}}}}),
         json!({"type":"function","function":{"name":"file_history_diff",
             "description":"Preview line additions/deletions and whether a checkpoint can be safely restored without modifying files.",
+            "parameters":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}}}),
+        json!({"type":"function","function":{"name":"file_rewind",
+            "description":"Rewind all tracked files changed since a selected checkpoint, after validating the complete multi-file state and approval.",
             "parameters":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}}}),
         json!({"type":"function","function":{"name":"file_revert",
             "description":"Restore a checkpoint only if the current file still matches the captured edited version. Requires approval.",
@@ -675,6 +791,30 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rewind_applies_all_later_file_edits_and_rejects_external_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let first = root.join("first.txt");
+        let second = root.join("second.txt");
+        fs::write(&first, "first-old").unwrap();
+        fs::write(&second, "second-old").unwrap();
+        let old_first = snapshot(&first).unwrap();
+        fs::write(&first, "first-new").unwrap();
+        let first_id = record(root, None, &first, old_first, None).unwrap().unwrap();
+        let old_second = snapshot(&second).unwrap();
+        fs::write(&second, "second-new").unwrap();
+        record(root, None, &second, old_second, None).unwrap().unwrap();
+        let plan = plan_rewind(root, None, &first_id.to_string()).unwrap();
+        assert_eq!(plan.entries.len(), 2);
+        fs::write(&second, "outside modification").unwrap();
+        assert!(apply_rewind(root, &plan).is_err());
+        assert_eq!(fs::read_to_string(&first).unwrap(), "first-new");
+        fs::write(&second, "second-new").unwrap();
+        apply_rewind(root, &plan).unwrap();
+        assert_eq!(fs::read_to_string(&first).unwrap(), "first-old");
+        assert_eq!(fs::read_to_string(&second).unwrap(), "second-old");
+    }
     #[test]
     fn checkpoints_restore_changes_and_refuse_stale_revert() {
         let root = tempfile::tempdir().unwrap();
