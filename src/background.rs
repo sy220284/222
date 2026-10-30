@@ -759,14 +759,21 @@ impl BackgroundTasks {
                 state_record.status = state.into();
                 state_record.exit_code = code;
                 state_record.truncated = out || err;
-                state_record.failure_reason = if stdout_failed || stderr_failed || failed_for_output_io {
-                    Some("Background command output could not be saved; the process was terminated".to_owned())
-                } else if merged_failed {
-                    Some("Background command combined output could not be saved".to_owned())
-                } else if killed_for_output_cap {
+                state_record.failure_reason = if killed_for_output_cap {
                     Some("Background command exceeded the 5 GiB output limit".to_owned())
                 } else if timed_out {
-                    Some(format!("Background command timed out after {timeout_ms} milliseconds"))
+                    Some(format!(
+                        "Background command timed out after {timeout_ms} milliseconds"
+                    ))
+                } else if state == "killed" {
+                    None
+                } else if failed_for_output_io || stdout_failed || stderr_failed {
+                    Some(
+                        "Background command output could not be saved; the process was terminated"
+                            .to_owned(),
+                    )
+                } else if merged_failed {
+                    Some("Background command combined output could not be saved".to_owned())
                 } else {
                     None
                 };
