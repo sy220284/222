@@ -706,7 +706,7 @@
 | `src/constants/figures.ts` | 46 | 2063 | 重写：保持通用行为 | `src/generated_ports/p_7e4e3f10886b7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/constants/files.ts` | 157 | 2625 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/github-app.ts` | 145 | 5347 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/constants/keys.ts` | 12 | 444 | 重写：保持通用行为 | `src/generated_ports/p_70ab7e5bb9bfb.rs` | 部分实现：完整等价：getGrowthBookClientKey 三分支客户端键选择（USER_TYPE 构建 define+懒读 truthy env）纯函数落地含单测；待验收 |
+| `src/constants/keys.ts` | 12 | 444 | 排除：原厂专属远程灰度服务密钥 | — | 按用户要求删除；远程灰度 SDK 密钥及客户身份分组不进入 Rust，通用本地开关由环境配置单独实现 |
 | `src/constants/messages.ts` | 2 | 49 | 重写：保持通用行为 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/constants/oauth.ts` | 235 | 8970 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/outputStyles.ts` | 217 | 9886 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_630eea798f5af.rs` | 部分实现：3 种内置输出风格及本地自定义 Markdown 风格已接入真实系统提示词；原版设置界面、完整格式与全局范围优先级未等价 |
