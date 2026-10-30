@@ -37,7 +37,11 @@ fn parse_js_concurrency(raw: &str) -> usize {
         return 10;
     }
     let digits: String = value.chars().take_while(|c| c.is_ascii_digit()).collect();
-    digits.parse::<usize>().ok().filter(|n| *n > 0).unwrap_or(10)
+    digits
+        .parse::<usize>()
+        .ok()
+        .filter(|n| *n > 0)
+        .unwrap_or(10)
 }
 
 fn concurrency_safe_tools() -> &'static HashSet<&'static str> {
