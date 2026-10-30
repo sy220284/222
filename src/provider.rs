@@ -328,6 +328,20 @@ struct Gemini {
     response_schema: Option<Value>,
 }
 
+impl Gemini {
+    fn request_body(&self, request: &ModelRequest) -> Result<Value> {
+        let mut body = gemini_request_body(request)?;
+        if let Some(budget) = self.thinking_budget {
+            body["generationConfig"]["thinkingConfig"] = json!({"thinkingBudget":budget});
+        }
+        if let Some(schema) = &self.response_schema {
+            body["generationConfig"]["responseMimeType"] = json!("application/json");
+            body["generationConfig"]["responseJsonSchema"] = schema.clone();
+        }
+        Ok(body)
+    }
+}
+
 #[async_trait]
 impl ModelProvider for Gemini {
     fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
@@ -340,16 +354,7 @@ impl ModelProvider for Gemini {
     }
 
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
-        let mut body = gemini_request_body(request)?;
-        if let Some(budget) = self.thinking_budget {
-            body["generationConfig"]["thinkingConfig"] = json!({"thinkingBudget":budget});
-        }
-        if let Some(schema) = &self.response_schema {
-            // generateContent JSON schema mode, preserving the independent
-            // thinkingConfig set above when both SDK options are enabled.
-            body["generationConfig"]["responseMimeType"] = json!("application/json");
-            body["generationConfig"]["responseJsonSchema"] = schema.clone();
-        }
+        let body = self.request_body(request)?;
         let model = request
             .model
             .strip_prefix("models/")
@@ -433,10 +438,7 @@ impl ModelProvider for Gemini {
         request: &ModelRequest,
         deltas: UnboundedSender<String>,
     ) -> Result<ModelResponse> {
-        let mut body = gemini_request_body(request)?;
-        if let Some(budget) = self.thinking_budget {
-            body["generationConfig"] = json!({"thinkingConfig":{"thinkingBudget":budget}});
-        }
+        let body = self.request_body(request)?;
         crate::gemini_sse::complete(
             &self.client,
             &self.base_url,
@@ -609,6 +611,31 @@ mod tests {
             "read_file"
         );
     }
+    #[test]
+    fn gemini_streaming_preserves_native_json_schema_and_thinking_budget() {
+        let mut provider = Gemini {
+            client: Client::new(),
+            base_url: "https://example.test".into(),
+            key: "unused".into(),
+            thinking_budget: None,
+            response_schema: None,
+        };
+        provider.set_thinking_budget(Some(2048)).unwrap();
+        let schema = json!({"type":"object","properties":{"value":{"type":"string"}}});
+        provider.set_response_schema(Some(schema.clone())).unwrap();
+        let request = ModelRequest {
+            model: "test-model".into(),
+            system: "instructions".into(),
+            messages: vec![Message::text("user", "Return structured output")],
+            tools: vec![],
+        };
+        let body = provider.request_body(&request).unwrap();
+        assert_eq!(body["generationConfig"]["thinkingConfig"]["thinkingBudget"], 2048);
+        assert_eq!(body["generationConfig"]["responseMimeType"], "application/json");
+        assert_eq!(body["generationConfig"]["responseJsonSchema"], schema);
+        assert_eq!(body["contents"][0]["parts"][0]["text"], "Return structured output");
+    }
+
     #[test]
     fn token_usage_normalization_is_provider_neutral() {
         assert_eq!(

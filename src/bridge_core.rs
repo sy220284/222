@@ -51,7 +51,10 @@ impl BridgeSession {
                     .and_then(Value::as_array)
                     .context("bridge_flush_enqueue requires messages array")?;
                 if self.active {
-                    let count = self.pending.len().checked_add(messages.len())
+                    let count = self
+                        .pending
+                        .len()
+                        .checked_add(messages.len())
                         .context("Bridge pending message count overflow")?;
                     if count > MAX_PENDING_BRIDGE_MESSAGES {
                         bail!("Bridge message queue full; flush or drain before retrying");
@@ -61,10 +64,13 @@ impl BridgeSession {
                     let mut pending_bytes = self.pending_bytes;
                     for message in messages {
                         let message_bytes = serde_json::to_vec(message)?.len();
-                        pending_bytes = pending_bytes.checked_add(message_bytes)
+                        pending_bytes = pending_bytes
+                            .checked_add(message_bytes)
                             .context("Bridge pending byte count overflow")?;
                         if pending_bytes > MAX_PENDING_BRIDGE_BYTES {
-                            bail!("Bridge message queue exceeds byte budget; flush before retrying");
+                            bail!(
+                                "Bridge message queue exceeds byte budget; flush before retrying"
+                            );
                         }
                     }
                     self.pending.extend(messages.iter().cloned());
@@ -151,15 +157,30 @@ mod tests {
     fn bridge_queue_rejection_is_atomic_and_recoverable() {
         let mut bridge = BridgeSession::new("s".to_owned());
         bridge.dispatch("bridge_flush_start", &json!({})).unwrap();
-        bridge.dispatch("bridge_flush_enqueue", &json!({"messages":["kept"]})).unwrap();
+        bridge
+            .dispatch("bridge_flush_enqueue", &json!({"messages":["kept"]}))
+            .unwrap();
         let oversized = "a".repeat(MAX_PENDING_BRIDGE_BYTES);
-        assert!(bridge.dispatch("bridge_flush_enqueue", &json!({"messages":[oversized]})).is_err());
-        assert_eq!(bridge.dispatch("bridge_flush_status", &json!({})).unwrap()["pending_count"], 1);
-        assert_eq!(bridge.dispatch("bridge_flush_end", &json!({})).unwrap()["messages"], json!(["kept"]));
+        assert!(bridge
+            .dispatch("bridge_flush_enqueue", &json!({"messages":[oversized]}))
+            .is_err());
+        assert_eq!(
+            bridge.dispatch("bridge_flush_status", &json!({})).unwrap()["pending_count"],
+            1
+        );
+        assert_eq!(
+            bridge.dispatch("bridge_flush_end", &json!({})).unwrap()["messages"],
+            json!(["kept"])
+        );
         assert_eq!(bridge.pending_bytes, 0);
         bridge.dispatch("bridge_flush_start", &json!({})).unwrap();
-        bridge.dispatch("bridge_flush_enqueue", &json!({"messages":["new"]})).unwrap();
-        assert_eq!(bridge.dispatch("bridge_flush_end", &json!({})).unwrap()["messages"], json!(["new"]));
+        bridge
+            .dispatch("bridge_flush_enqueue", &json!({"messages":["new"]}))
+            .unwrap();
+        assert_eq!(
+            bridge.dispatch("bridge_flush_end", &json!({})).unwrap()["messages"],
+            json!(["new"])
+        );
     }
 
     #[test]
@@ -167,7 +188,9 @@ mod tests {
         let mut bridge = BridgeSession::new("s".to_owned());
         bridge.dispatch("bridge_flush_start", &json!({})).unwrap();
         let batch = vec![Value::Null; MAX_PENDING_BRIDGE_MESSAGES + 1];
-        assert!(bridge.dispatch("bridge_flush_enqueue", &json!({"messages":batch})).is_err());
+        assert!(bridge
+            .dispatch("bridge_flush_enqueue", &json!({"messages":batch}))
+            .is_err());
         assert_eq!(bridge.pending.len(), 0);
     }
 

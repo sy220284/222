@@ -410,12 +410,30 @@ mod tests {
 
     #[test]
     fn credentialed_endpoints_require_tls_except_loopback() {
-        for url in ["http://example.com/v1", "http://10.0.0.5:3000/v1", "http://192.168.1.2/v1"] {
-            assert!(require_secure_credential_transport(url, true).is_err(), "{url}");
-            assert!(require_secure_credential_transport(url, false).is_ok(), "{url}");
+        for url in [
+            "http://example.com/v1",
+            "http://10.0.0.5:3000/v1",
+            "http://192.168.1.2/v1",
+        ] {
+            assert!(
+                require_secure_credential_transport(url, true).is_err(),
+                "{url}"
+            );
+            assert!(
+                require_secure_credential_transport(url, false).is_ok(),
+                "{url}"
+            );
         }
-        for url in ["http://localhost:11434/v1", "http://127.0.0.1:11434/v1", "http://[::1]:11434/v1", "https://example.com/v1"] {
-            assert!(require_secure_credential_transport(url, true).is_ok(), "{url}");
+        for url in [
+            "http://localhost:11434/v1",
+            "http://127.0.0.1:11434/v1",
+            "http://[::1]:11434/v1",
+            "https://example.com/v1",
+        ] {
+            assert!(
+                require_secure_credential_transport(url, true).is_ok(),
+                "{url}"
+            );
         }
     }
     #[test]

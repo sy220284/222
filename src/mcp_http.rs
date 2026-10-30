@@ -77,12 +77,19 @@ const MAX_MCP_CONTROL_BYTES: usize = 2 * 1024 * 1024;
 const MAX_MCP_TOOL_BYTES: usize = 128 * 1024 * 1024;
 
 async fn bounded_json_response(mut response: reqwest::Response, limit: usize) -> Result<Value> {
-    if response.content_length().is_some_and(|length| length > limit as u64) {
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
         bail!("MCP JSON response exceeds {limit} byte limit");
     }
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await? {
-        if body.len().checked_add(chunk.len()).is_none_or(|size| size > limit) {
+        if body
+            .len()
+            .checked_add(chunk.len())
+            .is_none_or(|size| size > limit)
+        {
             bail!("MCP JSON response exceeds {limit} byte limit");
         }
         body.extend_from_slice(&chunk);
@@ -239,7 +246,11 @@ impl HttpClient {
     async fn post(&mut self, request: &Value, expect_response: bool) -> Result<Option<Value>> {
         let headers = self.request_headers();
         let is_tool_call = request.get("method").and_then(Value::as_str) == Some("tools/call");
-        let response_limit = if is_tool_call { MAX_MCP_TOOL_BYTES } else { MAX_MCP_CONTROL_BYTES };
+        let response_limit = if is_tool_call {
+            MAX_MCP_TOOL_BYTES
+        } else {
+            MAX_MCP_CONTROL_BYTES
+        };
         let mut reply = self
             .client
             .post(self.url.clone())
@@ -535,7 +546,10 @@ mod tests {
     use std::collections::HashMap;
     #[tokio::test]
     async fn oversized_json_tool_result_is_bounded_before_body_read() {
-        use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpListener};
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -544,7 +558,11 @@ mod tests {
             let _ = socket.read(&mut request).await.unwrap();
             socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4096\r\nConnection: close\r\n\r\n").await.unwrap();
         });
-        let response = reqwest::Client::new().get(format!("http://{address}")).send().await.unwrap();
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .unwrap();
         let err = bounded_json_response(response, 32).await.unwrap_err();
         assert!(err.to_string().contains("exceeds 32 byte limit"));
         server.await.unwrap();
@@ -552,7 +570,10 @@ mod tests {
 
     #[tokio::test]
     async fn streamed_json_tool_result_is_bounded_without_content_length() {
-        use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpListener};
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -563,7 +584,11 @@ mod tests {
             let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:X}\r\n{}\r\n0\r\n\r\n", payload.len(), payload);
             socket.write_all(response.as_bytes()).await.unwrap();
         });
-        let response = reqwest::Client::new().get(format!("http://{address}")).send().await.unwrap();
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .unwrap();
         let err = bounded_json_response(response, 64).await.unwrap_err();
         assert!(err.to_string().contains("exceeds 64 byte limit"));
         server.await.unwrap();
