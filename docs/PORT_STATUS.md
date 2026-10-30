@@ -9,8 +9,8 @@
 
 - **原版依据**：`source/src/utils/task/diskOutput.ts:36–76::getTaskOutputDir/getTaskOutputPath` 返回项目临时目录内的任务输出文件；`source/src/utils/permissions/filesystem.ts:1691–1692` 对项目临时目录执行专用可读路径判断；`source/src/tools/TaskOutputTool/TaskOutputTool.tsx:144–160` 将任务输出作为完整结构化结果，声明 `maxResultSizeChars: 100_000` 并提示优先使用 Read 读取日志。
 - **原 Rust 缺口**：后台日志迁出工作区后，`src/workspace_dirs.rs::checked_path` 拒绝 Read 打开该路径，导致工具返回的 `output_file` 无法用于后续模型检查；原 `ToolExecutor::execute` 对 `task_output` 和 `task_output_delta` 的 JSON 统一按 16,000 字符截断，长日志会破坏 JSON 结构和任务状态/偏移信息。
-- **真实补齐 1**：`BackgroundTasks::trusted_output_path` 仅认可本会话后台任务目录下、具有合法任务 ID/元数据的常规 stdout/stderr 文件，拒绝符号链接；`ToolExecutor::read_file_with_mode` 在原有 Read deny/ask 规则后对其使用有界逐行流式读取，长行和大文件不会整体载入内存；日志读取不写入可用于 Edit 的全文缓存，旧工作区任务输出同样受此规则保护。代码 `b40a1daa7debd22b71b73df119c09e90ddfd1ff4`、`edb9a8284c2f944003047183a42644668969d5f3`、`46319ccaf44ab940c911b0048494210f64d8f239`、`e773d797c11b367ef86cd36d77e3d9fbf8bd5fc8`。保守计 **1 项用户可感知 Read 日志功能**。
-- **真实补齐 2**：`ToolExecutor::execute` 对 TaskOutput 类结果保留完整 JSON；超过原版 100k 字符的模型显示预算时保留状态、偏移及输出文件路径，截短内容字段并显式标记 `contentTruncated`，避免通用截断破坏 JSON。增量输出返回 `output_file` 供后续读取。代码 `98777615cd8395d03de631d20625e3a4777b0c8e`、`8f59c4b099278b976f358b8a53365f128f84e057`。保守计 **1 项独立 TaskOutput 长结果保真功能**，不把其中字段重复计数。
+- **真实补齐 1**：`BackgroundTasks::trusted_output_path` 仅认可本会话后台任务目录下、具有合法任务 ID/元数据的常规 stdout/stderr 文件，拒绝符号链接；`ToolExecutor::read_file_with_mode` 在原有 Read deny/ask 规则后对其使用有界逐行流式读取，长行和大文件不会整体载入内存；日志读取不写入可用于 Edit 的全文缓存，旧工作区任务输出同样受此规则保护。代码 `b40a1daa7debd22b71b73df119c09e90ddfd1ff4`、`edb9a8284c2f944003047183a42644668969d5f3`、`46319ccaf44ab940c911b0048494210f64d8f239`、`e773d797c11b367ef86cd36d77e3d9fbf8bd5fc8`、`af0019353a24762f3bc9d591108a32096ba642d8`（按请求行数停止扫描）。保守计 **1 项用户可感知 Read 日志功能**。
+- **真实补齐 2**：`ToolExecutor::execute` 对 TaskOutput 类结果保留完整 JSON；超过原版 100k 字符的模型显示预算时保留状态、偏移及输出文件路径，截短内容字段并显式标记 `contentTruncated`，避免通用截断破坏 JSON。增量输出返回 `output_file` 供后续读取。代码 `98777615cd8395d03de631d20625e3a4777b0c8e`、`8f59c4b099278b976f358b8a53365f128f84e057`、`4285a2c087dfa99cc2d2768f2ed7a40d76506f22`、`ca1c98db07f664b018e842f672009fdb65b66fcb`（按实际 JSON 转义预算最大化预览并保留有效结构）。保守计 **1 项独立 TaskOutput 长结果保真功能**，不把其中字段重复计数。
 - **本轮计数与验证**：连同后台私有目录和显式增量读取，本轮保守 **4/100 项源码已提交、待行为验收，余 96**；未运行 Cargo、测试或 CI。Issue #3 冻结 362 项仍全部开放，新增完整等价验收 0；先行恰好 100 项独立功能的全量双侧确认与完整方案仍未形成。
 - **剩余精确差异**：原版 Read 大文件全部 offset/limit/图片及文本提取语义、跨 UTF-8 行边界、异步取消、Windows ACL、超大增量返回内存占用、旧任务输出迁移、TaskOutput 模型消息格式及多任务类型仍需完整核对。
 
@@ -19,7 +19,7 @@
 - **原版依据**：`source/src/utils/task/diskOutput.ts:304–333::getTaskOutputDelta` 的 8 MiB 仅是 `maxBytes` 缺省值；用户显式指定更大的 `maxBytes` 时原版直接传给 `source/src/utils/fsOperations.ts:644::readFileRange`，只受实际剩余文件字节数约束。
 - **原 Rust 缺口**：`src/background.rs::output_delta` 对所有请求使用 `max_bytes.min(8MiB)`，即使用户明确要求读取 16 MiB，也只返回前 8 MiB；模型工具定义同时将最大值固定在 8 MiB。
 - **真实补齐**：保留 `src/tools.rs` 调用方缺省 8 MiB 的语义；移除运行时额外截断，工具参数允许显式读取至原版任务磁盘上限 5 GiB，底层读取仍以文件实际剩余字节为界，检查平台地址空间大小并返回明确错误。入口：模型 `task_output_delta` → `ToolExecutor` → `BackgroundTasks::output_delta` → `read_output_range`。
-- **代码提交**：`0920186080b9ec38192e7640f11d2dea590fd951`、`fd9415bc2a76c1ce351de658f95a03a715acfcc4`，涉及 `src/background.rs`。保守计 **1 项独立业务功能**，与后台输出私有目录分别计数；本轮 **2/100，余 98**，仅源码已提交、待行为验收。未运行 Cargo、测试或 CI。
+- **代码提交**：`0920186080b9ec38192e7640f11d2dea590fd951`、`fd9415bc2a76c1ce351de658f95a03a715acfcc4`、`881a37c359d20ec000d1265f923c4f36c31bd3fa`、`2ce82fa3c5b1f8b54480aa1afffefb061d976f38`（内存分配错误和文件缺失总字节数修正），涉及 `src/background.rs`。保守计 **1 项独立业务功能**，与后台输出私有目录分别计数；本轮 **2/100，余 98**，仅源码已提交、待行为验收。未运行 Cargo、测试或 CI。
 - **剩余差异**：超大范围请求可能消耗大量内存，原版也使用一次性缓冲；未来仍需按原版精确处理跨 UTF-8 字节边界、外部取消、任务输出合并时序及恢复。Issue #3 冻结 362 项仍开放，新增完整等价验收 0；先行 100 项完整核实清单与方案未完成。
 
 ## 2026-10-29：后台 Shell 输出按原版迁出源码工作区（已提交、待验收）
