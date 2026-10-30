@@ -499,7 +499,7 @@ impl BackgroundTasks {
             let _ = fs::remove_file(&output_path);
             return Err(error).context("Persist background task registration");
         }
-        let (stop, stopped) = oneshot::channel();
+        let (stop, mut stopped) = oneshot::channel();
         let running = Arc::new(Running {
             record: Mutex::new(record.clone()),
             stop: Mutex::new(Some(stop)),
@@ -527,7 +527,7 @@ impl BackgroundTasks {
                     Ok(status) => ("failed", status.code(), false),
                     Err(_) => ("failed", None, false),
                 },
-                _ = stopped => {
+                _ = &mut stopped => {
                     #[cfg(unix)]
                     if let Some(pid) = child.id() {
                         // Kill the whole process group, not only the shell.
@@ -548,14 +548,22 @@ impl BackgroundTasks {
             // A shell can exit while a descendant still holds stdout/stderr.
             // The original ShellCommand deadline covers output draining too;
             // never leave TaskOutput blocked forever on an inherited pipe.
-            let drain_deadline = if timed_out {
+            // A stop request must also interrupt output draining. The shell
+            // can exit while a descendant keeps its pipes open; waiting for
+            // the original 10-minute deadline makes TaskStop falsely time out.
+            let drain_deadline = if timed_out || state == "killed" {
                 tokio::time::Instant::now() + Duration::from_secs(1)
             } else {
                 deadline_at
             };
+            let mut cancelled_during_drain = false;
             let output_results = tokio::select! {
                 pair = async { tokio::join!(&mut stdout_task, &mut stderr_task) } => Some(pair),
                 _ = tokio::time::sleep_until(drain_deadline) => None,
+                _ = &mut stopped, if !timed_out && state != "killed" => {
+                    cancelled_during_drain = true;
+                    None
+                },
             };
             let (out, stdout_failed, err, stderr_failed) = if let Some((stdout_result, stderr_result)) = output_results {
                 let (out, stdout_failed) = match stdout_result {
@@ -582,8 +590,15 @@ impl BackgroundTasks {
                 };
                 (out, stdout_failed, err, stderr_failed)
             } else {
-                timed_out = true;
-                state = "failed";
+                // User cancellation is a killed task, even if an inherited
+                // pipe must be force-closed. Only an actual deadline failure
+                // receives a timeout notice in the persisted output.
+                if cancelled_during_drain {
+                    state = "killed";
+                } else if state != "killed" {
+                    timed_out = true;
+                    state = "failed";
+                }
                 code = None;
                 #[cfg(unix)]
                 if let Some(pid) = process_id {
