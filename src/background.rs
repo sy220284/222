@@ -1158,7 +1158,7 @@ pub fn definitions() -> Vec<Value> {
             "description":"Read appended stdout by byte offset; defaults to 8MiB, but honors explicit larger ranges; never follows a symlink.",
             "parameters":{"type":"object","properties":{
                 "task_id":{"type":"string"},"from_offset":{"type":"integer","minimum":0},
-                "max_bytes":{"type":"integer","minimum":0,"maximum":5368709120}
+                "max_bytes":{"type":"integer","minimum":0,"maximum":5368709120_i64}
             },"required":["task_id"]}}}),
         json!({"type":"function","function":{"name":"task_stop",
         "description":"Stop a running background shell task by ID. Requires approval.",
@@ -1172,6 +1172,15 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn task_output_delta_schema_preserves_five_gibibyte_limit() {
+        let definition = definitions().into_iter().find(|value| {
+            value["function"]["name"].as_str() == Some("task_output_delta")
+        }).expect("task_output_delta tool must be registered");
+        let maximum = &definition["function"]["parameters"]["properties"]["max_bytes"]["maximum"];
+        assert_eq!(maximum.as_i64(), Some(5_i64 * 1024 * 1024 * 1024));
+    }
     #[test]
     fn project_sibling_session_task_logs_are_readable_without_crossing_projects() {
         let root = tempfile::tempdir().unwrap();
