@@ -150,6 +150,11 @@ impl MinimalWsClient {
             "GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
         );
         for (name, value) in extra_headers {
+            if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+                || value.contains(['\r', '\n'])
+            {
+                bail!("Invalid WebSocket upgrade header");
+            }
             request.push_str(&format!("{name}: {value}\r\n"));
         }
         request.push_str("\r\n");
@@ -174,18 +179,38 @@ impl MinimalWsClient {
                 bail!("WS handshake: oversized response");
             }
         }
-        let head = String::from_utf8_lossy(&response);
-        let status = head
-            .lines()
-            .next()
-            .and_then(|line| line.split_whitespace().nth(1))
-            .unwrap_or("");
+        let header_end = response.windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .ok_or_else(|| anyhow!("WebSocket upgrade response missing terminator"))? + 4;
+        let header = std::str::from_utf8(&response[..header_end])?;
+        let status = header.lines().next()
+            .and_then(|line| line.split_whitespace().nth(1)).unwrap_or("");
         if status != "101" {
             bail!("WS handshake failed with status {status}");
         }
+        let mut upgrade = false;
+        let mut connection_upgrade = false;
+        let mut accept = None;
+        for line in header.split("\r\n").skip(1) {
+            if let Some((header_name, value)) = line.split_once(':') {
+                let value = value.trim();
+                if header_name.eq_ignore_ascii_case("Upgrade") {
+                    upgrade = value.eq_ignore_ascii_case("websocket");
+                } else if header_name.eq_ignore_ascii_case("Connection") {
+                    connection_upgrade = value.split(',')
+                        .any(|part| part.trim().eq_ignore_ascii_case("Upgrade"));
+                } else if header_name.eq_ignore_ascii_case("Sec-WebSocket-Accept") {
+                    accept = Some(value);
+                }
+            }
+        }
+        let expected = websocket_accept(&key);
+        if !upgrade || !connection_upgrade || accept != Some(expected.as_str()) {
+            bail!("WS upgrade failed RFC 6455 server verification");
+        }
         Ok(Self {
             stream,
-            read_buffer: Vec::new(),
+            read_buffer: response[header_end..].to_vec(),
             fragmented: None,
         })
     }
@@ -237,6 +262,10 @@ impl MinimalWsClient {
     pub async fn read_message(&mut self) -> Result<WsIncoming> {
         loop {
             let header = self.read_exact_vec(2).await?;
+            let fin = header[0] & 0x80 != 0;
+            if header[0] & 0x70 != 0 {
+                bail!("WS frame reserved bits must be zero");
+            }
             let opcode = header[0] & 0x0F;
             let masked = header[1] & 0x80 != 0;
             let mut len = (header[1] & 0x7F) as u64;
@@ -265,16 +294,27 @@ impl MinimalWsClient {
             }
             match opcode {
                 0x1 | 0x2 => {
-                    return Ok(WsIncoming::Text(
-                        String::from_utf8_lossy(&payload).into_owned(),
-                    ));
-                }
-                0x0 => match &mut self.fragmented {
-                    Some(collected) => {
-                        collected.extend_from_slice(&payload);
+                    if self.fragmented.is_some() {
+                        bail!("WS data message began before previous fragments completed");
                     }
-                    None => bail!("WS continuation frame without a started message"),
-                },
+                    if fin {
+                        return Ok(WsIncoming::Text(String::from_utf8(payload)?));
+                    }
+                    self.fragmented = Some(payload);
+                }
+                0x0 => {
+                    let collected = self.fragmented.as_mut()
+                        .ok_or_else(|| anyhow!("WS continuation without initial frame"))?;
+                    if collected.len().saturating_add(payload.len()) > 16 * 1024 * 1024 {
+                        bail!("WS fragmented message too large");
+                    }
+                    collected.extend_from_slice(&payload);
+                    if fin {
+                        let whole = self.fragmented.take()
+                            .ok_or_else(|| anyhow!("WS continuation state missing"))?;
+                        return Ok(WsIncoming::Text(String::from_utf8(whole)?));
+                    }
+                }
                 0x8 => {
                     let code = if payload.len() >= 2 {
                         Some(u16::from_be_bytes([payload[0], payload[1]]))
@@ -295,13 +335,16 @@ impl MinimalWsClient {
     }
 
     async fn read_exact_vec(&mut self, len: usize) -> Result<Vec<u8>> {
-        let mut out = vec![0_u8; len];
-        if len == 0 {
-            return Ok(out);
+        let mut out = Vec::with_capacity(len);
+        let available = len.min(self.read_buffer.len());
+        out.extend(self.read_buffer.drain(..available));
+        if available < len {
+            let mut remaining = vec![0_u8; len - available];
+            tokio::time::timeout(Duration::from_secs(45), self.stream.read_exact(&mut remaining))
+                .await
+                .map_err(|_| anyhow!("WS read timeout"))??;
+            out.extend_from_slice(&remaining);
         }
-        tokio::time::timeout(Duration::from_secs(45), self.stream.read_exact(&mut out))
-            .await
-            .map_err(|_| anyhow!("WS read timeout"))??;
         Ok(out)
     }
 }
@@ -668,6 +711,14 @@ impl WebSocketTransport {
     }
 }
 
+/// Compute the RFC 6455 upgrade digest (SHA-1 is prescribed by the protocol).
+fn websocket_accept(key: &str) -> String {
+    const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    let source = format!("{key}{GUID}");
+    let digest = ring::digest::digest(&ring::digest::SHA1_FOR_LEGACY_USE_ONLY, source.as_bytes());
+    base64::engine::general_purpose::STANDARD.encode(digest.as_ref())
+}
+
 /// Parse ws:// and wss:// URLs, preserving path, query and default ports.
 pub fn parse_ws_url(url: &str) -> Result<(String, u16, String)> {
     let parsed = reqwest::Url::parse(url)?;
@@ -705,6 +756,14 @@ mod tests {
         assert_eq!(buffer.to_vec(), vec![json!(2), json!(3), json!(4)]);
         buffer.clear();
         assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn ws_upgrade_accept_matches_rfc6455() {
+        assert_eq!(
+            websocket_accept("dGhlIHNhbXBsZSBub25jZQ=="),
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+        );
     }
 
     #[test]
