@@ -81,18 +81,24 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/PromptInput/PromptInputFooter.tsx" => match export {
+            "view" | "PromptInputFooter" => serde_json::to_value(super::p_c39f8f63b92a4::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
+            "promptOverlayData" => Some(super::p_c39f8f63b92a4::prompt_overlay_data(args.first()?)),
             _ => None,
         },
         "src/components/PromptInput/PromptInputFooterLeftSide.tsx" => match export {
+            "view" | "PromptInputFooterLeftSide" => serde_json::to_value(super::p_100d28512b001::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInputHelpMenu.tsx" => match export {
+            "view" | "PromptInputHelpMenu" => serde_json::to_value(super::p_ed2482259a075::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInputModeIndicator.tsx" => match export {
+            "view" | "PromptInputModeIndicator" => serde_json::to_value(super::p_4ae3f27ee4b20::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInputQueuedCommands.tsx" => match export {
+            "view" | "PromptInputQueuedCommands" => serde_json::to_value(super::p_9b6293319d85b::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInputStashNotice.tsx" => match export {
@@ -106,9 +112,12 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/PromptInput/ShimmeredInput.tsx" => match export {
+            "view" | "HighlightedInput" => serde_json::to_value(super::p_2f84f9e35605c::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
             _ => None,
         },
         "src/components/PromptInput/VoiceIndicator.tsx" => match export {
+            "view" | "VoiceIndicator" => serde_json::to_value(super::p_92d31b9e1cfc8::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
+            "warmupHint" | "VoiceWarmupHint" => serde_json::to_value(super::p_92d31b9e1cfc8::voice_warmup_hint(args.first().unwrap_or(&Value::Null))).ok(),
             _ => None,
         },
         "src/components/QuickOpenDialog.tsx" => match export {
@@ -221,6 +230,7 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/TextInput.tsx" => match export {
+            "view" => serde_json::to_value(super::p_d47fe9c9aae64::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
             _ => None,
         },
         "src/components/ThemePicker.tsx" => match export {
@@ -250,6 +260,7 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/VimTextInput.tsx" => match export {
+            "view" => serde_json::to_value(super::p_bfd0c9b4cdfac::render_source_view(args.first().unwrap_or(&Value::Null))).ok(),
             _ => None,
         },
         "src/components/VirtualMessageList.tsx" => match export {
@@ -396,19 +407,19 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             vec!["view"],
         ),
         ("src/components/PromptInput/PromptInput.tsx", vec![]),
-        ("src/components/PromptInput/PromptInputFooter.tsx", vec![]),
+        ("src/components/PromptInput/PromptInputFooter.tsx", vec!["view", "PromptInputFooter", "promptOverlayData"]),
         (
             "src/components/PromptInput/PromptInputFooterLeftSide.tsx",
-            vec![],
+            vec!["view", "PromptInputFooterLeftSide"],
         ),
-        ("src/components/PromptInput/PromptInputHelpMenu.tsx", vec![]),
+        ("src/components/PromptInput/PromptInputHelpMenu.tsx", vec!["view", "PromptInputHelpMenu"]),
         (
             "src/components/PromptInput/PromptInputModeIndicator.tsx",
-            vec![],
+            vec!["view", "PromptInputModeIndicator"],
         ),
         (
             "src/components/PromptInput/PromptInputQueuedCommands.tsx",
-            vec![],
+            vec!["view", "PromptInputQueuedCommands"],
         ),
         (
             "src/components/PromptInput/PromptInputStashNotice.tsx",
@@ -418,8 +429,8 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/components/PromptInput/SandboxPromptFooterHint.tsx",
             vec![],
         ),
-        ("src/components/PromptInput/ShimmeredInput.tsx", vec![]),
-        ("src/components/PromptInput/VoiceIndicator.tsx", vec![]),
+        ("src/components/PromptInput/ShimmeredInput.tsx", vec!["view", "HighlightedInput"]),
+        ("src/components/PromptInput/VoiceIndicator.tsx", vec!["view", "VoiceIndicator", "warmupHint", "VoiceWarmupHint"]),
         ("src/components/QuickOpenDialog.tsx", vec![]),
         ("src/components/RemoteEnvironmentDialog.tsx", vec![]),
         ("src/components/ResumeTask.tsx", vec![]),
@@ -457,14 +468,14 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/TeleportProgress.tsx", vec![]),
         ("src/components/TeleportResumeWrapper.tsx", vec![]),
         ("src/components/TeleportStash.tsx", vec![]),
-        ("src/components/TextInput.tsx", vec![]),
+        ("src/components/TextInput.tsx", vec!["view"]),
         ("src/components/ThemePicker.tsx", vec![]),
         ("src/components/ThinkingToggle.tsx", vec![]),
         ("src/components/TokenWarning.tsx", vec!["view"]),
         ("src/components/ToolUseLoader.tsx", vec!["view"]),
         ("src/components/TrustDialog/TrustDialog.tsx", vec![]),
         ("src/components/ValidationErrorsList.tsx", vec![]),
-        ("src/components/VimTextInput.tsx", vec![]),
+        ("src/components/VimTextInput.tsx", vec!["view"]),
         ("src/components/VirtualMessageList.tsx", vec![]),
         ("src/components/WorkflowMultiselectDialog.tsx", vec![]),
         ("src/components/WorktreeExitDialog.tsx", vec![]),
