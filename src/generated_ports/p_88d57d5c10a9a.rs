@@ -13,7 +13,12 @@ pub fn get_relative_memory_path(path: &str, home_dir: &str, cwd: &str) -> String
         None
     };
     let rel_cwd = if path.starts_with(cwd) {
-        Some(format!("./{}", path.strip_prefix(cwd).unwrap_or(path)))
+        Some(format!(
+            "./{}",
+            path.strip_prefix(cwd)
+                .unwrap_or(path)
+                .trim_start_matches('/')
+        ))
     } else {
         None
     };

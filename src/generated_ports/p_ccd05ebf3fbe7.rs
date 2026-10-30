@@ -10,10 +10,12 @@ pub fn needs_flush(resolved: bool) -> bool {
     !resolved
 }
 
-/// Transition after the background promise resolves: messages delivered and
-/// the pending slot cleared (idempotent — a resolved latch never re-fires).
+/// Transition after the background promise resolves: the pending slot is
+/// always cleared regardless of whether the resolution carried messages or
+/// was cancelled — the hook will not re-arm for the same turn (idempotent).
 pub fn on_resolved(resolved: bool) -> bool {
-    resolved
+    let _ = resolved;
+    true
 }
 
 #[cfg(test)]
