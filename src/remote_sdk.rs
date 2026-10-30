@@ -196,10 +196,30 @@ pub async fn run(
 ) -> Result<()> {
     let original_token = read_token(token_file)?;
     validate_url(url, original_token.is_some())?;
+    if let Some(resume) = resume {
+        if resume != session_id {
+            bail!("Remote session identity disagrees with the requested local resume ID");
+        }
+    }
     let token = Arc::new(RwLock::new(original_token.clone()));
     let headers: Headers = {
         let token = Arc::clone(&token);
+        let credential_path = token_file.map(Path::to_path_buf);
         Arc::new(move || {
+            if let Some(path) = &credential_path {
+                match read_token(Some(path)) {
+                    Ok(Some(fresh)) => {
+                        // Re-read on every reconnect, matching remoteIO.ts
+                        // refreshHeaders (the parent can rotate its token).
+                        *token.write().expect("Remote token lock poisoned") = Some(fresh);
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        eprintln!("Remote token refresh failed: {error:#}");
+                        return Vec::new();
+                    }
+                }
+            }
             token
                 .read()
                 .expect("Remote token lock poisoned")
