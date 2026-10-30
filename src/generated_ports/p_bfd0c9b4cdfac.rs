@@ -1,27 +1,25 @@
-//! Native Rust UI structure derived from original: src/components/VimTextInput.tsx
-#![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde_json::Value;
+//! `src/components/VimTextInput.tsx`: Vim editor state -> native input view.
+#![allow(dead_code)]
+use crate::generated_ports::{p_3949a8e5bc4d2,ui::VNode};
+use serde_json::{json,Map,Value};
+use std::collections::BTreeMap;
 
-use crate::generated_ports::ui::VNode;
-pub fn render_source_view(props: &Value) -> VNode {
-    VNode::Element {
-        tag: "Box".into(),
-        attrs: vec![("flexDirection".into(), Value::String("column".into()))]
-            .into_iter()
-            .collect(),
-        children: vec![VNode::Element {
-            tag: "BaseTextInput".into(),
-            attrs: vec![
-                ("inputState".into(), Value::Null),
-                ("terminalFocus".into(), Value::Null),
-                (
-                    "highlights".into(),
-                    crate::generated_ports::runtime::property(&props.clone(), "highlights"),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-            children: vec![],
-        }],
+pub fn render_source_view(props:&Value)->VNode {
+    let state=props.get("vimInputState").or_else(||props.get("inputState"))
+        .expect("VimTextInput requires vimInputState from host");
+    let mut child:Map<String,Value>=props.as_object().expect("VimTextInput props object required").clone();
+    child.insert("inputState".into(),state.clone());
+    child.insert("terminalFocus".into(),json!(props.get("terminalFocus").and_then(Value::as_bool).unwrap_or(false)));
+    VNode::Element{tag:"Box".into(),attrs:BTreeMap::from([("flexDirection".into(),json!("column"))]),
+        children:vec![p_3949a8e5bc4d2::render_source_view(&Value::Object(child))]}
+}
+
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+    #[test]
+    fn vim_input_displays_the_live_editor_snapshot() {
+        let node=render_source_view(&json!({"value":"hello","vimInputState":{"renderedValue":"hello"},"terminalFocus":true}));
+        assert_eq!(node.text_content(),"hello");
     }
 }
