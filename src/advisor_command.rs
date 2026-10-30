@@ -138,6 +138,7 @@ mod tests {
             model: "gpt-4.1-mini".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         });
         assert!(matches!(
             resolve(&config, &active, "gpt-4.1-mini"),
