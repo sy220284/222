@@ -98,6 +98,7 @@ mod prompt_runtime;
 mod protocol;
 mod provider;
 mod model_catalog;
+mod chatgpt_plan;
 mod query_config;
 mod query_guard;
 mod query_token_budget;
@@ -412,6 +413,11 @@ enum Commands {
         #[command(subcommand)]
         action: Option<model_catalog::ModelAction>,
     },
+    /// Manage official Sign in with ChatGPT and subscription usage.
+    Chatgpt {
+        #[command(subcommand)]
+        action: chatgpt_plan::AccountAction,
+    },
     /// Perform a local PR review through the selected model and GitHub CLI
     Review { pr_number: Option<u64> },
     /// Review staged/unstaged changes and create a new Git commit
@@ -515,6 +521,10 @@ async fn run_cli() -> Result<()> {
         tls_ca::apply_user_startup_config()?;
     }
     match &cli.command {
+        Commands::Chatgpt { action } => {
+            chatgpt_plan::run(action).await?;
+            return Ok(());
+        }
         Commands::ReleaseNotes => {
             let home = keybindings::config_home()?;
             let url = std::env::var("ATLAS_RELEASE_NOTES_URL").ok();
