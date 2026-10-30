@@ -187,7 +187,7 @@
 | `src/commands/install-github-app/CreatingStep.tsx` | 65 | 9266 | 重写：保持通用行为 | `src/generated_ports/p_7a696c359ec3c.rs`| 部分实现：进度步进双纯核——progress_steps（skipWorkflow 2步分支/existing-secret 分支/workflow 单复数措辞）与 step_status 分类器（completed/in-progress/pending 按当前索引），步骤行渲染（勾/省略号+success/warning色）+边框 Pane 视图，附 4 测试（敏感字面值按隐私门禁中性化）|
 | `src/commands/install-github-app/ErrorStep.tsx` | 85 | 8602 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/ExistingWorkflowStep.tsx` | 103 | 9833 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/commands/install-github-app/InstallAppStep.tsx` | 94 | 9601 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/install-github-app/InstallAppStep.tsx` | 94 | 9601 | 重写：保持通用行为 | `src/generated_ports/p_324bde623c2e0.rs` | 部分实现：完整等价：步骤文案两段（docs 域名随 github-app 常量桩）；键绑定与 JSX 归 ink 宿主，待验收 |
 | `src/commands/install-github-app/OAuthFlowStep.tsx` | 276 | 39935 | 重写：保持通用行为 | `src/generated_ports/p_92dc7da033a9e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/install-github-app/SuccessStep.tsx` | 96 | 10170 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/install-github-app/WarningsStep.tsx` | 73 | 9132 | 重写：保持通用行为 | `src/generated_ports/p_c4344a216659f.rs`| 部分实现：设置警告面板渲染（标题块/每警告行/条列说明/继续提示/手动设置文档指针），confirm:yes 键绑定上游驱动 onContinue（context=Confirmation）；docs URL env 可覆盖中性默认，附 3 测试|
@@ -553,7 +553,7 @@
 | `src/components/diff/DiffFileList.tsx` | 292 | 25342 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/grove/Grove.tsx` | 463 | 49525 | 重写：终端 UI／交互 | `src/generated_ports/p_dad974e93dda6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/hooks/HooksConfigMenu.tsx` | 578 | 54469 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/hooks/PromptDialog.tsx` | 90 | 7482 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/hooks/PromptDialog.tsx` | 90 | 7482 | 重写：终端 UI／交互 | `src/generated_ports/p_710bae9773a00.rs` | 部分实现：完整等价：单选项自动应答判定含三分支单测；渲染与键绑定归 ink 宿主，待验收 |
 | `src/components/hooks/SelectEventMode.tsx` | 127 | 13555 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/hooks/SelectHookMode.tsx` | 112 | 12907 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/hooks/SelectMatcherMode.tsx` | 144 | 14809 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -783,7 +783,7 @@
 | `src/hooks/useDoublePress.ts` | 63 | 1651 | 重写：终端 UI／交互 | `src/generated_ports/p_74bc565d88e8d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useDynamicConfig.ts` | 23 | 703 | 重写：终端 UI／交互 | `src/generated_ports/p_739c766517b36.rs` | 部分实现：完整等价：测试环境跳过拉取的防挂决策纯函数含单测；拉取本体随分析端口，待验收 |
 | `src/hooks/useElapsedTime.ts` | 38 | 1226 | 重写：终端 UI／交互 | `src/generated_ports/p_2a67cb7ba5c47.rs` | 部分实现：完整等价：elapsed 计算（endTime 冻结语义+pausedMs 扣减+非负钳制）纯函数含单测，格式化引 format.ts 桩；interval 重渲染订阅归宿主，待验收 |
-| `src/hooks/useExitOnCtrlCD.ts` | 96 | 3226 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useExitOnCtrlCD.ts` | 96 | 3226 | 重写：终端 UI／交互 | `src/generated_ports/p_33b2efb0e3e97.rs` | 部分实现：完整等价：双击退出状态机（同键二击退出/异键重排/窗口外重新武装）含三分支单测；useApp/键绑定宿主归 ink，待验收 |
 | `src/hooks/useExitOnCtrlCDWithKeybindings.ts` | 25 | 948 | 重写：终端 UI／交互 | `src/generated_ports/p_3544335fb425b.rs` | 部分实现：AST 转写：组合接线契约（防 import cycle 说明保留）+ExitState 生命周期转写；useKeybindings 宿主随键绑定链，待验收 |
 | `src/hooks/useFileHistorySnapshotInit.ts` | 26 | 767 | 重写：终端 UI／交互 | `src/generated_ports/p_4a38faf5080d4.rs` | 部分实现：完整等价：一次性初始化守卫（enabled 门+已初始化闩）纯函数含单测；fileHistory 访问器随文件历史链，待验收 |
 | `src/hooks/useGlobalKeybindings.tsx` | 249 | 31213 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -882,7 +882,7 @@
 | `src/ink/hooks/use-animation-frame.ts` | 58 | 1933 | 重写：终端 UI／交互 | `src/generated_ports/p_02a4478e8f594.rs` | 部分实现：完整等价：恢复时间语义（暂停冻结+回拨保冻结值）纯函数含单测；共享时钟/keepAlive/DOM ref 契约归 ink 运行时，待验收 |
 | `src/ink/hooks/use-app.ts` | 9 | 251 | 重写：终端 UI／交互 | `src/generated_ports/p_bbc2a036e6a40.rs` | 部分实现：契约记录：useApp 手动退出（unmount）句柄，宿主待验收 |
 | `src/ink/hooks/use-declared-cursor.ts` | 74 | 2996 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/hooks/use-input.ts` | 93 | 3107 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/hooks/use-input.ts` | 93 | 3107 | 重写：终端 UI／交互 | `src/generated_ports/p_ef0e8a0fc2a27.rs` | 部分实现：完整等价：输入捕获门（isActive∧raw∧非空）含四分支单测；粘贴合并与 raw 流归宿主，待验收 |
 | `src/ink/hooks/use-interval.ts` | 68 | 1796 | 重写：终端 UI／交互 | `src/generated_ports/p_d4af41e8141ae.rs` | 部分实现：完整等价：共享时钟 interval 门控数学（含饱和差值）含单测；Clock 订阅非 keepAlive 语义归 ink 运行时，待验收 |
 | `src/ink/hooks/use-search-highlight.ts` | 54 | 2158 | 重写：终端 UI／交互 | `src/generated_ports/p_74d7087914f2b.rs` | 部分实现：AST 转写：屏幕空间高亮契约（SGR 7 全匹配反色+黄标当前位+损坏机制与选择共用、只匹配渲染文本原注保留）；ink 实例宿主待验收 |
 | `src/ink/hooks/use-selection.ts` | 105 | 4421 | 重写：终端 UI／交互 | 待定 | 未迁移 |
