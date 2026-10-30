@@ -803,12 +803,13 @@ impl ToolExecutor {
                         .as_ref()
                         .context("Background tasks unavailable")?;
                     manager
-                        .start_with_shell(
+                        .start_with_shell_timeout(
                             required(&args, "command")?,
                             args.get("description")
                                 .and_then(Value::as_str)
                                 .unwrap_or("Shell command"),
                             kind,
+                            Self::shell_timeout_ms(&args)?,
                         )
                         .await
                 } else {
@@ -1716,12 +1717,9 @@ impl ToolExecutor {
         ))
     }
 
-    async fn run_command_with_shell(
-        &self,
-        args: &Value,
-        kind: crate::shell_runtime::ShellKind,
-    ) -> Result<String> {
-        let command = required(args, "command")?;
+    /// Backgrounded commands retain the same original BashTool timeout
+    /// semantics as foreground commands, including explicit milliseconds.
+    fn shell_timeout_ms(args: &Value) -> Result<u64> {
         let env = std::env::vars().collect::<HashMap<String, String>>();
         // 2.1.88 BashTool and PowerShellTool accept timeout in milliseconds.
         // The provider-neutral timeout_seconds field retains its seconds unit.
@@ -1751,6 +1749,16 @@ impl ToolExecutor {
             1,
             crate::portable_source_utils::max_bash_timeout_ms(&env),
         );
+        Ok(timeout_ms)
+    }
+
+    async fn run_command_with_shell(
+        &self,
+        args: &Value,
+        kind: crate::shell_runtime::ShellKind,
+    ) -> Result<String> {
+        let command = required(args, "command")?;
+        let timeout_ms = Self::shell_timeout_ms(args)?;
         let mut proc = kind.build_command(command)?;
         proc.envs(&self.session_env);
         crate::subprocess_env::apply(&mut proc);
