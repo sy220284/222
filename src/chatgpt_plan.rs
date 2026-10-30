@@ -564,7 +564,7 @@ pub async fn complete(
     deltas: Option<UnboundedSender<String>>,
 ) -> Result<ModelResponse> {
     let token = active_token().await?;
-    complete_with_token(request, tuning, deltas, &token, true, None).await
+    complete_with_token(request, tuning, deltas, &token, true, None, RESOURCE).await
 }
 
 /// Ordinary OpenAI API keys use the same stateless Responses adapter, with
@@ -575,8 +575,10 @@ pub async fn complete_api(
     deltas: Option<UnboundedSender<String>>,
     api_key: &str,
     response_schema: Option<&Value>,
+    base_url: &str,
 ) -> Result<ModelResponse> {
-    complete_with_token(request, tuning, deltas, api_key, false, response_schema).await
+    crate::config::require_secure_credential_transport(base_url, true)?;
+    complete_with_token(request, tuning, deltas, api_key, false, response_schema, base_url).await
 }
 
 async fn complete_with_token(
@@ -586,6 +588,7 @@ async fn complete_with_token(
     token: &str,
     subscription: bool,
     response_schema: Option<&Value>,
+    base_url: &str,
 ) -> Result<ModelResponse> {
     let mut body = json!({
         "model":request.model,
@@ -629,7 +632,7 @@ async fn complete_with_token(
     if let Some(effort) = &tuning.reasoning_effort {
         body["reasoning"] = json!({"effort":effort});
     }
-    let response = new_client()?.post(format!("{RESOURCE}/responses"))
+    let response = new_client()?.post(format!("{}/responses", base_url.trim_end_matches('/')))
         .bearer_auth(token).json(&body).send().await?
         .error_for_status().context("OpenAI Responses inference rejected")?;
     let mut stream = response.bytes_stream();
