@@ -162,11 +162,19 @@ impl BackgroundTasks {
                 bail!("Previous task output directory is redirected or invalid")
             }
             Ok(_) => {
-                if fs::read_dir(&legacy)?.any(|entry| {
-                    entry.as_ref().ok().is_some_and(|entry| {
-                        entry.path().extension().and_then(|ext| ext.to_str()) == Some("json")
-                    })
-                }) {
+                let mut has_records = false;
+                for entry in fs::read_dir(&legacy)? {
+                    let entry = entry?;
+                    if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
+                        let metadata = fs::symlink_metadata(entry.path())?;
+                        if metadata.file_type().is_symlink() || !metadata.is_file() {
+                            bail!("Previous task metadata is redirected or invalid: {}",
+                                entry.path().display());
+                        }
+                        has_records = true;
+                    }
+                }
+                if has_records {
                     return Self::in_directory(root, legacy);
                 }
             }
