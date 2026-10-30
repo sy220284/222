@@ -134,8 +134,10 @@ pub async fn complete(
         model
     );
     let response = client.post(url).header("x-goog-api-key", key).json(body);
-    let response = crate::provider::send_model_request(response)
+    let idle_timeout = crate::provider::stream_idle_timeout();
+    let response = tokio::time::timeout(idle_timeout, crate::provider::send_model_request(response))
         .await
+        .context("Gemini stream response headers timed out")?
         .context("Gemini stream request failed")?;
     let status = response.status();
     if !status.is_success() {
@@ -148,7 +150,11 @@ pub async fn complete(
     let mut stream = response.bytes_stream();
     let mut assembler = Accumulator::default();
     let mut pending = Vec::<u8>::new();
-    while let Some(bytes) = stream.next().await {
+    // Preserve long-running streamed reasoning while failing visibly when
+    // the provider stops sending any data for the configured idle interval.
+    while let Some(bytes) = tokio::time::timeout(idle_timeout, stream.next())
+        .await
+        .context("Gemini stream idle timeout")? {
         let chunk = bytes.context("Gemini stream socket failed")?;
         pending.extend_from_slice(&chunk);
         if pending.len() > 4_194_304 {
