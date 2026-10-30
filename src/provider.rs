@@ -284,6 +284,7 @@ impl ModelProvider for OpenAiCompatible {
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         let mut body = json!({"model":request.model,
             "messages":openai_messages(request)?});
+        self.tuning.validate_for_model(&request.model)?;
         self.tuning.apply_chat_completions(&mut body);
         if let Some(schema) = &self.response_schema {
             body["response_format"] = json!({"type":"json_schema",
