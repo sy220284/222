@@ -283,36 +283,44 @@ mod tests {
                 };
                 let header = String::from_utf8(buffer[..end].to_vec()).unwrap();
                 assert!(header.starts_with("POST /session/s1/events HTTP/1.1"));
-                let content_length: usize = header.lines().find_map(|line| {
-                    line.split_once(':').and_then(|(name, value)| {
-                        name.eq_ignore_ascii_case("Content-Length")
-                            .then(|| value.trim().parse().unwrap())
+                let content_length: usize = header
+                    .lines()
+                    .find_map(|line| {
+                        line.split_once(':').and_then(|(name, value)| {
+                            name.eq_ignore_ascii_case("Content-Length")
+                                .then(|| value.trim().parse().unwrap())
+                        })
                     })
-                }).unwrap();
+                    .unwrap();
                 while buffer.len() - end < content_length {
                     let n = peer.read(&mut chunk).await.unwrap();
                     assert!(n > 0);
                     buffer.extend_from_slice(&chunk[..n]);
                 }
-                let body: Value = serde_json::from_slice(&buffer[end..end + content_length]).unwrap();
+                let body: Value =
+                    serde_json::from_slice(&buffer[end..end + content_length]).unwrap();
                 let reply = format!(
                     "HTTP/1.1 {status} status\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                 );
                 peer.write_all(reply.as_bytes()).await.unwrap();
                 body
             });
-            let outbound = HybridOutbound::new(
-                &format!("ws://127.0.0.1:{port}/ws/s1"),
-                Arc::new(Vec::new),
-            ).unwrap();
+            let outbound =
+                HybridOutbound::new(&format!("ws://127.0.0.1:{port}/ws/s1"), Arc::new(Vec::new))
+                    .unwrap();
             tokio::time::timeout(
                 Duration::from_secs(3),
                 outbound.write(&serde_json::json!({"type":"result","uuid":"r1"})),
-            ).await.expect("both successful and permanent response must drain");
+            )
+            .await
+            .expect("both successful and permanent response must drain");
             let actual = server.await.unwrap();
-            assert_eq!(actual, serde_json::json!({
-                "events": [{"type":"result","uuid":"r1"}]
-            }));
+            assert_eq!(
+                actual,
+                serde_json::json!({
+                    "events": [{"type":"result","uuid":"r1"}]
+                })
+            );
             outbound.close();
         }
     }
