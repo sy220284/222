@@ -475,20 +475,15 @@ pub fn restore(record: &Record, path: &Path) -> Result<String> {
         }
     }
     if record.previous_backup.is_some() || record.previous.is_some() {
-        // Verify the original bytes before any write can change the user's file.
-        // This also detects a missing or corrupted backup before mutation.
-        let _verified = previous_bytes(record)?;
+        // Use the exact bytes already verified by SHA-256. Reopening the
+        // backup with fs::copy after verification allowed a replaced backup
+        // path to write different bytes during the rewind.
+        let verified = previous_bytes(record)?
+            .context("History checkpoint has no previous content")?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        if record.previous_backup.is_some() {
-            let backup = record.backup_path.as_ref()
-                .context("History backup was not loaded from session storage")?;
-            fs::copy(backup, path)
-                .with_context(|| format!("Restore history backup {}", backup.display()))?;
-        } else if let Some(previous) = &record.previous {
-            fs::write(path, previous)?;
-        }
+        fs::write(path, &verified)?;
         #[cfg(unix)]
         if let Some(mode) = record.previous_mode {
             use std::os::unix::fs::PermissionsExt;
