@@ -39,8 +39,8 @@ impl ModelTuning {
             }
         }
         if let Some(level) = &self.reasoning_effort {
-            if !matches!(level.as_str(), "none" | "low" | "medium" | "high" | "max") {
-                bail!("reasoning_effort must be none, low, medium, high or max");
+            if !matches!(level.as_str(), "none" | "low" | "medium" | "high" | "xhigh" | "max") {
+                bail!("reasoning_effort must be none, low, medium, high, xhigh or max");
             }
         }
         Ok(())
@@ -267,9 +267,9 @@ impl Default for Config {
             providers: vec![
                 ProviderProfile {
                     id: "openai".into(),
-                    kind: "openai-compatible".into(),
+                    kind: "openai-responses".into(),
                     base_url: "https://api.openai.com/v1".into(),
-                    model: "gpt-4.1-mini".into(),
+                    model: "gpt-6.1-sol".into(),
                     api_key_env: Some("OPENAI_API_KEY".into()),
                     stream: false,
                     tuning: ModelTuning::default(),
@@ -278,7 +278,7 @@ impl Default for Config {
                     id: "gemini".into(),
                     kind: "gemini".into(),
                     base_url: "https://generativelanguage.googleapis.com/v1beta".into(),
-                    model: "gemini-2.5-flash".into(),
+                    model: "gemini-3.8-flash".into(),
                     api_key_env: Some("GEMINI_API_KEY".into()),
                     stream: false,
                     tuning: ModelTuning::default(),
@@ -385,7 +385,7 @@ impl Config {
             if !seen.insert(&p.id) {
                 bail!("Duplicate provider id: {}", p.id);
             }
-            if !matches!(p.kind.as_str(), "openai-compatible" | "gemini" | "chatgpt-plan") {
+            if !matches!(p.kind.as_str(), "openai-compatible" | "openai-responses" | "gemini" | "chatgpt-plan") {
                 bail!("Unsupported provider kind for {}: {}", p.id, p.kind);
             }
             let url = reqwest::Url::parse(&p.base_url)?;
@@ -747,7 +747,7 @@ mod tests {
         );
         assert_eq!(
             c.select(Some("openai"), None).unwrap().model,
-            "gpt-4.1-mini"
+            "gpt-6.1-sol"
         );
     }
 }
