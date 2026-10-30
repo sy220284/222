@@ -3171,6 +3171,19 @@ async fn sdk_nested_control(
             | "mcp_poll_resource_updates" => {
                 mcp_control_request(agent, subtype, &Value::Object(request.clone())).await
             }
+            "rewind_files" => {
+                let id = request.get("user_message_id")
+                    .and_then(Value::as_str)
+                    .filter(|id| !id.trim().is_empty())
+                    .ok_or_else(|| anyhow::anyhow!(
+                        "rewind_files requires user_message_id"))?;
+                let dry_run = match request.get("dry_run") {
+                    None => false,
+                    Some(Value::Bool(value)) => *value,
+                    _ => bail!("rewind_files dry_run must be a boolean"),
+                };
+                agent.sdk_rewind_files(id, dry_run)
+            }
             "generate_session_title" => {
                 let description = request.get("description")
                     .and_then(Value::as_str)
