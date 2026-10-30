@@ -1251,6 +1251,12 @@ async fn spool_merged<R: AsyncRead + Unpin>(
         if writable > 0 {
             shared.file.write_all(&buffer[..writable]).await?;
             individual.write_all(&buffer[..writable]).await?;
+            // Tokio's file adapter may buffer successful write_all calls.
+            // Flush each chunk to the OS before acknowledging it: otherwise
+            // ENOSPC/EIO can remain hidden while a child blocks on a full pipe.
+            // This is a userspace flush, not a per-chunk fsync to stable media.
+            shared.file.flush().await?;
+            individual.flush().await?;
             shared.size += writable as u64;
         }
         if writable < n {
