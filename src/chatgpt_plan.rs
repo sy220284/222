@@ -715,6 +715,78 @@ mod tests {
         assert_eq!(parsed.message.tool_calls.unwrap()[0].id, "a");
         assert_eq!(parsed.usage.unwrap().cache_read_input_tokens, 2);
     }
+
+    #[tokio::test]
+    async fn api_key_responses_stream_preserves_tools_schema_and_usage() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut bytes = Vec::new();
+            let mut buffer = [0u8; 4096];
+            let end = loop {
+                let n = socket.read(&mut buffer).await.unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&buffer[..n]);
+                if let Some(i) = bytes.windows(4).position(|v| v == b"\r\n\r\n") {
+                    break i + 4;
+                }
+            };
+            let headers = String::from_utf8_lossy(&bytes[..end]).to_lowercase();
+            assert!(headers.starts_with("post /v1/responses http/1.1"));
+            assert!(headers.contains("authorization: bearer local-openai-key"));
+            let length = headers.lines().find_map(|line| {
+                line.strip_prefix("content-length:")
+                    .map(|v| v.trim().parse::<usize>().unwrap())
+            }).unwrap();
+            while bytes.len() < end + length {
+                let n = socket.read(&mut buffer).await.unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&buffer[..n]);
+            }
+            let body: Value = serde_json::from_slice(&bytes[end..end + length]).unwrap();
+            assert_eq!(body["store"], false);
+            assert_eq!(body["stream"], true);
+            assert_eq!(body["model"], "gpt-6.1-sol");
+            assert_eq!(body["tools"][0]["type"], "namespace");
+            assert_eq!(body["tools"][0]["tools"][0]["name"], "read_file");
+            assert_eq!(body["text"]["format"]["type"], "json_schema");
+            let response = json!({"type":"response.completed","response":{
+                "output":[{"type":"message","content":[{"type":"output_text","text":"Hello"}]},
+                    {"type":"function_call","name":"atlas.read_file","call_id":"call-a","arguments":"{}"}],
+                "usage":{"input_tokens":12,"output_tokens":4}
+            }});
+            let payload = format!(
+                "data: {}\r\n\r\ndata: {}\r\n\r\ndata: [DONE]\r\n\r\n",
+                json!({"type":"response.output_text.delta","delta":"Hello"}), response);
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                payload.len());
+            socket.write_all(head.as_bytes()).await.unwrap();
+            for part in payload.as_bytes().chunks(19) {
+                socket.write_all(part).await.unwrap();
+            }
+        });
+        let req = ModelRequest {
+            model:"gpt-6.1-sol".into(),
+            system:"local project".into(),
+            messages:vec![Message::text("user","read source")],
+            tools:vec![json!({"type":"function","function":{"name":"read_file",
+                "description":"Read","parameters":{"type":"object","properties":{}}}})],
+        };
+        let schema = json!({"type":"object","properties":{"result":{"type":"string"}}});
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let reply = complete_api(&req, &ModelTuning::default(), Some(tx),
+            "local-openai-key", Some(&schema), &format!("http://{addr}/v1"))
+            .await.unwrap();
+        server.await.unwrap();
+        assert_eq!(rx.try_recv().unwrap(), "Hello");
+        assert_eq!(reply.message.content.as_deref(), Some("Hello"));
+        assert_eq!(reply.message.tool_calls.as_ref().unwrap()[0].function.name, "read_file");
+        assert_eq!(reply.usage.unwrap().total_tokens, 16);
+    }
+
     #[test]
     fn chatgpt_subscription_permission_is_checked_exactly() {
         assert!(scope_granted("openid chatgpt.tokens.use.direct offline_access"));
