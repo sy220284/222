@@ -55,6 +55,8 @@ pub enum McpCommand {
         /// Only show currently approved and loadable MCP servers
         #[arg(long)]
         active: bool,
+        #[arg(long)]
+        no_check: bool,
     },
     /// Add MCP server configuration from a JSON object (no network access)
     AddJson {
@@ -70,6 +72,8 @@ pub enum McpCommand {
         name: String,
         #[arg(short = 's', long, value_enum)]
         scope: Option<Scope>,
+        #[arg(long)]
+        no_check: bool,
     },
     /// Remove MCP project trust decisions; config is left unchanged
     ResetProjectChoices,
@@ -403,7 +407,39 @@ fn store_server(root: &Path, scope: Scope, server: McpServerConfig) -> Result<Pa
     Ok(path)
 }
 
-pub fn run(root: &Path, command: &McpCommand) -> Result<String> {
+/// Probe a server through the real MCP initialize/discovery handshake.
+/// Never start an unapproved project server merely to display status.
+async fn health(root: &Path, scope: Scope, server: &McpServerConfig) -> Value {
+    if matches!(scope, Scope::Project) {
+        let approved = match approved_project_servers(root) {
+            Ok(value) => value,
+            Err(error) => return json!({"status":"failed","error":format!("{error:#}")}),
+        };
+        let config = match serde_json::to_value(server) {
+            Ok(value) => value,
+            Err(error) => return json!({"status":"failed","error":format!("{error:#}")}),
+        };
+        if approved.get(&server.id) != Some(&project_fingerprint(&config)) {
+            return json!({"status":"needs_approval"});
+        }
+    }
+    let response = tokio::time::timeout(
+        std::time::Duration::from_secs(12),
+        crate::mcp::McpManager::connect_with_root(std::slice::from_ref(server), root),
+    ).await;
+    match response {
+        Ok(Ok(mut manager)) => match manager.statuses() {
+            Ok(statuses) => statuses.into_iter().next().unwrap_or_else(|| {
+                json!({"status":"failed","error":"Missing MCP server status"})
+            }),
+            Err(error) => json!({"status":"failed","error":format!("{error:#}")}),
+        },
+        Ok(Err(error)) => json!({"status":"failed","error":format!("{error:#}")}),
+        Err(_) => json!({"status":"failed","error":"MCP health probe timed out"}),
+    }
+}
+
+pub async fn run(root: &Path, command: &McpCommand) -> Result<String> {
     match command {
         McpCommand::Add {
             scope,
@@ -482,13 +518,16 @@ pub fn run(root: &Path, command: &McpCommand) -> Result<String> {
             let path = store_server(root, *scope, server)?;
             Ok(format!("Added MCP server {name} to {}", path.display()))
         }
-        McpCommand::Get { name, scope } => {
+        McpCommand::Get { name, scope, no_check } => {
             let scope = resolve_scope(root, name, *scope)?;
             let config = get_saved_server(root, name, scope)?;
+            let health = if *no_check { json!({"status":"unchecked"}) }
+                else { health(root, scope, &config).await };
             let mut json = serde_json::to_value(config)?;
             json.as_object_mut()
                 .context("MCP config serialization is not an object")?
                 .insert("scope".into(), Value::String(scope_name(scope).to_owned()));
+            json["health"] = health;
             Ok(serde_json::to_string_pretty(&json)?)
         }
         McpCommand::ResetProjectChoices => {
@@ -507,7 +546,7 @@ pub fn run(root: &Path, command: &McpCommand) -> Result<String> {
             atomic_save(&path, &local)?;
             Ok("All project MCP approvals have been reset".to_owned())
         }
-        McpCommand::List { active } => {
+        McpCommand::List { active, no_check } => {
             if *active {
                 let profiles = active_servers(root, &Config::load()?)?;
                 let output = profiles
@@ -521,16 +560,26 @@ pub fn run(root: &Path, command: &McpCommand) -> Result<String> {
                     .collect::<Vec<_>>();
                 return Ok(serde_json::to_string_pretty(&output)?);
             }
-            let mut output = Vec::new();
+            let mut saved = Vec::new();
             for server in Config::load()?.mcp_servers {
-                output.push(json!({"scope":"user","name":server.id,"transport":server.transport.unwrap_or_else(||"stdio".to_owned())}));
+                saved.push((Scope::User, server));
             }
-            for (scope, label) in [(Scope::Project, "project"), (Scope::Local, "local")] {
+            for scope in [Scope::Project, Scope::Local] {
                 for server in scoped_servers(root, scope)?.into_values() {
-                    output.push(json!({"scope":label,"name":server.id,"transport":server.transport.unwrap_or_else(||"stdio".to_owned())}));
+                    saved.push((scope, server));
                 }
             }
-            output.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+            saved.sort_by(|a, b| a.1.id.cmp(&b.1.id));
+            let mut output = Vec::with_capacity(saved.len());
+            for (scope, server) in saved {
+                let mut item = json!({
+                    "scope":scope_name(scope), "name":server.id,
+                    "transport":server.transport.as_deref().unwrap_or("stdio")
+                });
+                item["health"] = if *no_check { json!({"status":"unchecked"}) }
+                    else { health(root, scope, &server).await };
+                output.push(item);
+            }
             Ok(serde_json::to_string_pretty(&output)?)
         }
         McpCommand::Remove { name, scope } => {

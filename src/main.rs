@@ -566,7 +566,7 @@ async fn run_cli() -> Result<()> {
         }
         Commands::Mcp { action } => {
             let root = canonical_workspace(&cli.workspace)?;
-            println!("{}", mcp_cli::run(&root, action)?);
+            println!("{}", mcp_cli::run(&root, action).await?);
             return Ok(());
         }
         Commands::Plugin { args } => {
@@ -3747,7 +3747,6 @@ async fn sdk_nested_control(
                 for key in [
                     "hooks",
                     "sdkMcpServers",
-                    "jsonSchema",
                     "promptSuggestions",
                     "agentProgressSummaries",
                 ] {
@@ -3801,6 +3800,10 @@ async fn sdk_nested_control(
                     agent.set_sdk_agent_definitions(agents)?;
                 }
                 let agents = agent.sdk_agent_descriptors()?;
+                let schema = request.get("jsonSchema")
+                    .filter(|value| !value.is_null())
+                    .cloned();
+                agent.set_sdk_response_schema(schema)?;
                 agent.set_sdk_system_prompts(system_prompt, append_system_prompt);
                 *sdk_initialized = true;
                 Ok(

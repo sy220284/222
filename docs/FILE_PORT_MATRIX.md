@@ -62,7 +62,7 @@
 | `src/bridge/debugUtils.ts` | 142 | 4240 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/envLessBridgeConfig.ts` | 166 | 7250 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/flushGate.ts` | 72 | 1981 | 改造：自建远程连接协议 | `src/bridge_core.rs / src/main.rs` | 部分实现：本地 SDK 控制入口可达；初始历史回放中的出站消息有序排队、传输替换保留、永久关闭清除与隔离测试已通过；远程 HTTP/WebSocket 实际发送仍未贯通 |
-| `src/bridge/inboundAttachments.ts` | 176 | 6267 | 改造：自建远程连接协议 | `src/bridge_inbound_attachments.rs / src/main.rs` | 部分实现：可信可配置附件服务的 OAuth 风格令牌请求、30秒超时和16MiB限制、路径清洗及会话隔离、最后文本块 @引用插入与无附件容错已接入真实 SDK/模型链；原版上传服务专用协议、重连和所有附件恢复行为尚未对齐 |
+| `src/bridge/inboundAttachments.ts` | 176 | 6267 | 改造：自建远程连接协议 | `src/bridge_inbound_attachments.rs / src/main.rs` | 部分实现：可信可配置附件服务的 OAuth 风格令牌请求、30秒超时、32MiB分块上限、最多四个并发下载、禁止远程明文凭证及 HTTP 重定向、路径清洗及会话隔离、最后文本块 @引用插入与无附件容错已接入真实 SDK/模型链；上述安全上限是 Rust 额外边界、原版无此限制；上传服务专用协议、重连和所有附件恢复行为仍待等价 |
 | `src/bridge/inboundMessages.ts` | 81 | 2727 | 改造：自建远程连接协议 | `src/multimodal.rs / src/main.rs` | 部分实现：用户消息/UUID 提取、camelCase mediaType 兼容、缺失媒体类型 PNG/JPEG/GIF/WebP 魔数识别已通过 SDK 直接及排队模型 HTTP 测试；远端传输、附件及恢复链仍待迁移 |
 | `src/bridge/initReplBridge.ts` | 570 | 23849 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
 | `src/bridge/jwtUtils.ts` | 257 | 9444 | 改造：自建远程连接协议 | 待定 | 未迁移，禁止原厂端点与认证依赖 |
@@ -316,7 +316,7 @@
 | `src/components/AutoUpdater.tsx` | 198 | 30788 | 重写：终端 UI／交互 | `src/generated_ports/p_33630f62d996d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/AutoUpdaterWrapper.tsx` | 91 | 11972 | 重写：终端 UI／交互 | `src/generated_ports/p_f96c082aa2c27.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/AwsAuthStatusBox.tsx` | 82 | 9707 | 重写：终端 UI／交互 | `src/generated_ports/p_dde39deb9414b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/BaseTextInput.tsx` | 136 | 19313 | 重写：终端 UI／交互 | `src/generated_ports/p_3949a8e5bc4d2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/BaseTextInput.tsx` | 136 | 19313 | 重写：终端 UI／交互 | `src/generated_ports/p_3949a8e5bc4d2.rs / src/terminal_input.rs / src/main.rs` | 部分实现：chat() 真实入口已接入 Unix TTY 逐键编辑、UTF-8 光标退格、历史回退、Bracketed Paste、Ctrl 中断，非 TTY 保留逐行输入；已有 Rust 单元测试；Ink JSX 多行布局、完整键位、焦点及 Windows 交互仍未等价 |
 | `src/components/BashModeProgress.tsx` | 56 | 5675 | 重写：终端 UI／交互 | `src/generated_ports/p_0b29474a0ccd4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/BridgeDialog.tsx` | 401 | 34418 | 重写：终端 UI／交互 | `src/generated_ports/p_21443fd0f496d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/BypassPermissionsModeDialog.tsx` | 87 | 9136 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -754,7 +754,7 @@
 | `src/hooks/notifs/useSettingsErrors.tsx` | 69 | 6756 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useStartupNotification.ts` | 42 | 1278 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useTeammateShutdownNotification.ts` | 79 | 2296 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/renderPlaceholder.ts` | 52 | 1280 | 重写：终端 UI／交互 | `src/generated_ports/text_input_semantics.rs` | 部分实现：原版字符范围与渲染主要分支已写 Rust；ANSI 全协议、输入 Hook/交互与原版动态调用链待验收 |
+| `src/hooks/renderPlaceholder.ts` | 52 | 1280 | 重写：终端 UI／交互 | `src/generated_ports/text_input_semantics.rs` | 部分实现：原版字符范围与渲染主要分支已写 Rust；占位显示已被 src/terminal_input.rs 生产入口调用；ANSI 全协议、完整输入 Hook 与渲染细节未验收 |
 | `src/hooks/toolPermission/PermissionContext.ts` | 389 | 12768 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/toolPermission/handlers/coordinatorHandler.ts` | 66 | 2374 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/toolPermission/handlers/interactiveHandler.ts` | 537 | 20194 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -944,7 +944,7 @@
 | `src/keybindings/match.ts` | 121 | 3797 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：Ink 等价终端键名归一化、修饰键和 Escape 特例已迁入 Rust；原生 UI 输入派发仍待连接 |
 | `src/keybindings/parser.ts` | 204 | 4972 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：组合键解析、修饰键别名、平台显示以及 bindings 映射已迁入 Rust；复杂终端输入仍需交叉验收 |
 | `src/keybindings/reservedShortcuts.ts` | 128 | 3610 | 重写：保持通用行为 | `src/generated_ports/p_d338e19c29574.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/keybindings/resolver.ts` | 245 | 7087 | 重写：保持通用行为 | `src/generated_ports/p_c7d9aa37cc1b1.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/keybindings/resolver.ts` | 245 | 7087 | 重写：保持通用行为 | `src/generated_ports/p_c7d9aa37cc1b1.rs / src/keybindings.rs / src/terminal_input.rs` | 部分实现：生产终端已使用 KeybindingRuntime 解析用户键位与 Chat 上下文；多段组合键、冲突优先级和全部原版焦点组件仍待验收 |
 | `src/keybindings/schema.ts` | 237 | 6269 | 重写：保持通用行为 | `src/generated_ports/p_212ef30d7fd2c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/keybindings/shortcutFormat.ts` | 64 | 2575 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：可用动作的用户定义快捷键显示已迁入 Rust；缺失快捷键后的原版遥测按用户要求删除 |
 | `src/keybindings/template.ts` | 53 | 1721 | 重写：保持通用行为 | `src/keybindings.rs / src/main.rs` | 部分实现：用户配置模板及保留快捷键过滤、原子排他创建已迁入 Rust；文本编辑器差异待覆盖 |
@@ -1863,7 +1863,7 @@
 | `src/utils/task/outputFormatting.ts` | 39 | 1188 | 重写：保持通用行为 | `src/task_output_format.rs` | 部分实现：长度上限、UTF-16 计数、尾部截断和日志路径；代理项边界与任务目录待核对 |
 | `src/utils/task/sdkProgress.ts` | 37 | 1153 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/tasks.ts` | 863 | 26354 | 重写：保持通用行为 | `src/task_graph.rs / src/task_events.rs / src/agent.rs` | 部分实现：CRUD、依赖/认领、高水位、重置、退出收回、订阅回调锁外派发；已补齐损坏/超长任务文件名、不可读/超大任务记录隔离、异常 JSON 重置清理、创建仅落任务记录、删除/重置时更新高水位，避免额外计数写失败误报；损坏记录占用编号不复用、无效编号读取返回任务不存在；新增 ATLAS_TASK_LIST_ID 跨会话共享任务列表优先级及团队清理隔离；原版全部状态迁移、跨进程通知与文件级并发仍未等价；队友空闲前从共享任务列表逐条读取本人 in_progress 任务并执行 TaskCompleted Hook（dd67ffc1），待验收；修复同一任务双向自依赖持久化时第二次写入覆盖阻塞关系（4f4cf7b） |
-| `src/utils/teamDiscovery.ts` | 82 | 2323 | 重写：保持通用行为 | `src/generated_ports/p_e19d4c01601c8.rs`| 部分实现：团队状态汇总（running/idle 计数排除隐藏成员）、成员富字段解析（agentType/model/prompt/color/idleSince/tmuxPaneId/cwd/worktreePath/isHidden/backendType/mode）、无效 pane 后端置空、isPaneBackend 白名单（tmux|iterm2）、缺文件返回 None，附 4 测试；原版 readTeamFile 的跨进程锁由 team_registry 端口承担，本桩自读团队 JSON|
+| `src/utils/teamDiscovery.ts` | 82 | 2323 | 重写：保持通用行为 | `src/generated_ports/p_e19d4c01601c8.rs`| 部分实现：团队状态汇总（running/idle 计数排除隐藏成员）、成员富字段解析（agentType/model/prompt/color/idleSince/tmuxPaneId/cwd/worktreePath/isHidden/backendType/mode）、无效 pane 后端置空、isPaneBackend 白名单（tmux、iterm2）、缺文件返回 None，附 4 测试；原版 readTeamFile 的跨进程锁由 team_registry 端口承担，本桩自读团队 JSON|
 | `src/utils/teamMemoryOps.ts` | 89 | 2471 | 重写：保持通用行为 | `src/generated_ports/p_0b4548f3115ca.rs`| 部分实现：团队记忆计数摘要构建（read/search/write 三类、单复数、active/recalled 动词时态）、isTeamMemFile 路径形状判定（目录前缀+进程级开关），附 5 测试；memdir/teamMemPaths 全量（sanitizePathKey 注入防护/realpath/lstat，292 行）待独立迁移记依赖差异，实验 flag 名按隐私门禁要求省略|
 | `src/utils/teammate.ts` | 293 | 9206 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/teammateContext.ts` | 97 | 3161 | 重写：保持通用行为 | 待定 | 未迁移 |
