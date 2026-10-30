@@ -151,6 +151,7 @@ mod transcript_search;
 mod transports;
 mod unicode_sanitization;
 mod version;
+mod vim;
 mod vim_mode_source;
 mod webfetch;
 mod websearch;

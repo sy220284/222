@@ -102,28 +102,6 @@ pub fn is_simple_motion(key: char) -> bool {
 /// Hard cap so `9999999dd` cannot DoS the editor.
 pub const MAX_VIM_COUNT: usize = 10_000;
 
-/// Command state machine for NORMAL mode. Each state knows exactly what
-/// input it is waiting for (matches `CommandState` in types.ts).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommandState {
-    Idle,
-    Count { digits: String },
-    Operator { op: Operator, count: usize },
-    OperatorCount { op: Operator, count: usize, digits: String },
-    OperatorFind { op: Operator, count: usize, find: FindType },
-    OperatorTextObj { op: Operator, count: usize, scope: TextObjScope },
-    Find { find: FindType, count: usize },
-    G { count: usize },
-    OperatorG { op: Operator, count: usize },
-    Replace { count: usize },
-    Indent { dir: char, count: usize },
-}
-impl Default for CommandState {
-    fn default() -> Self {
-        CommandState::Idle
-    }
-}
-
 /// A recorded change, sufficient to replay the command (dot repeat).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordedChange {

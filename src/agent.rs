@@ -34,6 +34,11 @@ use std::{
 
 const DEFAULT_SYSTEM: &str = crate::prompt_runtime::BASE_SYSTEM;
 
+/// Model-visible reminder envelope matching utils/messages.ts.
+fn wrap_in_system_reminder(text: &str) -> String {
+    format!("<system-reminder>\n{text}\n</system-reminder>")
+}
+
 /// Read the metadata scalars used by the on-disk agent editor. Supports
 /// quoted values and YAML folded/literal descriptions without loading the
 /// agent's executable prompt or leaking it through the SDK.

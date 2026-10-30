@@ -49,7 +49,7 @@ pub fn parse_sse_frames(buffer: &str) -> (Vec<SseFrame>, String) {
             continue;
         }
         let mut frame = SseFrame::default();
-        let mut data_lines: Vec<&str> = Vec::new();
+        let mut data_lines: Vec<String> = Vec::new();
         for line in raw.split('\n') {
             if let Some(stripped) = line.strip_prefix('\r') {
                 let line = stripped;
@@ -63,7 +63,7 @@ pub fn parse_sse_frames(buffer: &str) -> (Vec<SseFrame>, String) {
                 if let Some((field, value)) = split_field(line) {
                     match field {
                         "event" => frame.event = Some(value),
-                        "data" => data_lines.push(&value),
+                        "data" => data_lines.push(value),
                         "id" => frame.id = Some(value),
                         _ => {}
                     }
@@ -235,7 +235,7 @@ impl SseTransport {
         let mut url = self.url.clone();
         let last_seq = self.state.lock().expect("sse state").last_sequence_num;
         if last_seq > 0 {
-            url.push_str(&format!("?from_sequence_num={last_seq}"));
+            url.push_str(&format!("{}from_sequence_num={last_seq}", if url.contains('?') { "&" } else { "?" }));
         }
         let mut request = reqwest::Client::new().get(&url);
         for (name, value) in (self.auth)() {
@@ -246,6 +246,9 @@ impl SseTransport {
         }
         if let Some(session_id) = &self.session_id {
             request = request.header("X-Session-Id", session_id);
+        }
+        if last_seq > 0 {
+            request = request.header("Last-Event-ID", last_seq.to_string());
         }
         request = request.header("Accept", "text/event-stream");
         let response = request.send().await?;

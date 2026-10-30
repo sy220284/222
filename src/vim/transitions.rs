@@ -65,7 +65,9 @@ pub fn transition(state: &mut CommandState, input: &str, ctx: &mut VimCtx) -> bo
             from_operator_count(state, *op, *count, digits, input, ctx)
         }
         CommandState::OperatorFind { op, count, find } => {
-            execute_operator_find(ctx, *op, *find, input, *count);
+            if let Some(ch) = input.chars().next().filter(|_| input.chars().count() == 1) {
+                execute_operator_find(ctx, *op, *find, ch, *count);
+            }
             *state = CommandState::Idle;
             true
         }
@@ -83,10 +85,11 @@ pub fn transition(state: &mut CommandState, input: &str, ctx: &mut VimCtx) -> bo
         CommandState::Find { find, count } => {
             let (find, count) = (*find, *count);
             *state = CommandState::Idle;
-            let result = ctx.cursor().find_character(input, find, count);
-            if let Some(offset) = result {
-                ctx.set_offset(offset);
-                ctx.set_last_find(find, input);
+            if let Some(ch) = input.chars().next().filter(|_| input.chars().count() == 1) {
+                if let Some(offset) = ctx.cursor().find_character(ch, find, count) {
+                    ctx.set_offset(offset);
+                    ctx.set_last_find(find, ch);
+                }
             }
             true
         }

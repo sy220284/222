@@ -27,6 +27,7 @@ pub use sse::{convert_sse_url_to_post_url, parse_sse_frames, SseTransport};
 pub use web_socket::WebSocketTransport;
 pub use worker_state_uploader::{coalesce_patches, WorkerStateUploader};
 
+use anyhow::Result;
 use serde_json::Value;
 
 /// The transport flavour chosen for a URL (source `getTransportForUrl`).
@@ -120,20 +121,22 @@ impl SdkOutbound {
 
     /// Emit one stdout message: stdout always (SDK protocol), plus a POST to
     /// the configured endpoint when a transport is active.
-    pub async fn emit(&self, message: &Value) {
+    pub async fn emit(&self, message: &Value) -> Result<()> {
         print!("{}", crate::ndjson::stringify_value(message));
         use std::io::Write;
         let _ = std::io::stdout().flush();
         if let Self::Sse(_transport, post_url) = self {
             let client = reqwest::Client::new();
-            let _ = client
+            client
                 .post(post_url)
                 .header("Content-Type", "application/json")
                 .header("anthropic-version", "2023-06-01")
                 .body(crate::ndjson::stringify_value(message))
                 .send()
-                .await;
+                .await?
+                .error_for_status()?;
         }
+        Ok(())
     }
 }
 

@@ -11,18 +11,11 @@ use serde_json::Value;
 /// Decode the JWT payload section without signature verification.
 /// Mirrors `decodeJwtPayload`: JSON parse failure yields None.
 pub fn decode_jwt_payload(token: &str) -> Option<Value> {
-    let mut parts = token.split('.');
-    let _header = parts.next()?;
-    let payload = parts.next()?;
-    let _signature = parts.next()?;
+    let jwt = token.strip_prefix("sk-ant-si-").unwrap_or(token);
+    let parts: Vec<&str> = jwt.split('.').collect();
+    if parts.len() != 3 || parts[1].is_empty() { return None; }
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(
-            payload
-                .trim_end_matches('=')
-                .replace('-', "+")
-                .replace('_', "/"),
-        )
-        .ok()?;
+        .decode(parts[1].trim_end_matches('=')).ok()?;
     serde_json::from_slice(&bytes).ok()
 }
 
@@ -30,14 +23,11 @@ pub fn decode_jwt_payload(token: &str) -> Option<Value> {
 /// Mirrors `decodeJwtExpiry`.
 pub fn decode_jwt_expiry(token: &str) -> Option<u64> {
     let payload = decode_jwt_payload(token)?;
-    payload.get("exp")?.as_u64().or_else(|| {
-        // Some minters serialize exp as a JSON string.
-        payload.get("exp")?.as_str()?.parse::<u64>().ok()
-    })
+    payload.get("exp")?.as_u64()
 }
 
 /// Seconds before expiry at which refresh is scheduled (source: 60_000).
-pub const JWT_REFRESH_BUFFER_MS: u64 = 60_000;
+pub const JWT_REFRESH_BUFFER_MS: u64 = 300_000;
 
 /// Minimum delay between refresh attempts (source: 30_000).
 pub const MIN_REFRESH_DELAY_MS: u64 = 30_000;
@@ -68,9 +58,9 @@ mod tests {
     }
 
     #[test]
-    fn string_expires_are_accepted() {
+    fn string_expires_are_rejected() {
         let token = format!("x.{}.y", b64url(&json!({"exp":"123"})));
-        assert_eq!(decode_jwt_expiry(&token), Some(123));
+        assert_eq!(decode_jwt_expiry(&token), None);
     }
 
     #[test]

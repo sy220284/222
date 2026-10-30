@@ -28,17 +28,12 @@ fn default_version() -> u64 {
 /// Decode a base64url-encoded work secret and validate its version.
 /// Mirrors `decodeWorkSecret`.
 pub fn decode_work_secret(secret: &str) -> Result<WorkSecret> {
-    let normalized = secret
-        .trim_end_matches('=')
-        .replace('-', "+")
-        .replace('_', "/");
-    let json = base64::engine::general_purpose::STANDARD
-        .decode(normalized.as_bytes())
+    let json = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(secret.trim_end_matches('=').as_bytes())
         .ok()
-        .and_then(|bytes| String::from_utf8(bytes).ok())
-        .or_else(|| String::from_utf8(secret.as_bytes().to_vec()).ok());
+        .and_then(|bytes| String::from_utf8(bytes).ok());
     let parsed: Value = match json {
-        Some(text) => serde_json::from_str(&text).or_else(|_| serde_json::from_str(secret))?,
+        Some(text) => serde_json::from_str(&text)?,
         None => bail!("Unsupported work secret version: unknown"),
     };
     let version = parsed.get("version").and_then(Value::as_u64);
@@ -137,6 +132,7 @@ pub async fn register_worker(session_url: &str, access_token: &str) -> Result<u6
             .post(&url)
             .header("Authorization", auth)
             .header("Content-Type", "application/json")
+            .header("anthropic-version", "2023-06-01")
             .timeout(std::time::Duration::from_secs(10))
             .json(&json!({}))
             .send()

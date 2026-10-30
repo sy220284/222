@@ -2,6 +2,7 @@
 //! Pure functions over a [`VimCtx`] that owns text/offset plus the
 //! persistent state the original threaded through `OperatorContext`.
 
+use super::cursor::VimCursor;
 use super::motions::{is_inclusive_motion, is_linewise_motion, resolve_motion};
 use super::text_objects::{find_text_object, TextObjectRange};
 use super::types::{FindType, Operator, RecordedChange, TextObjScope};
@@ -43,6 +44,9 @@ impl VimCtx {
     pub fn enter_insert(&mut self, offset: usize) {
         self.set_offset(offset);
         self.enter_insert = true;
+    }
+    pub fn set_last_find(&mut self, find: FindType, ch: char) {
+        self.persistent.last_find = Some((find, ch));
     }
     pub fn set_register(&mut self, content: String, linewise: bool) {
         self.persistent.register = content;
@@ -123,7 +127,7 @@ fn get_operator_range(
         } else {
             word_cursor.end_of_word()
         };
-        to = word_end.next_offset(word_end.offset);
+        to = word_end.right().offset;
     } else if is_linewise_motion(motion) {
         linewise = true;
         let next_newline = text[to..].find('\n').map(|i| to + i);
@@ -137,7 +141,7 @@ fn get_operator_range(
             Some(idx) => to = idx + 1,
         }
     } else if is_inclusive_motion(motion) && cursor_offset <= target.offset {
-        to = VimCursor::new(text, to).next_offset(to);
+        to = VimCursor::new(text, to).right().offset;
     }
     (from, to, linewise)
 }
@@ -166,9 +170,9 @@ pub fn execute_operator_find(
         return;
     };
     let from = ctx.offset.min(target);
-    let to = VimCursor::new(&ctx.text, ctx.offset.max(target)).next_offset(ctx.offset.max(target));
+    let to = VimCursor::new(&ctx.text, ctx.offset.max(target)).right().offset;
     apply_operator(ctx, op, from, to, false);
-    ctx.record_change(RecordedChange::OperatorFind { op, find: find_type, count });
+    ctx.record_change(RecordedChange::OperatorFind { op, find: find_type, ch: target_char, count });
 }
 
 /// `executeRepeatFind`: repeat the last f/F/t/T find, optionally reversed.
@@ -343,7 +347,7 @@ pub fn execute_paste(ctx: &mut VimCtx, after: bool, count: usize) {
     } else {
         let text_to_insert = content.repeat(count.max(1));
         let insert_point = if after && ctx.offset < ctx.text.len() {
-            VimCursor::new(&ctx.text, ctx.offset).next_offset(ctx.offset)
+            VimCursor::new(&ctx.text, ctx.offset).right().offset
         } else {
             ctx.offset
         };
