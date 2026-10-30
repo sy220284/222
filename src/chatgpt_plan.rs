@@ -337,6 +337,10 @@ async fn active_token() -> Result<String> {
 }
 
 /// Current account-scoped models; never substitute an API-key catalog.
+pub fn has_plan_session() -> Result<bool> {
+    Ok(read_saved()?.is_some_and(|saved| saved.session.is_some()))
+}
+
 pub async fn model_list() -> Result<Value> {
     let token = active_token().await?;
     let response = new_client()?.get(format!("{RESOURCE}/models"))
