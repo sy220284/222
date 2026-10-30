@@ -1571,13 +1571,27 @@ mod tests {
         let id = created["task_id"].as_str().unwrap();
         let output: Value =
             serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
-        assert_eq!(output["task"]["output"], "first\nsecond\nthird\n");
-        assert!(created["output_file"]
-            .as_str()
-            .unwrap()
-            .ends_with(".output"));
+        // stdout and stderr use independent OS pipes: arrival order across
+        // the pipes is not guaranteed even when the shell writes serially.
+        // Preserve each pipe's order and all bytes without claiming an
+        // impossible cross-pipe total order.
+        let combined = output["task"]["output"].as_str().unwrap();
+        let lines: Vec<&str> = combined.lines().collect();
+        assert_eq!(lines.len(), 3);
+        for expected in ["first", "second", "third"] {
+            assert_eq!(lines.iter().filter(|&&line| line == expected).count(), 1);
+        }
+        let first = lines.iter().position(|&line| line == "first").unwrap();
+        let third = lines.iter().position(|&line| line == "third").unwrap();
+        assert!(first < third, "stdout line order must be preserved");
+        let output_file = created["output_file"].as_str().unwrap();
+        assert!(output_file.ends_with(".output"));
+        let stdout_file = output_file.replace(".output", ".stdout");
+        let stderr_file = output_file.replace(".output", ".stderr");
+        assert_eq!(fs::read_to_string(stdout_file).unwrap(), "first\nthird\n");
+        assert_eq!(fs::read_to_string(stderr_file).unwrap(), "second\n");
         let delta: Value = serde_json::from_str(&tasks.output_delta(id, 0, 100).unwrap()).unwrap();
-        assert_eq!(delta["content"], "first\nsecond\nthird\n");
+        assert_eq!(delta["content"], combined);
     }
 
     #[cfg(unix)]
