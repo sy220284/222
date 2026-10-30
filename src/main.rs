@@ -2093,7 +2093,7 @@ async fn chat(
                 if !metadata.is_file() || metadata.file_type().is_symlink() {
                     bail!("Agent definition must be a regular file");
                 }
-                let content = std::fs::read_to_string(&path)?;
+                let content = agent_definition::read_agent_file(&path)?;
                 Ok(format!("{} agent {} ({})\n{}", scope, name, path.display(), content))
             })();
             match outcome {
@@ -2191,7 +2191,7 @@ async fn chat(
                 if !metadata.is_file() || metadata.file_type().is_symlink() {
                     bail!("Agent definition must be a regular file, not a symbolic link");
                 }
-                let original = std::fs::read_to_string(&path)?;
+                let original = agent_definition::read_agent_file(&path)?;
                 println!("Current agent definition at {}:\n{}", path.display(), original);
                 println!("Enter replacement description and system prompt; invalid input leaves the existing file unchanged.");
                 print!("New description (when to use): ");
