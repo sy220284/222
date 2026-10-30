@@ -785,6 +785,29 @@ impl ToolExecutor {
                 }
                 history::restore(&record, &path)
             }
+            "file_rewind" => {
+                if !history::enabled(self.interactive, self.file_checkpointing_enabled) {
+                    bail!("File checkpointing is disabled");
+                }
+                let id = required(&args, "id")?;
+                let plan = history::plan_rewind(&self.root, self.session_id.as_deref(), id)?;
+                for entry in &plan.entries {
+                    let path = self.checked_path(&entry.path)?;
+                    let decision = permission_rules::policy_for(
+                        &self.permission_rules, "edit_file",
+                        &json!({"path":entry.path,"paths":self.file_rule_paths(&entry.path)?})
+                    )?;
+                    if decision == Some(permission_rules::Behavior::Deny) {
+                        bail!("File rewind denied by explicit Edit path rule: {}", entry.path);
+                    }
+                    self.require_read_rules(&entry.path, &path)?;
+                    if decision == Some(permission_rules::Behavior::Ask) {
+                        self.require_approval("edit_file", &json!({"path":entry.path}))?;
+                    }
+                }
+                self.require_approval("file_revert", &args)?;
+                history::apply_rewind(&self.root, &plan)
+            }
             "run_command" | "PowerShell" => {
                 Self::validate_shell_input(name, &args)?;
                 let kind = if call.function.name == "PowerShell" {
