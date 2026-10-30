@@ -16,6 +16,17 @@ struct Assembler {
 
 impl Assembler {
     fn consume(&mut self, value: &Value, deltas: &UnboundedSender<String>) -> Result<()> {
+        // A provider can report a failure inside an already established 200/SSE
+        // stream. Never turn a partial assistant response (or tool call) into
+        // a successful turn after an in-band error.
+        if let Some(error) = value.get("error").filter(|error| !error.is_null()) {
+            let detail = error
+                .get("message")
+                .and_then(Value::as_str)
+                .or_else(|| error.as_str())
+                .unwrap_or("provider reported a streaming error");
+            bail!("Model stream error: {}", detail.chars().take(500).collect::<String>());
+        }
         if let Some(usage) = value.get("usage") {
             if usage.is_object() {
                 let input = usage
@@ -143,7 +154,11 @@ fn consume_frame(
 ) -> Result<bool> {
     let lines = String::from_utf8_lossy(frame);
     let mut data = Vec::new();
+    let mut error_event = false;
     for line in lines.lines() {
+        if line.strip_prefix("event:").is_some_and(|name| name.trim() == "error") {
+            error_event = true;
+        }
         if let Some(body) = line.strip_prefix("data:") {
             data.push(body.trim_start().to_string());
         }
@@ -156,6 +171,13 @@ fn consume_frame(
         return Ok(true);
     }
     let value: Value = serde_json::from_str(&payload).context("Invalid model SSE event")?;
+    if error_event {
+        let detail = value.pointer("/error/message")
+            .or_else(|| value.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or("provider reported an SSE error event");
+        bail!("Model stream error: {}", detail.chars().take(500).collect::<String>());
+    }
     assembler.consume(&value, deltas)?;
     Ok(false)
 }
