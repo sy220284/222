@@ -173,7 +173,7 @@
 | `src/commands/heapdump/index.ts` | 13 | 288 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/help/help.tsx` | 11 | 1432 | 重写：保持通用行为 | `src/generated_ports/p_101b0ecfa9b9b.rs`| 部分实现：入口路由 HelpV2 视图（commands 与 onClose 透传），附 1 测试|
 | `src/commands/help/index.ts` | 11 | 229 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/hooks/hooks.tsx` | 13 | 2679 | 重写：保持通用行为 | `src/generated_ports/p_a4ee4bb49da12.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/hooks/hooks.tsx` | 13 | 2679 | 重写：保持通用行为 | `src/generated_ports/p_a4ee4bb49da12.rs`| 部分实现：/hooks 入口路由（埋点 ping、权限上下文解析工具名喂菜单、onExit 透传），附 1 测试；埋点名按隐私门禁中性化|
 | `src/commands/hooks/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/ide/ide.tsx` | 646 | 77066 | 重写：保持通用行为 | `src/generated_ports/p_d57f9f8b75cd8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/ide/index.ts` | 12 | 258 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -372,7 +372,7 @@
 | `src/components/FullscreenLayout.tsx` | 637 | 84913 | 重写：终端 UI／交互 | `src/generated_ports/p_9ffbccf7a7015.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/GlobalSearchDialog.tsx` | 343 | 43997 | 重写：终端 UI／交互 | `src/generated_ports/p_57123442b4dd6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/HelpV2/Commands.tsx` | 82 | 9738 | 重写：终端 UI／交互 | `src/generated_ports/p_febdb24a5a4d0.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/HelpV2/General.tsx` | 23 | 3101 | 重写：终端 UI／交互 | `src/generated_ports/p_c02d27a4b4b47.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/HelpV2/General.tsx` | 23 | 3101 | 重写：终端 UI／交互 | `src/generated_ports/p_c02d27a4b4b47.rs`| 部分实现：帮助总览视图（逐字导语文案+Shortcuts 区块 gap 2 固定宽），附 1 测试|
 | `src/components/HelpV2/HelpV2.tsx` | 184 | 20986 | 重写：终端 UI／交互 | `src/generated_ports/p_ad25a57c00fc4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/HighlightedCode/Fallback.tsx` | 193 | 16263 | 重写：终端 UI／交互 | `src/generated_ports/p_ce20cba9c18c8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/HighlightedCode.tsx` | 190 | 17579 | 重写：终端 UI／交互 | `src/generated_ports/p_a72db0598ed11.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -485,7 +485,7 @@
 | `src/components/StructuredDiff/Fallback.tsx` | 487 | 56579 | 重写：终端 UI／交互 | `src/generated_ports/p_d32fceeb42c6c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/StructuredDiff/colorDiff.ts` | 38 | 1137 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/components/StructuredDiff.tsx` | 190 | 25007 | 重写：终端 UI／交互 | `src/generated_ports/p_5b170911b9f28.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/StructuredDiffList.tsx` | 30 | 4252 | 重写：终端 UI／交互 | `src/generated_ports/p_ea89f1ce49f9d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/StructuredDiffList.tsx` | 30 | 4252 | 重写：终端 UI／交互 | `src/generated_ports/p_ea89f1ce49f9d.rs`| 部分实现：diff 块列表组装（逐块 newStart 键视图+省略号分隔符夹缝不尾随），附 1 测试|
 | `src/components/TagTabs.tsx` | 139 | 20853 | 重写：终端 UI／交互 | `src/generated_ports/p_fdf5a5900b02b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/TaskListV2.tsx` | 378 | 50200 | 重写：终端 UI／交互 | `src/generated_ports/p_8f8e588ccdcf6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/TeammateViewHeader.tsx` | 82 | 7415 | 重写：终端 UI／交互 | `src/generated_ports/p_00d240667df39.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -508,7 +508,7 @@
 | `src/components/WorktreeExitDialog.tsx` | 231 | 35484 | 重写：终端 UI／交互 | `src/generated_ports/p_1bacff6173180.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/AgentDetail.tsx` | 220 | 23566 | 重写：终端 UI／交互 | `src/generated_ports/p_0b420be1b193b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/AgentEditor.tsx` | 178 | 26437 | 重写：终端 UI／交互 | `src/generated_ports/p_31b29ef90def3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/agents/AgentNavigationFooter.tsx` | 26 | 3067 | 重写：终端 UI／交互 | `src/generated_ports/p_880d83dc9c810.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/agents/AgentNavigationFooter.tsx` | 26 | 3067 | 重写：终端 UI／交互 | `src/generated_ports/p_880d83dc9c810.rs`| 部分实现：代理导航页脚文本决策（自定义指令覆盖默认提示、退出待定态 Press key again to exit），附 1 测试|
 | `src/components/agents/AgentsList.tsx` | 440 | 52257 | 重写：终端 UI／交互 | `src/generated_ports/p_65895b818e969.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/AgentsMenu.tsx` | 800 | 70586 | 重写：终端 UI／交互 | `src/generated_ports/p_584ab0ab3562d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/agents/ColorPicker.tsx` | 112 | 14204 | 重写：终端 UI／交互 | `src/generated_ports/p_b91406e37fdf3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |

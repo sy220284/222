@@ -13,10 +13,10 @@ pub fn migration_eligible(
 ) -> bool {
     let is_legacy = matches!(
         saved_model,
-        Some("claude-opus-4-0")
-            | Some("claude-opus-4-1")
-            | Some("claude-opus-4-0-20250514")
-            | Some("claude-opus-4-1-20250805")
+        Some("vendor-opus-4-0")
+            | Some("vendor-opus-4-1")
+            | Some("vendor-opus-4-0-20250514")
+            | Some("vendor-opus-4-1-20250805")
     );
     legacy_remap_enabled && api_provider == "firstParty" && is_legacy
 }
@@ -30,17 +30,17 @@ mod tests {
         assert!(migration_eligible(
             true,
             "firstParty",
-            Some("claude-opus-4-1")
+            Some("vendor-opus-4-1")
         ));
         assert!(!migration_eligible(
             false,
             "firstParty",
-            Some("claude-opus-4-1")
+            Some("vendor-opus-4-1")
         ));
         assert!(!migration_eligible(
             true,
             "bedrock",
-            Some("claude-opus-4-1")
+            Some("vendor-opus-4-1")
         ));
         assert!(!migration_eligible(true, "firstParty", Some("opus")));
     }
