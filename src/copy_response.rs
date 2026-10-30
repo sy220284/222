@@ -159,6 +159,65 @@ fn extension(language: &str) -> String {
     }
 }
 
+
+pub fn code_block_choices(messages: &[Message], age: usize) -> Result<Vec<(String, String)>> {
+    let texts = recent_assistant_texts(messages);
+    if age == 0 || age > texts.len() {
+        bail!("No assistant response #{age}; {} recent responses available", texts.len());
+    }
+    Ok(code_blocks(&texts[age - 1]).into_iter().map(|block| {
+        let preview = block.code.lines().next().unwrap_or("");
+        let preview = preview.chars().take(76).collect::<String>();
+        (if block.language.is_empty() { "text".into() } else { block.language }, preview)
+    }).collect())
+}
+
+fn preference_path() -> Result<PathBuf> {
+    let config = crate::config::Config::path()?;
+    let parent = config.parent().context("Copy preferences need a config directory")?;
+    Ok(parent.join("copy-preferences.json"))
+}
+/// A terminal copy picker is optional, but "always copy full response" must
+/// persist across sessions just like the original global copyFullResponse flag.
+pub fn copy_full_preference() -> Result<bool> {
+    let path = preference_path()?;
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+    let value: serde_json::Value = serde_json::from_str(&raw)
+        .context("Invalid copy preferences")?;
+    value.get("copyFullResponse").and_then(serde_json::Value::as_bool)
+        .context("copyFullResponse preference must be a boolean")
+}
+pub fn save_copy_full_preference(always: bool) -> Result<()> {
+    let path = preference_path()?;
+    let parent = path.parent().context("Copy preferences directory missing")?;
+    fs::create_dir_all(parent)?;
+    let staged = parent.join(format!(".copy-preferences-{}.tmp", Uuid::new_v4()));
+    let result = (|| -> Result<()> {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&staged)?;
+        file.write_all(serde_json::to_string_pretty(
+            &serde_json::json!({"copyFullResponse":always})
+        )?.as_bytes())?;
+        file.sync_all()?;
+        fs::rename(&staged, &path)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&staged);
+    }
+    result
+}
+
 pub fn parse_selection(args: &str) -> Result<(usize, Option<usize>)> {
     let parts = args.split_whitespace().collect::<Vec<_>>();
     let (age, code) = match parts.as_slice() {

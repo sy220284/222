@@ -1705,8 +1705,9 @@ async fn chat(
                     "/files                   show files read successfully in this conversation"
                 );
                 println!(
-                    "/copy [N] [--code K]     copy recent assistant text or a fenced code block"
+                    "/copy [N] [--code K]     choose full response or a Markdown code block"
                 );
+                println!("/copy --reset            restore interactive copy selection");
                 println!(
                     "/diff                    view staged, unstaged and untracked Git changes"
                 );
@@ -2070,8 +2071,58 @@ async fn chat(
         }
         if input == "/copy" || input.starts_with("/copy ") {
             let selection = input.strip_prefix("/copy").unwrap_or("").trim();
-            match agent.copy_response(selection) {
-                Ok(message) => println!("{message}"),
+            // Original copy.tsx presents full-response/code-block choices
+            // whenever the selected answer contains Markdown code.
+            let outcome = (|| -> Result<Option<String>> {
+                if selection == "--reset" {
+                    copy_response::save_copy_full_preference(false)?;
+                    return Ok(Some("Copy picker restored for future responses.".into()));
+                }
+                let (age, explicit_code) = copy_response::parse_selection(selection)?;
+                let always_full = copy_response::copy_full_preference()?;
+                if explicit_code.is_some() || always_full {
+                    return agent.copy_response(selection).map(Some);
+                }
+                let choices = agent.copy_code_block_choices(age)?;
+                if choices.is_empty() {
+                    return agent.copy_response(selection).map(Some);
+                }
+                println!("Copy response #{age}:");
+                println!("  0) Full response");
+                for (index, (language, preview)) in choices.iter().enumerate() {
+                    println!("  {}) [{}] {}", index + 1, language, preview);
+                }
+                println!("  a) Always copy full responses (saved preference)");
+                println!("  q) Cancel");
+                loop {
+                    print!("Select copy content: ");
+                    io::stdout().flush()?;
+                    let mut choice = String::new();
+                    if io::stdin().read_line(&mut choice)? == 0 {
+                        return Ok(None);
+                    }
+                    let choice = choice.trim();
+                    if choice.eq_ignore_ascii_case("q") {
+                        return Ok(None);
+                    }
+                    if choice.eq_ignore_ascii_case("a") {
+                        copy_response::save_copy_full_preference(true)?;
+                        return agent.copy_response(&age.to_string()).map(Some);
+                    }
+                    if choice == "0" {
+                        return agent.copy_response(&age.to_string()).map(Some);
+                    }
+                    if let Ok(index) = choice.parse::<usize>() {
+                        if index > 0 && index <= choices.len() {
+                            return agent.copy_response(&format!("{age} --code {index}")).map(Some);
+                        }
+                    }
+                    eprintln!("Choose 0-{}, a, or q.", choices.len());
+                }
+            })();
+            match outcome {
+                Ok(Some(message)) => println!("{message}"),
+                Ok(None) => println!("Copy cancelled."),
                 Err(error) => eprintln!("Copy failed: {error:#}"),
             }
             continue;

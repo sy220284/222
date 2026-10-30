@@ -2484,6 +2484,9 @@ impl Agent {
         let (age, code) = crate::copy_response::parse_selection(selection)?;
         crate::copy_response::copy(&self.session.messages, age, code)
     }
+    pub fn copy_code_block_choices(&self, age: usize) -> Result<Vec<(String, String)>> {
+        crate::copy_response::code_block_choices(&self.session.messages, age)
+    }
 
     /// Source commands/hooks/hooks.tsx: expose the currently active rules.
     /// Commands can contain credentials; list event/matcher/timeout only.
