@@ -7,7 +7,8 @@
 
 use anyhow::{anyhow, bail, Result};
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -50,9 +51,11 @@ pub type HybridAuth = Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>;
 
 /// Outbound writer: serial batch uploads over POST while reads stay on WS.
 pub struct HybridOutbound {
-    uploader: super::serial_batch_event_uploader::SerialBatchEventUploader<Value>,
+    uploader: Arc<super::serial_batch_event_uploader::SerialBatchEventUploader<Value>>,
     post_url: String,
     auth: HybridAuth,
+    stream_event_buffer: Arc<Mutex<Vec<Value>>>,
+    timer_running: Arc<AtomicBool>,
 }
 
 impl HybridOutbound {
@@ -101,9 +104,11 @@ impl HybridOutbound {
         config.max_delay_ms = 8_000;
         config.jitter_ms = 250;
         Ok(Self {
-            uploader: super::serial_batch_event_uploader::SerialBatchEventUploader::new(config),
+            uploader: Arc::new(super::serial_batch_event_uploader::SerialBatchEventUploader::new(config)),
             post_url,
             auth,
+            stream_event_buffer: Arc::new(Mutex::new(Vec::new())),
+            timer_running: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -111,18 +116,42 @@ impl HybridOutbound {
         &self.post_url
     }
 
-    /// Queue one newline-JSON message; the 100ms batch window accumulates
-    /// bursts before a single POST.
+    /// Stream deltas coalesce over 100 ms. For all other messages, wait until
+    /// queued POSTs are persisted, mirroring HybridTransport.write in 2.1.88.
     pub async fn write(&self, message: &Value) {
-        self.uploader.enqueue(vec![message.clone()]).await;
+        if message.get("type").and_then(Value::as_str) == Some("stream_event") {
+            self.stream_event_buffer.lock().expect("hybrid stream buffer").push(message.clone());
+            if !self.timer_running.swap(true, Ordering::SeqCst) {
+                let buffer = Arc::clone(&self.stream_event_buffer);
+                let running = Arc::clone(&self.timer_running);
+                let uploader = Arc::clone(&self.uploader);
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(BATCH_FLUSH_INTERVAL_MS)).await;
+                    let batch = std::mem::take(&mut *buffer.lock().expect("hybrid stream buffer"));
+                    running.store(false, Ordering::SeqCst);
+                    if !batch.is_empty() {
+                        uploader.enqueue(batch).await;
+                    }
+                });
+            }
+            return;
+        }
+        let mut events = std::mem::take(&mut *self.stream_event_buffer.lock().expect("hybrid stream buffer"));
+        events.push(message.clone());
+        self.uploader.enqueue(events).await;
+        self.uploader.flush().await;
     }
 
-    /// Wait until every queued write has been POSTed (flush on close).
     pub async fn flush(&self) {
+        let events = std::mem::take(&mut *self.stream_event_buffer.lock().expect("hybrid stream buffer"));
+        if !events.is_empty() {
+            self.uploader.enqueue(events).await;
+        }
         self.uploader.flush().await;
     }
 
     pub fn close(&self) {
+        self.stream_event_buffer.lock().expect("hybrid stream buffer").clear();
         self.uploader.close();
     }
 }
@@ -219,8 +248,8 @@ mod tests {
     async fn outbound_batches_and_flushes() {
         let auth: HybridAuth = Arc::new(|| vec![]);
         let outbound = HybridOutbound::new("ws://127.0.0.1:9/ws/s1", auth).unwrap();
-        outbound.write(&serde_json::json!({"type":"x"})).await;
-        // No server: flush returns after retries are queued; close discards.
+        outbound.write(&serde_json::json!({"type":"stream_event"})).await;
+        // A stream event returns before the short batching window expires.
         outbound.close();
     }
 }
