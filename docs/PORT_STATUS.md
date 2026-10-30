@@ -2060,3 +2060,10 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **原版依据**：完整 2.1.88 `source/src/utils/{classifierApprovals.ts,teamDiscovery.ts,teamMemoryOps.ts}`，依赖端口 team_registry/event_signal/backends-types 桩均已在位。
 - **保守功能计数**：分类器审批登记与查询（双分类器隔离）、checking 生命周期、团队状态汇总（隐藏排除）、成员富字段解析、团队记忆计数摘要、isTeamMemFile 路径判定，共 **6 个独立业务行为**，14 个单元测试。
 - **尚未实现的准确差异**：feature 编译期门禁改进程级开关；teamMemPaths 全量（292 行注入防护）待独立迁移；team JSON 富字段由本桩直读。**本地 cargo check/fmt/test 全绿（847 通过 0 失败），已提交待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
+
+
+## 2026-10-30：六条源路径通过实际 Linux/Windows 测试正式销项
+
+正式基准：749a57bfe2da995bd5ba64aaf225f115595b6631；五项成功 CI：https://github.com/sy220284/222/actions/runs/41041559517。其中 `controlMessageCompat.ts` 由真实 SDK 接口与边界测试覆盖；`version.ts` 有真实 CLI 子进程及源码默认构建时间测试；四条命令 `add-dir/index.ts`、`rename/index.ts`、`export/index.ts`、`resume/index.ts` 是独立懒加载命令索引，原版完整元数据（名称、类型、提示、别名、即时执行标志、可见性）已在 `src/command_manifest.rs` 的独立测试对照，真实生产 handler 已接线并通过对应 CLI 集成测试。严格仅核销上述 index 元数据原路径，关联 handler 中 UI、SDK、剪贴板、跨项目搜索和权限差异仍保留 partial。
+
+本轮累计：原始 1,906 路径、22 排除、应迁移 1,884，已验收 **39**（历史 29 + 本任务新增 10），未验收 **1845**；本次 100 项清单 **10 已验收、90 未验收**。证据逐条见 `docs/PORT_EVIDENCE.jsonl`，对应 commit 与成功运行 ID 可独立复核。

@@ -103,7 +103,7 @@
 | `src/cli/transports/transportUtils.ts` | 46 | 1767 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/update.ts` | 423 | 14487 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/add-dir/add-dir.tsx` | 126 | 18017 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
-| `src/commands/add-dir/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
+| `src/commands/add-dir/index.ts` | 12 | 260 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/workspace_dirs.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、<path> 参数提示、非即时执行及动态入口全部匹配；CLI 真实目录授权/确认由独立 handler 执行；证据 CI #41041559517 |
 | `src/commands/add-dir/validation.ts` | 111 | 3207 | 重写：保持通用行为 | `src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs` | 部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
 | `src/commands/advisor.ts` | 110 | 3182 | 重写：保持通用行为 | `src/advisor_command.rs / src/config.rs / src/main.rs` | 部分实现：交互式 /advisor 查询、关闭、配置项模型/提供商校验及原子化用户配置保存；通用多模型 reviewer 工具执行链尚未接通，原厂灰度门禁维持排除 |
 | `src/commands/agents/agents.tsx` | 12 | 2500 | 重写：保持通用行为 | `src/generated_ports/p_c014e56745958.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -157,7 +157,7 @@
 | `src/commands/exit/exit.tsx` | 33 | 5272 | 重写：保持通用行为 | `src/generated_ports/p_8028611d439a8.rs`| 部分实现：/exit 编排——bg 会话先 detach 不杀（覆盖 /exit、/quit、ctrl+c、ctrl+d 经 REPL handleExit）、worktree 走确认流、否则随机告别语+优雅关机；告别语确定性取首条（原版均匀采样），会话/worktree/shutdown 服务注入，ExitFlow 视图归组件域，附 3 测试|
 | `src/commands/exit/index.ts` | 13 | 250 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/export/export.tsx` | 91 | 15104 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
-| `src/commands/export/index.ts` | 12 | 303 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
+| `src/commands/export/index.ts` | 12 | 303 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/session_control.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、[filename] 参数提示及非即时执行完整对应，生产会话导出分发已接线；证据 CI #41041559517 |
 | `src/commands/extra-usage/extra-usage-core.ts` | 119 | 4000 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/extra-usage/extra-usage-noninteractive.ts` | 17 | 466 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/extra-usage/extra-usage.tsx` | 17 | 3134 | 重写：保持通用行为 | `src/generated_ports/p_fa4cf9bf81ae4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -258,10 +258,10 @@
 | `src/commands/remote-setup/index.ts` | 21 | 693 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/remote-setup/remote-setup.tsx` | 187 | 21786 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/rename/generateSessionName.ts` | 68 | 2297 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：通过当前选定模型生成 JSON kebab-case 名称、验证输入并持久保存、不污染历史会话且计入模型用量；近期上下文与多模态文本已按原版补齐；原厂专用模型与超时/中断策略按通用化要求调整 |
-| `src/commands/rename/index.ts` | 13 | 281 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
+| `src/commands/rename/index.ts` | 13 | 281 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/session_control.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、[name] 参数提示与 immediate=true 完整对应，生产重命名分发已接线；证据 CI #41041559517 |
 | `src/commands/rename/rename.ts` | 88 | 2759 | 重写：保持通用行为 | `src/agent.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/reset-limits/index.js` | 5 | 172 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/resume/index.ts` | 13 | 303 | 重写：保持通用行为 | `src/main.rs / src/session.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
+| `src/commands/resume/index.ts` | 13 | 303 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/session.rs` / `src/session_control.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、[conversation id or search term] 参数提示、continue 别名及非即时执行完整对应，真实恢复入口已接线；证据 CI #41041559517 |
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
 | `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 重写：保持通用行为 | `src/generated_ports/p_8a0b520eb5d3b.rs`| 部分实现：超额计费对话框状态机——proceed 置 Launching 并执行回调（回调拒绝时回 Idle 可重试，上游承诺失败永不调 onDone）、cancel 与 Escape 先中止在途信号再回调（防已取消仍跑仍计费）、选项文案与对话框属性 verbatim；Dialog 与 Select 组件本体归组件域，附 5 测试|
 | `src/commands/review/reviewRemote.ts` | 317 | 11926 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -304,7 +304,7 @@
 | `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 重写：保持通用行为 | `src/generated_ports/p_ee2b485a76e48.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/usage/index.ts` | 10 | 233 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/usage/usage.tsx` | 7 | 1403 | 重写：保持通用行为 | `src/generated_ports/p_4c1965fccb05b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | `src/version.rs / src/main.rs` | 部分实现：当前运行二进制版本、可选编译时间、交互 /version 和版本 CLI 已落地；专属用户开关按多模型要求移除，原调用链完整验收待做 |
+| `src/commands/version.ts` | 23 | 577 | 重写：保持通用行为 | `src/version.rs` / `src/main.rs` | 已验收：仅本原路径完整等价；现有运行二进制版本及可选构建时间输出与原始源码一致，CLI/交互版本生产入口均复用此函数；专属 USER_TYPE gate 按明确的多模型/去品牌要求删除；证据 CI #41041559517 |
 | `src/commands/vim/index.ts` | 12 | 273 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/vim/vim.ts` | 39 | 1139 | 重写：保持通用行为 | `src/vim_mode_source.rs / src/main.rs / src/config.rs` | 部分实现：/vim 命令切换并持久化 Vim/标准编辑模式、旧 emacs 模式兼容及原版反馈文案；输入处理层须读取偏好才能完成终端等价 |
 | `src/commands/voice/index.ts` | 21 | 482 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -1471,7 +1471,7 @@
 | `src/utils/context.ts` | 222 | 6871 | 重写：保持通用行为 | `src/generated_ports/p_ac10a911dfef7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/contextAnalysis.ts` | 273 | 7733 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/contextSuggestions.ts` | 236 | 7258 | 重写：保持通用行为 | `src/generated_ports/p_91fa3406d8f8b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/controlMessageCompat.ts` | 33 | 1216 | 重写：保持通用行为 | `src/control_message_compat.rs / src/main.rs` | 部分实现：请求 ID 两种命名兼容、嵌套 response、优先级与 SDK 回复 ID；其余控制协议未全量验证 |
+| `src/utils/controlMessageCompat.ts` | 33 | 1216 | 重写：保持通用行为 | `src/control_message_compat.rs` / `src/main.rs` | 已验收：仅本原路径完整等价；请求与响应中的旧版 requestId→request_id，冲突时保留显式 request_id，null/数字/布尔及幂等边界完整；SDK 真实控制请求错误/恢复经过兼容入口；证据 CI #41041559517 |
 | `src/utils/conversationRecovery.ts` | 598 | 21077 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cron.ts` | 309 | 9462 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cronJitterConfig.ts` | 76 | 3414 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |

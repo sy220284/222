@@ -2,13 +2,13 @@
 
 **核对基准**：GitHub PR #6 提取时 HEAD `bd9844bc9f23617bef6574466097070228b62a46`，原始 Claude Code 2.1.88 源路径与 `docs/PORT_BASELINE.json` 冻结 SHA-256。原始 1,906 个源码文件已经在本地逐一独立 SHA-256 验证，**1,906/1,906 一致**。
 
-本清单跟踪 **100 条不同原路径（已验收 4 条，仍待完整等价验收 96 条）**，优先选取本 PR 实际修改所关联的 Rust 生产模块，并覆盖 Bridge、SDK/CLI、TUI、工具/MCP、命令与 Agent。用于后续修复、逐项验收与反复核查。表中“部分实现/未迁移”准确表示当前尚无完整等价证据，不能作为 100 条通过的证明。
+本清单跟踪 **100 条不同原路径（已验收 10 条，仍待完整等价验收 90 条）**，优先选取本 PR 实际修改所关联的 Rust 生产模块，并覆盖 Bridge、SDK/CLI、TUI、工具/MCP、命令与 Agent。用于后续修复、逐项验收与反复核查。表中“部分实现/未迁移”准确表示当前尚无完整等价证据，不能作为 100 条通过的证明。
 
 每条源路径只有同时达到以下标准才可转为 `已验收`：原始 SHA-256 一致；全部必要函数/类型和行为语义覆盖；生产入口真实调用；正常、错误、权限、取消、并发、恢复等适用测试实际执行；`docs/PORT_EVIDENCE.jsonl` 绑定通过的 tested_commit / workflow_run_id；原路径剩余差异为空。已跳过作业或静态源码匹配不得用于升格。
 
-- 本次独立追踪：**100 条（已验收 4、仍未验收 96）**；源文件哈希均有冻结基线（并已对完整原始包复核）。
-- 本轮新增完整等价验收：**4 条**，已同时更新矩阵及逐路径证据；其余 96 条不凭单测/映射/CI 绿灯冒充独立原路径闭环。
-- 历史基线已验收：**29 条**；本轮新增 4 条，动态台账当前总计 **33 条**。
+- 本次独立追踪：**100 条（已验收 10、仍未验收 90）**；源文件哈希均有冻结基线（并已对完整原始包复核）。
+- 本轮新增完整等价验收：**10 条**，已同时更新矩阵及逐路径证据；其余 96 条不凭单测/映射/CI 绿灯冒充独立原路径闭环。
+- 历史基线已验收：**29 条**；本轮新增 10 条，动态台账当前总计 **39 条**。
 - 本轮已落地修正：`src/portable_async_runtime.rs` 修复 JS `parseInt` 请求 ID 解析差异；`src/portable_ink_core.rs` 增加完整常量断言；`src/tool_names.rs` 补充 `TodoWrite` 原版工具名与测试。对应最新提交/CI 仍须按最新 PR HEAD 动态复核。
 
 | # | 类别 | 原始路径 | Rust 映射 | 现有状态 | 验收缺口（须继续闭环） |
@@ -52,13 +52,13 @@
 | 37 | TUI | `src/ink/termio/esc.ts` | src/portable_render_semantics.rs / src/main.rs | 部分实现 | TUI 实际交互/渲染与状态回调待完整验收；原台账：部分实现：ESC 重置、保存/恢复光标、索引移动、换行、字符集选择及未知序列返回已完整实现；上游所有渲染调用链仍需继续接通 |
 | 38 | TUI | `src/keybindings/template.ts` | src/keybindings.rs / src/main.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现：用户配置模板及保留快捷键过滤、原子排他创建已迁入 Rust；文本编辑器差异待覆盖 |
 | 39 | 命令 | `src/commands/clear/clear.ts` | src/agent.rs / src/main.rs | 部分实现 | SDK 回调、状态、取消与流事件时序需源码对照；原台账：部分实现：会话结束/开始 Hook、旧会话保留与新会话 ID、权限模式保留接入实际聊天和 SDK；完整缓存、MCP 热重置与全部后台任务生命周期待验收 |
-| 40 | 命令 | `src/commands/add-dir/index.ts` | src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs | 部分实现 | SDK 回调、状态、取消与流事件时序需源码对照；原台账：部分实现：CLI 确认、目录校验、授权文件工具与设置保存；原版表单/沙箱/SDK 链仍缺 |
-| 41 | 命令 | `src/commands/rename/index.ts` | src/main.rs / src/session_control.rs | 部分实现 | TUI 实际交互/渲染与状态回调待完整验收；原台账：部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
-| 42 | 命令 | `src/commands/export/index.ts` | src/main.rs / src/session_control.rs | 部分实现 | TUI 实际交互/渲染与状态回调待完整验收；原台账：部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
-| 43 | 命令 | `src/commands/resume/index.ts` | src/main.rs / src/session.rs / src/session_control.rs | 部分实现 | TUI 实际交互/渲染与状态回调待完整验收；原台账：部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
+| 40 | 命令 | `src/commands/add-dir/index.ts` | src/workspace_dirs.rs / src/main.rs / src/agent.rs / src/tools.rs | **已验收** | 原始 index.ts 的名称、local-jsx 类型、说明、<path> 参数提示、非即时执行及动态入口全部匹配；CLI 真实目录授权/确认由独立 handler 执行；[CI #41041559517](https://github.com/sy220284/222/actions/runs/41041559517)，`docs/PORT_EVIDENCE.jsonl` |
+| 41 | 命令 | `src/commands/rename/index.ts` | src/main.rs / src/session_control.rs | **已验收** | 原始 index.ts 的名称、local-jsx 类型、说明、[name] 参数提示与 immediate=true 完整对应，生产重命名分发已接线；[CI #41041559517](https://github.com/sy220284/222/actions/runs/41041559517)，`docs/PORT_EVIDENCE.jsonl` |
+| 42 | 命令 | `src/commands/export/index.ts` | src/main.rs / src/session_control.rs | **已验收** | 原始 index.ts 的名称、local-jsx 类型、说明、[filename] 参数提示及非即时执行完整对应，生产会话导出分发已接线；[CI #41041559517](https://github.com/sy220284/222/actions/runs/41041559517)，`docs/PORT_EVIDENCE.jsonl` |
+| 43 | 命令 | `src/commands/resume/index.ts` | src/main.rs / src/session.rs / src/session_control.rs | **已验收** | 原始 index.ts 的名称、local-jsx 类型、说明、[conversation id or search term] 参数提示、continue 别名及非即时执行完整对应，真实恢复入口已接线；[CI #41041559517](https://github.com/sy220284/222/actions/runs/41041559517)，`docs/PORT_EVIDENCE.jsonl` |
 | 44 | 命令 | `src/commands/logout/index.ts` | src/provider.rs / src/config.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分覆盖，原路径仍需逐条核对 |
 | 45 | 命令 | `src/commands/login/index.ts` | src/provider.rs / src/config.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分覆盖，原路径仍需逐条核对 |
-| 46 | 命令 | `src/commands/version.ts` | src/version.rs / src/main.rs | 部分实现 | TUI 实际交互/渲染与状态回调待完整验收；原台账：部分实现：当前运行二进制版本、可选编译时间、交互 /version 和版本 CLI 已落地；专属用户开关按多模型要求移除，原调用链完整验收待做 |
+| 46 | 命令 | `src/commands/version.ts` | src/version.rs / src/main.rs | **已验收** | 现有运行二进制版本及可选构建时间输出与原始源码一致，CLI/交互版本生产入口均复用此函数；专属 USER_TYPE gate 按明确的多模型/去品牌要求删除；[CI #41041559517](https://github.com/sy220284/222/actions/runs/41041559517)，`docs/PORT_EVIDENCE.jsonl` |
 | 47 | 命令 | `src/commands/files/files.ts` | src/files_context.rs / src/agent.rs / src/main.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现：/files 从真实工具结果重建读、写、编辑、NotebookEdit 的成功文件缓存，按最近使用排序、去重、保留最多 100 项，失败不入缓存，删除后的历史文件仍可跨会话恢复显示；原版独立 |
 | 48 | 命令 | `src/commands/vim/vim.ts` | src/vim_mode_source.rs / src/main.rs / src/config.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现：/vim 命令切换并持久化 Vim/标准编辑模式、旧 emacs 模式兼容及原版反馈文案；输入处理层须读取偏好才能完成终端等价 |
 | 49 | 命令 | `src/commands/stats/stats.tsx` | src/stats.rs / src/main.rs / tests/integration_cli.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现：/stats 和独立 stats 命令已经真实读取本地持久会话，按供应商/模型汇总使用量和已知费用、缓存/搜索/工具调用及代码行统计；分支按保存的基线扣除继承历史，未知费率不猜。原版多标签页 |
@@ -104,7 +104,7 @@
 | 89 | 底层工具 | `src/utils/bash/specs/srun.ts` | src/generated_ports/p_4007591beaebd.rs | 部分实现 | 生成模块代码存在，完整事件回调/真实入口/组件行为未获证明；原台账：部分实现：srun 规格登记至 builtin_command_specs 体系（-n/--ntasks、-N/--nodes 双旗标+command 参数），withfig options 结构向本 |
 | 90 | 底层工具 | `src/utils/userPromptKeywords.ts` | src/portable_async_runtime.rs | 部分实现 | SDK 回调、状态、取消与流事件时序需源码对照；原台账：部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | 91 | 底层工具 | `src/utils/shell/shellProvider.ts` | src/shell_runtime.rs / src/config.rs / src/agent.rs / src/tools.rs / src/background.rs | 部分实现 | 台账仍标部分实现；需逐导出行为、真实调用链和成功测试证据；原台账：部分实现：运行时类型/选择、真实前后台子进程、PATH 查找与 PowerShell 参数，已加真实进程回归；原版沙箱、Windows Git Bash/完整环境和高级取消待核 |
-| 92 | 底层工具 | `src/utils/controlMessageCompat.ts` | src/control_message_compat.rs / src/main.rs | 部分实现 | SDK 回调、状态、取消与流事件时序需源码对照；原台账：部分实现：请求 ID 两种命名兼容、嵌套 response、优先级与 SDK 回复 ID；其余控制协议未全量验证 |
+| 92 | 底层工具 | `src/utils/controlMessageCompat.ts` | src/control_message_compat.rs / src/main.rs | **已验收** | 请求与响应中的旧版 requestId→request_id，冲突时保留显式 request_id，null/数字/布尔及幂等边界完整；SDK 真实控制请求错误/恢复经过兼容入口；[CI #41041559517](https://github.com/sy220284/222/actions/runs/41041559517)，`docs/PORT_EVIDENCE.jsonl` |
 | 93 | 底层工具 | `src/utils/collapseTeammateShutdowns.ts` | src/portable_render_semantics.rs / src/main.rs | 部分实现 | TUI 实际交互/渲染与状态回调待完整验收；原台账：部分实现：连续完成的进程内队员关停消息折叠、首消息元信息、边界与非关停保留已实现；上游所有渲染调用链仍需继续接通 |
 | 94 | 底层工具 | `src/utils/lockfile.ts` | src/portable_async_runtime.rs | 部分实现 | SDK 回调、状态、取消与流事件时序需源码对照；原台账：部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | 95 | 底层工具 | `src/utils/idleTimeout.ts` | src/portable_async_runtime.rs | 部分实现 | SDK 回调、状态、取消与流事件时序需源码对照；原台账：部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
