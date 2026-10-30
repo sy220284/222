@@ -297,10 +297,23 @@ impl SseTransport {
         let mut buffer = String::new();
         let mut incomplete_utf8 = Vec::new();
         let mut response = response;
-        while let Some(chunk) = response.chunk().await? {
+        let mut last_frame = tokio::time::Instant::now();
+        loop {
+            // The original SSE liveness timer resets only when a complete
+            // frame (including a keepalive comment) arrives, not per byte.
+            let deadline = last_frame + Duration::from_millis(LIVENESS_TIMEOUT_MS);
+            let Some(chunk) = tokio::time::timeout_at(deadline, response.chunk())
+                .await
+                .map_err(|_| anyhow!("SSE liveness timeout with no complete frame"))??
+            else {
+                break;
+            };
             append_utf8_chunk(&mut buffer, &mut incomplete_utf8, &chunk)?;
             let (frames, remaining) = parse_sse_frames(&buffer);
             buffer = remaining;
+            if !frames.is_empty() {
+                last_frame = tokio::time::Instant::now();
+            }
             for frame in frames {
                 if frame.event.as_deref() == Some("client_event") {
                     if let Some(event) = parse_client_event(&frame.data) {
@@ -414,8 +427,7 @@ mod tests {
 
     #[test]
     fn chinese_utf8_survives_single_byte_network_chunks() {
-        let text = "event: client_event\\ndata: {\"payload\":{\"text\":\"中文\"}}\\n\\n"
-            .replace("\\n", "\n");
+        let text = "event: client_event\ndata: {\"payload\":{\"text\":\"中文\"}}\n\n";
         let mut output = String::new();
         let mut incomplete = Vec::new();
         for chunk in text.as_bytes().chunks(1) {
