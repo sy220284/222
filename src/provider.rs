@@ -456,6 +456,7 @@ impl ModelProvider for Gemini {
                 } else {
                     Some(texts.join("\n"))
                 },
+                reasoning_content: None,
                 content_blocks: None,
                 tool_calls: if calls.is_empty() { None } else { Some(calls) },
                 tool_call_id: None,
@@ -722,6 +723,30 @@ mod tests {
         assert_eq!(gemini.cache_read_input_tokens, 40);
         assert_eq!(gemini.cache_creation_input_tokens, 12);
         assert_eq!(gemini.web_search_requests, 3);
+    }
+
+    #[test]
+    fn deepseek_tool_result_round_trips_reasoning_to_next_request() {
+        let assistant: Message = serde_json::from_value(json!({
+            "role":"assistant", "content":null,
+            "reasoning_content":"I need to inspect source",
+            "tool_calls":[{"id":"call_one","type":"function",
+                "function":{"name":"read_file","arguments":"{}"}}]
+        })).unwrap();
+        let tool_call = assistant.tool_calls.as_ref().unwrap()[0].clone();
+        let request = ModelRequest {
+            model: "deepseek-flash".into(),
+            system: "You are an assistant".into(),
+            messages: vec![Message::text("user", "Inspect source"),
+                assistant, Message::tool_result(&tool_call, "file content".into())],
+            tools: vec![],
+        };
+        let wire = openai_messages(&request).unwrap();
+        assert_eq!(wire[2]["role"], "assistant");
+        assert_eq!(wire[2]["reasoning_content"], "I need to inspect source");
+        assert_eq!(wire[2]["tool_calls"][0]["id"], "call_one");
+        assert_eq!(wire[3]["role"], "tool");
+        assert_eq!(wire[3]["tool_call_id"], "call_one");
     }
 
     #[test]
