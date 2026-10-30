@@ -78,6 +78,9 @@ fn read_trusted_task_output(path: &Path, args: &Value, source_read: bool) -> Res
     let mut result = String::new();
     let mut number = 0u64;
     loop {
+        if number >= start && number >= end.saturating_sub(1) {
+            break;
+        }
         let selected = number.saturating_add(1) >= start;
         let remaining = if selected {
             max_bytes.saturating_sub(result.len().saturating_add(64))
