@@ -44,6 +44,34 @@ jobs:
       - name: Clippy 严格检查
         run: cargo clippy --locked --all-targets -- -D clippy::correctness -D clippy::suspicious
 
+
+  audit-regression:
+    name: 审计修复专项 Rust 行为测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 使用固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+      - name: MCP 超大 JSON/流式响应边界
+        run: |
+          cargo test --locked --bin atlas-agent oversized_json_tool_result_is_bounded_before_body_read
+          cargo test --locked --bin atlas-agent streamed_json_tool_result_is_bounded_without_content_length
+      - name: Bridge 队列超限与原子恢复
+        run: |
+          cargo test --locked --bin atlas-agent bridge_queue_rejection_is_atomic_and_recoverable
+          cargo test --locked --bin atlas-agent bridge_queue_message_limit_keeps_previous_batch
+      - name: 模型密钥与 Gemini 流式配置
+        run: |
+          cargo test --locked --bin atlas-agent credentialed_endpoints_require_tls_except_loopback
+          cargo test --locked --bin atlas-agent gemini_streaming_preserves_native_json_schema_and_thinking_budget
+          cargo test --locked --bin atlas-agent rejects_url_credentials_and_reserved_headers_without_network
+
   test:
     # 临时暂停 Linux 完整测试，待需要时移除 if 条件恢复。
     if: ${{ false }}
