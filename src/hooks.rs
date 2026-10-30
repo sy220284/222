@@ -497,6 +497,20 @@ impl HookRunner {
                 outcome.stop_reason = Some(reason);
             }
         }
+        // SessionEnd owns all still-running hook commands for this session.
+        // Its 2.1.88 finalizePendingAsyncHooks cancels unfinished processes
+        // before the SDK/CLI exits; never leave a detached hook alive.
+        if event_name == "SessionEnd" {
+            if let Some(session_id) = input.get("session_id").and_then(Value::as_str) {
+                for notification in finalize_async_hooks(session_id).await {
+                    outcome.non_blocking_errors.push(format!(
+                        "Async {} hook {}",
+                        notification["hook_event_name"].as_str().unwrap_or("Hook"),
+                        notification["outcome"].as_str().unwrap_or("cancelled"),
+                    ));
+                }
+            }
+        }
         Ok(outcome)
     }
 
