@@ -84,7 +84,7 @@
 | `src/buddy/types.ts` | 149 | 3805 | 重写：保持通用行为 | `src/generated_ports/p_0e2477efcdf43.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/buddy/useBuddyNotification.tsx` | 98 | 9959 | 重写：保持通用行为 | `src/generated_ports/p_336c8aa7f1741.rs`| 部分实现：预告窗口判定（2026年4月1-7日本地时间，ant 类型短路）、live 判定（窗口后永久）、通知契约（key=buddy-teaser/immediate/15s）、卸载清理 key；RainbowText 视图归 thinking 端口（调色板映射），附 3 测试|
 | `src/cli/exit.ts` | 32 | 1310 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
-| `src/cli/handlers/agents.ts` | 71 | 2089 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/cli/handlers/agents.ts` | 71 | 2089 | 重写：保持通用行为 | `src/generated_ports/p_74b25f396d24a.rs` | 部分实现：完整等价：agents 列表行格式（agentType · model · N memory 可选拼接）含四例单测；agent 解析与加载随 AgentTool 桩，待验收 |
 | `src/cli/handlers/auth.ts` | 331 | 10756 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/autoMode.ts` | 171 | 5742 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/cli/handlers/mcp.tsx` | 362 | 56167 | 重写：保持通用行为 | `src/generated_ports/p_f4f160d5e6a79.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -612,7 +612,7 @@
 | `src/components/messages/UserToolResultMessage/UserToolResultMessage.tsx` | 106 | 13742 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserToolResultMessage/UserToolSuccessMessage.tsx` | 104 | 16409 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserToolResultMessage/utils.tsx` | 44 | 3938 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/nullRenderingAttachments.ts` | 71 | 2257 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/nullRenderingAttachments.ts` | 71 | 2257 | 重写：终端 UI／交互 | `src/generated_ports/p_28999a6119f29.rs` | 部分实现：完整等价：NULL_RENDERING_TYPES 二十项逐字+is_null_rendering 查询含单测（渲染预算 200 条前置过滤 CC-724）；待验收 |
 | `src/components/messages/teamMemCollapsed.tsx` | 140 | 13711 | 重写：终端 UI／交互 | `src/generated_ports/p_7ea337b79dc53.rs`| 部分实现：团队记忆折叠计数——三计数判定逐字（read/search/write 任一>0）、动词决策（进行时/过去时×首段大写）、单复数 memory/memories、逗号拼接后缀、无操作返回 null，registry 兼容导出 checkHasTeamMemOps，附 5 测试；React 记忆化脚手架属组件域有意去除|
 | `src/components/messages/teamMemSaved.ts` | 20 | 711 | 重写：终端 UI／交互 | `src/generated_ports/p_22e1be01ba4e6.rs` | 部分实现：完整等价：团队记忆段构造（0→None/单复数）含单测，原注保留；待验收 |
 | `src/components/permissions/AskUserQuestionPermissionRequest/AskUserQuestionPermissionRequest.tsx` | 645 | 82469 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -935,7 +935,7 @@
 | `src/ink/useTerminalNotification.ts` | 127 | 3857 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/warn.ts` | 10 | 295 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/widest-line.ts` | 20 | 434 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
-| `src/ink/wrap-text.ts` | 75 | 1806 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/wrap-text.ts` | 75 | 1806 | 重写：终端 UI／交互 | `src/generated_ports/p_af7183e3fe089.rs` | 部分实现：完整等价：宽度数学（columns<1 空/==1 省略号/三分位截断+…标记）纯文本快路径含四例单测；ANSI 切片与宽字符重试随 sliceAnsi 桩，待验收 |
 | `src/ink/wrapAnsi.ts` | 21 | 383 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/keybindings/KeybindingContext.tsx` | 243 | 26000 | 重写：保持通用行为 | `src/keybindings.rs` | 部分实现：上下文激活/卸载计数、动作回调注册与清理、显示绑定及组合键共享状态，React UI 接线待迁 |
 | `src/keybindings/KeybindingProviderSetup.tsx` | 308 | 41452 | 重写：保持通用行为 | `src/keybindings.rs` | 部分实现：组合键拦截、1 秒限时、回调分发、状态重置、配置重载入口与警告状态；终端事件循环及实际文件监听仍缺 |
@@ -1034,7 +1034,7 @@
 | `src/services/autoDream/config.ts` | 22 | 892 | 重写：保持通用行为 | `src/generated_ports/p_3f28a74b2c6e6.rs`| 部分实现：autoDream 决策纯函数（用户设置显式值覆盖实验默认，未设时实验值决定），settings/growthbook 读取由调用方传入；实验 flag 名按隐私门禁省略|
 | `src/services/autoDream/consolidationLock.ts` | 141 | 4548 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/autoDream/consolidationPrompt.ts` | 66 | 3225 | 重写：保持通用行为 | `src/generated_ports/p_2debbeadd491a.rs` | 部分实现：完整等价：Dream 整合提示词模板逐字搬运（含会话记录 grep 指引），DIR_EXISTS_GUIDANCE 由调用方自 memdir 桩注入（同原版 import 形态）；待验收 |
-| `src/services/awaySummary.ts` | 75 | 2671 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/awaySummary.ts` | 75 | 2671 | 重写：保持通用行为 | `src/generated_ports/p_236bd5e7a80c6.rs` | 部分实现：完整等价：away 总结提示词逐字（memory 块条件前置）+30 条窗口常量含双分支单测；模型调用与 abort 随模型链，待验收 |
 | `src/services/claudeAiLimits.ts` | 516 | 16803 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/services/claudeAiLimitsHook.ts` | 24 | 515 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/services/compact/apiMicrocompact.ts` | 154 | 4996 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
@@ -1374,7 +1374,7 @@
 | `src/utils/ansiToPng.ts` | 335 | 214955 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ansiToSvg.ts` | 273 | 8212 | 重写：保持通用行为 | `src/generated_ports/p_a9e775f18b3e2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/api.ts` | 719 | 26078 | 重写：保持通用行为 | `src/generated_ports/p_e7319660e090e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/apiPreconnect.ts` | 72 | 2843 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/apiPreconnect.ts` | 72 | 2843 | 重写：保持通用行为 | `src/generated_ports/p_8e0e68d8e2a99.rs` | 部分实现：完整等价：preconnect 决策（fired 闩/proxy/mTLS/unix 三传输排除/bedrock-vertex-foundry 后端排除）含六分支单测；连接预热 rides reqwest 全局池同 Bun keep-alive 语义；待验收 |
 | `src/utils/appleTerminalBackup.ts` | 125 | 2798 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/argumentSubstitution.ts` | 146 | 5079 | 重写：技能参数解析、位置/命名替换及渐进提示 | `src/skill_arguments.rs` / `src/tools.rs` | 部分实现：原始占位符顺序、Shell 引号分组、frontmatter 参数名和实际 read_skill 工具接入；复杂 shell-quote 歧义、全部命令前端及未列出来源待继续核对 |
 | `src/utils/array.ts` | 14 | 364 | 重写：保持通用行为 | `src/array_utils.rs` | 部分实现：intersperse 序号、count 布尔谓词、uniq 基础值去重；JS 对象引用身份与非布尔 Truthy 待核对 |
@@ -1456,7 +1456,7 @@
 | `src/utils/computerUse/drainRunLoop.ts` | 80 | 2821 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/escHotkey.ts` | 55 | 1965 | 重写：保持通用行为 | `src/generated_ports/p_ef3cd621e95de.rs` | 部分实现：完整等价：幂等注册+失败语义（tap 创建失败=缺辅助功能权限，CU 仍可用）含单测；原生 CGEventTap 不可用（差异记录），待验收 |
 | `src/utils/computerUse/executor.ts` | 659 | 23812 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/computerUse/gates.ts` | 73 | 2563 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/computerUse/gates.ts` | 73 | 2563 | 重写：保持通用行为 | `src/generated_ports/p_065bde3bdaf17.rs` | 部分实现：完整等价：DEFAULTS 八字段+partial spread 继承语义（缺字段落默认非 undefined，原注保留）含单测；远端拉取随分析端口（厂商排除记录），待验收 |
 | `src/utils/computerUse/hostAdapter.ts` | 70 | 2771 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/computerUse/inputLoader.ts` | 31 | 1190 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/computerUse/mcpServer.ts` | 107 | 4123 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1577,7 +1577,7 @@
 | `src/utils/horizontalScroll.ts` | 138 | 4302 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/http.ts` | 137 | 4928 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/hyperlink.ts` | 40 | 1465 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/iTermBackup.ts` | 74 | 1608 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/iTermBackup.ts` | 74 | 1608 | 重写：保持通用行为 | `src/generated_ports/p_e003d5f269410.rs` | 部分实现：完整等价：setup 完成置位/recovery 投影/plist 路径构造（~/Library/Preferences 原样）含单测；fs 拷贝随 config/fs 链，待验收 |
 | `src/utils/ide.ts` | 1495 | 46585 | 重写：保持通用行为 | `src/generated_ports/p_66657bb564f3f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/idePathConversion.ts` | 91 | 2602 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/idleTimeout.ts` | 54 | 1574 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
@@ -1623,7 +1623,7 @@
 | `src/utils/model/aliases.ts` | 26 | 793 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/model/antModels.ts` | 65 | 1798 | 重写：保持通用行为 | `src/generated_ports/p_5df820c78cc7a.rs` | 部分实现：完整等价：AntModel 结构 serde 全字段（含 effort/上下文窗口/alwaysOnThinking 注释语义）；灰度配置管道属厂商面（差异记录），待验收 |
 | `src/utils/model/bedrock.ts` | 266 | 9196 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/model/check1mAccess.ts` | 73 | 2215 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/model/check1mAccess.ts` | 73 | 2215 | 重写：保持通用行为 | `src/generated_ports/p_386db1b345a37.rs` | 部分实现：完整等价：isExtraUsageEnabled 九态枚举（无缓存保守 false/null 全开/out_of_credits 视为开通/七类停用全 false）含全态单测；待验收 |
 | `src/utils/model/configs.ts` | 119 | 4286 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/contextWindowUpgradeCheck.ts` | 48 | 1284 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/model/deprecation.ts` | 102 | 2534 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1677,7 +1677,7 @@
 | `src/utils/planModeV2.ts` | 96 | 3051 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plans.ts` | 398 | 12390 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/platform.ts` | 151 | 3801 | 重写：保持通用行为 | `src/generated_ports/p_dbebe9c759444.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/plugins/addDirPluginSettings.ts` | 72 | 2320 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/addDirPluginSettings.ts` | 72 | 2320 | 重写：保持通用行为 | `src/generated_ports/p_ec6bb2b819ed0.rs` | 部分实现：完整等价：SETTINGS_FILES 顺序常量+目录内 local 胜/跨目录后序胜合并纯函数含单测；parseSettingsFile 随 settings 链，待验收 |
 | `src/utils/plugins/cacheUtils.ts` | 197 | 6652 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/dependencyResolver.ts` | 306 | 11673 | 重写：插件依赖闭包及会话隔离 | `src/plugins.rs / src/plugin_manager.rs` | 部分实现：已按原版 verifyAndDemote 补齐已启用插件依赖的跨市场身份检查、缺失依赖固定点级联停用，覆盖 Hooks、MCP、技能发现/读取和斜杠命令入口；cab6e0fc，源码已提交待验收。安装时依赖闭包自动安装、跨市场信任白名单、完整动态刷新/错误分类和持久化恢复仍未等价 |
 | `src/utils/plugins/fetchTelemetry.ts` | 136 | 4922 | 重写：保持通用行为 | `src/generated_ports/p_c16d3bc443a4b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
