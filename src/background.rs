@@ -13,12 +13,12 @@ use std::{
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     process::Command,
-    sync::{oneshot, Notify},
+    sync::{oneshot, Mutex as AsyncMutex, Notify},
     time::timeout,
 };
 use uuid::Uuid;
 
-// Original diskOutput.ts allows up to 5 GiB of task output per stream.
+// Original diskOutput.ts caps the combined task output at 5 GiB.
 // Keep the cap in bytes (u64), not characters, to preserve large outputs.
 const LOG_CAP: u64 = 5 * 1024 * 1024 * 1024;
 const OUTPUT_CAPPED_NOTICE: &str = "\n[output truncated: exceeded 5GB disk cap]\n";
@@ -72,6 +72,13 @@ struct Running {
     stop: Mutex<Option<oneshot::Sender<()>>>,
     persistence_warning: Mutex<Option<String>>,
     completed: Notify,
+}
+
+// One ordered output stream and disk budget for both shell pipes.
+struct CombinedLog {
+    file: tokio::fs::File,
+    size: u64,
+    capped: bool,
 }
 
 /// The original diskOutput.ts stores task streams under a per-project,
@@ -266,7 +273,7 @@ impl BackgroundTasks {
                 bail!("Task output directory is redirected");
             }
         }
-        if !matches!(path.extension().and_then(|ext| ext.to_str()), Some("stdout" | "stderr")) {
+        if !matches!(path.extension().and_then(|ext| ext.to_str()), Some("stdout" | "stderr" | "output")) {
             return Ok(None);
         }
         let Some(id) = path.file_stem().and_then(|stem| stem.to_str()) else {
@@ -389,6 +396,7 @@ impl BackgroundTasks {
                 !self.directory.join(format!("{candidate}.json")).exists()
                     && !self.directory.join(format!("{candidate}.stdout")).exists()
                     && !self.directory.join(format!("{candidate}.stderr")).exists()
+                    && !self.directory.join(format!("{candidate}.output")).exists()
             })
             .context("Could not allocate a unique background task ID")?;
         // Validate the shell command before reserving output files: a
@@ -398,6 +406,7 @@ impl BackgroundTasks {
         crate::subprocess_env::apply(&mut proc);
         let stdout_path = self.directory.join(format!("{id}.stdout"));
         let stderr_path = self.directory.join(format!("{id}.stderr"));
+        let output_path = self.directory.join(format!("{id}.output"));
         // Hold the descriptors from exclusive creation through spooling: never
         // reopen by path. This closes the symlink substitution race.
         let stdout_file = create_output_file(&stdout_path)?;
@@ -405,6 +414,16 @@ impl BackgroundTasks {
             Ok(file) => file,
             Err(error) => {
                 let _ = fs::remove_file(&stdout_path);
+                return Err(error);
+            }
+        };
+        let output_file = match create_output_file(&output_path) {
+            Ok(file) => file,
+            Err(error) => {
+                drop(stdout_file);
+                drop(stderr_file);
+                let _ = fs::remove_file(&stdout_path);
+                let _ = fs::remove_file(&stderr_path);
                 return Err(error);
             }
         };
@@ -426,8 +445,10 @@ impl BackgroundTasks {
                 // No process was started; discard its reserved output files.
                 drop(stdout_file);
                 drop(stderr_file);
+                drop(output_file);
                 let _ = fs::remove_file(&stdout_path);
                 let _ = fs::remove_file(&stderr_path);
+                let _ = fs::remove_file(&output_path);
                 return Err(error).context("Cannot start background command");
             }
         };
@@ -439,7 +460,7 @@ impl BackgroundTasks {
             command: command.to_owned(),
             status: "running".into(),
             exit_code: None,
-            output_file: stdout_path.to_string_lossy().to_string(),
+            output_file: output_path.to_string_lossy().to_string(),
             error_file: stderr_path.to_string_lossy().to_string(),
             truncated: false,
         };
@@ -454,8 +475,10 @@ impl BackgroundTasks {
             let _ = child.wait().await;
             drop(stdout);
             drop(stderr);
+            drop(output_file);
             let _ = fs::remove_file(&stdout_path);
             let _ = fs::remove_file(&stderr_path);
+            let _ = fs::remove_file(&output_path);
             return Err(error).context("Persist background task registration");
         }
         let (stop, stopped) = oneshot::channel();
@@ -471,8 +494,11 @@ impl BackgroundTasks {
             .insert(id.clone(), running.clone());
         let folder = self.directory.clone();
         tokio::spawn(async move {
-            let stdout_task = tokio::spawn(spool(stdout, stdout_file));
-            let stderr_task = tokio::spawn(spool(stderr, stderr_file));
+            let merged = Arc::new(AsyncMutex::new(CombinedLog {
+                file: output_file, size: 0, capped: false,
+            }));
+            let stdout_task = tokio::spawn(spool_merged(stdout, stdout_file, merged.clone()));
+            let stderr_task = tokio::spawn(spool_merged(stderr, stderr_file, merged.clone()));
             let (mut state, code) = tokio::select! {
                 result = child.wait() => match result {
                     Ok(status) if status.success() => ("completed", status.code()),
@@ -512,7 +538,16 @@ impl BackgroundTasks {
                     (true, true)
                 }
             };
-            if stdout_failed || stderr_failed {
+            let merged_failed = {
+                let mut log = merged.lock().await;
+                if let Err(error) = log.file.flush().await {
+                    eprintln!("Background combined output persistence failed: {error:#}");
+                    true
+                } else {
+                    false
+                }
+            };
+            if stdout_failed || stderr_failed || merged_failed {
                 // A successful shell exit with lost output is a failed task,
                 // not a silently successful command with incomplete evidence.
                 if state == "completed" {
@@ -569,16 +604,25 @@ impl BackgroundTasks {
         let task_id = canonical_shell_task_id(id)?;
         let safe_stdout = self.directory.join(format!("{task_id}.stdout"));
         let safe_stderr = self.directory.join(format!("{task_id}.stderr"));
-        let stdout = tail(safe_stdout.to_str().context("Invalid stdout path")?)?;
-        let stderr = tail(safe_stderr.to_str().context("Invalid stderr path")?)?;
-        let text = [stdout, stderr]
-            .into_iter()
-            .filter(|x| !x.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
+        let combined = self.directory.join(format!("{task_id}.output"));
+        let (text, result_path) = match fs::symlink_metadata(&combined) {
+            Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
+                (tail(combined.to_str().context("Invalid output path")?)?, combined)
+            }
+            Ok(_) => bail!("Combined task output is redirected or invalid"),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                // Older task records stored stdout/stderr separately.
+                let stdout = tail(safe_stdout.to_str().context("Invalid stdout path")?)?;
+                let stderr = tail(safe_stderr.to_str().context("Invalid stderr path")?)?;
+                let legacy = [stdout, stderr].into_iter()
+                    .filter(|part| !part.is_empty()).collect::<Vec<_>>().join("\n");
+                (legacy, safe_stdout)
+            }
+            Err(error) => return Err(error.into()),
+        };
         let displayed = task_output_format::format_task_output(
             &text,
-            safe_stdout.to_str().context("Invalid task output path")?,
+            result_path.to_str().context("Invalid task output path")?,
             task_output_format::max_output_length(),
         );
         let retrieval = if record.status == "running" {
@@ -597,7 +641,7 @@ impl BackgroundTasks {
             "task_id":record.id,"task_type":"local_bash",
             "status":record.status,"description":record.description,
             "output":displayed.content,"exitCode":record.exit_code,
-            "output_file":safe_stdout.to_string_lossy(),
+            "output_file":result_path.to_string_lossy(),
             "persistenceWarning":self.entries.lock().unwrap().get(id)
                 .and_then(|task| task.persistence_warning.lock().unwrap().clone()),
             "truncated":record.truncated || displayed.was_truncated
@@ -610,7 +654,15 @@ impl BackgroundTasks {
     /// readable across agent restarts. Never trust persisted path metadata.
     pub fn output_delta(&self, id: &str, from_offset: u64, max_bytes: u64) -> Result<String> {
         let id = canonical_shell_task_id(id)?;
-        let path = self.directory.join(format!("{id}.stdout"));
+        let combined = self.directory.join(format!("{id}.output"));
+        let path = match fs::symlink_metadata(&combined) {
+            Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => combined,
+            Ok(_) => bail!("Combined task output is redirected or invalid"),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                self.directory.join(format!("{id}.stdout"))
+            }
+            Err(error) => return Err(error.into()),
+        };
         // diskOutput.ts::getTaskOutputDelta applies the 8 MiB default only
         // when maxBytes is omitted. An explicit larger range is respected.
         let delta = read_output_range(&path, from_offset, max_bytes)?;
@@ -890,6 +942,38 @@ async fn spool_with_limit<R: AsyncRead + Unpin>(
     Ok(truncated)
 }
 
+// Append both pipes to one transcript in chunk arrival order, using a
+// shared 5 GiB cap. Keep the separate files for existing diagnostics.
+async fn spool_merged<R: AsyncRead + Unpin>(
+    mut stream: R,
+    mut individual: tokio::fs::File,
+    combined: Arc<AsyncMutex<CombinedLog>>,
+) -> Result<bool> {
+    let mut buffer = [0u8; 8192];
+    let mut truncated = false;
+    loop {
+        let n = stream.read(&mut buffer).await?;
+        if n == 0 { break; }
+        let mut shared = combined.lock().await;
+        let writable = n.min(LOG_CAP.saturating_sub(shared.size) as usize);
+        if writable > 0 {
+            shared.file.write_all(&buffer[..writable]).await?;
+            individual.write_all(&buffer[..writable]).await?;
+            shared.size += writable as u64;
+        }
+        if writable < n {
+            truncated = true;
+            if !shared.capped {
+                shared.file.write_all(OUTPUT_CAPPED_NOTICE.as_bytes()).await?;
+                individual.write_all(OUTPUT_CAPPED_NOTICE.as_bytes()).await?;
+                shared.capped = true;
+            }
+        }
+    }
+    individual.flush().await?;
+    Ok(truncated)
+}
+
 pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"background_list",
@@ -1074,6 +1158,23 @@ mod tests {
             *tasks.shell_kind.lock().unwrap(),
             crate::shell_runtime::ShellKind::Powershell
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn combined_shell_log_preserves_stdout_and_stderr_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let tasks = BackgroundTasks::new(&dir.path().canonicalize().unwrap()).unwrap();
+        let created: Value = serde_json::from_str(&tasks.start_with_shell(
+            "printf 'first\\n'; sleep 0.1; printf 'second\\n' >&2; sleep 0.1; printf 'third\\n'",
+            "Combined shell output", crate::shell_runtime::ShellKind::Bash,
+        ).await.unwrap()).unwrap();
+        let id = created["task_id"].as_str().unwrap();
+        let output: Value = serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
+        assert_eq!(output["task"]["output"], "first\\nsecond\\nthird\\n");
+        assert!(created["output_file"].as_str().unwrap().ends_with(".output"));
+        let delta: Value = serde_json::from_str(&tasks.output_delta(id, 0, 100).unwrap()).unwrap();
+        assert_eq!(delta["content"], "first\\nsecond\\nthird\\n");
     }
 
     #[cfg(unix)]
