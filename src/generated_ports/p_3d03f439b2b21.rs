@@ -28,8 +28,8 @@ pub struct ClassifierApproval {
     pub reason: Option<String>,
 }
 
-pub const FEATURE_BASH_CLASSIFIER: AtomicBool = AtomicBool::new(true);
-pub const FEATURE_TRANSCRIPT_CLASSIFIER: AtomicBool = AtomicBool::new(true);
+pub static FEATURE_BASH_CLASSIFIER: AtomicBool = AtomicBool::new(true);
+pub static FEATURE_TRANSCRIPT_CLASSIFIER: AtomicBool = AtomicBool::new(true);
 
 pub fn bash_classifier_enabled() -> bool {
     FEATURE_BASH_CLASSIFIER.load(Ordering::Relaxed)

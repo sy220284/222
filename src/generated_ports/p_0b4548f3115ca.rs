@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub const TEAM_MEMORY_ENABLED: AtomicBool = AtomicBool::new(true);
+pub static TEAM_MEMORY_ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// Original gate: auto-memory enabled AND `experiment-flag (original name elided for privacy scan)` feature
 /// on. Auto-memory enablement is an env/config port concern; the flag

@@ -1492,7 +1492,8 @@ async fn chat(
             .into_iter()
             .map(|entry| entry.display)
             .collect();
-        let line = match terminal_input::read_prompt(&prompt, &entries)? {
+        let line =
+            match terminal_input::read_prompt(&prompt, &entries, config.editor_mode == "vim")? {
             terminal_input::PromptRead::Line(line) => line,
             terminal_input::PromptRead::Cancelled => continue,
             terminal_input::PromptRead::Eof => break,
