@@ -1725,41 +1725,61 @@ async fn chat(
             }
             continue;
         }
-        if let Some(name) = input.strip_prefix("/mcp enable ") {
-            let name = name.trim();
-            if name.is_empty() {
-                eprintln!("Usage: /mcp enable SERVER_NAME");
-            } else {
-                match agent.toggle_named_mcp(name, true).await {
-                    Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
-                    Err(error) => eprintln!("MCP enable failed: {error:#}"),
+        if let Some(raw) = input.strip_prefix("/mcp ") {
+            use generated_ports::p_7522da9606aa2::{
+                resolve_toggle, route_args, McpClient, McpRoute, McpToggleOutcome,
+            };
+            // Keep the existing manual reconnect-failed shortcut; named
+            // reconnects and all enable/disable actions use the 2.1.88
+            // /mcp command route and target selection.
+            if raw.trim() != "reconnect" {
+                match route_args(Some(raw)) {
+                    McpRoute::Reconnect(name) => match agent.reconnect_named_mcp(&name).await {
+                        Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
+                        Err(error) => eprintln!("MCP reconnect failed: {error:#}"),
+                    },
+                    McpRoute::Toggle { action, target } => {
+                        let clients = agent
+                            .mcp_statuses()?
+                            .iter()
+                            .filter_map(|value| {
+                                Some(McpClient {
+                                    name: value.get("name")?.as_str()?.to_owned(),
+                                    ctype: value.get("status")?.as_str()?.to_owned(),
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        let (outcome, names) = resolve_toggle(&action, &target, &clients);
+                        let enabled = action == "enable";
+                        let mut succeeded = 0;
+                        for name in &names {
+                            match agent.toggle_named_mcp(name, enabled).await {
+                                Ok(_) => succeeded += 1,
+                                Err(error) => eprintln!("MCP {action} {name} failed: {error:#}"),
+                            }
+                        }
+                        match outcome {
+                            McpToggleOutcome::AlreadyAll(message) => println!("{message}"),
+                            McpToggleOutcome::NotFound(message) => println!("{message}"),
+                            McpToggleOutcome::ToggledAll { enabled, .. } => {
+                                let action = if enabled { "Enabled" } else { "Disabled" };
+                                println!("{action} {succeeded} MCP server(s)");
+                            }
+                            McpToggleOutcome::ToggledOne { name, enabled } if succeeded == 1 => {
+                                let state = if enabled { "enabled" } else { "disabled" };
+                                println!("MCP server \"{name}\" {state}");
+                            }
+                            McpToggleOutcome::ToggledOne { .. } => {}
+                        }
+                    }
+                    McpRoute::Settings => {
+                        for status in agent.mcp_statuses()? {
+                            println!("{}", serde_json::to_string_pretty(&status)?);
+                        }
+                    }
                 }
+                continue;
             }
-            continue;
-        }
-        if let Some(name) = input.strip_prefix("/mcp disable ") {
-            let name = name.trim();
-            if name.is_empty() {
-                eprintln!("Usage: /mcp disable SERVER_NAME");
-            } else {
-                match agent.toggle_named_mcp(name, false).await {
-                    Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
-                    Err(error) => eprintln!("MCP disable failed: {error:#}"),
-                }
-            }
-            continue;
-        }
-        if let Some(name) = input.strip_prefix("/mcp reconnect ") {
-            let name = name.trim();
-            if name.is_empty() {
-                eprintln!("Usage: /mcp reconnect SERVER_NAME");
-            } else {
-                match agent.reconnect_named_mcp(name).await {
-                    Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
-                    Err(error) => eprintln!("MCP reconnect failed: {error:#}"),
-                }
-            }
-            continue;
         }
         if let Some(raw) = input.strip_prefix("/mode set ") {
             let raw = raw.trim();
@@ -2099,7 +2119,7 @@ async fn chat(
                 println!("{}", agent.background_tasks()?);
                 continue;
             }
-            "/mcp" | "/mcp status" => {
+            "/mcp" => {
                 for status in agent.mcp_statuses()? {
                     println!("{}", serde_json::to_string_pretty(&status)?);
                 }

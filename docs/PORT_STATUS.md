@@ -1,3 +1,10 @@
+## 2026-10-30：MCP /mcp 原版批量开关接入真实聊天入口
+
+- **源码依据**：2.1.88 `source/src/commands/mcp/mcp.tsx::call/MCPToggle`；`ide` 不可选择，`all` 启用时仅选 disabled、禁用时仅选非 disabled；命名目标和空选择给出明确结果。
+- **Rust 生产接入**：`src/main.rs::chat` 使用 `generated_ports::p_7522da9606aa2::route_args/resolve_toggle` 收敛此前重复的手写命令；实际调用 `Agent::mcp_statuses`、`toggle_named_mcp` 和 `reconnect_named_mcp`，更改持久化到 mcp-disabled.json，保留无参数 reconnect-failed 快捷命令。
+- **新增测试**：`tests/mcp_chat_route_cli.rs` 通过真实 chat 进程测试禁用 all、重复禁用时的状态反馈、不存在目标、实时 status 与磁盘持久化。已做本地 Rustfmt 检查；本提交完整 Linux/Windows 结果按真实 GitHub CI 核验。
+- **保留差异**：原版 MCPSettings/MCPToggle 完整 Ink UI、交互式连接管理视图以及其它权限/网络边界尚未独立验收，源路径仍为部分实现。
+
 ## 2026-10-30：SDK initialize 原子生效与集成测试全量自动发现
 
 - **原始源码对照**：2.1.88 `source/src/cli/print.ts::handleInitializeRequest`，初始化同时提交 Agents、JSON Schema 及系统提示。旧 Rust 路径先发布 Agent catalog 再校验 Schema；Schema 错误后会留下未授权的会话状态。
