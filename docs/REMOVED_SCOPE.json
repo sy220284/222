@@ -8,7 +8,8 @@
     "普通 /review、本地规划和本地任务保留；远程专项审查、跨设备同步、云端定时 Trigger、官方权益服务移除",
     "原始1,906条路径、源码哈希及原始状态冻结快照不改；新增移除以本文件为授权依据",
     "模型 API 可在本地测试中通过回环 Mock 服务验证，但产品不预置或安装本地模型运行时",
-    "第二次源码复核识别出分散的官方云端/远程子入口；全部以逐路径授权并保持本地 SDK、普通 MCP、Git、任务及会话可用。"
+    "第二次源码复核识别出分散的官方云端/远程子入口；全部以逐路径授权并保持本地 SDK、普通 MCP、Git、任务及会话可用。",
+    "第三轮核查进一步剔除原厂订阅额度、营销、托管MCP和实验遥测，保留通用模型API、本地计费、SDK与MCP。"
   ],
   "items": [
     {
@@ -380,6 +381,18 @@
       "reason": "远程 Bridge 状态界面"
     },
     {
+      "path": "src/components/DesktopUpsell/DesktopUpsellStartup.tsx",
+      "reason": "官方桌面客户端营销"
+    },
+    {
+      "path": "src/components/LogoV2/GuestPassesUpsell.tsx",
+      "reason": "官方推荐权益营销"
+    },
+    {
+      "path": "src/components/LogoV2/OverageCreditUpsell.tsx",
+      "reason": "官方超额信用额度营销"
+    },
+    {
       "path": "src/components/LogoV2/VoiceModeNotice.tsx",
       "reason": "官方语音提示"
     },
@@ -398,6 +411,10 @@
     {
       "path": "src/components/RemoteEnvironmentDialog.tsx",
       "reason": "远程环境管理界面"
+    },
+    {
+      "path": "src/components/Settings/Usage.tsx",
+      "reason": "官方订阅窗口用量界面；保留通用 API 用量及费用"
     },
     {
       "path": "src/components/tasks/RemoteSessionDetailDialog.tsx",
@@ -430,6 +447,10 @@
     {
       "path": "src/context/voice.tsx",
       "reason": "官方语音状态"
+    },
+    {
+      "path": "src/hooks/notifs/useCanSwitchToExistingSubscription.tsx",
+      "reason": "Claude.ai 订阅切换提示"
     },
     {
       "path": "src/hooks/useRemoteSession.ts",
@@ -532,6 +553,18 @@
       "reason": "官方订阅配额 API；本地费用统计保留"
     },
     {
+      "path": "src/services/claudeAiLimits.ts",
+      "reason": "Claude.ai 订阅限额；保留第三方 API 用量统计"
+    },
+    {
+      "path": "src/services/claudeAiLimitsHook.ts",
+      "reason": "Claude.ai 订阅限额 Hook"
+    },
+    {
+      "path": "src/services/mcp/claudeai.ts",
+      "reason": "Claude.ai 组织托管 MCP；保留标准 MCP"
+    },
+    {
       "path": "src/services/remoteManagedSettings/index.ts",
       "reason": "原厂服务端托管设置；本地设置保留"
     },
@@ -612,6 +645,10 @@
       "reason": "云端任务 Trigger"
     },
     {
+      "path": "src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts",
+      "reason": "原厂实验遥测类型"
+    },
+    {
       "path": "src/upstreamproxy/relay.ts",
       "reason": "远程代理转发"
     },
@@ -630,6 +667,14 @@
     {
       "path": "src/utils/background/remote/remoteSession.ts",
       "reason": "远程后台 Agent"
+    },
+    {
+      "path": "src/utils/billing.ts",
+      "reason": "Claude.ai 订阅计费权限"
+    },
+    {
+      "path": "src/utils/extraUsage.ts",
+      "reason": "Claude.ai 超额订阅计费"
     },
     {
       "path": "src/utils/sessionIngressAuth.ts",

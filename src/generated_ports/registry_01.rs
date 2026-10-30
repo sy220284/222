@@ -103,11 +103,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         "src/types/generated/events_mono/common/v1/auth.ts" => match export {
             _ => None,
         },
-        "src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts" => {
-            match export {
-                _ => None,
-            }
-        }
         "src/types/generated/google/protobuf/timestamp.ts" => match export {
             _ => None,
         },
@@ -374,10 +369,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         (
             "src/types/generated/events_mono/common/v1/auth.ts",
             vec!["PublicApiAuth"],
-        ),
-        (
-            "src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts",
-            vec!["GrowthbookExperimentEvent"],
         ),
         (
             "src/types/generated/google/protobuf/timestamp.ts",

@@ -344,7 +344,7 @@
 | `src/components/CustomSelect/use-select-navigation.ts` | 654 | 16388 | 重写：终端 UI／交互 | `src/custom_select_source.rs` | 部分实现：焦点环绕、逐行和翻页滚动、选项变化后的焦点恢复已实现，React 事件绑定待接通 |
 | `src/components/CustomSelect/use-select-state.ts` | 158 | 2859 | 重写：终端 UI／交互 | `src/custom_select_source.rs` | 部分实现：Rust 选中与焦点状态隔离、显式选择和可见项派生，回调接线待验收 |
 | `src/components/DesktopHandoff.tsx` | 193 | 19335 | 重写：终端 UI／交互 | `src/generated_ports/p_d3509722b2b3c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/DesktopUpsell/DesktopUpsellStartup.tsx` | 171 | 15520 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/DesktopUpsell/DesktopUpsellStartup.tsx` | 171 | 15520 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；官方桌面客户端营销；不再跟进 |
 | `src/components/DevBar.tsx` | 49 | 5040 | 重写：终端 UI／交互 | `src/generated_ports/p_0e01a1adf25b5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/DevChannelsDialog.tsx` | 105 | 9113 | 重写：终端 UI／交互 | `src/generated_ports/p_b476dbe9d3b70.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/DiagnosticsDisplay.tsx` | 95 | 13220 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -395,10 +395,10 @@
 | `src/components/LogoV2/EmergencyTip.tsx` | 58 | 6707 | 重写：终端 UI／交互 | `src/generated_ports/p_eb6ebe3e9e07d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/Feed.tsx` | 112 | 13804 | 重写：终端 UI／交互 | `src/generated_ports/p_146d6a79b5789.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/FeedColumn.tsx` | 59 | 5379 | 重写：终端 UI／交互 | `src/generated_ports/p_2e288793aaf3b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/LogoV2/GuestPassesUpsell.tsx` | 70 | 9122 | 重写：终端 UI／交互 | `src/generated_ports/p_b950fb6b41f67.rs` | 部分实现：完整等价：通行证刷新重置决策（正值∧超过 last_seen→清计数）与 upsell 双门（eligible∧缓存热）纯函数含三单测；JSX 与厂商分析归宿主/排除，待验收 |
+| `src/components/LogoV2/GuestPassesUpsell.tsx` | 70 | 9122 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；官方推荐权益营销；不再跟进 |
 | `src/components/LogoV2/LogoV2.tsx` | 543 | 75183 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/LogoV2/Opus1mMergeNotice.tsx` | 55 | 5812 | 重写：终端 UI／交互 | `src/generated_ports/p_92ccc82ba7039.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/LogoV2/OverageCreditUpsell.tsx` | 166 | 18347 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/LogoV2/OverageCreditUpsell.tsx` | 166 | 18347 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；官方超额信用额度营销；不再跟进 |
 | `src/components/LogoV2/VoiceModeNotice.tsx` | 68 | 7668 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方语音提示；不再跟进，通用本地能力与模型 API 保留 |
 | `src/components/LogoV2/WelcomeV2.tsx` | 433 | 57864 | 重写：终端 UI／交互 | `src/generated_ports/p_ea10c11eb3bed.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/feedConfigs.tsx` | 92 | 12205 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -463,7 +463,7 @@
 | `src/components/Settings/Config.tsx` | 1822 | 271407 | 重写：终端 UI／交互 | `src/generated_ports/p_304f6b94b4985.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Settings/Settings.tsx` | 137 | 18641 | 重写：终端 UI／交互 | `src/generated_ports/p_cd5dd5eb5b5b8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Settings/Status.tsx` | 241 | 25871 | 重写：终端 UI／交互 | `src/generated_ports/p_cbf04f614d757.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/Settings/Usage.tsx` | 377 | 39524 | 重写：终端 UI／交互 | `src/generated_ports/p_52c6c162180e4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/components/Settings/Usage.tsx` | 377 | 39524 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；官方订阅窗口用量界面；保留通用 API 用量及费用；不再跟进 |
 | `src/components/ShowInIDEPrompt.tsx` | 170 | 17230 | 重写：终端 UI／交互 | `src/generated_ports/p_489fa54bdb60f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/SkillImprovementSurvey.tsx` | 152 | 15172 | 重写：终端 UI／交互 | `src/generated_ports/p_d7e7ec5a41e23.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/FlashingChar.tsx` | 61 | 6310 | 重写：终端 UI／交互 | `src/generated_ports/p_48b72004b31de.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -739,7 +739,7 @@
 | `src/entrypoints/sdk/coreTypes.ts` | 63 | 1466 | 重写：CLI／SDK 入口 | `src/main.rs` | 部分实现，多模式与 SDK 未等价 |
 | `src/hooks/fileSuggestions.ts` | 812 | 27152 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useAutoModeUnavailableNotification.ts` | 57 | 1965 | 重写：终端 UI／交互 | `src/generated_ports/p_1c0a174b2d839.rs` | 部分实现：完整等价：编译门关闭+remote 守卫判定纯函数含单测（外部构建永不触发）；原因/文案助手随 permission-setup 链，待验收 |
-| `src/hooks/notifs/useCanSwitchToExistingSubscription.tsx` | 60 | 7274 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/notifs/useCanSwitchToExistingSubscription.tsx` | 60 | 7274 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅切换提示；不再跟进 |
 | `src/hooks/notifs/useDeprecationWarningNotification.tsx` | 44 | 4605 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useFastModeNotification.tsx` | 162 | 14961 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/notifs/useIDEStatusIndicator.tsx` | 186 | 20764 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -1035,8 +1035,8 @@
 | `src/services/autoDream/consolidationLock.ts` | 141 | 4548 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/autoDream/consolidationPrompt.ts` | 66 | 3225 | 重写：保持通用行为 | `src/generated_ports/p_2debbeadd491a.rs` | 部分实现：完整等价：Dream 整合提示词模板逐字搬运（含会话记录 grep 指引），DIR_EXISTS_GUIDANCE 由调用方自 memdir 桩注入（同原版 import 形态）；待验收 |
 | `src/services/awaySummary.ts` | 75 | 2671 | 重写：保持通用行为 | `src/generated_ports/p_236bd5e7a80c6.rs` | 部分实现：完整等价：away 总结提示词逐字（memory 块条件前置）+30 条窗口常量含双分支单测；模型调用与 abort 随模型链，待验收 |
-| `src/services/claudeAiLimits.ts` | 516 | 16803 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
-| `src/services/claudeAiLimitsHook.ts` | 24 | 515 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
+| `src/services/claudeAiLimits.ts` | 516 | 16803 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅限额；保留第三方 API 用量统计；不再跟进 |
+| `src/services/claudeAiLimitsHook.ts` | 24 | 515 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅限额 Hook；不再跟进 |
 | `src/services/compact/apiMicrocompact.ts` | 154 | 4996 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/autoCompact.ts` | 352 | 12905 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/compact.ts` | 1706 | 60814 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现：先持久化压缩摘要再执行 PostCompact，Hook 失败不回滚摘要（1b652b8b）；长期记忆、完整边界标记及恢复时序未等价 |
@@ -1066,7 +1066,7 @@
 | `src/services/mcp/channelAllowlist.ts` | 77 | 2838 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/channelNotification.ts` | 317 | 12540 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/channelPermissions.ts` | 241 | 8981 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
-| `src/services/mcp/claudeai.ts` | 165 | 6126 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
+| `src/services/mcp/claudeai.ts` | 165 | 6126 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 组织托管 MCP；保留标准 MCP；不再跟进 |
 | `src/services/mcp/client.ts` | 3349 | 119060 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、故障隔离、资源/提示订阅及重连、MCP Prompt 命令发现/位置参数绑定/服务端取回/进入真实模型请求；多模态 Prompt、OAuth、独立 SSE GET/退避、其他传输及完整回调/UI 仍未等价；新增服务端 roots/list、ping、elicitation 初始化安全取消与 HTTP SSE 双向请求回执，交互式审批仍缺 ；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/资源等仍待验证；roots/list 按实际工作区或子代理 worktree 返回，断线重建保留原根目录，并校验 stdio/HTTP 双传输 ；独立 GET 通知流增加 SDK 显式长轮询/Last-Event-ID 续传及资源变更监听，常驻自动监听未实现 |
 | `src/services/mcp/config.ts` | 1579 | 51130 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、故障隔离、资源/提示订阅及重连、MCP Prompt 命令发现/位置参数绑定/服务端取回/进入真实模型请求；多模态 Prompt、OAuth、独立 SSE GET/退避、其他传输及完整回调/UI 仍未等价 |
 | `src/services/mcp/elicitationHandler.ts` | 314 | 10166 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
@@ -1348,7 +1348,7 @@
 | `src/types/command.ts` | 217 | 7736 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/types/generated/events_mono/claude_code/v1/claude_code_internal_event.ts` | 866 | 30728 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/types/generated/events_mono/common/v1/auth.ts` | 101 | 2822 | 重写：保持通用行为 | `src/generated_ports/p_90bb0f65ccd4f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts` | 224 | 7591 | 重写：保持通用行为 | `src/generated_ports/p_461ec04c9ec8b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts` | 224 | 7591 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；原厂实验遥测类型；不再跟进 |
 | `src/types/generated/google/protobuf/timestamp.ts` | 188 | 6565 | 重写：保持通用行为 | `src/generated_ports/p_5144380e07c74.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/types/hooks.ts` | 291 | 9138 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/types/ids.ts` | 45 | 1295 | 重写：保持通用行为 | `src/generated_ports/p_87d79f34fe49a.rs`| 部分实现：SessionId 与 AgentId 品牌类型（Rust newtype 等价 TS brand）、as_session_id 与 as_agent_id、createAgentId（可选标签加 16 位随机）、toAgentId 校验（a 前缀加可选标签加 16hex，拒绝队友名等格式），registry 兼容导出 asSessionId、asAgentId、toAgentId，附 3 测试|
@@ -1416,7 +1416,7 @@
 | `src/utils/bash/specs/timeout.ts` | 21 | 426 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/utils/bash/treeSitterAnalysis.ts` | 507 | 17594 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/betas.ts` | 435 | 15682 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/billing.ts` | 79 | 2413 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/billing.ts` | 79 | 2413 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅计费权限；不再跟进 |
 | `src/utils/binaryCheck.ts` | 54 | 1466 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/browser.ts` | 69 | 1867 | 重写：保持通用行为 | `src/browser_launcher.rs / src/main.rs` | 部分实现：真实 OS 启动浏览器及文件默认处理器、HTTP/HTTPS URL 校验、BROWSER 环境选择和平台命令已通过 Tokio 子进程接入；原版全部调用链待完整移植 |
 | `src/utils/bufferedWriter.ts` | 101 | 2584 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
@@ -1514,7 +1514,7 @@
 | `src/utils/execFileNoThrowPortable.ts` | 90 | 2685 | 重写：保持通用行为 | `src/exec_sync_compat.rs / src/portable_configuration.rs` | 部分实现：默认十分钟超时、Shell 执行、cwd/env/stdin、非零退出保留stdout并trim/null、标准流选项、输出缓冲上限、超时与取消的 Rust 同步兼容层；IDE/钥匙串等原版跨模块调用及平台差异仍待完整接线和对照 |
 | `src/utils/execSyncWrapper.ts` | 39 | 1203 | 重写：保持通用行为 | `src/portable_configuration.rs / src/exec_sync_compat.rs` | 部分实现：统一执行器已实现同步 Shell、cwd/env/stdin、退出码、输出、超时/取消；严格的非零退出错误与宽松非抛出接口分离；所有业务入口与跨平台权限验收待补齐 |
 | `src/utils/exportRenderer.tsx` | 98 | 16635 | 重写：保持通用行为 | `src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
-| `src/utils/extraUsage.ts` | 24 | 635 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
+| `src/utils/extraUsage.ts` | 24 | 635 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 超额订阅计费；不再跟进 |
 | `src/utils/fastMode.ts` | 533 | 17723 | 重写：保持通用行为 | `src/generated_ports/p_9a3112a5d3add.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/file.ts` | 585 | 18256 | 重写：保持通用行为 | `src/generated_ports/p_0ff2be80aab56.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/fileHistory.ts` | 1116 | 34660 | 重写：保持通用行为 | `src/history.rs / src/tools.rs / src/agent.rs / src/config.rs` | 部分实现：本地检查点与内容校验回退；按原版备份恢复原 Unix 文件权限，若回退前权限已被外部修改则拒绝覆盖（2a0f929b、0f3e5461）；按原版会话 ID 隔离检查点创建/查询/回退（28b82752、1b90480a）；交互配置 fileCheckpointingEnabled 与 SDK 显式 opt-in/全局禁用开关接入真实 Write/Edit/NotebookEdit 工具链（b63e2803、af837473、d8a79bb8、68f00be1），关闭文件历史时模型工具目录隐藏回退入口，会话目录拒绝符号链接（8586562f、32d8873c、dc46b1bb）；按原版恢复已删除文件并重建父目录，已删除的新文件回退幂等（95be4266）。源码已提交待验收；无损二进制及大文件独立备份、旧记录兼容恢复、检查点时间排序和损坏记录显式错误已接入（0f1c5ff9、06c700ce）；Write/Edit/NotebookEdit 修改前历史备份读取失败仍执行文件操作并明确告警，成功后历史落盘失败也不误报编辑失败（3ba0c262、771c1f45、e8823bcc、c582d31e、06ae7637），源码已提交待验收。新增原版回退方向差异预览与 Read 权限接线（ecd0dfca、54c9aa15），以及备份原始字节 SHA-256 校验、损坏备份回退前明确拒绝（ecd0dfca），均已提交待验收；预览当前按单文件检查点，尚缺原版消息级聚合。分支会话复制原会话检查点与二进制备份、优先硬链接/跨设备复制、失败回滚已接入真实 Agent（5e576b84、90879015），源码已提交待验收；原版日志恢复及消息级快照仍缺。仍缺原版按消息 ID 快照、100 次保留上限、Bash 修改跟踪、完整跨会话恢复、竞态与跨平台权限行为；回退工具现在在恢复磁盘前检查 Edit(path) 明确拒绝及询问规则（70d0bd1e，已提交待验收）；按消息快照与并发恢复仍缺；历史备份改存用户配置目录 file-history/<session>，旧工作区检查点与二进制备份通过临时复制、同步、同字节断点恢复后迁移清理，Unix 私有目录权限 0700（53add254、02ba3fe4），源码已提交待行为验收；历史检查点与备份读取、分支复制增加打开时防符号链接重定向（4bdc42ed、440a6ecd、02ffae2a），回退改用已校验的同一份字节防止二次读取竞态（488d4dd3），源码已提交待验收；消息级快照及100次保留上限仍缺；恢复目标写入改为同目录原子替换并保留符号链接目标语义（5445e4ae、2d8d350d），额外可靠性增强，不计原版等价功能；消息级 SDK rewind_files 现以原始 user_message_id 关联会话快照，逆序恢复文件前做完整性/修改冲突和权限预检，含 dry_run 与合并排队 UUID 别名（b66aa57e、cd64051a、8c869cde、69652c1b、005fe52a，源码已提交待验收）；完整 UI 与跨进程一致性仍待验收 |

@@ -164,9 +164,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         "src/components/Settings/Status.tsx" => match export {
             _ => None,
         },
-        "src/components/Settings/Usage.tsx" => match export {
-            _ => None,
-        },
         "src/components/ShowInIDEPrompt.tsx" => match export {
             _ => None,
         },
@@ -455,7 +452,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/Settings/Config.tsx", vec![]),
         ("src/components/Settings/Settings.tsx", vec![]),
         ("src/components/Settings/Status.tsx", vec![]),
-        ("src/components/Settings/Usage.tsx", vec![]),
         ("src/components/ShowInIDEPrompt.tsx", vec![]),
         ("src/components/SkillImprovementSurvey.tsx", vec![]),
         ("src/components/Spinner.tsx", vec![]),
