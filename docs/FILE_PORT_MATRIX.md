@@ -271,7 +271,7 @@
 | `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/rewind/rewind.ts` | 14 | 376 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/sandbox-toggle/index.ts` | 51 | 1520 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/sandbox-toggle/sandbox-toggle.tsx` | 83 | 13157 | 重写：保持通用行为 | `src/generated_ports/p_d71c68a412fbd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/sandbox-toggle/sandbox-toggle.tsx` | 83 | 13157 | 重写：保持通用行为 | `src/generated_ports/p_d71c68a412fbd.rs`| 部分实现：/sandbox 编排——平台支持门禁（WSL 专属提示）→enabledPlatforms 白名单→policy 锁→参数路由（空=设置菜单视图带依赖检查、exclude <pattern>=去引号+设置写路径+cwd 相对消息、未知=错误），设置路径 .atlas/settings.local.json；SandboxManager/设置加载注入，菜单视图归组件域，附 4 测试|
 | `src/commands/security-review.ts` | 244 | 12531 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/session/index.ts` | 17 | 418 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/session/session.tsx` | 140 | 13009 | 重写：保持通用行为 | 待定 | 未迁移 |
