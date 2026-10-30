@@ -395,7 +395,7 @@
 | `src/components/LogoV2/EmergencyTip.tsx` | 58 | 6707 | 重写：终端 UI／交互 | `src/generated_ports/p_eb6ebe3e9e07d.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/Feed.tsx` | 112 | 13804 | 重写：终端 UI／交互 | `src/generated_ports/p_146d6a79b5789.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/FeedColumn.tsx` | 59 | 5379 | 重写：终端 UI／交互 | `src/generated_ports/p_2e288793aaf3b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/LogoV2/GuestPassesUpsell.tsx` | 70 | 9122 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/LogoV2/GuestPassesUpsell.tsx` | 70 | 9122 | 重写：终端 UI／交互 | `src/generated_ports/p_b950fb6b41f67.rs` | 部分实现：完整等价：通行证刷新重置决策（正值∧超过 last_seen→清计数）与 upsell 双门（eligible∧缓存热）纯函数含三单测；JSX 与厂商分析归宿主/排除，待验收 |
 | `src/components/LogoV2/LogoV2.tsx` | 543 | 75183 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/LogoV2/Opus1mMergeNotice.tsx` | 55 | 5812 | 重写：终端 UI／交互 | `src/generated_ports/p_92ccc82ba7039.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/LogoV2/OverageCreditUpsell.tsx` | 166 | 18347 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -813,7 +813,7 @@
 | `src/hooks/usePrStatus.ts` | 107 | 3202 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/usePromptSuggestion.ts` | 178 | 5315 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/usePromptsFromClaudeInChrome.tsx` | 71 | 11623 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useQueueProcessor.ts` | 69 | 2547 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useQueueProcessor.ts` | 69 | 2547 | 重写：终端 UI／交互 | `src/generated_ports/p_ada86ce0c1836.rs` | 部分实现：完整等价：出队泵门（无活动查询∧队列非空∧无本地 JSX UI 阻塞）纯函数含四分支单测；优先级排序随 messageQueue，待验收 |
 | `src/hooks/useRemoteSession.ts` | 606 | 23010 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useReplBridge.tsx` | 723 | 115652 | 重写：终端 UI／交互 | `src/generated_ports/p_c84de04e0085c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useSSHSession.ts` | 242 | 8316 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -1702,7 +1702,7 @@
 | `src/utils/plugins/officialMarketplaceStartupCheck.ts` | 440 | 15192 | 重写：保持通用行为 | `src/generated_ports/p_bbc95ae0a3971.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/orphanedPluginFilter.ts` | 115 | 3980 | 重写：过期插件缓存过滤 | `src/search.rs` | 部分实现：按原版 `.orphaned_at` 版本标记，在真实 Glob/Grep 目录遍历前排除已过期的插件版本，保留健康版本（952cf33f、5218a04f，源码已提交待验收）；仍缺原版会话级缓存冻结、插件重载时刷新和全部外部缓存路径处理 |
 | `src/utils/plugins/parseMarketplaceInput.ts` | 163 | 6075 | 重写：保持通用行为 | `src/marketplace_source.rs / src/marketplace_registry.rs / src/plugin_manager.rs` | 部分实现：解析 Git SSH、GitHub 简写、HTTP(S)、Azure DevOps 与本地文件/目录；本地市场登记、持久管理、刷新及插件安装已接入 CLI，远程下载、信任验证与完整错误边界待验收 |
-| `src/utils/plugins/performStartupChecks.tsx` | 70 | 9597 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/performStartupChecks.tsx` | 70 | 9597 | 重写：保持通用行为 | `src/generated_ports/p_1b2df9c84c34d.rs` | 部分实现：完整等价：信任门纯函数（trust 对话框未确认则跳过插件安装，防恶意仓库自装）含单测；安装管理器随插件链，待验收 |
 | `src/utils/plugins/pluginAutoupdate.ts` | 285 | 9473 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginBlocklist.ts` | 128 | 4361 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/pluginDirectories.ts` | 179 | 6669 | 重写：保持通用行为 | 待定 | 未迁移 |
