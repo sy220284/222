@@ -56,7 +56,7 @@ fn fingerprint(content: &[u8]) -> String {
 
 /// Read only a regular checkpoint file, including across the open itself.
 /// The no-follow flag closes the gap between symlink_metadata and fs::read.
-fn read_checkpoint_file(path: &Path) -> Result<Vec<u8>> {
+fn open_history_file(path: &Path) -> Result<fs::File> {
     let metadata = fs::symlink_metadata(path)?;
     if !metadata.file_type().is_file() {
         bail!("History checkpoint must be a regular file: {}", path.display());
@@ -68,10 +68,15 @@ fn read_checkpoint_file(path: &Path) -> Result<Vec<u8>> {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_NOFOLLOW);
     }
-    let mut file = options.open(path)?;
+    let file = options.open(path)?;
     if !file.metadata()?.is_file() {
         bail!("History checkpoint changed to a non-file: {}", path.display());
     }
+    Ok(file)
+}
+
+fn read_checkpoint_file(path: &Path) -> Result<Vec<u8>> {
+    let mut file = open_history_file(path)?;
     let mut bytes = Vec::new();
     use std::io::Read as _;
     file.read_to_end(&mut bytes)?;
@@ -390,7 +395,7 @@ fn previous_bytes(record: &Record) -> Result<Option<Vec<u8>>> {
     let bytes = if record.previous_backup.is_some() {
         let backup = record.backup_path.as_ref()
             .context("History backup was not loaded from session storage")?;
-        Some(fs::read(backup)
+        Some(read_checkpoint_file(backup)
             .with_context(|| format!("Read history backup {}", backup.display()))?)
     } else {
         record.previous.as_ref().map(|text| text.as_bytes().to_vec())
@@ -564,23 +569,29 @@ pub fn copy_for_resume(root: &Path, previous_session: &str, next_session: &str) 
             let record = load(root, Some(previous_session), &id.to_string())?;
             if let Some(backup) = record.backup_path.as_ref() {
                 let target = destination.join(format!("{id}.bak"));
+                // Refuse redirected backup files both before and after
+                // linking; hard_link may link the symlink inode itself.
+                let _source = open_history_file(backup)?;
                 match fs::hard_link(backup, &target) {
                     Ok(()) => {},
                     Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                         return Err(error).context("History destination backup already exists")
                     }
                     Err(_) => {
-                        let mut source_file = fs::File::open(backup)?;
+                        let mut source_file = open_history_file(backup)?;
                         let mut target_file = fs::OpenOptions::new()
                             .write(true).create_new(true).open(&target)?;
                         std::io::copy(&mut source_file, &mut target_file)?;
                         target_file.sync_all()?;
                     }
                 }
+                if !fs::symlink_metadata(&target)?.file_type().is_file() {
+                    bail!("History backup copy was redirected: {}", target.display());
+                }
             }
             let source_record = source.join(format!("{id}.json"));
             let target_record = destination.join(format!("{id}.json"));
-            let mut input = fs::File::open(&source_record)?;
+            let mut input = open_history_file(&source_record)?;
             let mut output = fs::OpenOptions::new()
                 .write(true).create_new(true).open(&target_record)?;
             std::io::copy(&mut input, &mut output)?;
