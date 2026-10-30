@@ -384,6 +384,95 @@ mod tests {
         );
         assert!(tags_from_metadata(&json!({"id":"x"})).is_empty());
     }
+
+    #[tokio::test]
+    async fn catalog_and_probe_use_brand_specific_auth_and_native_routes() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for brand in ["deepseek", "gemini"] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let brand_name = brand.to_owned();
+            let worker = tokio::spawn(async move {
+                for request_index in 0..if brand_name == "gemini" { 3 } else { 2 } {
+                    let (mut socket, _) = listener.accept().await.unwrap();
+                    let mut received = Vec::new();
+                    let mut buffer = [0u8; 4096];
+                    let end = loop {
+                        let n = socket.read(&mut buffer).await.unwrap();
+                        assert!(n > 0);
+                        received.extend_from_slice(&buffer[..n]);
+                        if let Some(idx) = received.windows(4).position(|v| v == b"\r\n\r\n") {
+                            break idx + 4;
+                        }
+                    };
+                    let headers = String::from_utf8_lossy(&received[..end]).to_lowercase();
+                    let length = headers.lines().find_map(|line| {
+                        line.strip_prefix("content-length:")
+                            .map(|v| v.trim().parse::<usize>().unwrap())
+                    }).unwrap_or(0);
+                    while received.len() < end + length {
+                        let n = socket.read(&mut buffer).await.unwrap();
+                        assert!(n > 0);
+                        received.extend_from_slice(&buffer[..n]);
+                    }
+                    if brand_name == "gemini" {
+                        assert!(headers.contains("x-goog-api-key: test-key"));
+                        assert!(!headers.contains("authorization: bearer"));
+                    } else {
+                        assert!(headers.contains("authorization: bearer test-key"));
+                    }
+                    let (reply, expected) = if brand_name == "gemini" {
+                        match request_index {
+                            0 => (json!({"models":[{"name":"models/gemini-test",
+                                "displayName":"Gemini Test", "inputTokenLimit":1000,
+                                "outputTokenLimit":150,"supportedGenerationMethods":["generateContent"]},
+                                {"name":"models/embedding-test",
+                                "supportedGenerationMethods":["embedContent"]}],
+                                "nextPageToken":"page-2"}),
+                                "GET /models?pageSize=1000"),
+                            1 => (json!({"models":[{"name":"models/gemini-test-2",
+                                "supportedGenerationMethods":["generateContent"]}]}),
+                                "GET /models?pageSize=1000&pageToken=page-2"),
+                            _ => (json!({"candidates":[{"content":{"parts":[{"text":"OK"}]}}]}),
+                                "POST /models/gemini-test:generateContent"),
+                        }
+                    } else if request_index == 0 {
+                        (json!({"data":[{"id":"deepseek-v4-pro","name":"DeepSeek Pro",
+                            "context_window":1048576,"max_output_tokens":1024,
+                            "input_modalities":["text"],"effort":{"supported_levels":["low","high"]}}]}),
+                            "GET /models")
+                    } else {
+                        (json!({"choices":[{"message":{"role":"assistant","content":"OK"}}]}),
+                            "POST /chat/completions")
+                    };
+                    assert!(headers.contains(expected), "{brand_name}: {headers}");
+                    let payload = reply.to_string();
+                    socket.write_all(format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        payload.len(), payload,
+                    ).as_bytes()).await.unwrap();
+                }
+            });
+            let mut profile = Config::default().select(Some(brand), None).unwrap();
+            profile.base_url = format!("http://{address}");
+            let discovered = list_models(&profile, "test-key").await.unwrap();
+            if brand == "gemini" {
+                assert_eq!(discovered.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+                    vec!["gemini-test", "gemini-test-2"]);
+                assert_eq!(discovered[0].context_window, Some(1000));
+                assert_eq!(discovered[0].max_output_tokens, Some(150));
+                probe_model(&profile, "gemini-test", "test-key").await.unwrap();
+            } else {
+                assert_eq!(discovered.len(), 1);
+                assert_eq!(discovered[0].tags,
+                    vec!["输入:text", "思考:low/high"]);
+                assert_eq!(discovered[0].context_window, Some(1048576));
+                probe_model(&profile, "deepseek-v4-pro", "test-key").await.unwrap();
+            }
+            worker.await.unwrap();
+        }
+    }
+
     #[test]
     fn tuning_rejects_invalid_values() {
         assert!(ModelTuning { temperature: Some(2.1), ..Default::default() }.validate().is_err());
