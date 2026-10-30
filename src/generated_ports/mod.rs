@@ -459,11 +459,14 @@ pub fn inspect(
     }
     registry_04::inspect(source, export, args)
 }
+pub mod p_00655fd6fbf6c;
 pub mod p_02a4478e8f594;
 pub mod p_039276464fdf6;
 pub mod p_054fc0ad2fe85;
 pub mod p_065bde3bdaf17;
+pub mod p_065c142366c06;
 pub mod p_074b43566422f;
+pub mod p_0aaf9c6f1ed25;
 pub mod p_0b0275b0d32ea;
 pub mod p_0b22de63571f1;
 pub mod p_0be79184937ef;
