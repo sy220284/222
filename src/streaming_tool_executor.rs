@@ -624,7 +624,10 @@ mod tests {
             .await
             .expect("all queued calls should terminate");
         assert_eq!(
-            outcomes.iter().map(|o| o.call.id.as_str()).collect::<Vec<_>>(),
+            outcomes
+                .iter()
+                .map(|o| o.call.id.as_str())
+                .collect::<Vec<_>>(),
             ["first", "exclusive_queued", "later_read"]
         );
     }
@@ -638,7 +641,11 @@ mod tests {
         assert_eq!(executor.tools.len(), 3);
         assert!(executor.tools.iter().all(|tool| tool.deferred));
         assert_eq!(
-            executor.deferred_tools().iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            executor
+                .deferred_tools()
+                .iter()
+                .map(|c| c.id.as_str())
+                .collect::<Vec<_>>(),
             ["agent_first", "write_second", "read_third"]
         );
         assert!(executor.drain().await.is_empty());
