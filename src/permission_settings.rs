@@ -67,11 +67,14 @@ impl SettingsPaths {
     /// hard deny across installation, activation and runtime discovery.
     /// Read the same merged managed policy used by the permission system.
     pub fn plugin_blocked_by_policy(&self, plugin_id: &str) -> Result<bool> {
-        Ok(self.load_policy()?.as_ref()
+        Ok(self
+            .load_policy()?
+            .as_ref()
             .and_then(|policy| policy.get("enabledPlugins"))
             .and_then(Value::as_object)
             .and_then(|plugins| plugins.get(plugin_id))
-            .and_then(Value::as_bool) == Some(false))
+            .and_then(Value::as_bool)
+            == Some(false))
     }
 
     /// Read only non-sensitive plugin options from the user settings source.
@@ -84,13 +87,15 @@ impl SettingsPaths {
         let Some(configs) = settings.get("pluginConfigs") else {
             return Ok(Map::new());
         };
-        let configs = configs.as_object()
+        let configs = configs
+            .as_object()
             .context("User pluginConfigs must be an object")?;
         let config = if let Some(exact) = configs.get(plugin_name) {
             Some(exact)
         } else {
             let prefix = format!("{plugin_name}@");
-            let mut matches = configs.iter()
+            let mut matches = configs
+                .iter()
                 .filter(|(key, _)| key.starts_with(&prefix))
                 .map(|(_, value)| value);
             let first = matches.next();
@@ -105,7 +110,9 @@ impl SettingsPaths {
         let Some(options) = config.get("options") else {
             return Ok(Map::new());
         };
-        options.as_object().cloned()
+        options
+            .as_object()
+            .cloned()
             .context("Plugin public options must be an object")
     }
 
@@ -124,24 +131,33 @@ impl SettingsPaths {
         self.validate_edit_path(path)?;
         let lock_path = path.with_extension(format!(
             "{}.lock",
-            path.extension().and_then(|value| value.to_str()).unwrap_or("json")
+            path.extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or("json")
         ));
-        if fs::symlink_metadata(&lock_path)
-            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+        if fs::symlink_metadata(&lock_path).is_ok_and(|metadata| metadata.file_type().is_symlink())
         {
             bail!("Refusing symlinked plugin settings lock");
         }
-        let lock = OpenOptions::new().create(true).read(true).write(true)
-            .truncate(false).open(&lock_path)?;
+        let lock = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)?;
         lock.lock_exclusive()?;
         let Some(mut settings) = Self::read_json(path)? else {
             return Ok(false);
         };
-        let object = settings.as_object_mut().context("User settings must be an object")?;
+        let object = settings
+            .as_object_mut()
+            .context("User settings must be an object")?;
         let Some(configs) = object.get_mut("pluginConfigs") else {
             return Ok(false);
         };
-        let configs = configs.as_object_mut().context("User pluginConfigs must be an object")?;
+        let configs = configs
+            .as_object_mut()
+            .context("User pluginConfigs must be an object")?;
         let key = if configs.contains_key(plugin_name) {
             Some(plugin_name.to_owned())
         } else {
