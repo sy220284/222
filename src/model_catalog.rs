@@ -580,7 +580,10 @@ mod tests {
                         (json!({"choices":[{"message":{"role":"assistant","content":"OK"}}]}),
                             "POST /chat/completions")
                     };
-                    assert!(headers.contains(expected), "{brand_name}: {headers}");
+                    assert!(
+                        headers.contains(&expected.to_ascii_lowercase()),
+                        "{brand_name}: {headers}"
+                    );
                     let payload = reply.to_string();
                     socket.write_all(format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
