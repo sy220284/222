@@ -80,19 +80,24 @@ impl HybridOutbound {
                     request = request.header(name, value);
                 }
                 match request
-                    .body(crate::ndjson::stringify_value(&Value::Array(
-                        batch.to_vec(),
-                    )))
+                    .body(crate::ndjson::stringify_value(&serde_json::json!({
+                        "events": batch
+                    })))
                     .send()
                     .await
                 {
                     Ok(response) => {
                         let status = response.status().as_u16();
-                        if status == 200 || status == 201 {
+                        if response.status().is_success() {
+                            return Ok(());
+                        }
+                        // Upstream treats permanent client errors as delivered
+                        // (discard) rather than retrying the same rejected data.
+                        if (400..500).contains(&status) && status != 429 {
                             return Ok(());
                         }
                         Err(UploaderError::Retryable {
-                            retry_after_ms: parse_retry_after_status(status),
+                            retry_after_ms: None,
                         })
                     }
                     Err(_) => Err(UploaderError::Retryable {
@@ -177,14 +182,6 @@ impl HybridOutbound {
     }
 }
 
-fn parse_retry_after_status(status: u16) -> Option<u64> {
-    if status == 429 {
-        Some(1_000)
-    } else {
-        None
-    }
-}
-
 /// Run the inbound WebSocket read loop, forwarding every text frame line to
 /// `data_tx`. Returns when the connection drops (caller decides reconnect).
 pub async fn run_inbound(
@@ -263,6 +260,61 @@ mod tests {
             "http://127.0.0.1:9913/session/s3/events"
         );
         assert!(convert_ws_url_to_post_url("http://host/path").is_err());
+    }
+
+    #[tokio::test]
+    async fn post_events_envelope_and_permanent_http_errors_match_source() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+        for status in [204_u16, 400_u16] {
+            let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = tokio::spawn(async move {
+                let (mut peer, _) = listener.accept().await.unwrap();
+                let mut buffer = Vec::new();
+                let mut chunk = [0_u8; 1024];
+                let end = loop {
+                    if let Some(i) = buffer.windows(4).position(|b| b == b"\r\n\r\n") {
+                        break i + 4;
+                    }
+                    let n = peer.read(&mut chunk).await.unwrap();
+                    assert!(n > 0 && buffer.len() < 16384);
+                    buffer.extend_from_slice(&chunk[..n]);
+                };
+                let header = String::from_utf8(buffer[..end].to_vec()).unwrap();
+                assert!(header.starts_with("POST /session/s1/events HTTP/1.1"));
+                let content_length: usize = header.lines().find_map(|line| {
+                    line.split_once(':').and_then(|(name, value)| {
+                        name.eq_ignore_ascii_case("Content-Length")
+                            .then(|| value.trim().parse().unwrap())
+                    })
+                }).unwrap();
+                while buffer.len() - end < content_length {
+                    let n = peer.read(&mut chunk).await.unwrap();
+                    assert!(n > 0);
+                    buffer.extend_from_slice(&chunk[..n]);
+                }
+                let body: Value = serde_json::from_slice(&buffer[end..end + content_length]).unwrap();
+                let reply = format!(
+                    "HTTP/1.1 {status} status\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                peer.write_all(reply.as_bytes()).await.unwrap();
+                body
+            });
+            let outbound = HybridOutbound::new(
+                &format!("ws://127.0.0.1:{port}/ws/s1"),
+                Arc::new(Vec::new),
+            ).unwrap();
+            tokio::time::timeout(
+                Duration::from_secs(3),
+                outbound.write(&serde_json::json!({"type":"result","uuid":"r1"})),
+            ).await.expect("both successful and permanent response must drain");
+            let actual = server.await.unwrap();
+            assert_eq!(actual, serde_json::json!({
+                "events": [{"type":"result","uuid":"r1"}]
+            }));
+            outbound.close();
+        }
     }
 
     #[tokio::test]
