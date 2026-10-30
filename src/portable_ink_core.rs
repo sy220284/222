@@ -298,9 +298,10 @@ impl LineWidthCache {
                 };
                 continue;
             }
-            width += if ch == '\t' {
-                4
-            } else if ch.is_control() {
+            width += if ch.is_control() {
+                // 2.1.88 stringWidth's ASCII branch counts only printable
+                // code points (U+0020 and above); tabs are not four columns.
+                // Tab-stop expansion belongs to ink/tabstops.ts instead.
                 0
             } else if ('\u{1100}'..='\u{115f}').contains(&ch)
                 || ('\u{2e80}'..='\u{a4cf}').contains(&ch)
@@ -581,6 +582,19 @@ mod tests {
         click.relative_to(3, 2);
         assert_eq!((click.local_col, click.local_row), (7, 7));
     }
+    #[test]
+    fn ascii_control_width_and_widest_line_match_original_string_width() {
+        let mut cache = LineWidthCache::default();
+        assert_eq!(cache.line_width("a\\tb"), 2);
+        assert_eq!(cache.line_width("\\t"), 0);
+        assert_eq!(cache.line_width("a\\r\\nb"), 2);
+        assert_eq!(cache.line_width("line\\u{001b}[31m red\\u{001b}[0m"), 8);
+        assert_eq!(widest_line("a\\tb\\nhello", &mut cache), 5);
+        assert_eq!(widest_line("", &mut cache), 0);
+        // A second lookup must return exactly the same cached width.
+        assert_eq!(cache.line_width("a\\tb"), 2);
+    }
+
     #[test]
     fn wrapping_and_input_mode() {
         let mut cache = LineWidthCache::default();
