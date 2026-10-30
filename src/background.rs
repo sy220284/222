@@ -537,7 +537,9 @@ impl BackgroundTasks {
         let folder = self.directory.clone();
         tokio::spawn(async move {
             let merged = Arc::new(AsyncMutex::new(CombinedLog {
-                file: output_file, size: 0, capped: false,
+                file: output_file,
+                size: 0,
+                capped: false,
             }));
             let output_limit_reached = Arc::new(Notify::new());
             // If a spooler loses its output file, the other pipe can fill and
@@ -545,12 +547,20 @@ impl BackgroundTasks {
             // immediately, then terminate the whole process tree.
             let output_writer_failed = Arc::new(Notify::new());
             let mut stdout_task = tokio::spawn(spool_merged_checked(
-                stdout, stdout_file, merged.clone(), output_limit_reached.clone(),
-                output_writer_failed.clone(), "stdout",
+                stdout,
+                stdout_file,
+                merged.clone(),
+                output_limit_reached.clone(),
+                output_writer_failed.clone(),
+                "stdout",
             ));
             let mut stderr_task = tokio::spawn(spool_merged_checked(
-                stderr, stderr_file, merged.clone(), output_limit_reached.clone(),
-                output_writer_failed.clone(), "stderr",
+                stderr,
+                stderr_file,
+                merged.clone(),
+                output_limit_reached.clone(),
+                output_writer_failed.clone(),
+                "stderr",
             ));
             let process_id = child.id();
             let deadline_at = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
@@ -1225,12 +1235,16 @@ mod tests {
         // simulated shell pipe open: a supervisor that only waits for EOF
         // would hang instead of learning that output persistence has failed.
         let directory = tempfile::tempdir().unwrap();
-        let combined_file = tokio::fs::File::create(directory.path().join("combined")).await.unwrap();
+        let combined_file = tokio::fs::File::create(directory.path().join("combined"))
+            .await
+            .unwrap();
         let individual = tokio::fs::File::from_std(
             fs::OpenOptions::new().write(true).open("/dev/full").unwrap(),
         );
         let merged = Arc::new(AsyncMutex::new(CombinedLog {
-            file: combined_file, size: 0, capped: false,
+            file: combined_file,
+            size: 0,
+            capped: false,
         }));
         let output_limit_reached = Arc::new(Notify::new());
         let output_writer_failed = Arc::new(Notify::new());
@@ -1239,12 +1253,20 @@ mod tests {
         tokio::pin!(notified);
         notified.as_mut().enable();
         let task = tokio::spawn(spool_merged_checked(
-            consumer, individual, merged, output_limit_reached,
-            output_writer_failed, "stdout",
+            consumer,
+            individual,
+            merged,
+            output_limit_reached,
+            output_writer_failed.clone(),
+            "stdout",
         ));
-        producer.write_all(b"this output cannot be persisted").await.unwrap();
+        producer
+            .write_all(b"this output cannot be persisted")
+            .await
+            .unwrap();
         // Deliberately retain producer so EOF never arrives.
-        timeout(Duration::from_secs(3), notified).await
+        timeout(Duration::from_secs(3), notified)
+            .await
             .expect("background supervisor must be notified on disk write failure");
         assert!(task.await.unwrap().is_err());
     }
