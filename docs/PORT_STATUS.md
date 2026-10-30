@@ -1,3 +1,10 @@
+## 2026-10-29：交互式 /plugin 管理接通原版子命令与实时刷新（源码已提交、待行为验收）
+
+- **原版依据**：完整 2.1.88 的 `source/src/commands/plugin/plugin.tsx::call` 将 `/plugin` 参数传给插件管理界面；`source/src/commands/plugin/parseArgs.ts::parsePluginArgs` 支持安装、卸载、启用、停用、验证、市场管理及别名。
+- **确认的 Rust 差异**：此前 `src/plugin_commands.rs::parse_plugin_args` 与 `src/plugin_manager.rs::execute` 只通过独立 CLI `atlas-agent plugin ...` 可达；交互会话 `src/main.rs::chat` 未分发 `/plugin`，导致原版用户命令进入普通模型消息。
+- **实代码**：`src/main.rs::chat` 接通 `/plugin` 与原版子命令解析器和现有安装管理事务，直接复用托管策略、依赖、安装锁、配置持久化及错误反馈；修改成功后重新读取配置并刷新当前 Agent 的 Hook/MCP/插件命令目录，刷新失败明确报告“管理操作已完成、当前会话刷新失败”，避免误导用户重复安装。提取共享 `reload_live_plugins`，让 `/plugin` 和 `/reload-plugins` 使用同一刷新路径。提交 `580c0586301c1c90d399f40e37fc2296c1476ead`。
+- **保留差异**：原版 `PluginSettings.tsx` 的完整交互菜单/确认/分页与图形界面、远程市场下载、MCPB、LSP/Agent 完整动态刷新未等价；该项保守计 **1 个独立用户可感知的交互式插件管理入口补齐**，源码已提交、待行为验收。连同本轮 `/reload-plugins` 计 **2/100，剩余98项**，A/B 先行100项审查仍未完成，Issue #3 冻结362项不核销；未运行 Cargo、测试或 CI。
+
 ## 2026-10-29：交互式 /reload-plugins 接入实际运行链（源码已提交、待行为验收）
 
 - **原版依据**：完整用户原始 ZIP 的 `source/src/commands/reload-plugins/reload-plugins.ts:13–57::call` 会在会话不中断的情况下刷新插件、Hook、命令及 MCP/LSP，并向用户显示加载结果与错误。
