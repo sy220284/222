@@ -201,8 +201,7 @@ mod tests {
         let server = tokio::spawn(async move {
             for attempt in 0..2 {
                 let (mut socket, _) = listener.accept().await.unwrap();
-                let mut data = [0u8; 4096];
-                socket.read_exact(&mut data[..1]).await.unwrap();
+                crate::test_http::consume_request(&mut socket).await.unwrap();
                 let (status, body) = if attempt == 0 {
                     (
                         "429 Too Many Requests",
