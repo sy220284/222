@@ -12,9 +12,12 @@ pub fn render_tool_activity_text(
     tool_args: Option<&str>,
 ) -> String {
     match (user_facing_name, tool_args) {
-        (None, _) => tool_name.to_owned(),
-        (Some(name), Some(args)) if !args.is_empty() => format!("{name}({args})"),
-        (Some(name), _) => name.to_owned(),
+        (Some(name), Some(args)) if !name.is_empty() && !args.is_empty() => {
+            format!("{name}({args})")
+        }
+        (Some(name), _) if !name.is_empty() => name.to_owned(),
+        // Unknown tool / empty display name: fall back to the raw tool name.
+        _ => tool_name.to_owned(),
     }
 }
 

@@ -8,7 +8,8 @@
 /// Gate for one clock tick: does the elapsed delta reach the interval?
 /// Mirrors `now - lastUpdate >= intervalMs` with the lastUpdate advance.
 pub fn tick_reaches_interval(last_update_ms: u64, now_ms: u64, interval_ms: u64) -> bool {
-    now_ms.saturating_sub(last_update_ms) >= interval_ms
+    // Clock rollback / out-of-order ticks read as due (saturated delta 0).
+    now_ms <= last_update_ms || now_ms.saturating_sub(last_update_ms) >= interval_ms
 }
 
 #[cfg(test)]

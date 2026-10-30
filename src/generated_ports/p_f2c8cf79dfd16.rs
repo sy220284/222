@@ -18,8 +18,12 @@ pub fn apply_clear(
     clear_if_node: Option<u64>,
 ) -> Option<CursorDeclaration> {
     match (current, clear_if_node) {
+        // Owner clears itself.
         (Some(cur), Some(node)) if cur.node_id == node => None,
-        (Some(cur), _) => Some(cur),
+        // Unconditional clear.
+        (Some(_), None) => None,
+        // A sibling's clear does not clobber the owner's declaration.
+        (Some(cur), Some(_)) => Some(cur),
         (None, _) => None,
     }
 }
