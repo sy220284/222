@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from port_workbench import (AuditError, affected_source_paths, check_evidence, collect, label_status,
                             read_matrix, report, resolve_import, verify_counts, current_counts,
-                            generated_runtime_reachability, main)
+                            generated_runtime_reachability, verify_github_test_evidence, main)
 
 
 class WorkbenchTests(unittest.TestCase):
@@ -148,6 +148,26 @@ class WorkbenchTests(unittest.TestCase):
         (self.repo/'docs/PORT_EVIDENCE.jsonl').write_text(json.dumps(item)+'\n')
         with self.assertRaisesRegex(AuditError,'存在未解决差异'):
             check_evidence(self.repo,read_matrix(self.repo),False)
+
+    def test_verified_evidence_requires_actual_successful_test_job_on_exact_head(self):
+        sha = 'a'*40
+        item = {'tested_commit': sha, 'workflow_run_id': 123}
+        run = {'head_sha': sha, 'conclusion': 'success',
+               'repository': {'full_name': 'sy220284/222'}}
+        job = {'name':'编译与全部测试', 'conclusion':'success',
+               'steps':[{'name':'Linux Rust 单元测试', 'conclusion':'success'}]}
+        def lookup(url):
+            return {'jobs':[job]} if url.endswith('/jobs?per_page=100') else run
+        verify_github_test_evidence(item, repository='sy220284/222', fetch_json=lookup)
+        job['conclusion'] = 'skipped'
+        with self.assertRaisesRegex(AuditError, '没有实际执行成功'):
+            verify_github_test_evidence(item, repository='sy220284/222', fetch_json=lookup)
+        job['conclusion'] = 'success'
+        run['head_sha'] = 'b'*40
+        with self.assertRaisesRegex(AuditError, 'HEAD'):
+            verify_github_test_evidence(item, repository='sy220284/222', fetch_json=lookup)
+        with self.assertRaisesRegex(AuditError, 'workflow_run_id'):
+            verify_github_test_evidence({'tested_commit':sha}, repository='sy220284/222', fetch_json=lookup)
 
     def test_promotion_valid_record_can_be_checked(self):
         self.baseline()

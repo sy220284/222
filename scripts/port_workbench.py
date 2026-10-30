@@ -11,9 +11,11 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sys
+import urllib.request
 
 MATRIX = Path('docs/FILE_PORT_MATRIX.md')
 EVIDENCE = Path('docs/PORT_EVIDENCE.jsonl')
@@ -303,6 +305,55 @@ def affected_source_paths(entries: list[dict], changed_files: list[str]) -> dict
                 disclaimers='静态依赖受影响范围仅辅助回归；动态加载、运行时注册和外部协议必须额外检查')
 
 
+def github_json(url: str) -> dict:
+    headers = {'Accept': 'application/vnd.github+json',
+               'User-Agent': 'atlas-agent-port-workbench'}
+    token = os.environ.get('GITHUB_TOKEN')
+    if token:
+        headers['Authorization'] = 'Bearer ' + token
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            return json.load(response)
+    except Exception as error:
+        raise AuditError('无法获取已完成的 GitHub Actions 测试运行证据') from error
+
+
+def verify_github_test_evidence(item: dict, repository: str | None = None,
+                                fetch_json=None) -> None:
+    """Require the exact tested commit to have a successful *real test job*.
+
+    Static test function names, a syntactically valid SHA or a successful
+    formatting job are insufficient proof of a source-path parity promotion.
+    """
+    run_id = item.get('workflow_run_id')
+    if type(run_id) is not int or run_id < 1:
+        raise AuditError('已验收证据缺少有效 workflow_run_id')
+    repository = repository or os.environ.get('GITHUB_REPOSITORY', 'sy220284/222')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
+        raise AuditError('非法 GitHub 仓库名称')
+    fetch_json = fetch_json or github_json
+    url = f'https://api.github.com/repos/{repository}/actions/runs/{run_id}'
+    run = fetch_json(url)
+    if run.get('head_sha') != item.get('tested_commit'):
+        raise AuditError('验收工作流实际 HEAD 与 tested_commit 不匹配')
+    if run.get('conclusion') != 'success':
+        raise AuditError('验收工作流未成功完成')
+    if run.get('repository', {}).get('full_name') not in (None, repository):
+        raise AuditError('验收工作流不属于目标仓库')
+    jobs = fetch_json(url + '/jobs?per_page=100').get('jobs', [])
+    accepted = {'编译与全部测试', 'Windows Shell 与跨平台编译'}
+    for job in jobs:
+        if job.get('name') not in accepted or job.get('conclusion') != 'success':
+            continue
+        steps = job.get('steps', [])
+        if any(step.get('conclusion') == 'success' and
+               ('Rust 单元测试' in step.get('name', '') or
+                '集成测试' in step.get('name', '')) for step in steps):
+            return
+    raise AuditError('没有实际执行成功的 Rust 测试作业，跳过的 Linux/Windows 测试不能用于验收')
+
+
 def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
     counts = verify_counts(rows, strict=strict)
     baseline_path = repo / BASELINE
@@ -352,6 +403,8 @@ def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
                 raise AuditError(f'{path}: Rust 测试函数不存在: {test}')
         if not re.fullmatch(r'[0-9a-f]{40}', item['tested_commit']):
             raise AuditError(f'{path}: tested_commit 必须是有效完整提交 SHA')
+        if strict:
+            verify_github_test_evidence(item)
     returned = [p for p,r in rows.items() if r['status']=='excluded' and previous[p]!='excluded']
     if returned:
         raise AuditError('新增排除项需人工审批并重置基线: '+', '.join(returned))
