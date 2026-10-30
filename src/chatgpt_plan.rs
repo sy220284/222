@@ -31,6 +31,8 @@ use tokio::{
 const AUTH: &str = "https://auth.openai.com";
 const RESOURCE: &str = "https://api.openai.com/v1";
 const PERMISSION: &str = "chatgpt.tokens.use.direct";
+/// Internal, versioned envelope for API-owned encrypted reasoning items.
+pub const REASONING_ITEMS_PREFIX: &str = "__atlas_opaque_responses_items_v1__:";
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum AccountAction {
@@ -581,6 +583,24 @@ fn input_items(request: &ModelRequest) -> Result<Vec<Value>> {
                 }));
             }
             "user" | "assistant" => {
+                if message.role == "assistant" {
+                    if let Some(encoded) = message
+                        .reasoning_content
+                        .as_deref()
+                        .and_then(|value| value.strip_prefix(REASONING_ITEMS_PREFIX))
+                    {
+                        let reasoning: Vec<Value> = serde_json::from_str(encoded)
+                            .context("Invalid stored Responses reasoning items")?;
+                        for item in reasoning {
+                            if item.get("type").and_then(Value::as_str) != Some("reasoning")
+                                || item.get("encrypted_content").and_then(Value::as_str).is_none()
+                            {
+                                bail!("Stored Responses reasoning item is missing encrypted content");
+                            }
+                            items.push(item);
+                        }
+                    }
+                }
                 let mut content = Vec::new();
                 if let Some(blocks) = &message.content_blocks {
                     for block in crate::multimodal::openai(blocks)? {
@@ -597,7 +617,7 @@ fn input_items(request: &ModelRequest) -> Result<Vec<Value>> {
                             _ => bail!("Unsupported ChatGPT Responses input block"),
                         }
                     }
-                } else if let Some(text) = &message.content {
+                } else if let Some(text) = message.content.as_deref().filter(|text| !text.is_empty()) {
                     content.push(json!({
                         "type": if message.role == "assistant" {"output_text"} else {"input_text"},
                         "text":text,
@@ -646,12 +666,18 @@ fn response_tools(tools: &[Value]) -> Result<Value> {
 fn parse_completed(response: &Value) -> Result<ModelResponse> {
     let mut content = String::new();
     let mut calls = Vec::new();
+    let mut reasoning = Vec::new();
     let output = response
         .get("output")
         .and_then(Value::as_array)
         .context("ChatGPT Responses completion omitted output array")?;
     for item in output {
         match item.get("type").and_then(Value::as_str) {
+            Some("reasoning") => {
+                if item.get("encrypted_content").and_then(Value::as_str).is_some() {
+                    reasoning.push(item.clone());
+                }
+            }
             Some("function_call") => {
                 let call_id = item
                     .get("call_id")
@@ -716,7 +742,14 @@ fn parse_completed(response: &Value) -> Result<ModelResponse> {
             content_blocks: None,
             tool_calls: has_calls.then_some(calls),
             tool_call_id: None,
-            reasoning_content: None,
+            reasoning_content: if reasoning.is_empty() {
+                None
+            } else {
+                Some(format!(
+                    "{REASONING_ITEMS_PREFIX}{}",
+                    serde_json::to_string(&reasoning)?
+                ))
+            },
         },
         usage,
         finish_reason: Some(if has_calls { "tool_calls" } else { "stop" }.into()),
@@ -1050,6 +1083,52 @@ mod tests {
             "read_file"
         );
         assert_eq!(reply.usage.unwrap().total_tokens, 16);
+    }
+
+    #[test]
+    fn stateless_reasoning_items_survive_tool_roundtrips() {
+        let item = json!({
+            "type": "reasoning",
+            "id": "rs_opaque",
+            "summary": [],
+            "encrypted_content": "opaque-ciphertext"
+        });
+        let parsed = parse_completed(&json!({
+            "output": [
+                item,
+                {
+                    "type": "function_call",
+                    "call_id": "call-one",
+                    "name": "atlas.read_file",
+                    "arguments": "{}"
+                }
+            ]
+        }))
+        .unwrap();
+        assert!(parsed
+            .message
+            .reasoning_content
+            .as_deref()
+            .unwrap()
+            .starts_with(REASONING_ITEMS_PREFIX));
+        let request = ModelRequest {
+            model: "gpt-6.1-sol".into(),
+            system: "rules".into(),
+            messages: vec![
+                Message::text("user", "read source"),
+                parsed.message.clone(),
+                Message::tool_result(
+                    &parsed.message.tool_calls.as_ref().unwrap()[0],
+                    "file contents".into(),
+                ),
+            ],
+            tools: vec![],
+        };
+        let wire = input_items(&request).unwrap();
+        assert_eq!(wire[2]["type"], "reasoning");
+        assert_eq!(wire[2]["encrypted_content"], "opaque-ciphertext");
+        assert_eq!(wire[3]["type"], "function_call");
+        assert_eq!(wire[4]["type"], "function_call_output");
     }
 
     #[test]
