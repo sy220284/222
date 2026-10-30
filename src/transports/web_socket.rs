@@ -658,28 +658,17 @@ impl WebSocketTransport {
     /// `replayBufferedMessages`). Evicted-buffer bookkeeping matches the
     /// source: when the confirm point was already evicted, replay everything.
     async fn replay_buffered_messages(&self, conn: &mut MinimalWsClient, last_id: Option<&str>) {
-        let messages = self.shared.buffer.lock().expect("ws buffer").to_vec();
-        let start_index = match last_id {
-            Some(last_id) => messages
-                .iter()
-                .position(|message| message.get("uuid").and_then(Value::as_str) == Some(last_id))
-                .map(|index| index + 1),
-            None => Some(0),
+        let (pending, all_confirmed) = {
+            let mut buffer = self.shared.buffer.lock().expect("ws buffer");
+            pending_after_confirmation(&mut buffer, last_id)
         };
-        let Some(start_index) = start_index else {
-            // Confirm point was evicted from the ring: replay all.
-            for message in &messages {
-                if conn
-                    .send_text(&crate::ndjson::stringify_value(message))
-                    .await
-                    .is_err()
-                {
-                    return;
-                }
-            }
-            return;
-        };
-        for message in &messages[start_index..] {
+        // Source resets lastSentId only when the server explicitly confirmed
+        // every message. An unknown ID leaves the entire replay buffer intact.
+        if all_confirmed {
+            self.shared.state.lock().expect("ws state").last_sent_id = None;
+        }
+        // Keep unacknowledged messages buffered until the next server ack.
+        for message in &pending {
             if conn
                 .send_text(&crate::ndjson::stringify_value(message))
                 .await
@@ -732,6 +721,30 @@ impl WebSocketTransport {
     }
 }
 
+/// The server's last confirmed UUID is inclusive. Preserve all messages
+/// when the confirmation is absent or its UUID has already been evicted.
+fn pending_after_confirmation(
+    buffer: &mut CircularBuffer<Value>,
+    last_id: Option<&str>,
+) -> (Vec<Value>, bool) {
+    let messages = buffer.to_vec();
+    let confirmed_count = last_id
+        .and_then(|id| {
+            messages
+                .iter()
+                .position(|message| message.get("uuid").and_then(Value::as_str) == Some(id))
+        })
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    if confirmed_count > 0 {
+        buffer.replace_all(messages[confirmed_count..].to_vec());
+    }
+    (
+        messages[confirmed_count..].to_vec(),
+        confirmed_count > 0 && confirmed_count == messages.len(),
+    )
+}
+
 /// Compute the RFC 6455 upgrade digest (SHA-1 is prescribed by the protocol).
 fn websocket_accept(key: &str) -> String {
     const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -780,6 +793,37 @@ mod tests {
         assert_eq!(buffer.to_vec(), vec![json!(2), json!(3), json!(4)]);
         buffer.clear();
         assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn reconnect_ack_evicts_confirmed_messages_but_preserves_unconfirmed_tail() {
+        let mut buffer = CircularBuffer::new(5);
+        for id in ["a", "b", "c", "d"] {
+            buffer.add(json!({"uuid": id, "type": "result"}));
+        }
+        let (pending, all_confirmed) = pending_after_confirmation(&mut buffer, Some("b"));
+        assert!(!all_confirmed);
+        assert_eq!(pending.len(), 2);
+        assert_eq!(buffer.len(), 2);
+        assert_eq!(buffer.to_vec(), pending);
+        assert_eq!(pending[0]["uuid"], "c");
+        let (remaining, all_confirmed) = pending_after_confirmation(&mut buffer, Some("d"));
+        assert!(all_confirmed);
+        assert!(remaining.is_empty());
+        assert!(buffer.is_empty());
+    }
+
+    #[test]
+    fn reconnect_unknown_ack_replays_all_without_dropping_messages() {
+        let mut buffer = CircularBuffer::new(2);
+        for id in ["b", "c", "d"] {
+            buffer.add(json!({"uuid": id}));
+        }
+        let (pending, all_confirmed) = pending_after_confirmation(&mut buffer, Some("a"));
+        assert!(!all_confirmed);
+        assert_eq!(pending, buffer.to_vec());
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0]["uuid"], "c");
     }
 
     #[test]
