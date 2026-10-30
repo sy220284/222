@@ -220,12 +220,20 @@ fn deepseek_reasoning_is_replayed_with_tool_result_in_next_api_turn() {
                 let assistant = messages.iter().find(|m| {
                     m["role"] == "assistant" && m["tool_calls"].is_array()
                 }).expect("missing prior assistant tool message");
-                assert_eq!(assistant["reasoning_content"], "I will inspect the file before answering");
+                assert_eq!(
+                    assistant["reasoning_content"],
+                    "I will inspect the file before answering"
+                );
                 assert_eq!(assistant["tool_calls"][0]["id"], "deepseek_call_1");
                 let tool_result = messages.iter().find(|m| m["role"] == "tool")
                     .expect("missing tool result");
                 assert_eq!(tool_result["tool_call_id"], "deepseek_call_1");
-                assert!(tool_result["content"].as_str().unwrap().contains("reasoning-roundtrip-file"));
+                assert!(
+                    tool_result["content"]
+                        .as_str()
+                        .unwrap()
+                        .contains("reasoning-roundtrip-file")
+                );
                 json!({"choices":[{"message":{"role":"assistant",
                     "content":"reasoning roundtrip completed"},"finish_reason":"stop"}]})
             };
