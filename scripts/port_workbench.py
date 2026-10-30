@@ -16,6 +16,9 @@ from pathlib import Path
 import re
 import sys
 import urllib.request
+import urllib.error
+from functools import lru_cache
+import time
 
 MATRIX = Path('docs/FILE_PORT_MATRIX.md')
 EVIDENCE = Path('docs/PORT_EVIDENCE.jsonl')
@@ -305,18 +308,43 @@ def affected_source_paths(entries: list[dict], changed_files: list[str]) -> dict
                 disclaimers='静态依赖受影响范围仅辅助回归；动态加载、运行时注册和外部协议必须额外检查')
 
 
+@lru_cache(maxsize=128)
 def github_json(url: str) -> dict:
+    """Fail closed on unverifiable evidence, retry bounded transient API errors.
+
+    Multiple verified paths often reference the same workflow; cache only
+    successful responses within this check process to avoid repeated calls.
+    """
     headers = {'Accept': 'application/vnd.github+json',
                'User-Agent': 'atlas-agent-port-workbench'}
     token = os.environ.get('GITHUB_TOKEN')
     if token:
         headers['Authorization'] = 'Bearer ' + token
     request = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=12) as response:
-            return json.load(response)
-    except Exception as error:
-        raise AuditError('无法获取已完成的 GitHub Actions 测试运行证据') from error
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as error:
+            retryable = error.code in (429, 500, 502, 503, 504)
+            if error.code == 403 and (
+                error.headers.get('Retry-After')
+                or error.headers.get('X-RateLimit-Remaining') == '0'
+            ):
+                retryable = True
+            if not retryable or attempt == 2:
+                raise AuditError(
+                    f'无法核验 GitHub Actions 测试运行证据: HTTP {error.code}, '
+                    f'URL={url}'
+                ) from error
+        except (urllib.error.URLError, TimeoutError) as error:
+            if attempt == 2:
+                raise AuditError(
+                    f'无法核验 GitHub Actions 测试运行证据: '
+                    f'{type(error).__name__}, URL={url}'
+                ) from error
+        time.sleep(1 + attempt * 2)
+    raise AssertionError('Unreachable: all evidence fetch attempts exhausted')
 
 
 def verify_github_test_evidence(item: dict, repository: str | None = None,
