@@ -384,17 +384,33 @@ mod tests {
     fn preserves_streamed_reasoning_for_deepseek_tool_followup() {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let mut parser = Assembler::default();
-        parser.consume(&json!({"choices":[{"delta":{
-            "reasoning_content":"inspect "}}]}), &tx).unwrap();
-        parser.consume(&json!({"choices":[{"delta":{
+        parser
+            .consume(
+                &json!({"choices":[{"delta":{
+            "reasoning_content":"inspect "}}]}),
+                &tx,
+            )
+            .unwrap();
+        parser
+            .consume(
+                &json!({"choices":[{"delta":{
             "reasoning_content":"first",
             "tool_calls":[{"index":0,"id":"call_1","type":"function",
                 "function":{"name":"read_file","arguments":"{}"}}]},
-            "finish_reason":"tool_calls"}]}), &tx).unwrap();
+            "finish_reason":"tool_calls"}]}),
+                &tx,
+            )
+            .unwrap();
         let response = parser.finish().unwrap();
-        assert_eq!(response.message.reasoning_content.as_deref(), Some("inspect first"));
+        assert_eq!(
+            response.message.reasoning_content.as_deref(),
+            Some("inspect first")
+        );
         assert_eq!(response.message.tool_calls.unwrap()[0].id, "call_1");
-        assert!(rx.try_recv().is_err(), "reasoning must not leak to displayed text");
+        assert!(
+            rx.try_recv().is_err(),
+            "reasoning must not leak to displayed text"
+        );
     }
 
     #[test]
