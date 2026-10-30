@@ -851,6 +851,12 @@ mod tests {
         let init = Command::new("git").args(["init", "-q"])
             .arg(source.path()).status().unwrap();
         assert!(init.success());
+        assert!(Command::new("git").arg("-C").arg(source.path())
+            .args(["add", "."]).status().unwrap().success());
+        assert!(Command::new("git").arg("-C").arg(source.path())
+            .args(["-c", "user.email=test@example.invalid",
+                "-c", "user.name=Source Test", "commit", "-qm", "Initial catalog"])
+            .status().unwrap().success());
         let input = MarketplaceSource::Git {
             url: source.path().to_string_lossy().into_owned(),
             r#ref: None,
