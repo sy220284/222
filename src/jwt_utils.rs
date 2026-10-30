@@ -133,7 +133,8 @@ impl TokenRefreshScheduler {
         let millis = i128::from(expires_in_seconds)
             .saturating_mul(1_000)
             .saturating_sub(self.inner.buffer.as_millis().min(i128::MAX as u128) as i128)
-            .max(i128::from(MIN_REFRESH_DELAY_MS)) as u64;
+            .max(i128::from(MIN_REFRESH_DELAY_MS))
+            .min(i128::from(u64::MAX)) as u64;
         self.schedule_timer(session_id, std::time::Duration::from_millis(millis));
     }
 
@@ -176,12 +177,12 @@ impl TokenRefreshScheduler {
         })
     }
 
-    async fn refresh(
-        inner: std::sync::Arc<RefreshInner>,
-        session_id: String,
-        generation: u64,
-    ) {
-        let token = (inner.access_token)().await.ok().flatten().filter(|v| !v.is_empty());
+    async fn refresh(inner: std::sync::Arc<RefreshInner>, session_id: String, generation: u64) {
+        let token = (inner.access_token)()
+            .await
+            .ok()
+            .flatten()
+            .filter(|v| !v.is_empty());
         if let Some(token) = token {
             {
                 let mut state = inner.state.lock().expect("token refresh state");
@@ -281,10 +282,12 @@ mod tests {
         assert_eq!(decode_jwt_expiry(&token), None);
     }
 
-
     #[tokio::test]
     async fn refreshes_immediately_and_opaque_token_does_not_break_chain() {
-        use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
         let refresh_count = Arc::new(AtomicUsize::new(0));
         let delivered = refresh_count.clone();
         let scheduler = TokenRefreshScheduler::new(
@@ -301,7 +304,9 @@ mod tests {
             while refresh_count.load(Ordering::SeqCst) == 0 {
                 tokio::task::yield_now().await;
             }
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         assert!(!scheduler.schedule("session-1", "opaque-token"));
         assert_eq!(refresh_count.load(Ordering::SeqCst), 1);
         scheduler.cancel_all();
@@ -309,7 +314,10 @@ mod tests {
 
     #[tokio::test]
     async fn cancelling_session_while_access_token_is_pending_suppresses_delivery() {
-        use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
         let queried = Arc::new(tokio::sync::Notify::new());
         let unblock = Arc::new(tokio::sync::Notify::new());
         let received = Arc::new(AtomicUsize::new(0));
@@ -326,11 +334,15 @@ mod tests {
                     Ok(Some("a-token".to_owned()))
                 }
             },
-            move |_, _| { received_signal.fetch_add(1, Ordering::SeqCst); },
+            move |_, _| {
+                received_signal.fetch_add(1, Ordering::SeqCst);
+            },
         );
         let token = format!("x.{}.sig", b64url(&json!({"exp":1})));
         assert!(scheduler.schedule("cancelled", &token));
-        tokio::time::timeout(std::time::Duration::from_secs(1), queried.notified()).await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(1), queried.notified())
+            .await
+            .unwrap();
         scheduler.cancel("cancelled");
         unblock.notify_one();
         tokio::task::yield_now().await;
@@ -339,10 +351,7 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_jwt_preserves_existing_session_timer() {
-        let scheduler = TokenRefreshScheduler::new(
-            || async { Ok(None) },
-            |_, _| {},
-        );
+        let scheduler = TokenRefreshScheduler::new(|| async { Ok(None) }, |_, _| {});
         scheduler.schedule_from_expires_in("opaque", 60);
         assert!(!scheduler.schedule("opaque", "not-a-jwt"));
         let state = scheduler.inner.state.lock().unwrap();
@@ -353,10 +362,7 @@ mod tests {
 
     #[tokio::test]
     async fn refresh_generations_are_distinct_after_rescheduling() {
-        let scheduler = TokenRefreshScheduler::new(
-            || async { Ok(None) },
-            |_, _| {},
-        );
+        let scheduler = TokenRefreshScheduler::new(|| async { Ok(None) }, |_, _| {});
         scheduler.schedule_from_expires_in("session", 100);
         let before = scheduler.inner.state.lock().unwrap().sessions["session"].generation;
         scheduler.schedule_from_expires_in("session", 100);
