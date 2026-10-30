@@ -599,7 +599,7 @@
 | `src/components/messages/UserImageMessage.tsx` | 59 | 5897 | 重写：终端 UI／交互 | `src/generated_ports/p_a2bd5c24a5c92.rs` | 部分实现：完整等价：[Image #N]/[Image] 标签构造+存储路径∧超链接支持的链接门纯函数含三分支单测；Link/hyperlink 桩已就位，待验收 |
 | `src/components/messages/UserLocalCommandOutputMessage.tsx` | 167 | 14566 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserMemoryInputMessage.tsx` | 75 | 6516 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/messages/UserPlanMessage.tsx` | 42 | 3743 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/messages/UserPlanMessage.tsx` | 42 | 3743 | 重写：终端 UI／交互 | `src/generated_ports/p_5a3f70c1c35fc.rs` | 部分实现：完整等价：Plan to implement 头文案+addMargin 三元 margin 值；Markdown 主体归 ink 宿主，待验收 |
 | `src/components/messages/UserPromptMessage.tsx` | 80 | 15172 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserResourceUpdateMessage.tsx` | 121 | 12363 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/UserTeammateMessage.tsx` | 206 | 24126 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -644,7 +644,7 @@
 | `src/components/permissions/PermissionExplanation.tsx` | 272 | 23700 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/PermissionPrompt.tsx` | 336 | 37391 | 重写：终端 UI／交互 | `src/generated_ports/p_da009de33c5ba.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/permissions/PermissionRequest.tsx` | 217 | 33579 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/permissions/PermissionRequestTitle.tsx` | 66 | 5781 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/permissions/PermissionRequestTitle.tsx` | 66 | 5781 | 重写：终端 UI／交互 | `src/generated_ports/p_1ab561f51135a.rs` | 部分实现：完整等价：标题颜色缺省 permission+subtitle 存在性判定；badge 布局归 ink 宿主，待验收 |
 | `src/components/permissions/PermissionRuleExplanation.tsx` | 121 | 14921 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/PowerShellPermissionRequest/PowerShellPermissionRequest.tsx` | 235 | 38696 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/PowerShellPermissionRequest/powershellToolUseOptions.tsx` | 91 | 11950 | 重写：终端 UI／交互 | `src/generated_ports/p_ec381b97899e3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -671,7 +671,7 @@
 | `src/components/sandbox/SandboxDoctorSection.tsx` | 46 | 6190 | 重写：终端 UI／交互 | `src/generated_ports/p_9583089f65539.rs` | 部分实现：完整等价：doctor 可见性决策（平台/设置/双空三重门）与错误/警告分块构造含单测；SandboxManager 与 JSX 归宿主，待验收 |
 | `src/components/sandbox/SandboxOverridesTab.tsx` | 193 | 20473 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/sandbox/SandboxSettings.tsx` | 296 | 29988 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/shell/ExpandShellOutputContext.tsx` | 36 | 3504 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/shell/ExpandShellOutputContext.tsx` | 36 | 3504 | 重写：终端 UI／交互 | `src/generated_ports/p_b1caadd78c29c.rs` | 部分实现：完整等价：布尔 context 常量（Provider 恒 true/缺省 false）与消息类 context 同构说明；宿主待验收 |
 | `src/components/shell/OutputLine.tsx` | 118 | 14388 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/shell/ShellProgressMessage.tsx` | 150 | 14373 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/shell/ShellTimeDisplay.tsx` | 74 | 5229 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -693,8 +693,8 @@
 | `src/components/ui/OrderedList.tsx` | 71 | 7294 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/ui/OrderedListItem.tsx` | 45 | 3477 | 重写：终端 UI／交互 | `src/generated_ports/p_6ba8c68c78e69.rs` | 部分实现：完整等价：marker 序号构造纯函数；dim 渲染与 list context 归 ink 宿主，待验收 |
 | `src/components/ui/TreeSelect.tsx` | 397 | 38964 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/wizard/WizardDialogLayout.tsx` | 65 | 6271 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/wizard/WizardNavigationFooter.tsx` | 24 | 4246 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/wizard/WizardDialogLayout.tsx` | 65 | 6271 | 重写：终端 UI／交互 | `src/generated_ports/p_1bac0332b9410.rs` | 部分实现：完整等价：对话框颜色缺省 suggestion 纯函数含单测；Dialog/children 归 ink 宿主，待验收 |
+| `src/components/wizard/WizardNavigationFooter.tsx` | 24 | 4246 | 重写：终端 UI／交互 | `src/generated_ports/p_074b43566422f.rs` | 部分实现：完整等价：footer 文本决策（pending→Press X again to exit/默认三快捷提示清单逐字）含单测；margin/dim 归 ink 宿主，待验收 |
 | `src/components/wizard/WizardProvider.tsx` | 213 | 18665 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/wizard/index.ts` | 10 | 328 | 重写：终端 UI／交互 | `src/generated_ports/p_0b0275b0d32ea.rs` | 部分实现：完整等价：三类型+四成员 re-export 面清单；待验收 |
 | `src/components/wizard/useWizard.ts` | 14 | 447 | 重写：终端 UI／交互 | `src/generated_ports/p_f576d7f2f968c.rs` | 部分实现：完整等价：缺 Provider 抛错文案逐字一致含单测；待验收 |
@@ -855,7 +855,7 @@
 | `src/ink/components/ErrorOverview.tsx` | 109 | 15405 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/Link.tsx` | 42 | 3556 | 重写：终端 UI／交互 | `src/generated_ports/p_afac9c00ba614.rs` | 部分实现：完整等价：OSC-8 超链接/纯文本回退分支决策纯函数（children 缺省取 url、fallback 优先）含三分支单测；supportsHyperlinks 随 ink 检测桩，待验收 |
 | `src/ink/components/Newline.tsx` | 39 | 2356 | 重写：终端 UI／交互 | `src/generated_ports/p_1c19cd8600b42.rs` | 部分实现：完整等价：count 缺省 1 与 repeat 语义纯函数含单测；待验收 |
-| `src/ink/components/NoSelect.tsx` | 68 | 5899 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/components/NoSelect.tsx` | 68 | 5899 | 重写：终端 UI／交互 | `src/generated_ports/p_71dbc3debee4c.rs` | 部分实现：完整等价：排除区左界决策（fromLeftEdge→0 否则盒左偏移）含单测（沟槽防拖拽语义原注保留）；单元几何归 ink 运行时，待验收 |
 | `src/ink/components/RawAnsi.tsx` | 57 | 5157 | 重写：终端 UI／交互 | `src/generated_ports/p_0b22de63571f1.rs` | 部分实现：完整等价：RawAnsiProps 契约+join 输出（输出层已按换行切屏缓冲）含单测；Yoga 叶子宿主归 ink，待验收 |
 | `src/ink/components/ScrollBox.tsx` | 237 | 31814 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/Spacer.tsx` | 20 | 1563 | 重写：终端 UI／交互 | `src/generated_ports/p_dd14b320d49cc.rs` | 部分实现：AST 转写：flexGrow=1 布局属性保留给终端渲染宿主；待验收 |
@@ -1082,7 +1082,7 @@
 | `src/services/mcp/vscodeSdkMcp.ts` | 113 | 3703 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/xaa.ts` | 512 | 18286 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/xaaIdpLogin.ts` | 488 | 16271 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
-| `src/services/mcpServerApproval.tsx` | 41 | 6400 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/mcpServerApproval.tsx` | 41 | 6400 | 重写：保持通用行为 | `src/generated_ports/p_3c62b110473e2.rs` | 部分实现：完整等价：pending 项目服务器过滤纯函数含单测；对话框承载（共享 ink root/AppState/键绑定 Provider）归宿主，待验收 |
 | `src/services/mockRateLimits.ts` | 883 | 29698 | 重写：保持通用行为 | `src/generated_ports/p_0f036bc7045d6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/services/notifier.ts` | 157 | 4256 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/oauth/auth-code-listener.ts` | 212 | 6650 | 重写：保持通用行为 | `src/oauth_callback_listener.rs / src/main.rs` | 部分实现：原版 localhost 动态端口监听、GET 回调地址匹配、授权码与 state 检查、404/400 及延后 302 响应已真实 Rust 实现并接入 oauth-listen CLI，覆盖真实 TCP/HTTP 回归；原版自定义成功回调及完整 OAuth token 客户端仍待对接；补齐异常 HTTP 请求头 400/408/431 后继续等待合法授权、浏览器 onReady 未完成时并发接收回调且回调后启动任务不被取消，真实 TCP/HTTP 测试通过（CI 40852563169）；完整自定义成功处理器、Token 客户端及取消生命周期尚未验收 |
@@ -1731,7 +1731,7 @@
 | `src/utils/processUserInput/processSlashCommand.tsx` | 922 | 144807 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/processUserInput/processTextPrompt.ts` | 101 | 3272 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/processUserInput/processUserInput.ts` | 606 | 19507 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/profilerBase.ts` | 47 | 1572 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/profilerBase.ts` | 47 | 1572 | 重写：保持通用行为 | `src/generated_ports/p_5453fc3baa5b5.rs` | 部分实现：完整等价：formatMs 三位小数渲染含三例单测+共享 timeline 三 profiler 清单常量；formatFileSize 引 format 桩，待验收 |
 | `src/utils/promptCategory.ts` | 50 | 1502 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/promptEditor.ts` | 189 | 5664 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/promptShellExecution.ts` | 184 | 7011 | 重写：保持通用行为 | 待定 | 未迁移 |
