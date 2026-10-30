@@ -21,6 +21,98 @@ use walkdir::WalkDir;
 const MAX_FILE_BYTES: u64 = 1_048_576;
 const MAX_OUTPUT_CHARS: usize = 16_000;
 
+/// Stream task output one line at a time. A single unbroken line can be
+/// gigabytes long, so skip and truncate it without allocating the whole file.
+/// The full byte stream remains available through task_output_delta.
+fn bounded_task_line<R: io::BufRead>(
+    reader: &mut R,
+    limit: usize,
+) -> Result<Option<(Vec<u8>, bool)>> {
+    let mut bytes = Vec::new();
+    let mut seen = false;
+    let mut truncated = false;
+    loop {
+        let chunk = reader.fill_buf()?;
+        if chunk.is_empty() {
+            break;
+        }
+        seen = true;
+        let newline = chunk.iter().position(|byte| *byte == b'\n');
+        let count = newline.map(|index| index + 1).unwrap_or(chunk.len());
+        let append = count.min(limit.saturating_sub(bytes.len()));
+        bytes.extend_from_slice(&chunk[..append]);
+        if append < count {
+            truncated = true;
+        }
+        reader.consume(count);
+        if newline.is_some() {
+            break;
+        }
+    }
+    if !seen {
+        return Ok(None);
+    }
+    Ok(Some((bytes, truncated)))
+}
+
+fn read_trusted_task_output(path: &Path, args: &Value, source_read: bool) -> Result<String> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        bail!("Task output must be a regular file");
+    }
+    let start = args.get("start_line").and_then(Value::as_u64).unwrap_or(1).max(1);
+    let count = args.get("line_count").and_then(Value::as_u64)
+        .unwrap_or(if source_read { u64::MAX } else { 250 })
+        .max(1);
+    let count = if source_read { count } else { count.min(500) };
+    let end = start.saturating_add(count);
+    let max_bytes = if source_read { 256 * 1024 } else { MAX_FILE_BYTES as usize };
+    let mut reader = io::BufReader::new(file);
+    let mut result = String::new();
+    let mut number = 0u64;
+    loop {
+        let selected = number.saturating_add(1) >= start;
+        let remaining = if selected {
+            max_bytes.saturating_sub(result.len().saturating_add(64))
+        } else {
+            0
+        };
+        let Some((bytes, clipped)) = bounded_task_line(&mut reader, remaining)? else {
+            break;
+        };
+        number = number.saturating_add(1);
+        if number < start {
+            continue;
+        }
+        if number >= end {
+            break;
+        }
+        let text = String::from_utf8_lossy(&bytes);
+        let line = text.trim_end_matches(['\r', '\n']);
+        let entry = format!("{number}: {line}");
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        if result.len().saturating_add(entry.len()) > max_bytes {
+            result.push_str("[Task output range exceeds Read limit; use task_output_delta]");
+            break;
+        }
+        result.push_str(&entry);
+        if clipped {
+            result.push_str("\n[Long task output line truncated; use task_output_delta with a byte offset]");
+            break;
+        }
+    }
+    Ok(result)
+}
+
 fn skill_invocable(path: &Path, for_model: bool) -> Result<bool> {
     let content = fs::read_to_string(path)?;
     if for_model {
@@ -1066,8 +1158,29 @@ impl ToolExecutor {
 
     fn read_file_with_mode(&self, args: &Value, source_read: bool) -> Result<String> {
         let requested = required(args, "path")?;
-        let path = self.checked_path(requested)?;
+        let mut trusted_task_output = false;
+        let path = match self.checked_path(requested) {
+            Ok(path) => path,
+            Err(original_error) => {
+                let approved = match self.background.as_ref() {
+                    Some(background) => background.trusted_output_path(requested)?,
+                    None => None,
+                };
+                match approved {
+                    Some(path) => {
+                        trusted_task_output = true;
+                        path
+                    }
+                    None => return Err(original_error),
+                }
+            }
+        };
         self.require_read_rules(requested, &path)?;
+        if trusted_task_output {
+            // Reading a temporary task log must never grant Edit/Write
+            // authority or insert a full-file edit cache entry.
+            return read_trusted_task_output(&path, args, source_read);
+        }
         let metadata = fs::metadata(&path)?;
         // The original FileReadTool returns a small unchanged marker when
         // the same range was already shown and its mtime is unchanged.
