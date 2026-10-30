@@ -405,7 +405,7 @@
 | `src/components/LspRecommendation/LspRecommendationMenu.tsx` | 88 | 10247 | 重写：终端 UI／交互 | `src/generated_ports/p_d3216b1df5fb4.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/MCPServerApprovalDialog.tsx` | 115 | 11563 | 重写：终端 UI／交互 | `src/generated_ports/p_28b59eec0efcf.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/MCPServerDesktopImportDialog.tsx` | 203 | 21016 | 重写：终端 UI／交互 | `src/generated_ports/p_9d6b2f5def3de.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/MCPServerDialogCopy.tsx` | 15 | 1829 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/MCPServerDialogCopy.tsx` | 15 | 1829 | 重写：终端 UI／交互 | `src/generated_ports/p_cc92033a220f4.rs` | 部分实现：完整等价：对话框文案（品牌 docs 域名按隐私门禁中性化，正文逐字保留）；待验收 |
 | `src/components/MCPServerMultiselectDialog.tsx` | 133 | 16029 | 重写：终端 UI／交互 | `src/generated_ports/p_498bc5257103e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ManagedSettingsSecurityDialog/ManagedSettingsSecurityDialog.tsx` | 149 | 14484 | 重写：终端 UI／交互 | `src/generated_ports/p_b4669dd7c2988.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ManagedSettingsSecurityDialog/utils.ts` | 145 | 3979 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -473,7 +473,7 @@
 | `src/components/Spinner/SpinnerGlyph.tsx` | 80 | 10291 | 重写：终端 UI／交互 | `src/generated_ports/p_3d04352c988c3.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/TeammateSpinnerLine.tsx` | 233 | 38859 | 重写：终端 UI／交互 | `src/generated_ports/p_09647f4245ece.rs` | 部分实现：已完成独立队友状态行 Rust 动态渲染（状态、选择、工具用量、消息预览及宽度），通过源码 inspect/view 导出和状态树嵌套消费；已新增真实数据回归，终端生产入口、键盘事件及完整原版交互仍需验收 |
 | `src/components/Spinner/TeammateSpinnerTree.tsx` | 272 | 28052 | 重写：终端 UI／交互 | `src/generated_ports/p_024038719ca35.rs` | 部分实现：队友运行状态筛选、排序和领导行已从实际 AppState 输入生成；已接通 TeammateSpinnerLine 动态渲染、导出 inspect/view 和组合回归；终端实时刷新、可交互键盘事件及完整调用链仍待验收 |
-| `src/components/Spinner/index.ts` | 11 | 602 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/Spinner/index.ts` | 11 | 602 | 重写：终端 UI／交互 | `src/generated_ports/p_b823488ba9be8.rs` | 部分实现：完整等价：九成员 re-export 面+Teammate 动态 require 死代码消除注释保留；待验收 |
 | `src/components/Spinner/teammateSelectHint.ts` | 2 | 64 | 重写：终端 UI／交互 | `src/generated_ports/p_9cdb888d4eefe.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/Spinner/useShimmerAnimation.ts` | 32 | 1236 | 重写：终端 UI／交互 | `src/generated_ports/p_3597343532377.rs` | 部分实现：完整等价：glimmer 速度（requesting=50 余 200）+周期取模数学（width+20 周期、-10 相位）+stalled=-100 纯函数含单测；动画帧订阅与 DOM ref 归 ink 运行时，待验收 |
 | `src/components/Spinner/useStalledAnimation.ts` | 76 | 2500 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -569,7 +569,7 @@
 | `src/components/mcp/MCPToolDetailView.tsx` | 212 | 23139 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/MCPToolListView.tsx` | 141 | 16252 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/McpParsingWarnings.tsx` | 213 | 22079 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/mcp/index.ts` | 10 | 523 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/mcp/index.ts` | 10 | 523 | 重写：终端 UI／交互 | `src/generated_ports/p_9ba24aa9d05d7.rs` | 部分实现：完整等价：八组件+三类型 re-export 面清单；待验收 |
 | `src/components/mcp/utils/reconnectHelpers.tsx` | 49 | 5292 | 重写：终端 UI／交互 | `src/generated_ports/p_962b63a53cf13.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/memory/MemoryFileSelector.tsx` | 438 | 48121 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/memory/MemoryUpdateNotification.tsx` | 45 | 5100 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -696,8 +696,8 @@
 | `src/components/wizard/WizardDialogLayout.tsx` | 65 | 6271 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/wizard/WizardNavigationFooter.tsx` | 24 | 4246 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/wizard/WizardProvider.tsx` | 213 | 18665 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/wizard/index.ts` | 10 | 328 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/wizard/useWizard.ts` | 14 | 447 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/wizard/index.ts` | 10 | 328 | 重写：终端 UI／交互 | `src/generated_ports/p_0b0275b0d32ea.rs` | 部分实现：完整等价：三类型+四成员 re-export 面清单；待验收 |
+| `src/components/wizard/useWizard.ts` | 14 | 447 | 重写：终端 UI／交互 | `src/generated_ports/p_f576d7f2f968c.rs` | 部分实现：完整等价：缺 Provider 抛错文案逐字一致含单测；待验收 |
 | `src/constants/apiLimits.ts` | 95 | 3443 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/constants/betas.ts` | 53 | 2218 | 重写：保持通用行为 | `src/generated_ports/p_fa5438ef3e848.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/constants/common.ts` | 34 | 1516 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
@@ -832,7 +832,7 @@
 | `src/hooks/useTeleportResume.tsx` | 85 | 9840 | 重写：终端 UI／交互 | `src/generated_ports/p_17ee0f10fb33b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useTerminalSize.ts` | 16 | 354 | 重写：终端 UI／交互 | `src/generated_ports/terminal_context.rs` | 部分实现：上下文读取与缺失错误已手写；React Ink Provider 与终端尺寸事件仍需完整接线验收 |
 | `src/hooks/useTextInput.ts` | 530 | 17027 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/hooks/useTimeout.ts` | 15 | 362 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useTimeout.ts` | 15 | 362 | 重写：终端 UI／交互 | `src/generated_ports/p_34de3d89a3b89.rs` | 部分实现：完整等价：超时状态机（reset 清除重排/delay 到期置位/时钟注入可测）含单测；定时器宿主待验收 |
 | `src/hooks/useTurnDiffs.ts` | 214 | 6686 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useTypeahead.tsx` | 1385 | 212610 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useUpdateNotification.ts` | 35 | 982 | 重写：终端 UI／交互 | `src/generated_ports/p_e2a7dc8bdd83c.rs` | 部分实现：完整等价：loose semver 三段提取+通知触发比较+状态转移纯函数含双单测；MACRO.VERSION 种子随构建宏，待验收 |
@@ -861,7 +861,7 @@
 | `src/ink/components/Spacer.tsx` | 20 | 1563 | 重写：终端 UI／交互 | `src/generated_ports/p_dd14b320d49cc.rs` | 部分实现：AST 转写：flexGrow=1 布局属性保留给终端渲染宿主；待验收 |
 | `src/ink/components/StdinContext.ts` | 50 | 1678 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/TerminalFocusContext.tsx` | 52 | 5955 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/components/TerminalSizeContext.tsx` | 7 | 983 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/components/TerminalSizeContext.tsx` | 7 | 983 | 重写：终端 UI／交互 | `src/generated_ports/p_dd5c8e35720f8.rs` | 部分实现：完整等价：TerminalSize{columns,rows} 视图模型结构；React context 实例归 ink 运行时宿主，待验收 |
 | `src/ink/components/Text.tsx` | 254 | 16811 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/constants.ts` | 3 | 107 | 重写：终端 UI／交互 | `src/ink_constants.rs` | 已验收：原始唯一帧间隔常量数值 16ms；证据 ink_constants::tests::original_render_frame_interval |
 | `src/ink/dom.ts` | 485 | 15126 | 重写：终端 UI／交互 | `src/generated_ports/p_08d9d21613c39.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
@@ -880,20 +880,20 @@
 | `src/ink/get-max-width.ts` | 28 | 1149 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/hit-test.ts` | 131 | 4228 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-animation-frame.ts` | 58 | 1933 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/hooks/use-app.ts` | 9 | 251 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/hooks/use-app.ts` | 9 | 251 | 重写：终端 UI／交互 | `src/generated_ports/p_bbc2a036e6a40.rs` | 部分实现：契约记录：useApp 手动退出（unmount）句柄，宿主待验收 |
 | `src/ink/hooks/use-declared-cursor.ts` | 74 | 2996 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-input.ts` | 93 | 3107 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-interval.ts` | 68 | 1796 | 重写：终端 UI／交互 | `src/generated_ports/p_d4af41e8141ae.rs` | 部分实现：完整等价：共享时钟 interval 门控数学（含饱和差值）含单测；Clock 订阅非 keepAlive 语义归 ink 运行时，待验收 |
 | `src/ink/hooks/use-search-highlight.ts` | 54 | 2158 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/hooks/use-selection.ts` | 105 | 4421 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/hooks/use-stdin.ts` | 9 | 232 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/hooks/use-stdin.ts` | 9 | 232 | 重写：终端 UI／交互 | `src/generated_ports/p_9c2555f93b38d.rs` | 部分实现：契约记录：useStdin stdin 流句柄，宿主待验收 |
 | `src/ink/hooks/use-tab-status.ts` | 73 | 2175 | 重写：终端 UI／交互 | `src/generated_ports/p_7ec0d98f5f3f7.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/hooks/use-terminal-focus.ts` | 17 | 556 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/hooks/use-terminal-title.ts` | 32 | 1020 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/hooks/use-terminal-viewport.ts` | 97 | 3977 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/ink.tsx` | 1723 | 251886 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/instances.ts` | 11 | 410 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/layout/engine.ts` | 7 | 177 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/instances.ts` | 11 | 410 | 重写：终端 UI／交互 | `src/generated_ports/p_e638e7aebff0d.rs` | 部分实现：AST 转写：输出流键控实例表语义（连续 render 复用实例/unmount 自删，原注保留）；宿主待验收 |
+| `src/ink/layout/engine.ts` | 7 | 177 | 重写：终端 UI／交互 | `src/generated_ports/p_7879ffef78111.rs` | 部分实现：契约记录：createLayoutNode 委托 Yoga 布局引擎；Rust 无 Yoga 绑定，宿主供具体引擎，待验收 |
 | `src/ink/layout/geometry.ts` | 98 | 2471 | 重写：终端 UI／交互 | `src/generated_ports/p_bab2fac86d685.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/layout/node.ts` | 153 | 4346 | 重写：终端 UI／交互 | `src/generated_ports/p_dbe6d69b9cec8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/layout/yoga.ts` | 309 | 7400 | 重写：终端 UI／交互 | 待定 | 未迁移 |
