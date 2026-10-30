@@ -4542,7 +4542,7 @@ mod tests {
             .graph
             .create(&json!({"subject":"Verify","description":"Check tests"}))
             .unwrap();
-        agent.hooks = HookRunner::new(&[HookRule { if_condition: None, plugin_root: None,
+        agent.hooks = HookRunner::new(&[HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
             event: HookEvent::TaskCompleted,
             matcher: None,
             command: "printf '{\"decision\":\"block\",\"reason\":\"Tests missing\"}'".into(),
@@ -6004,13 +6004,13 @@ done"#;
         let log_path = root.join("hook-events.log");
         let shell = |event: &str| format!("printf '{}\\n' >> '{}'", event, log_path.display());
         agent.hooks = HookRunner::new(&[
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::SessionEnd,
                 matcher: None,
                 command: shell("end"),
                 shell: None, timeout_seconds: 5,
             },
-            HookRule { if_condition: None, plugin_root: None,
+            HookRule { async_background: false, async_rewake: false,  if_condition: None, plugin_root: None,
                 event: HookEvent::SessionStart,
                 matcher: None,
                 command: shell("start"),
