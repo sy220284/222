@@ -1841,6 +1841,8 @@ impl ToolExecutor {
         // have completed, so descendants cannot outlive user cancellation.
         #[cfg(unix)]
         let mut cancel_group_guard = ShellCancelGroupGuard(process_id);
+        #[cfg(windows)]
+        let mut cancel_tree_guard = ShellCancelTreeGuard(process_id);
         let stdout = child.stdout.take().context("No command stdout")?;
         let stderr = child.stderr.take().context("No command stderr")?;
         let combined_output_bytes = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -1898,6 +1900,8 @@ impl ToolExecutor {
         };
         #[cfg(unix)]
         { cancel_group_guard.0 = None; }
+        #[cfg(windows)]
+        { cancel_tree_guard.0 = None; }
         let interpretation = if kind == crate::shell_runtime::ShellKind::Bash {
             let (is_error, note) =
                 crate::shell_runtime::interpret_bash_exit(command, status.code().unwrap_or(-1));
@@ -1950,6 +1954,26 @@ impl Drop for ShellCancelGroupGuard {
     fn drop(&mut self) {
         if let Some(pid) = self.0.filter(|id| *id <= i32::MAX as u32) {
             let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+        }
+    }
+}
+
+/// The Windows equivalent of ShellCancelGroupGuard: process cancellation
+/// drops the model/tool future without running the timeout handler. Invoke
+/// the platform's existing taskkill tree operation synchronously from Drop.
+#[cfg(windows)]
+struct ShellCancelTreeGuard(Option<u32>);
+
+#[cfg(windows)]
+impl Drop for ShellCancelTreeGuard {
+    fn drop(&mut self) {
+        if let Some(pid) = self.0 {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
         }
     }
 }
