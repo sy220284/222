@@ -14,6 +14,11 @@ use std::{io, time::Duration};
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum ModelAction {
+    /// Interactive brand -> credential -> live model list -> verified selection.
+    Setup {
+        /// Optional brand ID; omit to choose interactively.
+        brand: Option<String>,
+    },
     /// List built-in brands, recommended versions, and current user settings.
     Brands,
     /// Query the selected brand's /models with the current API key.
@@ -291,8 +296,72 @@ fn profile_mut<'a>(config: &'a mut Config, brand: &str) -> Result<&'a mut Provid
         .with_context(|| format!("Unknown brand '{brand}'; run 'atlas-agent models'"))
 }
 
+
+fn read_stdin_line(prompt: &str) -> Result<String> {
+    eprint!("{prompt}");
+    let mut line = String::new();
+    io::stdin().read_line(&mut line)?;
+    Ok(line.trim().to_owned())
+}
+
+async fn interactive_setup(config: &mut Config, requested: Option<&str>) -> Result<()> {
+    let brand = if let Some(brand) = requested {
+        brand.to_owned()
+    } else {
+        for (i, profile) in config.providers.iter().enumerate() {
+            eprintln!("  {}. {} ({})", i + 1, profile.id, profile.model);
+        }
+        let selected = read_stdin_line("Choose model brand (number): ")?;
+        let index = selected.parse::<usize>().context("Brand must be a list number")?;
+        config.providers.get(index.checked_sub(1).context("Brand index starts at 1")?)
+            .context("Brand number is outside list")?.id.clone()
+    };
+    let profile = config.select(Some(&brand), None)?;
+    let (models, key) = if profile.kind == "chatgpt-plan" {
+        crate::chatgpt_plan::run(&crate::chatgpt_plan::AccountAction::Login).await?;
+        (list_models(&profile, "").await?, None)
+    } else {
+        let key = if let Some(name) = &profile.api_key_env {
+            match std::env::var(name) {
+                Ok(key) if !key.trim().is_empty() => key,
+                _ => {
+                    eprintln!("For privacy, use an environment variable when possible; interactive input may echo.");
+                    read_stdin_line(&format!("Enter API key for {brand}: "))?
+                }
+            }
+        } else {
+            read_stdin_line(&format!("Enter API key for {brand}: "))?
+        };
+        let models = list_models(&profile, &key).await?;
+        (models, Some(key))
+    };
+    for (i, model) in models.iter().enumerate() {
+        let context = model.context_window.map(|v| format!(" ctx={v}")).unwrap_or_default();
+        eprintln!("  {}. {} — {}{} [{}]", i + 1, model.id, model.name,
+            context, model.tags.join(", "));
+    }
+    let selected = read_stdin_line("Choose an available model (number): ")?;
+    let index = selected.parse::<usize>().context("Model must be a list number")?;
+    let model = models.get(index.checked_sub(1).context("Model index starts at 1")?)
+        .context("Model number is outside list")?;
+    probe_model(&profile, &model.id, key.as_deref().unwrap_or("")).await?;
+    // Verify the selected model works before changing settings or persisting a new key.
+    if let Some(key) = &key {
+        if std::env::var(profile.api_key_env.as_deref().unwrap_or("")).is_err() {
+            persist_key(&brand, key)?;
+        }
+    }
+    profile_mut(config, &brand)?.model = model.id.clone();
+    config.default_provider = brand.clone();
+    config.validate()?;
+    config.save()?;
+    println!("Model verified and selected: {brand} / {}", model.id);
+    Ok(())
+}
+
 pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
     match action {
+        ModelAction::Setup { brand } => interactive_setup(config, brand.as_deref()).await?,
         ModelAction::Brands => {
             for p in &config.providers {
                 println!("{}: {} | {} | {:?}", p.id, p.model, p.base_url, p.tuning);
