@@ -39,9 +39,6 @@ fn relative_path(cwd: &Path, path: &Path) -> String {
                 .zip(&target_parts)
                 .take_while(|(a, b)| a == b)
                 .count();
-            if shared == 0 {
-                return target.to_owned();
-            }
             return std::iter::repeat("..")
                 .take(root_parts.len() - shared)
                 .chain(target_parts[shared..].iter().copied())
