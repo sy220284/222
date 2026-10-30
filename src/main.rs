@@ -2303,6 +2303,7 @@ async fn sdk_interruptible_turn(
     agent: &mut Agent,
     prompt: &str,
     blocks: Option<Vec<Value>>,
+    message_id: Option<uuid::Uuid>,
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
 ) -> Result<String> {
@@ -2320,7 +2321,7 @@ async fn sdk_interruptible_turn(
             }
             bail!("SDK interrupt control channel closed");
         }
-        response = agent.ask_with_blocks(prompt, blocks) => response,
+        response = agent.ask_with_blocks_for_message(prompt, blocks, message_id) => response,
     }
 }
 
@@ -2329,7 +2330,7 @@ async fn sdk_run_initial_turn(
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
 ) {
-    match sdk_interruptible_turn(agent, "", None, interrupts, input_epoch).await {
+    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch).await {
         Ok(answer) => print_json!(json!({
             "type":"result","session_id":agent.session_id(),
             "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -2595,8 +2596,22 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         sdk_queue::emit_user_replay(prompt_value, uuid, &agent.session_id());
                     }
                 }
+                // The same UUID identifies both the SDK user message and
+                // every file edit performed by its agent/tool execution.
+                let message_id = event.get("uuid").and_then(Value::as_str)
+                    .filter(|id| !id.trim().is_empty())
+                    .map(uuid::Uuid::parse_str)
+                    .transpose();
+                let message_id = match message_id {
+                    Ok(value) => value,
+                    Err(error) => {
+                        print_json!(json!({"type":"error",
+                            "message":format!("SDK user uuid must be valid: {error}")}));
+                        continue;
+                    }
+                };
                 match sdk_interruptible_turn(
-                    agent, &user.preview, user.blocks, &interrupt_rx, input_epoch,
+                    agent, &user.preview, user.blocks, message_id, &interrupt_rx, input_epoch,
                 ).await {
                     Ok(answer) => print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
