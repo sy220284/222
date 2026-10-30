@@ -2389,8 +2389,33 @@ async fn chat(
         }
         if input == "/export" || input.starts_with("/export ") {
             let value = input.trim_start_matches("/export").trim();
-            match agent.export_session(if value.is_empty() { None } else { Some(value) }) {
-                Ok(path) => println!("Conversation exported to: {}", path.display()),
+            let outcome = (|| -> Result<Option<std::path::PathBuf>> {
+                if !value.is_empty() {
+                    return agent.export_session(Some(value)).map(Some);
+                }
+                // Match ExportDialog: preview and confirm a filename before
+                // creating the export; the user can rename or cancel.
+                let (suggested, preview) = agent.export_dialog_preview();
+                println!("Export conversation preview:\n{preview}");
+                if preview.chars().count() >= 1200 {
+                    println!("... (preview truncated; full conversation will be exported)");
+                }
+                print!("Export filename [{suggested}] (q to cancel): ");
+                io::stdout().flush()?;
+                let mut chosen = String::new();
+                if io::stdin().read_line(&mut chosen)? == 0 {
+                    return Ok(None);
+                }
+                let chosen = chosen.trim();
+                if chosen.eq_ignore_ascii_case("q") {
+                    return Ok(None);
+                }
+                let filename = if chosen.is_empty() { suggested.as_str() } else { chosen };
+                agent.export_session(Some(filename)).map(Some)
+            })();
+            match outcome {
+                Ok(Some(path)) => println!("Conversation exported to: {}", path.display()),
+                Ok(None) => println!("Export cancelled."),
                 Err(err) => eprintln!("Failed to export conversation: {err:#}"),
             }
             continue;
