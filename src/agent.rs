@@ -5725,6 +5725,7 @@ done"#;
                     message: Message {
                         role: "assistant".into(),
                         content: None,
+                        reasoning_content: None,
                         content_blocks: None,
                         tool_calls: Some(vec![call]),
                         tool_call_id: None,
