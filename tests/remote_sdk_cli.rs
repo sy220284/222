@@ -2,7 +2,6 @@
 //! Proves that init and control messages traverse the complete live chain.
 use base64::Engine;
 use serde_json::{json, Value};
-use sha1::{Digest, Sha1};
 use std::{
     fs,
     io::{Read, Write},
@@ -24,10 +23,12 @@ fn read_headers(peer: &mut TcpStream) -> String {
 }
 
 fn ws_accept(key: &str) -> String {
-    let mut hasher = Sha1::new();
-    hasher.update(key.trim().as_bytes());
-    hasher.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
-    base64::engine::general_purpose::STANDARD.encode(hasher.finalize())
+    let source = format!("{}258EAFA5-E914-47DA-95CA-C5AB0DC85B11", key.trim());
+    let digest = ring::digest::digest(
+        &ring::digest::SHA1_FOR_LEGACY_USE_ONLY,
+        source.as_bytes(),
+    );
+    base64::engine::general_purpose::STANDARD.encode(digest.as_ref())
 }
 
 fn send_json(peer: &mut TcpStream, event: Value) {
