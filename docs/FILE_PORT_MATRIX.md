@@ -614,7 +614,6 @@
 | `src/components/messages/UserToolResultMessage/utils.tsx` | 44 | 3938 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/nullRenderingAttachments.ts` | 71 | 2257 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/teamMemCollapsed.tsx` | 140 | 13711 | 重写：终端 UI／交互 | `src/generated_ports/p_7ea337b79dc53.rs`| 部分实现：团队记忆折叠计数——三计数判定逐字（read/search/write 任一>0）、动词决策（进行时/过去时×首段大写）、单复数 memory/memories、逗号拼接后缀、无操作返回 null，registry 兼容导出 checkHasTeamMemOps，附 5 测试；React 记忆化脚手架属组件域有意去除|
-| `src/components/messages/teamMemCollapsed.tsx` | 140 | 13711 | 重写：终端 UI／交互 | `src/generated_ports/p_7ea337b79dc53.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/messages/teamMemSaved.ts` | 20 | 711 | 重写：终端 UI／交互 | `src/generated_ports/p_22e1be01ba4e6.rs` | 部分实现：完整等价：团队记忆段构造（0→None/单复数）含单测，原注保留；待验收 |
 | `src/components/permissions/AskUserQuestionPermissionRequest/AskUserQuestionPermissionRequest.tsx` | 645 | 82469 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/AskUserQuestionPermissionRequest/PreviewBox.tsx` | 229 | 25959 | 重写：终端 UI／交互 | 待定 | 未迁移 |
