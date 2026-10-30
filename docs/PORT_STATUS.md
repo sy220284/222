@@ -1,3 +1,18 @@
+## 2026-10-29：交互式 /reload-plugins 接入实际运行链（源码已提交、待行为验收）
+
+- **原版依据**：完整用户原始 ZIP 的 `source/src/commands/reload-plugins/reload-plugins.ts:13–57::call` 会在会话不中断的情况下刷新插件、Hook、命令及 MCP/LSP，并向用户显示加载结果与错误。
+- **确认的 Rust 缺口**：此前 `src/agent.rs::reload_plugins` 已供 SDK 的 `reload_plugins` 控制消息调用，但 `src/main.rs::chat` 没有处理交互式 `/reload-plugins`；输入会落入普通模型消息，用户无法通过原版命令刷新当前会话插件。
+- **实代码**：`src/main.rs::chat` 现在重新读取本地配置，调用实际 `Agent::reload_plugins`，保留当前会话和模型，更新后续技能/命令调度使用的启用插件目录；打印配置插件数量、Hook/MCP 刷新结果及可调用命令数，配置读取、刷新或命令发现错误均明确显示。同步增加 `/help` 入口。提交 `9c86623190d4dbdd47f787dd9dd84c8d05ad1578`。
+- **尚缺**：原版远程模式用户设置重新拉取、插件 LSP 服务热重载、完整插件 Agent/技能刷新统计及文件监听变化传播；本次仅计 **1 项独立用户业务功能源码已提交、待行为验收**，不得认定完整等价。
+
+## 2026-10-29：文件历史恢复写入完整性增强（额外可靠性修复，不计原版等价数量）
+
+- **源码核对**：原版 `source/src/utils/fileHistory.ts:804–838::restoreBackup` 将备份复制到目标并恢复权限；现有 Rust `src/history.rs::restore` 已能用经 SHA-256 校验的备份字节恢复文件。
+- **实代码**：`src/history.rs::publish_verified_restore` 在目标同目录创建独占临时文件，写入、恢复 Unix 权限、同步后原子替换；失败时保留原文件并报告清理错误；符号链接文件继续恢复其真实目标，不删除用户符号链接。提交 `5445e4aeb30e51745631e679a89684448c9b1946`、`2d8d350d55f4176c8f53f0b4369ffa8f6028f41b`。
+- **计数规则**：原版采用直接复制，故此项属于 Rust 可靠性增强，**不计作原版缺失业务功能的补齐**。目标文件检查与最终替换之间的跨进程并发改写、消息 ID 聚合快照、100 次快照上限、Shell 变更追踪仍未完成。
+
+**本轮数量与流程核对**：仅 `/reload-plugins` 1 项确认有原版差异且已提交，**1/100，余99项**。已从完整原始 ZIP 提取源码并初筛 127 个函数级候选，但尚未完成恰好 100 个互不重复业务缺口的逐条 Rust 可达调用链核对及覆盖方案，A/B 未达标；未运行 Cargo、测试或 CI；Issue #3 冻结362项不核销。
+
 ## 2026-10-29：前台 Shell 大输出不再误杀正常命令（源码已提交、待行为验收）
 
 - **原版依据**：`source/src/tools/BashTool/BashTool.tsx:636–690,725–749` 使用有限预览和文件输出，`source/src/utils/task/TaskOutput.ts:278–325` 只读取输出开头的显示上限，`source/src/utils/ShellCommand.ts:237–255` 仅在实际输出超过 5GiB 时杀进程。
