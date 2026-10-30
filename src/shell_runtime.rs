@@ -108,6 +108,118 @@ impl ShellKind {
     }
 }
 
+
+#[cfg(windows)]
+mod windows_job {
+    use anyhow::{bail, Context, Result};
+    use std::{ffi::c_void, mem, ptr};
+    type Handle = *mut c_void;
+    const PROCESS_TERMINATE: u32 = 0x0001;
+    const PROCESS_SET_QUOTA: u32 = 0x0100;
+    const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x0000_2000;
+    const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION: u32 = 9;
+
+    #[repr(C)]
+    struct BasicLimits {
+        per_process_user_time_limit: i64,
+        per_job_user_time_limit: i64,
+        limit_flags: u32,
+        minimum_working_set_size: usize,
+        maximum_working_set_size: usize,
+        active_process_limit: u32,
+        affinity: usize,
+        priority_class: u32,
+        scheduling_class: u32,
+    }
+    #[repr(C)]
+    struct IoCounters {
+        read_operation_count: u64,
+        write_operation_count: u64,
+        other_operation_count: u64,
+        read_transfer_count: u64,
+        write_transfer_count: u64,
+        other_transfer_count: u64,
+    }
+    #[repr(C)]
+    struct ExtendedLimits {
+        basic: BasicLimits,
+        io: IoCounters,
+        process_memory_limit: usize,
+        job_memory_limit: usize,
+        peak_process_memory_used: usize,
+        peak_job_memory_used: usize,
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateJobObjectW(security: *const c_void, name: *const u16) -> Handle;
+        fn SetInformationJobObject(
+            job: Handle, kind: u32, data: *const c_void, size: u32
+        ) -> i32;
+        fn AssignProcessToJobObject(job: Handle, process: Handle) -> i32;
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
+        fn TerminateJobObject(job: Handle, exit_code: u32) -> i32;
+        fn CloseHandle(handle: Handle) -> i32;
+    }
+
+    pub struct ProcessJob(Handle);
+    // Win32 Job handles are kernel-owned and may be used across threads.
+    unsafe impl Send for ProcessJob {}
+    unsafe impl Sync for ProcessJob {}
+    impl Drop for ProcessJob {
+        fn drop(&mut self) {
+            unsafe { CloseHandle(self.0); }
+        }
+    }
+    impl ProcessJob {
+        pub fn attach(pid: Option<u32>) -> Result<Self> {
+            let pid = pid.context("Windows shell process ID missing")?;
+            let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
+            if handle.is_null() {
+                return Err(std::io::Error::last_os_error())
+                    .context("Create Windows process job");
+            }
+            let job = Self(handle);
+            let mut limits: ExtendedLimits = unsafe { mem::zeroed() };
+            limits.basic.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let configured = unsafe {
+                SetInformationJobObject(
+                    job.0, JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                    &limits as *const _ as *const c_void,
+                    mem::size_of::<ExtendedLimits>() as u32
+                )
+            };
+            if configured == 0 {
+                return Err(std::io::Error::last_os_error())
+                    .context("Enable kill-on-close for Windows background process job");
+            }
+            let process = unsafe {
+                OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid)
+            };
+            if process.is_null() {
+                return Err(std::io::Error::last_os_error())
+                    .context("Open Windows child for process-job assignment");
+            }
+            let assigned = unsafe { AssignProcessToJobObject(job.0, process) };
+            unsafe { CloseHandle(process); }
+            if assigned == 0 {
+                return Err(std::io::Error::last_os_error())
+                    .context("Contain Windows shell descendants in job");
+            }
+            Ok(job)
+        }
+        pub fn terminate(&self) -> Result<()> {
+            if unsafe { TerminateJobObject(self.0, 137) } == 0 {
+                return Err(std::io::Error::last_os_error())
+                    .context("Terminate Windows background process job");
+            }
+            Ok(())
+        }
+    }
+}
+#[cfg(windows)]
+pub use windows_job::ProcessJob as WindowsProcessJob;
+
 /// Original ShellCommand.ts::doKill uses tree-kill rather than killing only
 /// the shell. On Windows, Child::kill terminates the parent process but leaves
 /// child processes running (and often holding stdout/stderr open). Use the
