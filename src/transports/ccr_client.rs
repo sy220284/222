@@ -795,9 +795,18 @@ impl CcrShared {
             .context("rate limited (429)"));
         }
         if (200..300).contains(&status) {
+            // PUT/POST acknowledge delivery by HTTP status; a 204 has no
+            // response body. GET responses carry structured worker state and
+            // must never convert malformed JSON into an empty success.
+            let value = if method == "GET" {
+                let text = response.text().await?;
+                serde_json::from_str(&text)
+                    .map_err(|error| anyhow!("CCR {path} returned invalid JSON: {error}"))?
+            } else {
+                json!({})
+            };
             self.consecutive_auth_failures.store(0, Ordering::SeqCst);
-            let text = response.text().await.unwrap_or_default();
-            return Ok(serde_json::from_str(&text).unwrap_or(json!({})));
+            return Ok(value);
         }
         bail!("CCR request {method} {path} failed with status {status}")
     }
@@ -957,6 +966,42 @@ mod tests {
             .to_string()
             .contains("recovery failed after 1 attempts"));
         client.close();
+    }
+
+    #[tokio::test]
+    async fn malformed_worker_get_response_does_not_appear_as_empty_state() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = socket.read(&mut request).await.unwrap();
+            let body = "broken-json";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        let transport = SseTransport::new(
+            format!("http://{addr}/session/s1/events/stream"),
+            vec![],
+            None,
+            Arc::new(Vec::new),
+        );
+        let client = CcrClient::new(
+            &transport,
+            &format!("http://{addr}/session/s1"),
+            Arc::new(|| vec![("Authorization".to_owned(), "Bearer test".to_owned())]),
+            None,
+            Some(20),
+            Some(0.0),
+        );
+        let error = client.shared.request_get("/worker").await.unwrap_err();
+        assert!(error.to_string().contains("invalid JSON"));
+        client.close();
+        server.await.unwrap();
     }
 
     #[tokio::test]
