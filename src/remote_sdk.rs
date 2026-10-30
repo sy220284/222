@@ -73,13 +73,24 @@ impl RemoteChannel {
         }
     }
 
-    async fn close(&self) {
+    async fn close(&self) -> Result<()> {
         match self {
             Self::WebSocket(ws) => ws.close(),
             Self::Hybrid(hybrid) => hybrid.close().await,
             Self::Sse(sse, _) => sse.close(),
-            Self::Ccr(ccr) => ccr.close(),
+            Self::Ccr(ccr) => {
+                // Stop accepting new inbound SSE events before final flush.
+                // The source drains delivery status before worker shutdown.
+                let result = tokio::time::timeout(
+                    Duration::from_secs(3),
+                    ccr.flush_delivery_receipts(),
+                )
+                .await;
+                ccr.close();
+                result.context("CCR delivery receipt shutdown exceeded three seconds")??;
+            }
         }
+        Ok(())
     }
 
     fn delivery(&self, id: &str, status: &str) {
@@ -406,16 +417,26 @@ pub async fn run(
     if let Some(scheduler) = &refresh {
         scheduler.cancel(session_id);
     }
-    channel.close().await;
+    // Disable ingress before waiting for final CCR receipts; no new input
+    // can race a closing uploader.
     driver.abort();
+    let close_result = channel.close().await;
     ws_forwarder.abort();
     if let Some(forwarder) = sse_forwarder {
         forwarder.abort();
     }
     // Terminate the SDK actor if the transport fails during a model call.
-    let _ = child.start_kill();
-    let _ = child.wait().await;
-    outcome
+    let cleanup = async {
+        if child.try_wait()?.is_none() {
+            child.start_kill().context("Could not stop orphaned SDK actor")?;
+        }
+        child.wait().await.context("Could not reap SDK actor")?;
+        Ok(())
+    }
+    .await;
+    outcome?;
+    close_result?;
+    cleanup
 }
 
 #[cfg(test)]
