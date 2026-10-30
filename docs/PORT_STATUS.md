@@ -1,3 +1,11 @@
+## 2026-10-29：AI 辅助生成自定义 Agent 并审核保存（源码已提交、待验收）
+
+原版 source/src/components/agents/generateAgent.ts::generateAgent、new-agent-creation/wizard-steps/GenerateStep.tsx：用户描述目标后，以无工具模型请求生成 identifier/whenToUse/systemPrompt JSON，再预览、校验并由用户确认保存。Rust 原仅支持手工填写 Agent 定义，未接入此流程。
+
+已实现 src/main.rs::chat /agents generate project|user [DESCRIPTION] → Agent::generate_custom_agent_definition → 当前多模型 Provider.complete（工具列表为空，携带项目上下文）→ JSON 严格字段校验与名称校验 → 预览生成内容 → 原有风险警告确认 → agent_definition::save_agent(create_new)。请求用量和 API 耗时归集到当前会话，失败也持久化耗时，生成过程不污染正常对话消息。提交 b95c876b、7a0b1279、a67d674f。已静态核对实际入口。
+
+原版完整生成提示词、取消信号、记忆增强、模型选择 UI、重试和生成内容质量仍需等价验收。**本轮累计12/100，剩余88项**，先行100项独立缺口核查与实施方案未完成；未运行 Cargo/测试/CI，新增完整等价验收0，Issue #3 冻结362项继续开放。
+
 ## 2026-10-29：自定义 Agent 创建编辑前风险提醒（源码已提交、待验收）
 
 对照原版 components/agents/AgentEditor.tsx 和 new-agent-creation 向导：无工具、无限制工具、描述过短/过长、系统提示过长等校验警告应向用户展示并取得确认。Rust 原 agent_definition::validate 已计算 warnings，但交互式创建/编辑直接保存，用户看不到风险。现由 src/main.rs::confirm_custom_agent_warnings 复用真实验证结果，先拦截错误，逐条显示非阻断警告并请求 y/N 确认；取消时不创建文件，编辑取消保留旧文件。提交 fb3ab49c650f2bcfc925fe8aee2c03b92310e62e。
