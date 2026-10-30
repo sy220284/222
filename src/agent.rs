@@ -22,6 +22,7 @@ use crate::{
     worktree::Worktree,
 };
 use anyhow::{bail, Context, Result};
+use futures::stream::StreamExt;
 use serde_json::json;
 use std::{
     collections::HashMap,
@@ -2577,6 +2578,50 @@ impl Agent {
     pub fn set_model_prices(&mut self, prices: &[ModelPrice]) {
         self.model_prices = prices.to_vec();
     }
+    /// Shared tail of a concurrency-safe tool execution: PostToolUse hook,
+    /// warning surface, blocking injection and hook-context attachment. Runs
+    /// on the shared agent reference inside the read-only batch, mirroring
+    /// the serial path's post-hook stage for actual executions only.
+    async fn finalize_readonly_result(
+        &self,
+        call: &ToolCall,
+        raw_result: String,
+        pre_contexts: Vec<String>,
+    ) -> String {
+        let (post, mut result): (crate::hooks::HookOutcome, String) = match self
+            .hooks
+            .after_tool_with_context(call, &raw_result, self.tool_hook_input())
+            .await
+        {
+            Ok(outcome) => (outcome, raw_result),
+            Err(error) => (
+                Default::default(),
+                format!(
+                    "ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: {raw_result}"
+                ),
+            ),
+        };
+        for warning in &post.non_blocking_errors {
+            eprintln!("{warning}");
+            self.emit(json!({
+                "type":"hook_warning",
+                "hook_event_name":"PostToolUse",
+                "tool_use_id":call.id,
+                "message":warning,
+                "session_id":self.session.id,
+            }));
+        }
+        if let Some(reason) = post.blocking_reason {
+            result.push_str(&format!(
+                "\nPostToolUse hook blocked continuation: {reason}"
+            ));
+        }
+        for context in pre_contexts {
+            result.push_str(&format!("\n{context}"));
+        }
+        result
+    }
+
     /// `snapshotOutputTokensForTurn` — record the cumulative output-token
     /// baseline, install the turn budget and reset the continuation counter
     /// (bootstrap/state.ts).
@@ -4586,7 +4631,253 @@ impl Agent {
             if !text.trim().is_empty() {
                 eprintln!("{text}");
             }
-            for mut call in calls {
+            // Original toolOrchestration.runTools: partition the assistant
+            // turn's tool_use blocks into consecutive read-only batches
+            // (concurrent) and single non-safe tools (serial).
+            for tool_batch in crate::tool_orchestration::partition_tool_calls(calls) {
+                let mut call = match tool_batch {
+                    crate::tool_orchestration::ToolBatch::Unsafe(call) => call,
+                    crate::tool_orchestration::ToolBatch::Safe(safe_batch) => {
+                        // Read-only batch: validation and PreToolUse hooks run
+                        // serially on the agent (fast, keeps stdin approval
+                        // ordered); the executor call and PostToolUse hook run
+                        // concurrently up to the original concurrency cap.
+                        // Results are matched back in block order so every
+                        // tool id keeps a contiguous, ordered tool_result.
+                        let mut prepared: Vec<(ToolCall, Option<String>, Vec<String>)> = Vec::new();
+                        for mut call in safe_batch {
+                            let label: Option<&str> = None;
+                            eprintln!(
+                                "Executing tool: {}",
+                                label.as_deref().unwrap_or(&call.function.name)
+                            );
+                            let restricted_by_role = (self.child_depth > 0
+                                && self.prompt_role.as_deref().is_some_and(|role| {
+                                    !crate::prompt_runtime::tool_allowed_for_role(
+                                        role,
+                                        &call.function.name,
+                                    )
+                                }))
+                                || self.sdk_allowed_tools.as_ref().is_some_and(|allowed| {
+                                    !allowed.contains("*")
+                                        && !allowed.contains(&call.function.name)
+                                        && !allowed.contains(crate::tool_names::canonical_name(
+                                            &call.function.name,
+                                        ))
+                                })
+                                || self.sdk_disallowed_tools.contains(&call.function.name)
+                                || self.sdk_disallowed_tools.contains(
+                                    crate::tool_names::canonical_name(&call.function.name),
+                                );
+                            let invalid_input =
+                                if restricted_by_role {
+                                    Some(format!(
+                                        "Tool {} is unavailable to this agent's tool policy",
+                                        call.function.name
+                                    ))
+                                } else {
+                                    match serde_json::from_str::<serde_json::Value>(
+                                        &call.function.arguments,
+                                    ) {
+                                        Err(error) => {
+                                            Some(format!("Invalid tool arguments JSON: {error}"))
+                                        }
+                                        Ok(value @ serde_json::Value::Object(_)) => {
+                                            if matches!(call.function.name.as_str(), "Read") {
+                                                let mut normalized = value.clone();
+                                                crate::semantic_inputs::normalize_source_file_tool(
+                                                    &call.function.name,
+                                                    &mut normalized,
+                                                )
+                                                .and_then(|_| {
+                                                    crate::semantic_inputs::normalize_tool_fields(
+                                                        crate::tool_names::canonical_name(
+                                                            &call.function.name,
+                                                        ),
+                                                        &mut normalized,
+                                                    )
+                                                })
+                                                .err()
+                                                .map(|error| {
+                                                    format!(
+                                                        "Invalid {} arguments: {error:#}",
+                                                        call.function.name
+                                                    )
+                                                })
+                                            } else if matches!(
+                                                crate::tool_names::canonical_name(
+                                                    &call.function.name
+                                                ),
+                                                "grep_files" | "glob_files"
+                                            ) {
+                                                crate::search::validate_tool_input(
+                                                    crate::tool_names::canonical_name(
+                                                        &call.function.name,
+                                                    ),
+                                                    &value,
+                                                )
+                                                .err()
+                                                .map(|error| {
+                                                    format!("Invalid search arguments: {error:#}")
+                                                })
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        Ok(_) => {
+                                            Some("Tool arguments must be a JSON object".to_owned())
+                                        }
+                                    }
+                                };
+                            let mut pre_hook_failure = None;
+                            let pre = if invalid_input.is_none() {
+                                match self
+                                    .hooks
+                                    .before_tool_with_context(&call, self.tool_hook_input())
+                                    .await
+                                {
+                                    Ok(outcome) => Some(outcome),
+                                    Err(error) => {
+                                        pre_hook_failure = Some(format!("{error:#}"));
+                                        None
+                                    }
+                                }
+                            } else {
+                                None
+                            };
+                            if let Some(pre) = pre.as_ref() {
+                                for warning in &pre.non_blocking_errors {
+                                    eprintln!("{warning}");
+                                    self.emit(json!({
+                                        "type":"hook_warning",
+                                        "hook_event_name":"PreToolUse",
+                                        "tool_use_id":call.id,
+                                        "message":warning,
+                                        "session_id":self.session.id,
+                                    }));
+                                }
+                            }
+                            if let Some(updated) =
+                                pre.as_ref().and_then(|hook| hook.updated_input.as_ref())
+                            {
+                                call.function.arguments = serde_json::to_string(updated)?;
+                            }
+                            let hook_ask_rejection = if pre
+                                .as_ref()
+                                .and_then(|hook| hook.permission_decision.as_deref())
+                                == Some("ask")
+                            {
+                                if !self.interactive {
+                                    Some("PreToolUse hook requires interactive approval".to_owned())
+                                } else {
+                                    use std::io::Write;
+                                    let answer = (|| -> std::io::Result<bool> {
+                                        eprintln!(
+                                            "PreToolUse hook requests approval for {}",
+                                            call.function.name
+                                        );
+                                        eprint!("Allow once? [y/N] ");
+                                        std::io::stderr().flush()?;
+                                        let mut response = String::new();
+                                        std::io::stdin().read_line(&mut response)?;
+                                        Ok(matches!(
+                                            response.trim().to_ascii_lowercase().as_str(),
+                                            "y" | "yes"
+                                        ))
+                                    })();
+                                    match answer {
+                                        Ok(true) => None,
+                                        Ok(false) => Some(
+                                            "User rejected PreToolUse hook approval".to_owned(),
+                                        ),
+                                        Err(error) => {
+                                            Some(format!("PreToolUse approval failed: {error}"))
+                                        }
+                                    }
+                                }
+                            } else {
+                                None
+                            };
+                            let pre_blocked =
+                                pre.as_ref().and_then(|hook| hook.blocking_reason.clone());
+                            // Same synthesized pre-execution errors as the
+                            // serial path: only actual executions see the
+                            // PostToolUse stage, rejections carry stage names.
+                            let skip_reason = if let Some(reason) = invalid_input {
+                                Some(format!("ERROR: {reason}"))
+                            } else if let Some(reason) = pre_hook_failure {
+                                Some(format!("ERROR: PreToolUse hook failed: {reason}"))
+                            } else if let Some(reason) = pre_blocked {
+                                Some(format!("ERROR: PreToolUse hook blocked: {reason}"))
+                            } else if let Some(reason) = hook_ask_rejection {
+                                Some(format!("ERROR: {reason}"))
+                            } else {
+                                None
+                            };
+                            let pre_contexts = pre
+                                .map(|hook| {
+                                    hook.additional_context
+                                        .into_iter()
+                                        .map(|context| {
+                                            format!("[PreToolUse hook context] {context}")
+                                        })
+                                        .collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default();
+                            prepared.push((call, skip_reason, pre_contexts));
+                        }
+                        let cap = crate::tool_orchestration::max_tool_use_concurrency();
+                        let finished: Vec<(ToolCall, String, Instant)> =
+                            futures::stream::iter(prepared.into_iter().map(
+                                |(call, skip_reason, pre_contexts)| {
+                                    let agent = &*self;
+                                    let executor = &executor;
+                                    async move {
+                                        let tool_started = Instant::now();
+                                        let result = match skip_reason {
+                                            Some(reason) => reason,
+                                            None => {
+                                                let raw = executor.execute(&call).await;
+                                                agent
+                                                    .finalize_readonly_result(
+                                                        &call,
+                                                        raw,
+                                                        pre_contexts,
+                                                    )
+                                                    .await
+                                            }
+                                        };
+                                        (call, result, tool_started)
+                                    }
+                                },
+                            ))
+                            .buffered(cap)
+                            .collect::<Vec<_>>()
+                            .await;
+                        for (call, result, tool_started) in finished {
+                            self.session.cost.add_tool_duration(tool_started.elapsed());
+                            let (added, removed) = self.file_metrics.counts();
+                            self.session.cost.set_changed_lines(added, removed);
+                            self.emit(json!({
+                                "type":"tool_result","tool_use_id":call.id,
+                                "name":call.function.name,"content":result,
+                                "session_id":self.session.id,
+                            }));
+                            self.session
+                                .messages
+                                .push(Message::tool_result(&call, result));
+                            self.session.save(&self.root)?;
+                            if self.shutdown_requested {
+                                self.session.cost.add_wall_duration(ask_started.elapsed());
+                                self.session.save(&self.root)?;
+                                return Ok(
+                                    "Shutdown approved; confirmation delivered to team lead".into(),
+                                );
+                            }
+                        }
+                        continue;
+                    }
+                };
                 let label = if matches!(
                     call.function.name.as_str(),
                     "run_command" | "Bash" | "PowerShell"

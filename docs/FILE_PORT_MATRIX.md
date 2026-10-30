@@ -1115,10 +1115,10 @@
 | `src/services/tips/tipScheduler.ts` | 59 | 1664 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/tokenEstimation.ts` | 496 | 16883 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/toolUseSummary/toolUseSummaryGenerator.ts` | 113 | 3376 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | `src/tool_orchestration.rs`（调度语义）+`src/agent.rs`（主循环接入） | 部分实现：并发准入/批次排空/结果保序/未知工具合成错误经 orchestration 批次调度等价承载；流式增量 tool_use 块提取（addTool 边流边入队）、Bash 级联取消、streaming_fallback discard 三类合成错误待 provider 流式块端口后接入；待验收 |
 | `src/services/tools/toolExecution.ts` | 1746 | 60309 | 重写：工具调用与 Hook 生命周期 | `src/agent.rs / src/hooks.rs / src/tools.rs` | 部分实现：非法输入与 PreToolUse 阻止/失败逐工具回填，跳过实际执行的工具不触发 PostToolUseFailure；已执行工具的 PostToolUse/Failure 获得原版顶层结构化有效输入，失败事件使用 error/is_interrupt 字段；并行调度、取消与完整原版事件时序仍待对照 |
 | `src/services/tools/toolHooks.ts` | 651 | 22333 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` | 部分实现：PostToolUse 的 MCP 输出替换和连续 Hook 可见性已接入 Agent；完整 Hook 事件/阻断/回调时序仍缺 |
-| `src/services/tools/toolOrchestration.ts` | 189 | 5501 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/tools/toolOrchestration.ts` | 189 | 5501 | 重写：保持通用行为 | `src/tool_orchestration.rs` | 部分实现：partitionToolCalls 分区语义（连续只读合批/unsafe 断批/schema 失败与未知工具保守串行）、isConcurrencySafe 表（Read/Glob/Grep/WebFetch/WebSearch 对照原版逐工具核对；Bash 只读条件判定与 task/Agent 类 true 项因 Rust 执行体独占借用保守 false 已记差异）、并发上限 ATLAS_MAX_TOOL_USE_CONCURRENCY（parseInt 非零取值否则 10 语义）已接入 agent.rs 主循环批次调度（safe 批校验/hook 串行+executor.execute 与 PostToolUse hook 并发、结果按块序回填），contextModifier 队列待工具级 modifyContext 端口；待验收 |
 | `src/services/vcr.ts` | 407 | 12166 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/voice.ts` | 526 | 17116 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/voiceKeyterms.ts` | 107 | 3462 | 重写：保持通用行为 | 待定 | 未迁移 |

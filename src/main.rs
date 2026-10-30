@@ -143,6 +143,7 @@ mod tls_ca;
 mod tool_errors;
 mod tool_metrics;
 mod tool_names;
+mod tool_orchestration;
 mod tool_search;
 mod tools;
 mod transcript_search;
