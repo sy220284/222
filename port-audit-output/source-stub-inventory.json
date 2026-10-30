@@ -1,5 +1,5 @@
 {
-  "count": 225,
+  "count": 223,
   "disclaimer": "仅是自动生成空壳的静态检测，不证明手写代码功能完整。",
   "items": [
     {
@@ -1555,14 +1555,6 @@
       "view_export_unreachable": false
     },
     {
-      "null_expression_count": 6,
-      "rust": "src/generated_ports/p_bf68628a27ff8.rs",
-      "rust_lines": 7,
-      "source": "src/buddy/prompt.ts",
-      "source_lines": 37,
-      "view_export_unreachable": false
-    },
-    {
       "null_expression_count": 5,
       "rust": "src/generated_ports/p_d6a11c5239e9b.rs",
       "rust_lines": 43,
@@ -1747,14 +1739,6 @@
       "view_export_unreachable": false
     },
     {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_87d79f34fe49a.rs",
-      "rust_lines": 10,
-      "source": "src/types/ids.ts",
-      "source_lines": 45,
-      "view_export_unreachable": false
-    },
-    {
       "null_expression_count": 1,
       "rust": "src/generated_ports/p_c4d0f9a46fa38.rs",
       "rust_lines": 10,
@@ -1804,7 +1788,7 @@
     }
   ],
   "schema": "port-stubs/v1",
-  "total_null_expressions": 1003,
+  "total_null_expressions": 995,
   "unreachable_views": 186,
-  "with_null": 197
+  "with_null": 195
 }
