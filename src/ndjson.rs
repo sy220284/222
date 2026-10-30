@@ -99,17 +99,25 @@ mod tests {
             stringify_value(&source),
             r#"{"0":"zero","1":"one","2":"two","10":"ten","z":0,"01":"leading","4294967295":"out","a":1}"#
         );
-        let nested: Value = serde_json::from_str(
-            r#"{"items":[{"3":"third","1":"first","x":true}],"v":-0}"#,
-        )
-        .unwrap();
+        let nested: Value =
+            serde_json::from_str(r#"{"items":[{"3":"third","1":"first","x":true}],"v":-0}"#)
+                .unwrap();
         assert_eq!(
             stringify_value(&nested),
             r#"{"items":[{"1":"first","3":"third","x":true}],"v":0}"#
         );
         assert_eq!(js_array_index("0"), Some(0));
         assert_eq!(js_array_index("4294967294"), Some(4294967294));
-        for key in ["", "00", "01", "-1", "1.0", "+1", "4294967295", "99999999999"] {
+        for key in [
+            "",
+            "00",
+            "01",
+            "-1",
+            "1.0",
+            "+1",
+            "4294967295",
+            "99999999999",
+        ] {
             assert_eq!(js_array_index(key), None, "invalid array-index key: {key}");
         }
     }
