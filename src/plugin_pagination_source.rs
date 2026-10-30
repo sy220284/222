@@ -96,8 +96,14 @@ mod tests {
     fn continuous_scroll_keeps_selection_visible_and_retains_offset() {
         let mut p = PaginationState::new();
         let s = p.update(12, 5, 0);
-        assert_eq!((s.start_index, s.end_index, s.current_page, s.total_pages), (0, 5, 0, 3));
-        assert_eq!(s.visible_items(&(0..12).collect::<Vec<_>>()), &[0, 1, 2, 3, 4]);
+        assert_eq!(
+            (s.start_index, s.end_index, s.current_page, s.total_pages),
+            (0, 5, 0, 3)
+        );
+        assert_eq!(
+            s.visible_items(&(0..12).collect::<Vec<_>>()),
+            &[0, 1, 2, 3, 4]
+        );
         let s = p.update(12, 5, 6);
         assert_eq!((s.start_index, s.end_index), (2, 7));
         assert!(s.is_on_current_page(6));
@@ -115,7 +121,10 @@ mod tests {
         assert_eq!(p.update(20, 5, 18).start_index, 14);
         assert_eq!(p.update(8, 5, 4).start_index, 4);
         let small = p.update(2, 5, 0);
-        assert_eq!((small.start_index, small.end_index, small.total_pages), (0, 2, 1));
+        assert_eq!(
+            (small.start_index, small.end_index, small.total_pages),
+            (0, 2, 1)
+        );
         assert!(!small.needs_pagination);
         assert_eq!(small.visible_items(&[42, 43]), &[42, 43]);
         assert_eq!(p.update(20, 5, 4).start_index, 4);
