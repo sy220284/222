@@ -867,13 +867,15 @@ mod tests {
         assert!(cached_root(project.path(), &path).unwrap().is_dir());
     }
     #[test]
-    fn update_is_all_or_nothing_and_missing_name_is_an_error() {
+    fn bulk_update_reports_broken_marketplace_without_losing_registry() {
         let (project, source) = fixture();
         let source_path = source.path().to_str().unwrap();
         execute(project.path(), Some("add"), Some(source_path)).unwrap();
         let registry_before = fs::read(storage(project.path())).unwrap();
         fs::remove_file(legacy_manifest(source.path())).unwrap();
-        assert!(execute(project.path(), Some("update"), None).is_err());
+        let result = execute(project.path(), Some("update"), None).unwrap();
+        assert_eq!(result["updated"], json!([]));
+        assert_eq!(result["failed"][0]["name"], "team-repo");
         assert_eq!(fs::read(storage(project.path())).unwrap(), registry_before);
         assert!(execute(project.path(), Some("remove"), Some("does-not-exist")).is_err());
     }
