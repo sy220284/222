@@ -1,3 +1,13 @@
+## 2026-10-29：任务工具目录、消息级文件快照、Markdown 复制（已提交、待验收）
+
+本轮从用户完整原版 ZIP 的 source/src/tools.ts、source/src/utils/tasks.ts、source/src/utils/fileHistory.ts、source/src/commands/copy/copy.tsx 逐函数核对真实 Rust 调用链，**保守计 3 项独立用户可感知业务补齐**，均已推送至 Draft PR #2，未经行为验收：
+
+1. Agent 工具目录：原版仅在 V2 启用时展示 TaskCreate/Get/List/Update，否则展示 TodoWrite。此前 Rust 额外同时暴露旧 task_* 工具，造成两套并存清单；已在 src/agent.rs 移除模型可见的重复旧目录，旧客户端内部入口保留。提交 3121eed3。
+2. 文件编辑历史：同一用户消息的 Write/Edit/NotebookEdit 共享消息 UUID，重复修改同一文件时保留最初的备份、更新最终内容摘要；持久化消息标识，按消息分组限制最近 100 次快照，并用会话级文件锁串行写入。src/agent.rs、src/tools.rs、src/history.rs，提交 e9bd696a。原版按消息生成无编辑快照、SDK rewind_files、多文件回退及 Shell 修改跟踪仍待补齐；同期其他任务的 SDK 消息 UUID 续接不计本轮。
+3. /copy --code：原版 marked.lexer 支持缩进 Markdown 代码块，Rust 此前仅识别反引号/波浪线围栏；现将连续四空格或 Tab 缩进代码段按原有顺序纳入复制选择，保留未闭合围栏识别。src/copy_response.rs，提交 ac72fcbe。完整交互式复制选择器、全量 Markdown lexer 仍待等价。
+
+本轮未完成恰好 100 项预先确认的独立业务缺口清单与全部实施方案；**3/100，余 97 项，A/B 未达标**。未运行 cargo fmt/check/clippy/test、CI 或行为测试；新增完整等价验收 0 项，Issue #3 冻结 362 项不核销，全部保持“部分实现、待验收”。
+
 ## 2026-10-30：SDK 标题生成异步请求与会话单一写入口（源码已提交、待验收）
 
 原版：source/src/cli/print.ts:3783-3814::generate_session_title 采用 fire-and-forget 生成标题，不能让模型请求占据 SDK stdin 的控制处理；source/src/utils/sessionTitle.ts 等标题解析规则。Rust 原入口 src/main.rs::sdk_nested_control -> Agent::generate_session_title 等待模型同步完成，主控制队列被长模型请求阻塞。
