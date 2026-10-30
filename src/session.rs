@@ -20,6 +20,8 @@ pub struct Session {
     #[serde(default)]
     pub history_message_ids: Vec<Uuid>,
     #[serde(default)]
+    pub history_message_aliases: std::collections::BTreeMap<Uuid, Uuid>,
+    #[serde(default)]
     pub summary: Option<String>,
     #[serde(default)]
     pub tasks: Vec<Task>,
@@ -68,6 +70,7 @@ impl Session {
             id: Uuid::new_v4(),
             messages: Vec::new(),
             history_message_ids: Vec::new(),
+            history_message_aliases: std::collections::BTreeMap::new(),
             summary: None,
             tasks: Vec::new(),
             todos: Vec::new(),
