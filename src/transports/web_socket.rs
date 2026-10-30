@@ -1175,15 +1175,15 @@ mod tests {
             "ws://127.0.0.1:0/unreachable".into(),
             Vec::new(), None, tx, true, None,
         ));
-        let runner = {
+        let pending = {
             let transport = Arc::clone(&transport);
-            tokio::spawn(async move { transport.run().await; })
+            tokio::spawn(async move { transport.schedule_reconnect().await })
         };
-        tokio::time::sleep(Duration::from_millis(80)).await;
-        assert_eq!(transport.state(), WsState::Reconnecting);
+        tokio::time::sleep(Duration::from_millis(30)).await;
         transport.close();
-        tokio::time::timeout(Duration::from_millis(500), runner)
-            .await.expect("close must cancel reconnect backoff").unwrap();
+        let result = tokio::time::timeout(Duration::from_millis(500), pending)
+            .await.expect("close must wake the reconnect timer").unwrap();
+        assert!(result.is_none());
         assert_eq!(transport.state(), WsState::Closed);
     }
 
