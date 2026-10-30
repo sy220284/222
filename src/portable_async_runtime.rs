@@ -28,8 +28,16 @@ pub fn generate_request_id(kind: &str, id: &str, timestamp_ms: i64) -> String {
 pub fn parse_request_id(value: &str) -> Option<(String, i64, String)> {
     let (prefix, agent) = value.split_once('@')?;
     let (kind, date) = prefix.rsplit_once('-')?;
-    let value = date.parse::<i64>().ok()?;
-    Some((kind.into(), value, agent.into()))
+    // Upstream agentId.ts uses JavaScript parseInt(timestampStr, 10):
+    // a decimal prefix is accepted even when trailing text is present.
+    let decimal = date.trim_start_matches(char::is_whitespace);
+    let decimal = decimal.strip_prefix('+').unwrap_or(decimal);
+    let digit_count = decimal.bytes().take_while(u8::is_ascii_digit).count();
+    if digit_count == 0 {
+        return None;
+    }
+    let timestamp = decimal[..digit_count].parse::<i64>().ok()?;
+    Some((kind.into(), timestamp, agent.into()))
 }
 
 // src/utils/queueProcessor.ts: priority deque, main-thread-only, mode-stable.
@@ -628,6 +636,15 @@ mod tests {
         assert!(parse_session_identifier("not-a-session").is_none());
         assert!(matches_keep_going_keyword("Please keep going"));
         assert!(!matches_keep_going_keyword("Continue the process"));
+    }
+    #[test]
+    fn request_id_parse_matches_js_parse_int_prefix_and_rejects_nonnumeric() {
+        assert_eq!(parse_request_id("plan-123tail@worker@team"), Some(("plan".into(), 123, "worker@team".into())));
+        assert_eq!(parse_request_id("stop-+17junk@worker"), Some(("stop".into(), 17, "worker".into())));
+        assert_eq!(parse_request_id("step-0x10@worker"), Some(("step".into(), 0, "worker".into())));
+        assert_eq!(parse_request_id("step- 42.8@worker"), Some(("step".into(), 42, "worker".into())));
+        assert!(parse_request_id("step-abc123@worker").is_none());
+        assert!(parse_request_id("step-123-no-at-sign").is_none());
     }
     #[tokio::test]
     async fn abort_propagation_sequential_workload() {
