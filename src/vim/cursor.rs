@@ -222,19 +222,22 @@ impl<'a> VimCursor<'a> {
     }
     /// `e` — end of current/next vim word.
     pub fn end_of_vim_word(&self) -> VimCursor<'a> {
-        let mut cursor = self.clone();
-        if !cursor.is_at_end() {
-            cursor = cursor.right();
+        if self.is_at_end() {
+            return self.clone();
         }
-        while !cursor.is_at_end() && !cursor.is_word() {
+        let mut cursor = self.right();
+        while !cursor.is_at_end() && cursor.is_over_whitespace() {
             cursor = cursor.right();
         }
         if cursor.is_at_end() {
-            return VimCursor::new(cursor.text, cursor.text.len());
+            return cursor;
         }
+        let class = Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch));
         while !cursor.is_at_end() {
             let next = cursor.right();
-            if next.is_at_end() || !next.is_word() {
+            if next.is_at_end()
+                || Self::class(char_at(next.text, next.offset).map(|(ch, _)| ch)) != class
+            {
                 break;
             }
             cursor = next;
@@ -243,14 +246,20 @@ impl<'a> VimCursor<'a> {
     }
     /// `b` — start of previous vim word.
     pub fn prev_vim_word(&self) -> VimCursor<'a> {
-        let mut cursor = self.clone();
-        cursor = cursor.left();
-        while !cursor.is_at_start() && !cursor.is_word() {
+        if self.is_at_start() {
+            return self.clone();
+        }
+        let mut cursor = self.left();
+        while !cursor.is_at_start() && cursor.is_over_whitespace() {
             cursor = cursor.left();
+        }
+        let class = Self::class(char_at(cursor.text, cursor.offset).map(|(ch, _)| ch));
+        if class == 0 {
+            return VimCursor::new(cursor.text, 0);
         }
         while !cursor.is_at_start() {
             let prev = cursor.left();
-            if !prev.is_word() {
+            if Self::class(char_at(prev.text, prev.offset).map(|(ch, _)| ch)) != class {
                 break;
             }
             cursor = prev;
