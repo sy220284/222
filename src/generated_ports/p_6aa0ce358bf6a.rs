@@ -257,6 +257,12 @@ pub fn get_end_code(code: &str) -> String {
             return BG_CLOSE.to_string();
         }
         if let Ok(n) = rest.parse::<u32>() {
+            if (30..=37).contains(&n) || (90..=97).contains(&n) {
+                return FG_CLOSE.to_string();
+            }
+            if (40..=47).contains(&n) || (100..=107).contains(&n) {
+                return BG_CLOSE.to_string();
+            }
             if let Some(end) = end_code_for_sgr_number(n) {
                 return format!("\u{1b}[{end}m");
             }
@@ -283,12 +289,12 @@ pub fn split_compound_sgr_sequences(code: &str) -> Vec<String> {
         let raw = parts[i];
         if raw == "38" || raw == "48" {
             if i + 2 < parts.len() && parts[i + 1] == "5" {
-                out.push(parts[i..i + 3].join(";"));
+                out.push(format!("\u{1b}[{}m", parts[i..i + 3].join(";")));
                 i += 3;
                 continue;
             }
             if i + 4 < parts.len() && parts[i + 1] == "2" {
-                out.push(parts[i..i + 5].join(";"));
+                out.push(format!("\u{1b}[{}m", parts[i..i + 5].join(";")));
                 i += 5;
                 continue;
             }
@@ -802,7 +808,7 @@ mod tests {
 
     #[test]
     fn plain_ascii_slices_cleanly() {
-        assert_eq!(slice_ansi("hello", 1, Some(3)), "ell");
+        assert_eq!(slice_ansi("hello", 1, Some(3)), "el");
         assert_eq!(slice_ansi("hello", 0, None), "hello");
         assert_eq!(slice_ansi("hello", 3, Some(3)), "");
     }
@@ -815,7 +821,7 @@ mod tests {
         assert!(left.ends_with("\u{1b}[39m"));
         let right = slice_ansi(s, 1, None);
         assert!(right.starts_with("\u{1b}[31mb"));
-        assert!(right.ends_with("\u{1b}[39m"));
+        assert!(right.ends_with("\u{1b}[39mdef"));
         // Both halves concatenate to the original.
         let joined = slice_ansi(s, 0, Some(3)) + &slice_ansi(s, 3, None);
         assert_eq!(joined, s);
