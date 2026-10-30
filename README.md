@@ -71,6 +71,37 @@ cargo run -- --provider gemini chat
 
 无需固定账号也可使用自建兼容服务：运行 `cargo run -- init`，编辑配置文件中 `base_url`、`model`、`api_key_env`，或添加新的 `openai-compatible` 配置。配置默认在系统配置目录下的 `atlas-agent/config.json`；可以用环境变量 `ATLAS_CONFIG` 指定位置。
 
+### 国内模型 API：DeepSeek、Kimi、GLM、MiniMax
+
+程序内置四组中国大陆官方 API 配置。新安装直接出现在 `models` 列表中；升级现有的 `config.json` 时，会在内存中补齐缺少的模型，保留已有的同名自定义配置，不会仅因为读取配置就改写磁盘。默认仍为 OpenAI，只有显式选择时才调用其他服务。
+
+```bash
+export DEEPSEEK_API_KEY="your-api-key"
+cargo run -- --provider deepseek run "检查当前项目"
+
+export MOONSHOT_API_KEY="your-api-key"
+cargo run -- --provider kimi chat
+
+export ZHIPU_API_KEY="your-api-key"
+cargo run -- --provider glm chat
+
+export MINIMAX_API_KEY="your-api-key"
+cargo run -- --provider minimax chat
+```
+
+| 提供商 ID | 内置默认模型 | API 根地址 |
+| --- | --- | --- |
+| `deepseek` | `deepseek-flash` | `https://api.deepseek.com` |
+| `kimi` | `kimi-k2.6` | `https://api.moonshot.cn/v1` |
+| `glm` | `glm-4.7` | `https://open.bigmodel.cn/api/paas/v4` |
+| `minimax` | `MiniMax-M2.7` | `https://api.minimaxi.com/v1` |
+
+可用 `--model <模型ID>` 覆盖默认模型。海外 API、Coding 套餐或其他服务区域可能使用独立根地址和密钥；在 `config.json` 的 `providers` 中添加同名条目，就可以覆盖上表地址、密钥环境变量、模型和流式选项。
+
+四家沿用现有 OpenAI 兼容 Chat Completions、函数工具调用、Token 用量及本地 Agent 工具链。内置项默认 `stream:false`，需要流式时在同名配置中设置 `"stream":true`；请确认该模型支持 SSE 和 `stream_options.include_usage`。推理类专属字段、工具和结构化输出能力随所选模型实际支持情况而异。密钥从进程环境变量读取，不写入默认配置。
+
+官方文档：[DeepSeek](https://api-docs.deepseek.com/) · [Kimi](https://platform.kimi.com/) · [智谱](https://docs.bigmodel.cn/) · [MiniMax](https://platform.minimaxi.com/)。
+
 ## 本地 Hooks（不上传事件）
 
 可在配置 JSON 的根对象加入 `hooks` 数组，规则包含 `event`、`matcher`（可选正则）、`command`、`timeout_seconds`（秒）。默认不运行任何 Hook。
