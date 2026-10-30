@@ -269,57 +269,7 @@ impl LineWidthCache {
         if let Some(width) = self.values.get(line) {
             return *width;
         }
-        let mut width = 0usize;
-        let mut ansi = false;
-        let mut osc = false;
-        let mut characters = line.chars().peekable();
-        while let Some(ch) = characters.next() {
-            if ch == '\x1b' {
-                if characters.peek() == Some(&'[') {
-                    ansi = true;
-                    characters.next();
-                    continue;
-                }
-                if characters.peek() == Some(&']') {
-                    osc = true;
-                    characters.next();
-                    continue;
-                }
-            }
-            if ansi {
-                if ('@'..='~').contains(&ch) {
-                    ansi = false
-                };
-                continue;
-            }
-            if osc {
-                if ch == '\x07' {
-                    osc = false
-                };
-                continue;
-            }
-            width += if ch.is_control() {
-                // 2.1.88 stringWidth's ASCII branch counts only printable
-                // code points (U+0020 and above); tabs are not four columns.
-                // Tab-stop expansion belongs to ink/tabstops.ts instead.
-                0
-            } else if ('\u{1100}'..='\u{115f}').contains(&ch)
-                || ('\u{2e80}'..='\u{a4cf}').contains(&ch)
-                || ('\u{ac00}'..='\u{d7a3}').contains(&ch)
-                || ('\u{f900}'..='\u{faff}').contains(&ch)
-                || ('\u{ff01}'..='\u{ff60}').contains(&ch)
-                || ('\u{1f300}'..='\u{1faff}').contains(&ch)
-            {
-                2
-            } else if ('\u{0300}'..='\u{036f}').contains(&ch)
-                || ('\u{fe00}'..='\u{fe0f}').contains(&ch)
-                || ch == '\u{200d}'
-            {
-                0
-            } else {
-                1
-            };
-        }
+        let width = crate::generated_ports::p_6aa0ce358bf6a::string_width(line);
         if self.values.len() >= MAX_CACHE_SIZE {
             self.values.clear()
         }
@@ -593,6 +543,18 @@ mod tests {
         assert_eq!(widest_line("", &mut cache), 0);
         // A second lookup must return exactly the same cached width.
         assert_eq!(cache.line_width("a\tb"), 2);
+    }
+
+    #[test]
+    fn line_width_reuses_ansi_and_unicode_grapheme_measurement() {
+        let mut cache = LineWidthCache::default();
+        assert_eq!(cache.line_width("👨‍👩‍👧‍👦"), 2);
+        assert_eq!(cache.line_width("🇺🇸🇨🇳"), 4);
+        assert_eq!(cache.line_width("🇺"), 1);
+        assert_eq!(cache.line_width("e\u{301}"), 1);
+        assert_eq!(cache.line_width("1\u{fe0f}\u{20e3}"), 2);
+        assert_eq!(cache.line_width("\u{1b}[31m红\u{1b}[0m"), 2);
+        assert_eq!(widest_line("hi\n🇺🇸🇨🇳", &mut cache), 4);
     }
 
     #[test]
