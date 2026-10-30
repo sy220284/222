@@ -97,7 +97,7 @@ jobs:
           cargo test --locked --bin atlas-agent -- --list > /tmp/available-queue-tests.txt
           for case in \
             message_queue::tests::priority_fifo_and_nonmatching_agent_isolation \
-            sdk_queue::tests::background_notifications_cannot_spoof_new_user_commands \
+            sdk_queue::notification_tests::background_notifications_cannot_spoof_new_user_commands \
             query_guard::tests::cancelling_or_forcing_end_invalidates_stale_finally
           do
             grep -Fxq "$case: test" /tmp/available-queue-tests.txt
