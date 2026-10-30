@@ -1743,6 +1743,7 @@ async fn chat(
                 println!("/agents                  list project and user custom agent definitions");
                 println!("/agents show project|user NAME    inspect a custom agent definition");
                 println!("/agents create project|user NAME  create a custom agent interactively");
+                println!("/agents generate project|user [DESCRIPTION]  generate and review an agent");
                 println!("/agents delete project|user NAME  delete a custom agent with confirmation");
                 println!("/agents edit project|user NAME    replace an existing agent after validation");
                 println!("/hooks                   list active hook events, matchers and timeouts");
@@ -2125,6 +2126,65 @@ async fn chat(
             match outcome {
                 Ok(details) => println!("{details}"),
                 Err(error) => eprintln!("Agent details unavailable: {error:#}"),
+            }
+            continue;
+        }
+        if input.starts_with("/agents generate ") {
+            let args = input.trim_start_matches("/agents generate ").trim();
+            let mut pieces = args.splitn(2, ' ');
+            let scope = pieces.next().unwrap_or("");
+            let user = match scope {
+                "project" => false,
+                "user" => true,
+                _ => {
+                    eprintln!("Usage: /agents generate project|user [DESCRIPTION]");
+                    continue;
+                }
+            };
+            let supplied = pieces.next().unwrap_or("").trim();
+            let request = if supplied.is_empty() {
+                print!("Describe the agent to generate: ");
+                io::stdout().flush()?;
+                let mut line = String::new();
+                if io::stdin().read_line(&mut line)? == 0 {
+                    println!("Agent generation cancelled.");
+                    continue;
+                }
+                line.trim().to_owned()
+            } else {
+                supplied.to_owned()
+            };
+            match agent.generate_custom_agent_definition(&request).await {
+                Ok(definition) => {
+                    println!("Generated agent: {}", definition.agent_type);
+                    println!("When to use:\n{}", definition.when_to_use);
+                    println!("System prompt:\n{}", definition.system_prompt);
+                    let decision = (|| -> Result<bool> {
+                        if !confirm_custom_agent_warnings(
+                            &definition, agent.workspace_root(), user,
+                        )? {
+                            return Ok(false);
+                        }
+                        print!("Save generated agent {}? [y/N]: ", definition.agent_type);
+                        io::stdout().flush()?;
+                        let mut answer = String::new();
+                        if io::stdin().read_line(&mut answer)? == 0 {
+                            return Ok(false);
+                        }
+                        Ok(matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes"))
+                    })();
+                    match decision {
+                        Ok(true) => match agent_definition::save_agent(
+                            &definition, agent.workspace_root(), user, false,
+                        ) {
+                            Ok(path) => println!("Created generated agent at {}", path.display()),
+                            Err(error) => eprintln!("Cannot save generated agent: {error:#}"),
+                        },
+                        Ok(false) => println!("Generated agent discarded without saving."),
+                        Err(error) => eprintln!("Agent validation failed: {error:#}"),
+                    }
+                }
+                Err(error) => eprintln!("Agent generation failed: {error:#}"),
             }
             continue;
         }
