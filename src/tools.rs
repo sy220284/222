@@ -1774,6 +1774,12 @@ impl ToolExecutor {
             .stderr(Stdio::piped());
         let mut child = proc.spawn()?;
         let process_id = child.id();
+        // Tokio's kill_on_drop kills only the direct shell child. A cancelled
+        // SDK run drops this future without entering the timeout/error arms.
+        // Own the entire Unix process group until the shell and pipe readers
+        // have completed, so descendants cannot outlive user cancellation.
+        #[cfg(unix)]
+        let mut cancel_group_guard = ShellCancelGroupGuard(process_id);
         let stdout = child.stdout.take().context("No command stdout")?;
         let stderr = child.stderr.take().context("No command stderr")?;
         let combined_output_bytes = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -1829,6 +1835,8 @@ impl ToolExecutor {
                 bail!("Command timed out after {timeout_ms} milliseconds");
             }
         };
+        #[cfg(unix)]
+        { cancel_group_guard.0 = None; }
         let interpretation = if kind == crate::shell_runtime::ShellKind::Bash {
             let (is_error, note) =
                 crate::shell_runtime::interpret_bash_exit(command, status.code().unwrap_or(-1));
@@ -1867,6 +1875,21 @@ impl ToolExecutor {
             stderr_notice,
             truncate(&String::from_utf8_lossy(&err.0), 4_000)
         ))
+    }
+}
+
+// A ShellCommand that is cancelled while awaiting I/O never reaches its
+// timeout/error arms. Retain process-group ownership until normal completion.
+// This mirrors the existing hook cancellation guard and source tree-kill.
+#[cfg(unix)]
+struct ShellCancelGroupGuard(Option<u32>);
+
+#[cfg(unix)]
+impl Drop for ShellCancelGroupGuard {
+    fn drop(&mut self) {
+        if let Some(pid) = self.0.filter(|id| *id <= i32::MAX as u32) {
+            let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+        }
     }
 }
 
