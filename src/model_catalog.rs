@@ -288,6 +288,20 @@ pub async fn probe_model(profile: &ProviderProfile, model: &str, key: &str) -> R
     if !status.is_success() {
         bail!("Model '{}' for {} rejected inference with HTTP {}", model, profile.id, status)
     }
+    let bytes = response.bytes().await.context("Read model callability response")?;
+    if bytes.len() > 4 * 1024 * 1024 { bail!("Model probe response exceeds 4 MiB") }
+    let body: Value = serde_json::from_slice(&bytes)
+        .context("Model probe returned non-JSON instead of an inference result")?;
+    let has_result = if profile.kind == "gemini" {
+        body.get("candidates").and_then(Value::as_array)
+            .is_some_and(|values| !values.is_empty())
+    } else {
+        body.get("choices").and_then(Value::as_array)
+            .is_some_and(|values| !values.is_empty())
+    };
+    if !has_result {
+        bail!("Model probe returned HTTP 200 without a valid inference result");
+    }
     Ok(())
 }
 
@@ -424,7 +438,27 @@ pub async fn run(action: &ModelAction, config: &mut Config) -> Result<()> {
             probe_model(&profile, model, &key).await?;
             println!("Verified callable: {brand} / {model}");
             if matches!(action, ModelAction::Use { .. }) {
-                profile_mut(config, brand)?.model = model.clone();
+                let catalog = list_models(&profile, &key).await;
+                let context = match catalog {
+                    Ok(available) => available.iter().find(|item| item.id == *model)
+                        .and_then(|item| item.context_window)
+                        .and_then(|value| u32::try_from(value).ok())
+                        .filter(|value| *value >= 1_024),
+                    Err(error) => {
+                        eprintln!("Model was verified, but context metadata could not be retrieved: {error:#}");
+                        None
+                    }
+                };
+                let selected = profile_mut(config, brand)?;
+                selected.model = model.clone();
+                if selected.model != profile.model {
+                    selected.tuning.context_window = context;
+                    if selected.tuning.max_output_tokens
+                        .zip(selected.tuning.context_window)
+                        .is_some_and(|(out, window)| out > window) {
+                        selected.tuning.max_output_tokens = None;
+                    }
+                }
                 config.default_provider = brand.clone();
                 config.validate()?;
                 config.save()?;
