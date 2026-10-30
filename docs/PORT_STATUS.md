@@ -1839,3 +1839,13 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **回滚异常复核**：依赖安装或设置写入失败时，改为逐个核查并删除本轮新建插件目录；遇重定向或清理失败，向用户明确返回原错误及回滚错误，不再静默忽略。提交 `87bd969eb2381f22bb55c8413c813c9a29d3ecde`，仍计入同一安装业务链，不增加独立功能数。跨进程事务与真实行为验证仍待完成。
 
 - **最后一轮源码复核**：安装回滚的失败现在保留具体错误并返回调用方，源码 `87bd969eb2381f22bb55c8413c813c9a29d3ecde`；台账记录提交 `704dc4e3e2e5c6eed98c919fa76fa7993e2b1111`。此处仅记录静态接线审阅，尚未进行编译或行为测试。
+
+
+## 2026-10-29：插件并发、市场策略、状态反馈与本地复制（源码已提交、待验收）
+
+- **原版逐函数依据**：完整原始 2.1.88 ZIP 的 `source/src/utils/plugins/pluginInstallationHelpers.ts:348–475::installResolvedPlugin`（依赖闭包、配置写入、物化插件）、`source/src/utils/plugins/dependencyResolver.ts:95–159::resolveDependencyClosure`（已启用依赖与重新安装语义）、`source/src/utils/plugins/pluginPolicy.ts:17–20::isPluginBlockedByPolicy`（按完整 pluginId 读取托管策略）、`source/src/utils/plugins/pluginLoader.ts:293–347::copyDir` 及 `:856–868::installFromLocal`（目录复制、内外符号链接、删除 .git）。
+- **真实 Rust 入口**：`PluginCommand::Install/Enable/Disable/Uninstall/Marketplace` → `src/plugin_manager.rs::execute` → `plugin_operation_lock`（跨进程共享配置文件锁，在读取配置之前获取）→ `dependency_install_plan` → `install_local_with_origin/replace_local_with_origin` → `Config::save`。公开的 `install_local` 入口同样受锁保护；列表、帮助、校验和市场列表维持只读，不创建锁文件。
+- **真实缺口与补齐**：此前两个插件操作可同时读取旧配置并覆盖对方的启用状态，安装失败还可能误删并非本次激活的目标目录。现在插件命令串行修改共享配置，且只回滚本次确实激活的目录，清理失败向调用者报告。插件启用原先仅检查短名称，现读取经目录身份验证的 `name@marketplace` 元数据并执行完整身份托管禁用检查，避免市场级策略被绕过。安装与启用现在返回真实 `active` 状态和加载诊断，区分设置中启用与会话实际可运行。安装源包含目标缓存目录时明确拒绝递归复制；本地复制按原版保留内部相对链接、外部绝对链接和失效链接，保留 .git 排除规则。
+- **源码提交**：`9bb546ae7b98a943797b4d6b24e9d40a47e5a0b3`（并发锁/回滚）、`951bcc64cf5624235e03ba631d92b52a1223b14a`、`90e904684b7e1538ea79f81d0296cfccd4bb567a`、`16953df780daa8dcd20e0cafc4be22debeaa384b`（市场身份及策略）、`d446c10b641893b6d480acd7758fb7bf92841e0c`、`faf8b83406066d5cb4e11c2862c0f5d085dfc132`（安装/启用状态反馈）、`801ac1d80b4610bf864b922ac684e3bdf16aa7f6`（递归复制防护）、`d20f494b7883033ce26c165aab59c88f38f5b797`（符号链接复制）、`b32437c99dc5999ee6e2a3b1ea295e4a31288064`（只读入口保持无写入）。
+- **保守功能计数**：跨进程插件操作保护与失败清理、市场级托管禁用、安装结果状态反馈、启用结果状态反馈、递归复制防护、本地插件符号链接复制，共 **6 个独立用户可感知业务行为**；同一行为的修正提交不重复计数。本轮 **6/100，余 94**。预先恰好 100 项逐功能核实清单与覆盖全部 100 项的实施方案仍未完成，流程 A/B 和数量硬目标未达成。
+- **尚未实现的准确差异**：全局 `Config::save` 的其他非插件写入方尚未统一受锁保护；崩溃中断后的插件安装事务日志及恢复、不同市场同名插件的独立存储、多配置范围与远程市场缓存、版本约束、Windows 失效目录链接类型识别、插件热重载及异步 Hook 完整生命周期仍缺。新增逻辑仅做源码/可达入口静态核对，**未运行 Cargo、单元/集成/端到端测试或 CI；全部已提交、待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项，Draft PR #2 保持开放。
