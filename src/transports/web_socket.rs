@@ -400,6 +400,8 @@ pub struct WebSocketTransport {
     shared: Arc<WsShared>,
     #[allow(dead_code)]
     auth: Option<WsAuthHeaders>,
+    outbound_tx: mpsc::Sender<Value>,
+    outbound_rx: tokio::sync::Mutex<mpsc::Receiver<Value>>,
 }
 
 /// Result of one connection lifecycle.
@@ -420,6 +422,7 @@ impl WebSocketTransport {
         auto_reconnect: bool,
         auth: Option<WsAuthHeaders>,
     ) -> Self {
+        let (outbound_tx, outbound_rx) = mpsc::channel(DEFAULT_MAX_BUFFER_SIZE);
         Self {
             shared: Arc::new(WsShared {
                 url,
@@ -438,7 +441,18 @@ impl WebSocketTransport {
                 closed: AtomicBool::new(false),
             }),
             auth,
+            outbound_tx,
+            outbound_rx: tokio::sync::Mutex::new(outbound_rx),
         }
+    }
+
+    /// Send through the live socket while retaining FIFO and bounded backpressure.
+    pub async fn queue_message(&self, message: Value) -> Result<()> {
+        if self.is_closed() || self.state() == WsState::Closed {
+            bail!("WebSocket transport is closed");
+        }
+        self.outbound_tx.send(message).await
+            .map_err(|_| anyhow!("WebSocket outbound queue is closed"))
     }
 
     pub fn state(&self) -> WsState {
@@ -565,12 +579,20 @@ impl WebSocketTransport {
         let mut pong_received = true;
         let mut last_keep_alive = Instant::now();
         let mut last_activity = Instant::now();
+        let mut outbound = self.outbound_rx.lock().await;
         loop {
             if self.is_closed() {
                 let _ = conn.send_close(1000).await;
                 return ConnectionOutcome::Terminal;
             }
             tokio::select! {
+                outbound_message = outbound.recv() => {
+                    if let Some(message) = outbound_message {
+                        if self.write(&mut conn, &message).await.is_err() {
+                            return ConnectionOutcome::Reconnect;
+                        }
+                    }
+                }
                 message = conn.read_message() => {
                     match message {
                         Ok(WsIncoming::Text(text)) => {
@@ -886,6 +908,52 @@ mod tests {
             ("host".to_string(), 443, "/path".to_string())
         );
         assert!(parse_ws_url("ftp://host/path").is_err());
+    }
+
+    #[tokio::test]
+    async fn running_transport_delivers_queued_message_to_tcp_peer() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut peer, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 512];
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = peer.read(&mut chunk).await.unwrap();
+                assert!(n > 0 && request.len() < 16384);
+                request.extend_from_slice(&chunk[..n]);
+            }
+            let head = String::from_utf8(request).unwrap();
+            let key = head.lines().find_map(|l| l.strip_prefix("Sec-WebSocket-Key: ")).unwrap().trim();
+            let reply = format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {}\r\n\r\n", websocket_accept(key));
+            peer.write_all(reply.as_bytes()).await.unwrap();
+            let mut header = [0_u8; 2];
+            peer.read_exact(&mut header).await.unwrap();
+            assert_eq!(header[0], 0x81);
+            assert_ne!(header[1] & 0x80, 0);
+            let size = (header[1] & 0x7f) as usize;
+            assert!(size < 126);
+            let mut mask = [0_u8; 4];
+            peer.read_exact(&mut mask).await.unwrap();
+            let mut body = vec![0; size];
+            peer.read_exact(&mut body).await.unwrap();
+            for (i, b) in body.iter_mut().enumerate() { *b ^= mask[i % 4]; }
+            serde_json::from_slice::<Value>(&body).unwrap()
+        });
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let client = Arc::new(WebSocketTransport::new(
+            format!("ws://127.0.0.1:{port}/session"), Vec::new(), None, tx, false, None,
+        ));
+        client.queue_message(json!({"type":"result","uuid":"live-one"})).await.unwrap();
+        let task = { let client = client.clone(); tokio::spawn(async move { client.run().await }) };
+        let sent = tokio::time::timeout(Duration::from_secs(5), server).await.unwrap().unwrap();
+        assert_eq!(sent["uuid"], "live-one");
+        client.close();
+        tokio::time::timeout(Duration::from_secs(5), task).await.unwrap().unwrap();
+        assert_eq!(client.buffered_count(), 1);
+        assert!(client.queue_message(json!({"uuid":"too-late"})).await.is_err());
     }
 
     #[test]
