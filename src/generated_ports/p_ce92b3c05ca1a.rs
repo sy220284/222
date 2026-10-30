@@ -198,8 +198,8 @@ mod tests {
             .collect();
         assert!(events.iter().any(|event| event == "git_status_started"));
         assert!(events.iter().any(|event| event == "git_status_completed"));
-        assert!(events.contains(&"boom_started"));
-        assert!(events.contains(&"boom_failed"));
+        assert!(events.iter().any(|event| event == "boom_started"));
+        assert!(events.iter().any(|event| event == "boom_failed"));
         std::env::remove_var("ATLAS_DIAGNOSTICS_FILE");
         let _ = fs::remove_dir_all(dir);
     }
