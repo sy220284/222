@@ -73,6 +73,7 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
     match profile.kind.as_str() {
         "openai-responses" => Ok(Box::new(OpenAiResponses {
             key: key.context("OpenAI Responses requires an API key")?,
+            base_url: profile.base_url.clone(),
             tuning: profile.tuning.clone(),
             response_schema: None,
         })),
@@ -81,6 +82,7 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
             && profile.base_url.trim_end_matches('/') == "https://api.openai.com/v1" => {
             Ok(Box::new(OpenAiResponses {
                 key: key.context("OpenAI Responses requires an API key")?,
+                base_url: profile.base_url.clone(),
                 tuning: profile.tuning.clone(),
                 response_schema: None,
             }))
@@ -192,6 +194,7 @@ pub(crate) fn openai_messages(request: &ModelRequest) -> Result<Vec<Value>> {
 
 struct OpenAiResponses {
     key: String,
+    base_url: String,
     tuning: crate::config::ModelTuning,
     response_schema: Option<Value>,
 }
@@ -205,7 +208,7 @@ impl ModelProvider for OpenAiResponses {
 
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         crate::chatgpt_plan::complete_api(
-            request, &self.tuning, None, &self.key, self.response_schema.as_ref()
+            request, &self.tuning, None, &self.key, self.response_schema.as_ref(), &self.base_url
         ).await
     }
 
@@ -215,7 +218,7 @@ impl ModelProvider for OpenAiResponses {
         deltas: UnboundedSender<String>,
     ) -> Result<ModelResponse> {
         crate::chatgpt_plan::complete_api(
-            request, &self.tuning, Some(deltas), &self.key, self.response_schema.as_ref()
+            request, &self.tuning, Some(deltas), &self.key, self.response_schema.as_ref(), &self.base_url
         ).await
     }
 }
