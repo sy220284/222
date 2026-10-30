@@ -108,10 +108,15 @@ mod tests {
             file_path: "/repo/.claude/settings.json".into(),
         };
         set_project_settings_cache("projectSettings", "/repo/.claude/settings.json", doc);
-        let got = get_project_settings_cache("projectSettings", "/repo/.claude/settings.json").unwrap();
+        let got =
+            get_project_settings_cache("projectSettings", "/repo/.claude/settings.json").unwrap();
         assert_eq!(got.errors, vec!["bad field"]);
-        assert!(get_project_settings_cache("userSettings", "/repo/.claude/settings.json").is_none());
+        assert!(
+            get_project_settings_cache("userSettings", "/repo/.claude/settings.json").is_none()
+        );
         clear_project_settings_cache();
-        assert!(get_project_settings_cache("projectSettings", "/repo/.claude/settings.json").is_none());
+        assert!(
+            get_project_settings_cache("projectSettings", "/repo/.claude/settings.json").is_none()
+        );
     }
 }

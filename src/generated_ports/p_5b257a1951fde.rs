@@ -203,13 +203,14 @@ struct DebugWriterState {
 static DEBUG_WRITER: OnceLock<Mutex<DebugWriterState>> = OnceLock::new();
 
 fn writer_slot() -> &'static Mutex<DebugWriterState> {
-    DEBUG_WRITER.get_or_init(|| {
-        Mutex::new(DebugWriterState { writer: None })
-    })
+    DEBUG_WRITER.get_or_init(|| Mutex::new(DebugWriterState { writer: None }))
 }
 
 fn append_sync(path: &Path, content: &str) -> std::io::Result<()> {
-    let mut file = fs::OpenOptions::new().create(true).append(true).open(path)?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
     file.write_all(content.as_bytes())
 }
 
@@ -223,7 +224,9 @@ fn update_latest_debug_log_symlink() {
     #[cfg(unix)]
     {
         let debug_log_path = get_debug_log_path();
-        let Some(dir) = debug_log_path.parent() else { return };
+        let Some(dir) = debug_log_path.parent() else {
+            return;
+        };
         let latest = dir.join("latest");
         let _ = fs::remove_file(&latest);
         let _ = std::os::unix::fs::symlink(&debug_log_path, &latest);
@@ -353,8 +356,14 @@ mod tests {
             }
             None
         };
-        assert_eq!(scan(&["--debug-file=/tmp/a.txt"]), Some("/tmp/a.txt".into()));
-        assert_eq!(scan(&["--debug-file", "/tmp/b.txt"]), Some("/tmp/b.txt".into()));
+        assert_eq!(
+            scan(&["--debug-file=/tmp/a.txt"]),
+            Some("/tmp/a.txt".into())
+        );
+        assert_eq!(
+            scan(&["--debug-file", "/tmp/b.txt"]),
+            Some("/tmp/b.txt".into())
+        );
         assert_eq!(scan(&["chat"]), None);
     }
 

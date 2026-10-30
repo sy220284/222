@@ -32,7 +32,11 @@ fn read_dir_entries(dir_path: &Path) -> Option<Vec<(PathBuf, bool)>> {
         Ok(entries) => entries,
         Err(error) => {
             log_for_debugging(
-                &format!("Failed to scan plugin directory {}: {}", dir_path.display(), error),
+                &format!(
+                    "Failed to scan plugin directory {}: {}",
+                    dir_path.display(),
+                    error
+                ),
                 DebugLogLevel::error,
             );
             return None;
@@ -159,7 +163,10 @@ mod tests {
 
         let mut found = Vec::new();
         walk_plugin_markdown(root, None, |path, ns| {
-            found.push((path.file_name().unwrap().to_string_lossy().into_owned(), ns.to_vec()));
+            found.push((
+                path.file_name().unwrap().to_string_lossy().into_owned(),
+                ns.to_vec(),
+            ));
         });
         let mut names: Vec<&str> = found.iter().map(|(n, _)| n.as_str()).collect();
         names.sort();

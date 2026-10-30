@@ -53,7 +53,10 @@ pub fn get_diagnostic_log_file() -> Option<PathBuf> {
 }
 
 fn append_line(log_file: &Path, line: &str) -> std::io::Result<()> {
-    let mut file = fs::OpenOptions::new().create(true).append(true).open(log_file)?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_file)?;
     file.write_all(line.as_bytes())
 }
 
@@ -73,9 +76,7 @@ pub fn log_for_diagnostics_no_pii(
         event: event.to_string(),
         data: data.unwrap_or_default(),
     };
-    let line = serde_json::to_string(&entry)
-        .unwrap_or_else(|_| "{}".to_string())
-        + "\n";
+    let line = serde_json::to_string(&entry).unwrap_or_else(|_| "{}".to_string()) + "\n";
     if append_line(&log_file, &line).is_ok() {
         return;
     }
@@ -103,7 +104,11 @@ pub fn log_diag(level: DiagnosticLogLevel, event: &str, data: Value) {
 /// Wraps an async closure with diagnostic timing logs: `{event}_started`
 /// before execution, `{event}_completed` (with `duration_ms` plus optional
 /// extracted data) on success, `{event}_failed` on error — then re-raises.
-pub async fn with_diagnostics_timing<T, E, F, Fut, D>(event: &str, f: F, get_data: D) -> Result<T, E>
+pub async fn with_diagnostics_timing<T, E, F, Fut, D>(
+    event: &str,
+    f: F,
+    get_data: D,
+) -> Result<T, E>
 where
     F: FnOnce() -> Fut,
     Fut: Future<Output = Result<T, E>>,
@@ -129,7 +134,12 @@ where
             log_for_diagnostics_no_pii(
                 DiagnosticLogLevel::error,
                 &format!("{event}_failed"),
-                Some(json!({ "duration_ms": u128_to_ms(start_time.elapsed()) }).as_object().cloned().unwrap_or_default()),
+                Some(
+                    json!({ "duration_ms": u128_to_ms(start_time.elapsed()) })
+                        .as_object()
+                        .cloned()
+                        .unwrap_or_default(),
+                ),
             );
             Err(error)
         }
@@ -159,7 +169,8 @@ mod tests {
         temp_env(path.to_str().unwrap());
         log_for_diagnostics_no_pii(DiagnosticLogLevel::info, "mcp_connected", None);
         let content = fs::read_to_string(&path).expect("nested dir must be auto-created");
-        let entry: DiagnosticLogEntry = serde_json::from_str(content.lines().last().unwrap()).unwrap();
+        let entry: DiagnosticLogEntry =
+            serde_json::from_str(content.lines().last().unwrap()).unwrap();
         assert_eq!(entry.event, "mcp_connected");
         assert_eq!(entry.level, DiagnosticLogLevel::info);
         assert!(entry.timestamp.contains('T'));
@@ -180,9 +191,11 @@ mod tests {
         let path = dir.join("diag.log");
         temp_env(path.to_str().unwrap());
 
-        let ok: Result<u32, ()> = with_diagnostics_timing("git_status", || async { Ok(42) }, |r| {
-            json!({ "value": r }).as_object().cloned().unwrap()
-        })
+        let ok: Result<u32, ()> = with_diagnostics_timing(
+            "git_status",
+            || async { Ok(42) },
+            |r| json!({ "value": r }).as_object().cloned().unwrap(),
+        )
         .await;
         assert_eq!(ok.unwrap(), 42);
 

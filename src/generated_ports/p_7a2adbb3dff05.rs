@@ -218,7 +218,8 @@ mod tests {
             vec!["autoupdaterwrapper", "installation"]
         );
         // Long or spaced secondaries are dropped.
-        assert!(!extract_debug_categories("a: this has spaces: b").contains(&"this has spaces".to_string()));
+        assert!(!extract_debug_categories("a: this has spaces: b")
+            .contains(&"this has spaces".to_string()));
     }
 
     #[test]
