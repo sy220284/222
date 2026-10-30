@@ -158,6 +158,12 @@ impl HybridOutbound {
             }
             return;
         }
+        self.write_batch(std::slice::from_ref(message)).await;
+    }
+
+    /// Source writeBatch flushes buffered stream deltas before the supplied
+    /// ordered messages, and resolves only after the POST queue drains.
+    pub async fn write_batch(&self, messages: &[Value]) {
         let _sequence = self.sequence.lock().await;
         let mut events = std::mem::take(
             &mut *self
@@ -165,9 +171,16 @@ impl HybridOutbound {
                 .lock()
                 .expect("hybrid stream buffer"),
         );
-        events.push(message.clone());
-        self.uploader.enqueue(events).await;
+        events.extend_from_slice(messages);
+        if !events.is_empty() {
+            self.uploader.enqueue(events).await;
+        }
         self.uploader.flush().await;
+    }
+
+    /// Source exposes the number of batches dropped after the retry cap.
+    pub fn dropped_batch_count(&self) -> usize {
+        self.uploader.dropped_batch_count()
     }
 
     pub async fn flush(&self) {
