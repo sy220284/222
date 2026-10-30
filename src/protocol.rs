@@ -19,6 +19,10 @@ pub struct Message {
     pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    /// Reasoning returned by thinking-capable APIs. DeepSeek requires this in
+    /// the next tool-call turn; keep it in the session, not user-visible text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     /// SDK multimodal content, stored durably in sessions and translated
     /// into each model provider's native content blocks at the wire boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,6 +63,7 @@ impl Message {
         Self {
             role: role.to_owned(),
             content: Some(content.into()),
+            reasoning_content: None,
             content_blocks: None,
             tool_calls: None,
             tool_call_id: None,
@@ -69,6 +74,7 @@ impl Message {
         Self {
             role: "tool".into(),
             content: Some(content),
+            reasoning_content: None,
             content_blocks: None,
             tool_calls: None,
             tool_call_id: Some(call.id.clone()),
@@ -122,4 +128,27 @@ pub struct ModelResponse {
     pub message: Message,
     pub finish_reason: Option<String>,
     pub usage: Option<TokenUsage>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn deepseek_reasoning_round_trips_without_becoming_visible_text() {
+        let message: Message = serde_json::from_value(json!({
+            "role": "assistant",
+            "content": null,
+            "reasoning_content": "First inspect the file",
+            "tool_calls": [{"id":"call_1","type":"function",
+                "function":{"name":"read_file","arguments":"{}"}}]
+        }))
+        .unwrap();
+        assert_eq!(message.reasoning_content.as_deref(), Some("First inspect the file"));
+        assert_eq!(message.visible_text(), "");
+        let restored: Message = serde_json::from_value(serde_json::to_value(&message).unwrap()).unwrap();
+        assert_eq!(restored, message);
+        assert_eq!(serde_json::to_value(Message::text("user", "hello")).unwrap().get("reasoning_content"), None);
+    }
 }
