@@ -231,7 +231,10 @@ impl StreamingExecutor {
             join: None,
         });
         if self.discarded {
-            self.finish_with_error(index, "ERROR: Streaming fallback - tool execution discarded");
+            self.finish_with_error(
+                index,
+                "ERROR: Streaming fallback - tool execution discarded",
+            );
         } else if handled && self.can_execute(safe) {
             self.start(index);
         }
@@ -277,7 +280,9 @@ impl StreamingExecutor {
         tracked.status = ToolStatus::Executing;
         let deps = Arc::clone(&self.deps);
         let call = tracked.call.clone();
-        tracked.join = Some(tokio::spawn(async move { run_streamed_tool(&deps, call).await }));
+        tracked.join = Some(tokio::spawn(
+            async move { run_streamed_tool(&deps, call).await },
+        ));
     }
 
     fn finish_with_error(&mut self, index: usize, error: &str) {
@@ -300,12 +305,17 @@ impl StreamingExecutor {
         *self.deps.errored_description.lock().unwrap() = description.clone();
         self.deps.bash_cancel.cancel();
         let reason = match description {
-            Some(description) => format!("ERROR: Cancelled: parallel tool call {description} errored"),
+            Some(description) => {
+                format!("ERROR: Cancelled: parallel tool call {description} errored")
+            }
             None => "ERROR: Cancelled: parallel tool call errored".to_owned(),
         };
         for index in 0..self.tools.len() {
             if index != failed_index
-                && matches!(self.tools[index].status, ToolStatus::Queued | ToolStatus::Executing)
+                && matches!(
+                    self.tools[index].status,
+                    ToolStatus::Queued | ToolStatus::Executing
+                )
             {
                 self.finish_with_error(index, &reason);
             }
@@ -322,10 +332,19 @@ impl StreamingExecutor {
             }) {
                 break;
             }
-            type Completion<'a> = Pin<Box<dyn Future<Output =
-                (usize, Result<ToolOutcomeInternal, tokio::task::JoinError>)> + Send + 'a>>;
+            type Completion<'a> = Pin<
+                Box<
+                    dyn Future<
+                            Output = (usize, Result<ToolOutcomeInternal, tokio::task::JoinError>),
+                        > + Send
+                        + 'a,
+                >,
+            >;
             let finished = {
-                let waits: Vec<Completion<'_>> = self.tools.iter_mut().enumerate()
+                let waits: Vec<Completion<'_>> = self
+                    .tools
+                    .iter_mut()
+                    .enumerate()
                     .filter_map(|(index, tracked)| {
                         if tracked.status != ToolStatus::Executing {
                             return None;
@@ -333,7 +352,8 @@ impl StreamingExecutor {
                         tracked.join.as_mut().map(|join| {
                             Box::pin(async move { (index, join.await) }) as Completion<'_>
                         })
-                    }).collect();
+                    })
+                    .collect();
                 if waits.is_empty() {
                     None
                 } else {
@@ -360,8 +380,10 @@ impl StreamingExecutor {
             } else {
                 // Missing join handles must cause visible failures, not a spin loop.
                 for index in 0..self.tools.len() {
-                    if matches!(self.tools[index].status, ToolStatus::Queued | ToolStatus::Executing)
-                        && !self.tools[index].deferred
+                    if matches!(
+                        self.tools[index].status,
+                        ToolStatus::Queued | ToolStatus::Executing
+                    ) && !self.tools[index].deferred
                     {
                         self.finish_with_error(index, "ERROR: Tool execution lost its task handle");
                     }
@@ -386,12 +408,17 @@ impl StreamingExecutor {
         self.discarded = true;
         self.deps.bash_cancel.cancel();
         for index in 0..self.tools.len() {
-            if matches!(self.tools[index].status, ToolStatus::Queued | ToolStatus::Executing) {
-                self.finish_with_error(index, "ERROR: Streaming fallback - tool execution discarded");
+            if matches!(
+                self.tools[index].status,
+                ToolStatus::Queued | ToolStatus::Executing
+            ) {
+                self.finish_with_error(
+                    index,
+                    "ERROR: Streaming fallback - tool execution discarded",
+                );
             }
         }
     }
-
 }
 
 /// One tool execution: validation + PreToolUse hook (with the original's
@@ -541,12 +568,21 @@ mod tests {
             },
         }
     }
-    fn simulated(call: ToolCall, delay_ms: u64, errored: bool) -> tokio::task::JoinHandle<ToolOutcomeInternal> {
+    fn simulated(
+        call: ToolCall,
+        delay_ms: u64,
+        errored: bool,
+    ) -> tokio::task::JoinHandle<ToolOutcomeInternal> {
         tokio::spawn(async move {
             sleep(Duration::from_millis(delay_ms)).await;
             ToolOutcomeInternal {
                 call,
-                result: if errored { "ERROR: simulated shell failure" } else { "ok" }.to_owned(),
+                result: if errored {
+                    "ERROR: simulated shell failure"
+                } else {
+                    "ok"
+                }
+                .to_owned(),
                 errored,
                 started: Instant::now(),
             }
@@ -572,11 +608,16 @@ mod tests {
         assert_eq!(executor.tools.len(), 2);
         assert_eq!(executor.tools[1].status, ToolStatus::Queued);
         let result = timeout(Duration::from_secs(3), executor.drain())
-            .await.expect("queue drain must terminate");
+            .await
+            .expect("queue drain must terminate");
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].call.id, "a");
         assert_eq!(result[1].call.id, "b");
-        assert_eq!(executor.tools.len(), 2, "must not append a second copy of b");
+        assert_eq!(
+            executor.tools.len(),
+            2,
+            "must not append a second copy of b"
+        );
         assert!(executor.drain().await.is_empty(), "results are once-only");
     }
 
@@ -584,13 +625,21 @@ mod tests {
     async fn shell_error_closes_queued_and_deferred_tools_without_hanging() {
         let mut executor = StreamingExecutor::new(deps());
         let first = call("run_command", "failed");
-        executor.tools.push(executing(first.clone(), simulated(first, 20, true)));
+        executor
+            .tools
+            .push(executing(first.clone(), simulated(first, 20, true)));
         executor.add_tool(call("run_command", "blocked"));
         executor.add_tool(call("nonexistent_agent_tool", "deferred"));
         let results = timeout(Duration::from_secs(2), executor.drain())
-            .await.expect("shell failure must not strand queued tools");
-        assert_eq!(results.iter().map(|r| r.call.id.as_str()).collect::<Vec<_>>(),
-            vec!["failed", "blocked", "deferred"]);
+            .await
+            .expect("shell failure must not strand queued tools");
+        assert_eq!(
+            results
+                .iter()
+                .map(|r| r.call.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["failed", "blocked", "deferred"]
+        );
         assert!(results[1].result.contains("Cancelled"));
         assert!(results[2].result.contains("Cancelled"));
         assert!(executor.deps.bash_cancel.is_cancelled());
@@ -603,7 +652,8 @@ mod tests {
         let task = tokio::spawn(async move { panic!("intentional audit panic") });
         executor.tools.push(executing(first, task));
         let results = timeout(Duration::from_secs(2), executor.drain())
-            .await.expect("panicked task must not loop forever");
+            .await
+            .expect("panicked task must not loop forever");
         assert_eq!(results.len(), 1);
         assert!(results[0].errored);
         assert!(results[0].result.contains("task failed"));
@@ -618,8 +668,12 @@ mod tests {
         let task = tokio::spawn(async move {
             sleep(Duration::from_millis(200)).await;
             std::fs::write(&target, "unexpected").unwrap();
-            ToolOutcomeInternal { call: async_call, result: "written".to_owned(), errored: false,
-                started: Instant::now() }
+            ToolOutcomeInternal {
+                call: async_call,
+                result: "written".to_owned(),
+                errored: false,
+                started: Instant::now(),
+            }
         });
         let call = call("write_file", "pending_write");
         executor.tools.push(executing(call, task));
