@@ -74,6 +74,12 @@ impl Assembler {
             self.finish_reason = Some(reason.into());
         }
         let delta = choice.get("delta").unwrap_or(&Value::Null);
+        // OpenAI-compatible transports can emit a refusal as a dedicated
+        // delta field while the final finish_reason is simply "stop".
+        // Do not silently drop that field and return an empty success.
+        if let Some(refusal) = delta.get("refusal").and_then(Value::as_str) {
+            bail!("Model refused the request: {}", refusal.chars().take(500).collect::<String>());
+        }
         if let Some(text) = delta.get("content").and_then(Value::as_str) {
             self.content.push_str(text);
             let _ = deltas.send(text.into());
