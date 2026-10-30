@@ -3950,6 +3950,18 @@ impl Agent {
                 self.session.save(&self.root)?;
                 bail!("Model reached its output limit before completion; session saved")
             }
+            // The original errors.ts::getErrorMessageIfRefusal surfaces an
+            // explicit refusal instead of treating an empty answer as success.
+            // Keep this provider-neutral and do not dispatch partial tools.
+            if matches!(finish.as_deref(), Some(
+                "refusal" | "content_filter" | "SAFETY" | "PROHIBITED_CONTENT"
+                | "BLOCKLIST" | "RECITATION" | "SPII"
+            )) {
+                self.session.cost.add_wall_duration(ask_started.elapsed());
+                self.session.save(&self.root)?;
+                bail!("Model declined to generate a response ({}); session saved",
+                    finish.as_deref().unwrap_or("refusal"))
+            }
             if calls.is_empty() {
                 if self.absorb_team_messages()? {
                     continue;
