@@ -564,7 +564,7 @@ pub async fn complete(
     deltas: Option<UnboundedSender<String>>,
 ) -> Result<ModelResponse> {
     let token = active_token().await?;
-    complete_with_token(request, tuning, deltas, &token, true).await
+    complete_with_token(request, tuning, deltas, &token, true, None).await
 }
 
 /// Ordinary OpenAI API keys use the same stateless Responses adapter, with
@@ -574,8 +574,9 @@ pub async fn complete_api(
     tuning: &ModelTuning,
     deltas: Option<UnboundedSender<String>>,
     api_key: &str,
+    response_schema: Option<&Value>,
 ) -> Result<ModelResponse> {
-    complete_with_token(request, tuning, deltas, api_key, false).await
+    complete_with_token(request, tuning, deltas, api_key, false, response_schema).await
 }
 
 async fn complete_with_token(
@@ -584,6 +585,7 @@ async fn complete_with_token(
     deltas: Option<UnboundedSender<String>>,
     token: &str,
     subscription: bool,
+    response_schema: Option<&Value>,
 ) -> Result<ModelResponse> {
     let mut body = json!({
         "model":request.model,
@@ -593,6 +595,14 @@ async fn complete_with_token(
     });
     if !request.tools.is_empty() {
         body["tools"] = json!(response_tools(&request.tools)?);
+    }
+    if let Some(schema) = response_schema {
+        body["text"]["format"] = json!({
+            "type":"json_schema",
+            "name":"structured_output",
+            "strict":true,
+            "schema":schema
+        });
     }
     if subscription {
         if tuning.max_output_tokens.is_some()
