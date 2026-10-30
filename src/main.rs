@@ -119,6 +119,7 @@ mod source_semantics_osc;
 mod source_semantics_types;
 mod sse;
 mod stats;
+mod statusline_command_source;
 mod subprocess_env;
 mod task;
 mod task_events;

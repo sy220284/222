@@ -282,7 +282,7 @@
 | `src/commands/stats/stats.tsx` | 7 | 1141 | 重写：保持通用行为 | `src/stats.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：/stats 和独立 stats 命令已经真实读取本地持久会话，按供应商/模型汇总使用量和已知费用、缓存/搜索/工具调用及代码行统计；分支按保存的基线扣除继承历史，未知费率不猜。原版多标签页/日期热力图/趋势图与每消息时间戳尚未等价 |
 | `src/commands/status/index.ts` | 13 | 322 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/status/status.tsx` | 8 | 1855 | 重写：保持通用行为 | `src/agent.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：/status 已连入交互终端，展示真实会话标题/ID、工作区、模型/供应商、权限模式、MCP 服务及工具数，测试覆盖动态改名与不泄露凭据；原版 Settings 各页、IDE、完整安装/沙箱诊断 UI 仍未等价 |
-| `src/commands/statusline.tsx` | 24 | 3568 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/statusline.tsx` | 24 | 3568 | 重写：保持通用行为 | `src/statusline_command_source.rs` | 部分实现：原版内置提示命令的类型、权限清单与 getPromptForCommand 默认/自定义参数已用 Rust 实现，模型 Agent 调用链待接通 |
 | `src/commands/stickers/index.ts` | 12 | 268 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/stickers/stickers.ts` | 17 | 476 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/summary/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
