@@ -340,7 +340,7 @@ impl CcrClient {
             })
         };
 
-        Self {
+        let client = Self {
             http: reqwest::Client::new(),
             session_base_url,
             session_id: String::new(),
@@ -361,7 +361,22 @@ impl CcrClient {
             internal_event_uploader: SerialBatchEventUploader::new(internal_config),
             delivery_uploader: Arc::new(SerialBatchEventUploader::new(delivery_config)),
             shared,
-        }
+        };
+        // Source CCRClient constructor installs this synchronously, BEFORE
+        // SSE connect. Otherwise the first frame loses its received receipt.
+        let delivery = Arc::clone(&client.delivery_uploader);
+        _transport.set_event_callback(Arc::new(move |event| {
+            if let Some(event_id) = &event.event_id {
+                let uploader = Arc::clone(&delivery);
+                let event_id = event_id.clone();
+                tokio::spawn(async move {
+                    uploader.enqueue(vec![json!({
+                        "eventId": event_id, "status": "received"
+                    })]).await;
+                });
+            }
+        }));
+        client
     }
 
     pub fn session_id(&self) -> &str {
