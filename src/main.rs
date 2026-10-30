@@ -2976,7 +2976,9 @@ async fn sdk_nested_control(
                     "session_id":agent.session_id(),
                     "uuid":uuid::Uuid::new_v4().to_string()
                 }));
-                Ok(json!({"task":stopped}))
+                // print.ts::stop_task acknowledges with an empty object;
+                // the task's lifecycle is delivered by the event above.
+                Ok(json!({}))
             }
             other if other.starts_with("bridge_") => {
                 bridge_session.dispatch(other, &Value::Object(request.clone()))
