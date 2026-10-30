@@ -425,18 +425,33 @@ enum Commands {
     },
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Run process-wide cleanup even when a command returns early or fails.
-    // Session-specific cleanup still runs through Agent::finish().
-    let result = Box::pin(run_cli()).await;
-    let cleanup = cleanup_registry::run_cleanup_functions().await;
-    match (result, cleanup) {
-        (Err(error), Err(cleanup_error)) => {
-            Err(error.context(format!("Process cleanup also failed: {cleanup_error:#}")))
-        }
-        (Err(error), _) => Err(error),
-        (Ok(()), result) => result,
+fn main() -> Result<()> {
+    // The single CLI dispatcher carries numerous async command branches.
+    // Windows reserves a small stack for its initial process thread, so
+    // instantiate and poll this dispatcher on a dedicated, sized runtime
+    // thread. Keep all Tokio execution and process cleanup on that thread.
+    let thread = std::thread::Builder::new()
+        .name("atlas-cli-runtime".into())
+        .stack_size(16 * 1024 * 1024)
+        .spawn(|| -> Result<()> {
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            runtime.block_on(async {
+                let result = run_cli().await;
+                let cleanup = cleanup_registry::run_cleanup_functions().await;
+                match (result, cleanup) {
+                    (Err(error), Err(cleanup_error)) => {
+                        Err(error.context(format!("Process cleanup also failed: {cleanup_error:#}")))
+                    }
+                    (Err(error), _) => Err(error),
+                    (Ok(()), result) => result,
+                }
+            })
+        })?;
+    match thread.join() {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
     }
 }
 
