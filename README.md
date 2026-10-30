@@ -78,7 +78,7 @@ cargo run -- --provider gemini chat
 | 品牌 | 当前推荐的预置模型 | 密钥环境变量 |
 | --- | --- | --- |
 | DeepSeek | `deepseek-flash`（V4.1 Flash 线上别名） | `DEEPSEEK_API_KEY` |
-| Kimi | `kimi-k3` | `MOONSHOT_API_KEY` |
+| Kimi | `kimi-k3.1-pro` | `MOONSHOT_API_KEY` |
 | 智谱 GLM | `glm-5.3` | `ZHIPU_API_KEY` |
 | MiniMax | `MiniMax-M3` | `MINIMAX_API_KEY` |
 | OpenAI API | `gpt-6.1-sol`（全新安装，旧配置仍兼容） | `OPENAI_API_KEY` |
