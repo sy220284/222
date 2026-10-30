@@ -1841,37 +1841,59 @@ impl ToolExecutor {
         } else {
             String::new()
         };
+        let stdout_omitted = out.1.saturating_sub(out.0.len() as u64);
+        let stderr_omitted = err.1.saturating_sub(err.0.len() as u64);
+        let stdout_notice = if stdout_omitted > 0 {
+            format!("[stdout preview only: {stdout_omitted} bytes omitted]\n")
+        } else {
+            String::new()
+        };
+        let stderr_notice = if stderr_omitted > 0 {
+            format!("[stderr preview only: {stderr_omitted} bytes omitted]\n")
+        } else {
+            String::new()
+        };
         Ok(format!(
-            "Exit: {}\n{}STDOUT:\n{}\nSTDERR:\n{}",
+            "Exit: {}\n{}STDOUT:\n{}{}\nSTDERR:\n{}{}",
             status,
             interpretation,
+            stdout_notice,
             truncate(
-                &String::from_utf8_lossy(&out),
+                &String::from_utf8_lossy(&out.0),
                 crate::shell_runtime::max_output_length()
             ),
-            truncate(&String::from_utf8_lossy(&err), 4_000)
+            stderr_notice,
+            truncate(&String::from_utf8_lossy(&err.0), 4_000)
         ))
     }
 }
 
+/// Keep a bounded preview but continue draining both pipes. The original
+/// ShellCommand/TaskOutput only displays an initial output slice; a command
+/// producing more than that slice must still finish and return its exit code.
+/// The original 5 GiB hard disk-output limit remains a termination condition.
 async fn capped_read<R: tokio::io::AsyncRead + Unpin>(
     mut input: R,
     max_bytes: usize,
-) -> Result<Vec<u8>> {
+) -> Result<(Vec<u8>, u64)> {
     use tokio::io::AsyncReadExt;
+    const HARD_OUTPUT_LIMIT: u64 = 5 * 1024 * 1024 * 1024;
     let mut bytes = Vec::new();
+    let mut total = 0u64;
     let mut buffer = [0u8; 8192];
     loop {
         let n = input.read(&mut buffer).await?;
         if n == 0 {
             break;
         }
-        if bytes.len() + n > max_bytes {
-            bail!("Command output exceeded {max_bytes} bytes");
+        total = total.saturating_add(n as u64);
+        if total > HARD_OUTPUT_LIMIT {
+            bail!("Command output exceeded the original 5 GiB hard limit");
         }
-        bytes.extend_from_slice(&buffer[..n]);
+        let keep = n.min(max_bytes.saturating_sub(bytes.len()));
+        bytes.extend_from_slice(&buffer[..keep]);
     }
-    Ok(bytes)
+    Ok((bytes, total))
 }
 
 fn required<'a>(args: &'a Value, key: &str) -> Result<&'a str> {
