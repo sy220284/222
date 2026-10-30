@@ -2770,6 +2770,9 @@ impl Agent {
     pub async fn stop_background_task(&self, id: &str) -> Result<String> {
         self.background.stop(id).await
     }
+    pub async fn stop_background_task_for_sdk(&self, id: &str) -> Result<(String, String)> {
+        self.background.stop_with_description(id).await
+    }
     pub fn set_sdk_permission_mode(&mut self, label: &str) -> Result<()> {
         let mode = permission_mode::Mode::parse(label)
             .with_context(|| format!("Unknown permission mode: {label}"))?;
