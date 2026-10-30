@@ -270,7 +270,7 @@ pub async fn probe_model(profile: &ProviderProfile, model: &str, key: &str) -> R
             && profile.base_url.trim_end_matches('/') == "https://api.openai.com/v1"
             && model.starts_with("gpt-6")) {
         crate::chatgpt_plan::complete_api(
-            &request, &ModelTuning::default(), None, key, None
+            &request, &ModelTuning::default(), None, key, None, &profile.base_url
         ).await?;
         return Ok(());
     }
