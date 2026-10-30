@@ -60,7 +60,7 @@ fn every_original_path_is_tracked_once_and_no_partial_work_is_called_complete() 
         tracked, 1906,
         "Original source inventory changed without reconciliation"
     );
-    assert_eq!(omitted, 23, "Explicitly excluded source paths changed"); // 2026-10-30 +1: constants/keys.ts removed per deletion decision
+    assert_eq!(omitted, 23, "Explicitly excluded source paths changed");
     assert_eq!(
         partial + unported + accepted + omitted,
         tracked,
