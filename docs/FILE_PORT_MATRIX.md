@@ -294,7 +294,7 @@
 | `src/commands/terminalSetup/index.ts` | 24 | 725 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/terminalSetup/terminalSetup.tsx` | 531 | 77528 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/theme/index.ts` | 11 | 217 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/theme/theme.tsx` | 57 | 5180 | 重写：保持通用行为 | `src/generated_ports/p_cb6d3fa44994c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/theme/theme.tsx` | 57 | 5180 | 重写：保持通用行为 | `src/generated_ports/p_cb6d3fa44994c.rs`| 部分实现：/theme 命令契约功能化（选择→Theme set to <setting> 完成/取消→dismissed+system display 提示、skipExitHandling 透传、permission 色 Pane 包裹 ThemePicker 视图），附 3 测试；ThemePicker 组件本体归组件域|
 | `src/commands/thinkback/index.ts` | 14 | 442 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/thinkback/thinkback.tsx` | 554 | 61993 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/thinkback-play/index.ts` | 18 | 608 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
