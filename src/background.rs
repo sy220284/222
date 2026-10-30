@@ -70,6 +70,7 @@ pub struct TaskRecord {
 struct Running {
     record: Mutex<TaskRecord>,
     stop: Mutex<Option<oneshot::Sender<()>>>,
+    persistence_warning: Mutex<Option<String>>,
     completed: Notify,
 }
 
@@ -458,6 +459,7 @@ impl BackgroundTasks {
         let running = Arc::new(Running {
             record: Mutex::new(record.clone()),
             stop: Mutex::new(Some(stop)),
+            persistence_warning: Mutex::new(None),
             completed: Notify::new(),
         });
         self.entries
@@ -521,7 +523,11 @@ impl BackgroundTasks {
                 state_record.truncated = out || err;
                 state_record.clone()
             };
-            let _ = Self::save(&folder, &updated);
+            if let Err(error) = Self::save(&folder, &updated) {
+                let warning = format!("Task completed but final state could not be saved: {error:#}");
+                eprintln!("{warning}");
+                *running.persistence_warning.lock().unwrap() = Some(warning);
+            }
             running.completed.notify_waiters();
         });
         Ok(
@@ -589,6 +595,8 @@ impl BackgroundTasks {
             "status":record.status,"description":record.description,
             "output":displayed.content,"exitCode":record.exit_code,
             "output_file":safe_stdout.to_string_lossy(),
+            "persistenceWarning":self.entries.lock().unwrap().get(id)
+                .and_then(|task| task.persistence_warning.lock().unwrap().clone()),
             "truncated":record.truncated || displayed.was_truncated
         }})
         .to_string())
@@ -646,7 +654,9 @@ impl BackgroundTasks {
                 "task_type":"local_bash",
                 "description":record.description,
                 "status":record.status,
-                "exitCode":record.exit_code
+                "exitCode":record.exit_code,
+                "persistenceWarning":live.get(id)
+                    .and_then(|task| task.persistence_warning.lock().unwrap().clone())
             }));
         }
         records.sort_by(|a, b| a["task_id"].as_str().cmp(&b["task_id"].as_str()));
