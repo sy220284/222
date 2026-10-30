@@ -114,6 +114,237 @@ impl Editor {
     }
 }
 
+/// Source vim/types.ts initial state is INSERT. Escape switches to NORMAL;
+/// NORMAL motions and edits are handled before the readline keybindings.
+#[derive(Debug)]
+struct VimKeys {
+    enabled: bool,
+    insert: bool,
+    pending: Option<char>,
+    register: String,
+    undo: Vec<(String, usize)>,
+}
+
+impl VimKeys {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            insert: true,
+            pending: None,
+            register: String::new(),
+            undo: Vec::new(),
+        }
+    }
+
+    fn record(&mut self, editor: &Editor) {
+        self.undo.push((editor.text.clone(), editor.cursor));
+        if self.undo.len() > 100 {
+            self.undo.remove(0);
+        }
+    }
+
+    fn move_word(editor: &mut Editor, forward: bool) {
+        if forward {
+            let next = &editor.text[editor.cursor..];
+            let mut chars = next.char_indices().peekable();
+            let is_word = chars
+                .peek()
+                .is_some_and(|(_, c)| c.is_alphanumeric() || *c == '_');
+            if is_word {
+                while chars
+                    .peek()
+                    .is_some_and(|(_, c)| c.is_alphanumeric() || *c == '_')
+                {
+                    chars.next();
+                }
+            }
+            while chars
+                .peek()
+                .is_some_and(|(_, c)| !c.is_alphanumeric() && *c != '_')
+            {
+                chars.next();
+            }
+            editor.cursor += chars.peek().map(|(i, _)| *i).unwrap_or(next.len());
+        } else {
+            let before = &editor.text[..editor.cursor];
+            let mut chars = before.char_indices().rev().peekable();
+            while chars
+                .peek()
+                .is_some_and(|(_, c)| !c.is_alphanumeric() && *c != '_')
+            {
+                chars.next();
+            }
+            let mut beginning = 0;
+            while let Some((i, c)) = chars.peek().copied() {
+                if !c.is_alphanumeric() && c != '_' {
+                    break;
+                }
+                beginning = i;
+                chars.next();
+            }
+            editor.cursor = beginning;
+        }
+    }
+
+    fn line_bounds(e: &Editor) -> (usize, usize) {
+        let begin = e.text[..e.cursor].rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let end = e.text[e.cursor..]
+            .find('\n')
+            .map(|i| e.cursor + i)
+            .unwrap_or(e.text.len());
+        (begin, end)
+    }
+
+    fn vertical(e: &mut Editor, down: bool) {
+        let (start, end) = Self::line_bounds(e);
+        let column = e.text[start..e.cursor].chars().count();
+        let target = if down {
+            if end == e.text.len() {
+                return;
+            }
+            let next = end + 1;
+            let last = e.text[next..]
+                .find('\n')
+                .map(|i| next + i)
+                .unwrap_or(e.text.len());
+            (next, last)
+        } else {
+            if start == 0 {
+                return;
+            }
+            let last = start - 1;
+            let next = e.text[..last].rfind('\n').map(|i| i + 1).unwrap_or(0);
+            (next, last)
+        };
+        e.cursor = target.0
+            + e.text[target.0..target.1]
+                .chars()
+                .take(column)
+                .map(char::len_utf8)
+                .sum::<usize>();
+    }
+
+    /// Returns true when a keystroke was consumed by Vim. Terminal submission,
+    /// cancellation, and bracketed paste continue through the outer dispatcher.
+    fn handle(&mut self, e: &mut Editor, key: &Key) -> Result<bool> {
+        if !self.enabled {
+            return Ok(false);
+        }
+        if *key == Key::Escape {
+            self.insert = false;
+            self.pending = None;
+            return Ok(true);
+        }
+        if self.insert {
+            return Ok(false);
+        }
+        let Key::Char(ch) = key else {
+            match key {
+                Key::Left => e.left(),
+                Key::Right => e.right(),
+                Key::Up => Self::vertical(e, false),
+                Key::Down => Self::vertical(e, true),
+                Key::Home => e.cursor = Self::line_bounds(e).0,
+                Key::End => e.cursor = Self::line_bounds(e).1,
+                _ => return Ok(false),
+            }
+            return Ok(true);
+        };
+        if let Some(op) = self.pending.take() {
+            if *ch == op {
+                let (start, end) = Self::line_bounds(e);
+                match op {
+                    'd' | 'c' => {
+                        self.record(e);
+                        let stop = if end < e.text.len() { end + 1 } else { end };
+                        self.register = e.text[start..stop].to_owned();
+                        e.text.replace_range(start..stop, "");
+                        e.cursor = start.min(e.text.len());
+                        if op == 'c' {
+                            self.insert = true;
+                        }
+                    }
+                    'y' => {
+                        let stop = if end < e.text.len() { end + 1 } else { end };
+                        self.register = e.text[start..stop].to_owned();
+                    }
+                    _ => {}
+                }
+            } else if *ch == '$' && (op == 'd' || op == 'c') {
+                self.record(e);
+                let end = Self::line_bounds(e).1;
+                self.register = e.text[e.cursor..end].to_owned();
+                e.text.replace_range(e.cursor..end, "");
+                if op == 'c' {
+                    self.insert = true;
+                }
+            }
+            return Ok(true);
+        }
+        match *ch {
+            'i' => {
+                self.record(e);
+                self.insert = true;
+            }
+            'a' => {
+                self.record(e);
+                e.right();
+                self.insert = true;
+            }
+            'I' => {
+                self.record(e);
+                let (start, end) = Self::line_bounds(e);
+                e.cursor = start + e.text[start..end].len() - e.text[start..end].trim_start().len();
+                self.insert = true;
+            }
+            'A' => {
+                self.record(e);
+                e.cursor = Self::line_bounds(e).1;
+                self.insert = true;
+            }
+            'h' => e.left(),
+            'l' => e.right(),
+            'j' => Self::vertical(e, true),
+            'k' => Self::vertical(e, false),
+            '0' => e.cursor = Self::line_bounds(e).0,
+            '$' => e.cursor = Self::line_bounds(e).1,
+            'w' => Self::move_word(e, true),
+            'b' => Self::move_word(e, false),
+            'x' => {
+                self.record(e);
+                self.register = e.text[e.cursor..]
+                    .chars()
+                    .next()
+                    .map(|c| c.to_string())
+                    .unwrap_or_default();
+                e.delete();
+            }
+            'd' | 'c' | 'y' => self.pending = Some(*ch),
+            'p' | 'P' => {
+                if !self.register.is_empty() {
+                    self.record(e);
+                    if *ch == 'p' {
+                        e.right();
+                    }
+                    if e.text.len().saturating_add(self.register.len()) > MAX_INPUT_BYTES {
+                        bail!("Interactive input exceeds 1 MiB");
+                    }
+                    e.text.insert_str(e.cursor, &self.register);
+                    e.cursor += self.register.len();
+                }
+            }
+            'u' => {
+                if let Some((text, cursor)) = self.undo.pop() {
+                    e.text = text;
+                    e.cursor = cursor;
+                }
+            }
+            _ => {}
+        }
+        Ok(true)
+    }
+}
+
 #[derive(PartialEq, Eq, Debug)]
 enum Key {
     Char(char),
@@ -238,14 +469,19 @@ fn decode(reader: &mut impl Read, head: u8) -> io::Result<Key> {
     }
 }
 #[cfg(unix)]
-fn redraw(out: &mut impl Write, prompt: &str, e: &Editor) -> io::Result<()> {
+fn redraw(out: &mut impl Write, prompt: &str, e: &Editor, vim: &VimKeys) -> io::Result<()> {
+    let mode = if vim.enabled && !vim.insert {
+        "[NORMAL] "
+    } else {
+        ""
+    };
     let displayed = e.text.replace('\n', "↵").replace('\t', "⇥");
     let to_cursor = e.text[..e.cursor].replace('\n', "↵").replace('\t', "⇥");
     let tail = displayed
         .chars()
         .count()
         .saturating_sub(to_cursor.chars().count());
-    write!(out, "\r\x1b[2K{prompt}{displayed}")?;
+    write!(out, "\r\x1b[2K{mode}{prompt}{displayed}")?;
     if e.text.is_empty() {
         let view = text_input_semantics::render_placeholder(&json!({
             "placeholder":"Type a message or /help","value":"","showCursor":false,"focus":true,"terminalFocus":true
@@ -259,7 +495,7 @@ fn redraw(out: &mut impl Write, prompt: &str, e: &Editor) -> io::Result<()> {
     out.flush()
 }
 #[cfg(unix)]
-fn interactive(prompt: &str, history: &[String]) -> Result<PromptRead> {
+fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<PromptRead> {
     let _raw = RawMode::enter()?;
     let mut input = io::stdin().lock();
     let mut out = io::stdout().lock();
@@ -267,10 +503,11 @@ fn interactive(prompt: &str, history: &[String]) -> Result<PromptRead> {
     let mut bindings = keybindings::KeybindingRuntime::from_disk(&file);
     bindings.register_context("Chat");
     let mut e = Editor::default();
+    let mut vim = VimKeys::new(vim_enabled);
     let mut paste = false;
     write!(out, "\x1b[?2004h")?;
     let result = (|| -> Result<PromptRead> {
-        redraw(&mut out, prompt, &e)?;
+        redraw(&mut out, prompt, &e, &vim)?;
         loop {
             let Some(b) = byte(&mut input)? else {
                 continue;
@@ -282,7 +519,7 @@ fn interactive(prompt: &str, history: &[String]) -> Result<PromptRead> {
             }
             if key == Key::PasteEnd {
                 paste = false;
-                redraw(&mut out, prompt, &e)?;
+                redraw(&mut out, prompt, &e, &vim)?;
                 continue;
             }
             if paste {
@@ -292,7 +529,11 @@ fn interactive(prompt: &str, history: &[String]) -> Result<PromptRead> {
                     Key::Backspace => e.insert('\u{8}')?,
                     _ => {}
                 }
-                redraw(&mut out, prompt, &e)?;
+                redraw(&mut out, prompt, &e, &vim)?;
+                continue;
+            }
+            if vim.handle(&mut e, &key)? {
+                redraw(&mut out, prompt, &e, &vim)?;
                 continue;
             }
             let (input_string, named, ctrl) = match &key {
@@ -361,17 +602,17 @@ fn interactive(prompt: &str, history: &[String]) -> Result<PromptRead> {
                     _ => {}
                 }
             }
-            redraw(&mut out, prompt, &e)?;
+            redraw(&mut out, prompt, &e, &vim)?;
         }
     })();
     write!(out, "\x1b[?2004l")?;
     out.flush()?;
     result
 }
-pub fn read_prompt(prompt: &str, history: &[String]) -> Result<PromptRead> {
+pub fn read_prompt(prompt: &str, history: &[String], vim_enabled: bool) -> Result<PromptRead> {
     #[cfg(unix)]
     if io::stdin().is_terminal() && io::stdout().is_terminal() {
-        return interactive(prompt, history);
+        return interactive(prompt, history, vim_enabled);
     }
     print!("{prompt}");
     io::stdout().flush()?;
@@ -437,5 +678,53 @@ mod tests {
             Key::Char('猫')
         );
         assert_eq!(decode(&mut &b""[..], 3).unwrap(), Key::Ctrl('c'));
+    }
+}
+
+#[cfg(test)]
+mod vim_tests {
+    use super::*;
+    fn input(e: &mut Editor, state: &mut VimKeys, keys: &str) {
+        for c in keys.chars() {
+            if !state.handle(e, &Key::Char(c)).unwrap() {
+                e.insert(c).unwrap();
+            }
+        }
+    }
+    #[test]
+    fn vim_defaults_to_insert_and_escape_switches_to_normal() {
+        let mut vim = VimKeys::new(true);
+        let mut e = Editor::default();
+        input(&mut e, &mut vim, "你好 world");
+        assert_eq!(e.text, "你好 world");
+        assert!(vim.insert);
+        assert!(vim.handle(&mut e, &Key::Escape).unwrap());
+        assert!(!vim.insert);
+        input(&mut e, &mut vim, "0wxi!");
+        assert_eq!(e.text, "你好 !orld");
+        assert!(vim.insert);
+        assert!(vim.handle(&mut e, &Key::Escape).unwrap());
+        input(&mut e, &mut vim, "u");
+        assert_eq!(e.text, "你好 orld");
+    }
+    #[test]
+    fn vim_line_motions_copy_delete_and_paste() {
+        let mut vim = VimKeys::new(true);
+        let mut e = Editor::default();
+        e.text = "alpha\nbeta\ngamma".into();
+        e.cursor = 7;
+        vim.handle(&mut e, &Key::Escape).unwrap();
+        input(&mut e, &mut vim, "yy");
+        assert_eq!(vim.register, "beta\n");
+        input(&mut e, &mut vim, "dd");
+        assert_eq!(e.text, "alpha\ngamma");
+        input(&mut e, &mut vim, "u");
+        assert_eq!(e.text, "alpha\nbeta\ngamma");
+        input(&mut e, &mut vim, "0");
+        assert_eq!(e.cursor, 6);
+        input(&mut e, &mut vim, "$k");
+        assert_eq!(e.cursor, 4);
+        input(&mut e, &mut vim, "j");
+        assert_eq!(e.cursor, 10);
     }
 }
