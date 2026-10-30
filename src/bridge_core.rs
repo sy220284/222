@@ -8,10 +8,10 @@ use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 
 /// A single session owns its pending outbound messages. No process-global queue.
-#[derive(Debug)]
 const MAX_PENDING_BRIDGE_MESSAGES: usize = 16_384;
 const MAX_PENDING_BRIDGE_BYTES: usize = 64 * 1024 * 1024;
 
+#[derive(Debug)]
 pub struct BridgeSession {
     session_id: String,
     active: bool,
