@@ -331,7 +331,7 @@
 | `src/components/ContextSuggestions.tsx` | 47 | 5952 | 重写：终端 UI／交互 | `src/generated_ports/p_68ce9b76726b6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/ContextVisualization.tsx` | 489 | 76073 | 重写：终端 UI／交互 | `src/generated_ports/p_40acc6bc55581.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CoordinatorAgentStatus.tsx` | 273 | 36038 | 重写：终端 UI／交互 | `src/generated_ports/p_f1c50b7cfd309.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/CostThresholdDialog.tsx` | 50 | 4336 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/CostThresholdDialog.tsx` | 50 | 4336 | 重写：终端 UI／交互 | `src/generated_ports/p_44bdc1663a93e.rs` | 部分实现：完整等价：选项表（ok/Done）与监控文案（品牌 docs 域名中性化）；待验收 |
 | `src/components/CtrlOToExpand.tsx` | 51 | 6062 | 重写：终端 UI／交互 | `src/generated_ports/p_7fa135c73cbe6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CustomSelect/SelectMulti.tsx` | 213 | 29884 | 重写：终端 UI／交互 | `src/generated_ports/p_1006dc067830f.rs` | 部分实现：手工重写多选可见项、输入项、勾选、焦点、上下滚动和提交按钮动态视图；真实 Ink 回调接线待验收 |
 | `src/components/CustomSelect/index.ts` | 4 | 118 | 重写：终端 UI／交互 | `src/custom_select_exports.rs` | 部分实现：Rust 统一导出单选、多选、选项映射与输入事件控制器；select.tsx 完整视图待迁移 |
@@ -652,7 +652,7 @@
 | `src/components/permissions/SedEditPermissionRequest/SedEditPermissionRequest.tsx` | 230 | 20862 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/SkillPermissionRequest/SkillPermissionRequest.tsx` | 369 | 36531 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/WebFetchPermissionRequest/WebFetchPermissionRequest.tsx` | 258 | 22888 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/permissions/WorkerBadge.tsx` | 49 | 3850 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/permissions/WorkerBadge.tsx` | 49 | 3850 | 重写：终端 UI／交互 | `src/generated_ports/p_8185269f3225b.rs` | 部分实现：完整等价：badge 文本构造（BLACK_CIRCLE+空格+worker 名）含单测；toInkColor/JSX 归 ink 宿主，待验收 |
 | `src/components/permissions/WorkerPendingPermission.tsx` | 105 | 9365 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/hooks.ts` | 210 | 8453 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/rules/AddPermissionRules.tsx` | 180 | 22020 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -666,7 +666,7 @@
 | `src/components/permissions/shellPermissionHelpers.tsx` | 164 | 22517 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/useShellPermissionFeedback.ts` | 149 | 4605 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/permissions/utils.ts` | 26 | 660 | 重写：终端 UI／交互 | `src/generated_ports/p_7892b3202fd8a.rs` | 部分实现：完整等价：unary 权限事件 payload 构造（completion_type/event/language_name=none/message_id/platform/hasFeedback 默认 false）与原版元数据形态一致；投递引 unaryLogging 桩，待验收 |
-| `src/components/sandbox/SandboxConfigTab.tsx` | 45 | 16895 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/sandbox/SandboxConfigTab.tsx` | 45 | 16895 | 重写：终端 UI／交互 | `src/generated_ports/p_4096ca3117feb.rs` | 部分实现：完整等价：禁用占位判定+依赖警告可见性纯函数；SandboxManager 与 JSX 归宿主，待验收 |
 | `src/components/sandbox/SandboxDependenciesTab.tsx` | 120 | 17402 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/sandbox/SandboxDoctorSection.tsx` | 46 | 6190 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/sandbox/SandboxOverridesTab.tsx` | 193 | 20473 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -791,7 +791,7 @@
 | `src/hooks/useIDEIntegration.tsx` | 70 | 10517 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useIdeAtMentioned.ts` | 77 | 2217 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useIdeConnectionStatus.ts` | 34 | 981 | 重写：终端 UI／交互 | `src/generated_ports/p_67a83dfb2ae6f.rs` | 部分实现：完整等价：IDE 连接状态推导纯函数（find ide 客户端+sse-ide/ws-ide 的 ideName 提取+connected/disconnected 判定）含单测；useMemo 宿主待验收 |
-| `src/hooks/useIdeLogging.ts` | 42 | 1201 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useIdeLogging.ts` | 42 | 1201 | 重写：终端 UI／交互 | `src/generated_ports/p_91719bbff69dc.rs` | 部分实现：完整等价：log_event MCP 通知 schema 门（method 字面量+eventName 字符串+eventData 对象）含三分支单测；转发目标为厂商遥测面（排除），待验收 |
 | `src/hooks/useIdeSelection.ts` | 151 | 4349 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useInboxPoller.ts` | 970 | 34375 | 重写：终端 UI／交互 | `src/agent.rs / src/team_registry.rs / src/team_mailbox.rs` | 部分实现：队长自动审批计划并持久回执、成员验证来源/关联后退出计划模式；队长模式变更消息真实投递、成员授权校验、会话重启恢复；原版 React/UI 每秒轮询、团队配置模式同步、权限/沙箱请求分发和渲染时序未等价 |
 | `src/hooks/useInputBuffer.ts` | 133 | 3386 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -807,7 +807,7 @@
 | `src/hooks/useMergedTools.ts` | 45 | 1645 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/useMinDisplayTime.ts` | 36 | 1010 | 重写：终端 UI／交互 | `src/generated_ports/p_90bb112bfdd77.rs` | 部分实现：完整等价：最小展示时间节流决策（立即展示或剩余等待，区别于防抖/节流）纯函数含单测；延迟换值定时器归宿主，待验收 |
 | `src/hooks/useNotifyAfterTimeout.ts` | 66 | 2471 | 重写：终端 UI／交互 | `src/generated_ports/p_a0553423b570f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/hooks/useOfficialMarketplaceNotification.tsx` | 48 | 7299 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useOfficialMarketplaceNotification.tsx` | 48 | 7299 | 重写：终端 UI／交互 | `src/generated_ports/p_311cf4a518266.rs` | 部分实现：完整等价：三类通知元数据（config 失败 immediate/10s、成功 info/8s、失败 immediate/10s）键位匹配含单测；文案品牌域中性化，待验收 |
 | `src/hooks/usePasteHandler.ts` | 286 | 10146 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/usePluginRecommendationBase.tsx` | 105 | 11418 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/hooks/usePrStatus.ts` | 107 | 3202 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -860,7 +860,7 @@
 | `src/ink/components/ScrollBox.tsx` | 237 | 31814 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/components/Spacer.tsx` | 20 | 1563 | 重写：终端 UI／交互 | `src/generated_ports/p_dd14b320d49cc.rs` | 部分实现：AST 转写：flexGrow=1 布局属性保留给终端渲染宿主；待验收 |
 | `src/ink/components/StdinContext.ts` | 50 | 1678 | 重写：终端 UI／交互 | `src/generated_ports/p_7a57062d28876.rs` | 部分实现：契约记录：stdin 五能力面（raw 流/setRawMode/支持标记/exitOnCtrlC/终端询问器）归 ink 宿主；待验收 |
-| `src/ink/components/TerminalFocusContext.tsx` | 52 | 5955 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/components/TerminalFocusContext.tsx` | 52 | 5955 | 重写：终端 UI／交互 | `src/generated_ports/p_427b2b7d220db.rs` | 部分实现：契约记录：焦点视图模型默认值（focused=true/state=unknown）+displayName+订阅式重渲染说明；宿主待验收 |
 | `src/ink/components/TerminalSizeContext.tsx` | 7 | 983 | 重写：终端 UI／交互 | `src/generated_ports/p_dd5c8e35720f8.rs` | 部分实现：完整等价：TerminalSize{columns,rows} 视图模型结构；React context 实例归 ink 运行时宿主，待验收 |
 | `src/ink/components/Text.tsx` | 254 | 16811 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/constants.ts` | 3 | 107 | 重写：终端 UI／交互 | `src/ink_constants.rs` | 已验收：原始唯一帧间隔常量数值 16ms；证据 ink_constants::tests::original_render_frame_interval |
@@ -969,7 +969,7 @@
 | `src/migrations/migrateSonnet1mToSonnet45.ts` | 49 | 1582 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/migrateSonnet45ToSonnet46.ts` | 68 | 2055 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/migrations/resetAutoModeOptInForDefaultOffer.ts` | 52 | 2106 | 重写：保持通用行为 | `src/generated_ports/p_138b407b8bbdb.rs` | 部分实现：完整等价：一次性迁移决策（编译门关早退/仅 enabled 态清 skip/幂等）含四分支单测；settings/config 访问器随各自链路，待验收 |
-| `src/migrations/resetProToOpusDefault.ts` | 52 | 1550 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/migrations/resetProToOpusDefault.ts` | 52 | 1550 | 重写：保持通用行为 | `src/generated_ports/p_c6c5ea31781a5.rs` | 部分实现：完整等价：迁移资格门（firstParty∧Pro）纯函数含双分支单测；订阅/供应商谓词随各自链路，待验收 |
 | `src/moreright/useMoreRight.tsx` | 26 | 3535 | 重写：保持通用行为 | `src/generated_ports/p_b1e9236cd4884.rs` | 部分实现：完整等价：外部构建空桩与原版逐字语义（onBeforeQuery true/空完成/null 渲染）；内部实现仅内部分发，待验收 |
 | `src/native-ts/color-diff/index.ts` | 1000 | 30042 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/native-ts/file-index/index.ts` | 371 | 12006 | 重写：保持通用行为 | 待定 | 未迁移 |
