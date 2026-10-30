@@ -341,7 +341,6 @@ fn mcp_tool_alias(server: &str, tool: &str) -> String {
     build_mcp_tool_name(server, tool)
 }
 
-
 enum TransportClient {
     Stdio(Client),
     Http(crate::mcp_http::HttpClient),
@@ -2515,5 +2514,4 @@ mod remote_tests {
         );
         assert_eq!(extract_mcp_tool_display_name("no suffix"), "no suffix");
     }
-
 }
