@@ -239,11 +239,8 @@ impl HybridTransport {
 
     pub async fn close(&self) {
         self.reads.close();
-        let _ = tokio::time::timeout(
-            Duration::from_millis(CLOSE_GRACE_MS),
-            self.writes.flush(),
-        )
-        .await;
+        let _ =
+            tokio::time::timeout(Duration::from_millis(CLOSE_GRACE_MS), self.writes.flush()).await;
         self.writes.close();
     }
 }
