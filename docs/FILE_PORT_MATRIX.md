@@ -247,7 +247,7 @@
 | `src/commands/privacy-settings/index.ts` | 15 | 399 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/privacy-settings/privacy-settings.tsx` | 58 | 10043 | 重写：保持通用行为 | `src/generated_ports/p_5d2e3ca07cba4.rs`| 部分实现：/privacy-settings 编排功能化——资格门禁→terms 判定路由（首次 GroveDialog/已接受 PrivacySettingsDialog）→onDecision 独立处理（accept/decline 走更新检查+toggle 埋点门禁，escape/defer 关闭提示）；config 失败无专有分支（上游同语义，归 terms 未知路径）；grove API 端点由调用方注入，对话框视图归组件域，附 5 测试|
 | `src/commands/rate-limit-options/index.ts` | 20 | 511 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/rate-limit-options/rate-limit-options.tsx` | 210 | 23749 | 重写：保持通用行为 | `src/generated_ports/p_f500b0cca6994.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/commands/rate-limit-options/rate-limit-options.tsx` | 210 | 23749 | 重写：保持通用行为 | `src/generated_ports/p_f500b0cca6994.rs`| 部分实现：限额选项菜单决策核——订阅/档位门（max/max-20x/团队企业）、extra-usage 选项（管理员请求与自助标签四态、组织额度耗尽隐藏管理员请求、超额状态 Request more）、upgrade 选项（max-20x 与团队企业排除）、原序选项列表+cancel 收尾，附 4 测试；实验 flag 名按隐私门禁省略，Select/Dialog 渲染属组件域|
 | `src/commands/release-notes/index.ts` | 12 | 268 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/release-notes/release-notes.ts` | 51 | 1524 | 重写：保持通用行为 | `src/release_notes.rs / src/main.rs` | 部分实现：版本更新日志解析、500ms 下载、缓存及 CLI/交互调用已实现；自动通知仍缺 |
 | `src/commands/reload-plugins/index.ts` | 19 | 653 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
