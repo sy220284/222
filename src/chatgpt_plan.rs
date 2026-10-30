@@ -648,8 +648,12 @@ async fn complete_with_token(
             let lines = data.lines().filter_map(|line| line.strip_prefix("data:"))
                 .map(str::trim_start).collect::<Vec<_>>();
             if lines.is_empty() { continue; }
-            let event: Value = serde_json::from_str(&lines.join("\n"))
-                .context("Invalid ChatGPT Responses event")?;
+            let payload = lines.join("\n");
+            if payload.trim() == "[DONE]" {
+                continue;
+            }
+            let event: Value = serde_json::from_str(&payload)
+                .context("Invalid OpenAI Responses event")?;
             match event.get("type").and_then(Value::as_str) {
                 Some("response.output_text.delta") => {
                     if let (Some(tx), Some(text)) = (&deltas, event.get("delta").and_then(Value::as_str)) {
