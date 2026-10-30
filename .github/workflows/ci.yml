@@ -50,6 +50,30 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D clippy::correctness -D clippy::suspicious
 
 
+  model-providers:
+    name: 模型品牌与 ChatGPT 登录专项验收
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 使用固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+      - name: 模型配置、目录、协议与 ChatGPT OAuth 逻辑
+        run: |
+          cargo test --locked --bin atlas-agent config::tests
+          cargo test --locked --bin atlas-agent model_catalog::tests
+          cargo test --locked --bin atlas-agent chatgpt_plan::tests
+          cargo test --locked --bin atlas-agent provider::tests
+      - name: 品牌、鉴权、实时型号选择与参数全链路
+        run: |
+          cargo test --locked --test domestic_models_cli
+          cargo test --locked --test model_catalog_setup_cli
+
   audit-regression:
     name: 审计修复专项 Rust 行为测试
     runs-on: ubuntu-latest
