@@ -15,7 +15,6 @@ VIEW_PORTS = {
     'src/components/PromptInput/PromptInputQueuedCommands.tsx': ('p_9b6293319d85b.rs', 'PromptInputQueuedCommands'),
     'src/components/PromptInput/PromptInputHelpMenu.tsx': ('p_ed2482259a075.rs', 'PromptInputHelpMenu'),
     'src/components/PromptInput/Notifications.tsx': ('p_4375034f382f7.rs', 'Notifications'),
-    'src/components/PromptInput/VoiceIndicator.tsx': ('p_92d31b9e1cfc8.rs', 'VoiceIndicator'),
     'src/components/PromptInput/ShimmeredInput.tsx': ('p_2f84f9e35605c.rs', 'HighlightedInput'),
     'src/components/PromptInput/PromptInputFooter.tsx': ('p_c39f8f63b92a4.rs', 'PromptInputFooter'),
     'src/components/PromptInput/PromptInputModeIndicator.tsx': ('p_4ae3f27ee4b20.rs', 'PromptInputModeIndicator'),
