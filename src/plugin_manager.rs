@@ -249,8 +249,12 @@ fn install_local_with_origin(
     }
     fs::create_dir_all(&home)?;
     let target = home.join(&name);
-    if target.exists() {
-        bail!("Plugin '{name}' is already installed");
+    // Path::exists follows symlinks and returns false for a dangling link.
+    // Refuse every pre-existing directory entry before a rename can replace it.
+    match fs::symlink_metadata(&target) {
+        Ok(_) => bail!("Plugin '{name}' is already installed or has an invalid target"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
     }
     let stage = home.join(format!(".install-{}", Uuid::new_v4()));
     let mut activated = false;
