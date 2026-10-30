@@ -585,14 +585,14 @@ mod tests {
     #[test]
     fn ascii_control_width_and_widest_line_match_original_string_width() {
         let mut cache = LineWidthCache::default();
-        assert_eq!(cache.line_width("a\\tb"), 2);
-        assert_eq!(cache.line_width("\\t"), 0);
-        assert_eq!(cache.line_width("a\\r\\nb"), 2);
-        assert_eq!(cache.line_width("line\\u{001b}[31m red\\u{001b}[0m"), 8);
-        assert_eq!(widest_line("a\\tb\\nhello", &mut cache), 5);
+        assert_eq!(cache.line_width("a\tb"), 2);
+        assert_eq!(cache.line_width("\t"), 0);
+        assert_eq!(cache.line_width("a\r\nb"), 2);
+        assert_eq!(cache.line_width("line\u{001b}[31m red\u{001b}[0m"), 8);
+        assert_eq!(widest_line("a\tb\nhello", &mut cache), 5);
         assert_eq!(widest_line("", &mut cache), 0);
         // A second lookup must return exactly the same cached width.
-        assert_eq!(cache.line_width("a\\tb"), 2);
+        assert_eq!(cache.line_width("a\tb"), 2);
     }
 
     #[test]
