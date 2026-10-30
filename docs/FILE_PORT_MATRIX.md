@@ -1,5 +1,8 @@
 # 2.1.88 → Rust 逐文件迁移台账（原始清单）
 
+> 2026-10-29 本轮任务工具目录/消息快照/复制代码块补齐：原版 src/tools.ts + utils/tasks.ts → src/agent.rs，移除重复展示的旧 task_* 模型工具目录（3121eed3）；原版 utils/fileHistory.ts → src/history.rs / src/tools.rs / src/agent.rs，按用户消息聚合编辑快照及 100 组保留（e9bd696a）；原版 commands/copy/copy.tsx → src/copy_response.rs，复制时识别 Markdown 缩进代码块（ac72fcbe）。三项均为**源码已提交、待行为验收**，未升级任何源路径为已验收。SDK rewind_files、Shell 历史、完整交互复制及全量等价仍有缺口。
+
+
 基于用户提供源码包提取出的 **1,906** 个 TS/TSX/JS 文件。原路径保留仅供映射与核对，不用于运行时品牌与界面。状态为按功能模块的保守初判，**不代表已完成逐文件行为等价**。
 
 执行规则：原厂登录、专属模型 API → 可配置多模型实现；原厂遥测／行为与环境数据回传 → 删除；其他代码 → Rust 等价实现并提供行为测试。改造的远程功能转为自建协议，而不是简单删除。
