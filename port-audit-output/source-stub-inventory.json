@@ -1,5 +1,5 @@
 {
-  "count": 198,
+  "count": 188,
   "disclaimer": "仅是自动生成空壳的静态检测，不证明手写代码功能完整。",
   "items": [
     {
@@ -256,14 +256,6 @@
       "rust_lines": 36,
       "source": "src/components/LanguagePicker.tsx",
       "source_lines": 86,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 7,
-      "rust": "src/generated_ports/p_ea89f1ce49f9d.rs",
-      "rust_lines": 37,
-      "source": "src/components/StructuredDiffList.tsx",
-      "source_lines": 30,
       "view_export_unreachable": true
     },
     {
@@ -796,14 +788,6 @@
     },
     {
       "null_expression_count": 3,
-      "rust": "src/generated_ports/p_febdb24a5a4d0.rs",
-      "rust_lines": 23,
-      "source": "src/components/HelpV2/Commands.tsx",
-      "source_lines": 82,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 3,
       "rust": "src/generated_ports/p_3d04352c988c3.rs",
       "rust_lines": 27,
       "source": "src/components/Spinner/SpinnerGlyph.tsx",
@@ -980,30 +964,6 @@
     },
     {
       "null_expression_count": 2,
-      "rust": "src/generated_ports/p_4501df2866732.rs",
-      "rust_lines": 29,
-      "source": "src/components/MemoryUsageIndicator.tsx",
-      "source_lines": 37,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_ec706ec57f4b9.rs",
-      "rust_lines": 12,
-      "source": "src/components/Spinner/ShimmerChar.tsx",
-      "source_lines": 36,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_a4ee4bb49da12.rs",
-      "rust_lines": 17,
-      "source": "src/commands/hooks/hooks.tsx",
-      "source_lines": 13,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
       "rust": "src/generated_ports/p_f0fb508cfc148.rs",
       "rust_lines": 17,
       "source": "src/commands/permissions/permissions.tsx",
@@ -1120,22 +1080,6 @@
       "rust_lines": 17,
       "source": "src/components/FastIcon.tsx",
       "source_lines": 46,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 1,
-      "rust": "src/generated_ports/p_880d83dc9c810.rs",
-      "rust_lines": 20,
-      "source": "src/components/agents/AgentNavigationFooter.tsx",
-      "source_lines": 26,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 1,
-      "rust": "src/generated_ports/p_c02d27a4b4b47.rs",
-      "rust_lines": 49,
-      "source": "src/components/HelpV2/General.tsx",
-      "source_lines": 23,
       "view_export_unreachable": true
     },
     {
@@ -1328,22 +1272,6 @@
       "rust_lines": 45,
       "source": "src/components/agents/new-agent-creation/wizard-steps/ModelStep.tsx",
       "source_lines": 52,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 0,
-      "rust": "src/generated_ports/p_0660c482ad072.rs",
-      "rust_lines": 18,
-      "source": "src/components/FallbackToolUseRejectedMessage.tsx",
-      "source_lines": 16,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 0,
-      "rust": "src/generated_ports/p_806f37fa5888a.rs",
-      "rust_lines": 24,
-      "source": "src/components/PressEnterToContinue.tsx",
-      "source_lines": 15,
       "view_export_unreachable": true
     },
     {
@@ -1577,18 +1505,10 @@
       "source": "src/utils/aws.ts",
       "source_lines": 75,
       "view_export_unreachable": false
-    },
-    {
-      "null_expression_count": 1,
-      "rust": "src/generated_ports/p_5ca89f5b33dd6.rs",
-      "rust_lines": 7,
-      "source": "src/components/PromptInput/IssueFlagBanner.tsx",
-      "source_lines": 12,
-      "view_export_unreachable": false
     }
   ],
   "schema": "port-stubs/v1",
-  "total_null_expressions": 927,
-  "unreachable_views": 168,
-  "with_null": 172
+  "total_null_expressions": 908,
+  "unreachable_views": 159,
+  "with_null": 164
 }

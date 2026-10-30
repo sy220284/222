@@ -89,8 +89,13 @@ fn validate_url(url: &str, token_present: bool) -> Result<()> {
         bail!("Remote SDK requires a WebSocket or HTTP(S) endpoint");
     }
     let host = parsed.host_str().context("Remote SDK URL has no host")?;
-    let loopback = host.eq_ignore_ascii_case("localhost")
-        || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback());
+    // IPv6 hosts arrive bracketed ("[::1]"); IpAddr::parse rejects the
+    // brackets, so strip them before the loopback check.
+    let unbracketed = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')).unwrap_or(host);
+    let loopback = unbracketed.eq_ignore_ascii_case("localhost")
+        || unbracketed
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback());
     if token_present && !matches!(parsed.scheme(), "wss" | "https") && !loopback {
         bail!("Remote credentials require TLS except for loopback connections");
     }
