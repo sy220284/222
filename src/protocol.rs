@@ -147,8 +147,14 @@ mod tests {
         .unwrap();
         assert_eq!(message.reasoning_content.as_deref(), Some("First inspect the file"));
         assert_eq!(message.visible_text(), "");
-        let restored: Message = serde_json::from_value(serde_json::to_value(&message).unwrap()).unwrap();
+        let restored: Message =
+            serde_json::from_value(serde_json::to_value(&message).unwrap()).unwrap();
         assert_eq!(restored, message);
-        assert_eq!(serde_json::to_value(Message::text("user", "hello")).unwrap().get("reasoning_content"), None);
+        assert_eq!(
+            serde_json::to_value(Message::text("user", "hello"))
+                .unwrap()
+                .get("reasoning_content"),
+            None
+        );
     }
 }
