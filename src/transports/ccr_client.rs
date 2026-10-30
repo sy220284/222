@@ -368,9 +368,9 @@ impl CcrClient {
     /// Source getWorkerState/getWithRetry retries transient failures but
     /// treats exhausted restoration as absent metadata; a failed worker PUT
     /// independently prevents the session from starting.
-    async fn restore_worker_metadata(&self) -> Option<Value> {
+    async fn restore_worker_metadata(shared: Arc<CcrShared>) -> Option<Value> {
         for attempt in 1..=READ_INTERNAL_EVENTS_MAX_RETRIES {
-            match self.shared.request_get("/worker").await {
+            match shared.request_get("/worker").await {
                 Ok(body) => return body.pointer("/worker/external_metadata").cloned(),
                 Err(_) if attempt < READ_INTERNAL_EVENTS_MAX_RETRIES => {
                     let delay = super::serial_batch_event_uploader::retry_delay(
@@ -421,15 +421,16 @@ impl CcrClient {
                 "task_summary": null
             }
         });
-        let (restore, registered) = tokio::join!(
-            self.restore_worker_metadata(),
-            self.shared.request_put("/worker", &initial_state),
-        );
-        registered
-            .map_err(|error| anyhow!("{}: {error}", CcrInitFailReason::WorkerRegisterFailed))?;
+        let restored = tokio::spawn(Self::restore_worker_metadata(Arc::clone(&self.shared)));
+        if let Err(error) = self.shared.request_put("/worker", &initial_state).await {
+            // Do not wait for a slow GET when PUT already rejected our epoch.
+            // The original initialize rejects as soon as its PUT fails.
+            restored.abort();
+            bail!("{}: {error}", CcrInitFailReason::WorkerRegisterFailed);
+        }
         self.session_id = session_id.to_owned();
         self.start_heartbeat();
-        Ok(restore)
+        Ok(restored.await?)
     }
 
     /// Heartbeats are owned by this client and are cancelled on close.
@@ -1024,6 +1025,53 @@ mod tests {
         assert!(error.to_string().contains("no_auth_headers"));
         assert!(client.heartbeat_task.lock().unwrap().is_none());
         client.close();
+    }
+
+    #[tokio::test]
+    async fn rejected_epoch_returns_before_stalled_state_restoration() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut bytes = [0_u8; 1024];
+                    let size = socket.read(&mut bytes).await.unwrap();
+                    if String::from_utf8_lossy(&bytes[..size]).starts_with("PUT ") {
+                        let body = "{}";
+                        socket.write_all(format!(
+                            "HTTP/1.1 409 Conflict\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        ).as_bytes()).await.unwrap();
+                    } else {
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
+                });
+            }
+        });
+        let transport = SseTransport::new(
+            format!("http://{addr}/s1/events/stream"),
+            vec![],
+            None,
+            Arc::new(Vec::new),
+        );
+        let mut client = CcrClient::new(
+            &transport,
+            &format!("http://{addr}/s1"),
+            Arc::new(|| vec![("Authorization".to_owned(), "Bearer demo".to_owned())]),
+            None,
+            Some(100),
+            Some(0.0),
+        );
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(2),
+            client.initialize("s1", Some(9)),
+        ).await.expect("epoch conflict must fail without waiting for the stalled GET");
+        assert!(outcome.is_err());
+        assert!(client.heartbeat_task.lock().unwrap().is_none());
+        client.close();
+        server.await.unwrap();
     }
 
     #[tokio::test]
