@@ -1,3 +1,5 @@
+**同一后台任务生命周期附加复核（不重复计数）**：`src/background.rs` 结束任务后若元数据保存失败，现将失败原因写入运行中任务的 `persistenceWarning`，通过 `task_output` 和 `background_list` 真实返回，同时记录错误日志；防止成功/失败状态仅在内存变化却被无声当作持久成功。提交 `cc46faa271901ff4cd7e6c04d260fc3877db08c1`，仍属上述后台任务主链的异常分支，**不增加独立功能数**；跨进程失败恢复仍待补齐，未运行测试。
+
 ## 2026-10-29：同项目跨会话任务日志 Read 授权（源码已提交、待验收）
 
 - **原版依据**：`source/src/utils/permissions/filesystem.ts:1687–1700` 明确允许读取同一项目临时目录中所有会话的文件，供跨会话任务输出与临时结果检查；`source/src/utils/task/diskOutput.ts:50–54` 将 sessionId 放在项目临时目录下。
