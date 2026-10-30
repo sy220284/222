@@ -84,8 +84,10 @@ struct CombinedLog {
 /// Propagate Windows descendant-termination failures to the task record.
 /// A killed shell with surviving children must never be reported as stopped.
 #[cfg(windows)]
-async fn terminate_windows_task_tree(pid: Option<u32>, task: Option<&Arc<Running>>) -> bool {
-    match crate::shell_runtime::terminate_windows_process_tree(pid).await {
+fn terminate_windows_task_tree(
+    job: &crate::shell_runtime::WindowsProcessJob, task: Option<&Arc<Running>>
+) -> bool {
+    match job.terminate() {
         Ok(()) => true,
         Err(error) => {
             let warning = format!("Windows background process-tree termination failed: {error:#}");
@@ -487,6 +489,24 @@ impl BackgroundTasks {
                 return Err(error).context("Cannot start background command");
             }
         };
+        #[cfg(windows)]
+        let job = match crate::shell_runtime::WindowsProcessJob::attach(child.id()) {
+            Ok(job) => job,
+            Err(error) => {
+                // A background shell must never run without reliable
+                // ownership of its descendants, even if the parent exits.
+                let _ = crate::shell_runtime::terminate_windows_process_tree(child.id()).await;
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                drop(stdout_file);
+                drop(stderr_file);
+                drop(output_file);
+                let _ = fs::remove_file(&stdout_path);
+                let _ = fs::remove_file(&stderr_path);
+                let _ = fs::remove_file(&output_path);
+                return Err(error).context("Attach Windows background process job");
+            }
+        };
         let stdout = child.stdout.take().context("No background stdout")?;
         let stderr = child.stderr.take().context("No background stderr")?;
         let record = TaskRecord {
@@ -507,8 +527,7 @@ impl BackgroundTasks {
                 let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
             }
             #[cfg(windows)]
-            let tree_error = crate::shell_runtime::terminate_windows_process_tree(child.id())
-                .await.err();
+            let tree_error = job.terminate().err();
             let _ = child.kill().await;
             let _ = child.wait().await;
             drop(stdout);
@@ -566,7 +585,7 @@ impl BackgroundTasks {
                         let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                     }
                     #[cfg(windows)]
-                    let tree_stopped = terminate_windows_task_tree(child.id(), Some(&running)).await;
+                    let tree_stopped = terminate_windows_task_tree(&job, Some(&running));
                     let _ = child.kill().await;
                     #[cfg(windows)]
                     if !tree_stopped {
@@ -584,7 +603,7 @@ impl BackgroundTasks {
                         let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                     }
                     #[cfg(windows)]
-                    let _ = terminate_windows_task_tree(child.id(), Some(&running)).await;
+                    let _ = terminate_windows_task_tree(&job, Some(&running));
                     let _ = child.kill().await;
                     ("failed", Some(137), false)
                 },
@@ -594,7 +613,7 @@ impl BackgroundTasks {
                         let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                     }
                     #[cfg(windows)]
-                    let _ = terminate_windows_task_tree(child.id(), Some(&running)).await;
+                    let _ = terminate_windows_task_tree(&job, Some(&running));
                     let _ = child.kill().await;
                     ("failed", None, true)
                 }
@@ -668,7 +687,7 @@ impl BackgroundTasks {
                     let _ = unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
                 }
                 #[cfg(windows)]
-                if !terminate_windows_task_tree(process_id, Some(&running)).await {
+                if !terminate_windows_task_tree(&job, Some(&running)) {
                     state = "failed";
                 }
                 stdout_task.abort();
