@@ -467,8 +467,12 @@ pub fn has_plan_session() -> Result<bool> {
 
 pub async fn model_list() -> Result<Value> {
     let token = active_token().await?;
-    let response = new_client()?.get(format!("{RESOURCE}/models"))
-        .bearer_auth(token).send().await?.error_for_status()?;
+    let response = new_client()?
+        .get(format!("{RESOURCE}/models"))
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?;
     let payload = response.bytes().await?;
     if payload.len() > 4 * 1024 * 1024 {
         bail!("ChatGPT model catalog exceeds 4 MiB")
