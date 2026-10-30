@@ -2309,12 +2309,21 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     .ok()
                     .is_some_and(|value| {
                         let kind = value.get("type").and_then(Value::as_str);
+                        // Original print.ts aborts on explicit interrupt,
+                        // end_session and a higher-priority queued message.
                         (kind == Some("control_request")
-                            && value.pointer("/request/subtype").and_then(Value::as_str)
-                                == Some("interrupt"))
+                            && matches!(
+                                value.pointer("/request/subtype").and_then(Value::as_str),
+                                Some("interrupt" | "end_session")
+                            ))
                             || (matches!(kind, Some("control" | "control_request"))
-                                && value.get("action").and_then(Value::as_str)
-                                    == Some("interrupt"))
+                                && matches!(
+                                    value.get("action").and_then(Value::as_str),
+                                    Some("interrupt" | "end_session")
+                                ))
+                            || (kind == Some("user")
+                                && value.get("queued").and_then(Value::as_bool) == Some(true)
+                                && value.get("priority").and_then(Value::as_str) == Some("now"))
                     });
                 if is_interrupt {
                     input_epoch = input_epoch.wrapping_add(1);
