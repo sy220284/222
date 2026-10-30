@@ -67,14 +67,10 @@ fn every_original_path_is_tracked_once_and_no_partial_work_is_called_complete() 
     );
     // Verify the exact excluded set rather than a stale hard-coded count:
     // the frozen original baseline plus individually authorized removals.
-    let baseline: serde_json::Value = serde_json::from_slice(
-        &fs::read(root.join("docs/PORT_BASELINE.json")).unwrap(),
-    )
-    .unwrap();
-    let removals: serde_json::Value = serde_json::from_slice(
-        &fs::read(root.join("docs/REMOVED_SCOPE.json")).unwrap(),
-    )
-    .unwrap();
+    let baseline: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("docs/PORT_BASELINE.json")).unwrap()).unwrap();
+    let removals: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("docs/REMOVED_SCOPE.json")).unwrap()).unwrap();
     let original = baseline["statuses"].as_object().unwrap();
     let mut expected_excluded: HashSet<String> = original
         .iter()
@@ -83,7 +79,9 @@ fn every_original_path_is_tracked_once_and_no_partial_work_is_called_complete() 
         })
         .collect();
     for item in removals["items"].as_array().unwrap() {
-        let path = item["path"].as_str().expect("Approved removal requires path");
+        let path = item["path"]
+            .as_str()
+            .expect("Approved removal requires path");
         assert!(
             matches!(
                 original.get(path).and_then(serde_json::Value::as_str),
