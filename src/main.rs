@@ -2158,9 +2158,9 @@ async fn chat(
         if let Some(instructions) = input.strip_prefix("/compact ") {
             agent.compact_history_custom(instructions).await?;
             println!(
-                    "{}",
-                    compact_command_source::build_display_text(false, "ctrl+o", None, None)
-                );
+                "{}",
+                compact_command_source::build_display_text(false, "ctrl+o", None, None)
+            );
             continue;
         }
         if input == "/sessions --semantic" || input.starts_with("/sessions --semantic ") {
