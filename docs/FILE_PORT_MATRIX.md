@@ -542,7 +542,7 @@
 | `src/components/design-system/Pane.tsx` | 77 | 6907 | 重写：终端 UI／交互 | `src/generated_ports/p_739e7c996602c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/design-system/ProgressBar.tsx` | 86 | 7170 | 重写：终端 UI／交互 | `src/generated_ports/p_a9eb5b2575d7c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/design-system/Ratchet.tsx` | 80 | 7166 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/design-system/StatusIcon.tsx` | 95 | 7568 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/design-system/StatusIcon.tsx` | 95 | 7568 | 重写：终端 UI／交互 | `src/generated_ports/p_13412d0c4245d.rs` | 部分实现：完整等价：六态图标/颜色令牌映射+尾随空格选项含单测；待验收 |
 | `src/components/design-system/Tabs.tsx` | 340 | 41447 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/design-system/ThemeProvider.tsx` | 170 | 18852 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/design-system/ThemedBox.tsx` | 156 | 18043 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -902,7 +902,7 @@
 | `src/ink/measure-element.ts` | 24 | 419 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/measure-text.ts` | 48 | 1138 | 重写：终端 UI／交互 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：原始单遍文本宽高测算、尾部空行、非正数/无穷宽度、逐行自动折行已实现；上游所有渲染调用链仍需继续接通 |
 | `src/ink/node-cache.ts` | 55 | 1654 | 重写：终端 UI／交互 | `src/generated_ports/p_965d86a4c90de.rs` | 部分实现：完整等价：CachedLayout 值形状（含 yoga-local top 供视口裁剪）+absolute 待清标志；WeakMap 宿主归 ink DOM，待验收 |
-| `src/ink/optimizer.ts` | 94 | 2588 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/optimizer.ts` | 94 | 2588 | 重写：终端 UI／交互 | `src/generated_ports/p_0005dc4d45e8e.rs` | 部分实现：契约记录：diff 单趟优化七规则清单（空 stdout 移除/连续光标合并/零位移去重/相邻 style 拼接/重复超链去重/光标隐藏对取消/零清屏移除）；帧结构随 ink 屏幕层，待验收 |
 | `src/ink/output.ts` | 798 | 26183 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/parse-keypress.ts` | 802 | 23458 | 重写：终端 UI／交互 | `src/generated_ports/p_22f64b3a15765.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/reconciler.ts` | 513 | 14594 | 重写：终端 UI／交互 | 待定 | 未迁移 |
@@ -912,7 +912,7 @@
 | `src/ink/renderer.ts` | 179 | 7665 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/root.ts` | 185 | 4600 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/screen.ts` | 1487 | 49323 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/ink/searchHighlight.ts` | 94 | 3325 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/ink/searchHighlight.ts` | 94 | 3325 | 重写：终端 UI／交互 | `src/generated_ports/p_8a83436d1ba3a.rs` | 部分实现：AST 转写：屏幕缓冲反色高亮契约（SGR 7+宽字符列映射+黄标叠加分离原注保留）；Screen/StylePool 归 ink 运行时，待验收 |
 | `src/ink/selection.ts` | 918 | 34933 | 重写：终端 UI／交互 | `src/generated_ports/p_9b038cbf2e98a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/squash-text-nodes.ts` | 93 | 2293 | 重写：终端 UI／交互 | `src/generated_ports/p_054fc0ad2fe85.rs` | 部分实现：完整等价：styled segments 树遍历（样式继承合并/最近 hyperlink 传播/文本节点收集）含传播与覆写单测；待验收 |
 | `src/ink/stringWidth.ts` | 223 | 7156 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust DOM 事件传播/键盘事件及 Unicode 宽度路径已编写，完整 TUI 与分割符号待验 |
@@ -990,7 +990,7 @@
 | `src/screens/Doctor.tsx` | 575 | 73277 | 重写：终端 UI／交互 | `src/diagnostics.rs / src/main.rs / tests/integration_cli.rs` | 部分实现：原版 Doctor 诊断中可移植部分落地为实际可运行命令，支持真实 MCP 状态/上下文大小/配置错误报告；新增 Bash/后台任务输出长度环境变量的非法值与上限截断诊断，以及 40,000 UTF-16 字符超大指令文件警告，源码已提交待行为验收；修复 PATH 中不可执行文件被误判为可用程序；仍缺原版 React/Ink UI、自动更新、版本锁与完整环境安装诊断 |
 | `src/screens/REPL.tsx` | 5006 | 895850 | 重写：终端 UI／交互 | `src/generated_ports/p_fe5e0a874b3c2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/screens/ResumeConversation.tsx` | 399 | 59682 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/server/createDirectConnectSession.ts` | 89 | 2193 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/server/createDirectConnectSession.ts` | 89 | 2193 | 重写：保持通用行为 | `src/generated_ports/p_34db4849f32f1.rs` | 部分实现：完整等价：连接响应校验核心（sessionId/apiKey 缺失错误携带 url）含双分支单测；HTTP 投递与错误类型随 server 链，待验收 |
 | `src/server/directConnectManager.ts` | 214 | 5898 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/server/types.ts` | 58 | 1466 | 重写：保持通用行为 | `src/generated_ports/p_0409a449c853a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/services/AgentSummary/agentSummary.ts` | 180 | 6407 | 重写：保持通用行为 | 待定 | 未迁移 |
