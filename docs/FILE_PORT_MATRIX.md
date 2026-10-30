@@ -1411,7 +1411,7 @@
 | `src/utils/bash/specs/nohup.ts` | 14 | 274 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/bash/specs/pyright.ts` | 92 | 2670 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/bash/specs/sleep.ts` | 14 | 315 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/bash/specs/srun.ts` | 32 | 654 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/bash/specs/srun.ts` | 32 | 654 | 重写：保持通用行为 | `src/generated_ports/p_4007591beaebd.rs`| 部分实现：srun 规格登记至 builtin_command_specs 体系（-n/--ntasks、-N/--nodes 双旗标+command 参数），withfig options 结构向本仓 CommandSpec arguments 扁平归一（旗标拼写并入 name），附 shape 测试；loadFigSpec 动态导入不适用（Node 生态），未迁移|
 | `src/utils/bash/specs/time.ts` | 14 | 244 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/utils/bash/specs/timeout.ts` | 21 | 426 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/utils/bash/treeSitterAnalysis.ts` | 507 | 17594 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1441,7 +1441,7 @@
 | `src/utils/cliArgs.ts` | 61 | 2067 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/cliHighlight.ts` | 55 | 2140 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/codeIndexing.ts` | 207 | 6110 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/collapseBackgroundBashNotifications.ts` | 85 | 2750 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/collapseBackgroundBashNotifications.ts` | 85 | 2750 | 重写：保持通用行为 | `src/generated_ports/p_13ed07885469b.rs`| 部分实现：isCompletedBackgroundBash 判定链（user/text/task-notification 标签/status==completed/BACKGROUND_BASH_SUMMARY_PREFIX 前缀）、连续折叠合成 task-notification、verbose 与非 fullscreen 透传、extractTag 非贪婪，附 4 测试；isFullscreenEnvEnabled 由调用方注入（tmux 探测属 fullscreen 迁移），RenderableMessage→Value|
 | `src/utils/collapseHookSummaries.ts` | 60 | 1714 | 重写：保持通用行为 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：连续同标签 Hook 的计数、内容/错误并集、阻断、输出状态和最大并发耗时已实现；上游所有渲染调用链仍需继续接通 |
 | `src/utils/collapseReadSearch.ts` | 1110 | 37902 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/collapseTeammateShutdowns.ts` | 56 | 1322 | 重写：保持通用行为 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：连续完成的进程内队员关停消息折叠、首消息元信息、边界与非关停保留已实现；上游所有渲染调用链仍需继续接通 |
@@ -1481,8 +1481,8 @@
 | `src/utils/crossProjectResume.ts` | 76 | 2104 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/crypto.ts` | 14 | 763 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/cwd.ts` | 33 | 985 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
-| `src/utils/debug.ts` | 269 | 8000 | 重写：保持通用行为 | `src/generated_ports/p_5b257a1951fde.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/debugFilter.ts` | 158 | 5069 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/debug.ts` | 269 | 8000 | 重写：保持通用行为 | `src/generated_ports/p_5b257a1951fde.rs`| 部分实现：手工重写日志核心（级别门控/会话单例/--debug-file 链/symlink/缓冲写/过滤器接线/logAntError），env 品牌中立映射 CLAUDE_CODE_DEBUG_*→ATLAS_DEBUG_*，同步写替代 Node pendingWrite 异步链；memoize 缓存语义省略（行为等价），Windows symlink 差异待验收|
+| `src/utils/debugFilter.ts` | 158 | 5069 | 重写：保持通用行为 | `src/generated_ports/p_7a2adbb3dff05.rs`| 部分实现：parseDebugFilter 三模式（include/exclude/混合互斥）、extractDebugCategories 四正则（MCP 引导名/前缀冒号/方括号/二级冒号）、shouldShowDebugMessage 全链，附正负测试；memoize 身份不复刻（纯函数），行为验收待 CI|
 | `src/utils/deepLink/banner.ts` | 124 | 4694 | 重写：保持通用行为 | `src/deep_link_banner.rs / src/main.rs / src/git_filesystem.rs` | 部分实现：原版外部深链来源、工作目录展示、长预填提示与本地克隆 FETCH_HEAD 新旧状态告警已原生 Rust 实现并接入 CLI；原版无头启动进程及全平台终端唤起仍未完成 |
 | `src/utils/deepLink/parseDeepLink.ts` | 171 | 5715 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/deepLink/protocolHandler.ts` | 137 | 4943 | 重写：保持通用行为 | `src/deep_link_protocol.rs / src/terminal_launcher.rs / src/main.rs` | 部分实现：真实 URI 解析、显式 cwd 与本地仓库映射优先级、FETCH_HEAD 时间、当前二进制终端启动和可审阅提示输入已接入；macOS AppleEvent 原版桥接仍未完成 |
@@ -1491,7 +1491,7 @@
 | `src/utils/deepLink/terminalPreference.ts` | 55 | 1897 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/utils/desktopDeepLink.ts` | 237 | 7130 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/detectRepository.ts` | 179 | 6063 | 重写：保持通用行为 | `src/detect_repository.rs / src/diagnostics.rs` | 部分实现：Git SSH/HTTPS/企业版地址解析、仓库缓存和真实本地 Git 探测已在 Doctor 入口使用；原版全部环境调用方尚未完成等价验收 |
-| `src/utils/diagLogs.ts` | 95 | 2784 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/diagLogs.ts` | 95 | 2784 | 重写：保持通用行为 | `src/generated_ports/p_ce92b3c05ca1a.rs`| 部分实现：ATLAS_DIAGNOSTICS_FILE（原 CLAUDE_CODE_*）JSON 行追加、目录自建重试、enableDiagnostics/disable/reset 缓存、withDiagnosticsTiming started/completed/failed+duration_ms 全链，附 2 测试（含时序事件断言）；无 PII 契约注释保留|
 | `src/utils/diff.ts` | 178 | 4855 | 重写：行增删统计和差异工具 | `src/tool_metrics.rs` / `src/tools.rs` | 部分实现：使用文本行级差异统计写入与编辑增删行；原始补丁生成、应用、超时及引号转义待对照 |
 | `src/utils/directMemberMessage.ts` | 70 | 1715 | 重写：保持通用行为 | `src/portable_missing_utilities.rs` | 部分实现：按原始源码编写真实 Rust 函数/领域状态并配用例，原厂外部依赖及全部调用链待统一验收 |
 | `src/utils/displayTags.ts` | 52 | 2256 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
@@ -1534,7 +1534,7 @@
 | `src/utils/fsOperations.ts` | 771 | 24230 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/fullscreen.ts` | 203 | 8632 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/generatedFiles.ts` | 137 | 3481 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/generators.ts` | 89 | 2156 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/generators.ts` | 89 | 2156 | 重写：保持通用行为 | `src/generated_ports/p_48282ce751286.rs`| 部分实现：last_x/toArray/fromArray 语义、raceGenerators→all_bounded（FuturesUnordered 有界并发竞速，Promise.race 公平性对齐）；AsyncGenerator→futures Stream 映射，return_value 的 return 注入语义以 stream 包装未单独实现，测试待 CI|
 | `src/utils/genericProcessUtils.ts` | 185 | 6403 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/getWorktreePaths.ts` | 71 | 2048 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
 | `src/utils/getWorktreePathsPortable.ts` | 28 | 847 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
@@ -1718,7 +1718,7 @@
 | `src/utils/plugins/refresh.ts` | 216 | 8537 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/plugins/schemas.ts` | 1682 | 58914 | 重写：保持通用行为 | `src/generated_ports/p_e813a809bd066.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/validatePlugin.ts` | 904 | 28366 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/plugins/walkPluginMarkdown.ts` | 70 | 2222 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/plugins/walkPluginMarkdown.ts` | 70 | 2222 | 重写：保持通用行为 | `src/generated_ports/p_9f04f27b8b4b0.rs`| 部分实现：递归 .md 遍历、namespace 数组语义、stopAtSkillDir 叶子语义、readdir 错误吞并续走、skill.md 大小写不敏感，附 4 测试（含不可读目录不中止）；async 回调改同步闭包（调用方遍历），fsOperations 注入接口待接线|
 | `src/utils/plugins/zipCache.ts` | 407 | 13163 | 重写：保持通用行为 | `src/generated_ports/p_bb3d7b51ba520.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/zipCacheAdapters.ts` | 165 | 5310 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/powershell/dangerousCmdlets.ts` | 186 | 6155 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1747,7 +1747,7 @@
 | `src/utils/ripgrep.ts` | 680 | 21188 | 重写：保持通用行为 | `src/search.rs` | 部分实现：按原版 ripGrep 的默认 20 秒、WSL 60 秒及可配置正整数秒超时，为 Grep/Glob 可达搜索入口增加超时错误和遍历阶段检查（fbd4a626、17a8e25e，源码已提交待验收）；子进程级取消、信号升级、超时抢占、完整忽略规则及其余 ripgrep 执行链仍未迁移；Git 忽略检查子进程共享搜索截止时间，超时强制终止并显式报告错误，异常退出不再静默当成无忽略规则（13a62847，源码已提交待验收）；外部取消与完整 ripgrep 规则仍缺；Grep 大文件逐行及跨行正则扫描增加同一截止时间检查（64627c6e，已提交待验收），仍不能立即抢占单次正则计算；Grep 多个正反 glob 现按原版输入顺序由后命中规则覆盖（82b0bcd6，源码已提交待验收）；与 Git ignore 的跨来源覆盖仍缺；Grep content/count 不再被强制按文件时间重排，只有文件名模式按原版新到旧排序（98b6fc42，源码已提交待验收）；ripgrep 默认遍历顺序仍待验收 |
 | `src/utils/sandbox/sandbox-adapter.ts` | 986 | 35710 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sandbox/sandbox-ui-utils.ts` | 13 | 389 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/sanitization.ts` | 92 | 4003 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sanitization.ts` | 92 | 4003 | 重写：保持通用行为 | `src/generated_ports/p_5579cc6f53028.rs`| 部分实现：NFKC 归一+Cf/Co/Cn 手写范围表（Cn 以显式代理/非字符区间覆盖）+原版显式 fallback 范围全量、迭代至稳定 MAX=10 抛错语义精确对齐（第10轮收敛也抛）、recursivelySanitizeUnicode 对 JSON 键值递归+标量透传，附 5 测试；regex \p{Cf} 属性类未用（手写表保证跨 Unicode 版本确定性）|
 | `src/utils/screenshotClipboard.ts` | 122 | 3709 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sdkEventQueue.ts` | 135 | 4077 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/secureStorage/fallbackStorage.ts` | 71 | 2362 | 重写：保持通用行为 | `src/secure_fallback.rs / src/main.rs` | 部分实现：主安全存储优先、读取回退、首次主存储成功后删除副本、主失败时避免过期值遮蔽新刷新令牌、同步/异步读和删除已写入并接入凭据命令 |
@@ -1786,7 +1786,7 @@
 | `src/utils/settings/pluginOnlyPolicy.ts` | 61 | 2405 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/settings/schemaOutput.ts` | 9 | 317 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/settings/settings.ts` | 1016 | 32185 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/settings/settingsCache.ts` | 81 | 2416 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/settings/settingsCache.ts` | 81 | 2416 | 重写：保持通用行为 | `src/generated_ports/p_57eeca3eff1c9.rs`| 部分实现：session/project/marketplace 三缓存全局单例、get/clear/reset 语义、按 source key+路径键控，附 2 测试；SettingsJson zod 校验由 settings types 桩承担（本桩收 parsed Value），parseSettingsFile 接线待 settings.ts 迁移|
 | `src/utils/settings/toolValidationConfig.ts` | 104 | 3100 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/types.ts` | 1149 | 42784 | 重写：保持通用行为 | `src/generated_ports/p_71c09040fae60.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/settings/validateEditTool.ts` | 46 | 1695 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
@@ -1810,7 +1810,7 @@
 | `src/utils/skills/skillChangeDetector.ts` | 312 | 10033 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/slashCommandParsing.ts` | 61 | 1437 | 重写：斜杠命令解析 | `src/slash_command.rs` / `src/main.rs` | 已验收：完整返回结构、MCP 标记、重复空格、无效开头、UTF-8 前后空白及 CLI /model 接入；证据 slash_command::tests |
 | `src/utils/sleep.ts` | 85 | 2882 | 重写：保持通用行为 | `src/sleep_helpers.rs` | 部分实现：中断前及定时中的主动停止、可选择异常拒绝、超时竞赛不取消实际底层任务，配有真实 Tokio 竞争回归；AbortError 类型和 JS unref 细节仍需补齐 |
-| `src/utils/sliceAnsi.ts` | 92 | 3343 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/sliceAnsi.ts` | 92 | 3343 | 重写：保持通用行为 | `src/generated_ports/p_6aa0ce358bf6a.rs`| 部分实现：ansi-tokenize 0.3.1 全算法复刻（tokenize/reduce/undo/getEndCode/splitCompoundSGR/OSC8 三终止符）、is-fullwidth-code-point→get-east-asian-width 1.7.0 F/W 125+3 区间表原样嵌入、isZeroWidth 全表、start 边界零宽归属语义与结尾 undo 精确对齐，附 9 测试；Intl.Segmenter 图素聚类以 scalar+ZWJ 合并近似，原版 control token 拼接 undefined 缺陷已修正，行为验收待 CI|
 | `src/utils/slowOperations.ts` | 287 | 9055 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/standaloneAgent.ts` | 24 | 803 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/startupProfiler.ts` | 195 | 6079 | 重写：保持通用行为 | 待定 | 未迁移 |

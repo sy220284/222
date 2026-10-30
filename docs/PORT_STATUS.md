@@ -2021,3 +2021,11 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **修复的真实差异**：旧代码通过 `fs::read` 读取 JSON 检查点或备份，可能跟随被替换的符号链接；旧 `restore` 先哈希验证备份，再用 `fs::copy` 第二次打开同一路径，允许校验与回退之间内容变化。现直接写入已验证 SHA-256 的原始字节，避免二次读取。公开的历史查询、差异预览、回退及会话复制共用这些路径。
 - **代码提交**：`4bdc42ed2af38c0dfae62f9fa597491cd1b3a75c`、`440a6ecd9635ebc31f26f843d1ff20ca9ed6781c`、`02ffae2a97dd3de5ac15659c77d7ebefc9f3e847`、`488d4dd3cefebe246004849507223e3b0644320b`。保守计 **2 项独立用户业务行为**：历史查询/跨会话复制安全读取；回退使用经校验的同一份备份内容。与本轮插件 6 项合计 **8/100，余 92**，均为源码已提交、待行为验收。
 - **仍缺**：完整消息 ID 聚合快照、100 次会话内快照保留、Shell 修改追踪、跨进程复制锁、Windows 重新解析点竞态、文件回退目标写入原子性、跨会话恢复一致性。未运行 Cargo、测试或 CI；100 项预先完整缺口清单和对应实施方案仍未完成，流程 A/B 及数量硬目标未达标。Issue #3 冻结 362 项不核销。
+
+
+## 2026-10-30：工具层手工重写批次一（debug/过滤/插件遍历/Unicode 净化/ANSI 切片/规格/缓存/生成器/诊断/通知折叠）（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 `source/src/utils/{debug.ts,debugFilter.ts,plugins/walkPluginMarkdown.ts,sanitization.ts,sliceAnsi.ts,bash/specs/srun.ts,settings/settingsCache.ts,generators.ts,diagLogs.ts,collapseBackgroundBashNotifications.ts}` 及 npm 依赖 `@alcalzone/ansi-tokenize@0.3.1`、`is-fullwidth-code-point@5.1.0`、`get-east-asian-width@1.7.0` 源码逐函数对照。
+- **Rust 可达链**：`generated_ports::p_5b257a1951fde`（debug 核心）→ `p_7a2adbb3dff05`（过滤）→ `p_9f04f27b8b4b0`（插件 .md 遍历接 debug）；`p_5579cc6f53028`（Unicode 净化：NFKC+手写 Cf/Co/Cn 范围+JSON 递归）；`p_6aa0ce358bf6a`（ANSI 感知切片：tokenize/reduce/undo/OSC8 + EAW F/W 128 区间表 + isZeroWidth 全表 + stringWidth）；`p_4007591beaebd`（srun 规格）；`p_57eeca3eff1c9`（settings 三缓存）；`p_48282ce751286`（Stream 工具）；`p_ce92b3c05ca1a`（诊断 JSON 行）；`p_13ed07885469b`（后台 bash 通知折叠）。
+- **保守功能计数**：debug 日志核心（级别门控/路径链/缓冲写）、debug 过滤器、插件 Markdown 遍历、Unicode 净化（迭代收敛+递归）、ANSI 切片（含 OSC8 与 EAW 测宽）、srun 规格、settings 缓存、生成器工具、诊断日志时序、后台 bash 通知折叠，共 **10 个独立业务行为**，全部含单元测试（34 个 #[test]）。同一行为的修正提交不重复计数。
+- **尚未实现的准确差异**：debug 的 memoize 缓存身份省略（行为等价）、Windows symlink 差异待验收；sliceAnsi 的 Intl.Segmenter 图素聚类以 scalar+ZWJ 合并近似、原版 control token 拼接 undefined 缺陷已修正（AGENTS.md 统一修正条款）；generators 的 return_value 注入语义未单列；walkPluginMarkdown 的 fsOperations 注入接口待接线；env 名按仓库惯例 CLAUDE_CODE_*→ATLAS_*。**未运行 Cargo/测试/CI（本容器无 Rust 工具链）；全部已提交、待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
