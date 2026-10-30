@@ -600,9 +600,16 @@ mod tests {
     fn close_preserves_pending_depth_for_delivery_diagnostics() {
         let uploader = SerialBatchEventUploader::new(config_with(
             Arc::new(|_batch| Box::pin(async { Ok(()) })),
-            1, 10,
+            1,
+            10,
         ));
-        uploader.shared.state.lock().unwrap().pending.push_back(json!({"uuid":"undelivered"}));
+        uploader
+            .shared
+            .state
+            .lock()
+            .unwrap()
+            .pending
+            .push_back(json!({"uuid":"undelivered"}));
         uploader.close();
         assert_eq!(uploader.pending_count(), 1);
         assert!(uploader.shared.state.lock().unwrap().pending.is_empty());

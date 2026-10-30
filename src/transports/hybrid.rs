@@ -356,28 +356,38 @@ mod tests {
                 bytes.extend_from_slice(&chunk[..n]);
             };
             let headers = String::from_utf8_lossy(&bytes[..end]);
-            let len: usize = headers.lines().find_map(|line| {
-                line.split_once(':').and_then(|(name, value)| {
-                    name.eq_ignore_ascii_case("content-length")
-                        .then(|| value.trim().parse().unwrap())
+            let len: usize = headers
+                .lines()
+                .find_map(|line| {
+                    line.split_once(':').and_then(|(name, value)| {
+                        name.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse().unwrap())
+                    })
                 })
-            }).unwrap();
+                .unwrap();
             while bytes.len() - end < len {
                 let n = peer.read(&mut chunk).await.unwrap();
                 assert!(n > 0);
                 bytes.extend_from_slice(&chunk[..n]);
             }
             let payload: Value = serde_json::from_slice(&bytes[end..end + len]).unwrap();
-            peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+            peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .await
+                .unwrap();
             payload
         });
-        let outbound = HybridOutbound::new(
-            &format!("ws://127.0.0.1:{port}/ws/s1"), Arc::new(Vec::new),
-        ).unwrap();
-        outbound.write(&serde_json::json!({"type":"stream_event","uuid":"first"})).await;
-        tokio::time::timeout(Duration::from_secs(4), outbound.write(
-            &serde_json::json!({"type":"result","uuid":"second"})
-        )).await.unwrap();
+        let outbound =
+            HybridOutbound::new(&format!("ws://127.0.0.1:{port}/ws/s1"), Arc::new(Vec::new))
+                .unwrap();
+        outbound
+            .write(&serde_json::json!({"type":"stream_event","uuid":"first"}))
+            .await;
+        tokio::time::timeout(
+            Duration::from_secs(4),
+            outbound.write(&serde_json::json!({"type":"result","uuid":"second"})),
+        )
+        .await
+        .unwrap();
         let received = server.await.unwrap();
         assert_eq!(received["events"][0]["uuid"], "first");
         assert_eq!(received["events"][1]["uuid"], "second");

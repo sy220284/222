@@ -350,7 +350,10 @@ impl CcrClient {
             stream_timer_running: Arc::new(AtomicBool::new(false)),
             accumulator: Arc::new(Mutex::new(create_stream_accumulator())),
             worker_state: Arc::new(WorkerStateUploader::new_with_jitter(
-                worker_state_send, 1_000, 30_000, 1_000,
+                worker_state_send,
+                1_000,
+                30_000,
+                1_000,
             )),
             event_uploader: Arc::new(SerialBatchEventUploader::new(client_events_config)),
             internal_event_uploader: SerialBatchEventUploader::new(internal_config),
