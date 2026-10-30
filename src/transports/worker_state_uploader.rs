@@ -16,7 +16,6 @@
 use serde_json::Value;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::sync::Notify;
 
 /// Shallow overlay merge: nested metadata objects merge one level deep,
 /// everything else is replaced wholesale (mirrors `coalescePatches`).
@@ -58,7 +57,6 @@ struct WorkerStateShared {
     base_delay_ms: u64,
     max_delay_ms: u64,
     state: Mutex<WorkerStateInner>,
-    wake: Notify,
     closed: AtomicBool,
 }
 
@@ -82,7 +80,6 @@ impl WorkerStateUploader {
                     in_flight: false,
                     pending: None,
                 }),
-                wake: Notify::new(),
                 closed: AtomicBool::new(false),
             }),
         }
@@ -96,11 +93,11 @@ impl WorkerStateUploader {
             if self.shared.closed.load(Ordering::SeqCst) {
                 return;
             }
+            state.pending = Some(match state.pending.take() {
+                Some(previous) => coalesce_patches(&previous, &patch),
+                None => patch,
+            });
             if state.in_flight {
-                state.pending = Some(match state.pending.take() {
-                    Some(existing) => coalesce_patches(&existing, &patch),
-                    None => patch,
-                });
                 false
             } else {
                 state.in_flight = true;
@@ -108,15 +105,14 @@ impl WorkerStateUploader {
             }
         };
         if kick {
-            let shared = self.shared.clone();
-            tokio::spawn(async move { send_loop(shared, None).await });
+            let shared = Arc::clone(&self.shared);
+            tokio::spawn(async move { send_loop(shared).await });
         }
     }
 
     /// Stop accepting work; the in-flight attempt finishes on its own.
     pub fn close(&self) {
         self.shared.closed.store(true, Ordering::SeqCst);
-        self.shared.wake.notify_waiters();
     }
 
     /// Whether an attempt is in flight (test hook parity with the source).
@@ -125,45 +121,42 @@ impl WorkerStateUploader {
     }
 }
 
-async fn send_loop(shared: Arc<WorkerStateShared>, mut failures: Option<u32>) {
-    let mut failures = failures.unwrap_or(0);
+async fn send_loop(shared: Arc<WorkerStateShared>) {
+    let mut failures = 0_u32;
     loop {
-        let body = {
+        let mut current = {
             let mut state = shared.state.lock().expect("worker state");
             if shared.closed.load(Ordering::SeqCst) {
+                state.in_flight = false;
                 return;
             }
             match state.pending.take() {
-                Some(pending) => pending,
-                None => Value::Object(Default::default()),
-            }
-        };
-        let ok = (shared.send)(body).await;
-        if ok {
-            failures = 0;
-            let kick;
-            {
-                let mut state = shared.state.lock().expect("worker state");
-                if state.pending.is_some() {
-                    kick = true;
-                } else {
+                Some(patch) => patch,
+                None => {
                     state.in_flight = false;
-                    kick = false;
+                    return;
                 }
             }
-            if kick {
-                continue;
+        };
+        loop {
+            if shared.closed.load(Ordering::SeqCst) {
+                shared.state.lock().expect("worker state").in_flight = false;
+                return;
             }
-            return;
+            if (shared.send)(current.clone()).await {
+                failures = 0;
+                break;
+            }
+            failures = failures.saturating_add(1);
+            let delay = shared.base_delay_ms.saturating_mul(
+                1_u64 << failures.saturating_sub(1).min(16)
+            ).min(shared.max_delay_ms);
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            let mut state = shared.state.lock().expect("worker state");
+            if let Some(pending) = state.pending.take() {
+                current = coalesce_patches(&current, &pending);
+            }
         }
-        failures += 1;
-        let delay =
-            (shared.base_delay_ms * (1u64 << (failures - 1).min(5))).min(shared.max_delay_ms);
-        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-        if shared.closed.load(Ordering::SeqCst) {
-            return;
-        }
-        // Absorb pending patches before the retry (they were taken above).
     }
 }
 

@@ -328,6 +328,7 @@ pub struct WebSocketTransport {
 }
 
 /// Result of one connection lifecycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConnectionOutcome {
     /// Server told us to stop (permanent close code) or close() was called.
     Terminal,

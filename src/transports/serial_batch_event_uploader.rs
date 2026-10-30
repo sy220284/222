@@ -23,6 +23,13 @@ pub enum UploaderError {
     Retryable { retry_after_ms: Option<u64> },
 }
 
+impl std::fmt::Display for UploaderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self { Self::Retryable { retry_after_ms } => write!(f, "upload retry required: {retry_after_ms:?}") }
+    }
+}
+impl std::error::Error for UploaderError {}
+
 pub type UploaderSend<T> = Arc<
     dyn Fn(
             Vec<T>,
@@ -55,6 +62,22 @@ pub struct UploaderConfig<T> {
     pub send: UploaderSend<T>,
 }
 
+impl<T> UploaderConfig<T> {
+    pub fn new(send: UploaderSend<T>) -> Self {
+        Self {
+            max_batch_size: 100,
+            max_batch_bytes: None,
+            max_queue_size: 100_000,
+            base_delay_ms: 500,
+            max_delay_ms: 30_000,
+            jitter_ms: 500,
+            max_consecutive_failures: None,
+            on_batch_dropped: None,
+            send,
+        }
+    }
+}
+
 struct UploaderState<T> {
     pending: std::collections::VecDeque<T>,
     draining: bool,
@@ -63,7 +86,7 @@ struct UploaderState<T> {
     waiters: usize,
 }
 
-impl<T> UploaderState<T> {
+impl<T: serde::Serialize> UploaderState<T> {
     /// Take the next batch, mirroring the source: the first item is always
     /// taken; byte-limited configs stop before the first item that would
     /// exceed the bound once the batch is non-empty.
@@ -89,7 +112,7 @@ impl<T> UploaderState<T> {
 
 /// Serialized size of an event; `None` falls back to zero like the source's
 /// `jsonStringify`-throwing items being skipped from the byte budget.
-fn item_bytes(item: &Value) -> Option<usize> {
+fn item_bytes<T: serde::Serialize>(item: &T) -> Option<usize> {
     serde_json::to_vec(item).ok().map(|bytes| bytes.len())
 }
 
@@ -97,16 +120,16 @@ struct Shared<T> {
     config: UploaderConfig<T>,
     state: Mutex<UploaderState<T>>,
     /// One permit released per waiting enqueue/flush continuation.
-    wake: Semaphore,
+    wake: Arc<Semaphore>,
     closed: AtomicBool,
     dropped_batches: AtomicUsize,
 }
 
-pub struct SerialBatchEventUploader<T: Send + Clone + 'static> {
+pub struct SerialBatchEventUploader<T: serde::Serialize + Send + Clone + 'static> {
     shared: Arc<Shared<T>>,
 }
 
-impl<T: Send + Clone + 'static> SerialBatchEventUploader<T> {
+impl<T: serde::Serialize + Send + Clone + 'static> SerialBatchEventUploader<T> {
     pub fn new(config: UploaderConfig<T>) -> Self {
         Self {
             shared: Arc::new(Shared {
@@ -117,7 +140,7 @@ impl<T: Send + Clone + 'static> SerialBatchEventUploader<T> {
                     closed: false,
                     waiters: 0,
                 }),
-                wake: Semaphore::new(0),
+                wake: Arc::new(Semaphore::new(0)),
                 closed: AtomicBool::new(false),
                 dropped_batches: AtomicUsize::new(0),
             }),
@@ -144,34 +167,31 @@ impl<T: Send + Clone + 'static> SerialBatchEventUploader<T> {
     /// Enqueue events, waiting on backpressure when the queue is full.
     /// Returns once events are buffered (drain runs in the background).
     pub async fn enqueue(&self, events: Vec<T>) {
-        if events.is_empty() {
-            return;
-        }
-        let count = events.len();
-        loop {
+        let mut remaining: std::collections::VecDeque<T> = events.into();
+        while !remaining.is_empty() {
             if self.is_closed() {
                 return;
             }
-            let need_kick = {
+            let needs_wait = {
                 let mut state = self.shared.state.lock().expect("uploader state");
                 if state.closed {
                     return;
                 }
-                if state.pending.len() + count <= self.shared.config.max_queue_size {
-                    state.pending.extend(events);
-                    ensure_draining(&self.shared, &mut state)
+                let capacity = self.shared.config.max_queue_size.saturating_sub(state.pending.len());
+                if capacity > 0 {
+                    let count = capacity.min(remaining.len());
+                    state.pending.extend(remaining.drain(..count));
+                    ensure_draining(&self.shared, &mut state);
+                }
+                if remaining.is_empty() {
+                    false
                 } else {
                     state.waiters += 1;
-                    false
+                    true
                 }
             };
-            if need_kick {
+            if needs_wait && self.shared.wake.clone().acquire_owned().await.is_err() {
                 return;
-            }
-            let permit = self.shared.wake.clone().acquire_owned().await;
-            match permit {
-                Ok(_permit) => continue,
-                Err(_) => return,
             }
         }
     }
@@ -214,7 +234,7 @@ impl<T: Send + Clone + 'static> SerialBatchEventUploader<T> {
     }
 }
 
-async fn drain_loop<T: Send + 'static>(shared: Arc<Shared<T>>) {
+async fn drain_loop<T: serde::Serialize + Send + Clone + 'static>(shared: Arc<Shared<T>>) {
     let mut failures: u32 = 0;
     loop {
         let batch = {
@@ -244,12 +264,16 @@ async fn drain_loop<T: Send + 'static>(shared: Arc<Shared<T>>) {
                 // survives the retry (source: unshift(batch)).
                 {
                     let mut state = shared.state.lock().expect("uploader state");
-                    for item in batch.into_iter().rev() {
-                        state.pending.push_front(item);
+                    for item in batch.iter().rev() {
+                        state.pending.push_front(item.clone());
                     }
                 }
                 if let Some(max) = shared.config.max_consecutive_failures {
                     if failures >= max {
+                        {
+                            let mut state = shared.state.lock().expect("uploader state");
+                            for _ in 0..batch_size { state.pending.pop_front(); }
+                        }
                         shared.dropped_batches.fetch_add(1, Ordering::SeqCst);
                         if let Some(handler) = &shared.config.on_batch_dropped {
                             handler(batch_size, failures);
@@ -299,7 +323,7 @@ fn release_waiters<T>(shared: &Arc<Shared<T>>, state: &mut UploaderState<T>) {
     }
 }
 
-fn ensure_draining<T: Send + Clone + 'static>(
+fn ensure_draining<T: serde::Serialize + Send + Clone + 'static>(
     shared: &Arc<Shared<T>>,
     state: &mut UploaderState<T>,
 ) {
@@ -309,7 +333,7 @@ fn ensure_draining<T: Send + Clone + 'static>(
     }
 }
 
-fn spawn_drain<T: Send + Clone + 'static>(shared: Arc<Shared<T>>) {
+fn spawn_drain<T: serde::Serialize + Send + Clone + 'static>(shared: Arc<Shared<T>>) {
     tokio::spawn(drain_loop(shared));
 }
 

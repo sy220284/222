@@ -199,6 +199,7 @@ type EpochMismatchHandler = Box<dyn Fn() + Send + Sync>;
 type AuthHeaders = Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>;
 
 struct CcrShared {
+    session_base_url: String,
     auth: AuthHeaders,
     on_epoch_mismatch: EpochMismatchHandler,
     consecutive_auth_failures: AtomicU64,
@@ -233,6 +234,7 @@ impl CcrClient {
     ) -> Self {
         let session_base_url = session_url.trim_end_matches('/').to_string();
         let shared = Arc::new(CcrShared {
+            session_base_url: session_base_url.clone(),
             auth,
             on_epoch_mismatch: on_epoch_mismatch.unwrap_or_else(|| Box::new(|| {})),
             consecutive_auth_failures: AtomicU64::new(0),
@@ -631,13 +633,7 @@ impl CcrShared {
         if self.closed.load(Ordering::SeqCst) {
             bail!("CCR client closed");
         }
-        let base = std::env::var("ATLAS_CCR_BASE_URL").unwrap_or_default();
-        if base.is_empty() {
-            // No session base configured: nothing to contact. Treat as a
-            // no-op success so protocol behaviour stays observable in tests.
-            return Ok(json!({}));
-        }
-        let url = format!("{}{}", base.trim_end_matches('/'), path);
+        let url = format!("{}{}", self.session_base_url, path);
         let mut request = match method {
             "POST" => reqwest::Client::new().post(&url),
             "PUT" => reqwest::Client::new().put(&url),

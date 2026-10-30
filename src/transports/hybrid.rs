@@ -12,7 +12,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use super::serial_batch_event_uploader::{UploaderConfig, UploaderError, UploaderSend};
-use super::ws::{parse_ws_url, MinimalWsClient, WebSocketTransport};
+use super::web_socket::{parse_ws_url, MinimalWsClient, WebSocketTransport};
 
 pub const BATCH_FLUSH_INTERVAL_MS: u64 = 100;
 /// Per-attempt POST timeout — bounds how long one stuck POST can block the
@@ -57,8 +57,9 @@ impl HybridOutbound {
     pub fn new(ws_url: &str, auth: HybridAuth) -> Result<Self> {
         let post_url = convert_ws_url_to_post_url(ws_url)?;
         let sender_auth = auth.clone();
+        let sender_url = post_url.clone();
         let send: UploaderSend<Value> = Arc::new(move |batch| {
-            let post_url = post_url.clone();
+            let post_url = sender_url.clone();
             let auth = sender_auth.clone();
             Box::pin(async move {
                 let client = reqwest::Client::new();
@@ -143,10 +144,10 @@ pub async fn run_inbound(
     let mut conn = MinimalWsClient::connect(&host, port, &path, &headers).await?;
     loop {
         match conn.read_message().await {
-            Ok(super::ws::WsIncoming::Text(text)) => {
+            Ok(super::web_socket::WsIncoming::Text(text)) => {
                 let _ = data_tx.send(text);
             }
-            Ok(super::ws::WsIncoming::Close(_)) | Err(_) => bail!("hybrid inbound closed"),
+            Ok(super::web_socket::WsIncoming::Close(_)) | Err(_) => bail!("hybrid inbound closed"),
             Ok(_) => {}
         }
     }
