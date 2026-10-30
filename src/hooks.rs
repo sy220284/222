@@ -860,6 +860,23 @@ impl Drop for HookTaskDropGuard {
     }
 }
 
+/// SDK interrupt and SessionEnd cancellation must also terminate child
+/// processes spawned by a PowerShell/Git Bash hook on Windows.
+#[cfg(windows)]
+struct HookCancelTreeGuard(Option<u32>);
+
+#[cfg(windows)]
+impl Drop for HookCancelTreeGuard {
+    fn drop(&mut self) {
+        if let Some(pid) = self.0 {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .stdin(Stdio::null()).stdout(Stdio::null())
+                .stderr(Stdio::null()).status();
+        }
+    }
+}
+
 async fn run_command(
     rule: &HookRule,
     payload: &Value,
@@ -971,6 +988,8 @@ async fn run_command(
         .with_context(|| format!("Starting hook '{}'", rule.command))?;
     #[cfg(unix)]
     let mut group_guard = HookProcessGroupGuard(child.id());
+    #[cfg(windows)]
+    let mut windows_tree_guard = HookCancelTreeGuard(child.id());
     let mut stdin = child.stdin.take().context("Hook stdin unavailable")?;
     let mut stdout = child.stdout.take().context("Hook stdout unavailable")?;
     let mut stderr = child.stderr.take().context("Hook stderr unavailable")?;
@@ -1031,6 +1050,8 @@ async fn run_command(
         let status = child.wait().await?;
         #[cfg(unix)]
         { group_guard.0 = None; }
+        #[cfg(windows)]
+        { windows_tree_guard.0 = None; }
         Ok::<_, anyhow::Error>((status, out, err))
     };
     let task = tokio::spawn(operation);
