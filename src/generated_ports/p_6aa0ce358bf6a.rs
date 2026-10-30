@@ -74,6 +74,11 @@ fn in_ranges(cp: u32, ranges: &[(u32, u32)]) -> bool {
     ranges.iter().any(|&(lo, hi)| cp >= lo && cp <= hi)
 }
 
+/// Reproduce upstream East Asian Width F/W classification.
+fn is_fullwidth_code_point(cp: u32) -> bool {
+    in_ranges(cp, FULLWIDTH_RANGES) || in_ranges(cp, WIDE_RANGES)
+}
+
 /// One ANSI token: an escape sequence plus its matching end code.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnsiCode {
@@ -320,7 +325,7 @@ pub fn tokenize(s: &str, end_char: u32) -> Vec<Token> {
         let mut value = String::new();
         value.push(c);
         let mut j = i;
-        while j + 1 < chars.len() && chars[j + 1] == '\u{200d}' {
+        while j + 2 < chars.len() && chars[j + 1] == '\u{200d}' {
             value.push('\u{200d}');
             value.push(chars[j + 2]);
             j += 2;

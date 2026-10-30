@@ -51,7 +51,7 @@ pub fn get_session_settings_cache() -> Option<SettingsWithErrors> {
 
 /// Replaces the session settings cache entry.
 pub fn set_session_settings_cache(value: Option<SettingsWithErrors>) {
-    *cache_slot().lock().unwrap().session = value;
+    cache_slot().lock().unwrap().session = value;
 }
 
 /// Returns a cached project-settings entry for the given source and path.

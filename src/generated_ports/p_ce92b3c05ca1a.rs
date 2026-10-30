@@ -191,13 +191,13 @@ mod tests {
         assert!(err.is_err());
 
         let content = fs::read_to_string(&path).unwrap();
-        let events: Vec<&str> = content
+        let events: Vec<String> = content
             .lines()
             .filter_map(|l| serde_json::from_str::<DiagnosticLogEntry>(l).ok())
-            .map(|e| e.event.as_str())
+            .map(|e| e.event)
             .collect();
-        assert!(events.contains(&"git_status_started"));
-        assert!(events.contains(&"git_status_completed"));
+        assert!(events.iter().any(|event| event == "git_status_started"));
+        assert!(events.iter().any(|event| event == "git_status_completed"));
         assert!(events.contains(&"boom_started"));
         assert!(events.contains(&"boom_failed"));
         std::env::remove_var("ATLAS_DIAGNOSTICS_FILE");

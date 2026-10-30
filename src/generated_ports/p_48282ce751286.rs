@@ -7,9 +7,8 @@
 //! progress, matching the original's `Promise.race` fairness.
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
 
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::stream::{SelectAll, StreamExt};
 use futures::Stream;
-use std::future::Future;
 use std::pin::Pin;
 
 /// Returns the last value emitted by the stream, or `None` when empty.
@@ -47,81 +46,52 @@ where
     futures::stream::iter(values)
 }
 
-/// Runs each stream from `streams` with at most `concurrency_cap` active at
-/// once, yielding values in completion order (original `all` generator with
-/// its concurrency cap). The `Option<S::Item>` yield mirrors the original's
-/// `value !== undefined` guard: streams yielding `None` produce no output.
-pub async fn all_bounded<S>(streams: Vec<S>, concurrency_cap: usize) -> Vec<S::Item>
+/// Each active generator remains live until exhausted, and finishing one starts
+/// the next queued generator. Values are emitted in readiness order rather
+/// than collecting only each source's first available item.
+enum MergeEvent<T> {
+    Value(Option<T>),
+    Finished,
+}
+
+fn source_events<S, T>(stream: S) -> Pin<Box<dyn Stream<Item = MergeEvent<T>> + Send>>
 where
-    S: Stream<Item = Option<S::Item>> + Send + Unpin + 'static,
-    S::Item: Send + 'static,
+    S: Stream<Item = Option<T>> + Send + 'static,
+    T: Send + 'static,
+{
+    Box::pin(
+        stream
+            .map(MergeEvent::Value)
+            .chain(futures::stream::once(async { MergeEvent::Finished })),
+    )
+}
+
+pub async fn all_bounded<S, T>(streams: Vec<S>, concurrency_cap: usize) -> Vec<T>
+where
+    S: Stream<Item = Option<T>> + Send + 'static,
+    T: Send + 'static,
 {
     let cap = concurrency_cap.max(1);
-    let mut iter = streams.into_iter();
-    let mut running: FuturesUnordered<
-        Pin<Box<dyn Future<Output = (usize, Option<S::Item>)> + Send>>,
-    > = FuturesUnordered::new();
-    let mut out = Vec::new();
-    let mut next_id = 0usize;
-    let mut finished_ids: Vec<usize> = Vec::new();
-
-    let mut spawn_next = |running: &mut FuturesUnordered<_>,
-                          finished_ids: &mut Vec<usize>|
-     -> bool {
-        if running.len() + finished_ids.len() >= cap {
-            // Replace finished slots first.
-            if let Some(slot) = finished_ids.pop() {
-                if let Some(s) = iter.next() {
-                    let mut s = s;
-                    running.push(Box::pin(async move {
-                        let mut last = None;
-                        while let Some(item) = s.next().await {
-                            if item.is_some() {
-                                last = Some(item);
-                                break;
-                            }
-                        }
-                        (slot, last)
-                    }));
-                    return true;
+    let mut queued = streams.into_iter();
+    let mut active: SelectAll<Pin<Box<dyn Stream<Item = MergeEvent<T>> + Send>>> =
+        SelectAll::new();
+    for _ in 0..cap {
+        let Some(stream) = queued.next() else { break };
+        active.push(source_events(stream));
+    }
+    let mut output = Vec::new();
+    while let Some(event) = active.next().await {
+        match event {
+            MergeEvent::Value(Some(value)) => output.push(value),
+            MergeEvent::Value(None) => {}
+            MergeEvent::Finished => {
+                if let Some(stream) = queued.next() {
+                    active.push(source_events(stream));
                 }
             }
-            return false;
-        }
-        if let Some(mut s) = iter.next() {
-            running.push(Box::pin(async move {
-                let mut last = None;
-                while let Some(item) = s.next().await {
-                    if item.is_some() {
-                        last = Some(item);
-                        break;
-                    }
-                }
-                (usize::MAX, last)
-            }));
-            return true;
-        }
-        false
-    };
-
-    // Start the initial batch.
-    for _ in 0..cap {
-        if !spawn_next(&mut running, &mut finished_ids) {
-            break;
         }
     }
-
-    while let Some((_id, value)) = running.next().await {
-        if let Some(v) = value {
-            out.push(v);
-        }
-        if !spawn_next(&mut running, &mut finished_ids) && running.is_empty() {
-            break;
-        }
-        let _ = next_id;
-        next_id += 1;
-    }
-    out
+    output
 }
 
 #[cfg(test)]
