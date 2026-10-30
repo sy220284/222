@@ -1,3 +1,10 @@
+## 2026-10-29：后台 Shell 标准输出与错误输出统一日志（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 源码 `source/src/utils/task/diskOutput.ts:69–74::getTaskOutputPath` 使用单个 `<taskId>.output`；`diskOutput.ts:89–120::DiskTaskOutput` 将任务输出依序排队、以一个 5GiB 容量预算持久化；`source/src/tasks/LocalShellTask/LocalShellTask.tsx:195–220` 将 Shell 命令输出交给统一任务输出对象。
+- **实际缺口**：Rust `src/background.rs::start_with_shell/output/output_delta` 分别写入 `.stdout`、`.stderr`，TaskOutput 固定先拼 stdout 再拼 stderr，用户看到的错误可能错排到正常输出之后；两个文件各有 5GiB 上限，无法按原版控制统一输出容量；Read/增量输出也只访问 stdout。
+- **实质修复**：创建独立的 `<taskId>.output`，两个子进程输出管道共享异步写入锁和同一容量预算，按接收块顺序写入统一日志；TaskOutput、`task_output_delta`、Read 的真实调用链使用统一日志，同时保留旧版 `.stdout/.stderr` 记录的读取路径及独立诊断文件。创建失败/启动失败清理新增文件，磁盘写入或刷盘失败保留错误状态；增加交错 stdout/stderr 的原版行为回归用例，未执行。源码 `4aa001f548cff0ea3abcc0c58c412879fed49804`，容量计算与断言修正 `ea67020f94de3bb212fc009264319b1815a203e8`，修改 `src/background.rs`，远端静态复查待验收。
+- **计数与差异**：与本轮跨会话日志修复 `67c4092a` 区分，保守计 **2/100 项用户可感知代码修复**，余 98；未运行 Cargo、测试或 CI，均已提交待行为验收。跨流精确事件时序、原版任务通知/驱逐、Agent/远程任务类型、取消/恢复仍待逐项核对；Issue #3 冻结 362 项保持开放，新增完整等价验收 0，完整100项先行核查和方案未形成。
+
 ## 2026-10-29：修复跨会话后台日志读取元数据定位（源码已提交、待验收）
 
 - **原版依据**：完整 2.1.88 源码 `source/src/utils/permissions/filesystem.ts:1688–1699::checkReadableInternalPath` 明确允许读取同项目其他会话临时目录中的任务日志；`source/src/utils/task/diskOutput.ts:72–74::getTaskOutputPath` 定义后台任务输出路径。
