@@ -262,18 +262,36 @@ pub fn save_agent(
     if replace && fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
         bail!("Cannot replace a symbolic link: {}", path.display());
     }
-    let mut options = OpenOptions::new();
-    options.write(true);
     if replace {
-        options.create(true).truncate(true);
+        // Keep the previous agent definition intact until the replacement
+        // has been fully written and synced. An interrupted editor must not
+        // leave a truncated system prompt or half-written frontmatter.
+        let staged = path.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
+        let result = (|| -> Result<()> {
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options.open(&staged)?;
+            file.write_all(format_as_markdown(agent).as_bytes())?;
+            file.sync_all()?;
+            fs::rename(&staged, &path)?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&staged);
+        }
+        result?;
     } else {
-        options.create_new(true);
+        let mut file = OpenOptions::new().write(true).create_new(true)
+            .open(&path)
+            .with_context(|| format!("Cannot create agent file {}", path.display()))?;
+        file.write_all(format_as_markdown(agent).as_bytes())?;
+        file.sync_data()?;
     }
-    let mut file = options
-        .open(&path)
-        .with_context(|| format!("Cannot write agent file {}", path.display()))?;
-    file.write_all(format_as_markdown(agent).as_bytes())?;
-    file.sync_data()?;
     Ok(path)
 }
 

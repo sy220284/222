@@ -1717,6 +1717,7 @@ async fn chat(
                 println!("/agents                  list project and user custom agent definitions");
                 println!("/agents create project|user NAME  create a custom agent interactively");
                 println!("/agents delete project|user NAME  delete a custom agent with confirmation");
+                println!("/agents edit project|user NAME    replace an existing agent after validation");
                 println!("/hooks                   list active hook events, matchers and timeouts");
                 println!("/find TEXT               search visible messages in this conversation");
                 println!("Offline: atlas-agent transcript-search SESSION_ID TEXT");
@@ -2137,6 +2138,83 @@ async fn chat(
             match outcome {
                 Ok(message) => println!("{message}"),
                 Err(error) => eprintln!("Agent creation failed: {error:#}"),
+            }
+            continue;
+        }
+        if input.starts_with("/agents edit ") {
+            let args = input.trim_start_matches("/agents edit ").trim();
+            let outcome = (|| -> Result<String> {
+                let parts = args.split_whitespace().collect::<Vec<_>>();
+                let [scope, name] = parts.as_slice() else {
+                    bail!("Usage: /agents edit project|user NAME");
+                };
+                let user = match *scope {
+                    "project" => false,
+                    "user" => true,
+                    _ => bail!("Agent location must be project or user"),
+                };
+                let path = agent_definition::new_file_path(
+                    agent.workspace_root(), user, name,
+                )?;
+                let metadata = std::fs::symlink_metadata(&path)
+                    .with_context(|| format!("Agent definition missing: {}", path.display()))?;
+                if !metadata.is_file() || metadata.file_type().is_symlink() {
+                    bail!("Agent definition must be a regular file, not a symbolic link");
+                }
+                let original = std::fs::read_to_string(&path)?;
+                println!("Current agent definition at {}:\n{}", path.display(), original);
+                println!("Enter replacement description and system prompt; invalid input leaves the existing file unchanged.");
+                print!("New description (when to use): ");
+                io::stdout().flush()?;
+                let mut description = String::new();
+                if io::stdin().read_line(&mut description)? == 0 {
+                    bail!("Agent edit cancelled: input closed");
+                }
+                println!("New system prompt (finish with a line containing .end):");
+                let mut lines = Vec::new();
+                loop {
+                    let mut line = String::new();
+                    if io::stdin().read_line(&mut line)? == 0 {
+                        bail!("Agent edit cancelled: prompt incomplete");
+                    }
+                    if line.trim_end_matches(['\r', '\n']) == ".end" {
+                        break;
+                    }
+                    lines.push(line.trim_end_matches(['\r', '\n']).to_owned());
+                }
+                print!("Allowed tools (comma-separated, blank for all): ");
+                io::stdout().flush()?;
+                let mut tools = String::new();
+                if io::stdin().read_line(&mut tools)? == 0 {
+                    bail!("Agent edit cancelled: input closed");
+                }
+                print!("Preferred model (blank to inherit): ");
+                io::stdout().flush()?;
+                let mut model = String::new();
+                if io::stdin().read_line(&mut model)? == 0 {
+                    bail!("Agent edit cancelled: input closed");
+                }
+                let tools = tools.split(',').map(str::trim)
+                    .filter(|tool| !tool.is_empty()).map(str::to_owned)
+                    .collect::<Vec<_>>();
+                let definition = agent_definition::AgentDefinition {
+                    agent_type: (*name).to_owned(),
+                    when_to_use: description.trim().to_owned(),
+                    system_prompt: lines.join("\n"),
+                    tools: (!tools.is_empty()).then_some(tools),
+                    color: None,
+                    model: (!model.trim().is_empty()).then(|| model.trim().to_owned()),
+                    memory: None,
+                    effort: None,
+                };
+                agent_definition::save_agent(
+                    &definition, agent.workspace_root(), user, true,
+                )?;
+                Ok(format!("Updated {} agent {}", scope, name))
+            })();
+            match outcome {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Agent edit failed: {error:#}"),
             }
             continue;
         }
