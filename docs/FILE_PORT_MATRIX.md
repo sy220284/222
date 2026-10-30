@@ -1,5 +1,8 @@
 # 2.1.88 → Rust 逐文件迁移台账（原始清单）
 
+> 2026-10-29 交互式 /agents create/edit/delete：原版 components/agents/agentFileUtils.ts、AgentsMenu.tsx、AgentEditor.tsx → Rust src/main.rs::chat + src/agent_definition.rs，已新增用户/项目范围自定义代理的交互创建、原子替换编辑、确认删除，保留未显示的 color/memory/effort 字段。提交 632cabc3、c59693b9、095251a2；**3项源码已提交、待行为验收**，原版完整图形向导及 YAML 全字段编辑仍未等价，不提升路径验收状态。
+
+
 > 2026-10-29 本轮任务工具目录/消息快照/复制代码块补齐：原版 src/tools.ts + utils/tasks.ts → src/agent.rs，移除重复展示的旧 task_* 模型工具目录（3121eed3）；原版 utils/fileHistory.ts → src/history.rs / src/tools.rs / src/agent.rs，按用户消息聚合编辑快照及 100 组保留（e9bd696a）；原版 commands/copy/copy.tsx → src/copy_response.rs，复制时识别 Markdown 缩进代码块（ac72fcbe）；交互式 /copy N 现在提供完整回答/代码块选择与本地跨会话“始终完整复制”偏好（1192af69465e8350986a0d1a9ea830687f7c0524）。四项均为**源码已提交、待行为验收**，未升级任何源路径为已验收。SDK rewind_files、Shell 历史、完整交互复制及全量等价仍有缺口。
 
 
