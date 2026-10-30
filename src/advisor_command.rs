@@ -122,7 +122,7 @@ mod tests {
             matches!(resolve(&config, &active, "  OPENAI "), AdvisorChange::Set { provider_id, .. } if provider_id == "openai")
         );
         assert!(
-            matches!(resolve(&config, &active, "gpt-4.1-mini"), AdvisorChange::Set { provider_id, .. } if provider_id == "openai")
+            matches!(resolve(&config, &active, "gpt-6.1-sol"), AdvisorChange::Set { provider_id, .. } if provider_id == "openai")
         );
         config.advisor_model = Some("openai".into());
         assert!(
@@ -135,13 +135,13 @@ mod tests {
             id: "duplicate".into(),
             kind: "openai-compatible".into(),
             base_url: "https://localhost".into(),
-            model: "gpt-4.1-mini".into(),
+            model: "gpt-6.1-sol".into(),
             api_key_env: None,
             stream: false,
             tuning: Default::default(),
         });
         assert!(matches!(
-            resolve(&config, &active, "gpt-4.1-mini"),
+            resolve(&config, &active, "gpt-6.1-sol"),
             AdvisorChange::Unchanged(_)
         ));
     }
