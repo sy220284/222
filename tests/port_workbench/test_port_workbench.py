@@ -196,6 +196,56 @@ class WorkbenchTests(unittest.TestCase):
         (self.repo/'docs/PORT_EVIDENCE.jsonl').write_text(json.dumps(item)+'\n')
         self.assertEqual(check_evidence(self.repo,read_matrix(self.repo),False)['new_verified'],1)
 
+    def test_integration_test_in_tests_directory_is_real_acceptance_evidence(self):
+        self.baseline()
+        self.write_matrix(status1='已验收')
+        integration = self.repo / 'tests'
+        integration.mkdir()
+        (integration / 'real_cli.rs').write_text(
+            '#[test] fn real_executable_roundtrip() { assert!(true); }'
+        )
+        item=dict(
+            path='src/cli.ts',
+            source_sha256=__import__('hashlib').sha256(
+                (self.src / 'src/cli.ts').read_bytes()
+            ).hexdigest(),
+            rust_entrypoints=['src/main.rs'],
+            test_names=['real_cli::real_executable_roundtrip'],
+            tested_commit='b' * 40,
+            failure_and_recovery_verified=True,
+            remaining_gaps=[],
+        )
+        evidence = self.repo / 'docs/PORT_EVIDENCE.jsonl'
+        evidence.write_text(json.dumps(item) + '\n')
+        result = check_evidence(self.repo, read_matrix(self.repo), False)
+        self.assertEqual(result['new_verified'], 1)
+        self.assertEqual(result['evidence_records'], 1)
+
+    def test_fictitious_integration_test_cannot_be_accepted(self):
+        self.baseline()
+        self.write_matrix(status1='已验收')
+        integration = self.repo / 'tests'
+        integration.mkdir()
+        (integration / 'real_cli.rs').write_text(
+            '#[test] fn real_executable_roundtrip() { assert!(true); }'
+        )
+        item=dict(
+            path='src/cli.ts',
+            source_sha256=__import__('hashlib').sha256(
+                (self.src / 'src/cli.ts').read_bytes()
+            ).hexdigest(),
+            rust_entrypoints=['src/main.rs'],
+            test_names=['real_cli::invented_test_name'],
+            tested_commit='b' * 40,
+            failure_and_recovery_verified=True,
+            remaining_gaps=[],
+        )
+        (self.repo / 'docs/PORT_EVIDENCE.jsonl').write_text(
+            json.dumps(item) + '\n'
+        )
+        with self.assertRaisesRegex(AuditError, 'Rust 测试函数不存在'):
+            check_evidence(self.repo, read_matrix(self.repo), False)
+
     def test_exclusion_cannot_be_added_without_approval(self):
         self.baseline()
         self.write_matrix(status1='按用户要求删除')

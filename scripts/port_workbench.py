@@ -394,7 +394,16 @@ def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
         for entry in item['rust_entrypoints']:
             if not (repo / entry).is_file():
                 raise AuditError(f'{path}: Rust 生产入口不存在: {entry}')
-        rust_sources = [p.read_text(encoding='utf-8') for p in (repo/'src').rglob('*.rs')]
+        # Rust unit tests reside in src/, while end-to-end tests using the
+        # real executable live in tests/. Both must be discoverable; a passed
+        # integration test is stronger evidence than a source-only assertion.
+        # Ignore docstrings and file extensions other than .rs.
+        rust_sources = [
+            source.read_text(encoding='utf-8')
+            for directory in (repo / 'src', repo / 'tests')
+            if directory.is_dir()
+            for source in directory.rglob('*.rs')
+        ]
         for test in item['test_names']:
             token = test.split('::')[-1]
             if not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', token):
