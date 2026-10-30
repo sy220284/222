@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -235,6 +235,25 @@ pub fn new_file_path(workspace: &Path, user: bool, agent_type: &str) -> Result<P
         }
     }
     Ok(folder.join(format!("{agent_type}.md")))
+}
+
+/// Open the selected definition without following a symlink swapped in
+/// between the UI's metadata check and the actual file read.
+pub fn read_agent_file(path: &Path) -> Result<String> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let mut file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        bail!("Agent definition is not a regular file");
+    }
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+    Ok(content)
 }
 
 pub fn existing_agent_types(dir: &Path) -> Result<HashSet<String>> {
