@@ -156,24 +156,71 @@ fn installed_origin_id(target: &Path) -> Result<Option<String>> {
 }
 
 
+/// Rebase a link to the corresponding staged file without dereferencing
+/// the plugin source. Both paths share the same staging root.
+fn relative_plugin_link(from: &Path, to: &Path) -> PathBuf {
+    let from_parts = from.components().collect::<Vec<_>>();
+    let to_parts = to.components().collect::<Vec<_>>();
+    let mut common = 0;
+    while common < from_parts.len() && common < to_parts.len()
+        && from_parts[common] == to_parts[common] {
+        common += 1;
+    }
+    let mut result = PathBuf::new();
+    for _ in common..from_parts.len() {
+        result.push("..");
+    }
+    for part in &to_parts[common..] {
+        result.push(part.as_os_str());
+    }
+    if result.as_os_str().is_empty() {
+        result.push(".");
+    }
+    result
+}
+
 fn copy_local_tree(source: &Path, stage: &Path) -> Result<()> {
-    // pluginLoader.ts::installFromLocal removes the source repository's .git
-    // metadata. Do not copy private remotes, hooks or history into the
-    // installed plugin in the first place.
+    // pluginLoader.ts::copyDir preserves symlinks: internal links are rebased
+    // to the installed copy, external links become absolute, and broken links
+    // retain their original text. WalkDir never follows directory symlinks.
+    // installFromLocal excludes the source .git directory.
     for entry in WalkDir::new(source).follow_links(false).into_iter()
         .filter_entry(|entry| entry.depth() != 1
             || entry.file_name() != std::ffi::OsStr::new(".git"))
     {
         let entry = entry?;
-        if entry.file_type().is_symlink() {
-            bail!("Cannot install a plugin containing symbolic links");
-        }
         let relative = entry.path().strip_prefix(source)?;
         let target = stage.join(relative);
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target)?;
         } else if entry.file_type().is_file() {
             fs::copy(entry.path(), target)?;
+        } else if entry.file_type().is_symlink() {
+            let raw_link = fs::read_link(entry.path())?;
+            let resolved = entry.path().canonicalize().ok();
+            let link = match resolved.as_ref() {
+                Some(real) if real.starts_with(source) => {
+                    let staged_target = stage.join(real.strip_prefix(source)?);
+                    relative_plugin_link(
+                        target.parent().context("Plugin link has no parent")?,
+                        &staged_target,
+                    )
+                }
+                Some(real) => real.to_owned(),
+                None => raw_link,
+            };
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&link, &target)?;
+            #[cfg(windows)]
+            {
+                if resolved.as_ref().is_some_and(|path| path.is_dir()) {
+                    std::os::windows::fs::symlink_dir(&link, &target)?;
+                } else {
+                    std::os::windows::fs::symlink_file(&link, &target)?;
+                }
+            }
+            #[cfg(not(any(unix, windows)))]
+            bail!("Plugin symbolic links are unsupported on this platform");
         }
     }
     Ok(())
