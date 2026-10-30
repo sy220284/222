@@ -2280,13 +2280,36 @@ impl Agent {
     /// fileHistoryRewind(user_message_id) replays the target and subsequent
     /// edits backwards, without touching the conversation transcript. Keep
     /// the original message UUID and all path approvals in the active Agent.
+    /// Queued SDK messages may be merged into one model call. Every
+    /// acknowledged input UUID must resolve to the same file snapshot.
+    pub fn register_sdk_message_aliases(
+        &mut self,
+        primary: uuid::Uuid,
+        aliases: &[uuid::Uuid],
+    ) -> Result<()> {
+        if !self.session.history_message_ids.contains(&primary) {
+            bail!("Cannot register checkpoint aliases for an unsaved message");
+        }
+        let mut candidate = self.session.clone();
+        for id in aliases {
+            if *id != primary {
+                candidate.history_message_aliases.insert(*id, primary);
+            }
+        }
+        candidate.save(&self.root)?;
+        self.session = candidate;
+        Ok(())
+    }
+
     pub fn sdk_rewind_files(
         &self,
         user_message_id: &str,
         dry_run: bool,
     ) -> Result<serde_json::Value> {
-        let id = uuid::Uuid::parse_str(user_message_id)
+        let requested_id = uuid::Uuid::parse_str(user_message_id)
             .context("rewind_files requires a user message UUID")?;
+        let id = self.session.history_message_aliases
+            .get(&requested_id).copied().unwrap_or(requested_id);
         let start = self.session.history_message_ids.iter()
             .position(|saved| *saved == id)
             .context("User message was not found in session file history")?;
@@ -2308,7 +2331,7 @@ impl Agent {
             "canRewind": true,
             "dryRun": dry_run,
             "files": result,
-            "userMessageId": id,
+            "userMessageId": requested_id,
         }))
     }
 
