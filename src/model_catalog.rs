@@ -351,7 +351,20 @@ async fn interactive_setup(config: &mut Config, requested: Option<&str>) -> Resu
             persist_key(&brand, key)?;
         }
     }
-    profile_mut(config, &brand)?.model = model.id.clone();
+    {
+        let selected = profile_mut(config, &brand)?;
+        selected.model = model.id.clone();
+        // The live provider catalog owns the actual advertised context size.
+        // Selecting a different model replaces stale automatic context metadata.
+        selected.tuning.context_window = model.context_window
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| *n >= 1_024);
+        if selected.tuning.max_output_tokens
+            .zip(selected.tuning.context_window)
+            .is_some_and(|(output, window)| output > window) {
+            selected.tuning.max_output_tokens = None;
+        }
+    }
     config.default_provider = brand.clone();
     config.validate()?;
     config.save()?;
