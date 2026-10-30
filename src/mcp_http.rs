@@ -24,6 +24,7 @@ pub struct HttpClient {
     pub instructions: Option<String>,
     pub tools_changed: bool,
     pub resource_updates: Vec<Value>,
+    resource_update_bytes: usize,
     root: PathBuf,
     last_event_id: Option<HeaderValue>,
 }
@@ -75,6 +76,26 @@ async fn load_dynamic_headers(
 // unbounded in-memory buffering of JSON or an unterminated SSE frame.
 const MAX_MCP_CONTROL_BYTES: usize = 2 * 1024 * 1024;
 const MAX_MCP_TOOL_BYTES: usize = 128 * 1024 * 1024;
+const MAX_MCP_PENDING_RESOURCE_EVENTS: usize = 256;
+const MAX_MCP_PENDING_RESOURCE_BYTES: usize = 8 * 1024 * 1024;
+
+fn append_resource_update(
+    queue: &mut Vec<Value>,
+    queued_bytes: &mut usize,
+    event: Value,
+) -> Result<()> {
+    let size = serde_json::to_vec(&event)?.len();
+    let next_bytes = queued_bytes
+        .checked_add(size)
+        .context("MCP resource notification byte count overflow")?;
+    if queue.len() >= MAX_MCP_PENDING_RESOURCE_EVENTS || next_bytes > MAX_MCP_PENDING_RESOURCE_BYTES
+    {
+        bail!("MCP resource notification backlog full; drain pending updates before retrying");
+    }
+    queue.push(event);
+    *queued_bytes = next_bytes;
+    Ok(())
+}
 
 async fn bounded_json_response(mut response: reqwest::Response, limit: usize) -> Result<Value> {
     if response
@@ -98,6 +119,17 @@ async fn bounded_json_response(mut response: reqwest::Response, limit: usize) ->
 }
 
 impl HttpClient {
+    pub fn drain_resource_updates(&mut self) -> Vec<Value> {
+        self.resource_update_bytes = 0;
+        std::mem::take(&mut self.resource_updates)
+    }
+    fn queue_resource_update(&mut self, event: Value) -> Result<()> {
+        append_resource_update(
+            &mut self.resource_updates,
+            &mut self.resource_update_bytes,
+            event,
+        )
+    }
     pub async fn connect(config: &McpServerConfig) -> Result<Self> {
         let root = std::env::current_dir().context("MCP workspace directory unavailable")?;
         Self::connect_with_root(config, &root).await
@@ -188,6 +220,7 @@ impl HttpClient {
             instructions: None,
             tools_changed: false,
             resource_updates: Vec::new(),
+            resource_update_bytes: 0,
             root: root.to_path_buf(),
             last_event_id: None,
         };
@@ -351,7 +384,7 @@ impl HttpClient {
                                     | "notifications/resources/list_changed"
                             )
                         ) {
-                            self.resource_updates.push(event.clone());
+                            self.queue_resource_update(event.clone())?;
                         }
                         if event.get("id") == Some(id) {
                             return Ok(Some(event));
@@ -458,7 +491,7 @@ impl HttpClient {
                                 "notifications/resources/updated"
                                 | "notifications/resources/list_changed",
                             ) => {
-                                self.resource_updates.push(event);
+                                self.queue_resource_update(event)?;
                                 count += 1;
                             }
                             _ => {}
@@ -554,6 +587,29 @@ fn parse_sse(text: &str) -> Result<Vec<Value>> {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    #[test]
+    fn resource_notifications_have_count_and_byte_backpressure() {
+        let mut queue = Vec::new();
+        let mut queued_bytes = 0;
+        for _ in 0..MAX_MCP_PENDING_RESOURCE_EVENTS {
+            append_resource_update(&mut queue, &mut queued_bytes, json!({"method":"updated"}))
+                .unwrap();
+        }
+        assert!(append_resource_update(&mut queue, &mut queued_bytes, json!("next")).is_err());
+        assert_eq!(queue.len(), MAX_MCP_PENDING_RESOURCE_EVENTS);
+        queue.clear();
+        queued_bytes = 0;
+        assert!(append_resource_update(
+            &mut queue,
+            &mut queued_bytes,
+            json!("x".repeat(MAX_MCP_PENDING_RESOURCE_BYTES)),
+        )
+        .is_err());
+        assert!(queue.is_empty());
+        assert_eq!(queued_bytes, 0);
+        append_resource_update(&mut queue, &mut queued_bytes, json!({"method":"updated"})).unwrap();
+        assert_eq!(queue.len(), 1);
+    }
     #[tokio::test]
     async fn oversized_json_tool_result_is_bounded_before_body_read() {
         use tokio::{
