@@ -857,6 +857,7 @@ impl BackgroundTasks {
         }
         Ok(json!({"task_id":id,"task_type":"local_bash",
             "command":record.command,
+            "description":record.description,
             "message":format!("Successfully stopped task: {id} ({})", record.command)
         })
         .to_string())
