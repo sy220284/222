@@ -195,7 +195,7 @@ pub fn render_source_view(props: &Value) -> VNode {
     }
     let content = notification_content(&prepared);
     node(
-        "SentryErrorBoundary",
+        "ErrorBoundary",
         BTreeMap::new(),
         vec![node(
             "Box",
@@ -234,9 +234,10 @@ mod parity_tests {
         let mut props = json!({"ideStatus":"connected","ideSelection":{"filePath":"hello.rs"},
             "autoUpdaterResult":{"status":"success"},"isAutoUpdating":false,"isNarrow":true});
         let view = render_source_view(&props);
-        let VNode::Element { children, .. } = view else {
+        let VNode::Element { tag, children, .. } = view else {
             panic!("error boundary")
         };
+        assert_eq!(tag, "ErrorBoundary");
         assert!(!children[0]
             .text_content()
             .contains("Model provider authentication failed"));

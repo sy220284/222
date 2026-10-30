@@ -2897,7 +2897,11 @@ impl Agent {
             writeln!(report, "Session tag: #{tag}")?;
         }
         writeln!(report, "Session ID: {}", self.session.id)?;
-        writeln!(report, "cwd: {}", self.root.display())?;
+        writeln!(
+            report,
+            "cwd: {}",
+            crate::path_support::display_path_for_user(&self.root)
+        )?;
         writeln!(
             report,
             "Provider: {} ({})",
@@ -2919,7 +2923,11 @@ impl Agent {
         }
         writeln!(report, "Configured workspace directories:")?;
         for root in self.working_directories() {
-            writeln!(report, "  {}", root.display())?;
+            writeln!(
+                report,
+                "  {}",
+                crate::path_support::display_path_for_user(&root)
+            )?;
         }
         let statuses = self.mcp_statuses()?;
         writeln!(report, "MCP servers: {}", statuses.len())?;

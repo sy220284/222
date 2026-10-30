@@ -42,7 +42,10 @@ mod parity_tests {
         );
         // The original renderPlaceholder highlights the first letter using ANSI.
         // Match the rendered terminal output rather than searching across SGR bytes.
-        assert_eq!(normal.text_content(), "\u{1b}[7ms\u{1b}[27m\u{1b}[2mpeak\u{1b}[22m");
+        assert_eq!(
+            normal.text_content(),
+            "\u{1b}[7ms\u{1b}[27m\u{1b}[2mpeak\u{1b}[22m"
+        );
         let voice = render_source_view(
             &json!({"inputState":{"renderedValue":""},"value":"","placeholder":"speak",
             "terminalFocus":true,"showCursor":true,"focus":true,"voiceState":"recording"}),
