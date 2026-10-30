@@ -2185,7 +2185,8 @@ impl Agent {
         for event in events {
             self.emit(event.clone());
             let stdout = event["stdout"].as_str().unwrap_or("").lines()
-                .filter(|line| !line.contains("\"async\":true"))
+                .filter(|line| serde_json::from_str::<serde_json::Value>(line.trim())
+                    .ok().is_none_or(|value| value.get("async") != Some(&json!(true))))
                 .collect::<Vec<_>>().join("\n");
             let body = if event["outcome"] == "success" {
                 stdout.trim().to_owned()
