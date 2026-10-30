@@ -174,7 +174,9 @@ pub fn code_block_choices(messages: &[Message], age: usize) -> Result<Vec<(Strin
 
 fn preference_path() -> Result<PathBuf> {
     let config = crate::config::Config::path()?;
-    let parent = config.parent().context("Copy preferences need a config directory")?;
+    let parent = config.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
     Ok(parent.join("copy-preferences.json"))
 }
 /// A terminal copy picker is optional, but "always copy full response" must
