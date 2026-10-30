@@ -142,7 +142,7 @@ macro_rules! print_json {
 }
 
 use agent::Agent;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use config::{canonical_workspace, Config};
 use plugins::PluginSet;

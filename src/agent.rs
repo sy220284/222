@@ -2185,7 +2185,8 @@ impl Agent {
         for event in events {
             self.emit(event.clone());
             let stdout = event["stdout"].as_str().unwrap_or("").lines()
-                .filter(|line| !line.contains("\"async\":true"))
+                .filter(|line| serde_json::from_str::<serde_json::Value>(line.trim())
+                    .ok().is_none_or(|value| value.get("async") != Some(&json!(true))))
                 .collect::<Vec<_>>().join("\n");
             let body = if event["outcome"] == "success" {
                 stdout.trim().to_owned()
@@ -4730,6 +4731,7 @@ mod tests {
             additional_dirs: Vec::new(),
             approval: Approval::ReadOnly,
             interactive: false,
+            file_checkpointing_enabled: false,
             max_steps: 5,
             session,
             session_start_source: "startup",
@@ -4766,6 +4768,12 @@ mod tests {
             last_context_usage: None,
             last_side_question_request: None,
             last_model_usage: None,
+            sdk_system_prompt: None,
+            sdk_append_system_prompt: None,
+            sdk_thinking_budget: None,
+            sdk_agent_definitions: std::collections::BTreeMap::new(),
+            sdk_allowed_tools: None,
+            sdk_disallowed_tools: std::collections::HashSet::new(),
         };
         agent.compact_history().await.unwrap();
         let restored = Session::load(dir.path(), &id).unwrap();
