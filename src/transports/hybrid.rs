@@ -343,21 +343,36 @@ mod tests {
                 request.extend_from_slice(&chunk[..n]);
             }
             let headers = String::from_utf8(request).unwrap();
-            assert!(headers.lines().any(|line| line == "Authorization: Bearer refreshed"));
+            assert!(headers
+                .lines()
+                .any(|line| line == "Authorization: Bearer refreshed"));
         });
         let (tx, _rx) = mpsc::unbounded_channel();
-        let transport = Arc::new(HybridTransport::new(
-            format!("ws://127.0.0.1:{port}/ws/worker"),
-            Vec::new(), None, tx,
-            Arc::new(|| vec![("Authorization".into(), "Bearer refreshed".into())]),
-        ).unwrap());
+        let transport = Arc::new(
+            HybridTransport::new(
+                format!("ws://127.0.0.1:{port}/ws/worker"),
+                Vec::new(),
+                None,
+                tx,
+                Arc::new(|| vec![("Authorization".into(), "Bearer refreshed".into())]),
+            )
+            .unwrap(),
+        );
         let runner = {
             let transport = transport.clone();
-            tokio::spawn(async move { transport.reads.run().await; })
+            tokio::spawn(async move {
+                transport.reads.run().await;
+            })
         };
-        tokio::time::timeout(Duration::from_secs(3), server).await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(3), server)
+            .await
+            .unwrap()
+            .unwrap();
         transport.reads.close();
-        tokio::time::timeout(Duration::from_secs(3), runner).await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(3), runner)
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[tokio::test]

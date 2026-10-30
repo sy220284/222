@@ -579,8 +579,13 @@ impl WebSocketTransport {
                 headers.push(pair);
             }
         }
-        *self.shared.last_authorization.lock().expect("ws authorization") = headers
-            .iter().rev()
+        *self
+            .shared
+            .last_authorization
+            .lock()
+            .expect("ws authorization") = headers
+            .iter()
+            .rev()
             .find(|(name, _)| name.eq_ignore_ascii_case("Authorization"))
             .map(|(_, value)| value.clone());
         let mut conn = match MinimalWsClient::connect(
@@ -710,10 +715,15 @@ impl WebSocketTransport {
     fn handle_connection_error(&self, close_code: Option<u16>) -> ConnectionOutcome {
         if close_code == Some(4003) {
             if let Some(refresh) = &self.auth {
-                let fresh_authorization = refresh().into_iter()
+                let fresh_authorization = refresh()
+                    .into_iter()
                     .find(|(name, _)| name.eq_ignore_ascii_case("Authorization"))
                     .map(|(_, value)| value);
-                let mut current = self.shared.last_authorization.lock().expect("ws authorization");
+                let mut current = self
+                    .shared
+                    .last_authorization
+                    .lock()
+                    .expect("ws authorization");
                 if fresh_authorization.is_some() && fresh_authorization != *current {
                     *current = fresh_authorization;
                     return ConnectionOutcome::Reconnect;
@@ -1121,19 +1131,32 @@ mod tests {
     fn unauthorized_close_reconnects_only_for_a_new_authorization_token() {
         let token = Arc::new(Mutex::new(String::from("Bearer old")));
         let captured = token.clone();
-        let refresh: WsAuthHeaders = Arc::new(move || vec![
-            ("Authorization".to_owned(), captured.lock().unwrap().clone())
-        ]);
+        let refresh: WsAuthHeaders =
+            Arc::new(move || vec![("Authorization".to_owned(), captured.lock().unwrap().clone())]);
         let (data_tx, _data_rx) = mpsc::unbounded_channel();
         let client = WebSocketTransport::new(
-            "ws://127.0.0.1:1/x".into(), Vec::new(), None, data_tx, true, Some(refresh),
+            "ws://127.0.0.1:1/x".into(),
+            Vec::new(),
+            None,
+            data_tx,
+            true,
+            Some(refresh),
         );
         *client.shared.last_authorization.lock().unwrap() = Some("Bearer old".into());
-        assert_eq!(client.handle_connection_error(Some(4003)), ConnectionOutcome::Terminal);
+        assert_eq!(
+            client.handle_connection_error(Some(4003)),
+            ConnectionOutcome::Terminal
+        );
         *token.lock().unwrap() = String::from("Bearer refreshed");
-        assert_eq!(client.handle_connection_error(Some(4003)), ConnectionOutcome::Reconnect);
+        assert_eq!(
+            client.handle_connection_error(Some(4003)),
+            ConnectionOutcome::Reconnect
+        );
         assert_eq!(client.handle_connection_error(Some(4003)), ConnectionOutcome::Terminal);
-        assert_eq!(client.handle_connection_error(Some(4001)), ConnectionOutcome::Terminal);
+        assert_eq!(
+            client.handle_connection_error(Some(4001)),
+            ConnectionOutcome::Terminal
+        );
     }
 
     #[tokio::test]
