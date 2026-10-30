@@ -820,6 +820,12 @@ impl BackgroundTasks {
     }
 
     pub async fn stop(&self, id: &str) -> Result<String> {
+        self.stop_with_description(id).await.map(|(result, _)| result)
+    }
+
+    /// The SDK needs the original task description for its independent
+    /// termination event; the public TaskStop tool retains its exact schema.
+    pub async fn stop_with_description(&self, id: &str) -> Result<(String, String)> {
         let task = match self.entries.lock().unwrap().get(id).cloned() {
             Some(task) => task,
             None => match self.load(id) {
@@ -855,12 +861,11 @@ impl BackgroundTasks {
         if final_status != "killed" {
             bail!("Task {id} finished before stop took effect (status: {final_status})");
         }
-        Ok(json!({"task_id":id,"task_type":"local_bash",
+        Ok((json!({"task_id":id,"task_type":"local_bash",
             "command":record.command,
-            "description":record.description,
             "message":format!("Successfully stopped task: {id} ({})", record.command)
         })
-        .to_string())
+        .to_string(), record.description))
     }
 
     pub async fn stop_all(&self) {
