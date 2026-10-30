@@ -10,7 +10,9 @@ pub fn get_semver_part(version: &str) -> String {
     let nums: Vec<u64> = version
         .split(|c: char| c == '.' || c == '-' || c == '+')
         .map(|part| {
-            part.chars()
+            // Loose parsing tolerates a leading "v" prefix before digits.
+            part.trim_start_matches(|c: char| !c.is_ascii_digit())
+                .chars()
                 .take_while(char::is_ascii_digit)
                 .collect::<String>()
                 .parse()
