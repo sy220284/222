@@ -324,6 +324,12 @@ impl ModelProvider for Gemini {
             .await
             .context("Gemini request failed")?;
         let value: Value = read_model_response(response).await?;
+        // Gemini may reject the prompt before producing any candidates.
+        // Preserve the explicit block reason instead of a misleading
+        // "no candidates" error, and never enter the Agent tool loop.
+        if let Some(reason) = value.pointer("/promptFeedback/blockReason").and_then(Value::as_str) {
+            bail!("Model blocked the request: {reason}");
+        }
         let candidate = value
             .get("candidates")
             .and_then(Value::as_array)
