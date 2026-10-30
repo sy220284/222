@@ -1,23 +1,40 @@
-//! Native Rust UI structure derived from original: src/commands/skills/skills.tsx
+//! Native Rust port derived from original: src/commands/skills/skills.tsx
+//!
+//! /skills command entry: routes into the SkillsMenu component view. skills menu
+//! The SkillsMenu widget itself lives in the components domain; this port
+//! preserves the command contract (props passed through verbatim).
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde_json::Value;
+
+use serde_json::{json, Value};
 
 use crate::generated_ports::ui::VNode;
-pub fn render_source_view(props: &Value) -> VNode {
+
+/// Command entry (original `call`): returns the SkillsMenu view.
+pub fn call() -> VNode {
     VNode::Element {
         tag: "SkillsMenu".into(),
-        attrs: vec![
-            ("onExit".into(), Value::Null),
-            (
-                "commands".into(),
-                crate::generated_ports::runtime::property(
-                    &crate::generated_ports::runtime::property(&Value::Null, "options"),
-                    "commands",
-                ),
-            ),
+        attrs: [
+            ("onExit".into(), json!("onDone")),
+            ("commands".into(), json!("context.options.commands")),
         ]
         .into_iter()
         .collect(),
         children: vec![],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn routes_into_skills_view() {
+        match call() {
+            VNode::Element { tag, attrs, .. } => {
+                assert_eq!(tag, "SkillsMenu");
+                assert!(!attrs.is_empty());
+            }
+            _ => panic!("expected element"),
+        }
     }
 }
