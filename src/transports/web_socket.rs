@@ -461,10 +461,23 @@ impl WebSocketTransport {
         if self.is_closed() || self.state() == WsState::Closed {
             bail!("WebSocket transport is closed");
         }
+        self.record_for_replay(&message);
+        // Original write() saves UUID-bearing events when offline; transient
+        // messages have no replay key and are skipped while disconnected.
+        if self.state() != WsState::Connected {
+            return Ok(());
+        }
         self.outbound_tx
             .send(message)
             .await
             .map_err(|_| anyhow!("WebSocket outbound queue is closed"))
+    }
+
+    fn record_for_replay(&self, message: &Value) {
+        if let Some(uuid) = message.get("uuid").and_then(Value::as_str) {
+            self.shared.buffer.lock().expect("ws buffer").add(message.clone());
+            self.shared.state.lock().expect("ws state").last_sent_id = Some(uuid.to_owned());
+        }
     }
 
     pub fn state(&self) -> WsState {
@@ -631,7 +644,7 @@ impl WebSocketTransport {
             tokio::select! {
                 outbound_message = outbound.recv() => {
                     if let Some(message) = outbound_message {
-                        if self.write(&mut conn, &message).await.is_err() {
+                        if conn.send_text(&format!("{}\n", crate::ndjson::stringify_value(&message))).await.is_err() {
                             return ConnectionOutcome::Reconnect;
                         }
                     }
@@ -739,22 +752,8 @@ impl WebSocketTransport {
     /// Buffer one message and write it as a text frame. Messages keep their
     /// `uuid` for replay bookkeeping (`lastSentId`).
     pub async fn write(&self, connection: &mut MinimalWsClient, message: &Value) -> Result<()> {
-        let uuid = message
-            .get("uuid")
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        if let Some(uuid) = uuid {
-            // The original WebSocket transport replays only messages with a UUID.
-            self.shared
-                .buffer
-                .lock()
-                .expect("ws buffer")
-                .add(message.clone());
-            self.shared.state.lock().expect("ws state").last_sent_id = Some(uuid);
-        }
-        connection
-            .send_text(&format!("{}\n", crate::ndjson::stringify_value(message)))
-            .await
+        self.record_for_replay(message);
+        connection.send_text(&format!("{}\n", crate::ndjson::stringify_value(message))).await
     }
 
     pub fn close(&self) {
@@ -1176,6 +1175,19 @@ mod tests {
         tokio::time::timeout(Duration::from_millis(500), runner)
             .await.expect("close must cancel reconnect backoff").unwrap();
         assert_eq!(transport.state(), WsState::Closed);
+    }
+
+    #[tokio::test]
+    async fn offline_messages_follow_uuid_only_replay_contract() {
+        let (tx, _rx) = mpsc::unbounded_channel();
+        let transport = WebSocketTransport::new(
+            "ws://127.0.0.1:1/x".into(), Vec::new(), None, tx, false, None,
+        );
+        transport.queue_message(json!({"type":"transient"})).await.unwrap();
+        assert_eq!(transport.buffered_count(), 0);
+        transport.queue_message(json!({"type":"result","uuid":"persistent"})).await.unwrap();
+        assert_eq!(transport.buffered_count(), 1);
+        assert_eq!(transport.shared.buffer.lock().unwrap().to_vec()[0]["uuid"], "persistent");
     }
 
     #[test]
