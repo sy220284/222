@@ -647,7 +647,10 @@ mod tests {
         let file = parse_session_identifier(r"C:\Users\User\chat.JSONL").unwrap();
         assert!(file.is_jsonl_file);
         assert!(!file.is_url);
-        assert_eq!(file.jsonl_file.as_deref(), Some(r"C:\Users\User\chat.JSONL"));
+        assert_eq!(
+            file.jsonl_file.as_deref(),
+            Some(r"C:\Users\User\chat.JSONL")
+        );
         assert!(file.ingress_url.is_none());
         assert!(Uuid::parse_str(&file.session_id).is_ok());
 
@@ -659,10 +662,9 @@ mod tests {
         assert!(uuid.jsonl_file.is_none());
         assert!(uuid.ingress_url.is_none());
 
-        let remote = parse_session_identifier(
-            "HTTPS://EXAMPLE.COM/v1/session_ingress/session?id=1#hash"
-        )
-        .unwrap();
+        let remote =
+            parse_session_identifier("HTTPS://EXAMPLE.COM/v1/session_ingress/session?id=1#hash")
+                .unwrap();
         assert!(remote.is_url);
         assert!(!remote.is_jsonl_file);
         assert_eq!(
