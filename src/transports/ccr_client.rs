@@ -199,6 +199,7 @@ type EpochMismatchHandler = Box<dyn Fn() + Send + Sync>;
 type AuthHeaders = Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>;
 
 struct CcrShared {
+    http: reqwest::Client,
     session_base_url: String,
     auth: AuthHeaders,
     on_epoch_mismatch: EpochMismatchHandler,
@@ -236,6 +237,7 @@ impl CcrClient {
     ) -> Self {
         let session_base_url = session_url.trim_end_matches('/').to_string();
         let shared = Arc::new(CcrShared {
+            http: reqwest::Client::new(),
             session_base_url: session_base_url.clone(),
             auth,
             on_epoch_mismatch: on_epoch_mismatch.unwrap_or_else(|| Box::new(|| {})),
@@ -752,9 +754,9 @@ impl CcrShared {
         }
         let url = format!("{}{}", self.session_base_url, path);
         let mut request = match method {
-            "POST" => reqwest::Client::new().post(&url),
-            "PUT" => reqwest::Client::new().put(&url),
-            _ => reqwest::Client::new().get(&url),
+            "POST" => self.http.post(&url),
+            "PUT" => self.http.put(&url),
+            _ => self.http.get(&url),
         };
         for (name, value) in (self.auth)() {
             request = request.header(name, value);
