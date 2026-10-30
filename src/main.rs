@@ -129,6 +129,8 @@ mod tools;
 mod transcript_search;
 mod unicode_sanitization;
 mod version;
+#[cfg(test)]
+mod test_http;
 mod webfetch;
 mod websearch;
 mod workspace_dirs;
