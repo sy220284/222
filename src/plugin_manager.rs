@@ -133,6 +133,28 @@ fn manifest_name(root: &Path) -> Result<String> {
     crate::plugins::validate_local(root)
 }
 
+fn installed_origin_id(target: &Path) -> Result<Option<String>> {
+    let origin_file = target.join(".atlas-plugin-origin.json");
+    match fs::symlink_metadata(&origin_file) {
+        Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
+            let value: Value = serde_json::from_slice(&fs::read(&origin_file)?)
+                .with_context(|| format!("Invalid plugin marketplace identity at {}", origin_file.display()))?;
+            let id = value.get("pluginId").and_then(Value::as_str)
+                .context("Installed plugin has invalid marketplace identity")?;
+            let (name, marketplace) = id.split_once('@')
+                .context("Installed plugin marketplace identity must contain @")?;
+            if !valid_name(name) || !valid_name(marketplace) {
+                bail!("Installed plugin has invalid marketplace identity '{id}'");
+            }
+            Ok(Some(id.to_owned()))
+        }
+        Ok(_) => bail!("Installed plugin marketplace identity is redirected or invalid"),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+
 fn copy_local_tree(source: &Path, stage: &Path) -> Result<()> {
     // pluginLoader.ts::installFromLocal removes the source repository's .git
     // metadata. Do not copy private remotes, hooks or history into the
@@ -229,17 +251,7 @@ fn replace_local_with_origin(
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         bail!("Installed plugin '{name}' is redirected or invalid");
     }
-    let origin_file = target.join(".atlas-plugin-origin.json");
-    let existing_origin = match fs::symlink_metadata(&origin_file) {
-        Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
-            let value: Value = serde_json::from_slice(&fs::read(&origin_file)?)?;
-            Some(value["pluginId"].as_str()
-                .context("Installed plugin has invalid marketplace identity")?.to_owned())
-        }
-        Ok(_) => bail!("Installed plugin marketplace identity is redirected or invalid"),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error.into()),
-    };
+    let existing_origin = installed_origin_id(&target)?;
     if existing_origin.as_deref() != marketplace_id {
         bail!("Cannot replace plugin '{name}' from a different marketplace or source");
     }
@@ -534,17 +546,7 @@ fn dependency_install_plan(
             Err(error) => return Err(error.into()),
         };
         if existing {
-            let origin_file = target.join(".atlas-plugin-origin.json");
-            let existing_origin = match fs::symlink_metadata(&origin_file) {
-                Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
-                    let value: Value = serde_json::from_slice(&fs::read(origin_file)?)?;
-                    Some(value["pluginId"].as_str()
-                        .context("Installed dependency has invalid marketplace identity")?.to_owned())
-                }
-                Ok(_) => bail!("Installed dependency has redirected marketplace identity"),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                Err(error) => return Err(error.into()),
-            };
+            let existing_origin = installed_origin_id(&target)?;
             if origin.is_some() && existing_origin != origin {
                 bail!("Installed plugin '{name}' belongs to a different marketplace");
             }
@@ -772,6 +774,14 @@ pub fn execute(root: &Path, command: &PluginCommand) -> Result<Value> {
                 .with_context(|| format!("Plugin '{name}' is not installed"))?;
             if metadata.file_type().is_symlink() || !metadata.is_dir() {
                 bail!("Plugin '{name}' installation is invalid");
+            }
+            // Managed policy is keyed by the full marketplace identity in
+            // the original pluginPolicy.ts. A short-name-only check could
+            // re-enable a plugin explicitly blocked as name@marketplace.
+            if let Some(origin) = installed_origin_id(&installed)? {
+                if crate::plugins::plugin_blocked_by_policy(&root, &origin)? {
+                    bail!("Plugin '{origin}' is disabled by managed policy");
+                }
             }
             let manifest = [installed.join(".claude-plugin/plugin.json"), installed.join("plugin.json")]
                 .into_iter().find(|path| path.exists());
