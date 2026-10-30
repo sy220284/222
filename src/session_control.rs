@@ -604,8 +604,7 @@ mod tests {
                 ]),
                 tool_calls: None,
                 tool_call_id: None,
-
-            reasoning_content: None,
+                reasoning_content: None,
             },
         ];
         assert_eq!(
@@ -650,6 +649,7 @@ mod tests {
             }]),
             tool_call_id: None,
             content_blocks: None,
+            reasoning_content: None,
         });
         session.messages.push(Message::tool_result(
             &ToolCall {
@@ -745,8 +745,7 @@ mod tests {
             })]),
             tool_calls: None,
             tool_call_id: None,
-
-        reasoning_content: None,
+            reasoning_content: None,
         });
         transcript.save(root.path()).unwrap();
 
