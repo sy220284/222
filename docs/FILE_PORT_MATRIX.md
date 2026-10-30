@@ -335,14 +335,14 @@
 | `src/components/CtrlOToExpand.tsx` | 51 | 6062 | 重写：终端 UI／交互 | `src/generated_ports/p_7fa135c73cbe6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CustomSelect/SelectMulti.tsx` | 213 | 29884 | 重写：终端 UI／交互 | `src/generated_ports/p_1006dc067830f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CustomSelect/index.ts` | 4 | 118 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CustomSelect/option-map.ts` | 51 | 1189 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/CustomSelect/option-map.ts` | 51 | 1189 | 重写：终端 UI／交互 | `src/custom_select_source.rs` | 部分实现：Rust 选项 Map 保留顺序、前后链接与同值键覆盖，UI 生命周期尚未接通 |
 | `src/components/CustomSelect/select-input-option.tsx` | 488 | 58172 | 重写：终端 UI／交互 | `src/generated_ports/p_917c310662d72.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CustomSelect/select-option.tsx` | 68 | 5793 | 重写：终端 UI／交互 | `src/generated_ports/p_5937f7d9e3063.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/CustomSelect/select.tsx` | 690 | 115187 | 重写：终端 UI／交互 | `src/generated_ports/p_0fde04c6a0116.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/CustomSelect/use-multi-select-state.ts` | 415 | 10952 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CustomSelect/use-select-input.ts` | 288 | 8770 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CustomSelect/use-select-navigation.ts` | 654 | 16388 | 重写：终端 UI／交互 | 待定 | 未迁移 |
-| `src/components/CustomSelect/use-select-state.ts` | 158 | 2859 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/CustomSelect/use-multi-select-state.ts` | 415 | 10952 | 重写：终端 UI／交互 | `src/custom_multi_select_source.rs` | 部分实现：手工迁移多选默认值、输入值、动态选项、提交按钮、数字直选、翻页与取消行为，Ink/overlay 待验收 |
+| `src/components/CustomSelect/use-select-input.ts` | 288 | 8770 | 重写：终端 UI／交互 | `src/custom_select_input_source.rs / src/custom_select_source.rs` | 部分实现：Rust 按键、数字及全角选择、文本输入和图片模式、禁用、翻页、边界通知已实现，Ink 事件链待接通 |
+| `src/components/CustomSelect/use-select-navigation.ts` | 654 | 16388 | 重写：终端 UI／交互 | `src/custom_select_source.rs` | 部分实现：焦点环绕、逐行和翻页滚动、选项变化后的焦点恢复已实现，React 事件绑定待接通 |
+| `src/components/CustomSelect/use-select-state.ts` | 158 | 2859 | 重写：终端 UI／交互 | `src/custom_select_source.rs` | 部分实现：Rust 选中与焦点状态隔离、显式选择和可见项派生，回调接线待验收 |
 | `src/components/DesktopHandoff.tsx` | 193 | 19335 | 重写：终端 UI／交互 | `src/generated_ports/p_d3509722b2b3c.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/components/DesktopUpsell/DesktopUpsellStartup.tsx` | 171 | 15520 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/DevBar.tsx` | 49 | 5040 | 重写：终端 UI／交互 | `src/generated_ports/p_0e01a1adf25b5.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
