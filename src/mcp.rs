@@ -324,7 +324,7 @@ impl TransportClient {
     fn take_resource_updates(&mut self) -> Vec<Value> {
         match self {
             Self::Stdio(c) => std::mem::take(&mut c.resource_updates),
-            Self::Http(c) => std::mem::take(&mut c.resource_updates),
+            Self::Http(c) => c.drain_resource_updates(),
         }
     }
     fn take_tools_changed(&mut self) -> bool {
