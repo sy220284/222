@@ -2541,6 +2541,68 @@ impl Agent {
         ))
     }
 
+    /// Source components/agents/generateAgent.ts: generate a user-reviewed
+    /// agent definition through a tool-free model request, without changing
+    /// the active conversation transcript or binding to a specific vendor.
+    pub async fn generate_custom_agent_definition(
+        &mut self, description: &str,
+    ) -> Result<crate::agent_definition::AgentDefinition> {
+        if description.trim().is_empty() {
+            bail!("Describe the custom agent you want to create");
+        }
+        let mut system = self.effective_system_prompt()?;
+        self.conversation_context.append_to(&mut system);
+        system.push_str(
+            "\nYou are an expert AI agent architect. Translate the user's request into a complete, reliable autonomous agent configuration. Define its primary purpose, precise triggering conditions, success criteria, boundaries, quality checks, and concrete steps. Consider project instructions and likely edge cases. Produce a concise lowercase kebab-case identifier (2-4 words), a whenToUse description beginning 'Use this agent when...' with concrete examples, and a comprehensive second-person systemPrompt. Return ONLY valid JSON with exactly three string fields: identifier, whenToUse, systemPrompt. Do not include Markdown fences or commentary."
+        );
+        let request = ModelRequest {
+            model: self.profile.model.clone(),
+            system,
+            messages: vec![Message::text(
+                "user",
+                format!("Create an agent configuration based on this request: {}", description.trim()),
+            )],
+            tools: Vec::new(),
+        };
+        let started = Instant::now();
+        let response = self.provider.complete(&request).await;
+        self.session.cost.add_api_duration(started.elapsed());
+        let response = response?;
+        if let Some(usage) = response.usage {
+            self.record_usage(usage);
+        }
+        self.session.save(&self.root)?;
+        let text = response.message.visible_text();
+        let trimmed = text.trim();
+        let parsed = serde_json::from_str::<serde_json::Value>(trimmed).or_else(|_| {
+            let start = trimmed.find('{').ok_or_else(|| anyhow::anyhow!("No JSON object in agent generation"))?;
+            let end = trimmed.rfind('}').ok_or_else(|| anyhow::anyhow!("Incomplete JSON object in agent generation"))?;
+            Ok::<serde_json::Value, anyhow::Error>(
+                serde_json::from_str(&trimmed[start..=end])?
+            )
+        })?;
+        let field = |key: &str| -> Result<String> {
+            parsed.get(key).and_then(serde_json::Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_owned)
+                .with_context(|| format!("Generated agent is missing {key}"))
+        };
+        let definition = crate::agent_definition::AgentDefinition {
+            agent_type: field("identifier")?,
+            when_to_use: field("whenToUse")?,
+            system_prompt: field("systemPrompt")?,
+            tools: None,
+            color: None,
+            model: None,
+            memory: None,
+            effort: None,
+        };
+        if let Some(error) = crate::agent_definition::validate_agent_type(&definition.agent_type) {
+            bail!("Generated agent name is invalid: {error}");
+        }
+        Ok(definition)
+    }
+
     pub fn copy_response(&self, selection: &str) -> Result<String> {
         let (age, code) = crate::copy_response::parse_selection(selection)?;
         crate::copy_response::copy(&self.session.messages, age, code)
