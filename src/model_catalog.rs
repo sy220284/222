@@ -180,7 +180,10 @@ fn tags_from_metadata(value: &Value) -> Vec<String> {
     if value.get("supports_reasoning").and_then(Value::as_bool) == Some(true) {
         tags.push("深度思考:目录声明".into());
     }
-    if let Some(default) = value.pointer("/effort/default_level").and_then(Value::as_str) {
+    if let Some(default) = value
+        .pointer("/effort/default_level")
+        .and_then(Value::as_str)
+    {
         tags.push(format!("默认思考:{default}"));
     }
     tags
