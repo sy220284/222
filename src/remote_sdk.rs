@@ -19,6 +19,12 @@ use crate::transports::{get_transport_for_url, sse_stream_url_for_session, Trans
 
 type Headers = Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>;
 
+/// Keep transport-only receipt metadata out of the JSON sent to SDK.
+struct IncomingEvent {
+    payload: Value,
+    delivery_id: Option<String>,
+}
+
 enum RemoteChannel {
     WebSocket(Arc<WebSocketTransport>),
     Hybrid(Arc<HybridTransport>),
@@ -141,17 +147,17 @@ fn start_sdk(cli: &crate::Cli, session_id: &str, resume: Option<&str>) -> Result
 
 async fn deliver_input(
     channel: &RemoteChannel,
-    event: &Value,
+    event: &IncomingEvent,
     stdin: &mut tokio::process::ChildStdin,
     pending: &mut std::collections::HashMap<String, String>,
 ) -> Result<()> {
-    let id = event.get("eventId").or_else(|| event.get("event_id"))
-        .and_then(Value::as_str);
-    if let (Some(id), Some(uuid)) = (id, event.get("uuid").and_then(Value::as_str)) {
+    let id = event.delivery_id.as_deref()
+        .or_else(|| event.payload.get("eventId").or_else(|| event.payload.get("event_id"))
+            .and_then(Value::as_str));
+    if let (Some(id), Some(uuid)) = (id, event.payload.get("uuid").and_then(Value::as_str)) {
         pending.insert(uuid.to_owned(), id.to_owned());
-        channel.delivery(id, "received");
     }
-    stdin.write_all(crate::ndjson::stringify_value(event).as_bytes()).await?;
+    stdin.write_all(crate::ndjson::stringify_value(&event.payload).as_bytes()).await?;
     stdin.write_all(b"\n").await?;
     stdin.flush().await?;
     if let Some(id) = id {
@@ -203,14 +209,16 @@ pub async fn run(
     }
 
     let (ws_tx, mut ws_rx) = mpsc::unbounded_channel::<String>();
-    let (incoming_tx, mut incoming_rx) = mpsc::channel::<Value>(1024);
+    let (incoming_tx, mut incoming_rx) = mpsc::channel::<IncomingEvent>(1024);
     let ws_input_tx = incoming_tx.clone();
     let ws_forwarder = tokio::spawn(async move {
         while let Some(frame) = ws_rx.recv().await {
             for line in frame.lines().filter(|s| !s.trim().is_empty()) {
                 match serde_json::from_str::<Value>(line) {
                     Ok(value) => {
-                        if ws_input_tx.send(value).await.is_err() {
+                        if ws_input_tx.send(IncomingEvent {
+                            payload: value, delivery_id: None,
+                        }).await.is_err() {
                             return;
                         }
                     }
@@ -257,8 +265,12 @@ pub async fn run(
             let forwarder = tokio::spawn(async move {
                 let mut receiver = receiver;
                 while let Some(event) = receiver.recv().await {
-                    if sse_sender.send(event).await.is_err() {
-                        return;
+                    if let Some(payload) = event.payload {
+                        if sse_sender.send(IncomingEvent {
+                            payload, delivery_id: event.event_id,
+                        }).await.is_err() {
+                            return;
+                        }
                     }
                 }
             });
