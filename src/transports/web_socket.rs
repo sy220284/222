@@ -7,10 +7,7 @@
 //! frames, and a 1000-message replay buffer keyed by the server's `open`
 //! frame `lastId`.
 //!
-//! The underlying RFC 6455 client is a minimal self-hosted implementation
-//! (`ws://` cleartext only). Plain-text framing keeps local loopback and
-//! self-hosted endpoints testable without a TLS WebSocket dependency; the
-//! `SseTransport`/`HybridTransport` cover TLS ingress paths.
+//! RFC 6455 client supports cleartext ws:// and authenticated TLS wss://.
 
 use anyhow::{anyhow, bail, Result};
 use base64::Engine;
@@ -19,7 +16,8 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio_rustls::{rustls, TlsConnector};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 
@@ -102,13 +100,12 @@ pub enum WsIncoming {
     Close(Option<u16>),
 }
 
-/// Minimal RFC 6455 client connection (`ws://` cleartext).
-/// The `Sec-WebSocket-Accept` header is intentionally not verified: the
-/// handshake targets self-hosted loopback endpoints and skipping the SHA-1
-/// digest avoids an extra hash dependency in the offline build.
+trait WebSocketIo: AsyncRead + AsyncWrite + Send + Unpin {}
+impl<T: AsyncRead + AsyncWrite + Send + Unpin> WebSocketIo for T {}
+
+/// RFC 6455 client connection with TLS when wss:// is selected.
 pub struct MinimalWsClient {
-    stream: TcpStream,
-    #[allow(dead_code)]
+    stream: Box<dyn WebSocketIo>,
     read_buffer: Vec<u8>,
     fragmented: Option<Vec<u8>>,
 }
@@ -120,13 +117,31 @@ impl MinimalWsClient {
         port: u16,
         path: &str,
         extra_headers: &[(String, String)],
+        secure: bool,
     ) -> Result<Self> {
-        let stream = tokio::time::timeout(
+        let tcp = tokio::time::timeout(
             Duration::from_millis(CONNECT_TIMEOUT_MS),
             TcpStream::connect((host, port)),
         )
         .await
         .map_err(|_| anyhow!("WS connect timeout after {CONNECT_TIMEOUT_MS}ms"))??;
+        let mut stream: Box<dyn WebSocketIo> = if secure {
+            let roots = rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+            let config = rustls::ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            let server_name = rustls::pki_types::ServerName::try_from(host.to_owned())
+                .map_err(|error| anyhow!("Invalid WSS server name: {error}"))?;
+            let tls = tokio::time::timeout(
+                Duration::from_millis(CONNECT_TIMEOUT_MS),
+                TlsConnector::from(Arc::new(config)).connect(server_name, tcp),
+            )
+            .await
+            .map_err(|_| anyhow!("WSS TLS handshake timeout"))??;
+            Box::new(tls)
+        } else {
+            Box::new(tcp)
+        };
         let mut key_bytes = [0_u8; 16];
         getrandom::getrandom(&mut key_bytes)
             .map_err(|error| anyhow!("WS handshake randomness: {error}"))?;
@@ -138,7 +153,6 @@ impl MinimalWsClient {
             request.push_str(&format!("{name}: {value}\r\n"));
         }
         request.push_str("\r\n");
-        let mut stream = stream;
         stream.write_all(request.as_bytes()).await?;
         let mut response = Vec::new();
         let mut chunk = [0_u8; 1024];
@@ -470,7 +484,9 @@ impl WebSocketTransport {
                 headers.push(pair);
             }
         }
-        let mut conn = match MinimalWsClient::connect(&host, port, &path, &headers).await {
+        let mut conn = match MinimalWsClient::connect(
+            &host, port, &path, &headers, self.shared.url.starts_with("wss://")
+        ).await {
             Ok(conn) => conn,
             Err(_) => return ConnectionOutcome::Reconnect,
         };
@@ -652,22 +668,25 @@ impl WebSocketTransport {
     }
 }
 
-/// Parse a `ws://host:port/path` URL into its parts.
-/// `wss://` is rejected — TLS WebSocket is not available in this offline
-/// build; use `SseTransport` (https) or `HybridTransport` for TLS ingress.
+/// Parse ws:// and wss:// URLs, preserving path, query and default ports.
 pub fn parse_ws_url(url: &str) -> Result<(String, u16, String)> {
-    let rest = url
-        .strip_prefix("ws://")
-        .ok_or_else(|| anyhow!("Unsupported WebSocket URL scheme (expected ws://): {url}"))?;
-    let (authority, path) = match rest.find('/') {
-        Some(index) => (&rest[..index], &rest[index..]),
-        None => (rest, "/"),
-    };
-    let (host, port) = match authority.rsplit_once(':') {
-        Some((host, port)) => (host.to_string(), port.parse::<u16>().unwrap_or(80)),
-        None => (authority.to_string(), 80),
-    };
-    Ok((host, port, path.to_string()))
+    let parsed = reqwest::Url::parse(url)?;
+    if !matches!(parsed.scheme(), "ws" | "wss") {
+        bail!("Unsupported WebSocket URL scheme: {}", parsed.scheme());
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        bail!("Credentials in a WebSocket URL are forbidden");
+    }
+    let host = parsed.host_str()
+        .ok_or_else(|| anyhow!("WebSocket URL missing hostname"))?.to_string();
+    let port = parsed.port_or_known_default()
+        .ok_or_else(|| anyhow!("WebSocket URL missing port"))?;
+    let mut path = parsed.path().to_string();
+    if let Some(query) = parsed.query() {
+        path.push('?');
+        path.push_str(query);
+    }
+    Ok((host, port, path))
 }
 
 #[cfg(test)]
@@ -698,7 +717,11 @@ mod tests {
             parse_ws_url("ws://localhost").unwrap(),
             ("localhost".to_string(), 80, "/".to_string())
         );
-        assert!(parse_ws_url("wss://host/path").is_err());
+        assert_eq!(
+            parse_ws_url("wss://host/path").unwrap(),
+            ("host".to_string(), 443, "/path".to_string())
+        );
+        assert!(parse_ws_url("ftp://host/path").is_err());
     }
 
     #[test]

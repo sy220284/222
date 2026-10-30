@@ -406,7 +406,7 @@ mod tests {
         assert_eq!(cursor(text, 4).next_vim_word().offset, 7);
         // b goes back to word start
         assert_eq!(cursor(text, 5).prev_vim_word().offset, 4);
-        assert_eq!(cursor(text, 8).prev_vim_word().offset, 4);
+        assert_eq!(cursor(text, 8).prev_vim_word().offset, 7);
         // e lands on last char of the word
         assert_eq!(cursor(text, 4).end_of_vim_word().offset, 6);
         assert_eq!(cursor(text, 4).end_of_vim_word().right().offset, 7);

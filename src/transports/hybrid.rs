@@ -143,7 +143,9 @@ pub async fn run_inbound(
     data_tx: mpsc::UnboundedSender<String>,
 ) -> Result<()> {
     let (host, port, path) = parse_ws_url(ws_url)?;
-    let mut conn = MinimalWsClient::connect(&host, port, &path, &headers).await?;
+    let mut conn = MinimalWsClient::connect(
+        &host, port, &path, &headers, ws_url.starts_with("wss://")
+    ).await?;
     loop {
         match conn.read_message().await {
             Ok(super::web_socket::WsIncoming::Text(text)) => {

@@ -25,6 +25,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 similar = "2"
 indexmap = "2"
+ring = "0.17"
+tokio-rustls = "0.26"
+webpki-roots = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "fs", "time", "io-util", "net", "sync"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 unicode-normalization = "0.1"
