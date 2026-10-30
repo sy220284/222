@@ -252,18 +252,13 @@ mod tests {
             "install-github-app",
             "install-slack-app",
         ] {
-            assert!(lookup(removed).is_none(), "removed cloud command: {removed}");
+            assert!(
+                lookup(removed).is_none(),
+                "removed cloud command: {removed}"
+            );
         }
         for command in [
-            "btw",
-            "color",
-            "exit",
-            "hooks",
-            "mcp",
-            "plugin",
-            "rename",
-            "sandbox",
-            "status",
+            "btw", "color", "exit", "hooks", "mcp", "plugin", "rename", "sandbox", "status",
         ] {
             assert!(lookup(command).unwrap().immediate, "{command}");
         }
