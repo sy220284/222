@@ -12,8 +12,8 @@ mod cleanup_registry;
 mod collections;
 mod command_lifecycle;
 mod command_manifest;
-mod compat_helpers;
 mod compact_command_source;
+mod compat_helpers;
 mod config;
 mod context_usage;
 mod control_message_compat;
@@ -75,8 +75,8 @@ mod platform_source_utilities;
 mod plugin_commands;
 mod plugin_error_messages_source;
 mod plugin_manager;
-mod plugin_trust_warning_source;
 mod plugin_pagination_source;
+mod plugin_trust_warning_source;
 mod plugins;
 mod portable_async_runtime;
 mod portable_configuration;
@@ -2142,14 +2142,20 @@ async fn chat(
             }
             "/compact" => {
                 agent.compact_history().await?;
-                println!("{}", compact_command_source::build_display_text(false, "ctrl+o", None, None));
+                println!(
+                    "{}",
+                    compact_command_source::build_display_text(false, "ctrl+o", None, None)
+                );
                 continue;
             }
             _ => {}
         }
         if let Some(instructions) = input.strip_prefix("/compact ") {
             agent.compact_history_custom(instructions).await?;
-            println!("{}", compact_command_source::build_display_text(false, "ctrl+o", None, None));
+            println!(
+                    "{}",
+                    compact_command_source::build_display_text(false, "ctrl+o", None, None)
+                );
             continue;
         }
         if input == "/sessions --semantic" || input.starts_with("/sessions --semantic ") {

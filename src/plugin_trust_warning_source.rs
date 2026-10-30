@@ -45,7 +45,10 @@ mod tests {
     #[test]
     fn uses_only_policy_message_and_preserves_inline_spacing() {
         let from_user = json!({"userSettings":{"pluginTrustMessage":"ignored"}});
-        assert_eq!(plugin_trust_warning(&from_user).message, PLUGIN_TRUST_WARNING);
+        assert_eq!(
+            plugin_trust_warning(&from_user).message,
+            PLUGIN_TRUST_WARNING
+        );
         let policy = json!({"policySettings":{"pluginTrustMessage":"Admin-approved plugins only"}});
         let displayed = plugin_trust_warning(&policy);
         assert_eq!(
