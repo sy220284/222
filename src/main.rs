@@ -1494,10 +1494,10 @@ async fn chat(
             .collect();
         let line =
             match terminal_input::read_prompt(&prompt, &entries, config.editor_mode == "vim")? {
-            terminal_input::PromptRead::Line(line) => line,
-            terminal_input::PromptRead::Cancelled => continue,
-            terminal_input::PromptRead::Eof => break,
-        };
+                terminal_input::PromptRead::Line(line) => line,
+                terminal_input::PromptRead::Cancelled => continue,
+                terminal_input::PromptRead::Eof => break,
+            };
         let entry = if line.trim().is_empty() {
             initial_prefill.take().unwrap_or_default()
         } else {
