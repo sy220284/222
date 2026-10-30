@@ -1,0 +1,41 @@
+name: 模型品牌与 ChatGPT 套餐独立验收
+on:
+  pull_request:
+    branches: [main, feat/full-rust-parity]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: model-api-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  model-api:
+    name: 多品牌目录、API、OAuth 与工具调用
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+          components: rustfmt
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+      - name: 新增模型源文件格式
+        run: cargo fmt --all -- --check
+      - name: 多模型 API、ChatGPT OAuth 与推理状态单元测试
+        run: |
+          cargo test --locked --bin atlas-agent config::tests
+          cargo test --locked --bin atlas-agent model_catalog::tests
+          cargo test --locked --bin atlas-agent chatgpt_plan::tests
+          cargo test --locked --bin atlas-agent provider::tests
+      - name: 多品牌实时模型选择端到端测试
+        run: |
+          cargo test --locked --test domestic_models_cli
+          cargo test --locked --test model_catalog_setup_cli
