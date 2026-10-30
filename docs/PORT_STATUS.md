@@ -1,3 +1,11 @@
+## 2026-10-29：交互式 /copy 代码选择与跨会话偏好（已提交、待验收）
+
+原版 source/src/commands/copy/copy.tsx::call/CopyPicker：当回答包含代码块且未开启 copyFullResponse 时，/copy N 提供完整回答、每个代码块和“以后始终复制完整回答”的选择；保存用户偏好，下次免选。Rust 原 src/main.rs::chat 对 /copy 直接调用 Agent::copy_response，只有显式 --code 才能选代码，缺少原版交互。
+
+已接通 src/main.rs::chat → Agent::copy_code_block_choices → copy_response::code_block_choices/copy，按最近20条回答、代码块顺序展示选项；可复制完整回答或指定代码块，取消不写文件，选择“始终完整复制”持久化到本地配置目录，/copy --reset 恢复选择器。源码提交 **1192af69465e8350986a0d1a9ea830687f7c0524**，已推送并静态复查入口。完整 Ink 交互、原版全局配置字段的同路径存储、所有 Markdown lexer 边界仍待等价。
+
+本轮独立业务能力累计 **4/100，剩余96项**（前3项见下文）；未形成100项完整预审与方案，未运行 Cargo/测试/CI；全部源码已提交待行为验收，新增完整等价验收0项，Issue #3 冻结362项不核销。
+
 ## 2026-10-29：任务工具目录、消息级文件快照、Markdown 复制（已提交、待验收）
 
 本轮从用户完整原版 ZIP 的 source/src/tools.ts、source/src/utils/tasks.ts、source/src/utils/fileHistory.ts、source/src/commands/copy/copy.tsx 逐函数核对真实 Rust 调用链，**保守计 3 项独立用户可感知业务补齐**，均已推送至 Draft PR #2，未经行为验收：
