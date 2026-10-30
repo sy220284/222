@@ -86,6 +86,7 @@ struct UploaderState<T> {
     pending: std::collections::VecDeque<T>,
     draining: bool,
     closed: bool,
+    pending_at_close: usize,
     /// Waiters registered on the semaphore (backpressure or flush).
     waiters: usize,
 }
@@ -142,6 +143,7 @@ impl<T: serde::Serialize + Send + Clone + 'static> SerialBatchEventUploader<T> {
                     pending: std::collections::VecDeque::new(),
                     draining: false,
                     closed: false,
+                    pending_at_close: 0,
                     waiters: 0,
                 }),
                 wake: Arc::new(Semaphore::new(0)),
@@ -152,12 +154,12 @@ impl<T: serde::Serialize + Send + Clone + 'static> SerialBatchEventUploader<T> {
     }
 
     pub fn pending_count(&self) -> usize {
-        self.shared
-            .state
-            .lock()
-            .expect("uploader state")
-            .pending
-            .len()
+        let state = self.shared.state.lock().expect("uploader state");
+        if state.closed {
+            state.pending_at_close
+        } else {
+            state.pending.len()
+        }
     }
 
     pub fn dropped_batch_count(&self) -> usize {
@@ -236,7 +238,11 @@ impl<T: serde::Serialize + Send + Clone + 'static> SerialBatchEventUploader<T> {
     pub fn close(&self) {
         self.shared.closed.store(true, Ordering::SeqCst);
         let mut state = self.shared.state.lock().expect("uploader state");
+        if state.closed {
+            return;
+        }
         state.closed = true;
+        state.pending_at_close = state.pending.len();
         state.pending.clear();
         release_waiters(&self.shared, &mut state);
     }
@@ -591,11 +597,26 @@ mod tests {
     }
 
     #[test]
+    fn close_preserves_pending_depth_for_delivery_diagnostics() {
+        let uploader = SerialBatchEventUploader::new(config_with(
+            Arc::new(|_batch| Box::pin(async { Ok(()) })),
+            1, 10,
+        ));
+        uploader.shared.state.lock().unwrap().pending.push_back(json!({"uuid":"undelivered"}));
+        uploader.close();
+        assert_eq!(uploader.pending_count(), 1);
+        assert!(uploader.shared.state.lock().unwrap().pending.is_empty());
+        uploader.close();
+        assert_eq!(uploader.pending_count(), 1);
+    }
+
+    #[test]
     fn byte_limited_batches_split() {
         let mut state = UploaderState::<Value> {
             pending: std::collections::VecDeque::new(),
             draining: false,
             closed: false,
+            pending_at_close: 0,
             waiters: 0,
         };
         for index in 0..3 {
