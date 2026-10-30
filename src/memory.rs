@@ -532,7 +532,7 @@ mod tests {
             api_key_env: None,
             stream: false,
 
-        tuning: Default::default(),
+            tuning: Default::default(),
         }
     }
     #[test]
