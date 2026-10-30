@@ -204,7 +204,7 @@
 | `src/commands/login/login.tsx` | 104 | 16109 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/logout/index.ts` | 11 | 341 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
 | `src/commands/logout/logout.tsx` | 82 | 10732 | 替换：独立模型／访问管理 | `src/provider.rs / src/config.rs` | 部分覆盖，原路径仍需逐条核对 |
-| `src/commands/mcp/addCommand.ts` | 281 | 9848 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/mcp/addCommand.ts` | 281 | 9848 | 重写：保持通用行为 | `src/mcp_cli.rs` / `src/main.rs` | 部分实现：MCP add 的 stdio/http、环境变量、Header、local/project/user 配置范围已接入 CLI 和启动加载；项目命令须本机授权并绑定配置指纹。SSE、OAuth、XAA 尚未实现；相应完整等价验收未核销 |
 | `src/commands/mcp/index.ts` | 13 | 280 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/mcp/mcp.tsx` | 85 | 12126 | 重写：保持通用行为 | `src/generated_ports/p_7522da9606aa2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/mcp/xaaIdpCommand.ts` | 267 | 10290 | 重写：保持通用行为 | 待定 | 未迁移 |
