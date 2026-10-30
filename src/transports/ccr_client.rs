@@ -222,6 +222,7 @@ pub struct CcrClient {
     event_uploader: Arc<SerialBatchEventUploader<Value>>,
     internal_event_uploader: SerialBatchEventUploader<Value>,
     delivery_uploader: Arc<SerialBatchEventUploader<Value>>,
+    delivery_tasks: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
     http: reqwest::Client,
 }
 
@@ -340,6 +341,7 @@ impl CcrClient {
             })
         };
 
+        let delivery_tasks = Arc::new(Mutex::new(Vec::new()));
         let client = Self {
             http: reqwest::Client::new(),
             session_base_url,
@@ -360,6 +362,7 @@ impl CcrClient {
             event_uploader: Arc::new(SerialBatchEventUploader::new(client_events_config)),
             internal_event_uploader: SerialBatchEventUploader::new(internal_config),
             delivery_uploader: Arc::new(SerialBatchEventUploader::new(delivery_config)),
+            delivery_tasks: Arc::clone(&delivery_tasks),
             shared,
         };
         // Source CCRClient constructor installs this synchronously, BEFORE
@@ -369,13 +372,14 @@ impl CcrClient {
             if let Some(event_id) = &event.event_id {
                 let uploader = Arc::clone(&delivery);
                 let event_id = event_id.clone();
-                tokio::spawn(async move {
+                let task = tokio::spawn(async move {
                     uploader
                         .enqueue(vec![json!({
                             "eventId": event_id, "status": "received"
                         })])
                         .await;
                 });
+                delivery_tasks.lock().expect("CCR delivery tasks").push(task);
             }
         }));
         client
@@ -693,7 +697,7 @@ impl CcrClient {
     pub fn report_delivery(&self, event_id: &str, status: &str) {
         let event_id = event_id.to_string();
         let status = status.to_string();
-        tokio::spawn({
+        let task = tokio::spawn({
             let uploader = Arc::clone(&self.delivery_uploader);
             async move {
                 uploader
@@ -701,6 +705,25 @@ impl CcrClient {
                     .await;
             }
         });
+        self.delivery_tasks.lock().expect("CCR delivery tasks").push(task);
+    }
+
+    /// Drain all locally accepted delivery receipts and their HTTP uploads.
+    /// This is invoked during remote SDK shutdown before uploader.close().
+    pub async fn flush_delivery_receipts(&self) -> Result<()> {
+        loop {
+            let pending = std::mem::take(
+                &mut *self.delivery_tasks.lock().expect("CCR delivery tasks"),
+            );
+            if pending.is_empty() {
+                break;
+            }
+            for task in pending {
+                task.await.context("CCR delivery receipt enqueue failed")?;
+            }
+        }
+        self.delivery_uploader.flush().await;
+        Ok(())
     }
 
     /// Stop heartbeat-side work and close all uploaders. Buffered stream
