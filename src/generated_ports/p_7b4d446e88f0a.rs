@@ -7,9 +7,7 @@
 use std::collections::BTreeMap;
 
 /// Merge plugin LSP server maps in original order (later wins).
-pub fn merge_lsp_servers(
-    ordered: Vec<BTreeMap<String, String>>,
-) -> BTreeMap<String, String> {
+pub fn merge_lsp_servers(ordered: Vec<BTreeMap<String, String>>) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     for map in ordered {
         for (k, v) in map {
