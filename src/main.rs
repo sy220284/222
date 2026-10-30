@@ -2233,8 +2233,40 @@ async fn chat(
 
 /// Run a SessionStart-provided initial user turn after SDK initialization
 /// has installed the caller's prompt and runtime options (print.ts:2914-2917).
-async fn sdk_run_initial_turn(agent: &mut Agent) {
-    match agent.ask("").await {
+/// Each SDK model turn can be interrupted while the input reader continues
+/// accepting requests. Dropping the Agent future stops the active provider
+/// request and propagates cancellation into any awaited tool or hook future.
+async fn sdk_interruptible_turn(
+    agent: &mut Agent,
+    prompt: &str,
+    blocks: Option<Vec<Value>>,
+    interrupts: &tokio::sync::watch::Receiver<u64>,
+    input_epoch: u64,
+) -> Result<String> {
+    let mut observer = interrupts.clone();
+    // The stdin reader may have parsed a later interrupt while the main loop
+    // was preparing an earlier user event. Match event order, not scheduling.
+    if *observer.borrow_and_update() > input_epoch {
+        bail!("SDK request interrupted");
+    }
+    tokio::select! {
+        biased;
+        changed = observer.changed() => {
+            if changed.is_ok() {
+                bail!("SDK request interrupted");
+            }
+            bail!("SDK interrupt control channel closed");
+        }
+        response = agent.ask_with_blocks(prompt, blocks) => response,
+    }
+}
+
+async fn sdk_run_initial_turn(
+    agent: &mut Agent,
+    interrupts: &tokio::sync::watch::Receiver<u64>,
+    input_epoch: u64,
+) {
+    match sdk_interruptible_turn(agent, "", None, interrupts, input_epoch).await {
         Ok(answer) => print_json!(json!({
             "type":"result","session_id":agent.session_id(),
             "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -2262,9 +2294,41 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     // after initialize has installed systemPrompt, agents and hooks. Eager
     // execution previously rejected a subsequent valid initialize request.
     let mut initial_turn_pending = agent.has_initial_user_message();
-    let stdin = io::stdin();
-    for input in stdin.lock().lines() {
-        let line = input?;
+    // print.ts::structuredInput runs independently of the query consumer.
+    // A dedicated blocking reader can signal an interrupt while the Agent
+    // awaits a model, tool, memory or hook request. Other controls remain in
+    // FIFO order on the main SDK actor, preserving its unique state owner.
+    let (input_tx, mut input_rx) = tokio::sync::mpsc::unbounded_channel::<io::Result<(String, u64)>>();
+    let (interrupt_tx, interrupt_rx) = tokio::sync::watch::channel(0u64);
+    let _interrupt_keepalive = interrupt_tx.clone();
+    std::thread::spawn(move || {
+        let mut input_epoch = 0u64;
+        for input in io::stdin().lock().lines() {
+            let event = input.map(|line| {
+                let is_interrupt = serde_json::from_str::<Value>(&line)
+                    .ok()
+                    .is_some_and(|value| {
+                        let kind = value.get("type").and_then(Value::as_str);
+                        (kind == Some("control_request")
+                            && value.pointer("/request/subtype").and_then(Value::as_str)
+                                == Some("interrupt"))
+                            || (matches!(kind, Some("control" | "control_request"))
+                                && value.get("action").and_then(Value::as_str)
+                                    == Some("interrupt"))
+                    });
+                if is_interrupt {
+                    input_epoch = input_epoch.wrapping_add(1);
+                    interrupt_tx.send_modify(|revision| *revision = input_epoch);
+                }
+                (line, input_epoch)
+            });
+            if input_tx.send(event).is_err() {
+                break;
+            }
+        }
+    });
+    while let Some(input) = input_rx.recv().await {
+        let (line, input_epoch) = input?;
         if line.trim().is_empty() {
             continue;
         }
@@ -2283,7 +2347,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 // SessionStart turn first, preserving user message ordering.
                 if initial_turn_pending {
                     initial_turn_pending = false;
-                    sdk_run_initial_turn(agent).await;
+                    sdk_run_initial_turn(agent, &interrupt_rx, input_epoch).await;
                 }
                 // Keep bridge user content and UUID on the validated SDK path.
                 let bridge_user = multimodal::extract_inbound_user_fields(&event);
@@ -2405,7 +2469,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         sdk_queue::emit_user_replay(prompt_value, uuid, &agent.session_id());
                     }
                 }
-                match agent.ask_with_blocks(&user.preview, user.blocks).await {
+                match sdk_interruptible_turn(
+                    agent, &user.preview, user.blocks, &interrupt_rx, input_epoch,
+                ).await {
                     Ok(answer) => print_json!(json!({
                         "type":"result","session_id":agent.session_id(),
                         "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -2481,7 +2547,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 print_json!(response);
                 if initialized && initial_turn_pending {
                     initial_turn_pending = false;
-                    sdk_run_initial_turn(agent).await;
+                    sdk_run_initial_turn(agent, &interrupt_rx, input_epoch).await;
                 }
                 if sdk_end_requested {
                     break;
@@ -2498,6 +2564,11 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     }};
                 }
                 let action = event.get("action").and_then(Value::as_str).unwrap_or("");
+                if action == "interrupt" {
+                    send_control!(json!({"type":"control_response",
+                        "action":"interrupt","ok":true}));
+                    continue;
+                }
                 if action.starts_with("bridge_") {
                     let outcome = bridge_session.dispatch(action, &event);
                     match outcome {
@@ -2737,6 +2808,7 @@ async fn sdk_nested_control(
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow::anyhow!("control request requires subtype"))?;
         match subtype {
+            "interrupt" => Ok(json!({})),
             "end_session" => {
                 *sdk_end_requested = true;
                 Ok(json!({}))
