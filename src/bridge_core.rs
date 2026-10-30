@@ -318,10 +318,7 @@ mod tests {
         let mut session = BridgeSession::new("session-1".to_owned());
         assert_eq!(
             session
-                .dispatch(
-                    "bridge_poll_defaults",
-                    &json!({"session_id": "session-1"})
-                )
+                .dispatch("bridge_poll_defaults", &json!({"session_id": "session-1"}))
                 .unwrap(),
             expected
         );
