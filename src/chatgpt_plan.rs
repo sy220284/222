@@ -428,7 +428,7 @@ fn input_items(request: &ModelRequest) -> Result<Vec<Value>> {
                         items.push(json!({
                             "type":"function_call",
                             "call_id":call.id,
-                            "name":call.function.name,
+                            "name":format!("atlas.{}", call.function.name),
                             "arguments":call.function.arguments,
                         }));
                     }
@@ -440,8 +440,8 @@ fn input_items(request: &ModelRequest) -> Result<Vec<Value>> {
     Ok(items)
 }
 
-fn response_tools(tools: &[Value]) -> Result<Vec<Value>> {
-    tools.iter().map(|tool| {
+fn response_tools(tools: &[Value]) -> Result<Value> {
+    let functions = tools.iter().map(|tool| {
         let func = tool.get("function").context("Unsupported tool spec")?;
         let name = func.get("name").and_then(Value::as_str).context("Tool has no name")?;
         Ok(json!({
@@ -451,7 +451,13 @@ fn response_tools(tools: &[Value]) -> Result<Vec<Value>> {
             "parameters":func.get("parameters").cloned().unwrap_or_else(|| json!({"type":"object","properties":{}})),
             "strict":false,
         }))
-    }).collect()
+    }).collect::<Result<Vec<_>>>()?;
+    Ok(json!([{
+        "type":"namespace",
+        "name":"atlas",
+        "description":"Local coding agent tools, run in the user's workspace",
+        "tools":functions,
+    }]))
 }
 
 fn parse_completed(response: &Value) -> Result<ModelResponse> {
@@ -471,7 +477,10 @@ fn parse_completed(response: &Value) -> Result<ModelResponse> {
                 calls.push(ToolCall {
                     id: call_id.into(),
                     kind: "function".into(),
-                    function: FunctionCall { name: name.into(), arguments: arguments.into() },
+                    function: FunctionCall {
+                        name: name.strip_prefix("atlas.").unwrap_or(name).into(),
+                        arguments: arguments.into(),
+                    },
                 });
             }
             Some("message") => {
@@ -529,8 +538,9 @@ pub async fn complete(
     if !request.tools.is_empty() {
         body["tools"] = json!(response_tools(&request.tools)?);
     }
-    if let Some(limit) = tuning.max_output_tokens {
-        body["max_output_tokens"] = json!(limit);
+    // ChatGPT plan usage currently forbids max_output_tokens on Responses.
+    if tuning.max_output_tokens.is_some() {
+        bail!("ChatGPT plan does not accept max_output_tokens; use 'models tune chatgpt --reset'")
     }
     if let Some(effort) = &tuning.reasoning_effort {
         body["reasoning"] = json!({"effort":effort});
@@ -598,7 +608,8 @@ mod tests {
         assert_eq!(wire[0]["role"], "developer");
         assert_eq!(wire[2]["type"], "function_call");
         assert_eq!(wire[3]["type"], "function_call_output");
-        assert_eq!(response_tools(&request.tools).unwrap()[0]["name"], "read_file");
+        assert_eq!(response_tools(&request.tools).unwrap()[0]["type"], "namespace");
+        assert_eq!(response_tools(&request.tools).unwrap()[0]["tools"][0]["name"], "read_file");
     }
     #[test]
     fn tool_calls_and_usage_are_kept_at_response_completion() {
