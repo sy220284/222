@@ -3481,7 +3481,7 @@ impl Agent {
             bail!("Compaction is disabled by ATLAS_DISABLE_COMPACT")
         }
         if self.session.messages.is_empty() {
-            bail!("No history to compact")
+            bail!("{}", crate::compact_command_source::NO_MESSAGES)
         }
         runtime_contracts::clear_compact_warning_suppression();
         let before = self

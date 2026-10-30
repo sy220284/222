@@ -131,7 +131,7 @@
 | `src/commands/color/index.ts` | 17 | 417 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/commit-push-pr.ts` | 159 | 6309 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：真实默认分支检测、差异与中文 PR 工作流接入；推送和远端状态完整链待验收 |
 | `src/commands/commit.ts` | 93 | 3492 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：真实 Git 状态与差异生成提交提示，CLI/交互可执行；原版权限特化仍待验收 |
-| `src/commands/compact/compact.ts` | 288 | 10079 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/compact/compact.ts` | 288 | 10079 | 重写：保持通用行为 | `src/compact_command_source.rs / src/agent.rs / src/main.rs` | 部分实现：/compact 保留自定义指令、真实模型摘要、前后 Hook、事务存盘、三次上下文截断重试，并补充原版结果提示和错误语义函数；会话记忆压缩及 reactive 专用分支仍待完整迁移 |
 | `src/commands/compact/index.ts` | 16 | 530 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/config/config.tsx` | 7 | 1408 | 重写：保持通用行为 | `src/generated_ports/p_18a7a03aea84b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/config/index.ts` | 12 | 247 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -235,7 +235,7 @@
 | `src/commands/plugin/PluginOptionsDialog.tsx` | 357 | 34537 | 重写：保持通用行为 | `src/generated_ports/p_24eaf2e46f24a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/PluginOptionsFlow.tsx` | 135 | 18702 | 重写：保持通用行为 | `src/generated_ports/p_8dddb5ec693ee.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/PluginSettings.tsx` | 1072 | 128668 | 重写：保持通用行为 | `src/generated_ports/p_632353e8f57fc.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/commands/plugin/PluginTrustWarning.tsx` | 32 | 3919 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/plugin/PluginTrustWarning.tsx` | 32 | 3919 | 重写：保持通用行为 | `src/plugin_trust_warning_source.rs` | 部分实现：政策设置的信任告知、样式和附加提示由 Rust 计算，剔除原厂专属品牌文案；终端实际渲染与权限设置接线待验收 |
 | `src/commands/plugin/UnifiedInstalledCell.tsx` | 565 | 44441 | 重写：保持通用行为 | `src/generated_ports/p_48aef09fe12b8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/ValidatePlugin.tsx` | 98 | 12369 | 重写：保持通用行为 | `src/generated_ports/p_458eb28ef635b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands/plugin/index.tsx` | 11 | 1337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |

@@ -13,6 +13,7 @@ mod collections;
 mod command_lifecycle;
 mod command_manifest;
 mod compat_helpers;
+mod compact_command_source;
 mod config;
 mod context_usage;
 mod control_message_compat;
@@ -2140,14 +2141,14 @@ async fn chat(
             }
             "/compact" => {
                 agent.compact_history().await?;
-                println!("Session context compacted.");
+                println!("{}", compact_command_source::build_display_text(false, "ctrl+o", None, None));
                 continue;
             }
             _ => {}
         }
         if let Some(instructions) = input.strip_prefix("/compact ") {
             agent.compact_history_custom(instructions).await?;
-            println!("Session context compacted.");
+            println!("{}", compact_command_source::build_display_text(false, "ctrl+o", None, None));
             continue;
         }
         if input == "/sessions --semantic" || input.starts_with("/sessions --semantic ") {
