@@ -9,6 +9,7 @@ use tokio::sync::mpsc::UnboundedSender;
 #[derive(Default)]
 struct Assembler {
     content: String,
+    reasoning_content: String,
     calls: BTreeMap<u64, ToolCall>,
     emitted: HashSet<u64>,
     finish_reason: Option<String>,
@@ -92,6 +93,11 @@ impl Assembler {
                 "Model refused the request: {}",
                 refusal.chars().take(500).collect::<String>()
             );
+        }
+        if let Some(reasoning) = delta.get("reasoning_content").and_then(Value::as_str) {
+            // Reasoning stays in the model transcript for subsequent tool
+            // calls, but is never broadcast as a user-visible text delta.
+            self.reasoning_content.push_str(reasoning);
         }
         if let Some(text) = delta.get("content").and_then(Value::as_str) {
             self.content.push_str(text);
@@ -182,6 +188,11 @@ impl Assembler {
                     None
                 } else {
                     Some(self.content)
+                },
+                reasoning_content: if self.reasoning_content.is_empty() {
+                    None
+                } else {
+                    Some(self.reasoning_content)
                 },
                 content_blocks: None,
                 tool_calls: if calls.is_empty() { None } else { Some(calls) },
@@ -365,6 +376,23 @@ pub async fn complete_with_tool_blocks(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preserves_streamed_reasoning_for_deepseek_tool_followup() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut parser = Assembler::default();
+        parser.consume(&json!({"choices":[{"delta":{
+            "reasoning_content":"inspect "}}]}), &tx).unwrap();
+        parser.consume(&json!({"choices":[{"delta":{
+            "reasoning_content":"first",
+            "tool_calls":[{"index":0,"id":"call_1","type":"function",
+                "function":{"name":"read_file","arguments":"{}"}}]},
+            "finish_reason":"tool_calls"}]}), &tx).unwrap();
+        let response = parser.finish().unwrap();
+        assert_eq!(response.message.reasoning_content.as_deref(), Some("inspect first"));
+        assert_eq!(response.message.tool_calls.unwrap()[0].id, "call_1");
+        assert!(rx.try_recv().is_err(), "reasoning must not leak to displayed text");
+    }
+
     #[test]
     fn joins_tool_call_fragments_by_index() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
