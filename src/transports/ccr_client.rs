@@ -365,6 +365,29 @@ impl CcrClient {
         self.shared.worker_epoch.load(Ordering::SeqCst)
     }
 
+    /// Source getWorkerState/getWithRetry retries transient failures but
+    /// treats exhausted restoration as absent metadata; a failed worker PUT
+    /// independently prevents the session from starting.
+    async fn restore_worker_metadata(&self) -> Option<Value> {
+        for attempt in 1..=READ_INTERNAL_EVENTS_MAX_RETRIES {
+            match self.shared.request_get("/worker").await {
+                Ok(body) => return body.pointer("/worker/external_metadata").cloned(),
+                Err(_) if attempt < READ_INTERNAL_EVENTS_MAX_RETRIES => {
+                    let delay = super::serial_batch_event_uploader::retry_delay(
+                        attempt,
+                        None,
+                        CLIENT_EVENT_BASE_DELAY_MS,
+                        CLIENT_EVENT_MAX_DELAY_MS,
+                        CLIENT_EVENT_JITTER_MS,
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+                Err(_) => return None,
+            }
+        }
+        None
+    }
+
     /// Start only after the parent bridge has registered an epoch. The
     /// original CCRClient.initialize performs a synchronous worker PUT and
     /// starts heartbeats only after the server accepts the epoch.
@@ -399,16 +422,14 @@ impl CcrClient {
             }
         });
         let (restore, registered) = tokio::join!(
-            self.shared.request_get("/worker"),
+            self.restore_worker_metadata(),
             self.shared.request_put("/worker", &initial_state),
         );
         registered
             .map_err(|error| anyhow!("{}: {error}", CcrInitFailReason::WorkerRegisterFailed))?;
         self.session_id = session_id.to_owned();
         self.start_heartbeat();
-        Ok(restore
-            .ok()
-            .and_then(|value| value.pointer("/worker/external_metadata").cloned()))
+        Ok(restore)
     }
 
     /// Heartbeats are owned by this client and are cancelled on close.
