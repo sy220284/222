@@ -275,7 +275,10 @@ impl BackgroundTasks {
         if canonical_shell_task_id(id).ok().as_deref() != Some(id) {
             return Ok(None);
         }
-        let record = self.directory.join(format!("{id}.json"));
+        // A sibling session's output belongs to that sibling's metadata.
+        // Resolve the record next to the validated output, not in the
+        // reader's session, so project-local Read works across sessions.
+        let record = parent.join(format!("{id}.json"));
         let record_meta = fs::symlink_metadata(&record)
             .with_context(|| format!("Inspect task record {}", record.display()))?;
         if record_meta.file_type().is_symlink() || !record_meta.is_file() {
@@ -916,6 +919,38 @@ pub fn definitions() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn project_sibling_session_task_logs_are_readable_without_crossing_projects() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        let source = BackgroundTasks::for_session(&root, Uuid::new_v4()).unwrap();
+        let reader = BackgroundTasks::for_session(&root, Uuid::new_v4()).unwrap();
+        let id = new_shell_task_id();
+        let output = source.directory.join(format!("{id}.stdout"));
+        let error = source.directory.join(format!("{id}.stderr"));
+        fs::write(&output, b"output from sibling session").unwrap();
+        fs::write(&error, b"").unwrap();
+        BackgroundTasks::save(&source.directory, &TaskRecord {
+            id: id.clone(), description: "Previous session".into(),
+            command: "printf example".into(), status: "completed".into(),
+            exit_code: Some(0), output_file: output.to_string_lossy().into_owned(),
+            error_file: error.to_string_lossy().into_owned(), truncated: false,
+        }).unwrap();
+        assert_eq!(
+            reader.trusted_output_path(output.to_str().unwrap()).unwrap(),
+            Some(output.clone()),
+        );
+        assert_eq!(
+            reader.trusted_output_path(error.to_str().unwrap()).unwrap(),
+            Some(error),
+        );
+        let other_project = tempfile::tempdir().unwrap();
+        let outsider = BackgroundTasks::for_session(
+            &other_project.path().canonicalize().unwrap(), Uuid::new_v4(),
+        ).unwrap();
+        assert!(outsider.trusted_output_path(output.to_str().unwrap()).unwrap().is_none());
+    }
+
     #[test]
     fn tail_defaults_to_eight_megabytes_and_reports_omitted_prefix() {
         let dir = tempfile::tempdir().unwrap();
