@@ -1385,7 +1385,7 @@
 | `src/utils/authFileDescriptor.ts` | 197 | 6787 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/authPortable.ts` | 20 | 674 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/autoModeDenials.ts` | 27 | 720 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
-| `src/utils/autoRunIssue.tsx` | 122 | 10579 | 重写：保持通用行为 | `src/generated_ports/p_d3dd9f3d01f73.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/autoRunIssue.tsx` | 122 | 10579 | 重写：保持通用行为 | `src/generated_ports/p_d3dd9f3d01f73.rs`| 部分实现：auto-run 通知视图（粗体运行头+Esc 取消提示+reason 行，confirm:no 键绑定、effect 单次触发 ref 守卫语义注释）、shouldAutoRunIssue 门禁 verbatim（外部用户类型恒 false、枚举 reason 全 false 结构保留）、ANT-ONLY 命令解析（外部用户 None），附 3 测试|
 | `src/utils/autoUpdater.ts` | 562 | 18012 | 重写：保持通用行为 | `src/generated_ports/p_276b14dd2f617.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/aws.ts` | 75 | 2305 | 重写：保持通用行为 | `src/generated_ports/p_6ae88763d0d0f.rs`| 部分实现：AwsStsOutput 类型守卫（Credentials 三字段非空字符串验证）、isAwsCredentialsProviderError 名称判定，附 2 测试；checkStsCallerIdentity/clearAwsIniCache 依赖 AWS SDK（crate 无等价依赖）以钩子形式记录待 Bedrock 端口|
 | `src/utils/awsAuthStatusManager.ts` | 82 | 2043 | 重写：保持通用行为 | 待定 | 未迁移 |
