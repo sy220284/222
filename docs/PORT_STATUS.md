@@ -1,3 +1,11 @@
+## 2026-10-29：Windows Shell 进程树清理与后台 5GiB 输出硬上限（源码已提交、待行为验收）
+
+- **原始依据**：完整用户原始 ZIP 的 `source/src/utils/ShellCommand.ts:337–342::doKill` 调用 `tree-kill` 杀死 Shell 进程树；`ShellCommand.ts:49–54,237–255` 在后台输出超过 `MAX_TASK_OUTPUT_BYTES` 时立即杀死进程；`source/src/tasks/LocalShellTask/killShellTasks.ts:16–45::killTask` 停止后台 Shell，`source/src/utils/task/diskOutput.ts` 维护统一输出日志。
+- **业务缺口 1**：此前 Windows 的前台 Shell 超时、输出读取异常以及后台任务主动停止、超时、输出排空异常只终止 Shell 父进程，子进程可能继续执行并占用输出管道。已在 `src/shell_runtime.rs` 增加 Windows 系统 `taskkill.exe /F /T /PID` 的受限执行及五秒超时、错误反馈，并接入 `src/tools.rs` 前台异常/超时路径与 `src/background.rs` 后台启动失败/停止/超时/排空路径；终止失败不再被误报为成功停止。代码提交 `3b48d241f31495378e822ed5e6f604a3e3fbac17`、`00e588dd85db842a423e92c0aeaad0f8f45e5a25`、`811d93c63778825f559a90035720dc79dfa49a07`、`42e70ce7c3dc74ce9d46fdabe1c0fbbc30823d10`。
+- **业务缺口 2**：此前后台 Shell 输出超过原版 5GiB 上限后只停止写入，命令仍继续运行直至超时。现由统一输出写入器在首次超限时向任务监督器发信号，立即终止 Shell 进程树，保留原版磁盘上限提示和退出失败状态；Shell 已退出但后代仍写输出时，也能在排空阶段处理超限。修改 `src/background.rs`，代码提交 `38e0e4a84e23d676e2947de59416ed478dede38d`。
+- **静态审查与状态**：已核对原版三个相邻源模块、Rust 前后台可达入口、状态/停止/输出传播及远端文件变动；两项均仅计 **源码已提交、待行为验收**，完整等价验收新增 0。迁移矩阵补记提交 `26c856c4cc22cef8ce755f5b3c6fa376e675cc55`。按任务要求未运行 Cargo、测试或 CI。
+- **准确剩余差异**：Windows 父进程已经退出时 `taskkill /T` 未必能追踪已脱离的后代，仍需 Windows Job Object 级进程归属；外部取消、前后台自动切换、输出跨流精确时序、5GiB 临界并发竞态、异常退出后的任务恢复和全量 SDK/远程通知尚未逐项验收。本轮未完成恰好100项独立业务缺口的先行逐函数确认及覆盖方案，数量 **2/100，余98项**；Issue #3 冻结362项不核销。
+
 ## 2026-10-29：后台任务取消排空与 SDK 停止通知（源码已提交、待行为验收）
 
 - **原版依据**：完整用户原始 ZIP 的 `source/src/tasks/LocalShellTask/killShellTasks.ts:16–45::killTask` 在停止请求时立即杀进程并把任务标记为 `killed`；`source/src/tasks/LocalShellTask/LocalShellTask.tsx:330–360` 避免后续退出回调覆盖 `killed`。`source/src/tasks/stopTask.ts:38–95::stopTask` 对本地 Shell 停止后直接调用 `emitTaskTerminatedSdk(..., 'stopped')`；`source/src/utils/sdkEventQueue.ts:114–133` 给 SDK 输出结构化 `task_notification`；`source/src/cli/print.ts:3772–3782` 对成功的 `stop_task` 返回空对象。
