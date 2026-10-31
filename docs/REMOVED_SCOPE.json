@@ -10,7 +10,8 @@
     "模型 API 可在本地测试中通过回环 Mock 服务验证，但产品不预置或安装本地模型运行时",
     "第二次源码复核识别出分散的官方云端/远程子入口；全部以逐路径授权并保持本地 SDK、普通 MCP、Git、任务及会话可用。",
     "第三轮核查进一步剔除原厂订阅额度、营销、托管MCP和实验遥测，保留通用模型API、本地计费、SDK与MCP。",
-    "补充事件生成类型审查：原厂环境遥测事件和仅供事件使用的账号标签均删除。"
+    "补充事件生成类型审查：原厂环境遥测事件和仅供事件使用的账号标签均删除。",
+    "本地模型中立的高级审查、规划四条源路径恢复为待等价验收；云端额度、专用 CCR/Bridge、远程工作流继续排除。"
   ],
   "items": [
     {
@@ -334,14 +335,6 @@
       "reason": "云端专项审查（保留普通本地审查）"
     },
     {
-      "path": "src/commands/review/ultrareviewCommand.tsx",
-      "reason": "云端专项审查（保留普通本地审查）"
-    },
-    {
-      "path": "src/commands/review/ultrareviewEnabled.ts",
-      "reason": "云端专项审查（保留普通本地审查）"
-    },
-    {
       "path": "src/commands/review/UltrareviewOverageDialog.tsx",
       "reason": "云端专项审查（保留普通本地审查）"
     },
@@ -356,10 +349,6 @@
     {
       "path": "src/commands/teleport/index.js",
       "reason": "官方 Teleport 入口"
-    },
-    {
-      "path": "src/commands/ultraplan.tsx",
-      "reason": "云端专项规划（保留本地规划）"
     },
     {
       "path": "src/commands/upgrade/index.ts",
@@ -711,10 +700,6 @@
     },
     {
       "path": "src/utils/ultraplan/ccrSession.ts",
-      "reason": "官方云端规划专用工具"
-    },
-    {
-      "path": "src/utils/ultraplan/keyword.ts",
       "reason": "官方云端规划专用工具"
     },
     {

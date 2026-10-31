@@ -265,8 +265,8 @@
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
 | `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
 | `src/commands/review/reviewRemote.ts` | 317 | 11926 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
-| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
-| `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
+| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收 |
+| `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收 |
 | `src/commands/review.ts` | 58 | 2188 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：通过真实 Agent 执行 PR 审查任务；原版专属 Ultrareview 远程链仍待改造 |
 | `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/rewind/rewind.ts` | 14 | 376 | 重写：保持通用行为 | `src/generated_ports/p_0be79184937ef.rs` | 部分实现：完整等价：打开消息选择器+返回 skip 结果（不追加消息）含单测；LocalCommandResult 结构对齐 commands 体系，待验收 |
@@ -299,7 +299,7 @@
 | `src/commands/thinkback/thinkback.tsx` | 554 | 61993 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/thinkback-play/index.ts` | 18 | 608 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/thinkback-play/thinkback-play.ts` | 44 | 1430 | 重写：保持通用行为 | `src/generated_ports/p_a71cd9960b7a7.rs` | 部分实现：部分等价：pluginId 构造与缺安装文案完整等价（内部市场名品牌中性化占位，差异记录）；插件管理器与动画加载随插件链，待验收 |
-| `src/commands/ultraplan.tsx` | 471 | 66629 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项规划（保留本地规划）；不再跟进，通用本地能力保留 |
+| `src/commands/ultraplan.tsx` | 471 | 66629 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收 |
 | `src/commands/upgrade/index.ts` | 17 | 523 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂订阅升级；不再跟进，通用本地能力保留 |
 | `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂订阅升级；不再跟进，通用本地能力保留 |
 | `src/commands/usage/index.ts` | 10 | 233 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -1903,7 +1903,7 @@
 | `src/utils/treeify.ts` | 171 | 5033 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/truncate.ts` | 180 | 5719 | 重写：保持通用行为 | `src/generated_ports/terminal_truncate.rs` | 部分实现：按终端显示宽度的截断、路径中间截断、头尾截断和换行 Rust 实现；全 UAX29 字素规则和 ANSI 边界待完成 |
 | `src/utils/ultraplan/ccrSession.ts` | 350 | 12987 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端规划专用工具；不再跟进，通用本地能力与模型 API 保留 |
-| `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端规划专用工具；不再跟进，通用本地能力与模型 API 保留 |
+| `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收 |
 | `src/utils/unaryLogging.ts` | 40 | 1254 | 重写：保持通用行为 | `src/generated_ports/p_5386fc6ccfc1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/undercover.ts` | 90 | 3681 | 重写：保持通用行为 | `src/generated_ports/p_bba75aff43791.rs` | 部分实现：完整等价：外部构建语义（USER_TYPE 构建常量折叠，全函数 trivial return）恒 false/空清单含单测；内仓 allowlist 属厂商归因面（排除），待验收 |
 | `src/utils/user.ts` | 195 | 5714 | 重写：保持通用行为 | 待定 | 未迁移 |

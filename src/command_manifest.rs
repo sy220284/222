@@ -59,6 +59,8 @@ output-style|output-style|local-jsx||-|Legacy styles
 perf-issue|stub|disabled||-|Disabled performance issue
 permissions|permissions|local-jsx|allowed-tools|-|Tool permissions
 plan|plan|local-jsx||[open|description]|Planning mode
+ultraplan|ultraplan|local-jsx||[goal]|Detailed local planning with active model
+ultrareview|ultrareview|local-jsx||[PR]|Deep local code review with active model
 plugin|plugin|local-jsx|plugins,marketplace|-|Plugin manager
 pr_comments|pr-comments|text||-|PR comments
 privacy-settings|privacy-settings|local-jsx||-|Privacy options
@@ -229,13 +231,15 @@ mod tests {
 
     #[test]
     fn registry_and_alias_resolution() {
-        assert_eq!(commands().len(), 69);
+        assert_eq!(commands().len(), 71);
         assert_eq!(commands().iter().filter(|c| c.disabled).count(), 17);
         assert_eq!(lookup("settings").unwrap().name, "config");
         assert_eq!(lookup("add-dir").unwrap().name, "add-dir");
         assert_eq!(lookup("export").unwrap().name, "export");
         assert_eq!(lookup("rename").unwrap().name, "rename");
         assert_eq!(lookup("continue").unwrap().name, "resume");
+        assert!(lookup("ultrareview").is_some());
+        assert!(lookup("ultraplan").is_some());
         for removed in [
             "remote-control",
             "remote-env",

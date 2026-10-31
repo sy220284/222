@@ -19,8 +19,9 @@ pub fn review_prompt(root: &Path, number: Option<u64>) -> Result<String> {
         format!("PR #{number}. Read gh pr view {number} and gh pr diff {number}; inspect all changed files and their callers.")
     } else {
         let status = git(root, &["status", "--short"])?;
-        let stat = git(root, &["diff", "--stat", "HEAD"])?;
-        format!("Local staged, unstaged and untracked files.\nStatus:\n{status}\nDiff summary:\n{stat}\nRead the COMPLETE diffs and inspect every changed file.")
+        let stat = git(root, &["diff", "--stat"])?;
+        let staged = git(root, &["diff", "--cached", "--stat"])?;
+        format!("Local staged, unstaged and untracked files.\nStatus:\n{status}\nUnstaged diff summary:\n{stat}\nStaged diff summary:\n{staged}\nRead the COMPLETE diffs and inspect every changed file.")
     };
     Ok(format!(
         r#"Run a deep local code review using the CURRENT configured model and local Agent.
