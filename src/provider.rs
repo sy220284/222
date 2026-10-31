@@ -253,6 +253,7 @@ pub(crate) async fn send_model_request(
 /// Serialize session messages to provider-native blocks without leaking the
 /// internal persisted content_blocks attribute to an OpenAI-compatible API.
 pub(crate) fn openai_messages(request: &ModelRequest) -> Result<Vec<Value>> {
+    crate::multimodal::validate_images_for_api(&request.messages)?;
     let mut messages = Vec::with_capacity(request.messages.len() + 1);
     for msg in std::iter::once(Message::text("system", &request.system))
         .chain(request.messages.iter().cloned())
@@ -452,6 +453,7 @@ impl ModelProvider for OpenAiCompatible {
 }
 
 fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
+    crate::multimodal::validate_images_for_api(&request.messages)?;
     let mut names = HashMap::<String, String>::new();
     for msg in &request.messages {
         for call in msg.tool_calls.as_deref().unwrap_or(&[]) {
