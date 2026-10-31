@@ -6,8 +6,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 
 pub fn is_pr_activity_subscription_tool(name: &str) -> bool {
-    name.ends_with("subscribe_pr_activity")
-        || name.ends_with("unsubscribe_pr_activity")
+    name.ends_with("subscribe_pr_activity") || name.ends_with("unsubscribe_pr_activity")
 }
 
 fn tool_name(value: &Value) -> Result<&str> {
@@ -72,7 +71,10 @@ mod tests {
 
     #[test]
     fn initial_tools_win_and_mcp_never_interleaves_builtin_prefix() {
-        let initial = [tool("Bash", "initial"), tool("mcp__alpha__lookup", "initial")];
+        let initial = [
+            tool("Bash", "initial"),
+            tool("mcp__alpha__lookup", "initial"),
+        ];
         let assembled = [
             tool("mcp__z__post", "mcp"),
             tool("Read", "built-in"),
@@ -85,7 +87,10 @@ mod tests {
             .iter()
             .map(|tool| tool.pointer("/function/name").unwrap().as_str().unwrap())
             .collect();
-        assert_eq!(names, ["Bash", "Edit", "Read", "mcp__alpha__lookup", "mcp__z__post"]);
+        assert_eq!(
+            names,
+            ["Bash", "Edit", "Read", "mcp__alpha__lookup", "mcp__z__post"]
+        );
         assert_eq!(merged[0]["function"]["description"], "initial");
         assert_eq!(merged[3]["function"]["description"], "initial");
     }
@@ -103,14 +108,19 @@ mod tests {
         let merged = merge_and_filter_tools(&[], &tools, Some(&allowed)).unwrap();
         assert_eq!(merged.len(), 3);
         assert_eq!(merged[0]["function"]["name"], "Read");
-        assert_eq!(merged[1]["function"]["name"], "mcp__git__subscribe_pr_activity");
-        assert_eq!(merged[2]["function"]["name"], "mcp__git__unsubscribe_pr_activity");
+        assert_eq!(
+            merged[1]["function"]["name"],
+            "mcp__git__subscribe_pr_activity"
+        );
+        assert_eq!(
+            merged[2]["function"]["name"],
+            "mcp__git__unsubscribe_pr_activity"
+        );
     }
 
     #[test]
     fn malformed_catalog_is_an_error_not_a_silent_omission() {
-        let error = merge_and_filter_tools(&[], &[json!({"type":"function"})], None)
-            .unwrap_err();
+        let error = merge_and_filter_tools(&[], &[json!({"type":"function"})], None).unwrap_err();
         assert!(error.to_string().contains("without a name"));
     }
 }
