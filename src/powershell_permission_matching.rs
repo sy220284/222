@@ -67,41 +67,81 @@ pub fn destructive_command_warning(command: &str) -> Option<&'static str> {
 /// Keep the rule groups in one place: PowerShell's persistent prefix proposal
 /// must not auto-approve arbitrary code, network access or state mutation.
 const FILEPATH_EXECUTION_CMDLETS: &[&str] = &[
-    "invoke-command", "start-job", "start-threadjob", "register-scheduledjob",
+    "invoke-command",
+    "start-job",
+    "start-threadjob",
+    "register-scheduledjob",
 ];
 const SCRIPT_BLOCK_EXECUTION_CMDLETS: &[&str] = &[
-    "invoke-command", "invoke-expression", "start-job", "start-threadjob",
-    "register-scheduledjob", "register-engineevent", "register-objectevent",
-    "register-wmievent", "new-pssession", "enter-pssession",
+    "invoke-command",
+    "invoke-expression",
+    "start-job",
+    "start-threadjob",
+    "register-scheduledjob",
+    "register-engineevent",
+    "register-objectevent",
+    "register-wmievent",
+    "new-pssession",
+    "enter-pssession",
 ];
 const MODULE_LOADING_CMDLETS: &[&str] = &[
-    "import-module", "ipmo", "install-module", "save-module", "update-module",
-    "install-script", "save-script",
+    "import-module",
+    "ipmo",
+    "install-module",
+    "save-module",
+    "update-module",
+    "install-script",
+    "save-script",
 ];
 const SHELLS_AND_SPAWNERS: &[&str] = &[
-    "pwsh", "powershell", "cmd", "bash", "wsl", "sh", "start-process",
-    "start", "add-type", "new-object",
+    "pwsh",
+    "powershell",
+    "cmd",
+    "bash",
+    "wsl",
+    "sh",
+    "start-process",
+    "start",
+    "add-type",
+    "new-object",
 ];
 const NETWORK_CMDLETS: &[&str] = &["invoke-webrequest", "invoke-restmethod"];
 const ALIAS_HIJACK_CMDLETS: &[&str] = &[
-    "set-alias", "sal", "new-alias", "nal", "set-variable", "sv",
-    "new-variable", "nv",
+    "set-alias",
+    "sal",
+    "new-alias",
+    "nal",
+    "set-variable",
+    "sv",
+    "new-variable",
+    "nv",
 ];
-const WMI_CIM_CMDLETS: &[&str] = &[
-    "invoke-wmimethod", "iwmi", "invoke-cimmethod",
-];
+const WMI_CIM_CMDLETS: &[&str] = &["invoke-wmimethod", "iwmi", "invoke-cimmethod"];
 const ARG_GATED_CMDLETS: &[&str] = &[
-    "select-object", "sort-object", "group-object", "where-object",
-    "measure-object", "write-output", "write-host", "start-sleep",
-    "format-table", "format-list", "format-wide", "format-custom",
-    "out-string", "out-host", "ipconfig", "hostname", "route",
+    "select-object",
+    "sort-object",
+    "group-object",
+    "where-object",
+    "measure-object",
+    "write-output",
+    "write-host",
+    "start-sleep",
+    "format-table",
+    "format-list",
+    "format-wide",
+    "format-custom",
+    "out-string",
+    "out-host",
+    "ipconfig",
+    "hostname",
+    "route",
 ];
 /// src/utils/permissions/dangerousPatterns.ts::CROSS_PLATFORM_CODE_EXEC:
 /// multi-word entries (npm run, yarn run...) are excluded in the TS source,
 /// since the lookup checks a *single* executable/cmdlet name.
 const CROSS_PLATFORM_CODE_EXEC_SINGLE: &[&str] = &[
-    "python", "python3", "python2", "node", "deno", "tsx", "ruby",
-    "perl", "php", "lua", "npx", "bunx", "bash", "sh", "ssh",
+    "python", "python3", "python2", "node", "deno", "tsx", "ruby", "perl", "php", "lua", "npx",
+    "bunx", "bash", "sh", "ssh",
 ];
 
 /// src/utils/powershell/dangerousCmdlets.ts::NEVER_SUGGEST.
@@ -606,14 +646,42 @@ mod tests {
     #[test]
     fn source_dangerous_cmdlet_wildcards_never_suggest_even_via_aliases() {
         for cmdlet in [
-            "Invoke-Expression", "iex", "Start-Job", "sajb",
-            "Invoke-WebRequest", "iwr", "irm", "Start-Process", "saps",
-            "Import-Module", "ipmo", "New-PSSession", "nsn",
-            "ForEach-Object", "%", "Where-Object", "?",
-            "Set-Variable", "sv", "set-alias", "sal", "nal",
-            "Invoke-WmiMethod", "iwmi", "Invoke-CimMethod",
-            "python3", "node", "deno", "npx", "ssh", "bash",
-            "route", "hostname", "ipconfig", "select", "write",
+            "Invoke-Expression",
+            "iex",
+            "Start-Job",
+            "sajb",
+            "Invoke-WebRequest",
+            "iwr",
+            "irm",
+            "Start-Process",
+            "saps",
+            "Import-Module",
+            "ipmo",
+            "New-PSSession",
+            "nsn",
+            "ForEach-Object",
+            "%",
+            "Where-Object",
+            "?",
+            "Set-Variable",
+            "sv",
+            "set-alias",
+            "sal",
+            "nal",
+            "Invoke-WmiMethod",
+            "iwmi",
+            "Invoke-CimMethod",
+            "python3",
+            "node",
+            "deno",
+            "npx",
+            "ssh",
+            "bash",
+            "route",
+            "hostname",
+            "ipconfig",
+            "select",
+            "write",
         ] {
             assert!(never_suggest_wildcard(cmdlet), "unsafe wildcard: {cmdlet}");
         }
