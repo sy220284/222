@@ -82,3 +82,11 @@
 - 搜索工具：`src/search.rs::definitions` 将 Glob/Grep 提示词作为真正的模型函数 description，而非只放进静态生成模块；Grep 模板中的工具名称按实际 `grep_files`、`run_command` 映射，含正则表达式转义。
 - 会话压缩：`src/services/compact/prompt.ts::NO_TOOLS_PREAMBLE` 原文已前置到实际独立摘要请求；`compact_summary_content` 只保存可解析的 `<summary>` 正文，普通文本仍受支持；完整原版 BASE/PARTIAL 长提示词、摘要变体仍待接入。
 - 新增运行路由断言：真实 `system_prompt` 含源动作提示，工具定义内容与源文本对照，角色选择和无工具压缩摘要均有测试。当前不把 120 处“部分实现”擅自提升为“完整等价”。
+ 
+## 2026-10-31：原始提示词一次提取和可执行目录
+
+- 源码索引：`docs/original_prompt_literals_2_1_88.jsonl`，按用户提供的 2.1.88 压缩包与来源索引生成，包含120个源码路径、297段字符串候选、原文件 SHA-256、来源分类、以及两项明确排除的远程功能。
+- 生成入口：`scripts/import_original_prompt_literals.py`；新版本只需重新运行并比较来源哈希，无须逐字手工搬运。**原文候选条数不等于运行链完工数**，被截断的动态模板、条件渲染和函数调用必须单独验收。
+- Rust 读取：`src/source_prompt_catalog.rs` 编译期嵌入来源 JSONL，Glob/Grep 工具定义直接消费原版描述（只替换实际工具名），四种内置角色的完整原版静态模板由目录读取、限定变量替换后返回 `role_instructions()`。
+- 压缩完整原文：`src/compact_source_prompts.rs` 逐字保存 2.1.88 的 BASE 4220 字符、PARTIAL 2362 字符、PARTIAL_UP_TO 2326 字符，以及两种分析指令全文。普通压缩请求无旧摘要时使用 BASE，有旧摘要时使用 PARTIAL；UP_TO 保留原文但尚无对应部分消息保留运行入口。所有模型压缩请求仍无工具，并只保存 `<summary>` 主体。
+- 当前待对齐：主系统提示词更多动态分支、工具描述的完整可达列表、权限分类器、针对团队/协调模式的运行条件、Web/浏览器专用提示、技能模板动态变量与提取/整理记忆的完整原版指令。只在源码保存、不实际出现在 `ModelRequest` 或工具定义里的条目继续标记为部分或未迁移。
