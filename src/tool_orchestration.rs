@@ -86,6 +86,22 @@ pub fn is_concurrency_safe_call(call: &ToolCall) -> bool {
     is_concurrency_safe(&call.function.name)
 }
 
+/// Source utils/generators.ts::all yields whichever concurrent generator
+/// finishes next. Retain that property in the real Agent execution path;
+/// buffered/ordered collection would hide a fast result behind a slow read.
+pub fn completed_as_ready<I, F>(
+    jobs: I,
+    concurrency_limit: usize,
+) -> impl futures::Stream<Item = F::Output>
+where
+    I: IntoIterator<Item = F>,
+    F: std::future::Future,
+{
+    use futures::StreamExt;
+    assert!(concurrency_limit > 0, "concurrency must be positive");
+    futures::stream::iter(jobs).buffer_unordered(concurrency_limit)
+}
+
 /// `Batch` — a run of consecutive safe tools, or a single unsafe tool.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ToolBatch {
@@ -121,6 +137,35 @@ pub fn partition_tool_calls(calls: Vec<ToolCall>) -> Vec<ToolBatch> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn read_only_results_arrive_when_finished_not_in_original_block_order() {
+        use futures::StreamExt;
+        use tokio::{
+            sync::oneshot,
+            time::{timeout, Duration},
+        };
+        let (slow_tx, slow_rx) = oneshot::channel::<()>();
+        let (fast_tx, fast_rx) = oneshot::channel::<()>();
+        let jobs = [("slow", slow_rx), ("fast", fast_rx)].into_iter().map(
+            |(name, completion)| async move {
+                completion.await.expect("tool completion signal");
+                name
+            },
+        );
+        let mut results = completed_as_ready(jobs, 2);
+        fast_tx.send(()).unwrap();
+        assert_eq!(
+            timeout(Duration::from_secs(5), results.next())
+                .await
+                .unwrap(),
+            Some("fast")
+        );
+        slow_tx.send(()).unwrap();
+        assert_eq!(results.next().await, Some("slow"));
+        assert_eq!(results.next().await, None);
+    }
+
     use crate::protocol::{FunctionCall, ToolCall};
 
     fn call(name: &str, id: &str) -> ToolCall {

@@ -5394,32 +5394,34 @@ impl Agent {
                         let cap = crate::tool_orchestration::max_tool_use_concurrency();
                         let read_only_hooks = self.hooks.clone();
                         let hook_input = self.tool_hook_input();
-                        let mut completed = futures::stream::iter(prepared.into_iter().map(
-                            |(call, skip_reason, pre_contexts)| {
-                                let executor = &executor;
-                                let hooks = &read_only_hooks;
-                                let hook_input = hook_input.clone();
-                                async move {
-                                    let tool_started = Instant::now();
-                                    let (result, warnings) = match skip_reason {
-                                        Some(reason) => (reason, Vec::new()),
-                                        None => {
-                                            let raw = executor.execute(&call).await;
-                                            Self::finalize_readonly_result(
-                                                hooks,
-                                                hook_input,
-                                                &call,
-                                                raw,
-                                                pre_contexts,
-                                            )
-                                            .await
-                                        }
-                                    };
-                                    (call, result, warnings, tool_started)
-                                }
-                            },
-                        ))
-                        .buffer_unordered(cap);
+                        let mut completed = crate::tool_orchestration::completed_as_ready(
+                            prepared
+                                .into_iter()
+                                .map(|(call, skip_reason, pre_contexts)| {
+                                    let executor = &executor;
+                                    let hooks = &read_only_hooks;
+                                    let hook_input = hook_input.clone();
+                                    async move {
+                                        let tool_started = Instant::now();
+                                        let (result, warnings) = match skip_reason {
+                                            Some(reason) => (reason, Vec::new()),
+                                            None => {
+                                                let raw = executor.execute(&call).await;
+                                                Self::finalize_readonly_result(
+                                                    hooks,
+                                                    hook_input,
+                                                    &call,
+                                                    raw,
+                                                    pre_contexts,
+                                                )
+                                                .await
+                                            }
+                                        };
+                                        (call, result, warnings, tool_started)
+                                    }
+                                }),
+                            cap,
+                        );
                         while let Some((call, result, warnings, tool_started)) =
                             completed.next().await
                         {
