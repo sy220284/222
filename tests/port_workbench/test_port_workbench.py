@@ -30,7 +30,7 @@ class WorkbenchTests(unittest.TestCase):
         source2 = 'export function helper(){return 1}'
         (self.src / 'src/cli.ts').write_text(source1)
         (self.src / 'src/lib.ts').write_text(source2)
-        (self.repo / 'src/main.rs').write_text('mod lib; #[test] fn behavior() {}')
+        (self.repo / 'src/main.rs').write_text('mod lib;\n#[test]\nfn behavior() {}')
         self.source1 = source1; self.source2=source2
         self.matrix = self.repo / 'docs/FILE_PORT_MATRIX.md'
         self.write_matrix()
@@ -159,9 +159,9 @@ class WorkbenchTests(unittest.TestCase):
         rust = self.repo / 'src'
         rust.mkdir(exist_ok=True)
         (rust / 'sample.rs').write_text(
-            'fn false_positive() {}\\n'
-            '#[test]\\nfn real_test() {}\\n'
-            '#[tokio::test]\\nasync fn real_async_test() {}\\n',
+            'fn false_positive() {}\n'
+            '#[test]\nfn real_test() {}\n'
+            '#[tokio::test]\nasync fn real_async_test() {}\n',
             encoding='utf-8',
         )
         names = indexed_rust_test_names(self.repo)
