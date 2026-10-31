@@ -66,6 +66,7 @@ mod marketplace_source;
 mod mcp;
 mod mcp_cli;
 mod mcp_http;
+mod mcp_instructions_delta;
 mod mcp_legacy_sse;
 mod mcp_output_storage;
 mod mcp_policy;
