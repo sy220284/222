@@ -52,7 +52,9 @@ pub fn filter_simple_model_tools_for_context(
     tools
         .into_iter()
         .filter_map(|tool| match tool_name(&tool) {
-            Ok(name) if is_simple_model_tool_for_context(name, repl_enabled, coordinator_enabled) => {
+            Ok(name)
+                if is_simple_model_tool_for_context(name, repl_enabled, coordinator_enabled) =>
+            {
                 Some(Ok(tool))
             }
             Ok(_) => None,
@@ -185,15 +187,22 @@ mod tests {
             tool("REPL", "REPL"),
             tool("write_file", "Write"),
         ];
-        let coordinator = filter_simple_model_tools_for_context(catalog.clone(), false, true)
-            .unwrap();
+        let coordinator =
+            filter_simple_model_tools_for_context(catalog.clone(), false, true).unwrap();
         let names = coordinator
             .iter()
             .map(|tool| tool["function"]["name"].as_str().unwrap())
             .collect::<Vec<_>>();
         assert_eq!(
             names,
-            ["run_command", "read_file", "edit_file", "spawn_agent", "TaskStop", "SendMessage"]
+            [
+                "run_command",
+                "read_file",
+                "edit_file",
+                "spawn_agent",
+                "TaskStop",
+                "SendMessage"
+            ]
         );
         let repl = filter_simple_model_tools_for_context(catalog, true, true).unwrap();
         let names = repl
@@ -206,23 +215,28 @@ mod tests {
     #[test]
     fn locale_collation_matches_original_javascript_identifier_fixtures() {
         let names = [
-            "Tool-a", "tool_A", "tool-a", "Tool_A", "tools", "tool10", "tool2",
-            "tool", "_tool", "-tool", "2tool", "10tool", "abc", "ábc", "Äbc",
+            "Tool-a", "tool_A", "tool-a", "Tool_A", "tools", "tool10", "tool2", "tool", "_tool",
+            "-tool", "2tool", "10tool", "abc", "ábc", "Äbc",
         ];
         let mut actual = names.to_vec();
         actual.sort_by(|a, b| locale_compare_tool_names(a, b));
         assert_eq!(
             actual,
             [
-                "_tool", "-tool", "10tool", "2tool", "abc", "ábc", "Äbc",
-                "tool", "tool_A", "Tool_A", "tool-a", "Tool-a", "tool10",
-                "tool2", "tools",
+                "_tool", "-tool", "10tool", "2tool", "abc", "ábc", "Äbc", "tool", "tool_A",
+                "Tool_A", "tool-a", "Tool-a", "tool10", "tool2", "tools",
             ]
         );
-        let combined = names.iter().map(|name| tool(name, "entry")).collect::<Vec<_>>();
+        let combined = names
+            .iter()
+            .map(|name| tool(name, "entry"))
+            .collect::<Vec<_>>();
         let merged = merge_and_filter_tools(&[], &combined, None).unwrap();
         assert_eq!(
-            merged.iter().map(|v| v["function"]["name"].as_str().unwrap()).collect::<Vec<_>>(),
+            merged
+                .iter()
+                .map(|v| v["function"]["name"].as_str().unwrap())
+                .collect::<Vec<_>>(),
             actual
         );
     }

@@ -4903,8 +4903,7 @@ impl Agent {
                     crate::tool_pool_merge::filter_simple_model_tools_for_context(
                         complete_catalog,
                         false,
-                        self.team_name.is_some()
-                            && self.agent_name.as_deref() == Some("team-lead"),
+                        self.team_name.is_some() && self.agent_name.as_deref() == Some("team-lead"),
                     )?
                 } else {
                     complete_catalog

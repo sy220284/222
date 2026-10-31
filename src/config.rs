@@ -733,7 +733,8 @@ mod tests {
             .unwrap();
         assert_eq!(override_model.model, "CaseSensitive-Deployment");
         assert_eq!(
-            config.select(Some("openai"), Some("  CaseSensitive-Deployment[1M]  "))
+            config
+                .select(Some("openai"), Some("  CaseSensitive-Deployment[1M]  "))
                 .unwrap()
                 .model,
             "CaseSensitive-Deployment[1m]"
