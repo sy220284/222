@@ -187,7 +187,9 @@ jobs:
   source-parity:
     name: 原版源码全量等价验收
     # Original stays in an isolated local workspace outside the checkout.
-    runs-on: [self-hosted, linux, source-parity-222]
+    # Untrusted fork PRs run on hosted runners and fail without originals;
+    # never execute fork-controlled code on a runner holding private sources.
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '["ubuntu-latest"]' || '["self-hosted","linux","source-parity-222"]') }}
     timeout-minutes: 120
     permissions:
       contents: read
@@ -243,6 +245,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mandatory-source-parity
-          path: .port-audit/
+          # Do not upload raw source-backed function signatures/initializers.
+          path: |
+            .port-audit/SOURCE_PARITY.json
+            .port-audit/SOURCE_PARITY.md
+            .port-audit/DYNAMIC_PARITY.json
+            .port-audit/SOURCE_FUNCTION_COVERAGE_GAPS.json
           include-hidden-files: true
           if-no-files-found: error
