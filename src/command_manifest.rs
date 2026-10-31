@@ -248,7 +248,10 @@ mod tests {
             ("advisor", "src/commands/advisor.ts"),
             ("ultraplan", "src/commands/ultraplan.tsx"),
             ("ultrareview", "src/commands/review/ultrareviewCommand.tsx"),
-            ("trigger", "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts"),
+            (
+                "trigger",
+                "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts",
+            ),
             ("pr-comments", "src/commands/pr_comments/index.ts"),
         ];
         for (name, path) in examples {
