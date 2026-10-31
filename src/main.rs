@@ -566,8 +566,61 @@ fn sdk_message_id(external: &str, session_id: &str) -> uuid::Uuid {
 // command's system notice in one place; config changes apply next session.
 const LEGACY_OUTPUT_STYLE_NOTICE: &str = "/output-style has been deprecated. Use /config to change your output style, or set it in your settings file. Changes take effect on the next session.";
 
+/// Source entrypoints/cli.tsx and main.tsx default to an interactive REPL.
+/// Only recover the *missing-subcommand* parser case: explicit commands,
+/// invalid flags, --version and --help retain clap's original diagnostics.
+fn parse_cli_with_default_chat(
+    mut args: Vec<std::ffi::OsString>,
+) -> std::result::Result<Cli, clap::Error> {
+    match Cli::try_parse_from(args.clone()) {
+        Err(error) if error.kind() == clap::error::ErrorKind::MissingSubcommand => {
+            args.push(std::ffi::OsString::from("chat"));
+            Cli::try_parse_from(args)
+        }
+        result => result,
+    }
+}
+
+#[cfg(test)]
+mod default_chat_cli_tests {
+    use super::*;
+
+    #[test]
+    fn invoking_without_subcommand_enters_chat_and_preserves_global_options() {
+        let no_args = parse_cli_with_default_chat(vec!["atlas-agent".into()]).unwrap();
+        assert!(matches!(no_args.command, Commands::Chat { .. }));
+        let globals = parse_cli_with_default_chat(vec![
+            "atlas-agent".into(),
+            "--workspace".into(),
+            ".".into(),
+            "--max-steps".into(),
+            "3".into(),
+        ])
+        .unwrap();
+        assert!(matches!(globals.command, Commands::Chat { .. }));
+        assert_eq!(globals.max_steps, 3);
+        let explicit = parse_cli_with_default_chat(vec![
+            "atlas-agent".into(),
+            "version".into(),
+        ])
+        .unwrap();
+        assert!(matches!(explicit.command, Commands::Version));
+    }
+
+    #[test]
+    fn unsupported_arguments_still_fail_before_startup() {
+        let error = parse_cli_with_default_chat(vec![
+            "atlas-agent".into(),
+            "--unknown-option".into(),
+        ])
+        .unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
+    }
+}
+
 async fn run_cli() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = parse_cli_with_default_chat(std::env::args_os().collect())
+        .unwrap_or_else(|error| error.exit());
     // Doctor must diagnose malformed user configuration without failing startup.
     if !matches!(cli.command, Commands::Doctor) {
         tls_ca::apply_user_startup_config()?;
