@@ -56,10 +56,26 @@ pub fn review_prompt(root: &Path, number: Option<u64>) -> Result<String> {
         }
         format!("PR #{number}. Read gh pr view {number} and gh pr diff {number}; inspect all changed files and their callers.")
     } else {
+        // reviewRemote.ts compares the branch against its fork point.
+        // Include committed changes as well as index/worktree changes.
+        let base = ["origin/main", "origin/master", "main", "master"]
+            .iter()
+            .find_map(|reference| {
+                git(root, &["merge-base", reference, "HEAD"])
+                    .ok()
+                    .filter(|sha| !sha.trim().is_empty())
+                    .map(|sha| (reference, sha.trim().to_owned()))
+            });
+        let committed = if let Some((reference, base_sha)) = base {
+            let diff = git(root, &["diff", "--stat", &base_sha, "HEAD"])?;
+            format!("Base {reference}, merge-base {base_sha}:\n{diff}")
+        } else {
+            "No local main/master or origin base ref available; committed branch comparison is unavailable. This review covers the visible working tree only.".to_owned()
+        };
         let status = git(root, &["status", "--short"])?;
         let stat = git(root, &["diff", "--stat"])?;
         let staged = git(root, &["diff", "--cached", "--stat"])?;
-        format!("Local staged, unstaged and untracked files.\nStatus:\n{status}\nUnstaged diff summary:\n{stat}\nStaged diff summary:\n{staged}\nRead the COMPLETE diffs and inspect every changed file.")
+        format!("Local committed, staged, unstaged and untracked changes.\nBranch comparison:\n{committed}\nStatus:\n{status}\nUnstaged diff summary:\n{stat}\nStaged diff summary:\n{staged}\nRead the COMPLETE diffs and inspect every changed file.")
     };
     Ok(format!(
         r#"Run a deep local code review using the CURRENT configured model and local Agent.
