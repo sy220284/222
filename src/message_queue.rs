@@ -83,16 +83,29 @@ impl Command {
         }
         self.is_editable()
     }
+    /// messageQueueManager.ts::isSlashCommand accepts only string values.
+    /// SDK input uses separate last-text-block semantics.
     pub fn is_slash(&self) -> bool {
-        // processUserInput.ts takes slash commands from the final text block,
-        // including queued user turns containing earlier image blocks.
+        !self.skip_slash_commands
+            && self
+                .value
+                .as_str()
+                .is_some_and(|text| text.trim().starts_with('/'))
+    }
+
+    /// processUserInput.ts::processUserInputBase processes the last text block
+    /// after image or IDE context for multimodal queued SDK inputs.
+    pub fn is_input_slash(&self) -> bool {
+        if self.skip_slash_commands {
+            return false;
+        }
         let text = self.value.as_str().or_else(|| {
             let last = self.value.as_array()?.last()?;
             (last.get("type").and_then(Value::as_str) == Some("text"))
                 .then(|| last.get("text").and_then(Value::as_str))
                 .flatten()
         });
-        text.is_some_and(|value| value.trim().starts_with('/')) && !self.skip_slash_commands
+        text.is_some_and(|value| value.trim().starts_with('/'))
     }
     pub fn text(&self) -> Option<String> {
         if let Some(text) = self.value.as_str() {
@@ -410,6 +423,28 @@ mod tests {
             agent_id: None,
         }
     }
+    #[test]
+    fn queue_slash_predicate_differs_from_sdk_multimodal_input_parser() {
+        let mut command = cmd("/help", None, Mode::Prompt);
+        assert!(command.is_slash());
+        assert!(command.is_input_slash());
+        command.value = json!([
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"YQ=="}},
+            {"type":"text","text":" /help"}
+        ]);
+        assert!(!command.is_slash());
+        assert!(command.is_input_slash());
+        command.value = json!([
+            {"type":"text","text":"/help"},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"YQ=="}}
+        ]);
+        assert!(!command.is_input_slash());
+        command.value = json!("/help");
+        command.skip_slash_commands = true;
+        assert!(!command.is_slash());
+        assert!(!command.is_input_slash());
+    }
+
     #[test]
     fn priority_fifo_and_nonmatching_agent_isolation() {
         let mut q = Queue::default();

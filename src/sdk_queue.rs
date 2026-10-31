@@ -142,7 +142,7 @@ pub async fn control(
                 // Resolve before dequeue so a denied or malformed skill stays
                 // available for inspection instead of disappearing.
                 let slash_expansion =
-                    if next.command.mode == Mode::Prompt && next.command.is_slash() {
+                    if next.command.mode == Mode::Prompt && next.command.is_input_slash() {
                         let candidate = next.command.value.as_str().or_else(|| {
                             let last = next.command.value.as_array()?.last()?;
                             (last.get("type").and_then(Value::as_str) == Some("text"))
@@ -168,7 +168,7 @@ pub async fn control(
                 // queued prompts, while known built-ins remain with their
                 // dedicated handlers until those are migrated.
                 let unknown_skill = if next.command.mode == Mode::Prompt
-                    && next.command.is_slash()
+                    && next.command.is_input_slash()
                     && slash_expansion.is_none()
                 {
                     let candidate = next.command.value.as_str().or_else(|| {
@@ -204,7 +204,7 @@ pub async fn control(
                 let reason = match &next.command.mode {
                     Mode::Bash => Some("bash"),
                     Mode::OrphanedPermission => Some("permission"),
-                    _ if next.command.is_slash()
+                    _ if next.command.is_input_slash()
                         && slash_expansion.is_none()
                         && unknown_skill.is_none() =>
                     {
@@ -273,7 +273,7 @@ pub async fn control(
                     if !queued_prompt_batch::can_batch_with(
                         &batch[0].command,
                         Some(&candidate.command),
-                    ) || candidate.command.is_slash()
+                    ) || candidate.command.is_input_slash()
                         || crate::multimodal::parse(&candidate.command.value).is_err()
                     {
                         break;
