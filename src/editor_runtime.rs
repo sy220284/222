@@ -3,7 +3,7 @@
 use anyhow::{bail, Context, Result};
 use std::{
     env,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Stdio},
 };
 
@@ -53,7 +53,12 @@ fn terminal_goto_line(binary: &str) -> bool {
         .unwrap_or_default();
     filename
         .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
-        .any(|part| matches!(part, "vi" | "vim" | "nvim" | "nano" | "emacs" | "pico" | "micro" | "helix" | "hx"))
+        .any(|part| {
+            matches!(
+                part,
+                "vi" | "vim" | "nvim" | "nano" | "emacs" | "pico" | "micro" | "helix" | "hx"
+            )
+        })
 }
 
 pub fn parse_editor_command(raw: &str) -> Result<Vec<String>> {
@@ -65,7 +70,9 @@ pub fn parse_editor_command(raw: &str) -> Result<Vec<String>> {
     while let Some(ch) = chars.next() {
         if ch == '\\' && quote != Some('\'') {
             match chars.peek().copied() {
-                Some(next) if next.is_whitespace() || next == '\\' || next == '"' || next == '\'' => {
+                Some(next)
+                    if next.is_whitespace() || next == '\\' || next == '"' || next == '\'' =>
+                {
                     token.push(chars.next().expect("next was checked"));
                     active = true;
                 }
@@ -143,7 +150,10 @@ pub fn goto_arguments(binary: &str, path: &Path, line: Option<u32>) -> Vec<Strin
     let line = line.filter(|line| *line != 0);
     if let Some(gui) = classify_gui_editor(binary) {
         return match (gui, line) {
-            (GuiFamily::Code | GuiFamily::Cursor | GuiFamily::Windsurf | GuiFamily::Codium, Some(line)) => {
+            (
+                GuiFamily::Code | GuiFamily::Cursor | GuiFamily::Windsurf | GuiFamily::Codium,
+                Some(line),
+            ) => {
                 vec!["-g".to_owned(), format!("{filename}:{line}")]
             }
             (GuiFamily::Subl, Some(line)) => vec![format!("{filename}:{line}")],
@@ -162,7 +172,10 @@ pub fn open_file(path: &Path, line: Option<u32>) -> Result<(&'static str, Editor
     command.args(&argv[1..]);
     command.args(goto_arguments(&argv[0], path, line));
     if classify_gui_editor(&argv[0]).is_some() {
-        command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         // Source launches a GUI editor without blocking the active REPL.
         command
             .spawn()
@@ -188,7 +201,10 @@ mod tests {
     #[test]
     fn gui_classification_uses_binary_basename_not_parent_directory() {
         assert_eq!(classify_gui_editor("/some/code/bin/nvim"), None);
-        assert_eq!(classify_gui_editor("/usr/bin/code-insiders"), Some(GuiFamily::Code));
+        assert_eq!(
+            classify_gui_editor("/usr/bin/code-insiders"),
+            Some(GuiFamily::Code)
+        );
         assert_eq!(classify_gui_editor("cursor"), Some(GuiFamily::Cursor));
         assert_eq!(classify_gui_editor("notepad.exe"), Some(GuiFamily::Notepad));
     }
@@ -200,13 +216,22 @@ mod tests {
             goto_arguments("code-insiders", path, Some(42)),
             vec!["-g", "/tmp/a b;$(unsafe).rs:42"]
         );
-        assert_eq!(goto_arguments("subl", path, Some(3)), vec!["/tmp/a b;$(unsafe).rs:3"]);
+        assert_eq!(
+            goto_arguments("subl", path, Some(3)),
+            vec!["/tmp/a b;$(unsafe).rs:3"]
+        );
         assert_eq!(
             goto_arguments("nvim", path, Some(3)),
             vec!["+3", "/tmp/a b;$(unsafe).rs"]
         );
-        assert_eq!(goto_arguments("notepad", path, Some(3)), vec!["/tmp/a b;$(unsafe).rs"]);
-        assert_eq!(goto_arguments("vim", path, Some(0)), vec!["/tmp/a b;$(unsafe).rs"]);
+        assert_eq!(
+            goto_arguments("notepad", path, Some(3)),
+            vec!["/tmp/a b;$(unsafe).rs"]
+        );
+        assert_eq!(
+            goto_arguments("vim", path, Some(0)),
+            vec!["/tmp/a b;$(unsafe).rs"]
+        );
     }
 
     #[test]
