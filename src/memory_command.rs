@@ -1,0 +1,248 @@
+//! Provider-neutral local port of commands/memory/memory.tsx and its selector.
+//! Memory files are user-owned; this command never uploads or synchronizes data.
+use anyhow::{bail, Context, Result};
+use std::{
+    collections::HashSet,
+    env,
+    fs::{self, OpenOptions},
+    io::{self, Write},
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryTarget {
+    pub label: &'static str,
+    pub path: PathBuf,
+    pub create_if_missing: bool,
+}
+
+pub fn targets(workspace: &Path, user_config: &Path) -> Vec<MemoryTarget> {
+    let candidates = [
+        MemoryTarget {
+            label: "User instructions",
+            path: user_config.join("AGENTS.md"),
+            create_if_missing: true,
+        },
+        MemoryTarget {
+            label: "Project instructions",
+            path: workspace.join("AGENTS.md"),
+            create_if_missing: true,
+        },
+        MemoryTarget {
+            label: "Auto-memory index",
+            path: workspace.join(".atlas/memory/MEMORY.md"),
+            create_if_missing: false,
+        },
+    ];
+    let mut seen = HashSet::new();
+    candidates
+        .into_iter()
+        .filter(|target| {
+            // Only expose auto-memory after creation by the normal memory
+            // engine; opening /memory must not fabricate an empty index.
+            (target.create_if_missing || target.path.is_file())
+                && seen.insert(target.path.clone())
+        })
+        .collect()
+}
+
+pub fn select(targets: &[MemoryTarget], raw: &str) -> Result<Option<PathBuf>> {
+    let answer = raw.trim();
+    if answer.eq_ignore_ascii_case("q") || answer.eq_ignore_ascii_case("cancel") {
+        return Ok(None);
+    }
+    let selected: usize = answer
+        .parse()
+        .context("Choose a listed memory-file number, or q to cancel")?;
+    let target = targets.get(selected.saturating_sub(1)).filter(|_| selected > 0)
+        .context("Memory-file selection out of range")?;
+    Ok(Some(target.path.clone()))
+}
+
+/// Equivalent to original writeFile(flag='wx'): preexisting content is never
+/// truncated, and every other filesystem error reaches the caller.
+pub fn ensure_exists(path: &Path) -> Result<()> {
+    let directory = path.parent().context("Memory file has no parent directory")?;
+    fs::create_dir_all(directory)
+        .with_context(|| format!("Create memory directory {}", directory.display()))?;
+    match OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(mut file) => {
+            file.flush()?;
+            Ok(())
+        }
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("Create memory file {}", path.display())),
+    }
+}
+
+/// POSIX-style command argv parsing preserves quoted binary locations and
+/// editor flags while never evaluating shell metacharacters.
+fn editor_argv(raw: &str) -> Result<Vec<String>> {
+    let mut output = Vec::new();
+    let mut token = String::new();
+    let mut quote = None;
+    let mut escape = false;
+    let mut in_token = false;
+    for ch in raw.chars() {
+        if escape {
+            token.push(ch);
+            escape = false;
+            in_token = true;
+        } else if ch == '\\' && quote != Some('\'') {
+            escape = true;
+            in_token = true;
+        } else if let Some(current) = quote {
+            if ch == current {
+                quote = None;
+            } else {
+                token.push(ch);
+            }
+        } else if ch == '"' || ch == '\'' {
+            quote = Some(ch);
+            in_token = true;
+        } else if ch.is_whitespace() {
+            if in_token {
+                output.push(std::mem::take(&mut token));
+                in_token = false;
+            }
+        } else {
+            token.push(ch);
+            in_token = true;
+        }
+    }
+    if escape || quote.is_some() {
+        bail!("Unclosed escape or quote in external editor command");
+    }
+    if in_token {
+        output.push(token);
+    }
+    if output.is_empty() || output[0].is_empty() {
+        bail!("External editor command is empty");
+    }
+    Ok(output)
+}
+
+fn external_editor() -> Result<(Vec<String>, &'static str)> {
+    for (key, display) in [("VISUAL", "$VISUAL"), ("EDITOR", "$EDITOR")] {
+        if let Ok(value) = env::var(key) {
+            if !value.trim().is_empty() {
+                return Ok((editor_argv(&value)?, display));
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        Ok((vec!["notepad.exe".into()], "default"))
+    }
+    #[cfg(not(windows))]
+    {
+        Ok((vec!["vi".into()], "default"))
+    }
+}
+
+fn launch_editor(path: &Path) -> Result<&'static str> {
+    let (argv, source) = external_editor()?;
+    let status = Command::new(&argv[0])
+        .args(&argv[1..])
+        .arg(path)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .with_context(|| format!("Launch editor {}", argv[0]))?;
+    if !status.success() {
+        bail!("Editor exited with status {status}");
+    }
+    Ok(source)
+}
+
+pub fn run(workspace: &Path) -> Result<String> {
+    let config = crate::config::Config::path()?;
+    let user_dir = config.parent().context("User configuration has no parent directory")?;
+    let candidates = targets(workspace, user_dir);
+    println!("Memory files:");
+    for (index, target) in candidates.iter().enumerate() {
+        println!(
+            "  {}) {}  {}{}",
+            index + 1,
+            target.label,
+            target.path.display(),
+            if target.path.exists() { "" } else { " (new)" },
+        );
+    }
+    print!("Choose a memory file (q to cancel): ");
+    io::stdout().flush()?;
+    let mut choice = String::new();
+    if io::stdin().read_line(&mut choice)? == 0 {
+        return Ok("Cancelled memory editing".into());
+    }
+    let Some(chosen) = select(&candidates, &choice)? else {
+        return Ok("Cancelled memory editing".into());
+    };
+    let target = candidates
+        .iter()
+        .find(|item| item.path == chosen)
+        .context("Selected memory file disappeared from options")?;
+    if target.create_if_missing {
+        ensure_exists(&chosen)?;
+    }
+    let source = launch_editor(&chosen)?;
+    let hint = if source == "default" {
+        "To use a different editor, set $EDITOR or $VISUAL.".into()
+    } else {
+        format!("Using {source}. To change editors, set $EDITOR or $VISUAL.")
+    };
+    Ok(format!("Opened memory file at {}\n\n{hint}", chosen.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selection_and_cancellation_never_create_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let options = targets(root, &root.join("user"));
+        assert_eq!(options.len(), 2);
+        assert_eq!(select(&options, "q").unwrap(), None);
+        assert_eq!(select(&options, "cancel").unwrap(), None);
+        assert!(select(&options, "0").is_err());
+        assert!(select(&options, "99").is_err());
+        assert!(select(&options, "bad").is_err());
+        assert!(!root.join("AGENTS.md").exists());
+        assert!(!root.join("user/AGENTS.md").exists());
+    }
+
+    #[test]
+    fn create_new_preserves_existing_content_and_discovers_auto_memory() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let project = root.join("AGENTS.md");
+        ensure_exists(&project).unwrap();
+        fs::write(&project, "important user text\n").unwrap();
+        ensure_exists(&project).unwrap();
+        assert_eq!(fs::read_to_string(&project).unwrap(), "important user text\n");
+        let auto = root.join(".atlas/memory/MEMORY.md");
+        fs::create_dir_all(auto.parent().unwrap()).unwrap();
+        fs::write(&auto, "facts").unwrap();
+        let choices = targets(root, &root.join("user"));
+        assert_eq!(choices.len(), 3);
+        assert_eq!(select(&choices, "3").unwrap(), Some(auto));
+    }
+
+    #[test]
+    fn quoted_editor_argv_preserves_spaces_and_never_runs_a_shell() {
+        assert_eq!(
+            editor_argv(r#""/some path/code" --wait"#).unwrap(),
+            vec!["/some path/code", "--wait"],
+        );
+        assert_eq!(
+            editor_argv(r#"vi -u 'custom rc'"#).unwrap(),
+            vec!["vi", "-u", "custom rc"],
+        );
+        assert!(editor_argv("'unterminated").is_err());
+        assert!(editor_argv("").is_err());
+    }
+}
