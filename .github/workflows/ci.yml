@@ -184,7 +184,7 @@ jobs:
           command: check advisories
           arguments: --all-features
 
-source-parity:
+  source-parity:
     name: 原版源码全量等价验收
     runs-on: ubuntu-latest
     timeout-minutes: 35
