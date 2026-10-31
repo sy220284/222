@@ -266,7 +266,9 @@ def run(args):
             summary.append("- 另外 "+str(len(errors)-100)+" 项见 JSON")
         (output/"SOURCE_PARITY.md").write_text("\n".join(summary)+"\n", encoding="utf8")
         print(json.dumps({k:v for k,v in result.items() if k!="errors"},ensure_ascii=False))
-        return 0 if passed else 1
+        # A completed diagnostic report describes the gaps; it is not
+        # source-parity acceptance. The strict gate continues to reject them.
+        return 0 if args.command == "report" or passed else 1
     except (AuditError, OSError, ValueError, KeyError, BadZipFile) as exc:
         msg = {"schema":"source-parity/v1","pass":False,"error":str(exc)}
         (output/"SOURCE_PARITY.json").write_text(json.dumps(msg,ensure_ascii=False)+"\n",encoding="utf8")
@@ -276,7 +278,7 @@ def run(args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("command",choices=("audit","gate"))
+    p.add_argument("command",choices=("audit","gate","report"))
     p.add_argument("--repo",type=Path,default=Path("."))
     p.add_argument("--source-archive",type=Path)
     p.add_argument("--spec-archive",type=Path)

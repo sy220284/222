@@ -32,6 +32,38 @@ class SourceParityGateTests(unittest.TestCase):
         problems,stats=verify_contracts(rows,baseline,c)
         self.assertEqual(stats["fully_evidenced"],0)
         self.assertTrue(any("行为维度" in p for p in problems))
+    def test_report_exposes_remaining_gaps_without_bypassing_gate(self):
+        from argparse import Namespace
+        from unittest.mock import patch
+        import json
+        from source_parity_gate import run
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / "docs").mkdir()
+            (repo / "docs/PORT_BASELINE.json").write_text(
+                json.dumps({"expected_total": 1, "source_hashes": {"src/a.ts": "a" * 64}}),
+                encoding="utf-8",
+            )
+            rows = {"src/a.ts": {"status": "unported", "source_lines": 2,
+                                  "rust_mapping": "待定"}}
+            progress = {"eligible": 1, "accepted": 0, "remaining": 1}
+            with (patch("source_parity_gate.read_matrix", return_value=rows),
+                  patch("source_parity_gate.current_counts", return_value=progress),
+                  patch("source_parity_gate.check_evidence", return_value={}),
+                  patch("source_parity_gate.load_contracts", return_value=({}, []))):
+                output = repo / "audit"
+                self.assertEqual(run(Namespace(repo=repo, output=output,
+                                               command="report", source_archive=None)), 0)
+                report = json.loads((output / "SOURCE_PARITY.json").read_text())
+                self.assertFalse(report["pass"])
+                self.assertEqual(report["contracts"]["missing"], 1)
+                self.assertEqual(report["mode"], "report")
+                self.assertEqual(run(Namespace(repo=repo, output=output,
+                                               command="gate", source_archive=None)), 1)
+                gated = json.loads((output / "SOURCE_PARITY.json").read_text())
+                self.assertFalse(gated["pass"])
+                self.assertIn("缺少原版源码 ZIP，拒绝放行", gated["errors"])
+
     def test_duplicate_archive_path_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             z=Path(tmp)/"a.zip"

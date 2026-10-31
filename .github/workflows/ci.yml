@@ -194,6 +194,14 @@ jobs:
     steps:
       - name: 检出当前提交
         uses: actions/checkout@v4
+      # Publish the complete gap list even if private source credentials are
+      # absent; a successful report never changes the strict gate result.
+      - name: 输出源码逐函数差异清单（只报告，不放行）
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/source_parity_gate.py report --repo . --output .port-audit
+          cat .port-audit/SOURCE_PARITY.md >> "$GITHUB_STEP_SUMMARY"
       - name: 获取私密 2.1.88 原版源码
         shell: bash
         env:
