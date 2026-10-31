@@ -2,7 +2,6 @@
 //! sources. No vendor login, network reporting or JavaScript engine required.
 #![allow(dead_code)]
 use anyhow::{bail, Context, Result};
-use regex::Regex;
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, VecDeque},
