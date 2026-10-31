@@ -10,14 +10,14 @@
 | 已批准排除 | 192 | 独立清单见 [排除及理由](SPEC_DOCUMENT_EXCLUSIONS.md)，不可擅自增加 |
 | 应迁移 | 1714 | 不含排除项 |
 | 已验收 | 38 | 既有历史验收，须检查当前 HEAD 回归，不等同于本次重新验收 |
-| 部分实现 | 1210 | 仍须逐函数、入口、语义、异常与运行验证 |
-| 未迁移 | 466 | 须对照原版开发 Rust 主体并接通真实生产链 |
+| 部分实现 | 1212 | 仍须逐函数、入口、语义、异常与运行验证 |
+| 未迁移 | 464 | 须对照原版开发 Rust 主体并接通真实生产链 |
 | 尚待完整验收 | 1676 | 此项不得因只增加文档而清零 |
 
 ## 本轮核对的可复核成果（2026-10-31）
 
 1. **规格文件全量清点**：用户提交的 ZIP 实有 5,259 个文件；其中 1,902 份第一方逐文件规格与矩阵中的 1,902 条 `src/` 路径一一对应，其余 4 条源路径属于 `vendor/`。全量 14 模块及 2,854 份依赖源详表在本地进度工作簿单独登记。
-2. **映射实存检查**：对照本次 PR #6 HEAD 仓库树，当前非排除路径中 **38 条登记为已验收、1,210 条部分实现、466 条未迁移**。是否有 Rust 文件落点与是否真实运行须分别核验；未迁移条目必须继续按源码闭环。文件存在只说明有代码落点，不能证明执行链及原版行为完整。
+2. **映射实存检查**：对照本次 PR #6 HEAD 仓库树，当前非排除路径中 **38 条登记为已验收、1,212 条部分实现、464 条未迁移**。是否有 Rust 文件落点与是否真实运行须分别核验；未迁移条目必须继续按源码闭环。文件存在只说明有代码落点，不能证明执行链及原版行为完整。
 3. **真实代码修复**：单文件 `advisor.ts`、`ultraplan.tsx` 等命令源码映射从错误的 `index.ts` 推导改为真实源路径；已有 Rust `/advisor` 处理链补上命令索引，相关回归已增加。原版 `brief.ts` 仍无 Rust 处理链，保持未迁移。
 4. **可重跑的生成器**：`scripts/spec_document_progress.py` 从 ZIP + 唯一现行迁移矩阵 + 冻结原版哈希 + 用户授权排除清单生成 **每一份 ZIP 文件的 CSV 台账、192 条排除理由 CSV 及模块汇总**，遇到缺文档、重复文档、原版哈希不一致和范围冲突时直接报错；在合成全量 5,259 文件样本和 1,906 源路径数据上已执行验证，且增加独立回归测试。使用：
 
@@ -1639,7 +1639,7 @@
 | `src/utils/model/configs.ts` | `f217bfc735c8e7a88703371d19210adfe4d4490c46d81179c174bcf82f13c13a` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/model/contextWindowUpgradeCheck.ts` | `15a5384af4c1c753233c125f7891ea1a65a4cde9a6640c950be13abb5859ab0c` | 部分实现 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/model/deprecation.ts` | `8afd1ab75225bc557bcd5fb0e3eabfb5229ad024b6c30ec888aefaabeed6855c` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
-| `src/utils/model/model.ts` | `e12212768bd8d00e7ba3f89a45382c17bec2be27047077d32f120c348e45f00c` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
+| `src/utils/model/model.ts` | `e12212768bd8d00e7ba3f89a45382c17bec2be27047077d32f120c348e45f00c` | 部分实现 | `src/config.rs / src/model_catalog.rs` | 部分实现：自定义模型名保留大小写、trim 和 [1m] 尾缀规范化已接真实配置；原版全部别名、容量模式、订阅权益分支及完整动态模型发现需按授权范围逐函数对照，当前尚未完成等价验收 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/model/modelAllowlist.ts` | `90b9d6829d6e12410ebde54b406e9fed8fcd6392141e5385c4916b57606b7472` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/model/modelCapabilities.ts` | `7aec505ec86493e5ba680c96c88c4b87babb84344828b75ffb7c71845d5e9039` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/model/modelOptions.ts` | `6134ee08f2cd6f56ad4a246d88b78506ab588594223df3778b40b55360c751fc` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
@@ -1753,7 +1753,7 @@
 | `src/utils/queryProfiler.ts` | `d2049947aba841c7ea8d838c6de35aa6b54cc4b81bc366292d0ad8f0a16ec270` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/queueProcessor.ts` | `1ca7d9fe1dfcce258d87a4b3829477a09900085243c93266928132caed43cee4` | 部分实现 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/readEditContext.ts` | `50cdecb9e3b665f979f6ca33a761a98f089d6703075a9efad93b4a723988e2c6` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
-| `src/utils/readFileInRange.ts` | `36f4f4341928247020c32177422dc8766a5adc6ca0a2e6a9235402bbd088f574` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
+| `src/utils/readFileInRange.ts` | `36f4f4341928247020c32177422dc8766a5adc6ca0a2e6a9235402bbd088f574` | 部分实现 | `src/fs_operations.rs / src/tools.rs` | 部分实现：文件流式按行窗口读取已接真实 Read，按需分段且跳过未选超长行不整行缓存，支持 UTF-8 BOM、CRLF、末尾空行、总行数/字节数与越界告警，已加入测试；原版中途取消、完整读取结果契约及所有异常行为仍待对齐 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/releaseNotes.ts` | `1fcf2358ae300784e277706a629fd0ad631608f971990e5c26f20dbc1d68378c` | 部分实现 | `src/release_notes.rs` | 部分实现：版本解析排序、最近五条过滤、可信 URL 下载与原子缓存；旧配置迁移仍缺 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/renderOptions.ts` | `1a015ba8bdbaf3262b2ff290c86aa8692c4089c4239e8c08232ce5412c621f83` | 部分实现 | `src/render_options.rs / src/terminal_input.rs / src/main.rs` | 已接通管道stdin时终端覆盖、进程级缓存及CI/MCP隔离与RawMode FD恢复，详见矩阵；完整Ink及PTY测试仍待验收 | 已提交Rust生产代码及分支守卫测试，当前HEAD CI未完成，仍需PTY端到端验证 |
 | `src/utils/ripgrep.ts` | `bf4bfadbbbea5d5d35a13eea9159ae59f9780d28ee907d6bd5cc1bd1f30a8c70` | 部分实现 | `src/search.rs` | 部分实现：按原版 ripGrep 的默认 20 秒、WSL 60 秒及可配置正整数秒超时，为 Grep/Glob 可达搜索入口增加超时错误和遍历阶段检查（fbd4a626、17a8e25e，源码已提交待验收）；子进程级取消、信号升级、超时抢占、完整忽略规则及其余 ripgrep 执行链仍未迁移；Git 忽略检查子进程共享搜索截止时间，超时强制终止并显式报告错误，异常退出不再静默当成无忽略规则（13a62847，源码已提交待验收）；外部取消与完整 ripgrep 规则仍缺；Grep 大文件逐行及跨行正则扫描增加同一截止时间检查（64627c6e，已提交待验收），仍不能立即抢占单次正则计算；Grep 多个正反 glob 现按原版输入顺序由后命中规则覆盖（82b0bcd6，源码已提交待验收）；与 Git ignore 的跨来源覆盖仍缺；Grep content/count 不再被强制按文件时间重排，只有文件名模式按原版新到旧排序（98b6fc42，源码已提交待验收）；ripgrep 默认遍历顺序仍待验收 | 待按规格逐函数核实、补齐并验收 |

@@ -1627,7 +1627,7 @@
 | `src/utils/model/configs.ts` | 119 | 4286 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/contextWindowUpgradeCheck.ts` | 48 | 1284 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/model/deprecation.ts` | 102 | 2534 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/model/model.ts` | 619 | 21409 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/model/model.ts` | 619 | 21409 | 重写：保持通用行为 | `src/config.rs / src/model_catalog.rs` | 部分实现：自定义模型名保留大小写、trim 和 [1m] 尾缀规范化已接真实配置；原版全部别名、容量模式、订阅权益分支及完整动态模型发现需按授权范围逐函数对照，当前尚未完成等价验收 |
 | `src/utils/model/modelAllowlist.ts` | 171 | 6030 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/modelCapabilities.ts` | 119 | 4099 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/model/modelOptions.ts` | 541 | 18338 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1741,7 +1741,7 @@
 | `src/utils/queryProfiler.ts` | 302 | 8894 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/queueProcessor.ts` | 96 | 3174 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/readEditContext.ts` | 228 | 7224 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/readFileInRange.ts` | 384 | 12259 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/readFileInRange.ts` | 384 | 12259 | 重写：保持通用行为 | `src/fs_operations.rs / src/tools.rs` | 部分实现：文件流式按行窗口读取已接真实 Read，按需分段且跳过未选超长行不整行缓存，支持 UTF-8 BOM、CRLF、末尾空行、总行数/字节数与越界告警，已加入测试；原版中途取消、完整读取结果契约及所有异常行为仍待对齐 |
 | `src/utils/releaseNotes.ts` | 361 | 11813 | 重写：保持通用行为 | `src/release_notes.rs` | 部分实现：版本解析排序、最近五条过滤、可信 URL 下载与原子缓存；旧配置迁移仍缺 |
 | `src/utils/renderOptions.ts` | 78 | 2278 | 重写：保持通用行为 | `src/render_options.rs / src/terminal_input.rs / src/main.rs` | 部分实现：标准输入为管道时，在Unix有真实终端且非CI、非MCP的交互会话中，缓存并复制 /dev/tty 文件描述符，原子式读取终端按键；RawMode绑定实际FD并在退出时恢复状态，保留普通管道/CI/MCP原有输入路径。已加入源分支守卫单测，仍需真实PTY端到端、FD资源/恢复异常分支和原版Ink渲染选项行为对照 |
 | `src/utils/ripgrep.ts` | 680 | 21188 | 重写：保持通用行为 | `src/search.rs` | 部分实现：按原版 ripGrep 的默认 20 秒、WSL 60 秒及可配置正整数秒超时，为 Grep/Glob 可达搜索入口增加超时错误和遍历阶段检查（fbd4a626、17a8e25e，源码已提交待验收）；子进程级取消、信号升级、超时抢占、完整忽略规则及其余 ripgrep 执行链仍未迁移；Git 忽略检查子进程共享搜索截止时间，超时强制终止并显式报告错误，异常退出不再静默当成无忽略规则（13a62847，源码已提交待验收）；外部取消与完整 ripgrep 规则仍缺；Grep 大文件逐行及跨行正则扫描增加同一截止时间检查（64627c6e，已提交待验收），仍不能立即抢占单次正则计算；Grep 多个正反 glob 现按原版输入顺序由后命中规则覆盖（82b0bcd6，源码已提交待验收）；与 Git ignore 的跨来源覆盖仍缺；Grep content/count 不再被强制按文件时间重排，只有文件名模式按原版新到旧排序（98b6fc42，源码已提交待验收）；ripgrep 默认遍历顺序仍待验收 |
