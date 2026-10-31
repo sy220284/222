@@ -1233,7 +1233,7 @@
 | `src/tools/FileEditTool/prompt.ts` | 29 | 1895 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileEditTool/types.ts` | 86 | 2612 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Edit 原版严格参数名和语义布尔已接入运行时（d061352e），仍缺完整输出结构，待验收； |
 | `src/tools/FileEditTool/utils.ts` | 776 | 22516 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；弯引号文本匹配、替换时保留引号排版和非 Markdown 行尾空白归一化（9eed00be、645510ed、f17bb1c9），源码已提交待验收； |
-| `src/tools/FileReadTool/FileReadTool.ts` | 1184 | 39073 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；读取状态在 Agent 跨轮共享，区分完整/部分读取与输出截断（ae165e76、2206e0f9），待验收；；原版 Read(file_path,offset,limit) 严格参数转换、256KiB 文件上限及不受通用16K截断的真实执行入口（41404581、d061352e、223c5e08），待验收；；原版 Read 同范围且 mtime 未变化时返回简短复用提示，避免重复长文本占用上下文（cf83f4b6、1e8b095a、1b661e19），待验收；；按原版项目临时目录语义读取本会话后台任务 stdout/stderr，保留 Read 规则和流式有界行读取，不扩大编辑权限（46319cca、e773d797），源码已提交待验收；本次 SDK 本地附件复用统一 Read 授权，deny/ask 在读盘和发送前阻断，真实 SDK 回归覆盖 |
+| `src/tools/FileReadTool/FileReadTool.ts` | 1184 | 39073 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；读取状态在 Agent 跨轮共享，区分完整/部分读取与输出截断（ae165e76、2206e0f9），待验收；；原版 Read(file_path,offset,limit) 严格参数转换、256KiB 文件上限及不受通用16K截断的真实执行入口（41404581、d061352e、223c5e08），待验收；；原版 Read 同范围且 mtime 未变化时返回简短复用提示，避免重复长文本占用上下文（cf83f4b6、1e8b095a、1b661e19），待验收；；按原版项目临时目录语义读取本会话后台任务 stdout/stderr，保留 Read 规则和流式有界行读取，不扩大编辑权限（46319cca、e773d797），源码已提交待验收；本次 SDK 本地附件复用统一 Read 授权，deny/ask 在读盘和发送前阻断，真实 SDK 回归覆盖；大文件范围读取缓存原始选中内容并保持 partial 防止编辑越权（6fc2c03d，CI #41209445527 Linux/Windows 已通过，整体源码等价继续待验收） |
 | `src/tools/FileReadTool/UI.tsx` | 185 | 22540 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileReadTool/imageProcessor.ts` | 95 | 2881 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileReadTool/limits.ts` | 93 | 3219 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1741,7 +1741,7 @@
 | `src/utils/queryProfiler.ts` | 302 | 8894 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/queueProcessor.ts` | 96 | 3174 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
 | `src/utils/readEditContext.ts` | 228 | 7224 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/readFileInRange.ts` | 384 | 12259 | 重写：保持通用行为 | `src/fs_operations.rs / src/tools.rs` | 部分实现：文件流式按行窗口读取已接真实 Read，按需分段且跳过未选超长行不整行缓存，支持 UTF-8 BOM、CRLF、末尾空行、总行数/字节数与越界告警，已加入测试；原版中途取消、完整读取结果契约及所有异常行为仍待对齐 |
+| `src/utils/readFileInRange.ts` | 384 | 12259 | 重写：保持通用行为 | `src/fs_operations.rs / src/tools.rs` | 部分实现：文件流式按行窗口读取已接真实 Read，按需分段且跳过未选超长行不整行缓存，支持 UTF-8 BOM、CRLF、末尾空行、总行数/字节数与越界告警；大文件 Read 已将实际选中原文写入会话缓存，部分读取不授权整文件编辑（6fc2c03d，CI #41209445527 Linux/Windows 全量测试通过）；原版中途取消、完整读取结果契约及其余异常行为仍待对齐 |
 | `src/utils/releaseNotes.ts` | 361 | 11813 | 重写：保持通用行为 | `src/release_notes.rs` | 部分实现：版本解析排序、最近五条过滤、可信 URL 下载与原子缓存；旧配置迁移仍缺 |
 | `src/utils/renderOptions.ts` | 78 | 2278 | 重写：保持通用行为 | `src/render_options.rs / src/terminal_input.rs / src/main.rs` | 部分实现：标准输入为管道时，在Unix有真实终端且非CI、非MCP的交互会话中，缓存并复制 /dev/tty 文件描述符，原子式读取终端按键；RawMode绑定实际FD并在退出时恢复状态，保留普通管道/CI/MCP原有输入路径。已加入源分支守卫单测，仍需真实PTY端到端、FD资源/恢复异常分支和原版Ink渲染选项行为对照 |
 | `src/utils/ripgrep.ts` | 680 | 21188 | 重写：保持通用行为 | `src/search.rs` | 部分实现：按原版 ripGrep 的默认 20 秒、WSL 60 秒及可配置正整数秒超时，为 Grep/Glob 可达搜索入口增加超时错误和遍历阶段检查（fbd4a626、17a8e25e，源码已提交待验收）；子进程级取消、信号升级、超时抢占、完整忽略规则及其余 ripgrep 执行链仍未迁移；Git 忽略检查子进程共享搜索截止时间，超时强制终止并显式报告错误，异常退出不再静默当成无忽略规则（13a62847，源码已提交待验收）；外部取消与完整 ripgrep 规则仍缺；Grep 大文件逐行及跨行正则扫描增加同一截止时间检查（64627c6e，已提交待验收），仍不能立即抢占单次正则计算；Grep 多个正反 glob 现按原版输入顺序由后命中规则覆盖（82b0bcd6，源码已提交待验收）；与 Git ignore 的跨来源覆盖仍缺；Grep content/count 不再被强制按文件时间重排，只有文件名模式按原版新到旧排序（98b6fc42，源码已提交待验收）；ripgrep 默认遍历顺序仍待验收 |
