@@ -65,7 +65,9 @@ mod tests {
         assert_eq!(get_shell_history_completion("git  st", &history), None);
         assert_eq!(get_shell_history_completion("Git st", &history), None);
         assert_eq!(
-            get_shell_history_completion("ls ", &history).unwrap().suffix,
+            get_shell_history_completion("ls ", &history)
+                .unwrap()
+                .suffix,
             "-lah"
         );
         assert_eq!(get_shell_history_completion("ls  ", &history), None);
@@ -81,7 +83,9 @@ mod tests {
         assert!(get_shell_history_completion("cargo ", &history).is_none());
         history.insert(0, "!cargo test".into());
         assert_eq!(
-            get_shell_history_completion("cargo ", &history).unwrap().suffix,
+            get_shell_history_completion("cargo ", &history)
+                .unwrap()
+                .suffix,
             "test"
         );
     }
@@ -90,7 +94,9 @@ mod tests {
     fn unicode_input_indexes_on_char_boundary() {
         let history = vec!["!查询 状态".to_owned()];
         assert_eq!(
-            get_shell_history_completion("查询 ", &history).unwrap().suffix,
+            get_shell_history_completion("查询 ", &history)
+                .unwrap()
+                .suffix,
             "状态"
         );
     }
