@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# Rebuilding/uploading a 280+ MiB toolchain for every intermediate PR commit
+# wastes runners. Only the latest revision needs a reusable offline bundle.
+concurrency:
+  group: rust-toolchain-bundle-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   bundle:
     name: 制作并验证 Linux x86_64 工具链
