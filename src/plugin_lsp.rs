@@ -297,8 +297,10 @@ mod tests {
     #[test]
     fn loads_file_manifest_override_scoped_names_and_languages() {
         let root = tempfile::tempdir().unwrap();
+        let plugin_root = root.path().join(".atlas/plugins/typescript");
+        fs::create_dir_all(&plugin_root).unwrap();
         fs::write(
-            root.path().join(".lsp.json"),
+            plugin_root.join(".lsp.json"),
             json!({
                 "ts":{"command":"first","extensionToLanguage":{".ts":"typescript"}}
             })
@@ -307,7 +309,7 @@ mod tests {
         .unwrap();
         let decl = json!([{"ts":{"command":"later","extensionToLanguage":{".ts":"typescript",".tsx":"typescriptreact"}}}]);
         let (servers, errors) =
-            load_plugin_lsp(root.path(), "typescript", &decl, &Value::Null, &Map::new());
+            load_plugin_lsp(&plugin_root, "typescript", &decl, &Value::Null, &Map::new());
         assert!(errors.is_empty(), "{errors:?}");
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].command, "later");
@@ -317,13 +319,15 @@ mod tests {
     #[test]
     fn rejects_path_escape_and_preserves_healthy_entries() {
         let root = tempfile::tempdir().unwrap();
+        let plugin_root = root.path().join(".atlas/plugins/rust");
+        fs::create_dir_all(&plugin_root).unwrap();
         let decl = json!([
             "../outside.json",
             {"valid":{"command":"ok","extensionToLanguage":{".rs":"rust"}},
              "broken":{"command":"","extensionToLanguage":{".rs":"rust"}}}
         ]);
         let (servers, errors) =
-            load_plugin_lsp(root.path(), "rust", &decl, &Value::Null, &Map::new());
+            load_plugin_lsp(&plugin_root, "rust", &decl, &Value::Null, &Map::new());
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].id, "plugin:rust:valid");
         assert_eq!(errors.len(), 2);
