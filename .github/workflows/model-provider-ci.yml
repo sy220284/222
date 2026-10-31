@@ -39,3 +39,33 @@ jobs:
         run: |
           cargo test --locked --test domestic_models_cli
           cargo test --locked --test model_catalog_setup_cli
+
+  sdk-local-regression:
+    name: 旧版 SDK 输入与本地无密钥操作验收
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+      - name: 离线会话与 SDK 回放测试
+        run: |
+          set -euo pipefail
+          for case in \
+            chat_clear_rebinds_prompt_history_to_new_session_and_preserves_old \
+            doctor_cli_and_chat_report_real_local_environment_offline \
+            interactive_project_onboarding_is_persistent_and_disappears_after_init_file \
+            resume_by_unambiguous_title_uses_real_persisted_session_without_network \
+            sdk_control_request_recovers_legacy_ids_without_network \
+            sdk_native_control_envelopes_switch_model_enforce_approval_and_preserve_ids \
+            sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http \
+            sdk_bridge_inbound_media_type_fallback_reaches_real_model_for_direct_and_queued_messages \
+            sdk_remote_attachments_are_rejected_before_any_network_request
+          do
+            timeout 90s cargo test --locked --test integration_cli "$case" -- --exact --nocapture
+          done
