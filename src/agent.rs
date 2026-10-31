@@ -5199,7 +5199,7 @@ impl Agent {
                             turn_output as f64,
                         ))
                     }
-                    None => None,
+                    _ => None,
                 };
                 if let Some(decision) = budget_decision {
                     match decision {
