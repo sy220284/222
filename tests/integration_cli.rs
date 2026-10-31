@@ -3125,7 +3125,7 @@ done"#;
         &config,
         json!({"default_provider":"local","providers":[{
             "id":"local","kind":"openai-compatible","model":"local",
-            "base_url":"http://127.0.0.1:11434/v1"
+            "base_url":"http://127.0.0.1:9/v1"
         }],"mcp_servers":[{
             "id":"local-mcp","command":"sh","args":["-c",script],
             "env":{"SECRET_VALUE":"must-not-leak"}
@@ -5359,7 +5359,8 @@ fn doctor_cli_and_chat_report_real_local_environment_offline() {
     );
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(text.contains("Version:"), "{text}");
-    assert!(text.contains("Provider: 1 model profile"), "{text}");
+    // One user-configured mock profile plus five bundled API brands.
+    assert!(text.contains("Provider: 6 model profile"), "{text}");
     assert!(text.contains("MCP: missing: command"), "{text}");
     assert!(text.contains("Context: AGENTS.md is 50001 bytes"), "{text}");
     let mut child = binary()
