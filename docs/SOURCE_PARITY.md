@@ -30,6 +30,20 @@ Rust 生产代码必须按原版 2.1.88 的输入、输出、分支、异常、�
 
 多导出源码可以为每个黄金场景设置 `export` 和 `source_ids`，同一文件的所有登记函数须有真实场景覆盖。需要注册监听器、调用多步状态或处理异步结果时，可将经过审查的原版执行桥接脚本放入 `scripts/source_parity_drivers/*.mjs`，通过登记项 `original_driver` 调用提交者私有工作区中的**真实原版模块**；脚本只提交执行过程，禁止复制或改写原版实现。通过 `verify-original` 重放后，标准输出必须提供与黄金结果一致的按 ID 对应的观察序列，错误即拒绝。`tests/source_golden_registry.rs` 自动遍历登记的每一条原版黄金样例，调用编译后的 Rust 真实生产适配器并比较实际输出；新增登记必须提供可编译的适配器及正确的输出观察字段。`tests/source_contract_golden.rs` 仍保留具体功能的直接函数断言和执行入口回归，现有集成与端到端测试均保留。现有 CLI/SDK/Agent/MCP 测试保留，全量编译运行，不缩减原有范围。
 
+## 全量源码逐函数测试工单生成
+
+`scripts/source_test_factory.py` 与真实通过的测试登记独立运行。在普通 CI 中，以冻结台账一次产出全部 1,714 条保留路径的完整待办清单、Rust 映射和已登记黄金测试缺口，供提交者按优先级持续实现。不能因为工单已经生成就宣称测试通过。
+
+提交者有自己私有工作区原版 `source/` 和完整逐行规格 `spec.zip` 时执行：
+
+~~~bash
+python3 scripts/source_test_factory.py --repo . \
+  --source-root /absolute/path/to/private/source \
+  --spec-archive /absolute/path/to/private/spec.zip --output .port-audit
+~~~
+
+严格先核对 1,906 个冻结源码原文哈希及 513,237 行规格，再生成每个实际 AST 函数、方法、导出和文件级单元的测试任务（约 22,021 个）。每条任务保留函数位置、参数、复杂性风险信号、Rust 对应文件及未关联黄金测试的准确数量，不保存原版源码正文。原版路径不变时重复生成结果稳定；新黄金回归登记后自动消减缺口。这是完整测试建设的可复用任务来源，只有真正运行过的单元、集成及端到端测试才会被验收。
+
 ## 本地与 CI 验收
 
 本地普通环境，无须安装原版：

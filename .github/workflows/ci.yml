@@ -179,6 +179,10 @@ jobs:
           python3 scripts/source_test_gate.py check --repo . \
             --inventory .port-audit/RUST_TEST_INVENTORY.txt --output .port-audit
           cat .port-audit/SOURCE_TEST_SUITE.md >> "$GITHUB_STEP_SUMMARY"
+      - name: 为完整原版路径生成连续可复用测试任务与缺口
+        run: |
+          python3 scripts/source_test_factory.py --repo . --output .port-audit
+          cat .port-audit/SOURCE_TEST_WORKLIST.md >> "$GITHUB_STEP_SUMMARY"
       - name: 归档真实测试证据和待补范围
         if: always()
         uses: actions/upload-artifact@v4
@@ -187,6 +191,9 @@ jobs:
           path: |
             .port-audit/SOURCE_TEST_SUITE.json
             .port-audit/SOURCE_TEST_SUITE.md
+            .port-audit/SOURCE_TEST_WORKLIST.json
+            .port-audit/SOURCE_TEST_WORKLIST.jsonl
+            .port-audit/SOURCE_TEST_WORKLIST.md
           if-no-files-found: warn
 
   source-completeness:
