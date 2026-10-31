@@ -220,6 +220,16 @@ fn wrote_memory(messages: &[Message], from: usize, workspace: &Path) -> bool {
                 ) {
                     return false;
                 }
+                // A proposed write that the executor denied or that failed
+                // must not suppress extraction of durable memories.
+                let succeeded = messages.iter().skip(from).any(|result| {
+                    result.role == "tool"
+                        && result.tool_call_id.as_deref() == Some(call.id.as_str())
+                        && !result.visible_text().starts_with("ERROR:")
+                });
+                if !succeeded {
+                    return false;
+                }
                 let Ok(args) = serde_json::from_str::<serde_json::Value>(&call.function.arguments)
                 else {
                     return false;
@@ -604,9 +614,14 @@ mod tests {
             },
         }]);
         let model = mock("invalid");
+        let call = assistant.tool_calls.as_ref().unwrap()[0].clone();
         let result = extract(
             &root,
-            &[Message::text("user", "Remember this"), assistant],
+            &[
+                Message::text("user", "Remember this"),
+                assistant,
+                Message::tool_result(&call, "File written.".into()),
+            ],
             0,
             "system",
             &model,
@@ -614,9 +629,43 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(result.cursor, 2);
+        assert_eq!(result.cursor, 3);
         assert!(model.requests.lock().unwrap().is_empty());
     }
+    #[tokio::test]
+    async fn failed_main_agent_write_does_not_suppress_extraction() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        fs::create_dir_all(root.join(".atlas/memory")).unwrap();
+        let mut assistant = Message::text("assistant", "Attempted memory write");
+        let call = ToolCall {
+            id: "write-denied".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "write_file".into(),
+                arguments: r#"{"path":".atlas/memory/decisions.md"}"#.into(),
+            },
+        };
+        assistant.tool_calls = Some(vec![call.clone()]);
+        let model = mock(r#"{"memories":[]}"#);
+        let result = extract(
+            &root,
+            &[
+                Message::text("user", "Remember the decision"),
+                assistant,
+                Message::tool_result(&call, "ERROR: denied".into()),
+            ],
+            0,
+            "system",
+            &model,
+            &profile(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.cursor, 3);
+        assert_eq!(model.requests.lock().unwrap().len(), 1);
+    }
+
     #[tokio::test]
     async fn invalid_destination_prevents_partial_writes() {
         let tmp = tempfile::tempdir().unwrap();
