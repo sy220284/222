@@ -789,15 +789,15 @@ mod tests {
             compact_summary_content(
                 "<analysis>hidden</analysis>\n<summary>verified state</summary>"
             ),
-            "Summary:\\nverified state"
+            "Summary:\nverified state"
         );
         assert_eq!(compact_summary_content("bare summary"), "bare summary");
         assert_eq!(
-            compact_summary_content("intro\\n<analysis>discard</analysis>\\n\\n<summary>  result \\n </summary>\\n\\n\\ntrailing"),
-            "intro\\n\\nSummary:\\nresult\\n\\ntrailing"
+            compact_summary_content("intro\n<analysis>discard</analysis>\n\n<summary>  result \n </summary>\n\n\ntrailing"),
+            "intro\n\nSummary:\nresult\n\ntrailing"
         );
         assert_eq!(
-            compact_summary_content("<analysis>drafting</analysis>\\nfinal without tags"),
+            compact_summary_content("<analysis>drafting</analysis>\nfinal without tags"),
             "final without tags"
         );
         assert_eq!(
