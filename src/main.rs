@@ -1204,12 +1204,7 @@ async fn run_cli() -> Result<()> {
         match &cli.command {
             Commands::Sessions { query } => {
                 for item in session_control::search(&root, query.as_deref().unwrap_or(""))? {
-                    println!(
-                        "{}  {}  ({})",
-                        item.id,
-                        item.display_title(),
-                        item.display_metadata()
-                    );
+                    println!("{}  {}  ({})", item.id, item.title, item.display_metadata());
                 }
                 return Ok(());
             }
@@ -1267,12 +1262,7 @@ async fn run_cli() -> Result<()> {
             semantic_session_search::search(&root, query, provider.as_ref(), &profile.model)
                 .await?;
         for item in matches {
-            println!(
-                "{}  {}  ({})",
-                item.id,
-                item.display_title(),
-                item.display_metadata()
-            );
+            println!("{}  {}  ({})", item.id, item.title, item.display_metadata());
         }
         return Ok(());
     }
@@ -2233,12 +2223,7 @@ async fn chat(
             }
             "/sessions" => {
                 for item in agent.list_sessions()? {
-                    println!(
-                        "{}  {}  ({})",
-                        item.id,
-                        item.display_title(),
-                        item.display_metadata()
-                    );
+                    println!("{}  {}  ({})", item.id, item.title, item.display_metadata());
                 }
                 continue;
             }
