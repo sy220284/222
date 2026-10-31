@@ -51,3 +51,13 @@
 | 40_内置命令完整注册与行为入口.md | 176 | 4 | 115 | 12 | 45 | 未闭环 |
 
 原版规格路径 1902；仓库冻结矩阵 1906（包含 4 条未纳入第一方文档的路径）。
+
+## 2026-10-31 本轮源码对照与真实实现记录
+
+本节只追加可复核证据，不改变上表由唯一源路径台账生成的原始数字。文档维持「未闭环」，各函数的当前 HEAD CI 和跨模块验收仍须单独检查。
+
+| 功能文档 | 原源码入口 | 真实 Rust 入口 | 本次修复及测试 | 遗留验收 |
+|---|---|---|---|---|
+| 02 交互输入、消息队列与命令分派 | `messageQueueManager.ts::isSlashCommand`；`processUserInput.ts::processUserInputBase` | `message_queue.rs::Command::is_slash/is_input_slash`；`sdk_queue.rs::control` | 队列判定允许前导空格 trim；SDK 模型输入必须从第一个字符开始为斜杠，图文末文本块亦遵循，含非文本尾块/跳过标记测试，`4c00fcc` | 命令注册及弹窗、粘贴/@附件、SDK全模式 |
+| 02 交互输入、消息队列与命令分派 | `cli/print.ts::drainCommandQueue` | `sdk_queue.rs::latest_batch_checkpoint_uuid`、`Agent::ask_with_blocks_for_message` | 批量提示合并采用最后一条存在的有效 UUID，保留历史别名，新增多条及缺失 UUID 回归，`4c00fcc` | 完整 SDK 同步/异步回放、取消、端到端恢复 |
+| 03 会话主循环、流式事件与工具往返 | `services/tools/toolOrchestration.ts::runToolsConcurrently`；`utils/generators.ts::all` | `agent.rs::finalize_readonly_result`；`tool_orchestration.rs::completed_as_ready` | 并行只读工具谁先完成先回填独立 tool ID、PostToolUse 警告、会话记录与持久化，增加受控快慢完成先后测试，`f9502fd`、`c15b8e` | 真实并发 Hook/MCP/TUI 集成、Stop Hook/异常/取消/重启、工具上下文修改 |
