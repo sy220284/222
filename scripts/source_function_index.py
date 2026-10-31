@@ -17,6 +17,7 @@ from zipfile import ZipFile
 
 FUNCTIONS_TSV = "核验数据/全函数与方法核查.tsv"
 MAPPING_TSV = "核验数据/文件与模块双向映射.tsv"
+EXPORTS_CSV = "核验数据/export_missed_1212.csv"
 KINDS = {"ArrowFunction", "FunctionDeclaration", "MethodDeclaration",
          "GetAccessor", "FunctionExpression", "Constructor"}
 
@@ -29,6 +30,9 @@ def build_function_index(archive: Path, source_hashes: dict):
         ))
         mapping = list(csv.DictReader(
             io.StringIO(z.read(MAPPING_TSV).decode("utf-8-sig")), delimiter="\t"
+        ))
+        exported = list(csv.DictReader(
+            io.StringIO(z.read(EXPORTS_CSV).decode("utf-8-sig"))
         ))
     files = {row["源文件"]: row for row in mapping}
     if len(files) != len(mapping):
@@ -87,6 +91,39 @@ def build_function_index(archive: Path, source_hashes: dict):
             "flags":flags,"static_metrics":metrics,
             "review_status":"pending",
         })
+    seen_exports = set()
+    for number, row in enumerate(exported, 2):
+        path, name = row["file"], row["name"]
+        if path.removeprefix("src/") not in files or path not in source_hashes:
+            issues.append(f"EXPORTS:{number}: 路径不存在: {path}")
+            continue
+        try:
+            line = int(row["line"])
+        except ValueError:
+            issues.append(f"EXPORTS:{number}: 行号无效: {path}")
+            continue
+        if not 1 <= line <= int(files[path.removeprefix("src/")]["源文件行数"]):
+            issues.append(f"EXPORTS:{number}: 行号越界: {path}")
+            continue
+        ident = (path, line, row["kind"], name)
+        if ident in seen_exports:
+            issues.append(f"EXPORTS:{number}: 同一导出声明重复: {path}:{name}")
+            continue
+        seen_exports.add(ident)
+        # These are explicit export variables absent from the function AST list.
+        # CallExpression initializers may have real side effects at import time.
+        indices[path].append({
+            "source_id":f"{path}:ExportValue:{line}:{name}",
+            "source":path, "source_sha256":source_hashes[path],
+            "kind":"ExportValue", "name":name,"source_lines":[line,line],
+            "signature":{"initializer_kind":row["initializer_kind"],
+                         "initializer":row["initializer"],
+                         "declared_type":row["declared_type"]},
+            "needs_side_effect_review":row["initializer_kind"] in (
+                "CallExpression","NewExpression","ConditionalExpression",
+                "BinaryExpression","PropertyAccessExpression"),
+            "review_status":"pending",
+        })
     for path in sorted(source_hashes):
         if path.startswith("src/") and path not in indices:
             # May be constants, type declarations, import-only files.
@@ -100,6 +137,7 @@ def build_function_index(archive: Path, source_hashes: dict):
     shared_position_groups = sum(count > 1 for count in collisions.values())
     return indices, issues, {
         "ast_functions":len(funcs),
+        "exported_values":len(exported),
         "indexed_functions":sum(len(x) for x in indices.values()),
         "firstparty_files":len(files),
         "shared_position_groups":shared_position_groups,
