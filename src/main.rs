@@ -51,6 +51,7 @@ mod ink_constants;
 mod json_read;
 mod json_runtime;
 mod keybindings;
+mod local_advanced_keywords;
 mod local_advanced_workflows;
 mod local_attachments;
 mod local_triggers;
@@ -1393,16 +1394,14 @@ async fn run_cli() -> Result<()> {
         Commands::UltraReview { pr_number } => {
             let prompt =
                 local_advanced_workflows::review_prompt(agent.workspace_root(), *pr_number)?;
-            agent.set_sdk_permission_mode("plan")?;
-            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+            agent.ask_in_plan_mode(&prompt).await.map(|answer| println!("{answer}"))
         }
         Commands::UltraPlan { objective } => {
             let prompt = local_advanced_workflows::plan_prompt(
                 agent.workspace_root(),
                 &objective.join(" "),
             )?;
-            agent.set_sdk_permission_mode("plan")?;
-            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+            agent.ask_in_plan_mode(&prompt).await.map(|answer| println!("{answer}"))
         }
         Commands::Trigger {
             action: LocalTriggerAction::Run { name },
@@ -3013,8 +3012,7 @@ async fn chat(
                 };
                 match prepared {
                     Ok(prompt) => {
-                        agent.set_sdk_permission_mode("plan")?;
-                        match agent.ask(&prompt).await {
+                        match agent.ask_in_plan_mode(&prompt).await {
                             Ok(answer) => println!("{answer}"),
                             Err(error) => eprintln!("Error: {error:#}"),
                         }
@@ -3082,6 +3080,42 @@ async fn chat(
                     continue;
                 }
             }
+        }
+        // The original 2.1.88 keyword.ts recognizes standalone launch
+        // directives in ordinary text, but ignores quoted references, paths,
+        // switches, questions and slash commands. Respect the same boundaries
+        // for the provider-neutral local advanced workflows.
+        if let Some(goal) = local_advanced_keywords::replace_ultraplan_keyword(input) {
+            if goal.trim().is_empty() {
+                println!("Usage: /ultraplan GOAL");
+                continue;
+            }
+            match local_advanced_workflows::plan_prompt(agent.workspace_root(), &goal) {
+                Ok(prompt) => {
+                    onboarding.maybe_mark_complete()?;
+                    match agent.ask_in_plan_mode(&prompt).await {
+                        Ok(answer) => println!("{answer}"),
+                        Err(error) => eprintln!("Local UltraPlan failed: {error:#}"),
+                    }
+                }
+                Err(error) => eprintln!("Cannot prepare UltraPlan: {error:#}"),
+            }
+            continue;
+        }
+        if !local_advanced_keywords::ultrareview_positions(input).is_empty() {
+            match local_advanced_workflows::review_prompt(agent.workspace_root(), None) {
+                Ok(mut prompt) => {
+                    prompt.push_str("\n\nUser's review goal: ");
+                    prompt.push_str(input);
+                    onboarding.maybe_mark_complete()?;
+                    match agent.ask_in_plan_mode(&prompt).await {
+                        Ok(answer) => println!("{answer}"),
+                        Err(error) => eprintln!("Local UltraReview failed: {error:#}"),
+                    }
+                }
+                Err(error) => eprintln!("Cannot prepare UltraReview: {error:#}"),
+            }
+            continue;
         }
         // The original marks completion on prompt submission, not on a
         // successful model response; local project instructions may have
