@@ -6336,6 +6336,17 @@ done"#;
         agent.attach_mcp(&[server]).await.unwrap();
         let answer = agent.ask("Inspect the current project").await.unwrap();
         assert_eq!(answer, "Validated the supplied prompt.");
+        assert_eq!(agent.session.mcp_instruction_announcements.len(), 1);
+        assert_eq!(
+            agent.session.mcp_instruction_announcements[0].added_names,
+            ["demo"]
+        );
+        let restored = Session::load(dir.path(), &agent.session.id.to_string()).unwrap();
+        assert_eq!(restored.mcp_instruction_announcements.len(), 1);
+        assert_eq!(
+            restored.mcp_instruction_announcements[0].added_names,
+            ["demo"]
+        );
         let captured = captured.lock().unwrap();
         assert_eq!(captured.len(), 1);
         assert!(captured[0].contains("# MCP server-provided usage context"));
