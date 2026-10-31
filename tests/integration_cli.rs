@@ -6639,6 +6639,62 @@ fn sdk_remote_attachments_are_rejected_before_any_network_request() {
 }
 
 #[test]
+fn sdk_local_attachments_reach_selected_model_without_remote_bridge() {
+    let workspace = tempfile::tempdir().unwrap();
+    fs::write(workspace.path().join("snippet.txt"), "attachment-token-123").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        let mut connection = accept_before(&listener, Duration::from_secs(15));
+        let request = read_request(&mut connection);
+        let body = json!({"choices":[{"message":{"role":"assistant","content":"attachment accepted"},"finish_reason":"stop"}]}).to_string();
+        write!(connection,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(), body).unwrap();
+        connection.flush().unwrap();
+        request
+    });
+    let config = workspace.path().join("config.json");
+    fs::write(&config, json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+    }]}).to_string()).unwrap();
+    let mut child = binary()
+        .args(["--workspace", workspace.path().to_str().unwrap(), "sdk"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        writeln!(stdin, "{}", json!({"type":"user","content":"Inspect attached source",
+            "file_attachments":[{"path":"snippet.txt"}]})).unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("attachment accepted"), "{stdout}");
+    let request = server.join().unwrap();
+    assert!(request.contains("attachment-token-123"), "{request}");
+    assert!(request.contains("Local attachment: snippet.txt"), "{request}");
+}
+
+#[test]
+fn local_advanced_commands_reject_invalid_goals_before_model_calls() {
+    let workspace = tempfile::tempdir().unwrap();
+    let config = workspace.path().join("config.json");
+    let plan = binary()
+        .args(["--workspace", workspace.path().to_str().unwrap(), "ultra-plan"])
+        .env("ATLAS_CONFIG", &config)
+        .output().unwrap();
+    assert!(!plan.status.success());
+    assert!(String::from_utf8_lossy(&plan.stderr).contains("non-empty objective"));
+    let review = binary()
+        .args(["--workspace", workspace.path().to_str().unwrap(), "ultra-review", "0"])
+        .env("ATLAS_CONFIG", &config)
+        .output().unwrap();
+    assert!(!review.status.success());
+}
+
+#[test]
 fn local_marketplace_cli_add_install_list_and_remove_are_durable() {
     let project = tempfile::tempdir().unwrap();
     let source = tempfile::tempdir().unwrap();
