@@ -37,7 +37,7 @@ EXPORT_PATTERN = re.compile(
     re.MULTILINE,
 )
 EXPECTED_TOTAL = 1906
-EXPECTED_EXCLUDED = 195
+EXPECTED_EXCLUDED = 192
 ENTRYPOINTS = ['src/main.rs', 'src/agent.rs', 'src/tools.rs', 'src/mcp.rs', 'src/sdk_queue.rs']
 CRITICAL = {'agent': 7, 'commands': 6, 'bridge': 8, 'cli': 6, 'services': 7,
             'tools': 7, 'tasks': 7, 'hooks': 6, 'ink': 6, 'components': 5,

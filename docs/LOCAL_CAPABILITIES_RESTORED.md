@@ -19,3 +19,16 @@ SDK 示例：
 ## 验收指令
 
 `cargo fmt --all -- --check`、`cargo test --all-targets`、`python3 scripts/port_workbench.py --help`，并核实 PR #6 最新 HEAD 的 GitHub Actions。 
+
+## 持久化本地任务触发
+
+原 `src/tools/RemoteTriggerTool/{prompt.ts,RemoteTriggerTool.ts,UI.tsx}` 的通用任务触发能力重新纳入源码对齐，以 `src/local_triggers.rs` 实现不依赖原厂云端的明确执行入口。
+
+- `atlas-agent trigger set review_check 检查代码安全与单元测试`
+- `atlas-agent trigger list`
+- `atlas-agent trigger run review_check`
+- `atlas-agent trigger delete review_check`
+- 交互会话可用同名 `/trigger set/run/list/delete`。
+- 本地存储与源代码无关的提示词，执行时直接使用当前配置的模型和 Agent 工具权限；不调用云端 Worker，不会主动执行或添加定时任务。
+
+截至本次补充，排除 192 条，纳入对齐 1,714 条；上述 7 条重新纳入路径全部按“部分实现”继续源代码级验收。

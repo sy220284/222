@@ -1284,9 +1284,9 @@
 | `src/tools/ReadMcpResourceTool/ReadMcpResourceTool.ts` | 159 | 4654 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ReadMcpResourceTool/UI.tsx` | 37 | 6109 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ReadMcpResourceTool/prompt.ts` | 17 | 544 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/RemoteTriggerTool/RemoteTriggerTool.ts` | 162 | 4715 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端任务 Trigger；不再跟进，通用本地能力保留 |
-| `src/tools/RemoteTriggerTool/UI.tsx` | 17 | 3096 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端任务 Trigger；不再跟进，通用本地能力保留 |
-| `src/tools/RemoteTriggerTool/prompt.ts` | 16 | 697 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端任务 Trigger；不再跟进，通用本地能力保留 |
+| `src/tools/RemoteTriggerTool/RemoteTriggerTool.ts` | 162 | 4715 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地任务持久保存、列出、删除、显式执行已接通当前模型 Agent；原版云端调度和完整 UI 语义不恢复，需继续核验输入/错误/并发行为 |
+| `src/tools/RemoteTriggerTool/UI.tsx` | 17 | 3096 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地任务持久保存、列出、删除、显式执行已接通当前模型 Agent；原版云端调度和完整 UI 语义不恢复，需继续核验输入/错误/并发行为 |
+| `src/tools/RemoteTriggerTool/prompt.ts` | 16 | 697 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地任务持久保存、列出、删除、显式执行已接通当前模型 Agent；原版云端调度和完整 UI 语义不恢复，需继续核验输入/错误/并发行为 |
 | `src/tools/ScheduleCronTool/CronCreateTool.ts` | 158 | 5710 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ScheduleCronTool/CronDeleteTool.ts` | 96 | 2616 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ScheduleCronTool/CronListTool.ts` | 98 | 2888 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |

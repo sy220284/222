@@ -61,6 +61,7 @@ permissions|permissions|local-jsx|allowed-tools|-|Tool permissions
 plan|plan|local-jsx||[open|description]|Planning mode
 ultraplan|ultraplan|local-jsx||[goal]|Detailed local planning with active model
 ultrareview|ultrareview|local-jsx||[PR]|Deep local code review with active model
+trigger|local-trigger|local-jsx||[set|run|list|delete]|Run saved local Agent tasks with active model
 plugin|plugin|local-jsx|plugins,marketplace|-|Plugin manager
 pr_comments|pr-comments|text||-|PR comments
 privacy-settings|privacy-settings|local-jsx||-|Privacy options
@@ -231,7 +232,7 @@ mod tests {
 
     #[test]
     fn registry_and_alias_resolution() {
-        assert_eq!(commands().len(), 71);
+        assert_eq!(commands().len(), 72);
         assert_eq!(commands().iter().filter(|c| c.disabled).count(), 17);
         assert_eq!(lookup("settings").unwrap().name, "config");
         assert_eq!(lookup("add-dir").unwrap().name, "add-dir");

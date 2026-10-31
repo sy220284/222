@@ -11,7 +11,8 @@
     "第二次源码复核识别出分散的官方云端/远程子入口；全部以逐路径授权并保持本地 SDK、普通 MCP、Git、任务及会话可用。",
     "第三轮核查进一步剔除原厂订阅额度、营销、托管MCP和实验遥测，保留通用模型API、本地计费、SDK与MCP。",
     "补充事件生成类型审查：原厂环境遥测事件和仅供事件使用的账号标签均删除。",
-    "本地模型中立的高级审查、规划四条源路径恢复为待等价验收；云端额度、专用 CCR/Bridge、远程工作流继续排除。"
+    "本地模型中立的高级审查、规划四条源路径恢复为待等价验收；云端额度、专用 CCR/Bridge、远程工作流继续排除。",
+    "原 RemoteTriggerTool 三条路径恢复为用户显式触发的本地持久任务，通用模型 API 执行且不自动创建定时任务、远程 Worker 或云端会话。"
   ],
   "items": [
     {
@@ -621,18 +622,6 @@
     {
       "path": "src/tasks/RemoteAgentTask/RemoteAgentTask.tsx",
       "reason": "远程 Agent 执行任务"
-    },
-    {
-      "path": "src/tools/RemoteTriggerTool/prompt.ts",
-      "reason": "云端任务 Trigger"
-    },
-    {
-      "path": "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts",
-      "reason": "云端任务 Trigger"
-    },
-    {
-      "path": "src/tools/RemoteTriggerTool/UI.tsx",
-      "reason": "云端任务 Trigger"
     },
     {
       "path": "src/types/generated/events_mono/claude_code/v1/claude_code_internal_event.ts",

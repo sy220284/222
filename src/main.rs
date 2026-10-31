@@ -44,6 +44,7 @@ mod git_ignore;
 mod git_workflows;
 mod local_advanced_workflows;
 mod local_attachments;
+mod local_triggers;
 mod github_repo_mapping;
 mod history;
 mod hooks;
@@ -426,6 +427,11 @@ enum Commands {
     UltraReview { pr_number: Option<u64> },
     /// Detailed read-only project plan using the active API model
     UltraPlan { objective: Vec<String> },
+    /// Manage user-owned, explicitly invoked local task triggers
+    Trigger {
+        #[command(subcommand)]
+        action: LocalTriggerAction,
+    },
     /// Review staged/unstaged changes and create a new Git commit
     Commit { instructions: Option<String> },
     /// Commit, push and create/update a Chinese pull request
@@ -463,6 +469,18 @@ enum Commands {
         #[arg(long)]
         resume: Option<String>,
     },
+}
+
+#[derive(Subcommand, Debug)]
+enum LocalTriggerAction {
+    /// Save a reusable local task for the selected model
+    Set { name: String, prompt: Vec<String> },
+    /// Execute an existing saved task through the active Agent and model
+    Run { name: String },
+    /// Show saved local trigger names
+    List,
+    /// Delete a local trigger
+    Delete { name: String },
 }
 
 fn main() -> Result<()> {
@@ -1246,6 +1264,26 @@ async fn run_cli() -> Result<()> {
         }
         return Ok(());
     }
+    if let Commands::Trigger { action } = &cli.command {
+        let workspace = canonical_workspace(&cli.workspace)?;
+        match action {
+            LocalTriggerAction::Set { name, prompt } => {
+                local_triggers::set(&workspace, name, &prompt.join(" "))?;
+                println!("Saved local trigger: {name}");
+                return Ok(());
+            }
+            LocalTriggerAction::List => {
+                for name in local_triggers::list(&workspace)? { println!("{name}"); }
+                return Ok(());
+            }
+            LocalTriggerAction::Delete { name } => {
+                local_triggers::delete(&workspace, name)?;
+                println!("Deleted local trigger: {name}");
+                return Ok(());
+            }
+            LocalTriggerAction::Run { .. } => {}
+        }
+    }
     if cli.max_steps == 0 {
         bail!("--max-steps must be at least 1")
     }
@@ -1359,6 +1397,11 @@ async fn run_cli() -> Result<()> {
             agent.set_sdk_permission_mode("plan")?;
             agent.ask(&prompt).await.map(|answer| println!("{answer}"))
         }
+        Commands::Trigger { action: LocalTriggerAction::Run { name } } => {
+            let prompt = local_triggers::get(agent.workspace_root(), name)?;
+            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+        }
+        Commands::Trigger { .. } => unreachable!("Local trigger management is handled before model creation"),
         Commands::Commit { instructions } => {
             let prompt = git_workflows::prompt(
                 git_workflows::Action::Commit,
@@ -1908,6 +1951,9 @@ async fn chat(
                 println!("/review [PR]             review a pull request through the active model");
                 println!("/ultrareview [PR]        deep local multi-angle code review");
                 println!("/ultraplan GOAL          detailed local read-only project planning");
+                println!("/trigger set NAME GOAL   save reusable task for any model");
+                println!("/trigger run NAME        execute saved local task now");
+                println!("/trigger list|delete NAME  inspect or remove saved local tasks");
                 println!("/commit                  review changes and create a Git commit");
                 println!("/commit-push-pr          commit, push and create/update a Chinese PR");
                 println!("/history [query]         search saved prompt history");
@@ -2893,6 +2939,43 @@ async fn chat(
             let profile = config.select(Some(id), override_model)?;
             agent.switch_model(profile)?;
             println!("Model: {} / {}", agent.profile().id, agent.profile().model);
+            continue;
+        }
+        if let Some(rest) = input.strip_prefix("/trigger ") {
+            let mut parts = rest.trim().splitn(3, char::is_whitespace);
+            let action = parts.next().unwrap_or("");
+            let name = parts.next().unwrap_or("").trim();
+            let tail = parts.next().unwrap_or("").trim();
+            match action {
+                "list" if name.is_empty() => {
+                    match local_triggers::list(agent.workspace_root()) {
+                        Ok(names) => { for name in names { println!("{name}"); } }
+                        Err(error) => eprintln!("Cannot list triggers: {error:#}"),
+                    }
+                }
+                "set" => {
+                    match local_triggers::set(agent.workspace_root(), name, tail) {
+                        Ok(()) => println!("Saved local trigger: {name}"),
+                        Err(error) => eprintln!("Cannot save trigger: {error:#}"),
+                    }
+                }
+                "delete" => {
+                    match local_triggers::delete(agent.workspace_root(), name) {
+                        Ok(()) => println!("Deleted local trigger: {name}"),
+                        Err(error) => eprintln!("Cannot delete trigger: {error:#}"),
+                    }
+                }
+                "run" => {
+                    match local_triggers::get(agent.workspace_root(), name) {
+                        Ok(prompt) => match agent.ask(&prompt).await {
+                            Ok(answer) => println!("{answer}"),
+                            Err(error) => eprintln!("Trigger failed: {error:#}"),
+                        },
+                        Err(error) => eprintln!("Cannot run trigger: {error:#}"),
+                    }
+                }
+                _ => eprintln!("Usage: /trigger set NAME GOAL | run NAME | list | delete NAME"),
+            }
             continue;
         }
         if let Some((name, args)) = input
