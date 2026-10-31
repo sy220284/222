@@ -427,7 +427,10 @@ impl BackgroundTasks {
         // unrecognized "interrupted" status (SDK consumers otherwise may
         // mistake it for successful completion).
         // Normalize records written by previous Rust versions as well.
-        if matches!(record.status.as_str(), "pending" | "running" | "interrupted") {
+        if matches!(
+            record.status.as_str(),
+            "pending" | "running" | "interrupted"
+        ) {
             record.status = "failed".to_owned();
             record.failure_reason.get_or_insert_with(|| {
                 "Background task was interrupted when its owning process exited".to_owned()
