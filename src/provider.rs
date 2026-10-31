@@ -191,13 +191,19 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
 /// during a retry. HTTP failures with an explicit no-retry header are final.
 /// Once an SSE response has started, its parser owns the stream and we never
 /// replay a partially delivered completion.
-pub(crate) fn stream_idle_timeout() -> Duration {
-    let millis = std::env::var("ATLAS_STREAM_IDLE_TIMEOUT_MS")
-        .ok()
-        .and_then(|raw| raw.parse::<u64>().ok())
+fn stream_idle_timeout_from(raw: Option<&str>) -> Duration {
+    // claude.ts uses parseInt(value, 10) || 90000. The common parser
+    // preserves numeric prefixes, e.g. 30000ms and 1e3 -> 30000 and 1.
+    let millis = raw
+        .and_then(crate::env_validation::decimal_prefix)
         .filter(|millis| *millis > 0)
         .unwrap_or(90_000);
     Duration::from_millis(millis)
+}
+
+pub(crate) fn stream_idle_timeout() -> Duration {
+    let configured = std::env::var("ATLAS_STREAM_IDLE_TIMEOUT_MS").ok();
+    stream_idle_timeout_from(configured.as_deref())
 }
 
 /// withRetry.ts::getRetryDelay uses parseInt(header, 10), which accepts
@@ -205,26 +211,7 @@ pub(crate) fn stream_idle_timeout() -> Duration {
 /// this parsing behavior; keep the existing six-hour maximum for untrusted
 /// Retry-After values so a malformed upstream header cannot block forever.
 fn retry_after_delay(header: &str) -> Option<Duration> {
-    let value = header.trim_start();
-    let (negative, value) = if let Some(rest) = value.strip_prefix('-') {
-        (true, rest)
-    } else {
-        (false, value.strip_prefix('+').unwrap_or(value))
-    };
-    let digits = value
-        .bytes()
-        .take_while(u8::is_ascii_digit)
-        .collect::<Vec<u8>>();
-    if digits.is_empty() {
-        return None;
-    }
-    if negative {
-        return Some(Duration::ZERO);
-    }
-    let seconds = std::str::from_utf8(&digits)
-        .expect("ASCII decimal prefix")
-        .parse::<u64>()
-        .unwrap_or(u64::MAX);
+    let seconds = crate::env_validation::decimal_prefix(header)?;
     Some(Duration::from_secs(seconds.min(6 * 60 * 60)))
 }
 
@@ -997,6 +984,20 @@ mod tests {
         assert_eq!(wire[2]["tool_calls"][0]["id"], "call_one");
         assert_eq!(wire[3]["role"], "tool");
         assert_eq!(wire[3]["tool_call_id"], "call_one");
+    }
+
+    #[test]
+    fn idle_timeout_uses_source_decimal_prefix_without_environment_side_effects() {
+        for (raw, expected_ms) in [
+            (None, 90_000),
+            (Some("0"), 90_000),
+            (Some("-1"), 90_000),
+            (Some("  +30000ms"), 30_000),
+            (Some("1e3"), 1),
+            (Some("45000"), 45_000),
+        ] {
+            assert_eq!(stream_idle_timeout_from(raw).as_millis(), expected_ms);
+        }
     }
 
     #[test]
