@@ -1049,8 +1049,8 @@
 | `src/services/compact/sessionMemoryCompact.ts` | 631 | 21058 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/timeBasedMCConfig.ts` | 44 | 1766 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/diagnosticTracking.ts` | 398 | 12315 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
-| `src/services/extractMemories/extractMemories.ts` | 616 | 21684 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/extractMemories/prompts.ts` | 155 | 7673 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/extractMemories/extractMemories.ts` | 616 | 21684 | 重写：保持通用行为 | `src/memory_extraction.rs / src/agent.rs / src/session.rs` | 部分实现：显式开启后主 Agent 正常 Stop 增量提取、主 Agent 已写记忆时跳过、会话持久游标、无工具模型请求和记忆目录内安全写入；原版 fork-agent、异步通知、团队记忆与完整并发策略待验收 |
+| `src/services/extractMemories/prompts.ts` | 155 | 7673 | 重写：保持通用行为 | `src/memory_extraction.rs` | 部分实现：记忆四种类型、既有文件上下文、结构化模型请求及独立安全边界已接入；原版多轮工具提取完整提示词与团队模式待对齐 |
 | `src/services/internalLogging.ts` | 91 | 2799 | 重写：保持通用行为 | `src/generated_ports/p_55989d74f4cbb.rs` | 部分实现：完整等价：外部构建 ant 门折叠，K8s namespace 探测恒 null 含单测；内部集群日志目的地属厂商遥测面（排除），待验收 |
 | `src/services/lsp/LSPClient.ts` | 448 | 14361 | 重写：保持通用行为 | `src/lsp.rs` | 部分实现：JSON-RPC Content-Length、文档同步及查询测试通过 |
 | `src/services/lsp/LSPDiagnosticRegistry.ts` | 387 | 11957 | 重写：保持通用行为 | 待定 | 未迁移 |
