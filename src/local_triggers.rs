@@ -71,8 +71,11 @@ fn update(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> Result<
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let lock_file = options.open(&lock_path).context("Cannot open local task lock file")?;
-    fs2::FileExt::try_lock_exclusive(&lock_file).context("Another local trigger update is running")?;
+    let lock_file = options
+        .open(&lock_path)
+        .context("Cannot open local task lock file")?;
+    fs2::FileExt::try_lock_exclusive(&lock_file)
+        .context("Another local trigger update is running")?;
     let mut entries = load(root)?;
     change(&mut entries)?;
     let path = store_path(root);
@@ -170,8 +173,12 @@ mod tests {
     fn current_os_lock_rejects_concurrent_updates() {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join(".atlas")).unwrap();
-        let held = fs::OpenOptions::new().read(true).write(true).create(true)
-            .open(root.path().join(".atlas/local_triggers.lock")).unwrap();
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(root.path().join(".atlas/local_triggers.lock"))
+            .unwrap();
         fs2::FileExt::try_lock_exclusive(&held).unwrap();
         assert!(set(root.path(), "blocked", "prompt").is_err());
         fs2::FileExt::unlock(&held).unwrap();
