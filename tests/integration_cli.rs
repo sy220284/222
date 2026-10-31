@@ -7323,3 +7323,76 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
     assert!(last_user(6).to_string().contains("data:image/jpeg;base64,/9j/AA=="));
 
 }
+
+
+#[test]
+fn sdk_advanced_phases_block_write_then_restore_original_mode() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..6 {
+            let mut stream = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut stream);
+            let response = match step {
+                0 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"blocked-plan-write","type":"function","function":{
+                        "name":"Write","arguments":json!({
+                          "file_path":"forbidden-plan-write.txt","content":"MUST_NOT_WRITE"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                1 => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Plan draft after denied edit"},"finish_reason":"stop"}]}),
+                2 => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Verified read-only draft"},"finish_reason":"stop"}]}),
+                3 => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Final plan ready"},"finish_reason":"stop"}]}),
+                4 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"allowed-normal-write","type":"function","function":{
+                        "name":"Write","arguments":json!({
+                          "file_path":"normal-after-plan.txt","content":"RESTORED"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                _ => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Normal write completed"},"finish_reason":"stop"}]}),
+            }.to_string();
+            write!(stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(), response).unwrap();
+            stream.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(&config, json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let mut child = binary()
+        .args(["--workspace", root.path().to_str().unwrap(),
+            "--approval", "full", "sdk"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(input, "{}", json!({"type":"user",
+            "content":"/ultraplan audit permissions"})).unwrap();
+        writeln!(input, "{}", json!({"type":"user",
+            "content":"Now perform a normal write"})).unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let wire = String::from_utf8(output.stdout).unwrap();
+    let events: Vec<Value> = wire.lines().map(|s|serde_json::from_str(s).unwrap()).collect();
+    assert_eq!(events.iter().filter(|e|e["type"]=="result").count(),2,"{wire}");
+    assert!(events.iter().any(|e|e["type"]=="workflow"
+        && e["phase"]=="ready" && e["workflow"]=="ultraplan"));
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(),6);
+    assert!(requests[1].contains("ERROR:"), "{}", requests[1]);
+    assert!(!root.path().join("forbidden-plan-write.txt").exists());
+    assert_eq!(fs::read_to_string(root.path().join("normal-after-plan.txt")).unwrap(),"RESTORED");
+}
