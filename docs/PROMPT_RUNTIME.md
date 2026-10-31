@@ -7,7 +7,7 @@
 1. `src/prompt_runtime.rs` 集中定义主系统提示、协调者、Worker、规划、探索、独立验收、通用委派及会话压缩提示词。
 2. `src/agent.rs::system_prompt` 构造主 system，添加工作区路径、`AGENTS.md`、`.atlas/instructions.md` 和可选的 `ATLAS_OUTPUT_STYLE=default|explanatory|learning` 或 `.atlas/output-styles/<名称>.md` 自定义风格。
 3. `Agent::ask_with_blocks` 根据子 Agent 角色/团队身份选择专用 system；对于有效的 `.atlas/agents/<name>.md`，加载 frontmatter 后的用户自定义角色指令。角色指令保留在 system 中，独立于任务的 user 消息。
-4. 随后按运行状态加入会话上下文、真实环境、会话摘要、Hook 上下文、本地相关记忆与授权目录；动态工具清单仅加入已发现的实际工具。
+4. 随后按运行状态加入会话上下文、真实环境、Hook 上下文、本地相关记忆与授权目录；压缩摘要通过 `Session::model_messages` 转为置于模型上下文首部的 user 消息，避免升级为 system 指令；动态工具清单仅加入已发现的实际工具。
 5. `src/provider.rs` 将 `ModelRequest.system` 传给 OpenAI-compatible 或 Gemini。工具专用提示词作为工具定义的 description 传递。
 6. `Agent::compact_history` 发送不带工具的专用摘要请求，保留用户原话、已验证动作、失败原因及待办。
 7. 团队 Worker 重启后仍能通过团队身份重新加载 Worker 规则；其他子 Agent 使用当前委派类型决定角色规则。
@@ -22,7 +22,7 @@
 | `src/utils/systemPrompt.ts` 优先级和角色选择 | `Agent::ask_with_blocks` | 内置和项目角色有真实接线；所有覆盖策略和功能门控尚未等价 |
 | `src/tools/AgentTool/built-in/*` 角色指令 | `role_instructions` 与委派/团队调用 | 探索、规划、验收、Worker 已接入；可用工具的强制只读隔离仍按工具执行器权限单独验收 |
 | `src/tools/*/prompt.ts` 工具描述 | `src/tools.rs::definitions`、其余各工具定义 | 文件/Git/Shell/Skills 12 个描述已实质补齐，其他工具需逐项核验 |
-| `src/services/compact/prompt.ts` | `compact_source_prompts.rs`、`compact_prompt`、`Agent::compact_history` | 原版三套模板均已录入；普通压缩固定 BASE，PreCompact 自定义和 Hook 指令先合并、最后追加原版无工具结尾；原版 `formatCompactSummary` 已源码级修复。显式 UP_TO/from 分段执行及恢复状态仍待验收 |
+| `src/services/compact/prompt.ts` | `compact_source_prompts.rs`、`compact_prompt`、`Agent::compact_history` | 三套原版模板已录入；普通压缩固定 BASE，Hook 指令合并及摘要格式化按原版；`getCompactUserSummaryMessage` 通过 `Session::model_messages` 加入真实 user 角色，历史归档与摘要原子持久化，普通请求、侧问答与上下文统计复用。分段 UP_TO/from 与边界重链仍待验收 |
 | `src/services/SessionMemory/prompts.ts` | `src/memory.rs / src/memory_extraction.rs` | 记忆检索及 system 注入运行，新增显式开启的本地增量提取与安全文件更新；原版 fork-agent 模式与 Dream 整理待验收 |
 | `src/constants/outputStyles.ts` | `output_style_label`、`output_style_instructions`、`available_output_styles`、SDK initialize | 三种内置风格已恢复原版名称和详细指令，SDK 实际列表支持用户级及项目级 .atlas/output-styles（项目优先）；原版插件/管理级目录、完整设置交互仍待对齐 |
 | `src/utils/messages.ts` 与新版来源区分 | 主提示词、`sdk_queue::notification_model_context`、SDK 事件结构 | 后台任务通知作为低信任状态数据接入；其余来源标记/调度权限仍需补齐 |

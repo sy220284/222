@@ -1,5 +1,8 @@
 ## 2026-10-31：未迁移公共文件与输出链首批接入
 
+> **2026-10-31 续推：会话压缩后历史不丢失。** 对照 2.1.88 `services/compact/prompt.ts::getCompactUserSummaryMessage`、`services/compact/compact.ts` 与历史导出/搜索入口，已在 PR #6 将压缩摘要从 system 重复注入改为 `Session::model_messages()` 的单条合成 user 消息；普通 Agent、SDK、上下文估算与 /btw 共享该入口。压缩之前的原始 `Message` 迁入 `Session.archived_messages`，随摘要原子保存，后续重复压缩不重抄旧消息；`Session::transcript_messages()` 统一提供归档+当前消息给导出、CLI/交互全文搜索、语义会话检索、会话命名和统计。增加恢复后真实模型请求、历史顺序和清理回归测试。**待验：最新 HEAD 的全量 Linux/Windows CI；from/up_to 分段压缩、边界重链及 UI 行为尚未移植完毕。已验收路径数量不增加。**
+
+
 - 原版依据：2.1.88 `utils/fsOperations.ts`（128–384、620–771）、`utils/mcpOutputStorage.ts`（全文件）、`utils/format.ts`（全文件）。原始 1,906 条清单已实际逐路径核对行数和字节数。
 - 实际生产链：Read/Write/Edit → `fs_operations::permission_paths`，包括链中间目标的显式拒绝；PromptHistory → `ReverseLines`，保持 UTF-8 原始字节跨 4KB 块；后台任务输出 → `read_range_from`，保留原有 O_NOFOLLOW 与普通文件检查。
 - MCP 工具超限文本、MCP prompt 音频/资源和 WebFetch 二进制统一使用 `mcp_output_storage`，保存完整字节、按大小写无关 MIME 选择扩展名、阻止 `.atlas` 链接越界；超限文本包含原版分块阅读完整性要求。会话列表和保存回执接入共享格式。

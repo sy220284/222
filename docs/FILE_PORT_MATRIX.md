@@ -156,7 +156,7 @@
 | `src/commands/env/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/exit/exit.tsx` | 33 | 5272 | 重写：保持通用行为 | `src/generated_ports/p_8028611d439a8.rs`| 部分实现：/exit 编排——bg 会话先 detach 不杀（覆盖 /exit、/quit、ctrl+c、ctrl+d 经 REPL handleExit）、worktree 走确认流、否则随机告别语+优雅关机；告别语确定性取首条（原版均匀采样），会话/worktree/shutdown 服务注入，ExitFlow 视图归组件域，附 3 测试|
 | `src/commands/exit/index.ts` | 13 | 250 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/export/export.tsx` | 91 | 15104 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、完整消息及工具调用文本导出、恢复入口和跨进程 CLI；原版 UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
+| `src/commands/export/export.tsx` | 91 | 15104 | 重写：保持通用行为 | `src/main.rs / src/session_control.rs` | 部分实现：真实会话发现、标题持久化、跨进程 CLI；压缩前原文、压缩后新消息与工具调用共同参与完整文本导出，并测试顺序；原版 React UI/剪贴板/模型命名/跨项目模糊查询尚缺 |
 | `src/commands/export/index.ts` | 12 | 303 | 重写：保持通用行为 | `src/command_manifest.rs` / `src/main.rs` / `src/session_control.rs` | 已验收：仅本原路径完整等价；原始 index.ts 的名称、local-jsx 类型、说明、[filename] 参数提示及非即时执行完整对应，生产会话导出分发已接线；证据 CI #41041559517 |
 | `src/commands/extra-usage/extra-usage-core.ts` | 119 | 4000 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方超额用量付费入口；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/extra-usage/extra-usage-noninteractive.ts` | 17 | 466 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方超额用量付费入口；不再跟进，通用本地能力与模型 API 保留 |
@@ -1039,13 +1039,13 @@
 | `src/services/claudeAiLimitsHook.ts` | 24 | 515 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅限额 Hook；不再跟进 |
 | `src/services/compact/apiMicrocompact.ts` | 154 | 4996 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/autoCompact.ts` | 352 | 12905 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/services/compact/compact.ts` | 1706 | 60814 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现：先持久化压缩摘要再执行 PostCompact，Hook 失败不回滚摘要（1b652b8b）；长期记忆、完整边界标记及恢复时序未等价 |
+| `src/services/compact/compact.ts` | 1706 | 60814 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现：普通压缩按原版 BASE 模板无工具摘要；摘要通过独立用户消息进入实际模型请求，保留历史原文于 Session.archived_messages，摘要及归档同次原子保存；会话恢复、SDK/CLI 模型请求、搜索、导出、语义检索及统计共用完整历史入口；PostCompact 失败不回滚。原版完整 compact_boundary、from/up_to 分段选择及保留片段重链、附件恢复和全量会话时序仍待等价 |
 | `src/services/compact/compactWarningHook.ts` | 17 | 568 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/compactWarningState.ts` | 19 | 693 | 重写：压缩与记忆 | `src/runtime_contracts.rs / src/agent.rs` | 部分实现：默认 false、压缩抑制、清除与重复赋值不通知已验证；证据 runtime_contracts::tests::compact_warning_state_and_subscriptions；原始 createStore 的同步 Set 订阅、派发时增删监听及跨 Agent/UI 调用时序尚未等价 |
 | `src/services/compact/grouping.ts` | 64 | 2794 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/microCompact.ts` | 531 | 19544 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/postCompactCleanup.ts` | 78 | 3778 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：原版 BASE/PARTIAL/UP_TO 三套正文及分析指令已接入 Rust 模板；普通 compact 无论旧摘要是否存在均用 BASE，用户及 PreCompact Hook 指令按原版顺序合并，原版无工具结尾置于最后；formatCompactSummary 已去分析段、保留外部文本及 Summary 标题。显式分段选择、UP_TO 消息前缀切割和恢复状态仍待生产链验收 |
+| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：BASE/PARTIAL/UP_TO 原版模板及无工具约束已连接；普通 compact 始终用 BASE，Hook 指令顺序和 formatCompactSummary 按源码等价，getCompactUserSummaryMessage 原版继续会话文本已进入用户消息（非 system）。完整 from/up_to 消息范围选择、可见交互及归档边界重链仍待验收 |
 | `src/services/compact/sessionMemoryCompact.ts` | 631 | 21058 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/timeBasedMCConfig.ts` | 44 | 1766 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/diagnosticTracking.ts` | 398 | 12315 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
