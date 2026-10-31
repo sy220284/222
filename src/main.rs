@@ -1419,7 +1419,10 @@ async fn run_cli() -> Result<()> {
                 .await
                 .map(|answer| println!("{answer}"))
         }
-        Commands::UltraPlan { objective, seed_plan } => {
+        Commands::UltraPlan {
+            objective,
+            seed_plan,
+        } => {
             if objective.is_empty() && seed_plan.as_deref().unwrap_or("").trim().is_empty() {
                 println!("{}", local_advanced_workflows::plan_usage());
                 Ok(())
@@ -3057,7 +3060,7 @@ async fn chat(
                             Ok(answer) => println!("{answer}"),
                             Err(error) => eprintln!("Error: {error:#}"),
                         }
-                    },
+                    }
                     Err(error) => eprintln!("Cannot prepare /{name}: {error:#}"),
                 }
                 continue;
@@ -3512,11 +3515,13 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                             .flatten()
                     });
                     if let Some(candidate) = candidate {
-                        let seed_plan = event.get("seedPlan")
+                        let seed_plan = event
+                            .get("seedPlan")
                             .or_else(|| event.get("seed_plan"))
                             .and_then(Value::as_str);
                         if let Some(parsed) = slash_command::parse_slash_command(candidate) {
-                            if !parsed.is_mcp && parsed.command_name == "ultraplan"
+                            if !parsed.is_mcp
+                                && parsed.command_name == "ultraplan"
                                 && parsed.args.trim().is_empty()
                                 && seed_plan.map(str::trim).unwrap_or("").is_empty()
                             {
@@ -3537,7 +3542,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                                 advanced_kind = slash_command::parse_slash_command(candidate)
                                     .and_then(|parsed| match parsed.command_name.as_str() {
                                         "ultraplan" => Some(local_advanced_workflows::Kind::Plan),
-                                        "ultrareview" => Some(local_advanced_workflows::Kind::Review),
+                                        "ultrareview" => {
+                                            Some(local_advanced_workflows::Kind::Review)
+                                        }
                                         _ => None,
                                     });
                                 sdk_replace_last_text(&mut user, expanded);
