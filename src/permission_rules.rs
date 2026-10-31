@@ -284,6 +284,14 @@ pub fn suggestion_for_exact_command(tool_name: &str, command: &str) -> Value {
 }
 
 pub fn suggestion_for_prefix(tool_name: &str, prefix: &str) -> Value {
+    // The original PowerShell suggestion gate suppresses persistent prefix
+    // allows for executable/script/network/alias-mutating cmdlets. The
+    // caller can still approve a single invocation through its prompt.
+    if tool_name == "PowerShell"
+        && crate::powershell_permission_matching::never_suggest_wildcard(prefix)
+    {
+        return serde_json::json!([]);
+    }
     serde_json::json!([{
         "type":"addRules",
         "rules":[{"toolName":tool_name,"ruleContent":format!("{prefix}:*")}],
@@ -810,6 +818,10 @@ mod tests {
             suggestion_for_exact_command("Bash", "echo 'a:b(*)'")[0]["rules"][0]["ruleContent"],
             "echo 'a:b(*)'"
         );
+        assert_eq!(suggestion_for_prefix("PowerShell", "Invoke-Expression"), json!([]));
+        assert_eq!(suggestion_for_prefix("PowerShell", "iwr"), json!([]));
+        assert_eq!(suggestion_for_prefix("PowerShell", "node"), json!([]));
+        assert_eq!(suggestion_for_prefix("PowerShell", "Get-Content")[0]["rules"][0]["ruleContent"], "Get-Content:*");
     }
 
     #[test]

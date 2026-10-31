@@ -1721,7 +1721,7 @@
 | `src/utils/plugins/walkPluginMarkdown.ts` | 70 | 2222 | 重写：保持通用行为 | `src/generated_ports/p_9f04f27b8b4b0.rs`| 部分实现：递归 .md 遍历、namespace 数组语义、stopAtSkillDir 叶子语义、readdir 错误吞并续走、skill.md 大小写不敏感，附 4 测试（含不可读目录不中止）；async 回调改同步闭包（调用方遍历），fsOperations 注入接口待接线|
 | `src/utils/plugins/zipCache.ts` | 407 | 13163 | 重写：保持通用行为 | `src/generated_ports/p_bb3d7b51ba520.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/plugins/zipCacheAdapters.ts` | 165 | 5310 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/powershell/dangerousCmdlets.ts` | 186 | 6155 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/powershell/dangerousCmdlets.ts` | 186 | 6155 | 重写：保持通用行为 | `src/powershell_permission_matching.rs`, `src/permission_rules.rs` | 部分实现：原版危险命令集合及别名归一化已手工移植并接入持久通配符建议拦截；增加真实建议路径单元测试；完整 PowerShell AST 分析与交互式建议界面仍待迁移 |
 | `src/utils/powershell/parser.ts` | 1805 | 66647 | 重写：保持通用行为 | `src/generated_ports/p_c4d0f9a46fa38.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/powershell/staticPrefix.ts` | 317 | 12277 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/preflightChecks.tsx` | 151 | 19309 | 重写：保持通用行为 | `src/generated_ports/p_567219a1f8574.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
