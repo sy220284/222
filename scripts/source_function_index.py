@@ -94,7 +94,7 @@ def build_function_index(archive: Path, source_hashes: dict):
                 "source_id":f"{path}:file-level:1",
                 "source":path,"source_sha256":source_hashes[path],
                 "kind":"FileLevel","name":"whole source file",
-                "source_lines":[1,int(files[path]["源文件行数"])] if path.removeprefix("src/") in files else [],
+                "source_lines":[1,int(files[path.removeprefix("src/")]["源文件行数"])] if path.removeprefix("src/") in files else [],
                 "review_status":"pending",
             })
     shared_position_groups = sum(count > 1 for count in collisions.values())
