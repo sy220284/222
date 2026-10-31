@@ -1360,7 +1360,10 @@ async fn run_command(
             .filter(|message| !message.trim().is_empty())
             .map(str::to_owned);
     }
-    if matches!(payload["hook_event_name"].as_str(), Some("FileChanged" | "CwdChanged")) {
+    if matches!(
+        payload["hook_event_name"].as_str(),
+        Some("FileChanged" | "CwdChanged")
+    ) {
         if let Some(paths) = hook_output
             .and_then(|v| v.get("watchPaths"))
             .and_then(Value::as_array)
@@ -1418,7 +1421,7 @@ mod tests {
             matcher: None,
             if_condition: None,
             plugin_root: None,
-            command: r#"printf '%s\\n' '{"hookSpecificOutput":{"hookEventName":"FileChanged","watchPaths":["generated/config.json",".env"]}}'"#.into(),
+            command: r#"printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"FileChanged","watchPaths":["generated/config.json",".env"]}}'"#.into(),
             shell: None,
             timeout_seconds: 3,
         }])
