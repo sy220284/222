@@ -2114,6 +2114,26 @@ impl Agent {
 
     fn emit(&self, mut event: serde_json::Value) {
         if self.structured_output {
+            if event.get("type").and_then(serde_json::Value::as_str) == Some("assistant") {
+                if let Some(calls) = event.pointer("/message/tool_calls")
+                    .and_then(serde_json::Value::as_array)
+                {
+                    let labels = calls.iter()
+                        .filter(|call| call.pointer("/function/name")
+                            .and_then(serde_json::Value::as_str) == Some("LocalTrigger"))
+                        .filter_map(|call| {
+                            let id = call.get("id")?.as_str()?;
+                            let args = call.pointer("/function/arguments")?.as_str()?;
+                            let input: serde_json::Value = serde_json::from_str(args).ok()?;
+                            Some(json!({"tool_use_id":id,
+                                "display":crate::local_triggers::render_tool_use_message(&input)}))
+                        })
+                        .collect::<Vec<_>>();
+                    if !labels.is_empty() {
+                        event["tool_use_display"] = json!(labels);
+                    }
+                }
+            }
             if event.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
                 && event.get("name").and_then(serde_json::Value::as_str) == Some("LocalTrigger")
             {
