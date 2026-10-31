@@ -5853,18 +5853,9 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn compacted_summary_survives_session_restore() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut session = Session::fresh();
-        session
-            .messages
-            .push(Message::text("user", "Check this project"));
-        session
-            .messages
-            .push(Message::text("assistant", "Checked files"));
-        let id = session.id.to_string();
-        let mut agent = Agent {
+    fn test_compaction_agent(root: &std::path::Path, session: Session) -> Agent {
+        let dir = root;
+        Agent {
             profile: ProviderProfile {
                 id: "fake".into(),
                 kind: "openai-compatible".into(),
@@ -5875,8 +5866,8 @@ mod tests {
                 tuning: Default::default(),
             },
             provider: Box::new(SummaryModel),
-            root: dir.path().canonicalize().unwrap(),
-            project_root: dir.path().canonicalize().unwrap(),
+            root: dir.canonicalize().unwrap(),
+            project_root: dir.canonicalize().unwrap(),
             additional_dirs: Vec::new(),
             approval: Approval::ReadOnly,
             interactive: false,
@@ -5890,17 +5881,17 @@ mod tests {
             session_context: String::new(),
             pending_initial_user_message: None,
             pending_rewake_notifications: Vec::new(),
-            conversation_context: ConversationContext::capture(dir.path()),
+            conversation_context: ConversationContext::capture(dir),
             structured_output: false,
             child_depth: 0,
             mcp_configs: Vec::new(),
             lsp_configs: Vec::new(),
             enabled_plugins: Vec::new(),
             search_backend: None,
-            background: Arc::new(BackgroundTasks::new(dir.path()).unwrap()),
+            background: Arc::new(BackgroundTasks::new(dir).unwrap()),
             shell_kind: crate::shell_runtime::ShellKind::default(),
             session_env: std::collections::BTreeMap::new(),
-            graph: task_graph::TaskGraph::new(dir.path(), "test").unwrap(),
+            graph: task_graph::TaskGraph::new(dir, "test").unwrap(),
             team_name: None,
             agent_name: None,
             prompt_role: None,
@@ -5928,7 +5919,22 @@ mod tests {
             sdk_agent_definitions: std::collections::BTreeMap::new(),
             sdk_allowed_tools: None,
             sdk_disallowed_tools: std::collections::HashSet::new(),
-        };
+        }
+
+    }
+
+    #[tokio::test]
+    async fn compacted_summary_survives_session_restore() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut session = Session::fresh();
+        session
+            .messages
+            .push(Message::text("user", "Check this project"));
+        session
+            .messages
+            .push(Message::text("assistant", "Checked files"));
+        let id = session.id.to_string();
+        let mut agent = test_compaction_agent(dir.path(), session);
         agent.compact_history().await.unwrap();
         let restored = Session::load(dir.path(), &id).unwrap();
         assert!(restored.messages.is_empty());
@@ -5963,6 +5969,135 @@ mod tests {
         let resumed_task = export.find("Continue from summary").unwrap();
         let final_summary = export.rfind("This session is being continued").unwrap();
         assert!(first_summary < resumed_task && resumed_task < final_summary);
+    }
+
+    #[tokio::test]
+    async fn partial_compaction_matches_source_directions_and_preserves_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut session = Session::fresh();
+        session.messages.push(Message::text("user", "Original issue"));
+        session.messages.push(Message::text("assistant", "Original resolution"));
+        let id = session.id.to_string();
+        // Reuse the real Agent and hook/session wiring from the compaction
+        // restore test, rather than testing a disconnected prompt helper.
+        let mut agent = test_compaction_agent(dir.path(), session);
+        agent.compact_history().await.unwrap();
+        agent.session.messages.extend([
+            Message::text("user", "Keep prefix request"),
+            Message::text("assistant", "Keep prefix answer"),
+            Message::text("user", "Summarize tail"),
+        ]);
+        let untouched = agent.session.model_messages();
+        assert!(agent
+            .compact_history_partial(
+                untouched.len(),
+                crate::compact_source_prompts::CompactDirection::From,
+                None,
+            )
+            .await
+            .is_err());
+        assert_eq!(agent.session.model_messages(), untouched);
+        agent.provider = Box::new(PartialSummaryModel {
+            direction: crate::compact_source_prompts::CompactDirection::From,
+            expected_messages: 4,
+            feedback: true,
+        });
+        agent
+            .compact_history_partial(
+                3,
+                crate::compact_source_prompts::CompactDirection::From,
+                Some("Preserve user constraints"),
+            )
+            .await
+            .unwrap();
+        let from_saved = Session::load(dir.path(), &id).unwrap();
+        assert_eq!(from_saved.summary_insert_at, Some(3));
+        assert_eq!(from_saved.messages.len(), 3);
+        assert_eq!(from_saved.model_messages().len(), 4);
+        assert!(from_saved.model_messages()[3]
+            .visible_text()
+            .contains("Summary:\nPartial complete"));
+        let transcript = from_saved.transcript_messages();
+        assert_eq!(
+            transcript
+                .iter()
+                .filter(|m| m.visible_text() == "Summarize tail")
+                .count(),
+            1
+        );
+        assert!(transcript
+            .iter()
+            .any(|m| m.visible_text() == "Original issue"));
+        assert!(crate::session_control::render(&from_saved).contains("Summarize tail"));
+        agent.provider = Box::new(PartialSummaryModel {
+            direction: crate::compact_source_prompts::CompactDirection::UpTo,
+            expected_messages: 2,
+            feedback: false,
+        });
+        agent
+            .compact_history_partial(
+                2,
+                crate::compact_source_prompts::CompactDirection::UpTo,
+                None,
+            )
+            .await
+            .unwrap();
+        let up_to_saved = Session::load(dir.path(), &id).unwrap();
+        assert_eq!(up_to_saved.summary_insert_at, Some(0));
+        assert_eq!(up_to_saved.messages.len(), 2);
+        assert_eq!(up_to_saved.model_messages().len(), 3);
+        assert!(up_to_saved.model_messages()[0]
+            .visible_text()
+            .contains("Partial complete"));
+        assert!(up_to_saved.transcript_messages().len() > transcript.len());
+        assert_eq!(
+            up_to_saved
+                .transcript_messages()
+                .iter()
+                .filter(|m| m.visible_text() == "Summarize tail")
+                .count(),
+            1
+        );
+    }
+
+    struct PartialSummaryModel {
+        direction: crate::compact_source_prompts::CompactDirection,
+        expected_messages: usize,
+        feedback: bool,
+    }
+    #[async_trait::async_trait]
+    impl ModelProvider for PartialSummaryModel {
+        async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
+            assert!(request.tools.is_empty());
+            assert!(request
+                .system
+                .ends_with(crate::compact_source_prompts::NO_TOOLS_TRAILER));
+            assert_eq!(request.messages.len(), self.expected_messages);
+            match self.direction {
+                crate::compact_source_prompts::CompactDirection::From => {
+                    assert!(request.system.contains("RECENT portion"));
+                    assert!(!request.system.contains("newer messages that build"));
+                }
+                crate::compact_source_prompts::CompactDirection::UpTo => {
+                    assert!(request.system.contains("newer messages that build"));
+                    assert!(!request.messages.iter().any(|m| {
+                        m.visible_text() == "Summarize tail"
+                    }));
+                }
+                crate::compact_source_prompts::CompactDirection::Full => {
+                    panic!("Unexpected full compact request")
+                }
+            }
+            assert_eq!(
+                request.system.contains("User context: Preserve user constraints"),
+                self.feedback
+            );
+            Ok(crate::protocol::ModelResponse {
+                message: Message::text("assistant", "<summary>Partial complete</summary>"),
+                finish_reason: Some("stop".into()),
+                usage: None,
+            })
+        }
     }
 
     struct CompactContinuationModel;
