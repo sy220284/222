@@ -17,7 +17,7 @@ pub fn get_shell_history_completion<'a>(
     input: &str,
     history: &'a [String],
 ) -> Option<ShellHistoryMatch<'a>> {
-    if input.len() < 2 || input.trim().is_empty() {
+    if input.encode_utf16().take(2).count() < 2 || input.trim().is_empty() {
         return None;
     }
     let mut seen = HashSet::new();
@@ -72,6 +72,7 @@ mod tests {
         );
         assert_eq!(get_shell_history_completion("ls  ", &history), None);
         assert_eq!(get_shell_history_completion("g", &history), None);
+        assert_eq!(get_shell_history_completion("猫", &["!猫咪".to_owned()]), None);
         assert_eq!(get_shell_history_completion("  ", &history), None);
         assert_eq!(get_shell_history_completion("git status", &history), None);
     }
