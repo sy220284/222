@@ -195,8 +195,7 @@ jobs:
     steps:
       - name: 检出当前提交
         uses: actions/checkout@v4
-      # Publish the complete gap list even if private source credentials are
-      # absent; a successful report never changes the strict gate result.
+      # The local source may be absent; publish gaps and keep the strict gate failing.
       - name: 输出源码逐函数差异清单（只报告，不放行）
         shell: bash
         run: |
@@ -207,12 +206,12 @@ jobs:
         id: workspace
         shell: bash
         env:
-          ORIGINAL_SOURCE_ROOT: \${{ vars.ORIGINAL_SOURCE_ROOT }}
-          ORIGINAL_SPEC_ARCHIVE: \${{ vars.ORIGINAL_SPEC_ARCHIVE }}
+          ORIGINAL_SOURCE_ROOT: ${{ vars.ORIGINAL_SOURCE_ROOT }}
+          ORIGINAL_SPEC_ARCHIVE: ${{ vars.ORIGINAL_SPEC_ARCHIVE }}
         run: |
           set -euo pipefail
-          source_root="\${ORIGINAL_SOURCE_ROOT:-\${RUNNER_WORKSPACE}/original-2.1.88/source}"
-          spec_zip="\${ORIGINAL_SPEC_ARCHIVE:-\${RUNNER_WORKSPACE}/original-2.1.88/spec.zip}"
+          source_root="${ORIGINAL_SOURCE_ROOT:-${RUNNER_WORKSPACE}/original-2.1.88/source}"
+          spec_zip="${ORIGINAL_SPEC_ARCHIVE:-${RUNNER_WORKSPACE}/original-2.1.88/spec.zip}"
           if [[ ! -d "$source_root/src" ]]; then
             echo "::error::提交者工作区缺少原版 source/src"
             exit 1
@@ -234,11 +233,11 @@ jobs:
         run: |
           set -euo pipefail
           args=(gate --repo . --output .port-audit)
-          if [[ "\${{ steps.workspace.outcome }}" == "success" ]]; then
-            args+=(--source-root "\${{ steps.workspace.outputs.source_root }}")
-            args+=(--spec-archive "\${{ steps.workspace.outputs.spec_archive }}")
+          if [[ "${{ steps.workspace.outcome }}" == "success" ]]; then
+            args+=(--source-root "${{ steps.workspace.outputs.source_root }}")
+            args+=(--spec-archive "${{ steps.workspace.outputs.spec_archive }}")
           fi
-          python3 scripts/source_parity_gate.py "\${args[@]}"
+          python3 scripts/source_parity_gate.py "${args[@]}"
       - name: 保存独立验收记录
         if: always()
         uses: actions/upload-artifact@v4
