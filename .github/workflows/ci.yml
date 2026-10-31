@@ -31,6 +31,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          python3 scripts/source_test_gate.py lint --repo . --output .port-audit
           python3 scripts/source_parity_gate.py check --repo .
           python3 scripts/source_parity_gate.py reachability --repo . --output .port-audit
           python3 scripts/source_parity_gate.py dashboard --repo . --output .port-audit --changed-from-git

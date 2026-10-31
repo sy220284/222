@@ -389,7 +389,7 @@ process.stdout.write(JSON.stringify(outputs));
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("command", choices=("check","gate","report","verify-original"))
+    p.add_argument("command", choices=("lint","check","gate","report","verify-original"))
     p.add_argument("--repo", type=Path, default=Path("."))
     p.add_argument("--output", type=Path, default=Path(".port-audit"))
     p.add_argument("--inventory", type=Path,

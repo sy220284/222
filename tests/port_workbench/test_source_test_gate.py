@@ -92,6 +92,12 @@ class SourceTestGateTests(unittest.TestCase):
         self.entry["adapter"]["operation_key"]="operation"
         self.assertTrue(self.result()["pass"], self.result()["errors"])
 
+    def test_frozen_golden_sha_disagrees_with_registry(self):
+        self.fixture["source_sha256"]="b"*64
+        self.write_golden()
+        self.assertFalse(self.result()["pass"])
+        self.assertTrue(any("原版预期结果、SHA" in e for e in self.result()["errors"]))
+
     def test_source_sha_mismatch_fails(self):
         self.entry["source_sha256"]="b"*64
         self.assertFalse(self.result()["pass"])
