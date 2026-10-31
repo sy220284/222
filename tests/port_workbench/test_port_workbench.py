@@ -12,7 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from port_workbench import (AuditError, affected_source_paths, check_evidence, collect, label_status,
                             read_matrix, report, resolve_import, verify_counts, current_counts, detect_generated_stubs,
                             generated_runtime_reachability, verify_github_test_evidence, github_json, main,
-                            build_dashboard, write_dashboard, git_changed_files)
+                            build_dashboard, write_dashboard, git_changed_files,
+                            indexed_rust_test_names)
 
 
 class WorkbenchTests(unittest.TestCase):
@@ -153,6 +154,20 @@ class WorkbenchTests(unittest.TestCase):
     def test_unchanged_baseline_is_valid(self):
         self.baseline()
         self.assertEqual(check_evidence(self.repo,read_matrix(self.repo),False)['new_verified'],0)
+
+    def test_evidence_index_requires_actual_rust_test_attribute(self):
+        rust = self.repo / 'src'
+        rust.mkdir(exist_ok=True)
+        (rust / 'sample.rs').write_text(
+            'fn false_positive() {}\\n'
+            '#[test]\\nfn real_test() {}\\n'
+            '#[tokio::test]\\nasync fn real_async_test() {}\\n',
+            encoding='utf-8',
+        )
+        names = indexed_rust_test_names(self.repo)
+        self.assertIn('real_test', names)
+        self.assertIn('real_async_test', names)
+        self.assertNotIn('false_positive', names)
 
     def test_historic_verified_entry_cannot_lose_its_evidence(self):
         self.write_matrix(status1='已验收')
