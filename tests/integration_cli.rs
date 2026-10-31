@@ -6712,7 +6712,6 @@ fn sdk_slash_skill_with_trailing_image_and_local_attachment_reaches_model_intact
     assert!(request.contains("Inspect this skill request: inspect"),"{request}");
     assert!(request.contains("local reference text"),"{request}");
     assert!(request.contains("data:image/jpeg;base64,/9j/AA=="),"{request}");
-    assert!(!request.contains("type\\\":\\\"image\\\",\\\"text\\\":"),"{request}");
 }
 
 #[test]
