@@ -125,6 +125,7 @@ mod queue_journal;
 mod queued_prompt_batch;
 mod reactive_store;
 mod release_notes;
+mod render_options;
 mod runtime_contracts;
 mod sdk_queue;
 mod sdk_system_init;
