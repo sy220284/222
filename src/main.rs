@@ -623,6 +623,15 @@ mod default_chat_cli_tests {
             parse_cli_with_default_chat(vec!["atlas-agent".into(), "--help".into()]).unwrap_err();
         assert_eq!(help.kind(), clap::error::ErrorKind::DisplayHelp);
     }
+
+    #[test]
+    fn structured_output_payload_accepts_json_and_rejects_prose() {
+        let value = structured_output_payload("  {\"answer\": 42}  ").unwrap();
+        assert_eq!(value["answer"], 42);
+        let error = structured_output_payload("The answer is 42").unwrap_err();
+        assert!(error.contains("StructuredOutput schema mismatch"), "{error}");
+        assert!(error.contains("not valid JSON"), "{error}");
+    }
 }
 
 async fn run_cli() -> Result<()> {
@@ -3436,16 +3445,51 @@ async fn sdk_interruptible_turn(
     }
 }
 
+/// Parse the final answer into the `structured_output` payload when a schema
+/// is active. Mirrors the SyntheticOutputTool runtime guard: a non-JSON
+/// answer fails with an explicit mismatch message instead of returning
+/// unstructured text (coreSchemas.ts `error_max_structured_output_retries`
+/// surfaces after server-side retries; the client guard fails fast).
+fn structured_output_payload(answer: &str) -> Result<serde_json::Value, String> {
+    serde_json::from_str::<serde_json::Value>(answer.trim())
+        .map_err(|error| {
+            format!("StructuredOutput schema mismatch: final answer is not valid JSON ({error})")
+        })
+}
+
+/// Build the SDK result event for a completed turn. When an initialize
+/// jsonSchema is active, the final answer must parse as JSON and is attached
+/// as `structured_output` (coreSchemas.ts SDKResultSuccessSchema); a
+/// non-JSON answer fails loudly instead of returning unstructured text.
+/// JSON-Schema-level validation is enforced provider-side (OpenAI strict
+/// response_format / Gemini responseJsonSchema); the parse here is the
+/// client-side guard for providers without hard guarantees.
+fn structured_result_event(agent: &Agent, answer: &str) -> serde_json::Value {
+    let mut event = json!({
+        "type":"result","session_id":agent.session_id(),
+        "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
+    });
+    if agent.sdk_response_schema().is_some() {
+        match structured_output_payload(answer) {
+            Ok(value) => event["structured_output"] = value,
+            Err(message) => {
+                return json!({
+                    "type":"error","session_id":agent.session_id(),
+                    "message":message
+                });
+            }
+        }
+    }
+    event
+}
+
 async fn sdk_run_initial_turn(
     agent: &mut Agent,
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
 ) {
     match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch, None).await {
-        Ok(answer) => print_json!(json!({
-            "type":"result","session_id":agent.session_id(),
-            "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
-        })),
+        Ok(answer) => print_json!(structured_result_event(agent, &answer)),
         Err(error) => print_json!(json!({
             "type":"error","session_id":agent.session_id(),
             "message":format!("{error:#}")
@@ -3590,11 +3634,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         match sdk_interruptible_turn(
                             agent, &prompt, None, None, &interrupt_rx, input_epoch, None,
                         ).await {
-                            Ok(answer) => print_json!(json!({
-                                "type":"result","session_id":agent.session_id(),
-                                "content":answer,"usage":agent.usage(),
-                                "cost":agent.cost_ledger()
-                            })),
+                            Ok(answer) => {
+                                print_json!(structured_result_event(agent, &answer))
+                            }
                             Err(error) => print_json!(json!({
                                 "type":"error","session_id":agent.session_id(),
                                 "message":format!("{error:#}")
@@ -3801,10 +3843,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 )
                 .await
                 {
-                    Ok(answer) => print_json!(json!({
-                        "type":"result","session_id":agent.session_id(),
-                        "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
-                    })),
+                    Ok(answer) => print_json!(structured_result_event(agent, &answer)),
                     Err(error) => print_json!(json!({
                         "type":"error","session_id":agent.session_id(),
                         "message":format!("{error:#}")

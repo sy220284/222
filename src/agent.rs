@@ -212,6 +212,8 @@ pub struct Agent {
     pending_rewake_notifications: Vec<String>,
     conversation_context: ConversationContext,
     structured_output: bool,
+    /// SDK initialize jsonSchema mirror for result-event structured_output.
+    sdk_response_schema: Option<Value>,
     child_depth: u8,
     mcp_configs: Vec<McpServerConfig>,
     lsp_configs: Vec<LspServerConfig>,
@@ -350,6 +352,7 @@ impl Agent {
             pending_rewake_notifications: Vec::new(),
             conversation_context,
             structured_output: false,
+            sdk_response_schema: None,
             child_depth: 0,
             mcp_configs: Vec::new(),
             lsp_configs: Vec::new(),
@@ -2135,7 +2138,15 @@ impl Agent {
                 bail!("initialize jsonSchema requires type or $ref")
             }
         }
-        self.provider.set_response_schema(schema)
+        self.provider.set_response_schema(schema.clone());
+        self.sdk_response_schema = schema;
+        Ok(())
+    }
+
+    /// The active SDK response schema, mirrored at set time so the result
+    /// event can attach `structured_output` without reaching into providers.
+    pub fn sdk_response_schema(&self) -> Option<&Value> {
+        self.sdk_response_schema.as_ref()
     }
 
     pub fn set_structured_output(&mut self, enabled: bool) {
@@ -6002,6 +6013,7 @@ mod tests {
             pending_rewake_notifications: Vec::new(),
             conversation_context: ConversationContext::capture(dir),
             structured_output: false,
+            sdk_response_schema: None,
             child_depth: 0,
             mcp_configs: Vec::new(),
             lsp_configs: Vec::new(),
