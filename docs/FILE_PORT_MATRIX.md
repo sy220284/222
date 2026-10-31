@@ -1175,7 +1175,7 @@
 | `src/tools/AgentTool/built-in/statuslineSetup.ts` | 145 | 7477 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/built-in/verificationAgent.ts` | 153 | 11410 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：独立验收 system 和只读工具隔离已接入模型请求；原版完整验收规范及所有权限分支待核对 |
 | `src/tools/AgentTool/builtInAgents.ts` | 73 | 2756 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/constants.ts` | 13 | 547 | 重写：工具行为、参数和权限 | `src/tool_names.rs` / `src/agent.rs` / `src/tools.rs` | 部分实现：原版 Agent 与历史 Task 外部工具名、verification 类型常量已对齐；两种工具名现经统一名称转换进入 Agent 真实子任务分发，权限沿原链校验。ONE_SHOT_BUILTIN_AGENT_TYPES 的 Explore/Plan 专有结果省略规则仍需逐路径验收，保持部分实现 |
+| `src/tools/AgentTool/constants.ts` | 13 | 547 | 重写：工具行为、参数和权限 | `src/tool_names.rs` / `src/agent.rs` / `src/tools.rs` / `tests/integration_cli.rs` | 已验收：原版四项导出 Agent、Task、verification、Explore/Plan 单次类型集合逐字对应；Agent/Task 经真实模型工具调用进入子任务，Explore/Plan 省略续写元数据，有工作树时保留回执；拒绝授权及 SubagentStart 阻断均有真实回归，依据 CI #41202650455 完整 Linux/Windows 成功，证据见 PORT_EVIDENCE.jsonl。完整 AgentTool.tsx 仍单独保持待验 |
 | `src/tools/AgentTool/forkSubagent.ts` | 211 | 8678 | 重写：工具行为、参数和权限 | `src/agent.rs` / `src/worktree.rs` | 部分实现：独立子任务和隔离，团队及远程不等价 |
 | `src/tools/AgentTool/loadAgentsDir.ts` | 756 | 26220 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/prompt.ts` | 288 | 16671 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |

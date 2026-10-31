@@ -9,15 +9,15 @@
 | 原版第一方及 vendor 源路径 | 1906 | 逐条列示，保留原路径 |
 | 已批准排除 | 192 | 独立清单见 [排除及理由](SPEC_DOCUMENT_EXCLUSIONS.md)，不可擅自增加 |
 | 应迁移 | 1714 | 不含排除项 |
-| 已验收 | 38 | 既有历史验收，须检查当前 HEAD 回归，不等同于本次重新验收 |
-| 部分实现 | 1212 | 仍须逐函数、入口、语义、异常与运行验证 |
+| 已验收 | 39 | 历史已验收 38，本次新增 1 条具有原版哈希及完整 CI 证据 |
+| 部分实现 | 1211 | 仍须逐函数、入口、语义、异常与运行验证 |
 | 未迁移 | 464 | 须对照原版开发 Rust 主体并接通真实生产链 |
-| 尚待完整验收 | 1676 | 此项不得因只增加文档而清零 |
+| 尚待完整验收 | 1675 | 此项不得因只增加文档而清零 |
 
 ## 本轮核对的可复核成果（2026-10-31）
 
 1. **规格文件全量清点**：用户提交的 ZIP 实有 5,259 个文件；其中 1,902 份第一方逐文件规格与矩阵中的 1,902 条 `src/` 路径一一对应，其余 4 条源路径属于 `vendor/`。全量 14 模块及 2,854 份依赖源详表在本地进度工作簿单独登记。
-2. **映射实存检查**：对照本次 PR #6 HEAD 仓库树，当前非排除路径中 **38 条登记为已验收、1,212 条部分实现、464 条未迁移**。是否有 Rust 文件落点与是否真实运行须分别核验；未迁移条目必须继续按源码闭环。文件存在只说明有代码落点，不能证明执行链及原版行为完整。
+2. **映射实存检查**：对照本次 PR #6 HEAD 仓库树，当前非排除路径中 **39 条登记为已验收、1,211 条部分实现、464 条未迁移**。是否有 Rust 文件落点与是否真实运行须分别核验；未迁移条目必须继续按源码闭环。文件存在只说明有代码落点，不能证明执行链及原版行为完整。
 3. **真实代码修复**：单文件 `advisor.ts`、`ultraplan.tsx` 等命令源码映射从错误的 `index.ts` 推导改为真实源路径；已有 Rust `/advisor` 处理链补上命令索引，相关回归已增加。原版 `brief.ts` 仍无 Rust 处理链，保持未迁移。
 4. **可重跑的生成器**：`scripts/spec_document_progress.py` 从 ZIP + 唯一现行迁移矩阵 + 冻结原版哈希 + 用户授权排除清单生成 **每一份 ZIP 文件的 CSV 台账、192 条排除理由 CSV 及模块汇总**，遇到缺文档、重复文档、原版哈希不一致和范围冲突时直接报错；在合成全量 5,259 文件样本和 1,906 源路径数据上已执行验证，且增加独立回归测试。使用：
 
@@ -25,11 +25,11 @@
    python3 scripts/spec_document_progress.py --repo . --archive /path/to/规格压缩包.zip --output .spec-document-progress
    ```
 
-5. **验收边界**：新增真实功能的当前 HEAD CI 必须独立成功。没有从本次静态检查推导新增的完整等价验收条数，故迁移矩阵状态保持原样。
+5. **验收边界**：新增 `src/tools/AgentTool/constants.ts` 的源码级验收来自冻结原版哈希、真实 Agent/Task/Explore/Plan 运行、权限拒绝及 Hook 阻断回归，提交 `3a90b170` 的 Linux/Windows 完整 CI #41202650455 成功；其余条目不因静态映射推算完整等价。
 
 ## 进度记录口径
 
-- **文档已登记**：本表仅把每份第一方详细文档映射到仓库既有唯一事实源。矩阵中的「已验收」是此前有证据的状态；本轮没有逐份通过新测试的条目，禁止将「有 Rust 文件」直接改为已验收。
+- **文档已登记**：本表将每份第一方详细文档映射到唯一事实源。本次新增 1 条经过源码、真实模型/权限调用、异常恢复及完整 CI 核实的常量源路径；其余路径仅有 Rust 文件或测试名，不自动升级为已验收。
 - **逐文档执行**：每行按原版函数、调用关系、参数、权限、成功/失败、取消、重启恢复、Rust 实际入口以及测试报告逐一完成后，才填入源码提交及当前 HEAD 验收依据。
 - 目标路径与描述为当前 `docs/FILE_PORT_MATRIX.md` 的原样映射和状态摘要；完整差异请查原矩阵与 `docs/PORT_STATUS.md`。源 SHA 从 `docs/PORT_BASELINE.json` 固定值读取。
 - 该台账不替代现有 `docs/FILE_PORT_MATRIX.md`，不触发范围变更或任何定时任务。
@@ -1187,7 +1187,7 @@
 | `src/tools/AgentTool/built-in/statuslineSetup.ts` | `d364fd003c1d8295aaf44709d33e9279dba87b5dd7ea892b837df65ce3d42c59` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/AgentTool/built-in/verificationAgent.ts` | `467f06234a59cdc07f52e4a418d8b66ec98507e793ef0bed3c1c45afa0b2559e` | 部分实现 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：独立验收 system 和只读工具隔离已接入模型请求；原版完整验收规范及所有权限分支待核对 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/AgentTool/builtInAgents.ts` | `24df97f95532f86108d60176d1c708edf4040bda028ee8f22a52f1bac6acfb22` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
-| `src/tools/AgentTool/constants.ts` | `d2da1c4ab62404ccc09186704994fccb6559ecb0342563fee14adce8e4d51866` | 部分实现 | `src/tool_names.rs` / `src/agent.rs` / `src/tools.rs` | 部分实现：Agent/Task 原版工具名和 verification 常量已对齐、主 Agent 子任务分发已接线；Explore/Plan 单次内建代理结果省略规则仍待等价 | 待按规格逐函数核实、补齐并验收 |
+| `src/tools/AgentTool/constants.ts` | `d2da1c4ab62404ccc09186704994fccb6559ecb0342563fee14adce8e4d51866` | 已验收 | `src/tool_names.rs` / `src/agent.rs` / `src/tools.rs` / `tests/integration_cli.rs` | 四项导出及单次子任务结果合同逐源码验收；Agent/Task、Explore/Plan 真实模型多轮回归、权限拒绝和 Hook 阻断，CI 41202650455 成功 | 已按原版逐函数与真实运行、异常恢复验收；参见 PORT_EVIDENCE.jsonl |
 | `src/tools/AgentTool/forkSubagent.ts` | `483073ec16219f522e787facd043ada1169804476b17acebd62bbcf03ec35c55` | 部分实现 | `src/agent.rs` / `src/worktree.rs` | 部分实现：独立子任务和隔离，团队及远程不等价 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/AgentTool/loadAgentsDir.ts` | `06cb0d5a3e05b5b59d0e48aef0e0c3af24f9677e642f3243a619b66459ab4eab` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/AgentTool/prompt.ts` | `ac61c37854a6dde6201351095154504cfbf4a932be24dd340b80df40604de8e3` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
