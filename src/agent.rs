@@ -486,6 +486,16 @@ impl Agent {
             None => json!({"added":[],"removed":[],"errors":{}}),
         };
 
+        let mut lsp_configs = config.lsp_servers.clone();
+        lsp_configs.extend(plugin_set.lsp_servers);
+        // Prepare the new LSP connections before releasing the running ones.
+        if !lsp_configs.is_empty() {
+            let replacement = LspManager::connect(&self.root, &lsp_configs).await?;
+            self.lsp = Some(replacement);
+        } else {
+            self.lsp = None;
+        }
+        self.lsp_configs = lsp_configs;
         self.mcp_configs = fixed;
         self.hooks = new_hooks;
         self.hook_rules = hook_rules;

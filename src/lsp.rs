@@ -64,6 +64,7 @@ struct LspClient {
     sequence: u64,
     versions: HashMap<PathBuf, u32>,
     language: String,
+    extension_to_language: HashMap<String, String>,
 }
 
 impl LspClient {
@@ -71,6 +72,7 @@ impl LspClient {
         let mut command = Command::new(&config.command);
         command
             .args(&config.args)
+            .envs(&config.env)
             .current_dir(root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -90,6 +92,7 @@ impl LspClient {
             sequence: 1,
             versions: HashMap::new(),
             language: config.language_id.clone(),
+            extension_to_language: config.extension_to_language.clone(),
         };
         let root_uri = reqwest::Url::from_file_path(root)
             .map_err(|_| anyhow::anyhow!("Invalid LSP workspace path"))?
@@ -101,6 +104,7 @@ impl LspClient {
                     "processId":null,
                     "clientInfo":{"name":"atlas-agent","version":env!("CARGO_PKG_VERSION")},
                     "rootUri":root_uri,
+                    "initializationOptions":config.initialization_options,
                     "capabilities":{"textDocument":{"synchronization":{"didSave":true},
                         "definition":{},"references":{},"hover":{},
                         "documentSymbol":{},"implementation":{},"callHierarchy":{}}},
@@ -109,6 +113,9 @@ impl LspClient {
             )
             .await?;
         client.notify("initialized", json!({})).await?;
+        if let Some(settings) = &config.settings {
+            client.notify("workspace/didChangeConfiguration", json!({"settings":settings})).await?;
+        }
         Ok(client)
     }
 
@@ -174,7 +181,9 @@ impl LspClient {
             self.notify(
                 "textDocument/didOpen",
                 json!({
-                    "textDocument":{"uri":uri,"languageId":self.language,
+                    "textDocument":{"uri":uri,"languageId":self.extension_to_language
+                        .get(path.extension().and_then(|s| s.to_str()).unwrap_or(""))
+                        .unwrap_or(&self.language),
                         "version":1,"text":content}
                 }),
             )
@@ -401,6 +410,7 @@ while True:
             args: vec!["-u".into(), "-c".into(), fake_server.into()],
             extensions: vec!["rs".into()],
             language_id: "rust".into(),
+            ..Default::default()
         }];
         let mut manager = LspManager::connect(root.path(), &profiles).await.unwrap();
         let result = manager

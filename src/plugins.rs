@@ -19,6 +19,8 @@ struct Manifest {
     hooks: Value,
     #[serde(default, alias = "mcpServers")]
     mcp_servers: Value,
+    #[serde(default, alias = "lspServers")]
+    lsp_servers: Value,
     #[serde(default)]
     skills: Value,
     #[serde(default)]
@@ -57,6 +59,7 @@ fn read_manifest(root: &Path, fallback: &str) -> Result<Manifest> {
             version: None,
             hooks: Value::Null,
             mcp_servers: Value::Null,
+            lsp_servers: Value::Null,
             skills: Value::Null,
             commands: Value::Null,
             user_config: Value::Null,
@@ -538,6 +541,7 @@ pub fn validate_local(location: &Path) -> Result<String> {
 pub struct PluginSet {
     pub hooks: Vec<HookRule>,
     pub mcp_servers: Vec<McpServerConfig>,
+    pub lsp_servers: Vec<crate::config::LspServerConfig>,
     /// Failed plugin MCP configurations, kept visible to SDK reload callers.
     pub errors: Vec<String>,
 }
@@ -697,6 +701,7 @@ impl PluginSet {
         let mut set = Self {
             hooks: Vec::new(),
             mcp_servers: Vec::new(),
+            lsp_servers: Vec::new(),
             errors: Vec::new(),
         };
         let (active, dependency_errors) = active_plugin_names(root, enabled);
@@ -776,6 +781,23 @@ impl PluginSet {
                 server.id = format!("{}_{}", name, server.id);
                 set.mcp_servers.push(server);
             }
+            let options = if !manifest.user_config.is_null() {
+                match crate::permission_settings::SettingsPaths::for_workspace(root)?
+                    .plugin_public_options(name) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        set.errors.push(format!("Plugin '{name}' LSP public options unavailable: {error:#}"));
+                        serde_json::Map::new()
+                    }
+                }
+            } else {
+                serde_json::Map::new()
+            };
+            let (lsp_servers, lsp_errors) = crate::plugin_lsp::load_plugin_lsp(
+                &location, name, &manifest.lsp_servers, &manifest.user_config, &options,
+            );
+            set.lsp_servers.extend(lsp_servers);
+            set.errors.extend(lsp_errors);
         }
         Ok(set)
     }

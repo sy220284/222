@@ -148,6 +148,37 @@ pub struct LspServerConfig {
     pub extensions: Vec<String>,
     #[serde(default)]
     pub language_id: String,
+    #[serde(default, rename = "extensionToLanguage", alias = "extension_to_language")]
+    pub extension_to_language: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub env: std::collections::HashMap<String, String>,
+    #[serde(default, rename = "initializationOptions")]
+    pub initialization_options: Option<serde_json::Value>,
+    #[serde(default)]
+    pub settings: Option<serde_json::Value>,
+    #[serde(default, rename = "workspaceFolder")]
+    pub workspace_folder: Option<String>,
+    #[serde(default, rename = "startupTimeout")]
+    pub startup_timeout: Option<u64>,
+    #[serde(default, rename = "shutdownTimeout")]
+    pub shutdown_timeout: Option<u64>,
+    #[serde(default, rename = "restartOnCrash")]
+    pub restart_on_crash: Option<bool>,
+    #[serde(default, rename = "maxRestarts")]
+    pub max_restarts: Option<u64>,
+}
+
+impl Default for LspServerConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(), command: String::new(), args: Vec::new(),
+            extensions: Vec::new(), language_id: String::new(),
+            extension_to_language: std::collections::HashMap::new(),
+            env: std::collections::HashMap::new(), initialization_options: None,
+            settings: None, workspace_folder: None, startup_timeout: None,
+            shutdown_timeout: None, restart_on_crash: None, max_restarts: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -92,6 +92,7 @@ mod plain_text_storage;
 mod platform_source_utilities;
 mod plugin_commands;
 mod plugin_error_messages_source;
+mod plugin_lsp;
 mod plugin_manager;
 mod plugin_pagination_source;
 mod plugin_trust_warning_source;
@@ -1397,7 +1398,9 @@ async fn run_cli() -> Result<()> {
     let mut mcp_profiles = mcp_cli::active_servers(agent.workspace_root(), &config)?;
     mcp_profiles.extend(plugins.mcp_servers);
     agent.attach_mcp(&mcp_profiles).await?;
-    agent.attach_lsp(&config.lsp_servers).await?;
+    let mut lsp_profiles = config.lsp_servers.clone();
+    lsp_profiles.extend(plugins.lsp_servers);
+    agent.attach_lsp(&lsp_profiles).await?;
     let mut hooks = config.hooks.clone();
     hooks.extend(plugins.hooks);
     agent.attach_hooks(&hooks).await?;
