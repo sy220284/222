@@ -6861,8 +6861,9 @@ fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
                         }).to_string()
                     }}]},"finish_reason":"tool_calls"}]}),
                 _ => json!({"choices":[{"message":{"role":"assistant",
-                    "content":"Confirmed saved local task"},"finish_reason":"stop"}]})
-            }.to_string();
+                    "content":"Confirmed saved local task"},"finish_reason":"stop"}]}),
+            }
+            .to_string();
             write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 body.len(),body).unwrap();
             stream.flush().unwrap();
@@ -6870,24 +6871,54 @@ fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
         }
         requests
     });
-    let config=root.path().join("config.json");
-    fs::write(&config,json!({"default_provider":"mock","providers":[{
-        "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
-    }]}).to_string()).unwrap();
-    let output=binary()
-        .args(["--workspace",root.path().to_str().unwrap(),
-            "--approval","full","run","Create a reusable local task then inspect it"])
-        .env("ATLAS_CONFIG",&config).output().unwrap();
-    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
-    let requests=request_log.join().unwrap();
-    assert_eq!(requests.len(),3);
-    assert!(requests[0].contains("LocalTrigger"),"{}",requests[0]);
-    assert!(requests[1].contains("LocalTrigger create saved: model_review"),"{}",requests[1]);
-    assert!(requests[2].contains("Inspect local project files"),"{}",requests[2]);
-    let stored=fs::read_to_string(root.path().join(".atlas/local-triggers/tasks.json")).unwrap();
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let output = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "run",
+            "Create a reusable local task then inspect it",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let requests = request_log.join().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert!(requests[0].contains("LocalTrigger"), "{}", requests[0]);
+    assert!(
+        requests[1].contains("LocalTrigger create saved: model_review"),
+        "{}",
+        requests[1]
+    );
+    assert!(
+        requests[2].contains("Inspect local project files"),
+        "{}",
+        requests[2]
+    );
+    let stored = fs::read_to_string(root.path().join(".atlas/local-triggers/tasks.json")).unwrap();
     assert!(stored.contains("Inspect local project files"));
-    assert!(String::from_utf8(output.stdout).unwrap().contains("Confirmed saved local task"));
-    assert!(!root.path().join(".atlas/local-triggers/schedules.json").exists());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("Confirmed saved local task"));
+    assert!(!root
+        .path()
+        .join(".atlas/local-triggers/schedules.json")
+        .exists());
 }
 
 #[test]
