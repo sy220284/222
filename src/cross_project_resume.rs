@@ -1,9 +1,12 @@
 //! Local, provider-neutral port of 2.1.88 utils/crossProjectResume.ts.
 //! Worktree membership is a path-boundary check: /repo/worktree2 must never
 //! match /repo/worktree. Launch suggestions are displayed, never executed.
-use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
-use tokio::{process::Command, time::{timeout, Duration}};
+use std::path::{Path, PathBuf};
+use tokio::{
+    process::Command,
+    time::{timeout, Duration},
+};
 
 /// Read the active worktree collection from the current Git repository.
 /// This only discovers paths; it does not create/remove worktrees or switch
@@ -25,8 +28,8 @@ pub async fn active_worktree_paths(current: &Path) -> Result<Vec<PathBuf>> {
         // git worktree is not applicable outside a Git checkout.
         return Ok(Vec::new());
     }
-    let raw = std::str::from_utf8(&output.stdout)
-        .context("Git returned non-UTF-8 worktree paths")?;
+    let raw =
+        std::str::from_utf8(&output.stdout).context("Git returned non-UTF-8 worktree paths")?;
     Ok(parse_worktree_paths(raw))
 }
 
@@ -59,7 +62,10 @@ pub fn check_cross_project_resume(
     }
     // Match src/utils/crossProjectResume.ts:54-56: equality or a descendant
     // separated by a path boundary, never a string-prefix sibling.
-    if worktree_paths.iter().any(|wt| project == wt || project.starts_with(wt)) {
+    if worktree_paths
+        .iter()
+        .any(|wt| project == wt || project.starts_with(wt))
+    {
         return ResumeLocation::SameRepositoryWorktree {
             project: project.to_owned(),
         };
@@ -90,7 +96,10 @@ mod tests {
         let got = parse_worktree_paths(
             "worktree /tmp/root name\nHEAD 123\nbranch refs/heads/main\n\nworktree /tmp/other\ndetached\n",
         );
-        assert_eq!(got, vec![PathBuf::from("/tmp/root name"), PathBuf::from("/tmp/other")]);
+        assert_eq!(
+            got,
+            vec![PathBuf::from("/tmp/root name"), PathBuf::from("/tmp/other")]
+        );
     }
 
     #[test]
@@ -122,7 +131,9 @@ mod tests {
                 &roots,
                 "id"
             ),
-            ResumeLocation::SameRepositoryWorktree { project: actual.into() }
+            ResumeLocation::SameRepositoryWorktree {
+                project: actual.into()
+            }
         );
         let adjacent = Path::new("/home/work/repository");
         assert!(matches!(
@@ -140,13 +151,8 @@ mod tests {
     #[test]
     fn different_project_command_preserves_spaces_quotes_and_session() {
         let p = Path::new("/tmp/my project/it's here");
-        let location = check_cross_project_resume(
-            Path::new("/tmp/work"),
-            Some(p),
-            true,
-            &[],
-            "aa-bb"
-        );
+        let location =
+            check_cross_project_resume(Path::new("/tmp/work"), Some(p), true, &[], "aa-bb");
         assert_eq!(
             location,
             ResumeLocation::AnotherProject {
