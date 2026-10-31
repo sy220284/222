@@ -4914,6 +4914,29 @@ impl Agent {
                         }
                     }
                 }
+                if self.child_depth == 0 && memory_extraction::dream_enabled() {
+                    match memory_extraction::dream_if_due(
+                        &self.root,
+                        self.session.id,
+                        self.provider.as_ref(),
+                        &self.profile,
+                    )
+                    .await
+                    {
+                        Ok(Some((count, usage))) => {
+                            if let Some(usage) = usage {
+                                self.record_usage(usage);
+                            }
+                            self.session.save(&self.root)?;
+                            self.emit(json!({"type":"dream_completed",
+                                "count":count,"session_id":self.session.id}));
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            eprintln!("Optional local Dream consolidation failed: {error:#}");
+                        }
+                    }
+                }
                 return Ok(text);
             }
             if !text.trim().is_empty() {
