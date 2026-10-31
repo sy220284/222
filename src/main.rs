@@ -4090,11 +4090,18 @@ async fn sdk_nested_control(
                     agent.install_sdk_agent_definitions(prepared);
                 }
                 let agents = agent.sdk_agent_descriptors()?;
+                let available_output_styles =
+                    prompt_runtime::available_output_styles(agent.workspace_root())?;
+                let output_style = std::env::var("ATLAS_OUTPUT_STYLE")
+                    .unwrap_or_else(|_| "default".to_owned());
+                if !available_output_styles.contains(&output_style) {
+                    anyhow::bail!("Configured output style is not available: {output_style}");
+                }
                 agent.set_sdk_system_prompts(system_prompt, append_system_prompt);
                 *sdk_initialized = true;
                 Ok(
-                    json!({"commands":commands,"agents":agents,"output_style":"default",
-                    "available_output_styles":["default"],"models":models,
+                    json!({"commands":commands,"agents":agents,"output_style":output_style,
+                    "available_output_styles":available_output_styles,"models":models,
                     "account":{},"pid":std::process::id()}),
                 )
             }
