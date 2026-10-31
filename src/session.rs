@@ -31,6 +31,10 @@ pub struct Session {
     /// partial compaction. Full/up_to summaries appear at offset zero.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary_insert_at: Option<usize>,
+    /// Source isCompactSummary state for earlier summaries retained by
+    /// prefix-preserving compaction; indices refer to self.messages.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retained_summary_indices: Vec<usize>,
     /// Immutable transcript prefix covering all turns before a partial
     /// compaction. Retained model messages may already occur in this prefix.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -94,6 +98,7 @@ impl Session {
             history_message_aliases: std::collections::BTreeMap::new(),
             summary: None,
             summary_insert_at: None,
+            retained_summary_indices: Vec::new(),
             transcript_snapshot: None,
             transcript_active_offset: 0,
             tasks: Vec::new(),
@@ -226,6 +231,7 @@ impl Session {
     pub fn clear(&mut self) {
         self.summary = None;
         self.summary_insert_at = None;
+        self.retained_summary_indices.clear();
         self.transcript_snapshot = None;
         self.transcript_active_offset = 0;
         self.messages.clear();
@@ -275,6 +281,7 @@ mod tests {
         s.transcript_active_offset = 2;
         s.summary = Some("Summary:\nSummarized tail".into());
         s.summary_insert_at = Some(2);
+        s.retained_summary_indices.push(0);
         assert_eq!(s.model_messages().len(), 3);
         assert_eq!(s.model_messages()[0].visible_text(), "kept-first");
         assert_eq!(s.model_messages()[1].visible_text(), "kept-answer");
@@ -295,6 +302,7 @@ mod tests {
         s.clear();
         assert!(s.transcript_snapshot.is_none());
         assert!(s.summary_insert_at.is_none());
+        assert!(s.retained_summary_indices.is_empty());
     }
 
     #[test]
