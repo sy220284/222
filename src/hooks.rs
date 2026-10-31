@@ -14,7 +14,7 @@ use tokio::{
     time::timeout,
 };
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum HookEvent {
     SessionStart,
@@ -374,6 +374,17 @@ impl HookRunner {
 
     pub fn is_empty(&self) -> bool {
         self.rules.is_empty()
+    }
+
+    /// FileChanged rules in registration order, for the file watcher that
+    /// mirrors utils/hooks/fileChangedWatcher.ts (it re-reads the hook config
+    /// snapshot to decide what to watch and which commands to run).
+    pub fn file_changed_rules(&self) -> Vec<HookRule> {
+        self.rules
+            .iter()
+            .filter(|(rule, _)| rule.event == HookEvent::FileChanged)
+            .map(|(rule, _)| rule.clone())
+            .collect()
     }
 
     pub async fn run(

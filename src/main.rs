@@ -39,6 +39,7 @@ mod env_validation;
 mod event_signal;
 mod exec_file;
 mod exec_sync_compat;
+mod file_changed_watcher;
 mod files_context;
 mod fs_operations;
 mod gemini_content;
@@ -1684,6 +1685,11 @@ async fn chat(
         println!("{}", deep_link_banner::build_deep_link_banner(&banner));
     }
     let mut initial_prefill = prefill.map(str::to_owned);
+    // utils/hooks/fileChangedWatcher.ts: the interactive session watches the
+    // paths named by FileChanged hook matchers and surfaces hook messages at
+    // the next input boundary. Headless runs never start a watcher.
+    let mut file_changed_watcher =
+        file_changed_watcher::spawn(&agent.file_changed_rules(), agent.workspace_root())?;
     loop {
         let prompt = if let Some(ref suggested) = initial_prefill {
             println!("Proposed prompt: {suggested}");
@@ -1707,6 +1713,11 @@ async fn chat(
             terminal_input::PromptRead::Cancelled => continue,
             terminal_input::PromptRead::Eof => break,
         };
+        if let Some(watcher) = file_changed_watcher.as_mut() {
+            while let Ok(message) = watcher.messages.try_recv() {
+                println!("FileChanged: {message}");
+            }
+        }
         let entry = if line.trim().is_empty() {
             initial_prefill.take().unwrap_or_default()
         } else {

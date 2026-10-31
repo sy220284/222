@@ -2249,6 +2249,11 @@ impl Agent {
     pub fn workspace_root(&self) -> &std::path::Path {
         &self.root
     }
+
+    /// FileChanged hook rules backing the live-session file watcher.
+    pub fn file_changed_rules(&self) -> Vec<crate::hooks::HookRule> {
+        self.hooks.file_changed_rules()
+    }
     /// Fork the live conversation and switch the active run to the new session.
     /// The original session remains unchanged and resumable.
     pub fn branch_session(&mut self, title: Option<&str>) -> Result<String> {

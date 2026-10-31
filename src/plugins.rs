@@ -1516,8 +1516,13 @@ pub fn command_descriptors(root: &Path, enabled: &[String]) -> Result<Vec<Value>
         })?;
         let (description, hint) =
             crate::skill_arguments::command_metadata(&content, "Installed plugin command or skill");
+        // Source parity: commands.ts formatDescriptionWithSource prefixes the
+        // owning plugin name for prompt commands from the plugin source so the
+        // catalog stays attributable. Non-prompt commands keep the bare text.
         descriptors.push(serde_json::json!({
-            "name":name,"description":description,"argumentHint":hint
+            "name":name,
+            "description":format!("({plugin}) {description}"),
+            "argumentHint":hint
         }));
     }
     Ok(descriptors)
@@ -1525,6 +1530,28 @@ pub fn command_descriptors(root: &Path, enabled: &[String]) -> Result<Vec<Value>
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn plugin_command_descriptors_carry_plugin_name_prefix() {
+        let temporary = tempfile::tempdir().unwrap();
+        let installed = temporary.path().join(".atlas/plugins/demo");
+        fs::create_dir_all(installed.join("commands/demo")).unwrap();
+        fs::write(
+            installed.join("plugin.json"),
+            serde_json::json!({"name":"demo"}).to_string(),
+        )
+        .unwrap();
+        fs::write(
+            installed.join("commands/demo/SKILL.md"),
+            "---\ndescription: Fetch release notes\n---\nBody",
+        )
+        .unwrap();
+        let descriptors =
+            command_descriptors(temporary.path(), &["demo".to_string()]).unwrap();
+        assert_eq!(descriptors.len(), 1);
+        assert_eq!(descriptors[0]["name"], "demo:demo");
+        assert_eq!(descriptors[0]["description"], "(demo) Fetch release notes");
+    }
+
     use super::*;
     #[test]
     fn plugin_command_respects_user_invocable_and_expands_root() {
