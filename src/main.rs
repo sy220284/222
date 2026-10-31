@@ -3162,6 +3162,27 @@ async fn chat(
 /// Each SDK model turn can be interrupted while the input reader continues
 /// accepting requests. Dropping the Agent future stops the active provider
 /// request and propagates cancellation into any awaited tool or hook future.
+/// Replace the last SDK text block without dropping other text or images.
+fn sdk_replace_last_text(input: &mut multimodal::Input, replacement: String) {
+    if let Some(blocks) = input.blocks.as_mut() {
+        if let Some(last_text) = blocks.iter_mut().rev()
+            .find(|block| block["type"] == "text")
+        {
+            last_text["text"] = json!(replacement);
+        }
+        input.preview = blocks.iter().map(|block| match block["type"].as_str() {
+            Some("text") => block["text"].as_str().unwrap_or("").to_owned(),
+            Some("image") => format!(
+                "[image: {}]",
+                block["mime_type"].as_str().unwrap_or("unknown")
+            ),
+            _ => String::new(),
+        }).collect::<Vec<_>>().join("\n");
+    } else {
+        input.preview = replacement;
+    }
+}
+
 async fn sdk_interruptible_turn(
     agent: &mut Agent,
     prompt: &str,
@@ -3169,6 +3190,7 @@ async fn sdk_interruptible_turn(
     message_id: Option<uuid::Uuid>,
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
+    plan_mode: bool,
 ) -> Result<String> {
     let mut observer = interrupts.clone();
     // The stdin reader may have parsed a later interrupt while the main loop
@@ -3184,7 +3206,13 @@ async fn sdk_interruptible_turn(
             }
             bail!("SDK interrupt control channel closed");
         }
-        response = agent.ask_with_blocks_for_message(prompt, blocks, message_id) => response,
+        response = async {
+            if plan_mode {
+                agent.ask_with_blocks_in_plan_mode(prompt, blocks, message_id).await
+            } else {
+                agent.ask_with_blocks_for_message(prompt, blocks, message_id).await
+            }
+        } => response,
     }
 }
 
@@ -3193,7 +3221,7 @@ async fn sdk_run_initial_turn(
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
 ) {
-    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch).await {
+    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch, false).await {
         Ok(answer) => print_json!(json!({
             "type":"result","session_id":agent.session_id(),
             "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -3343,7 +3371,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                             .join("\n");
                         let input_epoch = *interrupt_rx.borrow();
                         match sdk_interruptible_turn(
-                            agent, &prompt, None, None, &interrupt_rx, input_epoch,
+                            agent, &prompt, None, None, &interrupt_rx, input_epoch, false,
                         ).await {
                             Ok(answer) => print_json!(json!({
                                 "type":"result","session_id":agent.session_id(),
@@ -3447,9 +3475,10 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         continue;
                     }
                 };
-                // processUserInput.ts:336-343,531-550 recognizes a slash
-                // command in the LAST text block, keeping earlier image/text
-                // blocks intact. A string-only check lost this SDK behavior.
+                // The original SDK user input and REPL both recognize advanced
+                // commands. Keep images, earlier blocks, UUID and skipSlashCommands
+                // intact, and apply plan permissions only for this one turn.
+                let mut advanced_plan_turn = false;
                 if event.get("skipSlashCommands").and_then(Value::as_bool) != Some(true) {
                     let candidate = prompt_value.as_str().or_else(|| {
                         prompt_value.as_array()?.iter().rev().find_map(|block| {
@@ -3458,46 +3487,33 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                                 .flatten()
                         })
                     });
-                    if let Some(parsed) = candidate.and_then(slash_command::parse_slash_command) {
-                        match expand_user_skill_prompt(
-                            agent,
-                            config,
-                            &parsed.command_name,
-                            &parsed.args,
-                            parsed.is_mcp,
-                        ) {
+                    if let Some(candidate) = candidate {
+                        match local_advanced_workflows::sdk_user_prompt(agent.workspace_root(), candidate) {
                             Ok(Some(expanded)) => {
-                                if let Some(blocks) = user.blocks.as_mut() {
-                                    if let Some(last_text) = blocks
-                                        .iter_mut()
-                                        .rev()
-                                        .find(|block| block["type"] == "text")
-                                    {
-                                        last_text["text"] = json!(expanded);
-                                    }
-                                    user.preview = blocks
-                                        .iter()
-                                        .map(|block| match block["type"].as_str() {
-                                            Some("text") => {
-                                                block["text"].as_str().unwrap_or("").to_owned()
-                                            }
-                                            Some("image") => format!(
-                                                "[image: {}]",
-                                                block["mime_type"].as_str().unwrap_or("unknown")
-                                            ),
-                                            _ => String::new(),
-                                        })
-                                        .collect::<Vec<_>>()
-                                        .join("\n");
-                                } else {
-                                    user.preview = expanded;
-                                }
+                                sdk_replace_last_text(&mut user, expanded);
+                                advanced_plan_turn = true;
                             }
                             Ok(None) => {}
                             Err(error) => {
                                 print_json!(json!({"type":"error",
-                                    "message":format!("Cannot invoke skill command: {error:#}")}));
+                                    "message":format!("Cannot prepare SDK advanced workflow: {error:#}")}));
                                 continue;
+                            }
+                        }
+                        if !advanced_plan_turn {
+                            if let Some(parsed) = slash_command::parse_slash_command(candidate) {
+                                match expand_user_skill_prompt(
+                                    agent, config, &parsed.command_name,
+                                    &parsed.args, parsed.is_mcp,
+                                ) {
+                                    Ok(Some(expanded)) => sdk_replace_last_text(&mut user, expanded),
+                                    Ok(None) => {}
+                                    Err(error) => {
+                                        print_json!(json!({"type":"error",
+                                            "message":format!("Cannot invoke skill command: {error:#}")}));
+                                        continue;
+                                    }
+                                }
                             }
                         }
                     }
@@ -3528,6 +3544,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     message_id,
                     &interrupt_rx,
                     input_epoch,
+                    advanced_plan_turn,
                 )
                 .await
                 {
