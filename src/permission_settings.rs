@@ -897,6 +897,35 @@ mod tests {
     }
 
     #[test]
+    fn invalid_permission_writes_are_rejected_without_touching_settings() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = paths(root.path());
+        for rule in [
+            RuleValue {
+                tool_name: "WebSearch".into(),
+                rule_content: Some("token*".into()),
+            },
+            RuleValue {
+                tool_name: "WebFetch".into(),
+                rule_content: Some("https://example.com".into()),
+            },
+        ] {
+            assert!(paths
+                .add(EditableSource::Local, Behavior::Allow, &[rule])
+                .is_err());
+            assert!(!paths.local.exists());
+        }
+        assert!(paths
+            .add(
+                EditableSource::Local,
+                Behavior::Allow,
+                &[parse_rule("Bash(git status)")]
+            )
+            .unwrap());
+        assert!(paths.local.exists());
+    }
+
+    #[test]
     fn policy_only_disables_all_nonmanaged_rules_and_edits() {
         let root = tempfile::tempdir().unwrap();
         let paths = paths(root.path());
