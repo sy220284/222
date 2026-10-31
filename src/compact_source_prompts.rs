@@ -238,6 +238,30 @@ Please provide your summary following this structure, ensuring precision and tho
 
 /// The original partial mode scopes its request to recent messages when
 /// an older summary is retained; all input/output remains tool-less.
+/// 2.1.88 services/compact/prompt.ts::getCompactUserSummaryMessage.
+/// The summary is an API user turn, not trusted system instructions.
+pub fn user_summary_message(
+    formatted_summary: &str,
+    transcript_path: Option<&str>,
+    recent_messages_preserved: bool,
+    suppress_follow_up_questions: bool,
+) -> String {
+    let mut text = format!(
+        "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\n{formatted_summary}"
+    );
+    if let Some(path) = transcript_path.filter(|path| !path.is_empty()) {
+        text.push_str("\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: ");
+        text.push_str(path);
+    }
+    if recent_messages_preserved {
+        text.push_str("\n\nRecent messages are preserved verbatim.");
+    }
+    if suppress_follow_up_questions {
+        text.push_str("\nContinue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with \"I'll continue\" or similar. Pick up the last task as if the break never happened.");
+    }
+    text
+}
+
 pub const NO_TOOLS_TRAILER: &str = "\n\nREMINDER: Do NOT call any tools. Respond with plain text only — an <analysis> block followed by a <summary> block. Tool calls will be rejected and you will fail the task.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -310,6 +334,24 @@ mod tests {
         }
         assert!(NO_TOOLS_TRAILER.contains("Tool calls will be rejected"));
     }
+    #[test]
+    fn source_summary_user_turn_preserves_transcript_and_continuation() {
+        let content = user_summary_message(
+            "Summary:\nVerified state",
+            Some("/work/session.jsonl"),
+            true,
+            true,
+        );
+        assert!(content.starts_with("This session is being continued from a previous conversation"));
+        assert!(content.contains("\n\nSummary:\nVerified state"));
+        assert!(content.contains("read the full transcript at: /work/session.jsonl"));
+        assert!(content.contains("Recent messages are preserved verbatim."));
+        assert!(content.ends_with("Pick up the last task as if the break never happened."));
+        let default = user_summary_message("Summary:\nDone", None, false, false);
+        assert!(!default.contains("Recent messages are preserved"));
+        assert!(!default.contains("Continue the conversation from where it left off"));
+    }
+
     #[test]
     fn full_source_text_and_partial_selection() {
         assert_eq!(BASE_COMPACT_PROMPT.len(), 4220);

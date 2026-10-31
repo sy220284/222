@@ -155,6 +155,24 @@ impl Session {
         result
     }
 
+    /// Source 2.1.88 places the compacted conversation summary back into
+    /// the model transcript as a user message. Keep the persisted session
+    /// normalized: the synthetic message is composed once per API request,
+    /// never re-appended on retries, resume or per-tool model turns.
+    pub fn model_messages(&self) -> Vec<Message> {
+        let mut messages = Vec::with_capacity(self.messages.len() + usize::from(self.summary.is_some()));
+        if let Some(summary) = self.summary.as_deref().filter(|s| !s.trim().is_empty()) {
+            messages.push(Message::text(
+                "user",
+                crate::compact_source_prompts::user_summary_message(
+                    summary, None, false, false,
+                ),
+            ));
+        }
+        messages.extend(self.messages.iter().cloned());
+        messages
+    }
+
     pub fn clear(&mut self) {
         self.summary = None;
         self.messages.clear();
@@ -169,6 +187,23 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn compact_context_is_a_single_user_turn_and_not_a_system_override() {
+        let mut session = Session::fresh();
+        session.summary = Some("Summary:\nVerified state".to_owned());
+        session.messages.push(Message::text("user", "Continue work"));
+        let once = session.model_messages();
+        let twice = session.model_messages();
+        assert_eq!(once, twice);
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(once.len(), 2);
+        assert_eq!(once[0].role, "user");
+        assert!(once[0].visible_text().contains("Summary:\nVerified state"));
+        assert_eq!(once[1].visible_text(), "Continue work");
+        session.summary = None;
+        assert_eq!(session.model_messages().len(), 1);
+    }
+
     #[test]
     fn session_storage_rejects_symlink_escape() {
         #[cfg(unix)]

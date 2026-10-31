@@ -2795,10 +2795,6 @@ impl Agent {
         }
         let mut system = self.effective_system_prompt()?;
         self.conversation_context.append_to(&mut system);
-        if let Some(summary) = &self.session.summary {
-            system.push_str("\nVerified session continuity summary:\n");
-            system.push_str(summary);
-        }
         if !self.session_context.is_empty() {
             system.push_str("\nSession start hook context:\n");
             system.push_str(&self.session_context);
@@ -2836,7 +2832,7 @@ impl Agent {
         let request = ModelRequest {
             model: self.profile.model.clone(),
             system,
-            messages: self.session.messages.clone(),
+            messages: self.session.model_messages(),
             tools: definitions,
         };
         Ok((
@@ -2849,26 +2845,23 @@ impl Agent {
     /// the parent transcript. When no model turn has run, reconstruct the
     /// same system/session context used by the normal Agent fallback.
     pub fn side_question_request(&self, question: &str) -> Result<ModelRequest> {
+        let current_messages = self.session.model_messages();
         let base = if let Some(last) = &self.last_side_question_request {
             let mut fork = last.clone();
             // Preserve the original request prefix for cache reuse while
             // including the assistant/tool messages completed afterwards.
             // If the transcript was replaced, use its current contents
             // rather than accidentally resurrecting an earlier turn.
-            if self.session.messages.starts_with(&fork.messages) {
+            if current_messages.starts_with(&fork.messages) {
                 fork.messages
-                    .extend(self.session.messages[fork.messages.len()..].iter().cloned());
+                    .extend(current_messages[fork.messages.len()..].iter().cloned());
             } else {
-                fork.messages = self.session.messages.clone();
+                fork.messages = current_messages;
             }
             fork
         } else {
             let mut system = self.effective_system_prompt()?;
             self.conversation_context.append_to(&mut system);
-            if let Some(summary) = &self.session.summary {
-                system.push_str("\nVerified session continuity summary:\n");
-                system.push_str(summary);
-            }
             if !self.session_context.is_empty() {
                 system.push_str("\nSession start hook context:\n");
                 system.push_str(&self.session_context);
@@ -2879,7 +2872,7 @@ impl Agent {
             ModelRequest {
                 model: self.profile.model.clone(),
                 system,
-                messages: self.session.messages.clone(),
+                messages: self.session.model_messages(),
                 tools: Vec::new(),
             }
         };
@@ -3746,8 +3739,9 @@ impl Agent {
         for warning in &before.non_blocking_errors {
             eprintln!("PreCompact hook warning: {warning}");
         }
-        let previous = self.session.summary.as_deref().unwrap_or("");
-        let mut prompt = crate::prompt_runtime::compact_prompt(previous);
+        // Earlier compressed context is already present as a user turn in
+        // model_messages, just as in 2.1.88. Do not duplicate it in system.
+        let mut prompt = crate::prompt_runtime::compact_prompt("");
         // 2.1.88 mergeHookInstructions puts explicit user guidance first,
         // then successful PreCompact hook context, under one source-defined
         // Additional Instructions section (before the final tool ban).
@@ -3765,7 +3759,7 @@ impl Agent {
         prompt.push_str(crate::compact_source_prompts::NO_TOOLS_TRAILER);
         // The original stripImagesFromMessages removes binary payloads only
         // from the summarization request, never from saved conversation data.
-        let mut history = self.session.messages.clone();
+        let mut history = self.session.model_messages();
         for message in &mut history {
             // In Rust, tool results are stored as role="tool" messages,
             // while the original TS stream represents them as user blocks.
@@ -4457,10 +4451,6 @@ impl Agent {
             system.push_str(crate::prompt_runtime::COORDINATOR);
         }
         self.conversation_context.append_to(&mut system);
-        if let Some(summary) = &self.session.summary {
-            system.push_str("\nVerified session continuity summary:\n");
-            system.push_str(summary);
-        }
         if !self.session_context.is_empty() {
             system.push_str("\nSession start hook context:\n");
             system.push_str(&self.session_context);
@@ -4715,7 +4705,7 @@ impl Agent {
             let request = ModelRequest {
                 model: self.profile.model.clone(),
                 system: request_system,
-                messages: self.session.messages.clone(),
+                messages: self.session.model_messages(),
                 tools: visible_tools,
             };
             self.last_context_usage = Some(crate::context_usage::Snapshot::from_request(&request));
@@ -5845,6 +5835,10 @@ mod tests {
             restored.summary.as_deref(),
             Some("Summary:\nRetain verified changes and next steps.")
         );
+        let rendered = restored.model_messages();
+        assert_eq!(rendered.len(), 1);
+        assert_eq!(rendered[0].role, "user");
+        assert!(rendered[0].visible_text().contains("Summary:\nRetain verified changes and next steps."));
     }
 
     struct PromptCaptureModel(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
