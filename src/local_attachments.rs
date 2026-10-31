@@ -74,6 +74,7 @@ pub fn attach(root: &Path, current: &Value, field: Option<&Value>) -> Result<Val
         Value::Array(items) => items.clone(),
         _ => bail!("SDK content must be a string or content blocks"),
     };
+    let mut attached = Vec::new();
     let mut total = 0u64;
     for entry in entries {
         let raw = entry
@@ -103,8 +104,8 @@ pub fn attach(root: &Path, current: &Value, field: Option<&Value>) -> Result<Val
         let bytes =
             fs::read(&path).with_context(|| format!("Cannot read local attachment: {name}"))?;
         if let Some(mime) = image_type(&bytes) {
-            blocks.push(json!({"type":"text","text":format!("Attached local image: {name}")}));
-            blocks.push(json!({"type":"image","source":{"type":"base64","media_type":mime,"data":STANDARD.encode(&bytes)}}));
+            attached.push(json!({"type":"text","text":format!("Attached local image: {name}")}));
+            attached.push(json!({"type":"image","source":{"type":"base64","media_type":mime,"data":STANDARD.encode(&bytes)}}));
         } else {
             if meta.len() > MAX_TEXT_BYTES {
                 bail!("Local text attachment exceeds 1 MiB: {name}");
@@ -112,9 +113,16 @@ pub fn attach(root: &Path, current: &Value, field: Option<&Value>) -> Result<Val
             let text = String::from_utf8(bytes).with_context(|| {
                 format!("Attachment {name} is neither a supported image nor UTF-8 text")
             })?;
-            blocks.push(json!({"type":"text","text":format!("[Local attachment: {name}]\n{text}\n[/Local attachment]")}));
+            attached.push(json!({"type":"text","text":format!("[Local attachment: {name}]\n{text}\n[/Local attachment]")}));
         }
     }
+    // 2.1.88 inboundAttachments.ts prepends references to the LAST text
+    // block, keeping it recognizable by slash-command expansion. Put the
+    // local files before that same block; a trailing image must not erase
+    // command detection or cause user text to be lost.
+    let insertion = blocks.iter().rposition(|item| item["type"] == "text")
+        .unwrap_or(blocks.len());
+    blocks.splice(insertion..insertion, attached);
     Ok(Value::Array(blocks))
 }
 
@@ -142,6 +150,23 @@ mod tests {
             .unwrap()
             .iter()
             .any(|block| block["type"] == "image"));
+    }
+    #[test]
+    fn local_attachments_preserve_last_user_text_and_slash_command() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("reference.txt"), "reference body").unwrap();
+        let original = json!([
+            {"type":"text","text":"earlier context"},
+            {"type":"text","text":"/summarize this source"},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}}
+        ]);
+        let result = attach(root.path(), &original, Some(&json!([{"path":"reference.txt"}]))).unwrap();
+        let items = result.as_array().unwrap();
+        let text_blocks = items.iter().filter(|b| b["type"] == "text").collect::<Vec<_>>();
+        assert_eq!(text_blocks.last().unwrap()["text"], "/summarize this source");
+        assert!(items.iter().any(|b| b["text"].as_str()
+            .is_some_and(|s| s.contains("reference body"))));
+        assert_eq!(items.last().unwrap()["type"], "image");
     }
     #[test]
     fn rejects_remote_and_workspace_escape() {
