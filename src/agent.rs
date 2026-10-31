@@ -2115,12 +2115,17 @@ impl Agent {
     fn emit(&self, mut event: serde_json::Value) {
         if self.structured_output {
             if event.get("type").and_then(serde_json::Value::as_str) == Some("assistant") {
-                if let Some(calls) = event.pointer("/message/tool_calls")
+                if let Some(calls) = event
+                    .pointer("/message/tool_calls")
                     .and_then(serde_json::Value::as_array)
                 {
-                    let labels = calls.iter()
-                        .filter(|call| call.pointer("/function/name")
-                            .and_then(serde_json::Value::as_str) == Some("LocalTrigger"))
+                    let labels = calls
+                        .iter()
+                        .filter(|call| {
+                            call.pointer("/function/name")
+                                .and_then(serde_json::Value::as_str)
+                                == Some("LocalTrigger")
+                        })
                         .filter_map(|call| {
                             let id = call.get("id")?.as_str()?;
                             let args = call.pointer("/function/arguments")?.as_str()?;
