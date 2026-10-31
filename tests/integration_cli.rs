@@ -7728,7 +7728,7 @@ fn print_alias_json_returns_one_real_model_result() {
     )
     .unwrap();
     let server = thread::spawn(move || {
-        let (mut stream, _) = accept_before(&listener, Duration::from_secs(15));
+        let mut stream = accept_before(&listener, Duration::from_secs(15));
         let request = read_request(&mut stream);
         let body = json!({"choices":[{"message":{
             "role":"assistant","content":"print-mode-ok"
