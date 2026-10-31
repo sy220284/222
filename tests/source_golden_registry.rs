@@ -66,10 +66,17 @@ fn all_registered_source_goldens_execute_against_production_adapters() {
         let cases = fixture["cases"]
             .as_array()
             .expect("missing source golden cases");
+        let operation_key = adapter["operation_key"].as_str();
         assert!(cases.len() >= 2, "normal and boundary cases required");
         for case in cases {
             let mut input = serde_json::Map::new();
             input.insert(key.to_string(), case["input"].clone());
+            if let Some(operation_key) = operation_key {
+                assert_ne!(operation_key, key, "operation must not overwrite input");
+                let export = case["export"].as_str().or_else(|| fixture["export"].as_str())
+                    .expect("multi-function golden requires the exported operation");
+                input.insert(operation_key.to_string(), json!(export));
+            }
             let request = json!({"id":case["id"],"input":input});
             let mut child = Command::new(&executable)
                 .stdin(Stdio::piped())
@@ -94,7 +101,12 @@ fn all_registered_source_goldens_execute_against_production_adapters() {
                 .expect("Rust adapter did not return one JSON observation");
             assert_eq!(result["schema"], "source-rust-observation/v1");
             assert_eq!(result["case_id"], case["id"]);
-            assert_eq!(result["executed_source_ids"], entry["source_ids"]);
+            let expected_ids = if case.get("source_ids").is_some() {
+                &case["source_ids"]
+            } else {
+                &entry["source_ids"]
+            };
+            assert_eq!(result["executed_source_ids"], *expected_ids);
             let actual = result.pointer(pointer).unwrap_or_else(|| {
                 panic!("{source_path}: Rust adapter missing expected runtime output {pointer}")
             });
