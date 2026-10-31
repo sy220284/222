@@ -4145,6 +4145,11 @@ impl Agent {
         // Source clearSessionCaches invalidates WebFetch's bounded URL cache
         // on /clear and /resume; cached pages may reflect prior session state.
         crate::webfetch::clear_cache();
+        // Original clear/caches.ts also invalidates repository detection and
+        // the gitdir/snapshot cache. Otherwise moving between worktrees or
+        // changing origin can reuse stale project identity after /clear.
+        crate::detect_repository::clear_repository_caches();
+        crate::git_filesystem::clear_resolve_git_dir_cache();
         self.notebook_reads.lock().unwrap().clear();
         self.file_reads.lock().unwrap().clear();
         self.last_context_usage = None;
@@ -7580,7 +7585,15 @@ done"#;
             .graph
             .create(&json!({"subject":"Old session task","description":"Old graph"}))
             .unwrap();
+        // A negative gitdir lookup is cached. Creating the repository
+        // before /clear must become visible to the next conversation.
+        assert!(crate::git_filesystem::resolve_git_dir(&root).is_none());
+        std::fs::create_dir(root.join(".git")).unwrap();
         agent.clear_history().await.unwrap();
+        assert_eq!(
+            crate::git_filesystem::resolve_git_dir(&root),
+            Some(root.join(".git"))
+        );
 
         assert_ne!(agent.session_id(), original_id);
         assert!(agent.session.messages.is_empty());
