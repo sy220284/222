@@ -5493,6 +5493,13 @@ fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<S
     prompt.push_str(
         &crate::conversation_context::project_instructions_with_dirs(root, additional_dirs)?,
     );
+    // Original 2.1.88 action-scope prompt is part of the actual system
+    // request. Rewrite the obsolete vendor-specific instruction path.
+    prompt.push_str("\n");
+    prompt.push_str(
+        &crate::prompt_runtime::active_source_sections().replace("CLAUDE.md", "AGENTS.md"),
+    );
+    prompt.push('\n');
     if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
         let instructions = crate::prompt_runtime::output_style_instructions(root, &style)?;
         prompt.push_str("\nOutput style:\n");
@@ -5527,6 +5534,16 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn original_actions_are_in_live_model_system_prompt() {
+        let root = tempfile::tempdir().unwrap();
+        let system = system_prompt(root.path()).unwrap();
+        assert!(system.contains("# Executing actions with care"));
+        assert!(system.contains("Authorization stands for the scope specified"));
+        assert!(system.contains("AGENTS.md"));
+        assert!(!system.contains("CLAUDE.md files"));
+    }
 
     #[test]
     fn branch_uses_first_multimodal_text_block_and_switches_active_session() {
