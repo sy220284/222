@@ -941,6 +941,24 @@ mod tests {
         assert_eq!(wire[3]["tool_call_id"], "call_one");
     }
 
+    #[tokio::test]
+    async fn unauthenticated_api_profile_opens_locally_but_refuses_inference() {
+        let mut profile = crate::config::Config::default()
+            .select(Some("deepseek"), None)
+            .unwrap();
+        profile.id = "missing-key-test-provider".into();
+        profile.api_key_env = Some("ATLAS_TEST_NEVER_CONFIGURED_KEY_929318".into());
+        let provider = create(&profile).expect("Local model selection must work without key");
+        let request = ModelRequest {
+            model: profile.model.clone(),
+            system: "instructions".into(),
+            messages: vec![Message::text("user", "hello")],
+            tools: vec![],
+        };
+        let err = provider.complete(&request).await.err().expect("key required");
+        assert!(format!("{err:#}").contains("models connect"), "{err:#}");
+    }
+
     #[test]
     fn parse_provider_response_with_tool_call() {
         let msg: Message = serde_json::from_value(json!({
