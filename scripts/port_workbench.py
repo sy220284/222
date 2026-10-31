@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import urllib.request
 import urllib.error
@@ -533,6 +534,18 @@ def current_counts(rows: dict[str, dict], strict: bool = True) -> dict:
 
 
 
+
+def git_changed_files(repo: Path) -> list[str]:
+    """Inspect this commit's changed paths without depending on an external source tree."""
+    process = subprocess.run(
+        ['git', 'diff', '--name-only', '--no-ext-diff', 'HEAD^', 'HEAD'],
+        cwd=repo, capture_output=True, text=True, check=False)
+    if process.returncode:
+        raise AuditError('无法获得当前提交变更文件，请确保存在 HEAD^ 并检出至少两个提交: '
+                         + process.stderr.strip())
+    return sorted(set(path.strip() for path in process.stdout.splitlines() if path.strip()))
+
+
 def build_dashboard(repo: Path, rows: dict[str, dict], source: Path | None = None,
                     changed_files: list[str] | None = None, strict: bool = True) -> dict:
     """Combine the ONE matrix, frozen baseline and evidence into reviewable work.
@@ -729,6 +742,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--output', type=Path, default=Path('port-audit-output'))
     parser.add_argument('--allow-fixture', action='store_true', help='仅供单元测试使用')
     parser.add_argument('--changed', action='append', default=[], help='变更过的原路径或 Rust 路径，可重复指定')
+    parser.add_argument('--changed-from-git', action='store_true',
+                        help='dashboard：对本次提交 HEAD^..HEAD 的变更做复验影响分析')
     args = parser.parse_args(argv)
     try:
         rows = read_matrix(args.repo)
@@ -747,8 +762,10 @@ def main(argv: list[str] | None = None) -> int:
             result = {k: v for k, v in result.items() if k != 'entries'}
             result['report'] = str(output_file)
         elif args.command == 'dashboard':
+            changed = args.changed + (git_changed_files(args.repo)
+                                      if args.changed_from_git else [])
             dashboard = build_dashboard(args.repo, rows, source=args.source,
-                                        changed_files=args.changed,
+                                        changed_files=sorted(set(changed)),
                                         strict=not args.allow_fixture)
             result = write_dashboard(dashboard, args.output)
         elif args.command == 'impact':
