@@ -110,7 +110,7 @@ mod tests {
         for text in [
             "/rename ultraplan task",
             "`ultraplan`",
-            ""ultraplan"",
+            "\"ultraplan\"",
             "'ultraplan'",
             "<ultraplan>",
             "(ultraplan)",
