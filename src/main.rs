@@ -124,6 +124,7 @@ mod reactive_store;
 mod release_notes;
 mod runtime_contracts;
 mod sdk_queue;
+mod sdk_system_init;
 mod search;
 mod secure_fallback;
 mod semantic_inputs;
@@ -3495,10 +3496,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut side_question_tasks = Vec::<tokio::task::JoinHandle<()>>::new();
     let (title_tx, mut title_rx) = tokio::sync::mpsc::unbounded_channel::<SdkTitleDone>();
     let mut title_pending = 0usize;
-    print_json!(json!({"type":"system","subtype":"init",
-        "session_id":agent.session_id(),"provider":agent.profile().id,
-        "model":agent.profile().model,
-        "usage_schema":runtime_contracts::empty_usage()}));
+    print_json!(sdk_system_init::build_for_agent(agent, config)?);
     // Source print.ts queues the SessionStart message and drains it only
     // after initialize has installed systemPrompt, agents and hooks. Eager
     // execution previously rejected a subsequent valid initialize request.
