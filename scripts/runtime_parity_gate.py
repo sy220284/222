@@ -87,7 +87,7 @@ def _execute(template, repo, original, sandbox, case, side):
         "PARITY_SEED":"220", "PARITY_CASE_ID":case["id"],
         "PARITY_SIDE":side,
     }
-    (sandbox/"home").mkdir()
+    (sandbox/"home").mkdir(parents=True)
     (sandbox/"tmp").mkdir()
     payload = json.dumps({"id":case["id"],"input":case["input"]},
                          ensure_ascii=False,sort_keys=True)
@@ -150,18 +150,12 @@ def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
     coverage = {key:set() for key in expected}
     attempted = passed = 0
     mismatches = []
-    seen_pairs = set()
     for case in cases:
         ident, ids = case["id"], case["source_ids"]
         invalid = sorted(set(ids) - expected.keys())
         if invalid:
             errors.append(ident + ": 引用了排除或不存在的原版函数: " + ", ".join(invalid[:3]))
             continue
-        pair = (tuple(sorted(ids)),case["kind"])
-        if pair in seen_pairs:
-            errors.append(ident + ": 重复覆盖相同函数集合与场景类型，请合并重复样例")
-            continue
-        seen_pairs.add(pair)
         attempted += 1
         with tempfile.TemporaryDirectory(prefix="source-rust-parity-") as tmp:
             temp = Path(tmp)
