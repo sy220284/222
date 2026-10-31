@@ -27,7 +27,7 @@
 | 原路径 | 原行数 | 原字节数 | 处理方式 | Rust 目标 | 当前验证状态 |
 |---|---:|---:|---|---|---|
 | `src/QueryEngine.ts` | 1296 | 46630 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
-| `src/Task.ts` | 126 | 3152 | 重写：任务调度 | `src/background.rs / src/task.rs` | 部分实现：local_bash 任务使用原版 b+8 位小写数字字母 ID，查询/停止/增量读取兼容旧 UUID；新增会话级输出隔离、启动失败回收、输出落盘错误状态，源码已提交待验收；其他任务类型、统一生命周期和任务依赖仍未等价 |
+| `src/Task.ts` | 126 | 3152 | 重写：任务调度 | `src/background.rs / src/task.rs` | 部分实现：local_bash 任务 ID 已对照原版 crypto.randomBytes(8) 改用八个独立安全随机字节和36字符映射，保留旧 UUID 读取；会话级输出隔离、启动失败回收、增量读取、输出落盘错误状态运行；重启后悬挂 pending/running 与旧 interrupted 均转为明确 failed 并保存原因，列表与停止操作遇损坏元数据传播错误、回归已新增；尚缺其他任务类型、统一生命周期、任务依赖、跨功能取消恢复及当前 HEAD 动态等价验收 |
 | `src/Tool.ts` | 793 | 29516 | 重写：保持通用行为 | `src/generated_ports/p_2980dcfa0210a.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/commands.ts` | 755 | 25185 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/context.ts` | 190 | 6446 | 重写：保持通用行为 | `src/conversation_context.rs / src/agent.rs / src/main.rs` | 部分实现：会话首次启动的真实 Git 状态/分支/最近提交快照与本地日期进入模型 system，后续轮次不刷新；补齐用户级 AGENTS.md/规则、父目录继承、项目及本地指令、递归无条件规则与 paths 条件规则隔离，并接通 Agent 系统提示词；Git 状态 UTF-16 截断与用户指令配置错误传播修复（42b729ca、549f12b2、5db0100c、24e27e1c），源码已提交待验收；已补充工作区内 @include 递归引用（b7dd2cf0、1b670581、ae1f934b），源码已提交待验收；嵌套 Git 工作树主仓库项目指令去重（fb4210e7），保留主仓库本地指令；授权附加目录指令按显式 ATLAS_ADDITIONAL_DIRECTORIES_INSTRUCTIONS 开关加载并接入 Agent/上下文统计（80336875、22b50ecd），均已提交待验收；原版外部引用审批、完整条件规则按文件动态加载、记忆排除、源设置开关和完整 SDK 行为仍待等价；指令 glob 排除与来源独立开关、外部 @引用显式配置授权已接通真实 Agent，代码 7de3b735/03b5697f/95f8dde9/f3c2c0f6/93493750/123d67f0，均已提交待验收；完整交互审批、动态条件规则、SDK 来源传播与跨平台行为仍缺 |
