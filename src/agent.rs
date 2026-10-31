@@ -9,7 +9,7 @@ use crate::{
     in_memory_mailbox,
     lsp::LspManager,
     mcp::McpManager,
-    memory, permission_mode, permission_rules,
+    memory, memory_extraction, permission_mode, permission_rules,
     protocol::ToolCall,
     protocol::{Message, ModelRequest, TokenUsage},
     provider::{self, ModelProvider},
@@ -3811,6 +3811,7 @@ impl Agent {
         let mut candidate = self.session.clone();
         candidate.summary = Some(summary);
         candidate.messages.clear();
+        candidate.memory_extraction_cursor = 0;
         candidate.surfaced_memories.clear();
         candidate.surfaced_memory_units = 0;
         candidate.save(&self.root)?;
@@ -4884,6 +4885,31 @@ impl Agent {
                 self.snapshot_output_tokens_for_turn(None);
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
+                // Run only after a successful main-agent Stop. The original
+                // feature is opt-in; no background agent or timer is created.
+                if self.child_depth == 0 && memory_extraction::enabled() {
+                    match memory_extraction::extract(
+                        &self.root,
+                        &self.session.messages,
+                        self.session.memory_extraction_cursor,
+                        &system,
+                        self.provider.as_ref(),
+                        &self.profile,
+                    ).await {
+                        Ok(outcome) => {
+                            if let Some(usage) = outcome.usage { self.record_usage(usage); }
+                            self.session.memory_extraction_cursor = outcome.cursor;
+                            self.session.save(&self.root)?;
+                            if outcome.files_written > 0 {
+                                self.emit(json!({"type":"memory_saved",
+                                    "count":outcome.files_written,"session_id":self.session.id}));
+                            }
+                        }
+                        Err(error) => {
+                            eprintln!("Optional memory extraction failed: {error:#}");
+                        }
+                    }
+                }
                 return Ok(text);
             }
             if !text.trim().is_empty() {
