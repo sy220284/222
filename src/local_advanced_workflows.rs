@@ -68,18 +68,27 @@ pub fn review_prompt(root: &Path, number: Option<u64>) -> Result<String> {
     } else {
         // reviewRemote.ts compares the branch against its fork point.
         // Include committed changes as well as index/worktree changes.
-        let base = ["refs/remotes/origin/HEAD", "origin/main", "origin/master", "main", "master"]
-            .iter()
-            .find_map(|reference| {
-                git(root, &["merge-base", reference, "HEAD"])
-                    .ok()
-                    .filter(|sha| !sha.trim().is_empty())
-                    .map(|sha| (reference, sha.trim().to_owned()))
-            });
+        let base = [
+            "refs/remotes/origin/HEAD",
+            "origin/main",
+            "origin/master",
+            "main",
+            "master",
+        ]
+        .iter()
+        .find_map(|reference| {
+            git(root, &["merge-base", reference, "HEAD"])
+                .ok()
+                .filter(|sha| !sha.trim().is_empty())
+                .map(|sha| (reference, sha.trim().to_owned()))
+        });
         let (committed, has_committed_changes) = if let Some((reference, base_sha)) = base {
             let diff = git(root, &["diff", "--stat", &base_sha, "HEAD"])?;
             let has_changes = !diff.trim().is_empty();
-            (format!("Base {reference}, merge-base {base_sha}:\n{diff}"), has_changes)
+            (
+                format!("Base {reference}, merge-base {base_sha}:\n{diff}"),
+                has_changes,
+            )
         } else {
             ("No local main/master or origin base ref available; committed branch comparison is unavailable. This review covers the visible working tree only.".to_owned(), false)
         };
@@ -247,7 +256,8 @@ mod tests {
             .arg("-C")
             .arg(root.path())
             .args(["init", "-q"])
-            .status().unwrap();
+            .status()
+            .unwrap();
         assert!(git.success());
         std::fs::write(root.path().join("pending.rs"), "fn f() {}").unwrap();
         for input in [
@@ -284,18 +294,36 @@ mod tests {
         git(root.path(), &["init", "-q", "-b", "main"]).unwrap();
         std::fs::write(root.path().join("feature.rs"), "pub fn old() {}\n").unwrap();
         git(root.path(), &["add", "feature.rs"]).unwrap();
-        git(root.path(), &[
-            "-c", "user.name=CI", "-c", "user.email=ci@example.test",
-            "commit", "-qm", "baseline"
-        ]).unwrap();
+        git(
+            root.path(),
+            &[
+                "-c",
+                "user.name=CI",
+                "-c",
+                "user.email=ci@example.test",
+                "commit",
+                "-qm",
+                "baseline",
+            ],
+        )
+        .unwrap();
         assert!(review_prompt(root.path(), None).is_err());
         git(root.path(), &["checkout", "-q", "-b", "feature"]).unwrap();
         std::fs::write(root.path().join("feature.rs"), "pub fn changed() {}\n").unwrap();
         git(root.path(), &["add", "feature.rs"]).unwrap();
-        git(root.path(), &[
-            "-c", "user.name=CI", "-c", "user.email=ci@example.test",
-            "commit", "-qm", "change"
-        ]).unwrap();
+        git(
+            root.path(),
+            &[
+                "-c",
+                "user.name=CI",
+                "-c",
+                "user.email=ci@example.test",
+                "commit",
+                "-qm",
+                "change",
+            ],
+        )
+        .unwrap();
         let prompt = review_prompt(root.path(), None).unwrap();
         assert!(prompt.contains("Base main"), "{prompt}");
         assert!(prompt.contains("feature.rs"), "{prompt}");
