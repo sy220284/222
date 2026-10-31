@@ -18,8 +18,8 @@ out = {
 "schema":"source-rust-observation/v1",
 "case_id":r["id"], "executed_source_ids":["src/f.ts:FunctionDeclaration:1-1:occurrence-1"],
 "outcome":{"value":value}, "errors":[], "state":{"value":value},
-"calls":["execute"], "permissions":[], "events":["begin","end"],
-"side_effects":[], "persistence":{}, "cancellation":{"cancelled":False}
+"calls":["execute"], "permissions":([{"decision":"deny"}] if r["id"]=="permission_deny" else ([{"decision":"allow"}] if r["id"]=="permission_allow" else [])), "events":["begin","end"],
+"side_effects":[], "persistence":{}, "cancellation":{"cancelled":r["id"]=="cancel"}
 }
 print(json.dumps(out))
 """
