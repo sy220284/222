@@ -293,6 +293,25 @@ def main(argv=None):
         legacy = _jsonl(repo/LEGACY)
         discovered = (inventory_tests(args.inventory) if args.inventory else None)
         result = inspect(repo, rows, hashes, entries, legacy, discovered, args.command=="gate")
+        if args.command == "gate":
+            # Source-to-test linkage alone is not a proof of *all* branches
+            # and side effects. Preserve the original per-function audit as a
+            # second, mandatory condition for full-source acceptance.
+            from source_parity_gate import (
+                CONTRACTS, load_contracts, verify_contracts,
+            )
+            source_contracts, parsing_errors = load_contracts(repo / CONTRACTS)
+            contract_errors, contract_counts = verify_contracts(
+                rows, baseline, source_contracts, repo=repo,
+                evidence_records={r["path"]: r for r in legacy},
+                verify_ci=False,
+            )
+            result["source_function_contracts"] = contract_counts
+            result["source_function_contract_errors"] = parsing_errors + contract_errors
+            if parsing_errors or contract_errors:
+                result["errors"].append(
+                    f"逐函数/逐分支原版契约尚有 {len(parsing_errors)+len(contract_errors)} 处不完整"
+                )
         if args.command in ("check","gate") and discovered is None:
             result["errors"].append("缺少本次真实编译测试的 Rust --list 清单")
         if args.command == "verify-original":
@@ -319,7 +338,7 @@ def main(argv=None):
         (output/"SOURCE_TEST_SUITE.md").write_text("\n".join(report)+"\n",encoding="utf-8")
         print(json.dumps({k:v for k,v in result.items()
                           if k not in ("missing_source_test_paths","remaining_port_path_names",
-                                       "linked_rust_tests","errors")},ensure_ascii=False))
+                                       "linked_rust_tests","source_function_contract_errors","errors")},ensure_ascii=False))
         for issue in result["errors"][:100]:
             print("门禁问题: " + str(issue), file=sys.stderr)
         if len(result["errors"]) > 100:
