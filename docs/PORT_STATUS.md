@@ -1,3 +1,12 @@
+## 2026-10-31：未迁移公共文件与输出链首批接入
+
+- 原版依据：2.1.88 `utils/fsOperations.ts`（128–384、620–771）、`utils/mcpOutputStorage.ts`（全文件）、`utils/format.ts`（全文件）。原始 1,906 条清单已实际逐路径核对行数和字节数。
+- 实际生产链：Read/Write/Edit → `fs_operations::permission_paths`，包括链中间目标的显式拒绝；PromptHistory → `ReverseLines`，保持 UTF-8 原始字节跨 4KB 块；后台任务输出 → `read_range_from`，保留原有 O_NOFOLLOW 与普通文件检查。
+- MCP 工具超限文本、MCP prompt 音频/资源和 WebFetch 二进制统一使用 `mcp_output_storage`，保存完整字节、按大小写无关 MIME 选择扩展名、阻止 `.atlas` 链接越界；超限文本包含原版分块阅读完整性要求。会话列表和保存回执接入共享格式。
+- 行为验证包括 `intermediate_symlink_targets_obey_read_and_write_deny_rules`、`bounded_ranges_and_reverse_lines_preserve_utf8_across_chunks`、`large_mcp_output_is_saved_in_full_with_chunk_read_instructions`、`mixed_case_binary_response_is_saved_without_loss`、`escaped_results_directory_does_not_create_or_write_outside_workspace`；`original_formatter_snapshots` 使用原始 TS 运行生成的 175 组结果，先复现舍入偏差再修正。原始 TS 只用于生成测试预期，不进入运行时。
+- 台账仅将这 3 条由未迁移调整为部分实现，逐条保留日期/时区、FS 可替换层、MCP 全部内容变换等剩余缺口。未迁移 493 → 490，部分实现 1,183 → 1,186，已验收仍 38，剩余待完整验收仍 1,676。**本批不代表完成用户要求的全部剩余移植。**
+- 保留同期 LocalTrigger 模型调用链及路径授权提交。本批本地 1,217 项 Rust 测试、26 项工作台测试通过；全部目标编译、Clippy 正确性/可疑代码门禁、Rustfmt、迁移台账检查及原版全量扫描通过。提交后的 Linux/Windows CI 仍需按新 HEAD 独立验收，不沿用旧版通过结论。
+
 ## 2026-10-31 本地通用能力模型工具链复查
 
 - 对照原版 RemoteTriggerTool（模型工具）的五种动作，查出此前 Rust 仅注册 CLI/REPL 的入口断链；新增 `LocalTrigger` 通用模型工具定义，连通模型函数调用、权限校验、持久化及返回结果。拒绝周期计划和远程任务字段，用户未明确要求时不启用后台 Agent。

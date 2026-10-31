@@ -1238,26 +1238,23 @@ impl ToolExecutor {
     /// symlinked directories must not bypass a denied path pattern.
     fn file_rule_paths(&self, requested: &str) -> Result<Vec<String>> {
         let path = self.checked_path(requested)?;
-        let mut ancestor = path.as_path();
-        while !ancestor.exists() {
-            ancestor = ancestor
-                .parent()
-                .context("File path has no existing ancestor")?;
-        }
-        let resolved = ancestor.canonicalize()?.join(path.strip_prefix(ancestor)?);
-        let mut paths = vec![
-            requested.to_owned(),
-            path.to_string_lossy().into_owned(),
-            resolved.to_string_lossy().into_owned(),
-        ];
-        for candidate in [&path, &resolved] {
+        Ok(self.rule_paths_for(requested, &path))
+    }
+
+    fn rule_paths_for(&self, requested: &str, path: &Path) -> Vec<String> {
+        let candidates = crate::fs_operations::permission_paths(path);
+        let mut paths = vec![requested.to_owned()];
+        for candidate in &candidates {
+            paths.push(candidate.to_string_lossy().into_owned());
             for root in std::iter::once(&self.root).chain(self.extra_roots.iter()) {
                 if let Ok(relative) = candidate.strip_prefix(root) {
                     paths.push(relative.to_string_lossy().into_owned());
                 }
             }
         }
-        Ok(paths)
+        paths.sort();
+        paths.dedup();
+        paths
     }
 
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
@@ -1400,19 +1397,7 @@ impl ToolExecutor {
         requested: &str,
         path: &Path,
     ) -> Result<Option<permission_rules::Behavior>> {
-        let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        let mut paths = vec![
-            requested.to_owned(),
-            path.to_string_lossy().into_owned(),
-            resolved.to_string_lossy().into_owned(),
-        ];
-        for candidate in [path, &resolved] {
-            for root in std::iter::once(&self.root).chain(self.extra_roots.iter()) {
-                if let Ok(relative) = candidate.strip_prefix(root) {
-                    paths.push(relative.to_string_lossy().into_owned());
-                }
-            }
-        }
+        let paths = self.rule_paths_for(requested, path);
         permission_rules::policy_for(
             &self.permission_rules,
             "read_file",
@@ -3621,6 +3606,40 @@ mod tests {
                 })
             )
             .is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn intermediate_symlink_targets_obey_read_and_write_deny_rules() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("public.txt"), "secret").unwrap();
+        symlink("public.txt", root.path().join("denied.txt")).unwrap();
+        symlink("denied.txt", root.path().join("alias.txt")).unwrap();
+        let rules = permission_rules::compile_rules(&[
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "Read(denied.txt)".into(),
+            },
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "Write(denied.txt)".into(),
+            },
+        ])
+        .unwrap();
+        let tool = executor(root.path(), Approval::Full).with_permission_rules(rules);
+        let path = tool.checked_path("alias.txt").unwrap();
+        assert!(tool.require_read_rules("alias.txt", &path).is_err());
+        assert!(tool
+            .require_approval(
+                "write_file",
+                &json!({"path":"alias.txt","content":"replace"})
+            )
+            .is_err());
+        assert_eq!(
+            fs::read_to_string(root.path().join("public.txt")).unwrap(),
+            "secret"
+        );
     }
 
     #[tokio::test]

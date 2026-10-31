@@ -19,6 +19,21 @@ pub struct SessionItem {
     pub modified_ms: u128,
 }
 impl SessionItem {
+    pub fn display_metadata(&self) -> String {
+        crate::display_format::format_log_metadata(
+            &crate::display_format::LogMetadata {
+                modified_ms: self.modified_ms.min(i64::MAX as u128) as i64,
+                message_count: self.messages,
+                file_size: None,
+                git_branch: self.git_branch.as_deref(),
+                tag: self.tag.as_deref(),
+                agent_setting: None,
+                pr_number: None,
+                pr_repository: None,
+            },
+            chrono::Utc::now().timestamp_millis(),
+        )
+    }
     pub fn display_title(&self) -> String {
         match self.tag.as_deref() {
             Some(tag) if !tag.is_empty() => format!("{} #{tag}", self.title),

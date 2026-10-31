@@ -30,12 +30,14 @@ mod deep_link_register;
 mod detect_repository;
 mod diagnostics;
 mod diff_view;
+mod display_format;
 mod env_runtime;
 mod env_validation;
 mod event_signal;
 mod exec_file;
 mod exec_sync_compat;
 mod files_context;
+mod fs_operations;
 mod gemini_content;
 mod gemini_sse;
 mod generated_ports;
@@ -63,6 +65,7 @@ mod mcp;
 mod mcp_cli;
 mod mcp_http;
 mod mcp_legacy_sse;
+mod mcp_output_storage;
 mod mcp_policy;
 mod mcp_prompt;
 mod memory;
@@ -1202,10 +1205,10 @@ async fn run_cli() -> Result<()> {
             Commands::Sessions { query } => {
                 for item in session_control::search(&root, query.as_deref().unwrap_or(""))? {
                     println!(
-                        "{}  {}  ({} messages)",
+                        "{}  {}  ({})",
                         item.id,
                         item.display_title(),
-                        item.messages
+                        item.display_metadata()
                     );
                 }
                 return Ok(());
@@ -1265,10 +1268,10 @@ async fn run_cli() -> Result<()> {
                 .await?;
         for item in matches {
             println!(
-                "{}  {}  ({} messages)",
+                "{}  {}  ({})",
                 item.id,
                 item.display_title(),
-                item.messages
+                item.display_metadata()
             );
         }
         return Ok(());
@@ -2231,10 +2234,10 @@ async fn chat(
             "/sessions" => {
                 for item in agent.list_sessions()? {
                     println!(
-                        "{}  {}  ({} messages)",
+                        "{}  {}  ({})",
                         item.id,
                         item.display_title(),
-                        item.messages
+                        item.display_metadata()
                     );
                 }
                 continue;

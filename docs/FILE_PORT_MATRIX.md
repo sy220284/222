@@ -1527,11 +1527,11 @@
 | `src/utils/findExecutable.ts` | 18 | 553 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/fingerprint.ts` | 77 | 2248 | 重写：保持通用行为 | `src/generated_ports/p_2cc5445fbf7a6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/forkedAgent.ts` | 690 | 24635 | 重写：保持通用行为 | `src/generated_ports/p_c67576a3324b2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/format.ts` | 309 | 9375 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/format.ts` | 309 | 9375 | 重写：保持通用行为 | `src/display_format.rs / src/session_control.rs / src/main.rs` | 部分实现：移植大小、时长、紧凑计数、相对时间、会话元数据和重置时间格式；会话列表及 MCP/WebFetch 保存回执使用共享格式。175 组原版运行快照验证常用边界及 toFixed 二进制舍入；完整日期解析、时区夏令时、极大紧凑计数及全部 UI 调用方仍待对齐 |
 | `src/utils/formatBriefTimestamp.ts` | 82 | 2223 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/fpsTracker.ts` | 48 | 1299 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/frontmatterParser.ts` | 371 | 12404 | 重写：保持通用行为 | `src/generated_ports/p_2e571c4a5ca80.rs`| 部分实现：frontmatter 解析——YAML 特殊字符引用表逐字（含冒号空格细节保护时间与 URL）、quoteProblematicValues（列表/块标量/已引用行不动）、--- 定界提取、known key 访问器（allowed-tools 列表拆分）；上游 parseYaml 无 Rust 等价，轻量 key-value 子集实现、嵌套 YAML 记差异，registry 兼容导出 parseBooleanFrontmatter，附 4 测试|
-| `src/utils/fsOperations.ts` | 771 | 24230 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/fsOperations.ts` | 771 | 24230 | 重写：保持通用行为 | `src/fs_operations.rs / src/tools.rs / src/prompt_history.rs / src/background.rs` | 部分实现：符号链接逐级权限路径、缺失路径祖先解析、去重、有界范围/尾部读取及 4KB UTF-8 安全倒序行读取已实现；接通 Read/Write/Edit 规则、历史记录和后台输出。多层链接 deny 及实际文件回归通过；完整可替换 FS 接口、所有原生文件操作适配和跨平台行为仍待等价 |
 | `src/utils/fullscreen.ts` | 203 | 8632 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/generatedFiles.ts` | 137 | 3481 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/generators.ts` | 89 | 2156 | 重写：保持通用行为 | `src/generated_ports/p_48282ce751286.rs`| 部分实现：last_x/toArray/fromArray 语义、raceGenerators→all_bounded（FuturesUnordered 有界并发竞速，Promise.race 公平性对齐）；AsyncGenerator→futures Stream 映射，return_value 的 return 注入语义以 stream 包装未单独实现，测试待 CI|
@@ -1607,7 +1607,7 @@
 | `src/utils/mcp/dateTimeParser.ts` | 122 | 4322 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcp/elicitationValidation.ts` | 337 | 9384 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcpInstructionsDelta.ts` | 131 | 4752 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/mcpOutputStorage.ts` | 190 | 7086 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/mcpOutputStorage.ts` | 190 | 7086 | 重写：保持通用行为 | `src/mcp_output_storage.rs / src/mcp.rs / src/mcp_prompt.rs / src/webfetch.rs` | 部分实现：共享 MIME 检测与扩展名、原子完整保存、大小回执和大输出顺序阅读指引，接通 MCP 工具大文本、MCP prompt 二进制附件和 WebFetch。真实 HTTP 混合大小写 PDF、完整大文本保存和目录越界回归通过；MCP 工具全部二进制内容转换、schema 透传和多模态超限仍待等价 |
 | `src/utils/mcpValidation.ts` | 209 | 6300 | 重写：保持通用行为 | `src/generated_ports/p_6287d1dbedede.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/mcpWebSocketTransport.ts` | 201 | 6052 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/memoize.ts` | 270 | 8612 | 重写：保持通用行为 | 待定 | 未迁移 |

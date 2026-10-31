@@ -1171,14 +1171,11 @@ fn tail_with_limit(path: &Path, max_bytes: u64) -> Result<String> {
     }
     let len = file.metadata()?.len();
     let start = len.saturating_sub(max_bytes);
-    use std::io::{Read, Seek, SeekFrom};
-    file.seek(SeekFrom::Start(start))?;
-    let mut bytes = Vec::new();
-    file.take(max_bytes).read_to_end(&mut bytes)?;
-    let earlier = len.saturating_sub(bytes.len() as u64);
-    let content = String::from_utf8_lossy(&bytes);
+    let range = crate::fs_operations::read_range_from(&mut file, start, max_bytes)?;
+    let earlier = range.bytes_total.saturating_sub(range.bytes_read as u64);
+    let content = range.content;
     if earlier == 0 {
-        Ok(content.into_owned())
+        Ok(content)
     } else {
         Ok(format!(
             "[{}KB of earlier output omitted]\n{content}",
