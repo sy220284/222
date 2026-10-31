@@ -2796,7 +2796,7 @@ fn sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http(
         let mut conn = accept_before(&listener, Duration::from_secs(15));
         let request = read_request(&mut conn);
         let body = json!({"choices":[{"message":{"role":"assistant",
-            "content":"Direct text accepted","finish_reason":"stop"}]})
+            "content":"Direct text accepted"},"finish_reason":"stop"}]})
         .to_string();
         write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             body.len(),body).unwrap();
@@ -6497,7 +6497,7 @@ fn sdk_bridge_inbound_media_type_fallback_reaches_real_model_for_direct_and_queu
             let mut conn = accept_before(&server, Duration::from_secs(15));
             let request = read_request(&mut conn);
             let response = json!({"choices":[{"message":{"role":"assistant",
-                "content":"image compatible","finish_reason":"stop"}]})
+                "content":"image compatible"},"finish_reason":"stop"}]})
             .to_string();
             write!(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 response.len(), response).unwrap();
