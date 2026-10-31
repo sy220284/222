@@ -1184,8 +1184,14 @@ mod source_prompt_tests {
     #[test]
     fn model_tool_definitions_contain_original_search_guidance() {
         let tools = definitions();
-        let glob = tools.iter().find(|tool| tool["function"]["name"] == "glob_files").unwrap();
-        let grep = tools.iter().find(|tool| tool["function"]["name"] == "grep_files").unwrap();
+        let glob = tools
+            .iter()
+            .find(|tool| tool["function"]["name"] == "glob_files")
+            .unwrap();
+        let grep = tools
+            .iter()
+            .find(|tool| tool["function"]["name"] == "grep_files")
+            .unwrap();
         assert_eq!(glob["function"]["description"], SOURCE_GLOB_DESCRIPTION);
         assert_eq!(grep["function"]["description"], SOURCE_GREP_DESCRIPTION);
         assert!(SOURCE_GLOB_DESCRIPTION.contains("sorted by modification time"));
