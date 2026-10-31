@@ -7120,7 +7120,6 @@ fn local_marketplace_cli_add_install_list_and_remove_are_durable() {
         .is_file());
 }
 
-
 #[test]
 fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
     let root = tempfile::tempdir().unwrap();
@@ -7134,7 +7133,8 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
             let request = read_request(&mut stream);
             let response = json!({"choices":[{"message":{"role":"assistant",
                 "content":if step==0 {"plan accepted"} else {"plain text accepted"}},
-                "finish_reason":"stop"}]}).to_string();
+                "finish_reason":"stop"}]})
+            .to_string();
             write!(stream,
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 response.len(), response).unwrap();
@@ -7144,52 +7144,115 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
         requests
     });
     let config = root.path().join("config.json");
-    fs::write(&config, json!({"default_provider":"mock","providers":[{
-        "id":"mock","kind":"openai-compatible","model":"vision",
-        "base_url":format!("http://{addr}/v1")
-    }]}).to_string()).unwrap();
-    let mut child = binary().args([
-        "--workspace", root.path().to_str().unwrap(),
-        "--approval", "full", "sdk",
-    ]).env("ATLAS_CONFIG", &config)
-      .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-      .spawn().unwrap();
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"vision",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
     {
         let mut input = child.stdin.take().unwrap();
-        writeln!(input, "{}", json!({"type":"user","content":"/ultrareview invalid"})).unwrap();
-        writeln!(input, "{}", json!({"type":"user","uuid":uuid::Uuid::new_v4().to_string(),
-            "content":[{"type":"text","text":"visual reference"},
-                {"type":"image","source":{"type":"base64",
-                    "media_type":"image/jpeg","data":"/9j/AA=="}},
-                {"type":"text","text":"/ultraplan repair local UI"}],
-            "file_attachments":[{"path":"note.txt"}]
-        })).unwrap();
-        writeln!(input, "{}", json!({"type":"user",
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user","content":"/ultrareview invalid"})
+        )
+        .unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user","uuid":uuid::Uuid::new_v4().to_string(),
+                "content":[{"type":"text","text":"visual reference"},
+                    {"type":"image","source":{"type":"base64",
+                        "media_type":"image/jpeg","data":"/9j/AA=="}},
+                    {"type":"text","text":"/ultraplan repair local UI"}],
+                "file_attachments":[{"path":"note.txt"}]
+            })
+        )
+        .unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
             "content":"/ultraplan literal message, do not expand",
-            "skipSlashCommands":true})).unwrap();
+            "skipSlashCommands":true})
+        )
+        .unwrap();
     }
     let output = child.wait_with_output().unwrap();
     let wire = String::from_utf8(output.stdout).unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    let events: Vec<Value> = wire.lines().map(|l|serde_json::from_str(l).unwrap()).collect();
-    assert!(events.iter().any(|e| e["type"] == "error"
-        && e["message"].as_str().unwrap_or("").contains("/ultrareview expects")),
-        "{wire}");
-    assert_eq!(events.iter().filter(|e|e["type"]=="result").count(),2,"{wire}");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let events: Vec<Value> = wire
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert!(
+        events.iter().any(|e| e["type"] == "error"
+            && e["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("/ultrareview expects")),
+        "{wire}"
+    );
+    assert_eq!(
+        events.iter().filter(|e| e["type"] == "result").count(),
+        2,
+        "{wire}"
+    );
     let requests = received.join().unwrap();
-    assert_eq!(requests.len(),2);
-    let first: Value = serde_json::from_str(
-        requests[0].split("\r\n\r\n").nth(1).unwrap()).unwrap();
-    let first_user = first["messages"].as_array().unwrap().last().unwrap().to_string();
+    assert_eq!(requests.len(), 2);
+    let first: Value = serde_json::from_str(requests[0].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    let first_user = first["messages"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()
+        .to_string();
     assert!(first_user.contains("repair local UI"), "{first_user}");
-    assert!(first_user.contains("detailed implementation plan"), "{first_user}");
-    assert!(first_user.contains("data:image/jpeg;base64,/9j/AA=="), "{first_user}");
+    assert!(
+        first_user.contains("detailed implementation plan"),
+        "{first_user}"
+    );
+    assert!(
+        first_user.contains("data:image/jpeg;base64,/9j/AA=="),
+        "{first_user}"
+    );
     assert!(first_user.contains("private local note"), "{first_user}");
-    let second: Value = serde_json::from_str(
-        requests[1].split("\r\n\r\n").nth(1).unwrap()).unwrap();
-    let second_user = second["messages"].as_array().unwrap().last().unwrap().to_string();
-    assert!(second_user.contains("/ultraplan literal message, do not expand"),
-        "{second_user}");
-    assert!(!second_user.contains("detailed implementation plan"),
-        "{second_user}");
+    let second: Value =
+        serde_json::from_str(requests[1].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    let second_user = second["messages"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()
+        .to_string();
+    assert!(
+        second_user.contains("/ultraplan literal message, do not expand"),
+        "{second_user}"
+    );
+    assert!(
+        !second_user.contains("detailed implementation plan"),
+        "{second_user}"
+    );
 }
