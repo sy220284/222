@@ -309,38 +309,10 @@ impl SdkEventQueue {
     }
 }
 
-// src/utils/userPromptKeywords.ts. JavaScript /\\b/ uses ASCII
-// [A-Za-z0-9_] word boundaries without the /u flag. Rust regex defaults
-// to Unicode boundaries, which silently misses "éwtf" and "中文go on".
-fn matches_js_word_boundaries(input: &str, pattern: &Regex) -> bool {
-    let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
-    pattern.find_iter(input).any(|found| {
-        let before = input[..found.start()].chars().next_back();
-        let after = input[found.end()..].chars().next();
-        !before.is_some_and(word) && !after.is_some_and(word)
-    })
-}
-
-pub fn matches_negative_keyword(input: &str) -> bool {
-    static PATTERN: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let pattern = PATTERN.get_or_init(|| {
-        Regex::new(r"(wtf|wth|ffs|omfg|shit(ty|tiest)?|dumbass|horrible|awful|piss(ed|ing)? off|piece of (shit|crap|junk)|what the (fuck|hell)|fucking? (broken|useless|terrible|awful|horrible)|fuck you|screw (this|you)|so frustrating|this sucks|damn it)").expect("source negative keyword regex")
-    });
-    matches_js_word_boundaries(&input.to_lowercase(), pattern)
-}
-
-pub fn matches_keep_going_keyword(input: &str) -> bool {
-    let lower = input.to_lowercase();
-    let trimmed = lower.trim();
-    if trimmed == "continue" {
-        return true;
-    }
-    static PATTERN: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let pattern = PATTERN.get_or_init(|| {
-        Regex::new(r"(keep going|go on)").expect("source continuation keyword regex")
-    });
-    matches_js_word_boundaries(trimmed, pattern)
-}
+// src/utils/userPromptKeywords.ts
+#[path = "source_user_keywords.rs"]
+mod source_user_keywords;
+pub use source_user_keywords::{matches_keep_going_keyword, matches_negative_keyword};
 
 // src/utils/sessionUrl.ts — SDK resume selectors: UUID, JSONL, URL.
 #[derive(Debug, Clone, PartialEq, Eq)]
