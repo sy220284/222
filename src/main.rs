@@ -107,6 +107,7 @@ mod project_init;
 mod project_onboarding;
 mod prompt_history;
 mod prompt_runtime;
+mod source_prompt_catalog;
 mod protocol;
 mod provider;
 mod query_config;
