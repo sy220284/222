@@ -27,6 +27,17 @@ pub struct Session {
     pub history_message_aliases: std::collections::BTreeMap<Uuid, Uuid>,
     #[serde(default)]
     pub summary: Option<String>,
+    /// Model-visible summary position for source 2.1.88 prefix-preserving
+    /// partial compaction. Full/up_to summaries appear at offset zero.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary_insert_at: Option<usize>,
+    /// Immutable transcript prefix covering all turns before a partial
+    /// compaction. Retained model messages may already occur in this prefix.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript_snapshot: Option<Vec<Message>>,
+    /// Number of active model turns already contained in transcript_snapshot.
+    #[serde(default)]
+    pub transcript_active_offset: usize,
     #[serde(default)]
     pub tasks: Vec<Task>,
     #[serde(default)]
@@ -82,6 +93,9 @@ impl Session {
             history_message_ids: Vec::new(),
             history_message_aliases: std::collections::BTreeMap::new(),
             summary: None,
+            summary_insert_at: None,
+            transcript_snapshot: None,
+            transcript_active_offset: 0,
             tasks: Vec::new(),
             todos: Vec::new(),
             surfaced_memories: Vec::new(),
@@ -164,17 +178,24 @@ impl Session {
     /// Keep this separate from model_messages: old turns must not be resent
     /// to the model after compaction has replaced them with a summary.
     pub fn transcript_messages(&self) -> Vec<Message> {
-        let mut history = Vec::with_capacity(self.archived_messages.len() + self.messages.len());
-        history.extend(self.archived_messages.iter().cloned());
-        // Original transcript retains each synthetic compaction summary
-        // between old and new turns, including the most recent boundary.
+        let mut history = if let Some(snapshot) = &self.transcript_snapshot {
+            snapshot.clone()
+        } else {
+            self.archived_messages.clone()
+        };
+        // Synthetic summaries are stored once at their compaction boundary.
         if let Some(summary) = self.summary.as_deref().filter(|s| !s.trim().is_empty()) {
             history.push(Message::text(
                 "user",
                 crate::compact_source_prompts::user_summary_message(summary, None, false, false),
             ));
         }
-        history.extend(self.messages.iter().cloned());
+        let from = if self.transcript_snapshot.is_some() {
+            self.transcript_active_offset.min(self.messages.len())
+        } else {
+            0
+        };
+        history.extend(self.messages[from..].iter().cloned());
         history
     }
 
@@ -183,27 +204,30 @@ impl Session {
     /// normalized: the synthetic message is composed once per API request,
     /// never re-appended on retries, resume or per-tool model turns.
     pub fn model_messages(&self) -> Vec<Message> {
-        let mut messages =
-            Vec::with_capacity(self.messages.len() + usize::from(self.summary.is_some()));
+        let mut messages = self.messages.clone();
         if let Some(summary) = self.summary.as_deref().filter(|s| !s.trim().is_empty()) {
-            messages.push(Message::text(
+            let summary = Message::text(
                 "user",
                 crate::compact_source_prompts::user_summary_message(
                     summary,
-                    (!self.archived_messages.is_empty())
+                    (!self.archived_messages.is_empty() || self.transcript_snapshot.is_some())
                         .then(|| format!(".atlas/sessions/{}.json", self.id))
                         .as_deref(),
                     false,
-                    false,
+                    self.summary_insert_at.unwrap_or(0) > 0,
                 ),
-            ));
+            );
+            let insert_at = self.summary_insert_at.unwrap_or(0).min(messages.len());
+            messages.insert(insert_at, summary);
         }
-        messages.extend(self.messages.iter().cloned());
         messages
     }
 
     pub fn clear(&mut self) {
         self.summary = None;
+        self.summary_insert_at = None;
+        self.transcript_snapshot = None;
+        self.transcript_active_offset = 0;
         self.messages.clear();
         self.archived_messages.clear();
         self.tasks.clear();
@@ -234,6 +258,39 @@ mod tests {
         assert_eq!(once[1].visible_text(), "Continue work");
         session.summary = None;
         assert_eq!(session.model_messages().len(), 1);
+    }
+
+    #[test]
+    fn partial_compaction_preserves_model_position_without_duplicating_transcript() {
+        let mut s = Session::fresh();
+        s.messages = vec![
+            Message::text("user", "kept-first"),
+            Message::text("assistant", "kept-answer"),
+        ];
+        s.transcript_snapshot = Some(vec![
+            Message::text("user", "kept-first"),
+            Message::text("assistant", "kept-answer"),
+            Message::text("user", "summarized-tail"),
+        ]);
+        s.transcript_active_offset = 2;
+        s.summary = Some("Summary:\nSummarized tail".into());
+        s.summary_insert_at = Some(2);
+        assert_eq!(s.model_messages().len(), 3);
+        assert_eq!(s.model_messages()[0].visible_text(), "kept-first");
+        assert_eq!(s.model_messages()[1].visible_text(), "kept-answer");
+        assert!(s.model_messages()[2].visible_text().contains("Summarized tail"));
+        s.messages.push(Message::text("user", "new-task"));
+        let model = s.model_messages();
+        assert_eq!(model[3].visible_text(), "new-task");
+        let transcript = s.transcript_messages();
+        assert_eq!(transcript.len(), 5);
+        assert_eq!(transcript[2].visible_text(), "summarized-tail");
+        assert_eq!(transcript[4].visible_text(), "new-task");
+        s.summary_insert_at = Some(0);
+        assert!(s.model_messages()[0].visible_text().contains("Summarized tail"));
+        s.clear();
+        assert!(s.transcript_snapshot.is_none());
+        assert!(s.summary_insert_at.is_none());
     }
 
     #[test]
