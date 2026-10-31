@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn invalid_store_data_is_an_error_not_an_empty_success() {
         let root = tempfile::tempdir().unwrap();
-        fs::create_dir_all(root.path().join(".atlas")).unwrap();
+        fs::create_dir_all(store_dir(root.path())).unwrap();
         fs::write(store_path(root.path()), b"invalid json").unwrap();
         assert!(list(root.path()).is_err());
         assert!(set(root.path(), "name", "prompt").is_err());
