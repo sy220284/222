@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn git_porcelain_worktrees_preserve_spaces_and_do_not_match_metadata() {
         let got = parse_worktree_paths(
-            "worktree /tmp/root name\\nHEAD 123\\nbranch refs/heads/main\\n\\nworktree /tmp/other\\ndetached\\n",
+            "worktree /tmp/root name\nHEAD 123\nbranch refs/heads/main\n\nworktree /tmp/other\ndetached\n",
         );
         assert_eq!(got, vec![PathBuf::from("/tmp/root name"), PathBuf::from("/tmp/other")]);
     }
