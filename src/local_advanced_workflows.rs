@@ -75,6 +75,13 @@ pub fn review_prompt(root: &Path, number: Option<u64>) -> Result<String> {
         let status = git(root, &["status", "--short"])?;
         let stat = git(root, &["diff", "--stat"])?;
         let staged = git(root, &["diff", "--cached", "--stat"])?;
+        if status.trim().is_empty()
+            && stat.trim().is_empty()
+            && staged.trim().is_empty()
+            && !committed.starts_with("Base ")
+        {
+            bail!("No local changes to review, and no branch base is available");
+        }
         format!("Local committed, staged, unstaged and untracked changes.\nBranch comparison:\n{committed}\nStatus:\n{status}\nUnstaged diff summary:\n{stat}\nStaged diff summary:\n{staged}\nRead the COMPLETE diffs and inspect every changed file.")
     };
     Ok(format!(
