@@ -3,11 +3,9 @@
 use anyhow::{bail, Context, Result};
 use std::{
     collections::HashSet,
-    env,
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,87 +108,6 @@ pub fn ensure_exists(path: &Path) -> Result<()> {
     }
 }
 
-/// POSIX-style command argv parsing preserves quoted binary locations and
-/// editor flags while never evaluating shell metacharacters.
-fn editor_argv(raw: &str) -> Result<Vec<String>> {
-    let mut output = Vec::new();
-    let mut token = String::new();
-    let mut quote = None;
-    let mut escape = false;
-    let mut in_token = false;
-    for ch in raw.chars() {
-        if escape {
-            token.push(ch);
-            escape = false;
-            in_token = true;
-        } else if ch == '\\' && quote != Some('\'') {
-            escape = true;
-            in_token = true;
-        } else if let Some(current) = quote {
-            if ch == current {
-                quote = None;
-            } else {
-                token.push(ch);
-            }
-        } else if ch == '"' || ch == '\'' {
-            quote = Some(ch);
-            in_token = true;
-        } else if ch.is_whitespace() {
-            if in_token {
-                output.push(std::mem::take(&mut token));
-                in_token = false;
-            }
-        } else {
-            token.push(ch);
-            in_token = true;
-        }
-    }
-    if escape || quote.is_some() {
-        bail!("Unclosed escape or quote in external editor command");
-    }
-    if in_token {
-        output.push(token);
-    }
-    if output.is_empty() || output[0].is_empty() {
-        bail!("External editor command is empty");
-    }
-    Ok(output)
-}
-
-fn external_editor() -> Result<(Vec<String>, &'static str)> {
-    for (key, display) in [("VISUAL", "$VISUAL"), ("EDITOR", "$EDITOR")] {
-        if let Ok(value) = env::var(key) {
-            if !value.trim().is_empty() {
-                return Ok((editor_argv(&value)?, display));
-            }
-        }
-    }
-    #[cfg(windows)]
-    {
-        Ok((vec!["notepad.exe".into()], "default"))
-    }
-    #[cfg(not(windows))]
-    {
-        Ok((vec!["vi".into()], "default"))
-    }
-}
-
-fn launch_editor(path: &Path) -> Result<&'static str> {
-    let (argv, source) = external_editor()?;
-    let status = Command::new(&argv[0])
-        .args(&argv[1..])
-        .arg(path)
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .with_context(|| format!("Launch editor {}", argv[0]))?;
-    if !status.success() {
-        bail!("Editor exited with status {status}");
-    }
-    Ok(source)
-}
-
 pub fn run(workspace: &Path) -> Result<String> {
     let config = crate::config::Config::path()?;
     let user_dir = config
@@ -229,7 +146,7 @@ pub fn run(workspace: &Path) -> Result<String> {
     if target.create_if_missing {
         ensure_exists(&chosen)?;
     }
-    let source = launch_editor(&chosen)?;
+    let (source, _launch) = crate::editor_runtime::open_file(&chosen, None)?;
     let hint = if source == "default" {
         "To use a different editor, set $EDITOR or $VISUAL.".into()
     } else {
@@ -244,6 +161,7 @@ pub fn run(workspace: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::editor_runtime::parse_editor_command as editor_argv;
 
     #[test]
     fn selection_and_cancellation_never_create_files() {
