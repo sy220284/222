@@ -4845,6 +4845,22 @@ impl Agent {
             // model step. This also revokes instructions from removed servers.
             // The MCP manager quotes these lower-trust strings as data.
             if let Some(mcp) = &self.mcp {
+                if let Some(delta) = mcp.instruction_delta(
+                    &self.session.mcp_instruction_announcements,
+                    &[],
+                ) {
+                    // Persist source-style delta history before the provider
+                    // request. Model-visible instructions remain in the
+                    // lower-trust, quoted system context below; do not replay
+                    // detached server instructions as privileged tool grants.
+                    self.session.mcp_instruction_announcements.push(
+                        crate::mcp_instructions_delta::InstructionAnnouncement {
+                            added_names: delta.added_names,
+                            removed_names: delta.removed_names,
+                        },
+                    );
+                    self.session.save(&self.root)?;
+                }
                 request_system.push_str(&mcp.instruction_context());
             }
             if !deferred_names.is_empty() {
