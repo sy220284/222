@@ -8,7 +8,8 @@ use serde_json::{json, Value};
 use std::io::{self, Read};
 
 const PRED: &str = "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1";
-const SANDBOX: &str = "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1";
+const SANDBOX: &str =
+    "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1";
 
 fn main() {
     if let Err(error) = execute() {
@@ -29,7 +30,10 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
         "isHumanTurn" => (json!(message_predicates::is_human_turn(input)), PRED),
         "removeSandboxViolationTags" => {
             let text = input.as_str().ok_or("sandbox input must be text")?;
-            (json!(sandbox_ui_utils::remove_sandbox_violation_tags(text)), SANDBOX)
+            (
+                json!(sandbox_ui_utils::remove_sandbox_violation_tags(text)),
+                SANDBOX,
+            )
         }
         _ => return Err("unrecognized original exported function".into()),
     };
