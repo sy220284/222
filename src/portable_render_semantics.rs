@@ -310,7 +310,9 @@ pub fn render_truncated_content(
     if text.is_empty() {
         return String::new();
     }
-    let wrap_width = terminal_width.saturating_sub(TERMINAL_RESULT_PADDING as i64).max(10) as usize;
+    let wrap_width = terminal_width
+        .saturating_sub(TERMINAL_RESULT_PADDING as i64)
+        .max(10) as usize;
     let max_units = TERMINAL_MAX_VISIBLE_LINES
         .saturating_mul(wrap_width)
         .saturating_mul(4);
@@ -384,13 +386,13 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             Some(json!(collapse_hook_summaries(first.as_array()?)))
         }
         ("src/ink/optimizer.ts", "optimize") => Some(json!(optimize_patches(first.as_array()?))),
-        ("src/utils/terminal.ts", "renderTruncatedContent") => Some(json!(
-            render_truncated_content(
+        ("src/utils/terminal.ts", "renderTruncatedContent") => {
+            Some(json!(render_truncated_content(
                 first.as_str()?,
                 args.get(1)?.as_i64()?,
                 args.get(2).and_then(Value::as_bool).unwrap_or(false),
-            )
-        )),
+            )))
+        }
         ("src/utils/terminal.ts", "isOutputLineTruncated") => {
             Some(json!(is_output_line_truncated(first.as_str()?)))
         }
@@ -433,10 +435,14 @@ mod tests {
     #[test]
     fn original_terminal_fold_shows_one_extra_line_and_bounds_large_output() {
         assert_eq!(render_truncated_content("one\n", 80, true), "one");
-        assert_eq!(render_truncated_content("one\ntwo\nthree\nfour", 80, true),
-            "one\ntwo\nthree\nfour");
-        assert_eq!(render_truncated_content("one\ntwo\nthree\nfour\nfive", 80, true),
-            "one\ntwo\nthree\n… +2 lines");
+        assert_eq!(
+            render_truncated_content("one\ntwo\nthree\nfour", 80, true),
+            "one\ntwo\nthree\nfour"
+        );
+        assert_eq!(
+            render_truncated_content("one\ntwo\nthree\nfour\nfive", 80, true),
+            "one\ntwo\nthree\n… +2 lines"
+        );
         assert_eq!(render_truncated_content(" ", 80, false), "");
         assert!(!is_output_line_truncated("one\ntwo\nthree\nfour"));
         assert!(is_output_line_truncated("one\ntwo\nthree\nfour\nfive"));
@@ -445,11 +451,22 @@ mod tests {
         let preview = render_truncated_content(&giant, 80, true);
         assert!(preview.len() < 1500);
         assert!(preview.contains("… +"));
-        assert_eq!(inspect("src/utils/terminal.ts", "isOutputLineTruncated",
-            &[json!("a\nb\nc\nd\ne")]), Some(json!(true)));
-        assert_eq!(inspect("src/utils/terminal.ts", "renderTruncatedContent",
-            &[json!("a\nb\nc\nd\ne"), json!(80), json!(true)]),
-            Some(json!("a\nb\nc\n… +2 lines")));
+        assert_eq!(
+            inspect(
+                "src/utils/terminal.ts",
+                "isOutputLineTruncated",
+                &[json!("a\nb\nc\nd\ne")]
+            ),
+            Some(json!(true))
+        );
+        assert_eq!(
+            inspect(
+                "src/utils/terminal.ts",
+                "renderTruncatedContent",
+                &[json!("a\nb\nc\nd\ne"), json!(80), json!(true)]
+            ),
+            Some(json!("a\nb\nc\n… +2 lines"))
+        );
     }
 
     #[test]

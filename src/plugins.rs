@@ -1668,7 +1668,11 @@ mod tests {
         assert_eq!(server.args, ["--stdio"]);
         assert_eq!(
             server.env.get("ATLAS_PLUGIN_ROOT").unwrap(),
-            &healthy.canonicalize().unwrap().to_string_lossy().to_string()
+            &healthy
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
         );
         assert!(result
             .errors
