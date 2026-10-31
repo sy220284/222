@@ -157,8 +157,13 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
             errors.append("旧验收证据重复登记: " + str(path))
             continue
         old[path] = record
-        if path not in required:
-            errors.append("旧证据引用排除或不存在的源码: " + str(path))
+        if path not in rows:
+            errors.append("旧证据引用冻结清单外的原版路径: " + str(path))
+            continue
+        if rows[path]["status"] == "excluded":
+            # Keep the historical audit trail; an explicitly authorized
+            # deletion of the now-removed production module supersedes its
+            # former acceptance, which cannot still count as live coverage.
             continue
         if record.get("source_sha256") != hashes.get(path):
             errors.append(path + ": 旧证据源码哈希已失效")
@@ -184,6 +189,7 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
     # prove original input/output equivalence.
     unregistered = sorted(required - paths.keys())
     not_completed = sorted(path for path in required if rows[path]["status"] != "verified")
+    active_old = set(old) & required
     if full:
         if discovered is None:
             errors.append("完整验收需要本次成功执行的 cargo test -- --list")
@@ -191,7 +197,7 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
             errors.append(f"{len(unregistered)} 条原版保留路径缺少原版驱动的 Rust 测试登记")
         if not_completed:
             errors.append(f"{len(not_completed)} 条路径仍为部分实现或未移植")
-        if old.keys() != required:
+        if active_old != required:
             errors.append("原版路径与历史审计证据尚未形成全量闭环")
     return {
         "schema": "source-rust-test-suite/v1",
@@ -200,7 +206,8 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
         "source_paths": len(rows),
         "eligible": len(required),
         "verified_in_matrix": len(actual_verified),
-        "legacy_evidence_paths": len(old),
+        "legacy_evidence_paths": len(active_old),
+        "archived_excluded_evidence_paths": len(set(old) - required),
         "golden_registered_paths": len(paths),
         "golden_cases": sum(
             len(json.loads((repo / r["golden"]).read_text(encoding="utf-8"))["cases"])
