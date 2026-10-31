@@ -211,7 +211,8 @@ def _required_kinds(index, contracts, expected):
 
 
 def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
-                       index: dict, eligible: set, output: Path, contracts=None):
+                       index: dict, eligible: set, output: Path, contracts=None,
+                       required_families: dict | None = None):
     """Fail closed on missing scenarios, mismatch or unavailable runtime.
 
     Each explicitly selected original-source function must have actual normal
@@ -230,8 +231,24 @@ def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
                 if ident in expected:
                     errors.append("原版函数审计 ID 重复: " + ident)
                 expected[ident] = path
-    required, review_errors = _required_kinds(index, contracts or {}, expected)
-    errors.extend(review_errors)
+    if required_families is None:
+        # Preserve existing strict per-function audit behavior for legacy users.
+        required, review_errors = _required_kinds(index, contracts or {}, expected)
+        errors.extend(review_errors)
+    else:
+        # Only scenarios grounded in each source function's real responsibilities.
+        required = {}
+        if set(required_families) != set(expected):
+            errors.append("差异测试所需函数 ID 与实际原版函数不一致")
+        for sid in expected:
+            kinds = required_families.get(sid)
+            if (not isinstance(kinds, (list, tuple, set, frozenset)) or
+                not {"normal", "edge"}.issubset(kinds) or
+                not set(kinds).issubset(KINDS)):
+                errors.append(sid + ": 缺少基于原版功能的正常、边界及适用行为场景")
+                required[sid] = set(KINDS)
+            else:
+                required[sid] = set(kinds)
     coverage = {key:set() for key in expected}
     attempted = passed = 0
     mismatches = []

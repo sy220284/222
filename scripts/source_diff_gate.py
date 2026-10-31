@@ -76,14 +76,18 @@ def main(argv=None):
                         raise AuditError("测试未登记对应原版函数 ID: " + sid)
                     chosen[sid]=path
             selected={}
+            required_families={}
             for sid,path in chosen.items():
                 selected.setdefault(path,[]).append(
                     next(n for n in index[path] if n["source_id"]==sid)
                 )
+                registered=next(r for r in registrations if r["path"]==path)
+                required_families[sid]=set(registered.get("differential_kinds",[]))
             contracts={path:{"functions":[{"source_id":node["source_id"]}
                             for node in nodes]} for path,nodes in selected.items()}
             result=run_dynamic_parity(
-                repo,root,args.cases,selected,set(selected),output,contracts=contracts
+                repo,root,args.cases,selected,set(selected),output,
+                contracts=contracts,required_families=required_families
             )
             after=Path(tmp)/"after.zip"
             pack_workspace_original(root,repo,after)

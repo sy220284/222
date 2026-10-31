@@ -58,6 +58,27 @@ class DynamicParityTest(unittest.TestCase):
                                   self.index,{"src/f.ts"},self.root/"out",
                                   contracts={"src/f.ts":{"functions":[{"source_id":self.sid}]}})
 
+    def test_reviewed_source_needs_only_real_applicable_scenarios(self):
+        self.case("normal", "normal")
+        self.case("edge", "edge")
+        report = run_dynamic_parity(
+            self.repo, self.original, self.cases, self.index,
+            {"src/f.ts"}, self.root/"reviewed", contracts={},
+            required_families={self.sid: {"normal", "edge"}},
+        )
+        self.assertTrue(report["pass"], report["errors"])
+        self.assertEqual(report["passed"], 2)
+
+    def test_reviewed_source_cannot_skip_normal_or_edge(self):
+        self.case("normal", "normal")
+        report = run_dynamic_parity(
+            self.repo, self.original, self.cases, self.index,
+            {"src/f.ts"}, self.root/"reviewed", contracts={},
+            required_families={self.sid: {"normal"}},
+        )
+        self.assertFalse(report["pass"])
+        self.assertTrue(any("正常、边界" in e for e in report["errors"]))
+
     def test_missing_scenarios_fail_closed(self):
         report = self.run_gate()
         self.assertFalse(report["pass"])
