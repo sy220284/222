@@ -125,6 +125,46 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
                         raise ValueError("Rust 入口必须为 src/ 下的生产源文件")
                 except ValueError as exc:
                     errors.append(path + ": " + str(exc))
+        source_ids = record.get("source_ids")
+        if (not isinstance(source_ids, list) or not source_ids or
+            any(not isinstance(s, str) or not s.startswith(path + ":")
+                for s in source_ids) or
+            len(source_ids) != len(set(s for s in source_ids if isinstance(s, str)))):
+            errors.append(path + ": 原版 AST 函数身份未正确登记")
+        adapter = record.get("adapter")
+        if not isinstance(adapter, dict):
+            errors.append(path + ": 缺少真实 Rust 黄金回归执行适配器")
+        else:
+            binary = adapter.get("binary")
+            input_key = adapter.get("input_key")
+            pointer = adapter.get("observation_pointer")
+            if (not isinstance(binary, str) or
+                not re.fullmatch(r"parity_[A-Za-z_][A-Za-z_0-9]*", binary)):
+                errors.append(path + ": 适配器二进制名称非法")
+            else:
+                try:
+                    _safe_file(repo, "src/bin/" + binary + ".rs")
+                except ValueError as exc:
+                    errors.append(path + ": " + str(exc))
+            if (not isinstance(input_key, str) or
+                not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", input_key) or
+                not isinstance(pointer, str) or not pointer.startswith("/")
+                or pointer == "/"):
+                errors.append(path + ": 适配器输入/输出观察字段非法")
+        if not any(isinstance(ref, dict) and
+                   ref.get("name") == "all_registered_source_goldens_execute_against_production_adapters"
+                   and ref.get("layer") == "regression" for ref in test_refs):
+            errors.append(path + ": 未纳入可自动执行全部原版黄金样例的统一回归测试")
+        differential_kinds = record.get("differential_kinds")
+        accepted_kinds = {"normal","edge","error","permission_allow",
+                          "permission_deny","cancel","concurrent",
+                          "restart","stream","side_effect"}
+        if (not isinstance(differential_kinds, list) or
+            any(not isinstance(k, str) for k in differential_kinds) or
+            len(differential_kinds) != len(set(differential_kinds)) or
+            not {"normal","edge"}.issubset(differential_kinds) or
+            not set(differential_kinds).issubset(accepted_kinds)):
+            errors.append(path + ": 源码职责差异场景未登记（正常与边界强制）")
         golden = record.get("golden")
         if not isinstance(golden, str):
             errors.append(path + ": 缺少原版预期结果固化文件")

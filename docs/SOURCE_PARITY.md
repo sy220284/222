@@ -16,7 +16,7 @@ Rust 生产代码必须按原版 2.1.88 的输入、输出、分支、异常、�
 - `verify-original`：在提交者自己工作区中执行真实原版 TypeScript 函数，验证黄金文件每条预期结果与原版一致；不得自动覆写原版预期。
 
 `docs/SOURCE_TEST_REGISTRY.jsonl` 每条源路径登记：
-`path`、`source_sha256`、`profile`、`rust_entrypoints`、`golden`、`tests`、`source_ids`（差异复验身份）。`tests` 明确测试名和类别，所有测试名称都必须出现在本次 Cargo 编译后 `--list` 的真实清单中。
+`path`、`source_sha256`、`profile`、`rust_entrypoints`、`golden`、`tests`、`source_ids`（差异复验身份）、`adapter`（实际 Rust 生产执行入口及输出观察字段）、`differential_kinds`（源码实际适用的差异行为类型）。`tests` 明确测试名和类别，所有测试名称都必须出现在本次 Cargo 编译后 `--list` 的真实清单中。
 
 按源码真实职责选择验收层次：
 
@@ -26,7 +26,7 @@ Rust 生产代码必须按原版 2.1.88 的输入、输出、分支、异常、�
 
 按源码实际存在的路径追加异常、权限、并发、取消、重启、流式、副作用等测试。取消以前把 22,021 个静态源码审计对象机械乘以十类场景的要求。函数索引仍用于查找、定位、覆盖分析，不能直接证明功能已验收。
 
-`tests/source_parity/golden/*.json` 保存源代码 SHA、调用的原版导出函数、带 ID 的真实输入与预期输出。`tests/source_contract_golden.rs` 调用 Rust 生产实现重放黄金语义，此外通过真实可执行程序执行集成对照。现有 CLI/SDK/Agent/MCP 测试保留，全量编译运行，不缩减原有范围。
+`tests/source_parity/golden/*.json` 保存源代码 SHA、调用的原版导出函数、带 ID 的真实输入与预期输出。`tests/source_golden_registry.rs` 自动遍历登记的每一条原版黄金样例，调用编译后的 Rust 真实生产适配器并比较实际输出；新增登记必须提供可编译的适配器及正确的输出观察字段。`tests/source_contract_golden.rs` 仍保留具体功能的直接函数断言和执行入口回归，现有集成与端到端测试均保留。现有 CLI/SDK/Agent/MCP 测试保留，全量编译运行，不缩减原有范围。
 
 ## 本地与 CI 验收
 

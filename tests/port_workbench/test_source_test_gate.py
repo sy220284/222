@@ -17,6 +17,8 @@ class SourceTestGateTests(unittest.TestCase):
         (self.repo/"src").mkdir()
         (self.repo/"tests").mkdir()
         (self.repo/"src/real.rs").write_text("pub fn real() {}",encoding="utf-8")
+        (self.repo/"src/bin").mkdir()
+        (self.repo/"src/bin/parity_example.rs").write_text("fn main() {}",encoding="utf-8")
         self.sha="a"*64
         self.rows={"src/example.ts":{"status":"verified"}}
         self.hashes={"src/example.ts":self.sha}
@@ -31,13 +33,18 @@ class SourceTestGateTests(unittest.TestCase):
             "path":"src/example.ts","source_sha256":self.sha,
             "profile":"pure","rust_entrypoints":["src/real.rs"],
             "golden":"tests/golden.json",
+            "source_ids":["src/example.ts:FunctionDeclaration:1-1:occurrence-1"],
+            "adapter":{"binary":"parity_example","input_key":"value","observation_pointer":"/outcome/value"},
+            "differential_kinds":["normal","edge"],
             "tests":[{"layer":"unit","name":"sample::tests::unit"},
-                     {"layer":"regression","name":"golden_match"}],
+                     {"layer":"regression","name":"golden_match"},
+                     {"layer":"regression","name":"all_registered_source_goldens_execute_against_production_adapters"}],
         }
         self.old=[{"path":"src/example.ts","source_sha256":self.sha,
                    "rust_entrypoints":["src/real.rs"],
                    "test_names":["sample::tests::unit"]}]
-        self.discovered={"sample::tests::unit","golden_match"}
+        self.discovered={"sample::tests::unit","golden_match",
+                         "all_registered_source_goldens_execute_against_production_adapters"}
 
     def write_golden(self):
         (self.repo/"tests/golden.json").write_text(
@@ -55,6 +62,14 @@ class SourceTestGateTests(unittest.TestCase):
     def test_missing_discovered_rust_test_fails(self):
         self.discovered.remove("golden_match")
         self.assertTrue(any("实际 --list" in e for e in self.result()["errors"]))
+
+    def test_missing_real_runtime_adapter_fails(self):
+        self.entry["adapter"]["binary"]="parity_missing"
+        self.assertFalse(self.result()["pass"])
+
+    def test_missing_applicable_differential_coverage_fails(self):
+        self.entry["differential_kinds"]=["normal"]
+        self.assertFalse(self.result()["pass"])
 
     def test_source_sha_mismatch_fails(self):
         self.entry["source_sha256"]="b"*64
