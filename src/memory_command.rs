@@ -78,13 +78,17 @@ fn verify_memory_path(path: &Path, scope: &Path) -> Result<()> {
         }
         match fs::symlink_metadata(&current) {
             Ok(meta) if meta.file_type().is_symlink() => {
-                bail!("Memory file path contains a symbolic link: {}", current.display());
+                bail!(
+                    "Memory file path contains a symbolic link: {}",
+                    current.display()
+                );
             }
             Ok(_) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error).with_context(|| {
-                format!("Inspect memory file path {}", current.display())
-            }),
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("Inspect memory file path {}", current.display()))
+            }
         }
     }
     Ok(())
