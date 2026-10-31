@@ -23,7 +23,7 @@
 | `src/tools/AgentTool/built-in/*` 角色指令 | `role_instructions` 与委派/团队调用 | 探索、规划、验收、Worker 已接入；可用工具的强制只读隔离仍按工具执行器权限单独验收 |
 | `src/tools/*/prompt.ts` 工具描述 | `src/tools.rs::definitions`、其余各工具定义 | 文件/Git/Shell/Skills 12 个描述已实质补齐，其他工具需逐项核验 |
 | `src/services/compact/prompt.ts` | `compact_prompt` 与 `Agent::compact_history` | 独立模型摘要请求已接线，原版各种压缩模式未完全移植 |
-| `src/services/SessionMemory/prompts.ts` | `src/memory.rs` | 相关记忆筛选与 system 注入已接线；自动提取/整理仍缺 |
+| `src/services/SessionMemory/prompts.ts` | `src/memory.rs / src/memory_extraction.rs` | 记忆检索及 system 注入运行，新增显式开启的本地增量提取与安全文件更新；原版 fork-agent 模式与 Dream 整理待验收 |
 | `src/constants/outputStyles.ts` | `output_style_label`、`output_style_instructions`、`available_output_styles`、SDK initialize | 三种内置风格已恢复原版名称和详细指令，SDK 实际列表支持用户级及项目级 .atlas/output-styles（项目优先）；原版插件/管理级目录、完整设置交互仍待对齐 |
 | `src/utils/messages.ts` 与新版来源区分 | 主提示词、`sdk_queue::notification_model_context`、SDK 事件结构 | 后台任务通知作为低信任状态数据接入；其余来源标记/调度权限仍需补齐 |
 | `src/constants/prompts.ts` MCP 指令 | `McpManager::instruction_context`、`Agent::ask_with_blocks` | 已修复同一用户轮次内动态重连/禁用后的旧说明滞留；新增重连/撤销回归测试。原版全部动态来源与策略仍待完整验收 |
@@ -58,3 +58,11 @@
 - 原版 `src/constants/outputStyles.ts`：`Explanatory` 和 `Learning` 为有独立长篇提示词的内置风格，已恢复名称及主要教学规则（不能以此宣称逐字完全等价）。
 - 原版 `src/outputStyles/loadOutputStylesDir.ts`：同名项目风格覆盖用户风格，已在本地 `.atlas/output-styles` 两级路径实现并以临时双目录测试覆盖；插件/管理级风格与 frontmatter 自定义名称另需补足。
 - 原版风格中的注入条件与 `keep-coding-instructions` 差异，须继续结合 `src/constants/prompts.ts` 和实际 provider 捕获验收。
+
+## 2026-10-31：记忆提取主运行链（显式开启）
+
+- 原版依据：`services/extractMemories/extractMemories.ts` 由完整 Stop 后触发，跟踪增量消息、主 Agent 直接记忆写入时跳过，并在成功后保存游标。
+- Rust 实际执行：`src/memory_extraction.rs::extract` 在 `Agent::ask_with_blocks_for_message` 正常结束后调用，单独向当前 API 模型发送无工具结构化请求，解析后仅可写入本工作区 `.atlas/memory/*.md`，并更新 `MEMORY.md`。由 `session.memory_extraction_cursor` 保存进度，压缩或清空消息时重置。
+- 开关：仅显式设置 `ATLAS_AUTO_MEMORY_EXTRACTION=true` 时运行，默认关闭；不会启动定时任务、派生子 Agent 或远程服务。调用失败只影响可选提取，保留主回答与原游标。
+- 约束：全量检查模型产出的所有文件名/类型/长度，拒绝目录逃逸、符号链接、重复文件名和索引预算溢出；每轮至多四条。文件采用临时文件并原子替换。
+- 剩余源码差异：原版复用主 Agent 提示词缓存的 forked agent、多轮工具隔离、团队共享记忆、停止钩子后台通知及 Dream 尚未完整对齐，本条只标记部分实现。
