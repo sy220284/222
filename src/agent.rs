@@ -3758,6 +3758,9 @@ impl Agent {
             prompt.push_str("\n\n[Additional PreCompact hook instructions]\n");
             prompt.push_str(&before.additional_context.join("\n\n"));
         }
+        // In 2.1.88 the no-tools trailer follows all custom/hook context.
+        // Keep it last so injected context cannot displace the tool ban.
+        prompt.push_str(crate::compact_source_prompts::NO_TOOLS_TRAILER);
         // The original stripImagesFromMessages removes binary payloads only
         // from the summarization request, never from saved conversation data.
         let mut history = self.session.messages.clone();
