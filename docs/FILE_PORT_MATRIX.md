@@ -1584,7 +1584,7 @@
 | `src/utils/imagePaste.ts` | 417 | 14509 | 重写：保持通用行为 | `src/generated_ports/p_9d14b23b8f34e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/imageResizer.ts` | 881 | 26699 | 重写：保持通用行为 | `src/generated_ports/p_f63750a1bb1d8.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/imageStore.ts` | 168 | 4320 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/imageValidation.ts` | 105 | 3619 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/imageValidation.ts` | 105 | 3619 | 重写：保持通用行为 | `src/multimodal.rs / src/provider.rs / src/chatgpt_plan.rs / src/local_attachments.rs` | 部分实现：对照 2.1.88 校验每条用户消息的 Base64 图片编码后 5 MiB 阈值，单图/多图错误文案及大小格式、附件预检、OpenAI/Gemini/Responses 模型请求入口；源码已提交，待本次 HEAD 测试及原版全协议回归 |
 | `src/utils/immediateCommand.ts` | 16 | 547 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/inProcessTeammateHelpers.ts` | 103 | 2988 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/ink.ts` | 27 | 921 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
@@ -1827,7 +1827,7 @@
 | `src/utils/subprocessEnv.ts` | 100 | 3975 | 重写：保持通用行为 | `src/subprocess_env.rs / src/tools.rs / src/background.rs / src/hooks.rs / src/mcp.rs / src/lsp.rs` | 部分实现：通用凭据环境隔离，接入 Shell、Git、Hook、MCP、LSP 全部进程入口；上游代理环境尚缺 |
 | `src/utils/suggestions/commandSuggestions.ts` | 568 | 18558 | 重写：保持通用行为 | `src/generated_ports/p_955a1746e1a31.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/suggestions/directoryCompletion.ts` | 264 | 7098 | 重写：保持通用行为 | `src/generated_ports/p_d37e245605bfe.rs`| 部分实现：路径补全决策核——parsePartialPath（空→基准、尾分隔符→无前缀、其余 dirname+basename）、matchedOnNameOnly 前缀匹配、隐藏项排除与文件包含开关、LRU 契约常量（500 条/5 分钟 TTL）、registry 兼容导出 parsePartialPath 与 isPathLikeToken，附 4 测试；文件系统扫描注入|
-| `src/utils/suggestions/shellHistoryCompletion.ts` | 120 | 3456 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/suggestions/shellHistoryCompletion.ts` | 120 | 3456 | 重写：保持通用行为 | `src/shell_history_completion.rs / src/terminal_input.rs / src/main.rs` | 部分实现：手工移植 50 条近期去重 Bash 历史、原样前缀匹配及幽灵补全显示/采纳，覆盖大小写/空格/UTF-16/光标与 Vim 输入模式；最新源码已提交待本次 HEAD 的交互与 CI 验收，原版异步缓存与完整快捷键/交互仍需核对 |
 | `src/utils/suggestions/skillUsageTracking.ts` | 56 | 1948 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/suggestions/slackChannelSuggestions.ts` | 210 | 6391 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/swarm/It2SetupPrompt.tsx` | 380 | 42721 | 重写：保持通用行为 | 待定 | 未迁移 |
