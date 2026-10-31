@@ -60,30 +60,19 @@ fn load(root: &Path) -> Result<Store> {
     Ok(entries)
 }
 
-/// Use a create-new lock to reject concurrent writes rather than silently
-/// losing an update; the lock's lifetime is exactly one write transaction.
-struct Lock(PathBuf);
-impl Drop for Lock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
-    }
-}
-
 fn update(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> Result<()> {
     let dir = root.join(".atlas");
     fs::create_dir_all(&dir).context("Cannot create local trigger directory")?;
     let lock_path = dir.join("local_triggers.lock");
     let mut options = fs::OpenOptions::new();
-    options.create_new(true).write(true);
+    options.create(true).read(true).write(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let _lock_file = options
-        .open(&lock_path)
-        .context("Another trigger update is running")?;
-    let _lock = Lock(lock_path);
+    let lock_file = options.open(&lock_path).context("Cannot open local task lock file")?;
+    fs2::FileExt::try_lock_exclusive(&lock_file).context("Another local trigger update is running")?;
     let mut entries = load(root)?;
     change(&mut entries)?;
     let path = store_path(root);
@@ -168,6 +157,25 @@ mod tests {
         delete(root.path(), "review_ci").unwrap();
         assert!(get(root.path(), "review_ci").is_err());
         assert!(list(root.path()).unwrap().is_empty());
+    }
+    #[test]
+    fn stale_lock_file_does_not_block_subsequent_updates() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join(".atlas")).unwrap();
+        fs::write(root.path().join(".atlas/local_triggers.lock"), b"stale").unwrap();
+        set(root.path(), "recovered", "execute explicitly").unwrap();
+        assert_eq!(get(root.path(), "recovered").unwrap(), "execute explicitly");
+    }
+    #[test]
+    fn current_os_lock_rejects_concurrent_updates() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join(".atlas")).unwrap();
+        let held = fs::OpenOptions::new().read(true).write(true).create(true)
+            .open(root.path().join(".atlas/local_triggers.lock")).unwrap();
+        fs2::FileExt::try_lock_exclusive(&held).unwrap();
+        assert!(set(root.path(), "blocked", "prompt").is_err());
+        fs2::FileExt::unlock(&held).unwrap();
+        set(root.path(), "unblocked", "prompt").unwrap();
     }
     #[test]
     fn invalid_names_or_empty_tasks_do_not_write_store() {

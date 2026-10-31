@@ -6389,15 +6389,17 @@ fn interactive_project_onboarding_is_persistent_and_disappears_after_init_file()
 }
 
 #[test]
-fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
+fn sdk_removed_remote_bridge_controls_reject_without_remote_side_effects() {
     use std::process::Stdio;
     let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
     let config = root.path().join("config.json");
     fs::write(
         &config,
-        json!({"default_provider":"local","providers":[{
-            "id":"local","kind":"openai-compatible","model":"test",
-            "base_url":"http://127.0.0.1:9/v1"
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock",
+            "base_url":format!("http://{}/v1",listener.local_addr().unwrap())
         }]})
         .to_string(),
     )
@@ -6414,11 +6416,7 @@ fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
         let mut writer = child.stdin.take().unwrap();
         for (id, action, request) in [
             ("1", "bridge_flush_start", json!({})),
-            (
-                "2",
-                "bridge_flush_enqueue",
-                json!({"messages":[{"seq":1},{"seq":2}]}),
-            ),
+            ("2", "bridge_flush_enqueue", json!({"messages":[{"seq":1},{"seq":2}]})),
             ("3", "bridge_flush_deactivate", json!({})),
             ("4", "bridge_flush_start", json!({})),
             ("5", "bridge_flush_enqueue", json!({"messages":[{"seq":3}]})),
@@ -6436,11 +6434,7 @@ fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
         }
         for (id, action, payload) in [
             ("nested-1", "bridge_flush_start", json!({})),
-            (
-                "nested-2",
-                "bridge_flush_enqueue",
-                json!({"messages":["nested"]}),
-            ),
+            ("nested-2", "bridge_flush_enqueue", json!({"messages":["nested"]})),
             ("nested-3", "bridge_flush_end", json!({})),
         ] {
             let mut request = payload;
@@ -6448,41 +6442,38 @@ fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
             writeln!(
                 writer,
                 "{}",
-                json!({"type":"control_request", "request_id":id,
-                "request":request})
+                json!({"type":"control_request","request_id":id,"request":request})
             )
             .unwrap();
         }
+        // The local SDK is still alive and services its provider-neutral controls.
+        writeln!(writer, "{}", json!({"type":"control","action":"tasks","request_id":"local-tasks"})).unwrap();
+        writeln!(writer, "{}", json!({"type":"control","action":"permission_mode","request_id":"local-mode"})).unwrap();
     }
     let output = child.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let values = String::from_utf8(output.stdout)
         .unwrap()
         .lines()
         .map(|s| serde_json::from_str::<Value>(s).unwrap())
         .collect::<Vec<_>>();
-    let response = |id: &str| values.iter().find(|x| x["request_id"] == id).unwrap();
-    assert_eq!(response("3")["result"]["pending_count"], 2);
-    assert_eq!(
-        response("6")["result"]["messages"],
-        json!([{"seq":1},{"seq":2},{"seq":3}])
-    );
-    assert_eq!(response("7")["result"]["messages"], json!([]));
-    assert_eq!(response("8")["result"]["compat_id"], "session_123");
-    assert_eq!(response("9")["result"]["reclaim_older_than_ms"], 5000);
-    assert_eq!(response("10")["ok"], false);
-    let nested = values
-        .iter()
-        .find(|value| value["response"]["request_id"] == "nested-3")
-        .unwrap();
-    assert_eq!(
-        nested["response"]["response"]["messages"],
-        json!(["nested"])
-    );
+    for id in (1..=10).map(|n| n.to_string()) {
+        let response = values.iter().find(|x| x["request_id"] == id).unwrap();
+        assert_eq!(response["ok"], false, "{response}");
+        assert!(response["error"].as_str().unwrap().contains("Unknown control action"), "{response}");
+    }
+    for id in ["nested-1","nested-2","nested-3"] {
+        let response = values.iter().find(|x| x["response"]["request_id"] == id).unwrap();
+        assert_eq!(response["response"]["subtype"], "error", "{response}");
+        assert!(response["response"]["error"]
+            .as_str().unwrap().contains("Unsupported SDK control subtype"), "{response}");
+    }
+    for id in ["local-tasks","local-mode"] {
+        let response = values.iter().find(|x| x["request_id"] == id).unwrap();
+        assert_eq!(response["ok"], true, "{response}");
+    }
+    assert!(!values.iter().any(|x| x["type"] == "result"));
+    assert!(listener.accept().is_err(), "Removed remote Bridge requested model/network");
 }
 
 #[test]
@@ -6723,6 +6714,82 @@ fn local_advanced_commands_reject_invalid_goals_before_model_calls() {
         .output()
         .unwrap();
     assert!(!review.status.success());
+}
+
+#[test]
+fn local_task_trigger_cli_persists_and_calls_configured_model_once() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let received = thread::spawn(move || {
+        let mut connection = accept_before(&listener, Duration::from_secs(15));
+        let request = read_request(&mut connection);
+        let body = json!({"choices":[{"message":{
+            "role":"assistant","content":"local trigger completed"},
+            "finish_reason":"stop"}]}).to_string();
+        write!(connection,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(), body).unwrap();
+        connection.flush().unwrap();
+        request
+    });
+    fs::write(&config, json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+    }]}).to_string()).unwrap();
+    let invoke = |args: &[&str]| binary()
+        .args(["--workspace", root.path().to_str().unwrap()])
+        .args(args)
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    let stored = invoke(&["trigger","set","smoke","Inspect","saved","task","without","cloud"]);
+    assert!(stored.status.success(), "{}", String::from_utf8_lossy(&stored.stderr));
+    let file = root.path().join(".atlas/local_triggers.json");
+    assert!(file.is_file());
+    let list = invoke(&["trigger","list"]);
+    assert!(list.status.success());
+    assert!(String::from_utf8(list.stdout).unwrap().contains("smoke"));
+    let run = invoke(&["trigger","run","smoke"]);
+    assert!(run.status.success(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(String::from_utf8(run.stdout).unwrap().contains("local trigger completed"));
+    let network_request = received.join().unwrap();
+    assert!(network_request.contains("Inspect saved task without cloud"), "{network_request}");
+    let removed = invoke(&["trigger","delete","smoke"]);
+    assert!(removed.status.success());
+    let missing = invoke(&["trigger","run","smoke"]);
+    assert!(!missing.status.success());
+}
+
+#[test]
+fn local_advanced_plan_uses_current_api_and_keeps_plan_permission() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let received = thread::spawn(move || {
+        let mut connection = accept_before(&listener, Duration::from_secs(15));
+        let request = read_request(&mut connection);
+        let body = json!({"choices":[{"message":{
+            "role":"assistant","content":"plan generated"},
+            "finish_reason":"stop"}]}).to_string();
+        write!(connection,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(), body).unwrap();
+        connection.flush().unwrap();
+        request
+    });
+    fs::write(&config, json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+    }]}).to_string()).unwrap();
+    let output = binary()
+        .args(["--workspace",root.path().to_str().unwrap(),"ultra-plan","Check","local","workflows"])
+        .env("ATLAS_CONFIG",&config).output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(String::from_utf8(output.stdout).unwrap().contains("plan generated"));
+    let request = received.join().unwrap();
+    assert!(request.contains("Check local workflows"), "{request}");
+    assert!(request.contains("read-only/plan permissions"), "{request}");
 }
 
 #[test]

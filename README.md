@@ -9,7 +9,15 @@
 - 只通过模型 API 推理，取消默认 Ollama 配置；存量配置指向 11434 端口会明确报错。
 - 移除跨设备 Bridge、远程 SDK、云端 Trigger、云端专项审查/规划、官方账号权益及团队云端同步。
 - 保留普通本地 SDK、Agent、模型 API、HTTP MCP、WebSearch/WebFetch、本地文件、任务、设置与记忆。
-- 已核准排除 **199 条**原始路径（新增 177 条、原有 22 条）；以 [移除清单](docs/REMOVED_SCOPE.json) 和实时迁移台账为准，全部不再跟进。
+- 当前排除 **192 条**原始路径（新增排除 170 条、原有 22 条），另外 7 条可通过任意模型在本地完成的功能重新纳入完整对齐范围；参见 [本地功能恢复清单](docs/LOCAL_CAPABILITIES_RESTORED.md) 和 [逐项排除清单](docs/REMOVED_SCOPE.json)。
+
+### 本地通用高级能力（使用当前配置的任意模型）
+
+- `atlas-agent ultra-review [PR]` 或交互 `/ultrareview [PR]`：本地多视角代码审查。
+- `atlas-agent ultra-plan 目标` 或交互 `/ultraplan 目标`：只读完整规划。
+- `atlas-agent trigger set 名称 任务内容` 保存本地任务，`trigger run 名称` 显式执行，`trigger list` 查看、`trigger delete 名称` 删除；不会创建定时任务。
+- SDK `user.file_attachments` 支持本地工作区文件和图片；拒绝远端文件、URL 和工作区越权。
+
 
 ## 已实现
 
