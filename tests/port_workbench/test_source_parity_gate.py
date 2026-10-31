@@ -5,7 +5,7 @@ from pathlib import Path
 from zipfile import ZipFile
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-from source_parity_gate import AuditError, original_entries, verify_original, verify_contracts, verify_spec_archive
+from source_parity_gate import AuditError, original_entries, verify_original, verify_contracts, verify_spec_archive, verify_source_lines
 
 class SourceParityGateTests(unittest.TestCase):
     def test_archive_hash_full_inventory_and_mismatch(self):
@@ -105,6 +105,33 @@ class SourceParityGateTests(unittest.TestCase):
             baseline["source_hashes"]["src/a.ts"]="0"*64
             errors,_=verify_spec_archive(file,baseline)
             self.assertTrue(any("不同版本源码" in e for e in errors))
+
+
+    def test_all_source_lines_preserve_unicode_nbsp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp)/"source.zip"
+            spec = Path(tmp)/"spec.zip"
+            text = "const x = '\u00a0';\n"
+            with ZipFile(source, "w") as orig:
+                orig.writestr("claude-code-2.1.88-main/source/src/a.ts", text.encode("utf8"))
+            mapping = ("模块\t源文件\t源文件行数\t可执行单元\t静态操作节点\t唯一标注行数\t源文件sha256\t对应详细文档\n"
+                       "M\ta.ts\t1\t1\t1\t1\t"+hashlib.sha256(text.encode()).hexdigest()+
+                       "\t逐文件逐行/M/a.ts.md\n")
+            doc = ("# a.ts\n## 三、物理源码逐行对照\n"
+                   "| 行号 | 代码原文 | 作用域 | 语义 |\n"
+                   "| 1 | <code>const&nbsp;x&nbsp;=&nbsp;'\u00a0';</code> | 文件级 | 常量 |\n")
+            with ZipFile(spec,"w") as zipped:
+                zipped.writestr("核验数据/文件与模块双向映射.tsv",mapping.encode())
+                zipped.writestr("逐文件逐行/M/a.ts.md",doc.encode())
+            errors,stat = verify_source_lines(source,spec)
+            self.assertEqual(errors, [])
+            self.assertEqual(stat["physical_lines"],1)
+            bad = doc.replace("\u00a0", "&nbsp;")
+            with ZipFile(spec,"w") as zipped:
+                zipped.writestr("核验数据/文件与模块双向映射.tsv",mapping.encode())
+                zipped.writestr("逐文件逐行/M/a.ts.md",bad.encode())
+            errors,_ = verify_source_lines(source,spec)
+            self.assertTrue(any("源码逐行原文不一致" in e for e in errors))
 
 if __name__=="__main__":
     unittest.main()
