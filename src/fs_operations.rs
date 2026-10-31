@@ -496,7 +496,10 @@ mod tests {
             .and_then(|error| error.downcast_ref::<FileRangeTooLarge>())
             .expect("source FileTooLargeError is preserved");
         assert_eq!(source_error.max_size_bytes, 11);
-        assert_eq!(source_error.size_in_bytes, fs::metadata(&path).unwrap().len());
+        assert_eq!(
+            source_error.size_in_bytes,
+            fs::metadata(&path).unwrap().len()
+        );
     }
 
     #[test]
