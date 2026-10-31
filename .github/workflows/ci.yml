@@ -24,13 +24,24 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: 核对全量迁移台账与新增验收证据
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 scripts/port_workbench.py check --repo .
           python3 scripts/port_workbench.py reachability --repo . --output .port-audit
+          python3 scripts/port_workbench.py dashboard --repo . --output .port-audit --changed-from-git
           python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
+      - name: 保存迁移工作台报告和本次改动复验范围
+        uses: actions/upload-artifact@v4
+        with:
+          name: port-workbench-dashboard
+          path: |
+            .port-audit/PORT_DASHBOARD.json
+            .port-audit/PORT_DASHBOARD.md
+          if-no-files-found: error
       - name: 保留自动生成模块调用路径审计结果
         uses: actions/upload-artifact@v4
         with:
