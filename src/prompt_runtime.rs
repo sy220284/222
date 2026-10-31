@@ -758,7 +758,7 @@ mod tests {
             let prompt = role_instructions(role, false);
             assert!(!prompt.contains(concat!("$", "{BASH_TOOL_NAME}")));
             assert!(!prompt.contains(concat!("$", "{globGuidance}")));
-            assert!(!prompt.contains("Anthropic's official CLI"));
+            assert!(!prompt.contains("mcp__vendor-in-chrome__*"));
         }
     }
 
