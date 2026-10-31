@@ -757,7 +757,7 @@ mod tests {
             "WebSearch(test*)",
             "WebFetch(https://example.com)",
             "WebFetch(example.com)",
-            "Read(src/*/config)",
+            "Read(src*config)",
         ] {
             assert!(validate_rule_input(rule).is_err(), "{rule}");
         }
