@@ -3,7 +3,8 @@
 //! to preserve the provider's built-in-prefix cache boundary.
 use anyhow::Result;
 use serde_json::Value;
-use std::collections::HashSet;
+use std::{cmp::Ordering, collections::HashSet};
+use unicode_normalization::{char::is_combining_mark, UnicodeNormalization};
 
 pub fn is_pr_activity_subscription_tool(name: &str) -> bool {
     name.ends_with("subscribe_pr_activity") || name.ends_with("unsubscribe_pr_activity")
@@ -18,25 +19,83 @@ fn tool_name(value: &Value) -> Result<&str> {
         .ok_or_else(|| anyhow::anyhow!("Tool pool contains a tool without a name"))
 }
 
-/// Original tools.ts:getTools in simple mode exposes only Bash, Read and
-/// Edit. The Rust runtime uses provider-neutral canonical names for these
-/// three tools; keep the public tool pool and execution permission aligned.
+/// Source tools.ts::getTools: the small tool pool changes when a real
+/// coordinator or REPL tool is active. Do not publish tools that are not
+/// registered; the caller supplies the already-discovered catalog.
 pub fn is_simple_model_tool(name: &str) -> bool {
-    matches!(
-        crate::tool_names::canonical_name(name),
-        "run_command" | "read_file" | "edit_file"
-    )
+    is_simple_model_tool_for_context(name, false, false)
+}
+
+pub fn is_simple_model_tool_for_context(
+    name: &str,
+    repl_enabled: bool,
+    coordinator_enabled: bool,
+) -> bool {
+    match crate::tool_names::canonical_name(name) {
+        "run_command" | "read_file" | "edit_file" => !repl_enabled,
+        "REPL" => repl_enabled,
+        "spawn_agent" => coordinator_enabled && !repl_enabled,
+        "task_stop" | "SendMessage" => coordinator_enabled,
+        _ => false,
+    }
 }
 
 pub fn filter_simple_model_tools(tools: Vec<Value>) -> Result<Vec<Value>> {
+    filter_simple_model_tools_for_context(tools, false, false)
+}
+
+pub fn filter_simple_model_tools_for_context(
+    tools: Vec<Value>,
+    repl_enabled: bool,
+    coordinator_enabled: bool,
+) -> Result<Vec<Value>> {
     tools
         .into_iter()
         .filter_map(|tool| match tool_name(&tool) {
-            Ok(name) if is_simple_model_tool(name) => Some(Ok(tool)),
+            Ok(name) if is_simple_model_tool_for_context(name, repl_enabled, coordinator_enabled) => {
+                Some(Ok(tool))
+            }
             Ok(_) => None,
             Err(error) => Some(Err(error)),
         })
         .collect()
+}
+
+/// English locale collation for the tool-identifier alphabet. JS localeCompare
+/// sorts punctuation and case-insensitive primary weights differently from
+/// Rust's byte ordering. Preserve distinct secondary accents and case weights
+/// so dynamically discovered MCP names retain stable prompt-cache ordering.
+fn collation_key(name: &str) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+    const SYMBOLS: &str = r#" _-,;:!?.'"()[]{}@*/\&#%`^+<=>|~$"#;
+    let mut primary = Vec::new();
+    let mut accents = Vec::new();
+    let mut case = Vec::new();
+    for ch in name.nfd() {
+        if is_combining_mark(ch) {
+            if let Some(last) = accents.last_mut() {
+                *last = ch as u32;
+            }
+            continue;
+        }
+        let lower = ch.to_lowercase().next().unwrap_or(ch);
+        let weight = if let Some(position) = SYMBOLS.find(lower) {
+            1 + position as u32
+        } else if lower.is_ascii_digit() {
+            100 + (lower as u32 - '0' as u32)
+        } else if lower.is_ascii_lowercase() {
+            200 + (lower as u32 - 'a' as u32)
+        } else {
+            1000 + lower as u32
+        };
+        primary.push(weight);
+        accents.push(0);
+        case.push(u32::from(ch.is_uppercase()));
+    }
+    (primary, accents, case)
+}
+
+fn locale_compare_tool_names(left: &str, right: &str) -> Ordering {
+    collation_key(left).cmp(&collation_key(right))
 }
 
 /// Initial tools take precedence, matching lodash uniqBy([...initial, ...assembled], 'name').
@@ -66,17 +125,17 @@ pub fn merge_and_filter_tools(
             built_in.push(tool.clone());
         }
     }
-    // TS localeCompare uses locale-specific collation; ASCII names are
-    // stable here (all public built-ins and canonical MCP identifiers).
     built_in.sort_by(|a, b| {
-        tool_name(a)
-            .expect("validated tool")
-            .cmp(tool_name(b).expect("validated tool"))
+        locale_compare_tool_names(
+            tool_name(a).expect("validated tool"),
+            tool_name(b).expect("validated tool"),
+        )
     });
     mcp.sort_by(|a, b| {
-        tool_name(a)
-            .expect("validated tool")
-            .cmp(tool_name(b).expect("validated tool"))
+        locale_compare_tool_names(
+            tool_name(a).expect("validated tool"),
+            tool_name(b).expect("validated tool"),
+        )
     });
     built_in.extend(mcp);
     Ok(built_in)
@@ -112,6 +171,60 @@ mod tests {
         assert!(!is_simple_model_tool("Write"));
         assert!(!is_simple_model_tool("mcp__server__read_file"));
         assert!(filter_simple_model_tools(vec![json!({})]).is_err());
+    }
+
+    #[test]
+    fn simple_mode_coordinator_and_repl_follow_source_branches() {
+        let catalog = vec![
+            tool("run_command", "Bash"),
+            tool("read_file", "Read"),
+            tool("edit_file", "Edit"),
+            tool("spawn_agent", "Task"),
+            tool("TaskStop", "TaskStop"),
+            tool("SendMessage", "SendMessage"),
+            tool("REPL", "REPL"),
+            tool("write_file", "Write"),
+        ];
+        let coordinator = filter_simple_model_tools_for_context(catalog.clone(), false, true)
+            .unwrap();
+        let names = coordinator
+            .iter()
+            .map(|tool| tool["function"]["name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            ["run_command", "read_file", "edit_file", "spawn_agent", "TaskStop", "SendMessage"]
+        );
+        let repl = filter_simple_model_tools_for_context(catalog, true, true).unwrap();
+        let names = repl
+            .iter()
+            .map(|tool| tool["function"]["name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["TaskStop", "SendMessage", "REPL"]);
+    }
+
+    #[test]
+    fn locale_collation_matches_original_javascript_identifier_fixtures() {
+        let names = [
+            "Tool-a", "tool_A", "tool-a", "Tool_A", "tools", "tool10", "tool2",
+            "tool", "_tool", "-tool", "2tool", "10tool", "abc", "ábc", "Äbc",
+        ];
+        let mut actual = names.to_vec();
+        actual.sort_by(|a, b| locale_compare_tool_names(a, b));
+        assert_eq!(
+            actual,
+            [
+                "_tool", "-tool", "10tool", "2tool", "abc", "ábc", "Äbc",
+                "tool", "tool_A", "Tool_A", "tool-a", "Tool-a", "tool10",
+                "tool2", "tools",
+            ]
+        );
+        let combined = names.iter().map(|name| tool(name, "entry")).collect::<Vec<_>>();
+        let merged = merge_and_filter_tools(&[], &combined, None).unwrap();
+        assert_eq!(
+            merged.iter().map(|v| v["function"]["name"].as_str().unwrap()).collect::<Vec<_>>(),
+            actual
+        );
     }
 
     #[test]

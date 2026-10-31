@@ -4753,6 +4753,9 @@ impl Agent {
             .with_plugins(self.enabled_plugins.clone())
             .with_search(self.search_backend.clone())
             .with_background(self.background.clone())
+            .with_simple_mode_coordinator(
+                self.team_name.is_some() && self.agent_name.as_deref() == Some("team-lead"),
+            )
             .with_permission_rules(self.permission_rules.clone())
             .with_extra_roots(self.additional_dirs.clone())
             .with_shell(self.shell_kind)
@@ -4897,7 +4900,12 @@ impl Agent {
             let complete_catalog =
                 if crate::env_runtime::is_env_truthy(std::env::var("ATLAS_SIMPLE").ok().as_deref())
                 {
-                    crate::tool_pool_merge::filter_simple_model_tools(complete_catalog)?
+                    crate::tool_pool_merge::filter_simple_model_tools_for_context(
+                        complete_catalog,
+                        false,
+                        self.team_name.is_some()
+                            && self.agent_name.as_deref() == Some("team-lead"),
+                    )?
                 } else {
                     complete_catalog
                 };

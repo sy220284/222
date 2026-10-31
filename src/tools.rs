@@ -581,6 +581,7 @@ pub struct ToolExecutor {
     history_message_id: Option<uuid::Uuid>,
     approval: Approval,
     interactive: bool,
+    simple_mode_coordinator: bool,
     file_checkpointing_enabled: bool,
     reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
     file_reads: Arc<Mutex<FileReadCache>>,
@@ -603,6 +604,7 @@ impl ToolExecutor {
             history_message_id: None,
             approval,
             interactive,
+            simple_mode_coordinator: false,
             file_checkpointing_enabled: true,
             reads: Arc::new(Mutex::new(HashMap::new())),
             file_reads: Arc::new(Mutex::new(FileReadCache::default())),
@@ -613,6 +615,11 @@ impl ToolExecutor {
             mode: None,
             metrics: Arc::new(ToolMetrics::default()),
         }
+    }
+
+    pub fn with_simple_mode_coordinator(mut self, enabled: bool) -> Self {
+        self.simple_mode_coordinator = enabled;
+        self
     }
 
     pub fn with_extra_roots(mut self, roots: Vec<PathBuf>) -> Self {
@@ -779,7 +786,11 @@ impl ToolExecutor {
     /// validates the effective arguments after hook rewrites.
     pub fn validate_call_before_hooks(&self, call: &ToolCall) -> Result<()> {
         if crate::env_runtime::is_env_truthy(std::env::var("ATLAS_SIMPLE").ok().as_deref())
-            && !crate::tool_pool_merge::is_simple_model_tool(&call.function.name)
+            && !crate::tool_pool_merge::is_simple_model_tool_for_context(
+                &call.function.name,
+                false,
+                self.simple_mode_coordinator,
+            )
         {
             bail!("Tool {} is unavailable in simple mode", call.function.name);
         }

@@ -631,9 +631,18 @@ impl Config {
             if id.is_empty() {
                 bail!("Model cannot be empty");
             }
-            // Source model.ts::parseUserSpecifiedModel trims outer whitespace
-            // but preserves case for arbitrary non-first-party model IDs.
-            p.model = id.to_owned();
+            // Source model.ts::parseUserSpecifiedModel preserves custom model
+            // spelling while canonicalizing the optional [1m] suffix.
+            // Provider-specific aliases remain under the provider catalog.
+            if id.to_ascii_lowercase().ends_with("[1m]") {
+                let base = id[..id.len() - 4].trim();
+                if base.is_empty() {
+                    bail!("Model cannot be only a context suffix");
+                }
+                p.model = format!("{base}[1m]");
+            } else {
+                p.model = id.to_owned();
+            }
         }
         // Validate against the effective model, including an explicit
         // override, before selecting a provider or opening a paid request.
@@ -723,6 +732,13 @@ mod tests {
             .select(Some("openai"), Some("  CaseSensitive-Deployment  "))
             .unwrap();
         assert_eq!(override_model.model, "CaseSensitive-Deployment");
+        assert_eq!(
+            config.select(Some("openai"), Some("  CaseSensitive-Deployment[1M]  "))
+                .unwrap()
+                .model,
+            "CaseSensitive-Deployment[1m]"
+        );
+        assert!(config.select(Some("openai"), Some("[1M]")).is_err());
         assert!(config.select(Some("openai"), Some("   ")).is_err());
         let profile = config
             .providers
