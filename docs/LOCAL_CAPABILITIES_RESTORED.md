@@ -43,3 +43,7 @@ SDK 示例：
 - 本地任务支持源版五类动作对应的 `create/get/update/run/list`，以及额外的 `set/delete`；严格区分创建已存在与修改不存在的报错。本地任务仍仅为用户显式调用，**没有云端调度、周期触发和自动派生 Agent**。
 
 **尚未等价的部分（不可标记 verified）：** 原版高级审查、规划的原厂计费/云端会话及远端执行已按用户要求排除；原版 UltraPlan 的多阶段独立探索、seedPlan 细化、状态/取消/计划回传 UI 尚缺本地完整等价实现。原压缩包未包含其 `source/src/utils/ultraplan/prompt.txt` 原文。RemoteTrigger 的 `isReadOnly`、模型工具调用入口、输出结果格式及调度元数据尚未完成本地等价，当前 CLI 是独立用户入口。SDK 的关键词自动高级工作流也仍待单独完成贯通。全部保持**部分实现**，不以新增提示词或 CI 通过替代等价验收。
+
+### 本地任务存储隔离补强
+
+任务提示词会写到当前工作区的 `.atlas/local-triggers/tasks.json`，并在同目录生成独立的 `.gitignore`（忽略目录下的任务数据和锁文件）。因此即使目标工程自己的 `.gitignore` 未配置，也不会通过普通 `git add` 意外提交。首次写入时兼容读取旧路径 `.atlas/local_triggers.json`，持久化成功后移除旧文件。

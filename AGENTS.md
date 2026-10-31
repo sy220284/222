@@ -132,4 +132,4 @@ docs/FILE_PORT_MATRIX.md 是原路径唯一状态台账；docs/PORT_STATUS.md �
 
 ## 本地任务触发能力恢复
 
-RemoteTriggerTool 原三条源码路径恢复为本地显式任务触发器，在 `.atlas/local_triggers.json` 保存任务内容，并通过 CLI `trigger set/run/list/delete` 或交互 `/trigger` 使用当前配置的任意模型。未经明确用户动作，不创建或启动定时计划，不触发远程 Worker，不保存云端任务数据。
+RemoteTriggerTool 原三条源码路径恢复为本地显式任务触发器，在 `.atlas/local-triggers/tasks.json` 保存任务内容（独立目录忽略规则，旧路径自动迁移），并通过 CLI `trigger set/run/list/delete` 或交互 `/trigger` 使用当前配置的任意模型。未经明确用户动作，不创建或启动定时计划，不触发远程 Worker，不保存云端任务数据。

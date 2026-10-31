@@ -15,7 +15,7 @@
 
 - `atlas-agent ultra-review [PR]` 或交互 `/ultrareview [PR]`：本地多视角代码审查；普通输入中合法的 ultrareview 关键词也会触发。
 - `atlas-agent ultra-plan 目标` 或交互 `/ultraplan 目标`：仅当前回合只读规划；普通输入中合法的 ultraplan 关键词也会触发，遵循原版引号/路径/疑问句过滤规则。
-- `atlas-agent trigger create 名称 任务内容` 创建任务，`trigger get 名称` 读取、`trigger update 名称 新内容` 修改、`trigger run 名称` 显式执行；另外支持 `set/list/delete` 管理；不会创建定时任务。
+- `atlas-agent trigger create 名称 任务内容` 创建任务，`trigger get 名称` 读取、`trigger update 名称 新内容` 修改、`trigger run 名称` 显式执行；另外支持 `set/list/delete` 管理；不会创建定时任务；任务记录存于本地独立忽略目录，避免误提交源码仓库。
 - SDK `user.file_attachments` 支持本地工作区文件和图片；拒绝远端文件、URL 和工作区越权。
 
 
