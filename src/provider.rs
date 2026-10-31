@@ -215,7 +215,11 @@ pub(crate) async fn send_model_request(
                     .headers()
                     .get("x-should-retry")
                     .and_then(|v| v.to_str().ok());
-                let retryable = header != Some("false")
+                // x-should-retry is meaningful only on an unsuccessful
+                // response. A successful request must never be replayed:
+                // doing so can charge twice or produce a second completion.
+                let retryable = !status.is_success()
+                    && header != Some("false")
                     && (header == Some("true")
                         || matches!(
                             status.as_u16(),
@@ -968,6 +972,37 @@ mod tests {
         assert_eq!(wire[2]["tool_calls"][0]["id"], "call_one");
         assert_eq!(wire[3]["role"], "tool");
         assert_eq!(wire[3]["tool_call_id"], "call_one");
+    }
+
+    #[tokio::test]
+    async fn successful_model_http_response_is_never_retried_even_if_header_says_true() {
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/models", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = [0_u8; 2048];
+            let _ = stream.read(&mut bytes).await.unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nx-should-retry: true\r\nConnection: close\r\n\r\nok").await.unwrap();
+            // A faulty retry would send the same successful request again
+            // after a 500ms backoff; reject any duplicate connection.
+            assert!(
+                tokio::time::timeout(Duration::from_millis(800), listener.accept())
+                    .await
+                    .is_err(),
+                "A successful response was sent twice"
+            );
+        });
+        let client = Client::new();
+        let response = send_model_request(client.post(url).body("{}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(response.text().await.unwrap(), "ok");
+        server.await.unwrap();
     }
 
     #[tokio::test]
