@@ -70,6 +70,7 @@ mod mcp_policy;
 mod mcp_prompt;
 mod memory;
 mod memory_age;
+mod memory_extraction;
 mod message_queue;
 mod model_catalog;
 mod multimodal;
