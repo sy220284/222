@@ -3748,18 +3748,20 @@ impl Agent {
         }
         let previous = self.session.summary.as_deref().unwrap_or("");
         let mut prompt = crate::prompt_runtime::compact_prompt(previous);
-        if let Some(custom) = custom_instructions {
-            prompt.push_str("\n\n[User's compaction instructions]\n");
-            prompt.push_str(custom);
+        // 2.1.88 mergeHookInstructions puts explicit user guidance first,
+        // then successful PreCompact hook context, under one source-defined
+        // Additional Instructions section (before the final tool ban).
+        let mut additional_instructions = Vec::new();
+        if let Some(custom) = custom_instructions.filter(|text| !text.trim().is_empty()) {
+            additional_instructions.push(custom.to_owned());
         }
-        // 2.1.88 executePreCompactHooks merges successful hook stdout as
-        // custom compaction instructions, respecting auto/manual matchers.
         if !before.additional_context.is_empty() {
-            prompt.push_str("\n\n[Additional PreCompact hook instructions]\n");
-            prompt.push_str(&before.additional_context.join("\n\n"));
+            additional_instructions.push(before.additional_context.join("\n\n"));
         }
-        // In 2.1.88 the no-tools trailer follows all custom/hook context.
-        // Keep it last so injected context cannot displace the tool ban.
+        if !additional_instructions.is_empty() {
+            prompt.push_str("\n\nAdditional Instructions:\n");
+            prompt.push_str(&additional_instructions.join("\n\n"));
+        }
         prompt.push_str(crate::compact_source_prompts::NO_TOOLS_TRAILER);
         // The original stripImagesFromMessages removes binary payloads only
         // from the summarization request, never from saved conversation data.
