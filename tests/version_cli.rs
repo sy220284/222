@@ -26,3 +26,26 @@ fn version_cli_prints_running_binary_version_and_optional_build_timestamp() {
     );
     assert!(String::from_utf8_lossy(&clap_version.stdout).contains(env!("CARGO_PKG_VERSION")));
 }
+
+#[test]
+fn version_subcommand_does_not_load_malformed_user_settings() {
+    let dir = tempfile::tempdir().unwrap();
+    let bad_settings = dir.path().join("bad-user-settings.json");
+    std::fs::write(&bad_settings, "{broken").unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
+        .arg("version")
+        .env("ATLAS_USER_SETTINGS", &bad_settings)
+        .env_remove("NODE_EXTRA_CA_CERTS")
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "version command must not parse settings: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(result.stdout).unwrap().trim(),
+        env!("CARGO_PKG_VERSION")
+    );
+    assert!(result.stderr.is_empty());
+}
