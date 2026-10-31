@@ -200,6 +200,34 @@ pub(crate) fn stream_idle_timeout() -> Duration {
     Duration::from_millis(millis)
 }
 
+/// withRetry.ts::getRetryDelay uses parseInt(header, 10), which accepts
+/// a decimal integer prefix even when the server adds a suffix. Preserve
+/// this parsing behavior; keep the existing six-hour maximum for untrusted
+/// Retry-After values so a malformed upstream header cannot block forever.
+fn retry_after_delay(header: &str) -> Option<Duration> {
+    let value = header.trim_start();
+    let (negative, value) = if let Some(rest) = value.strip_prefix('-') {
+        (true, rest)
+    } else {
+        (false, value.strip_prefix('+').unwrap_or(value))
+    };
+    let digits = value
+        .bytes()
+        .take_while(u8::is_ascii_digit)
+        .collect::<Vec<u8>>();
+    if digits.is_empty() {
+        return None;
+    }
+    if negative {
+        return Some(Duration::ZERO);
+    }
+    let seconds = std::str::from_utf8(&digits)
+        .expect("ASCII decimal prefix")
+        .parse::<u64>()
+        .unwrap_or(u64::MAX);
+    Some(Duration::from_secs(seconds.min(6 * 60 * 60)))
+}
+
 pub(crate) async fn send_model_request(
     request: reqwest::RequestBuilder,
 ) -> Result<reqwest::Response> {
@@ -230,12 +258,9 @@ pub(crate) async fn send_model_request(
                         .headers()
                         .get(reqwest::header::RETRY_AFTER)
                         .and_then(|v| v.to_str().ok())
-                        .and_then(|v| v.trim().parse::<u64>().ok())
-                        // withRetry.ts::getRetryDelay honors the server's
-                        // Retry-After directive even when it exceeds normal
-                        // exponential backoff. Retrying after only 30 seconds
-                        // on a longer rate-limit window repeatedly fails.
-                        .map(|seconds| Duration::from_secs(seconds.min(6 * 60 * 60)))
+                        .and_then(retry_after_delay)
+                        // The source honors Retry-After over ordinary backoff;
+                        // do not retry a longer rate-limit window too early.
                         .unwrap_or_else(|| Duration::from_millis((500u64 << attempt).min(32_000)));
                     // Drop the failed HTTP response before waiting; do not
                     // retain a busy connection across capacity retries.
@@ -972,6 +997,25 @@ mod tests {
         assert_eq!(wire[2]["tool_calls"][0]["id"], "call_one");
         assert_eq!(wire[3]["role"], "tool");
         assert_eq!(wire[3]["tool_call_id"], "call_one");
+    }
+
+    #[test]
+    fn retry_after_prefix_matches_source_parse_int_and_caps_untrusted_values() {
+        for (value, expected) in [
+            ("120", Some(120)),
+            ("  +005.9", Some(5)),
+            ("2 seconds", Some(2)),
+            ("0x10", Some(0)),
+            ("-1", Some(0)),
+            ("99999999999999999999999999999", Some(21600)),
+            ("next Wednesday", None),
+        ] {
+            assert_eq!(
+                retry_after_delay(value).map(|delay| delay.as_secs()),
+                expected,
+                "{value}"
+            );
+        }
     }
 
     #[tokio::test]
