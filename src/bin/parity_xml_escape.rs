@@ -27,10 +27,7 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("missing original exported function")?;
     let (result, source_ids): (String, Vec<&str>) = match operation {
         "escapeXml" => (xml_escape::escape_xml(value), vec![TEXT_ID]),
-        "escapeXmlAttr" => (
-            xml_escape::escape_xml_attr(value),
-            vec![TEXT_ID, ATTR_ID],
-        ),
+        "escapeXmlAttr" => (xml_escape::escape_xml_attr(value), vec![TEXT_ID, ATTR_ID]),
         _ => return Err("unknown original XML function".into()),
     };
     let observed = serde_json::json!({

@@ -17,7 +17,9 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
     io::stdin().read_to_string(&mut request)?;
     let payload: serde_json::Value = serde_json::from_str(&request)?;
     let case_id = payload["id"].as_str().ok_or("missing golden case ID")?;
-    let content = payload["input"]["content"].as_str().ok_or("missing content")?;
+    let content = payload["input"]["content"]
+        .as_str()
+        .ok_or("missing content")?;
     let result = json_read::strip_bom(content);
     let observed = serde_json::json!({
         "schema": "source-rust-observation/v1",

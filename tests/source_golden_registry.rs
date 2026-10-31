@@ -73,7 +73,9 @@ fn all_registered_source_goldens_execute_against_production_adapters() {
             input.insert(key.to_string(), case["input"].clone());
             if let Some(operation_key) = operation_key {
                 assert_ne!(operation_key, key, "operation must not overwrite input");
-                let export = case["export"].as_str().or_else(|| fixture["export"].as_str())
+                let export = case["export"]
+                    .as_str()
+                    .or_else(|| fixture["export"].as_str())
                     .expect("multi-function golden requires the exported operation");
                 input.insert(operation_key.to_string(), json!(export));
             }
