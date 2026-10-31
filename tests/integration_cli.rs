@@ -1542,6 +1542,47 @@ fn gemini_sse_sdk_model_tool_roundtrip_preserves_streaming_and_context() {
 }
 
 #[test]
+fn chat_rejects_raw_permission_rules_before_any_write() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"test",
+            "base_url":"http://127.0.0.1:12345/v1"
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "chat"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(input, "/permission add local allow Bash()").unwrap();
+        writeln!(input, "/permission add local allow WebFetch(https://example.com)").unwrap();
+        writeln!(input, "/permission add local allow WebSearch(test*)").unwrap();
+        writeln!(input, "/exit").unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("Invalid permission rule: Bash()"), "{stderr}");
+    assert!(stderr.contains("domain"), "{stderr}");
+    assert!(stderr.contains("WebSearch does not support wildcards"), "{stderr}");
+    assert!(!root.path().join(".atlas/settings.local.json").exists());
+}
+
+#[test]
 fn chat_permission_mode_cycle_controls_real_model_tool_mutations() {
     use std::process::Stdio;
     for (cycles, expected_allowed) in [(1usize, true), (2usize, false)] {
