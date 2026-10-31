@@ -320,6 +320,10 @@ def main(argv=None):
         print(json.dumps({k:v for k,v in result.items()
                           if k not in ("missing_source_test_paths","remaining_port_path_names",
                                        "linked_rust_tests","errors")},ensure_ascii=False))
+        for issue in result["errors"][:100]:
+            print("门禁问题: " + str(issue), file=sys.stderr)
+        if len(result["errors"]) > 100:
+            print(f"另有 {len(result['errors']) - 100} 项详见 JSON", file=sys.stderr)
         return 0 if args.command=="report" or result["pass"] else 1
     except (AuditError, OSError, ValueError, KeyError, TypeError) as exc:
         print("原版驱动的 Rust 测试门禁失败：" + str(exc),file=sys.stderr)
