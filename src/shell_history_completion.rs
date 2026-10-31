@@ -72,7 +72,10 @@ mod tests {
         );
         assert_eq!(get_shell_history_completion("ls  ", &history), None);
         assert_eq!(get_shell_history_completion("g", &history), None);
-        assert_eq!(get_shell_history_completion("猫", &["!猫咪".to_owned()]), None);
+        assert_eq!(
+            get_shell_history_completion("猫", &["!猫咪".to_owned()]),
+            None
+        );
         assert_eq!(get_shell_history_completion("  ", &history), None);
         assert_eq!(get_shell_history_completion("git status", &history), None);
     }
