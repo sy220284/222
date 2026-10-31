@@ -72,6 +72,10 @@ fn diff_events(prev: &Snapshot, next: &Snapshot) -> Vec<(PathBuf, &'static str)>
                 events.push((path.clone(), "change"));
             }
             (Some(_), None) => events.push((path.clone(), "unlink")),
+            // Static matchers stay in both snapshots even when the file was
+            // missing at startup. A missing -> present transition is an add,
+            // just like chokidar's 'add' handler after ignoreInitial.
+            (None, Some(_)) => events.push((path.clone(), "add")),
             _ => {}
         }
     }
@@ -235,6 +239,34 @@ mod tests {
         assert!(events.contains(&(b, "unlink")));
         assert!(events.contains(&(c, "add")));
         assert_eq!(events.len(), 3);
+    }
+
+    #[test]
+    fn initially_missing_watched_file_triggers_add_and_recreate_triggers_add_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".env");
+        let missing = snapshot(&[path.clone()]);
+        assert!(diff_events(&missing, &missing).is_empty());
+
+        std::fs::write(&path, "value=1").unwrap();
+        let created = snapshot(&[path.clone()]);
+        assert_eq!(
+            diff_events(&missing, &created),
+            vec![(path.clone(), "add")]
+        );
+
+        std::fs::remove_file(&path).unwrap();
+        let removed = snapshot(&[path.clone()]);
+        assert_eq!(
+            diff_events(&created, &removed),
+            vec![(path.clone(), "unlink")]
+        );
+
+        std::fs::write(&path, "value=2").unwrap();
+        assert_eq!(
+            diff_events(&removed, &snapshot(&[path.clone()])),
+            vec![(path, "add")]
+        );
     }
 
     #[test]

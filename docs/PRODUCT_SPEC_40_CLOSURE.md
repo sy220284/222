@@ -1,3 +1,24 @@
+## 第39份规格：文件创建事件漏报的源码级修复（2026-10-31）
+
+| 规格与原版调用 | Rust 调用入口 | 真实差异与修复 | 状态 |
+|---|---|---|---|
+| `39_文件变更监控、项目监听与热更新.md`；`utils/hooks/fileChangedWatcher.ts:67-85` 的 `chokidar.watch(... ignoreInitial:true)` 与 `add/change/unlink` 处理 | `file_changed_watcher.rs::spawn -> snapshot -> diff_events -> HookRunner::run` | 原来 watch path 在首次快照已存在、值为 `None` 时，后续文件新建形成 `None -> Some`，却被 `diff_events` 忽略；新增 `add` 分支。增加真实临时文件的创建、删除、重建顺序回归。源码提交 [`0479c35e`](https://github.com/sy220284/222/commit/0479c35e276969d921efac6a32b97a2ab64fff04) | 子行为已修复；待当前 HEAD CI；文档仍未闭环 |
+
+剩余差异：原版 watcher 支持运行时动态 `watchPaths`、`CwdChanged` 后重新挂载、文件写入稳定等待及配置变化；现 Rust 仍按固定周期轮询且未实现上述全部行为。继续保持部分实现，不冒充全功能等价。
+
+
+---
+
+## 2026-10-31 两套新上传规格与源码复核（继续逐文档）
+
+- 本轮输入：`产品设计逻辑.zip` 实有 49 份文件（40 份产品模块文档、2 个源码导航索引、核验及说明）；`说明书.zip` 实有 258 份文件（38 份模块文档、14 份功能总览、40 份工具独立契约、81 份命令独立契约，另含审计、索引、补充与运行记录）。两套分类维度不同，不能将 40+38+14 简单相加当作新功能总数；以 1,906 原路径、40 产品模块、各命令/工具函数形成交叉对照，不重复销项。除 192 条已授权排除外全部保留待对齐。
+- 原版依据：资料库 `claude-code-2.1.88-main(2).zip` 中 `source/src/services/api/withRetry.ts:530-548`。原版 `getRetryDelay` 优先按 `parseInt(retry-after,10)` 解析秒数，并直接转换为毫秒，没有六小时裁断；Rust `src/provider.rs::retry_after_delay` 此前无依据地设了 6h 上限。
+- 本轮已修复源码提交：[`c1705089`](https://github.com/sy220284/222/commit/c1705089ac50978a87dbc7fe65a15c821418530b)，去除固定六小时截断，补充 `21601` 秒、`100000` 秒及超大数解析边界的独立测试，防止服务端明确等待窗被提前重试。
+- 文档归属：**04_模型 API、流式传输与自动重试.md**；说明书 `functional_modules/08_API认证与网络.md`、`modules/27_services.md` 及 API/工具契约关联。这项仅属于“子行为已修复、待当前 HEAD 自动回归”，`services/api/withRetry.ts` 整体仍有 529 特殊来源策略、重试取消、错误分类、状态事件等缺口，不能提升全路径已验收数或宣称整份文档闭环。
+- 每一份文档继续依赖 `docs/FILE_PORT_MATRIX.md` 的唯一状态；说明书中的 81 命令和 40 工具深度契约必须进一步按原路径与 Rust 真实调用/测试核验，单纯文件存在不作为通过证据。
+
+---
+
 # Claude Code 2.1.88 增强规格逐文档闭环进度
 
 核对源包：`claude-code-2.1.88-main(2).zip`。规格归属表 1,902 个第一方源文件的 SHA-256 已与源包逐个比对，全部一致。

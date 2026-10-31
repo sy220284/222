@@ -206,13 +206,13 @@ pub(crate) fn stream_idle_timeout() -> Duration {
     stream_idle_timeout_from(configured.as_deref())
 }
 
-/// withRetry.ts::getRetryDelay uses parseInt(header, 10), which accepts
-/// a decimal integer prefix even when the server adds a suffix. Preserve
-/// this parsing behavior; keep the existing six-hour maximum for untrusted
-/// Retry-After values so a malformed upstream header cannot block forever.
+/// withRetry.ts::getRetryDelay uses parseInt(header, 10), including
+/// numeric prefixes with suffixes. The source does not cap Retry-After at
+/// six hours: respect the server's actual retry window rather than retrying
+/// prematurely and issuing additional model requests.
 fn retry_after_delay(header: &str) -> Option<Duration> {
     let seconds = crate::env_validation::decimal_prefix(header)?;
-    Some(Duration::from_secs(seconds.min(6 * 60 * 60)))
+    Some(Duration::from_secs(seconds))
 }
 
 /// withRetry.ts::getRetryDelay adds up to 25% jitter after capping
@@ -1083,14 +1083,16 @@ mod tests {
     }
 
     #[test]
-    fn retry_after_prefix_matches_source_parse_int_and_caps_untrusted_values() {
+    fn retry_after_prefix_matches_source_parse_int_without_six_hour_cap() {
         for (value, expected) in [
             ("120", Some(120)),
             ("  +005.9", Some(5)),
             ("2 seconds", Some(2)),
             ("0x10", Some(0)),
             ("-1", Some(0)),
-            ("99999999999999999999999999999", Some(21600)),
+            ("21601", Some(21601)),
+            ("100000", Some(100000)),
+            ("99999999999999999999999999999", Some(u64::MAX)),
             ("next Wednesday", None),
         ] {
             assert_eq!(
