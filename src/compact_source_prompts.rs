@@ -250,15 +250,9 @@ pub enum CompactDirection {
 /// Original source templates, with a retained local session summary supplied
 /// as context when one already exists. The caller appends hook/user
 /// instructions and NO_TOOLS_TRAILER as the final instruction.
-pub fn prompt_for_direction(
-    previous: &str,
-    direction: CompactDirection,
-) -> String {
+pub fn prompt_for_direction(previous: &str, direction: CompactDirection) -> String {
     let (template, analysis) = match direction {
-        CompactDirection::Full => (
-            BASE_COMPACT_PROMPT,
-            DETAILED_ANALYSIS_INSTRUCTION_BASE,
-        ),
+        CompactDirection::Full => (BASE_COMPACT_PROMPT, DETAILED_ANALYSIS_INSTRUCTION_BASE),
         CompactDirection::From => (
             PARTIAL_COMPACT_PROMPT,
             DETAILED_ANALYSIS_INSTRUCTION_PARTIAL,
@@ -299,7 +293,6 @@ pub fn prompt(previous: &str, partial: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn all_three_source_directions_expand_exact_boundaries() {
