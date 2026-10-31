@@ -955,7 +955,11 @@ mod tests {
             messages: vec![Message::text("user", "hello")],
             tools: vec![],
         };
-        let err = provider.complete(&request).await.err().expect("key required");
+        let err = provider
+            .complete(&request)
+            .await
+            .err()
+            .expect("key required");
         assert!(format!("{err:#}").contains("models connect"), "{err:#}");
     }
 
