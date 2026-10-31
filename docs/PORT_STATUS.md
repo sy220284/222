@@ -1,3 +1,11 @@
+## 2026-10-31 文件监听新建事件漏报修复（第39份产品规格）
+
+- 源码 `utils/hooks/fileChangedWatcher.ts:67-85` 在 `ignoreInitial:true` 后监听 `add/change/unlink`；Rust 原 `diff_events` 对静态 watch path 的 `None -> Some` 漏报 `add`。PR6 提交 [0479c35e](https://github.com/sy220284/222/commit/0479c35e276969d921efac6a32b97a2ab64fff04) 修复首次创建及删除后再次创建；单测使用真实临时目录读写验证三次状态过渡。
+- 原版动态 watchPaths、CwdChanged 重挂载、chokidar 写入稳定等待及运行时重载仍未移植完毕；最新 HEAD 自动测试须核实，保留原迁移状态。
+
+
+---
+
 ## 2026-10-31 新上传规格复核：模型 Retry-After 无端截断修复
 
 - 对照本次产品规格 04 与说明书 API/服务章节、原始 2.1.88 `services/api/withRetry.ts::getRetryDelay`（530–548），发现 `src/provider.rs::retry_after_delay` 曾将上游 Retry-After 秒数强制裁至 6 小时，提前重新发送模型请求。
