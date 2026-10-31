@@ -120,7 +120,9 @@ pub fn attach(root: &Path, current: &Value, field: Option<&Value>) -> Result<Val
     // block, keeping it recognizable by slash-command expansion. Put the
     // local files before that same block; a trailing image must not erase
     // command detection or cause user text to be lost.
-    let insertion = blocks.iter().rposition(|item| item["type"] == "text")
+    let insertion = blocks
+        .iter()
+        .rposition(|item| item["type"] == "text")
         .unwrap_or(blocks.len());
     blocks.splice(insertion..insertion, attached);
     Ok(Value::Array(blocks))
@@ -160,11 +162,23 @@ mod tests {
             {"type":"text","text":"/summarize this source"},
             {"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}}
         ]);
-        let result = attach(root.path(), &original, Some(&json!([{"path":"reference.txt"}]))).unwrap();
+        let result = attach(
+            root.path(),
+            &original,
+            Some(&json!([{"path":"reference.txt"}])),
+        )
+        .unwrap();
         let items = result.as_array().unwrap();
-        let text_blocks = items.iter().filter(|b| b["type"] == "text").collect::<Vec<_>>();
-        assert_eq!(text_blocks.last().unwrap()["text"], "/summarize this source");
-        assert!(items.iter().any(|b| b["text"].as_str()
+        let text_blocks = items
+            .iter()
+            .filter(|b| b["type"] == "text")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            text_blocks.last().unwrap()["text"],
+            "/summarize this source"
+        );
+        assert!(items.iter().any(|b| b["text"]
+            .as_str()
             .is_some_and(|s| s.contains("reference body"))));
         assert_eq!(items.last().unwrap()["type"], "image");
     }

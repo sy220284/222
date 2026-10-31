@@ -137,7 +137,12 @@ pub fn create(root: &Path, name: &str, prompt: &str) -> Result<()> {
         if entries.len() >= MAX_TRIGGERS {
             bail!("Local trigger limit reached");
         }
-        entries.insert(name.to_owned(), Trigger { prompt: prompt.to_owned() });
+        entries.insert(
+            name.to_owned(),
+            Trigger {
+                prompt: prompt.to_owned(),
+            },
+        );
         Ok(())
     })
 }
@@ -150,7 +155,8 @@ pub fn change(root: &Path, name: &str, prompt: &str) -> Result<()> {
         bail!("Trigger prompt must be 1-65536 bytes");
     }
     mutate_store(root, |entries| {
-        let existing = entries.get_mut(name)
+        let existing = entries
+            .get_mut(name)
             .with_context(|| format!("No local trigger named {name}"))?;
         existing.prompt = prompt.to_owned();
         Ok(())

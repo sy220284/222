@@ -1414,14 +1414,20 @@ async fn run_cli() -> Result<()> {
         Commands::UltraReview { pr_number } => {
             let prompt =
                 local_advanced_workflows::review_prompt(agent.workspace_root(), *pr_number)?;
-            agent.ask_in_plan_mode(&prompt).await.map(|answer| println!("{answer}"))
+            agent
+                .ask_in_plan_mode(&prompt)
+                .await
+                .map(|answer| println!("{answer}"))
         }
         Commands::UltraPlan { objective } => {
             let prompt = local_advanced_workflows::plan_prompt(
                 agent.workspace_root(),
                 &objective.join(" "),
             )?;
-            agent.ask_in_plan_mode(&prompt).await.map(|answer| println!("{answer}"))
+            agent
+                .ask_in_plan_mode(&prompt)
+                .await
+                .map(|answer| println!("{answer}"))
         }
         Commands::Trigger {
             action: LocalTriggerAction::Run { name },
@@ -3046,12 +3052,10 @@ async fn chat(
                     local_advanced_workflows::plan_prompt(agent.workspace_root(), args)
                 };
                 match prepared {
-                    Ok(prompt) => {
-                        match agent.ask_in_plan_mode(&prompt).await {
-                            Ok(answer) => println!("{answer}"),
-                            Err(error) => eprintln!("Error: {error:#}"),
-                        }
-                    }
+                    Ok(prompt) => match agent.ask_in_plan_mode(&prompt).await {
+                        Ok(answer) => println!("{answer}"),
+                        Err(error) => eprintln!("Error: {error:#}"),
+                    },
                     Err(error) => eprintln!("Cannot prepare /{name}: {error:#}"),
                 }
                 continue;
@@ -3476,8 +3480,11 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         ) {
                             Ok(Some(expanded)) => {
                                 if let Some(blocks) = user.blocks.as_mut() {
-                                    if let Some(last_text) = blocks.iter_mut().rev()
-                                        .find(|block| block["type"] == "text") {
+                                    if let Some(last_text) = blocks
+                                        .iter_mut()
+                                        .rev()
+                                        .find(|block| block["type"] == "text")
+                                    {
                                         last_text["text"] = json!(expanded);
                                     }
                                     user.preview = blocks

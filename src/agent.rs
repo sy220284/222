@@ -6587,8 +6587,14 @@ done"#;
         };
         let session = Session::fresh();
         let mut agent = Agent::new(
-            profile, root.path().to_path_buf(), Approval::Ask, false, 5, session
-        ).unwrap();
+            profile,
+            root.path().to_path_buf(),
+            Approval::Ask,
+            false,
+            5,
+            session,
+        )
+        .unwrap();
         let before = agent.current_permission_mode();
         assert!(agent.ask_in_plan_mode("").await.is_err());
         assert_eq!(agent.current_permission_mode(), before);

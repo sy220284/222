@@ -27,9 +27,7 @@ fn matching_ranges(text: &str, keyword: &str) -> Vec<Range<usize>> {
         let end = start + keyword.len();
         let before = preceding(text, start);
         let after = following(text, end);
-        let ascii_word = |c: Option<char>| {
-            c.is_some_and(|x| x.is_ascii_alphanumeric() || x == '_')
-        };
+        let ascii_word = |c: Option<char>| c.is_some_and(|x| x.is_ascii_alphanumeric() || x == '_');
         if ascii_word(before) || ascii_word(after) {
             continue;
         }
@@ -71,7 +69,8 @@ fn matching_ranges(text: &str, keyword: &str) -> Vec<Range<usize>> {
         } else {
             let before = if i > 0 { Some(chars[i - 1].1) } else { None };
             let after = chars.get(i + 1).map(|(_, c)| *c);
-            let is_angle = c == '<' && after.is_some_and(|next| next.is_ascii_alphabetic() || next == '/');
+            let is_angle =
+                c == '<' && after.is_some_and(|next| next.is_ascii_alphabetic() || next == '/');
             let is_single = c == '\'' && !word_char(before);
             let is_pair = matches!(c, '`' | '"' | '{' | '[' | '(');
             if is_angle || is_single || is_pair {
@@ -99,7 +98,10 @@ pub fn replace_ultraplan_keyword(text: &str) -> Option<String> {
     if format!("{before}{after}").trim().is_empty() {
         return Some(String::new());
     }
-    Some(format!("{before}{}{after}", &text[first.start + "ultra".len()..first.end]))
+    Some(format!(
+        "{before}{}{after}",
+        &text[first.start + "ultra".len()..first.end]
+    ))
 }
 
 #[cfg(test)]
@@ -130,8 +132,14 @@ mod tests {
     }
     #[test]
     fn replacement_preserves_case_and_avoids_empty_prompt() {
-        assert_eq!(replace_ultraplan_keyword("please ultraplan this").as_deref(), Some("please plan this"));
-        assert_eq!(replace_ultraplan_keyword("please ULTRAPLAN this").as_deref(), Some("please PLAN this"));
+        assert_eq!(
+            replace_ultraplan_keyword("please ultraplan this").as_deref(),
+            Some("please plan this")
+        );
+        assert_eq!(
+            replace_ultraplan_keyword("please ULTRAPLAN this").as_deref(),
+            Some("please PLAN this")
+        );
         assert_eq!(replace_ultraplan_keyword("ultraplan").as_deref(), Some(""));
         assert!(replace_ultraplan_keyword("src/ultraplan.tsx").is_none());
     }
@@ -139,6 +147,9 @@ mod tests {
     fn paired_delimiters_do_not_hide_later_trigger() {
         let text = "`ultraplan` please ultraplan this";
         assert_eq!(ultraplan_positions(text).len(), 1);
-        assert_eq!(replace_ultraplan_keyword(text).as_deref(), Some("`ultraplan` please plan this"));
+        assert_eq!(
+            replace_ultraplan_keyword(text).as_deref(),
+            Some("`ultraplan` please plan this")
+        );
     }
 }

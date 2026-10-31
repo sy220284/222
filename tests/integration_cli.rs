@@ -6673,7 +6673,11 @@ fn sdk_slash_skill_with_trailing_image_and_local_attachment_reaches_model_intact
     let workspace = tempfile::tempdir().unwrap();
     let skill = workspace.path().join(".atlas/skills/image_audit");
     fs::create_dir_all(&skill).unwrap();
-    fs::write(skill.join("SKILL.md"), "Inspect this skill request: $ARGUMENTS").unwrap();
+    fs::write(
+        skill.join("SKILL.md"),
+        "Inspect this skill request: $ARGUMENTS",
+    )
+    .unwrap();
     fs::write(workspace.path().join("notes.txt"), "local reference text").unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -6681,7 +6685,8 @@ fn sdk_slash_skill_with_trailing_image_and_local_attachment_reaches_model_intact
         let mut conn = accept_before(&listener, Duration::from_secs(15));
         let request = read_request(&mut conn);
         let body = json!({"choices":[{"message":{"role":"assistant",
-            "content":"skill and attachment accepted"},"finish_reason":"stop"}]}).to_string();
+            "content":"skill and attachment accepted"},"finish_reason":"stop"}]})
+        .to_string();
         write!(conn,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             body.len(),body).unwrap();
@@ -6689,29 +6694,53 @@ fn sdk_slash_skill_with_trailing_image_and_local_attachment_reaches_model_intact
         request
     });
     let config = workspace.path().join("config.json");
-    fs::write(&config,json!({"default_provider":"mock","providers":[{
-        "id":"mock","kind":"openai-compatible","model":"vision",
-        "base_url":format!("http://{addr}/v1")
-    }]}).to_string()).unwrap();
-    let mut child=binary().args(["--workspace",workspace.path().to_str().unwrap(),"sdk"])
-        .env("ATLAS_CONFIG",&config)
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-        .spawn().unwrap();
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"vision",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args(["--workspace", workspace.path().to_str().unwrap(), "sdk"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
     {
-        let mut writer=child.stdin.take().unwrap();
-        writeln!(writer,"{}",json!({"type":"user","content":[
+        let mut writer = child.stdin.take().unwrap();
+        writeln!(
+            writer,
+            "{}",
+            json!({"type":"user","content":[
             {"type":"text","text":"/image_audit inspect"},
             {"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"/9j/AA=="}}
-        ],"file_attachments":[{"path":"notes.txt"}]})).unwrap();
+        ],"file_attachments":[{"path":"notes.txt"}]})
+        )
+        .unwrap();
     }
-    let output=child.wait_with_output().unwrap();
-    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
-    let wire=String::from_utf8(output.stdout).unwrap();
-    assert!(wire.contains("skill and attachment accepted"),"{wire}");
-    let request=received.join().unwrap();
-    assert!(request.contains("Inspect this skill request: inspect"),"{request}");
-    assert!(request.contains("local reference text"),"{request}");
-    assert!(request.contains("data:image/jpeg;base64,/9j/AA=="),"{request}");
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let wire = String::from_utf8(output.stdout).unwrap();
+    assert!(wire.contains("skill and attachment accepted"), "{wire}");
+    let request = received.join().unwrap();
+    assert!(
+        request.contains("Inspect this skill request: inspect"),
+        "{request}"
+    );
+    assert!(request.contains("local reference text"), "{request}");
+    assert!(
+        request.contains("data:image/jpeg;base64,/9j/AA=="),
+        "{request}"
+    );
 }
 
 #[test]
@@ -6851,11 +6880,20 @@ fn local_task_trigger_cli_persists_and_calls_configured_model_once() {
     assert!(String::from_utf8(list.stdout).unwrap().contains("smoke"));
     let read = invoke(&["trigger", "get", "smoke"]);
     assert!(read.status.success());
-    assert!(String::from_utf8(read.stdout).unwrap().contains("Inspect saved task without cloud"));
+    assert!(String::from_utf8(read.stdout)
+        .unwrap()
+        .contains("Inspect saved task without cloud"));
     let duplicate = invoke(&["trigger", "create", "smoke", "must", "fail"]);
     assert!(!duplicate.status.success());
-    let updated = invoke(&["trigger", "update", "smoke", "Inspect", "saved", "task", "without", "cloud", "and", "verify", "update"]);
-    assert!(updated.status.success(), "{}", String::from_utf8_lossy(&updated.stderr));
+    let updated = invoke(&[
+        "trigger", "update", "smoke", "Inspect", "saved", "task", "without", "cloud", "and",
+        "verify", "update",
+    ]);
+    assert!(
+        updated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&updated.stderr)
+    );
     let missing = invoke(&["trigger", "update", "nonexistent", "fail"]);
     assert!(!missing.status.success());
     let run = invoke(&["trigger", "run", "smoke"]);
