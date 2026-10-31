@@ -1382,6 +1382,7 @@ impl Agent {
             }
         }
         let mut running = Vec::new();
+        let leader_session_id = self.session.id.to_string();
         for (index, name, prompt, profile, worktree) in prepared {
             let root = worktree
                 .as_ref()
@@ -1409,8 +1410,23 @@ impl Agent {
             let current_team_root = self.team_root.clone();
             let stable_project_root = self.project_root.clone();
             let cleanup_graph = self.graph.clone();
+            let parent_session_id = leader_session_id.clone();
             running.push(async move {
-                let result = async {
+                // The original AsyncLocalStorage teammate context must be
+                // scoped per future: concurrently polled workers cannot share
+                // process-wide environment identity or cancellation state.
+                let task_context = current_team.as_ref().map(|team| {
+                    crate::teammate_context::create_teammate_context(
+                        format!("{name}@{team}"),
+                        name.clone(),
+                        team.clone(),
+                        None,
+                        mode == permission_mode::Mode::Plan,
+                        parent_session_id,
+                        crate::teammate_context::AbortController::new(),
+                    )
+                });
+                let task_work = async {
                     let mut child = Self::new(
                         profile,
                         root.clone(),
@@ -1610,8 +1626,12 @@ impl Agent {
                         (Ok(answer), Ok(())) => Ok((session_id, answer)),
                     };
                     Ok::<_, anyhow::Error>((outcome, usage, cost))
-                }
-                .await;
+                };
+                let result = if let Some(context) = task_context {
+                    crate::teammate_context::run_with_teammate_context(context, task_work).await
+                } else {
+                    task_work.await
+                };
                 // The member remains active until worktree finalization,
                 // task release and leader notification have been attempted.
                 let worktree_status = if let Some(tree) = worktree {
