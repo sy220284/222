@@ -58,9 +58,9 @@ fn new_shell_task_id() -> Result<String> {
     // several bits in its version/variant bytes and must not substitute for
     // eight independent random bytes when creating task output filenames.
     let mut bytes = [0u8; 8];
-    getrandom::getrandom(&mut bytes).map_err(
-        |error| anyhow::anyhow!("Cannot allocate task ID: system entropy unavailable: {error}"),
-    )?;
+    getrandom::getrandom(&mut bytes).map_err(|error| {
+        anyhow::anyhow!("Cannot allocate task ID: system entropy unavailable: {error}")
+    })?;
     Ok(shell_task_id_from_random(bytes))
 }
 
