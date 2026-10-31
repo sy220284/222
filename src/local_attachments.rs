@@ -104,8 +104,8 @@ pub fn attach(
             .and_then(|name| name.to_str())
             .context("Invalid attachment filename")?;
         let meta = fs::metadata(&path).context("Cannot stat local attachment")?;
-        if meta.len() > MAX_IMAGE_BYTES {
-            bail!("Attachment {name} exceeds the 3.75 MiB raw limit for the API's 5 MiB base64 image limit");
+        if meta.len() > MAX_IMAGE_BASE64_BYTES {
+            bail!("Local attachment exceeds 5 MiB: {name}");
         }
         total = total
             .checked_add(meta.len())
@@ -116,6 +116,9 @@ pub fn attach(
         let bytes =
             fs::read(&path).with_context(|| format!("Cannot read local attachment: {name}"))?;
         if let Some(mime) = image_type(&bytes) {
+            if bytes.len() as u64 > MAX_IMAGE_BYTES {
+                bail!("Attachment {name} exceeds the API's 5 MiB base64 image limit");
+            }
             let encoded = STANDARD.encode(&bytes);
             if encoded.len() as u64 > MAX_IMAGE_BASE64_BYTES {
                 bail!("Attachment {name} exceeds the API's 5 MiB base64 image limit");
