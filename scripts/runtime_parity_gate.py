@@ -54,6 +54,9 @@ def _load_cases(directory: Path):
                     raise ValueError(side + " 必须是直接执行的非空 argv 数组")
                 if any("\x00" in t for t in cmd):
                     raise ValueError("命令参数包含 NUL")
+                required_root = "{ORIGINAL}" if side=="original" else "{REPO}"
+                if not any(required_root in arg for arg in cmd):
+                    raise ValueError(side + " 适配器命令必须引用对应真实工作区 " + required_root)
             case["__path"] = str(file)
             cases.append(case)
         except (OSError, KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -157,6 +160,16 @@ def _execute(template, repo, original, sandbox, case, side):
         return None, side + " 权限允许场景缺少实际 allow 决定"
     if case["kind"] == "cancel" and observation["cancellation"].get("cancelled") is not True:
         return None, side + " 取消场景没有取消完成证据"
+    if case["kind"] == "error" and not observation["errors"]:
+        return None, side + " 错误路径场景没有真实错误记录"
+    if case["kind"] == "restart" and not observation["persistence"]:
+        return None, side + " 重启恢复场景缺少持久化状态证据"
+    if case["kind"] == "stream" and not any(
+        event == "chunk" or (isinstance(event, dict) and
+                             event.get("kind") in ("chunk","delta"))
+        for event in observation["events"]
+    ):
+        return None, side + " 流式行为缺少实际流式分块事件"
     try:
         filesystem_effects = _snapshot_sandbox(sandbox)
     except (OSError, ValueError) as exc:
@@ -265,6 +278,14 @@ def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
         passed += 1
         for sid in ids:
             coverage[sid].add(case["kind"])
+    # Reject relabeling the exact same input as both normal and edge.
+    for sid in expected:
+        normal_inputs = {json.dumps(c["input"],ensure_ascii=False,sort_keys=True)
+                         for c in cases if c["kind"]=="normal" and sid in c["source_ids"]}
+        edge_inputs = {json.dumps(c["input"],ensure_ascii=False,sort_keys=True)
+                       for c in cases if c["kind"]=="edge" and sid in c["source_ids"]}
+        if normal_inputs and edge_inputs and normal_inputs == edge_inputs:
+            errors.append(sid + ": 正常与边界场景输入完全相同，无真实边界覆盖")
     # All ten behavior families must run unless a source-anchored, human
     # reviewed contract explicitly documents why a family does not apply.
     uncovered = {sid:sorted(required[sid]-kinds)
