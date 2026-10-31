@@ -121,21 +121,28 @@ pub fn visible_catalog(
     (visible, deferred_names)
 }
 
+/// JavaScript Array.slice(0, maxResults): truncates fractional numbers,
+/// and a negative end omits that many items from the tail.
+fn js_slice_end(len: usize, max_results: f64) -> usize {
+    let end = max_results.trunc();
+    if end >= 0.0 {
+        (end as usize).min(len)
+    } else {
+        len.saturating_sub((-end) as usize)
+    }
+}
+
 pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
-    let query = args
+    let original_query = args
         .get("query")
         .and_then(Value::as_str)
-        .ok_or_else(|| anyhow::anyhow!("ToolSearch query must be a string"))?
-        .trim();
-    if query.is_empty() {
-        bail!("ToolSearch query cannot be empty");
-    }
+        .ok_or_else(|| anyhow::anyhow!("ToolSearch query must be a string"))?;
+    let query = original_query.trim();
     let max = match args.get("max_results") {
-        None => 5,
-        Some(v) => match v.as_u64() {
-            Some(n) if n > 0 => usize::try_from(n).unwrap_or(usize::MAX),
-            _ => bail!("max_results must be a positive integer"),
-        },
+        None => 5.0,
+        Some(value) => value
+            .as_f64()
+            .ok_or_else(|| anyhow::anyhow!("max_results must be a number"))?,
     };
     let catalog: Vec<(&str, &str, &str)> = tools
         .iter()
@@ -203,9 +210,9 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
                         .to_ascii_lowercase()
                         .starts_with(&query.to_ascii_lowercase())
             })
-            .take(max)
             .map(|(name, _, _)| (*name).to_owned())
-            .collect();
+            .collect::<Vec<_>>();
+        matches.truncate(js_slice_end(matches.len(), max));
     } else {
         let words: Vec<String> = query
             .split_whitespace()
@@ -267,7 +274,8 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
             }
         }
         scored.sort_by(|a, b| b.1.cmp(&a.1));
-        matches = scored.into_iter().take(max).map(|(name, _)| name).collect();
+        matches = scored.into_iter().map(|(name, _)| name).collect();
+        matches.truncate(js_slice_end(matches.len(), max));
     }
     let schemas: Vec<Value> = tools
         .iter()
@@ -278,7 +286,7 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
         })
         .cloned()
         .collect();
-    Ok(json!({"matches":matches,"query":query,
+    Ok(json!({"matches":matches,"query":original_query,
         "total_deferred_tools":deferred_count,"schemas":schemas}))
 }
 
@@ -354,9 +362,32 @@ mod tests {
         assert_eq!(visible_catalog(&[always], &Default::default()).0.len(), 1);
     }
     #[test]
-    fn invalid_query_is_rejected() {
-        assert!(execute(&json!({"query":""}), &catalog()).is_err());
-        assert!(execute(&json!({"query":"x","max_results":0}), &catalog()).is_err());
-        assert!(execute(&json!({"query":"x","max_results":1.5}), &catalog()).is_err());
+    fn numeric_max_results_follows_source_javascript_slice_semantics() {
+        let two = json!(["mcp__github__search_issues", "mcp__github__create_issue"]);
+        assert_eq!(
+            execute(&json!({"query":"+github","max_results":2.5}), &catalog()).unwrap()["matches"],
+            two
+        );
+        assert_eq!(
+            execute(&json!({"query":"+github","max_results":1.5}), &catalog()).unwrap()["matches"],
+            json!(["mcp__github__search_issues"])
+        );
+        assert_eq!(
+            execute(&json!({"query":"+github","max_results":-1}), &catalog()).unwrap()["matches"],
+            json!(["mcp__github__search_issues"])
+        );
+        assert_eq!(
+            execute(&json!({"query":"+github","max_results":0}), &catalog()).unwrap()["matches"],
+            json!([])
+        );
+        assert_eq!(
+            execute(&json!({"query":" ","max_results":3}), &catalog()).unwrap()["matches"],
+            json!([])
+        );
+        assert_eq!(
+            execute(&json!({"query":" x "}), &catalog()).unwrap()["query"],
+            " x "
+        );
+        assert!(execute(&json!({"query":"x","max_results":"1"}), &catalog()).is_err());
     }
 }
