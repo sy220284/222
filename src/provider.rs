@@ -215,6 +215,26 @@ fn retry_after_delay(header: &str) -> Option<Duration> {
     Some(Duration::from_secs(seconds.min(6 * 60 * 60)))
 }
 
+/// withRetry.ts::getRetryDelay adds up to 25% jitter after capping
+/// the exponential base at 32 seconds. Accept a supplied random sample to
+/// make the source's retry range verifiable without probabilistic tests.
+fn model_backoff_millis(attempt: usize, sample: u64) -> u64 {
+    let base = if attempt >= 6 { 32_000 } else { 500u64 << attempt };
+    let jitter = (u128::from(sample) * u128::from(base)
+        / ((u128::from(u64::MAX) + 1) * 4)) as u64;
+    base + jitter
+}
+
+fn model_backoff(attempt: usize) -> Result<Duration> {
+    let mut entropy = [0_u8; 8];
+    getrandom::getrandom(&mut entropy)
+        .map_err(|error| anyhow!("Cannot select model retry jitter: {error}"))?;
+    Ok(Duration::from_millis(model_backoff_millis(
+        attempt,
+        u64::from_le_bytes(entropy),
+    )))
+}
+
 pub(crate) async fn send_model_request(
     request: reqwest::RequestBuilder,
 ) -> Result<reqwest::Response> {
@@ -248,7 +268,8 @@ pub(crate) async fn send_model_request(
                         .and_then(retry_after_delay)
                         // The source honors Retry-After over ordinary backoff;
                         // do not retry a longer rate-limit window too early.
-                        .unwrap_or_else(|| Duration::from_millis((500u64 << attempt).min(32_000)));
+                        .map(Ok)
+                        .unwrap_or_else(|| model_backoff(attempt))?;
                     // Drop the failed HTTP response before waiting; do not
                     // retain a busy connection across capacity retries.
                     drop(response);
@@ -984,6 +1005,24 @@ mod tests {
         assert_eq!(wire[2]["tool_calls"][0]["id"], "call_one");
         assert_eq!(wire[3]["role"], "tool");
         assert_eq!(wire[3]["tool_call_id"], "call_one");
+    }
+
+    #[test]
+    fn model_retry_backoff_uses_source_exponential_base_and_25_percent_jitter() {
+        assert_eq!(model_backoff_millis(0, 0), 500);
+        assert_eq!(model_backoff_millis(1, 0), 1_000);
+        assert_eq!(model_backoff_millis(2, 0), 2_000);
+        assert_eq!(model_backoff_millis(6, 0), 32_000);
+        assert_eq!(model_backoff_millis(80, 0), 32_000);
+        assert_eq!(model_backoff_millis(0, u64::MAX), 624);
+        assert_eq!(model_backoff_millis(6, u64::MAX), 39_999);
+        for attempt in 0..20 {
+            let floor = model_backoff_millis(attempt, 0);
+            let upper = model_backoff_millis(attempt, u64::MAX);
+            let middle = model_backoff_millis(attempt, u64::MAX / 2);
+            assert!(floor <= middle && middle <= upper);
+            assert!(upper < floor + floor / 4 + 1);
+        }
     }
 
     #[test]
