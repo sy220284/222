@@ -211,7 +211,6 @@ pub fn expand_tabs(text: &str, interval: usize) -> String {
     output
 }
 
-
 /**
  * Original src/ink/optimizer.ts, mirrored in Rust for the terminal diff
  * inspection path. Keep patch order and merge only adjacent compatible
@@ -245,13 +244,11 @@ pub fn optimize_patches(diff: &[Value]) -> Vec<Value> {
                         result.push(patch.clone());
                         continue;
                     };
-                    let (Some(nx), Some(ny)) = (px.checked_add(x), py.checked_add(y))
-                    else {
+                    let (Some(nx), Some(ny)) = (px.checked_add(x), py.checked_add(y)) else {
                         result.push(patch.clone());
                         continue;
                     };
-                    *result.last_mut().unwrap() =
-                        json!({"type":"cursorMove","x":nx,"y":ny});
+                    *result.last_mut().unwrap() = json!({"type":"cursorMove","x":nx,"y":ny});
                     continue;
                 }
                 ("cursorTo", "cursorTo") => {
@@ -291,9 +288,7 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         ("src/utils/collapseHookSummaries.ts", "collapseHookSummaries") => {
             Some(json!(collapse_hook_summaries(first.as_array()?)))
         }
-        ("src/ink/optimizer.ts", "optimize") => {
-            Some(json!(optimize_patches(first.as_array()?)))
-        }
+        ("src/ink/optimizer.ts", "optimize") => Some(json!(optimize_patches(first.as_array()?))),
         ("src/ink/measure-text.ts", "default") => {
             let mut cache = LineWidthCache::default();
             Some(measure_text(
@@ -337,8 +332,8 @@ mod tests {
             {"type":"cursorMove","x":2,"y":-1},
             {"type":"cursorMove","x":-2,"y":1},
             {"type":"clear","count":0},
-            {"type":"styleStr","str":"\\u{1b}[49m"},
-            {"type":"styleStr","str":"\\u{1b}[2m"},
+            {"type":"styleStr","str":"\u{1b}[49m"},
+            {"type":"styleStr","str":"\u{1b}[2m"},
             {"type":"hyperlink","uri":"https://example.org"},
             {"type":"hyperlink","uri":"https://example.org"},
             {"type":"cursorHide"},
@@ -348,24 +343,34 @@ mod tests {
             {"type":"stdout","content":"tail"}
         ]);
         let optimized = optimize_patches(raw.as_array().unwrap());
-        assert_eq!(optimized, json!([
-            {"type":"cursorMove","x":0,"y":0},
-            {"type":"styleStr","str":"\\u{1b}[49m\\u{1b}[2m"},
-            {"type":"hyperlink","uri":"https://example.org"},
-            {"type":"cursorTo","col":4},
-            {"type":"stdout","content":"tail"}
-        ]));
+        assert_eq!(
+            json!(optimized),
+            json!([
+                {"type":"cursorMove","x":0,"y":0},
+                {"type":"styleStr","str":"\u{1b}[49m\u{1b}[2m"},
+                {"type":"hyperlink","uri":"https://example.org"},
+                {"type":"cursorTo","col":4},
+                {"type":"stdout","content":"tail"}
+            ])
+        );
         // Optimizer's singleton fast-path intentionally does not drop no-ops.
-        assert_eq!(optimize_patches(&[json!({"type":"clear","count":0})]),
-            vec![json!({"type":"clear","count":0})]);
+        assert_eq!(
+            optimize_patches(&[json!({"type":"clear","count":0})]),
+            vec![json!({"type":"clear","count":0})]
+        );
         assert!(optimize_patches(&[]).is_empty());
-        assert_eq!(optimize_patches(&[
-            json!({"type":"cursorHide"}), json!({"type":"stdout","content":"x"}),
-            json!({"type":"cursorShow"})
-        ]), vec![
-            json!({"type":"cursorHide"}), json!({"type":"stdout","content":"x"}),
-            json!({"type":"cursorShow"})
-        ]);
+        assert_eq!(
+            optimize_patches(&[
+                json!({"type":"cursorHide"}),
+                json!({"type":"stdout","content":"x"}),
+                json!({"type":"cursorShow"})
+            ]),
+            vec![
+                json!({"type":"cursorHide"}),
+                json!({"type":"stdout","content":"x"}),
+                json!({"type":"cursorShow"})
+            ]
+        );
         assert_eq!(
             inspect("src/ink/optimizer.ts", "optimize", &[raw]).unwrap(),
             json!(optimized)

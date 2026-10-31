@@ -189,14 +189,36 @@ fn parse_server(
         .and_then(Value::as_str)
         .map(|text| expand_field(text, root, data, options, schema))
         .transpose()?;
-    let timeout = map.get("startupTimeout").map(|n| n.as_u64()
-        .filter(|n| *n > 0).context("Plugin LSP startupTimeout must be a positive integer")).transpose()?;
-    let shutdown = map.get("shutdownTimeout").map(|n| n.as_u64()
-        .filter(|n| *n > 0).context("Plugin LSP shutdownTimeout must be a positive integer")).transpose()?;
-    let max_restarts = map.get("maxRestarts").map(|n| n.as_u64()
-        .context("Plugin LSP maxRestarts must be a nonnegative integer")).transpose()?;
-    let restart_on_crash = map.get("restartOnCrash").map(|v| v.as_bool()
-        .context("Plugin LSP restartOnCrash must be boolean")).transpose()?;
+    let timeout = map
+        .get("startupTimeout")
+        .map(|n| {
+            n.as_u64()
+                .filter(|n| *n > 0)
+                .context("Plugin LSP startupTimeout must be a positive integer")
+        })
+        .transpose()?;
+    let shutdown = map
+        .get("shutdownTimeout")
+        .map(|n| {
+            n.as_u64()
+                .filter(|n| *n > 0)
+                .context("Plugin LSP shutdownTimeout must be a positive integer")
+        })
+        .transpose()?;
+    let max_restarts = map
+        .get("maxRestarts")
+        .map(|n| {
+            n.as_u64()
+                .context("Plugin LSP maxRestarts must be a nonnegative integer")
+        })
+        .transpose()?;
+    let restart_on_crash = map
+        .get("restartOnCrash")
+        .map(|v| {
+            v.as_bool()
+                .context("Plugin LSP restartOnCrash must be boolean")
+        })
+        .transpose()?;
     let mut extensions = extension_to_language.keys().cloned().collect::<Vec<_>>();
     extensions.sort();
     Ok(LspServerConfig {
@@ -230,9 +252,7 @@ fn merge_server_entry(
                 specs.insert(name, config);
             }
         }
-        Err(error) => errors.push(format!(
-            "Plugin '{plugin}' LSP config '{entry}': {error:#}"
-        )),
+        Err(error) => errors.push(format!("Plugin '{plugin}' LSP config '{entry}': {error:#}")),
     }
 }
 
@@ -249,7 +269,13 @@ pub fn load_plugin_lsp(
     let mut errors = Vec::new();
     let file = root.join(".lsp.json");
     if file.exists() || file.is_symlink() {
-        merge_server_entry(&mut specs, &mut errors, plugin, ".lsp.json", read_json_map(root, ".lsp.json"));
+        merge_server_entry(
+            &mut specs,
+            &mut errors,
+            plugin,
+            ".lsp.json",
+            read_json_map(root, ".lsp.json"),
+        );
     }
     let definitions: Vec<&Value> = match declaration {
         Value::Null => Vec::new(),
@@ -258,12 +284,24 @@ pub fn load_plugin_lsp(
     };
     for value in definitions {
         match value {
-            Value::String(file) => merge_server_entry(&mut specs, &mut errors, plugin, file, read_json_map(root, file)),
-            Value::Object(map) => merge_server_entry(&mut specs, &mut errors, plugin, "inline", Ok(map.clone())),
-            _ => errors.push(format!("Plugin '{plugin}' LSP declaration must be map, path or array")),
+            Value::String(file) => merge_server_entry(
+                &mut specs,
+                &mut errors,
+                plugin,
+                file,
+                read_json_map(root, file),
+            ),
+            Value::Object(map) => {
+                merge_server_entry(&mut specs, &mut errors, plugin, "inline", Ok(map.clone()))
+            }
+            _ => errors.push(format!(
+                "Plugin '{plugin}' LSP declaration must be map, path or array"
+            )),
         }
     }
-    let data = root.parent().and_then(Path::parent)
+    let data = root
+        .parent()
+        .and_then(Path::parent)
         .map(|directory| directory.join("plugin-data").join(plugin));
     let mut servers = Vec::new();
     let Some(data) = data else {
@@ -278,7 +316,9 @@ pub fn load_plugin_lsp(
     // Enforce the boundary before creating it, rather than passing a path
     // that does not exist to the subprocess.
     if let Err(error) = fs::create_dir_all(&data) {
-        errors.push(format!("Plugin '{plugin}' LSP data directory unavailable: {error}"));
+        errors.push(format!(
+            "Plugin '{plugin}' LSP data directory unavailable: {error}"
+        ));
         return (servers, errors);
     }
     for (name, spec) in specs {

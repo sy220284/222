@@ -1636,20 +1636,26 @@ mod tests {
                 "syntax":{"command":"first","extensionToLanguage":{".rs":"rust"}}
             })
             .to_string(),
-        ).unwrap();
+        )
+        .unwrap();
         fs::write(
             healthy.join("plugin.json"),
             serde_json::json!({
                 "name":"healthy",
                 "lspServers":{"syntax":{"command":"second","args":["--stdio"],
                     "extensionToLanguage":{".rs":"rust",".toml":"toml"}}}
-            }).to_string(),
-        ).unwrap();
-        fs::write(invalid.join("plugin.json"),
+            })
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(
+            invalid.join("plugin.json"),
             serde_json::json!({"name":"invalid","lspServers":{
                 "broken":{"command":"","extensionToLanguage":{".rs":"rust"}}}
-            }).to_string(),
-        ).unwrap();
+            })
+            .to_string(),
+        )
+        .unwrap();
         let disabled = PluginSet::load(root.path(), &[]).unwrap();
         assert!(disabled.lsp_servers.is_empty());
         let result = PluginSet::load(root.path(), &["invalid".into(), "healthy".into()]).unwrap();
@@ -1664,7 +1670,10 @@ mod tests {
             server.env.get("ATLAS_PLUGIN_ROOT").unwrap(),
             &healthy.to_string_lossy().to_string()
         );
-        assert!(result.errors.iter().any(|e| e.contains("invalid") && e.contains("broken")));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.contains("invalid") && e.contains("broken")));
     }
 
     #[test]
