@@ -6112,12 +6112,16 @@ mod tests {
         let schema = json!({"type":"object","properties":{"ok":{"type":"boolean"}}});
         let error = agent.set_sdk_response_schema(Some(schema)).unwrap_err();
         assert!(
-            error.to_string().contains("no native JSON schema response capability"),
+            error
+                .to_string()
+                .contains("no native JSON schema response capability"),
             "{error}"
         );
         assert!(agent.sdk_response_schema().is_none());
         // Invalid caller schemas must fail before trying to reconfigure the provider.
-        assert!(agent.set_sdk_response_schema(Some(json!({"properties":{}}))).is_err());
+        assert!(agent
+            .set_sdk_response_schema(Some(json!({"properties":{}})))
+            .is_err());
         assert!(agent.sdk_response_schema().is_none());
         agent.set_sdk_response_schema(None).unwrap();
     }
