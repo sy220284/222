@@ -50,6 +50,23 @@ Respond in Chinese."#
     ))
 }
 
+/// Source reviewRemote.ts treats only decimal arguments as PR numbers.
+/// Every other argument takes the local branch/worktree review route.
+pub fn review_request(root: &Path, args: &str) -> Result<String> {
+    let value = args.trim();
+    if !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()) {
+        let pr = value.parse::<u64>()
+            .context("PR number exceeds u64 range")?;
+        return review_prompt(root, Some(pr));
+    }
+    let mut review = review_prompt(root, None)?;
+    if !value.is_empty() {
+        review.push_str("\n\nUser's review focus: ");
+        review.push_str(value);
+    }
+    Ok(review)
+}
+
 /// Local detailed planning reuses normal workspace, tools, and permissions.
 pub fn plan_prompt(root: &Path, objective: &str) -> Result<String> {
     if !root.is_dir() {
@@ -90,22 +107,7 @@ pub fn sdk_user_prompt(root: &Path, text: &str) -> Result<Option<String>> {
         }
         return match parsed.command_name.as_str() {
             "ultraplan" => plan_prompt(root, &parsed.args).map(Some),
-            "ultrareview" => {
-                let number = if parsed.args.trim().is_empty() {
-                    None
-                } else {
-                    let parsed_number = parsed
-                        .args
-                        .trim()
-                        .parse::<u64>()
-                        .context("/ultrareview expects a positive PR number")?;
-                    if parsed_number == 0 {
-                        bail!("/ultrareview expects a positive PR number");
-                    }
-                    Some(parsed_number)
-                };
-                review_prompt(root, number).map(Some)
-            }
+            "ultrareview" => review_request(root, &parsed.args).map(Some),
             _ => Ok(None),
         };
     }
@@ -162,7 +164,7 @@ mod tests {
             );
         }
         assert!(sdk_user_prompt(root.path(), "/ultraplan").is_err());
-        assert!(sdk_user_prompt(root.path(), "/ultrareview bad").is_err());
+        assert!(sdk_user_prompt(root.path(), "/ultrareview inspect local branch").unwrap().unwrap().contains("User's review focus: inspect local branch"));
         assert!(sdk_user_prompt(root.path(), "/ultrareview 0").is_err());
     }
 
@@ -189,6 +191,7 @@ mod tests {
         assert!(prompt.contains("untracked.rs"));
         assert!(prompt.contains("Do not modify code"));
         assert!(review_prompt(root.path(), Some(0)).is_err());
+        assert!(review_request(root.path(), "security focus").unwrap().contains("User's review focus: security focus"));
         assert!(review_prompt(root.path(), Some(42))
             .unwrap()
             .contains("gh pr diff 42"));
