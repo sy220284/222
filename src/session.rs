@@ -15,6 +15,10 @@ use uuid::Uuid;
 pub struct Session {
     pub id: Uuid,
     pub messages: Vec<Message>,
+    /// Durable pre-compaction transcript. Never sent to the model again:
+    /// the compact summary represents this portion in active context.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub archived_messages: Vec<Message>,
     /// Insertion-ordered user-turn IDs for message-level file snapshots.
     /// Old sessions simply have no rewindable user-turn index.
     #[serde(default)]
@@ -74,6 +78,7 @@ impl Session {
         Self {
             id: Uuid::new_v4(),
             messages: Vec::new(),
+            archived_messages: Vec::new(),
             history_message_ids: Vec::new(),
             history_message_aliases: std::collections::BTreeMap::new(),
             summary: None,
@@ -165,7 +170,14 @@ impl Session {
         if let Some(summary) = self.summary.as_deref().filter(|s| !s.trim().is_empty()) {
             messages.push(Message::text(
                 "user",
-                crate::compact_source_prompts::user_summary_message(summary, None, false, false),
+                crate::compact_source_prompts::user_summary_message(
+                    summary,
+                    (!self.archived_messages.is_empty())
+                        .then(|| format!(".atlas/sessions/{}.json", self.id))
+                        .as_deref(),
+                    false,
+                    false,
+                ),
             ));
         }
         messages.extend(self.messages.iter().cloned());
@@ -175,6 +187,7 @@ impl Session {
     pub fn clear(&mut self) {
         self.summary = None;
         self.messages.clear();
+        self.archived_messages.clear();
         self.tasks.clear();
         self.surfaced_memories.clear();
         self.surfaced_memory_units = 0;

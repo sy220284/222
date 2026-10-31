@@ -2708,7 +2708,9 @@ impl Agent {
         Ok(matches)
     }
     pub fn search_transcript(&self, query: &str) -> Vec<crate::transcript_search::SearchHit> {
-        crate::transcript_search::TranscriptIndex::from_stored(&self.session.messages).find(query)
+        let mut transcript = self.session.archived_messages.clone();
+        transcript.extend(self.session.messages.iter().cloned());
+        crate::transcript_search::TranscriptIndex::from_stored(&transcript).find(query)
     }
     pub fn usage(&self) -> crate::protocol::TokenUsage {
         self.session.usage
@@ -3883,7 +3885,10 @@ impl Agent {
         // disk failure cannot destroy the conversation in memory.
         let mut candidate = self.session.clone();
         candidate.summary = Some(summary);
-        candidate.messages.clear();
+        // Source 2.1.88 retains pre-compact transcript entries for later
+        // inspection. Persist them in the same atomic session write as the
+        // new summary, so retries never double-archive or erase the history.
+        candidate.archived_messages.append(&mut candidate.messages);
         candidate.memory_extraction_cursor = 0;
         candidate.surfaced_memories.clear();
         candidate.surfaced_memory_units = 0;
@@ -5834,10 +5839,12 @@ mod tests {
         agent.compact_history().await.unwrap();
         let restored = Session::load(dir.path(), &id).unwrap();
         assert!(restored.messages.is_empty());
+        assert_eq!(restored.archived_messages.len(), 2);
         assert_eq!(
             restored.summary.as_deref(),
             Some("Summary:\nRetain verified changes and next steps.")
         );
+        assert_eq!(agent.search_transcript("Check this project").len(), 1);
         let rendered = restored.model_messages();
         assert_eq!(rendered.len(), 1);
         assert_eq!(rendered[0].role, "user");

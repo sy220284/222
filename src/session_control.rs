@@ -488,7 +488,13 @@ fn render_export_block(block: &serde_json::Value) -> Option<String> {
 }
 pub fn render(session: &Session) -> String {
     let mut lines = Vec::new();
-    for message in &session.messages {
+    // A compacted session still exports its complete pre-compaction
+    // transcript, not merely the live turns after its summary.
+    for message in session
+        .archived_messages
+        .iter()
+        .chain(session.messages.iter())
+    {
         let role = match message.role.as_str() {
             "user" => "User",
             "assistant" => "Assistant",
@@ -604,6 +610,23 @@ pub fn export_saved(root: &Path, id: &str, path: Option<&str>) -> Result<PathBuf
 mod tests {
     use super::*;
     use crate::protocol::{FunctionCall, ToolCall};
+    #[test]
+    fn transcript_export_includes_precompact_history_in_original_order() {
+        let mut session = Session::fresh();
+        session
+            .archived_messages
+            .push(Message::text("user", "Original design request"));
+        session
+            .archived_messages
+            .push(Message::text("assistant", "Original design reply"));
+        session.messages.push(Message::text("user", "Latest request"));
+        let text = render(&session);
+        let first = text.find("Original design request").unwrap();
+        let second = text.find("Original design reply").unwrap();
+        let last = text.find("Latest request").unwrap();
+        assert!(first < second && second < last);
+    }
+
     #[test]
     fn generated_name_context_uses_recent_text_and_excludes_tool_results() {
         let messages = vec![
