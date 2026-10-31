@@ -72,15 +72,25 @@ pub fn review_request(root: &Path, args: &str) -> Result<String> {
 
 /// Local detailed planning reuses normal workspace, tools, and permissions.
 pub fn plan_prompt(root: &Path, objective: &str) -> Result<String> {
+    plan_prompt_with_seed(root, objective, None)
+}
+
+/// Preserve the seedPlan ordering of buildUltraplanPrompt: the approved or
+/// supplied draft is visible to the model before the refinement objective.
+pub fn plan_prompt_with_seed(root: &Path, objective: &str, seed_plan: Option<&str>) -> Result<String> {
     if !root.is_dir() {
         bail!("Workspace is not a directory: {}", root.display());
     }
     let objective = objective.trim();
-    if objective.is_empty() {
-        bail!("UltraPlan requires a non-empty objective");
+    let seed_plan = seed_plan.map(str::trim).filter(|s| !s.is_empty());
+    if objective.is_empty() && seed_plan.is_none() {
+        bail!("UltraPlan requires an objective or a draft plan");
     }
+    let seed_section = seed_plan.map(|draft| format!(
+        "Here is a draft plan to refine:\n\n{draft}\n\n"
+    )).unwrap_or_default();
     Ok(format!(
-        r#"Using the CURRENT configured model and local Agent, make a detailed implementation plan.
+        r#"{seed_section}Using the CURRENT configured model and local Agent, make a detailed implementation plan.
 Project: {}
 Objective: {}
 
@@ -178,6 +188,10 @@ mod tests {
         assert!(prompt.contains("CURRENT configured model"));
         assert!(prompt.contains("恢复本地功能"));
         assert!(plan_prompt(root.path(), "  ").is_err());
+        let seeded = plan_prompt_with_seed(root.path(), "", Some("Existing rollout draft")).unwrap();
+        assert!(seeded.starts_with("Here is a draft plan to refine:"));
+        assert!(seeded.contains("Existing rollout draft"));
+        assert!(plan_prompt_with_seed(root.path(), "", Some("  ")).is_err());
     }
     #[test]
     fn reviewer_is_read_only_and_validates_pr_number() {
