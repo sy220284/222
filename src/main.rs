@@ -3178,6 +3178,19 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
         let kind = event.get("type").and_then(Value::as_str).unwrap_or("user");
         match kind {
             "user" => {
+                // Remote attachment download was intentionally removed from the
+                // local/API-only product. Explicitly reject these SDK fields,
+                // before any model call, instead of silently dropping files.
+                if event
+                    .get("file_attachments")
+                    .or_else(|| event.get("fileAttachments"))
+                    .is_some_and(|value| !value.is_null()
+                        && !value.as_array().is_some_and(Vec::is_empty))
+                {
+                    print_json!(json!({"type":"error",
+                        "message":"Remote file attachments are disabled; provide local content blocks instead"}));
+                    continue;
+                }
                 // A stream without explicit initialize still executes the
                 // SessionStart turn first, preserving user message ordering.
                 if initial_turn_pending {
