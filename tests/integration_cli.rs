@@ -6901,7 +6901,7 @@ fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
     assert_eq!(requests.len(), 3);
     assert!(requests[0].contains("LocalTrigger"), "{}", requests[0]);
     assert!(
-        requests[1].contains("LocalTrigger create saved: model_review"),
+        requests[1].contains("HTTP 201") && requests[1].contains("model_review"),
         "{}",
         requests[1]
     );
@@ -7172,7 +7172,7 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
         writeln!(
             input,
             "{}",
-            json!({"type":"user","content":"/ultrareview invalid"})
+            json!({"type":"user","content":"/ultrareview 0"})
         )
         .unwrap();
         writeln!(
