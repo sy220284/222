@@ -4,7 +4,7 @@
 >
 > **当前执行入口**：以 docs/FILE_PORT_MATRIX.md、docs/REMOVED_SCOPE.json、docs/PORT_EVIDENCE.jsonl 与 scripts/port_workbench.py dashboard/check/scan 为准；详细用法见 docs/PORT_WORKBENCH.md。当前唯一目标分支 fix/manual-source-parity-20261030（草稿 PR #6）；已有源码实现但缺行为证据时仍标“部分实现”。
 >
-> **Issue #3**：冻结的 362 项中 24 项已授权取消，剩余 338 项继续核对。新增可复用本地工作流不自动开启定时任务或派生 Agent。
+> **Issue #3**：冻结的 362 项中 21 项已授权取消，剩余 341 项继续核对。新增可复用本地工作流不自动开启定时任务或派生 Agent。
 >
 > 下面保留 2026-10-29 原始规划供追溯。其中的 PR #2、远程 Bridge、云端/订阅功能和旧范围数字均为**历史信息**，不得再作为当前开发指令。
 
