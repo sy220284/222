@@ -204,6 +204,22 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
                         }
                         if normal_inputs == edge_inputs:
                             errors.append(path + ": 正常与边界场景必须使用不同的原版输入")
+                        actual_covered = set()
+                        default_export = fixture.get("export")
+                        for case in fixture["cases"]:
+                            symbol = case.get("export", default_export)
+                            if (not isinstance(symbol, str) or
+                                not re.fullmatch(r"[A-Za-z_$][A-Za-z_0-9$]*", symbol)):
+                                errors.append(path + ": 黄金场景缺少有效的原版导出函数名")
+                            case_ids = case.get("source_ids", source_ids if len(source_ids)==1 else [])
+                            if (not isinstance(case_ids, list) or
+                                not case_ids or any(not isinstance(i,str) for i in case_ids) or
+                                not set(case_ids).issubset(source_ids)):
+                                errors.append(path + ": 黄金场景未准确绑定原版 AST 函数 ID")
+                            else:
+                                actual_covered.update(case_ids)
+                        if actual_covered != set(source_ids):
+                            errors.append(path + ": 黄金场景尚未覆盖已登记的全部原版函数")
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 errors.append(path + ": 固化结果文件错误: " + str(exc))
         linked[path] = len(names)
@@ -297,9 +313,10 @@ def verify_original(repo: Path, source: Path, entries: list, hashes: dict):
             errors.append("本机原版源码哈希不符合冻结版本: " + path)
             continue
         fixture = json.loads((repo / record["golden"]).read_text(encoding="utf-8"))
-        export = fixture.get("export")
-        if not isinstance(export, str) or not re.fullmatch(r"[A-Za-z_$][\w$]*", export):
-            errors.append(path + ": 原版执行入口名称无效")
+        export = fixture.get("export", "")
+        if not isinstance(export, str) or (export and
+            not re.fullmatch(r"[A-Za-z_$][A-Za-z_0-9$]*", export)):
+            errors.append(path + ": 原版默认执行入口名称无效")
             continue
         # The replay bridge is fixed, and user-controlled paths are passed as
         # argv rather than interpolated into executable JavaScript.
@@ -307,10 +324,15 @@ def verify_original(repo: Path, source: Path, entries: list, hashes: dict):
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 const module = await import(pathToFileURL(process.argv[1]).href);
-const entry = module[process.argv[2]];
-if (typeof entry !== 'function') throw Error('original export not callable');
 const cases = JSON.parse(readFileSync(0, 'utf8'));
-const outputs = cases.map(item => ({id:item.id,expected:entry(item.input)}));
+const outputs = [];
+for (const item of cases) {
+  const symbol = item.export ?? process.argv[2];
+  const entry = module[symbol];
+  if (typeof entry !== 'function') throw Error('original export not callable: ' + symbol);
+  const args = Array.isArray(item.args) ? item.args : [item.input];
+  outputs.push({id:item.id,expected:await entry(...args)});
+}
 process.stdout.write(JSON.stringify(outputs));
 """
         try:
