@@ -55,12 +55,87 @@ pub trait ModelProvider: Send + Sync {
     }
 }
 
+/// Only used while a selected API model has not yet been authenticated.
+/// Cloning the configuration preserves all model-specific tuning settings.
+struct DeferredCredentialProvider {
+    profile: ProviderProfile,
+    response_schema: Option<Value>,
+    thinking_budget: Option<u32>,
+}
+
+impl DeferredCredentialProvider {
+    fn resolve(&self) -> Result<Box<dyn ModelProvider>> {
+        let key = crate::model_catalog::load_api_key(&self.profile)?;
+        if key.is_none() {
+            let env = self.profile.api_key_env.as_deref().unwrap_or("API_KEY");
+            bail!(
+                "Provider '{}' requires {env}; run 'atlas-agent models connect {}' or set {env}",
+                self.profile.id,
+                self.profile.id
+            );
+        }
+        let mut actual = create(&self.profile)?;
+        actual.set_response_schema(self.response_schema.clone())?;
+        actual.set_thinking_budget(self.thinking_budget)?;
+        Ok(actual)
+    }
+}
+
+#[async_trait]
+impl ModelProvider for DeferredCredentialProvider {
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        self.response_schema = schema;
+        Ok(())
+    }
+
+    fn set_thinking_budget(&mut self, budget: Option<u32>) -> Result<()> {
+        if budget.is_some() && self.profile.kind != "gemini" {
+            bail!("Selected model provider has no token-precise thinking budget capability");
+        }
+        self.thinking_budget = budget;
+        Ok(())
+    }
+
+    async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
+        self.resolve()?.complete(request).await
+    }
+
+    async fn complete_stream(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+    ) -> Result<ModelResponse> {
+        self.resolve()?.complete_stream(request, deltas).await
+    }
+
+    async fn complete_stream_with_tool_blocks(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+        tool_blocks: UnboundedSender<ToolCall>,
+    ) -> Result<ModelResponse> {
+        self.resolve()?
+            .complete_stream_with_tool_blocks(request, deltas, tool_blocks)
+            .await
+    }
+}
+
 pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
     crate::config::require_secure_credential_transport(
         &profile.base_url,
         profile.api_key_env.is_some(),
     )?;
     let key = crate::model_catalog::load_api_key(profile)?;
+    if key.is_none() && profile.api_key_env.is_some() {
+        // Keep the local CLI/SDK operational while a user chooses an API brand.
+        // No unauthenticated model request is sent; the first real inference
+        // resolves the credential and yields a specific setup error if missing.
+        return Ok(Box::new(DeferredCredentialProvider {
+            profile: profile.clone(),
+            response_schema: None,
+            thinking_budget: None,
+        }));
+    }
     // A client-wide timeout measures the entire streamed completion. It
     // aborts healthy long-running generations after 180 seconds even while
     // tokens are arriving. Streaming adapters enforce per-chunk idle timeouts;
