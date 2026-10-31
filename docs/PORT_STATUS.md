@@ -1,3 +1,10 @@
+## 2026-10-31 新上传规格复核：模型 Retry-After 无端截断修复
+
+- 对照本次产品规格 04 与说明书 API/服务章节、原始 2.1.88 `services/api/withRetry.ts::getRetryDelay`（530–548），发现 `src/provider.rs::retry_after_delay` 曾将上游 Retry-After 秒数强制裁至 6 小时，提前重新发送模型请求。
+- 提交 [c1705089](https://github.com/sy220284/222/commit/c1705089ac50978a87dbc7fe65a15c821418530b) 已移除该上限，并加入 21601 秒、100000 秒及超大前缀解析回归。完整 API 异常、取消、来源相关 529、UI/SDK/流式恢复和最新 HEAD CI 仍需继续验收。保持“部分实现”，不增加已验收路径数量。
+
+---
+
 ## 2026-10-31：未迁移公共文件与输出链首批接入
 
 > **2026-10-31 分段压缩对照推进（当前 HEAD 待CI复核）：** 原版 `src/services/compact/compact.ts::partialCompactConversation` 的方向选择与用户消息范围已进入 `Agent::compact_history_partial`，`from` 保留选定索引前的上下文并以完整会话进行总结，`up_to` 只总结之前消息并保留之后的消息；过滤旧摘要，模板沿用原版 PARTIAL 与 UP_TO 文本。新会话状态通过 `Session.summary_insert_at`、`transcript_snapshot` 与 `transcript_active_offset` 原子写盘，保留无损归档、终端搜索/导出/会话列表/语义检索/统计及会话恢复；CLI 增加 `/compact from INDEX`、`/compact up_to INDEX` 零基索引入口，SDK `compact` 控制可传 `direction,pivotIndex`。新增两方向模型请求、无效边界、磁盘恢复及失败不变更历史回归。保留缺口：原版 UUID compact_boundary 和保留片段亲缘重链、TUI 图形选段、文件/技能及代理附件恢复、其他同源 Hook/缓存时序；本次不提升已验收原路径数量。
