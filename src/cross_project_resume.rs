@@ -2,6 +2,40 @@
 //! Worktree membership is a path-boundary check: /repo/worktree2 must never
 //! match /repo/worktree. Launch suggestions are displayed, never executed.
 use std::path::{Path, PathBuf};
+use anyhow::{Context, Result};
+use tokio::{process::Command, time::{timeout, Duration}};
+
+/// Read the active worktree collection from the current Git repository.
+/// This only discovers paths; it does not create/remove worktrees or switch
+/// the active process. A non-Git folder has no related worktrees.
+pub async fn active_worktree_paths(current: &Path) -> Result<Vec<PathBuf>> {
+    let output = timeout(
+        Duration::from_secs(5),
+        Command::new("git")
+            .arg("-C")
+            .arg(current)
+            .args(["worktree", "list", "--porcelain"])
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    .context("Git worktree discovery timed out")?
+    .context("Failed to launch Git worktree discovery")?;
+    if !output.status.success() {
+        // git worktree is not applicable outside a Git checkout.
+        return Ok(Vec::new());
+    }
+    let raw = std::str::from_utf8(&output.stdout)
+        .context("Git returned non-UTF-8 worktree paths")?;
+    Ok(parse_worktree_paths(raw))
+}
+
+fn parse_worktree_paths(raw: &str) -> Vec<PathBuf> {
+    raw.lines()
+        .filter_map(|line| line.strip_prefix("worktree "))
+        .map(PathBuf::from)
+        .collect()
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ResumeLocation {
@@ -50,6 +84,14 @@ pub fn resume_command(project: &Path, session_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn git_porcelain_worktrees_preserve_spaces_and_do_not_match_metadata() {
+        let got = parse_worktree_paths(
+            "worktree /tmp/root name\\nHEAD 123\\nbranch refs/heads/main\\n\\nworktree /tmp/other\\ndetached\\n",
+        );
+        assert_eq!(got, vec![PathBuf::from("/tmp/root name"), PathBuf::from("/tmp/other")]);
+    }
 
     #[test]
     fn same_path_hidden_projects_and_missing_project_are_current() {
