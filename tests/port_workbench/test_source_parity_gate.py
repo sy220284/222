@@ -88,7 +88,7 @@ class SourceParityGateTests(unittest.TestCase):
                        "M\ta.ts\t1\t1\t1\t1\t"+digest+"\t逐文件逐行/M/a.ts.md\n")
             docs = {
                 "核验数据/文件与模块双向映射.tsv":mapping.encode(),
-                "逐文件逐行/M/a.ts.md":b"document",
+                "逐文件逐行/M/a.ts.md":"## 一、函数与类型声明入口\n| — | — | 无此类顶层声明 | — |\n## 二、物理源码逐行对照\n".encode("utf8"),
             }
             manifest = "".join(hashlib.sha256(data).hexdigest()+"  "+name+"\n"
                                for name,data in docs.items()).encode()
@@ -100,6 +100,8 @@ class SourceParityGateTests(unittest.TestCase):
             errors,summary=verify_spec_archive(file,baseline)
             self.assertEqual(errors,[])
             self.assertEqual(summary["mapped_firstparty"],1)
+            self.assertEqual(summary["file_level_only"],1)
+            self.assertEqual(summary["function_queue"][0]["kind"],"FileLevelDeclarationOrConstant")
             baseline["source_hashes"]["src/a.ts"]="0"*64
             errors,_=verify_spec_archive(file,baseline)
             self.assertTrue(any("不同版本源码" in e for e in errors))
