@@ -627,11 +627,17 @@ impl Config {
             .with_context(|| format!("No provider named {id}; run 'atlas-agent models'"))?
             .clone();
         if let Some(m) = model {
-            if m.trim().is_empty() {
+            let id = m.trim();
+            if id.is_empty() {
                 bail!("Model cannot be empty");
             }
-            p.model = m.to_owned();
+            // Source model.ts::parseUserSpecifiedModel trims outer whitespace
+            // but preserves case for arbitrary non-first-party model IDs.
+            p.model = id.to_owned();
         }
+        // Validate against the effective model, including an explicit
+        // override, before selecting a provider or opening a paid request.
+        p.tuning.validate_for_model(&p.model)?;
         Ok(p)
     }
 }
@@ -709,6 +715,18 @@ pub fn canonical_workspace(path: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_model_override_trims_without_lowercasing_and_revalidates_tuning() {
+        let mut config = Config::default();
+        let override_model = config.select(Some("openai"), Some("  CaseSensitive-Deployment  "))
+            .unwrap();
+        assert_eq!(override_model.model, "CaseSensitive-Deployment");
+        assert!(config.select(Some("openai"), Some("   ")).is_err());
+        let profile = config.providers.iter_mut().find(|p| p.id == "openai").unwrap();
+        profile.tuning.reasoning_effort = Some("none".into());
+        assert!(config.select(Some("openai"), Some("gpt-6.1-sol")).is_err());
+    }
 
     #[test]
     fn credentialed_endpoints_require_tls_except_loopback() {
