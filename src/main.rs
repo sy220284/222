@@ -3562,6 +3562,10 @@ fn structured_result_event(agent: &Agent, answer: &str) -> serde_json::Value {
         "type":"result","session_id":agent.session_id(),
         "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
     });
+    if let Some(reason) = agent.last_turn_stop_reason() {
+        event["stop_reason"] = json!(reason);
+        event["subtype"] = json!("stopped");
+    }
     if agent.sdk_response_schema().is_some() {
         match structured_output_payload(answer) {
             Ok(value) => event["structured_output"] = value,
