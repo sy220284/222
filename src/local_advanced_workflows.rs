@@ -269,6 +269,29 @@ mod tests {
     }
 
     #[test]
+    fn branch_review_includes_committed_diff_and_rejects_empty_review() {
+        let root = tempfile::tempdir().unwrap();
+        git(root.path(), &["init", "-q", "-b", "main"]).unwrap();
+        std::fs::write(root.path().join("feature.rs"), "pub fn old() {}\n").unwrap();
+        git(root.path(), &["add", "feature.rs"]).unwrap();
+        git(root.path(), &[
+            "-c", "user.name=CI", "-c", "user.email=ci@example.test",
+            "commit", "-qm", "baseline"
+        ]).unwrap();
+        assert!(review_prompt(root.path(), None).is_err());
+        git(root.path(), &["checkout", "-q", "-b", "feature"]).unwrap();
+        std::fs::write(root.path().join("feature.rs"), "pub fn changed() {}\n").unwrap();
+        git(root.path(), &["add", "feature.rs"]).unwrap();
+        git(root.path(), &[
+            "-c", "user.name=CI", "-c", "user.email=ci@example.test",
+            "commit", "-qm", "change"
+        ]).unwrap();
+        let prompt = review_prompt(root.path(), None).unwrap();
+        assert!(prompt.contains("Base main"), "{prompt}");
+        assert!(prompt.contains("feature.rs"), "{prompt}");
+    }
+
+    #[test]
     fn planner_requires_a_goal_and_uses_selected_model() {
         let root = tempfile::tempdir().unwrap();
         let prompt = plan_prompt(root.path(), "恢复本地功能").unwrap();
