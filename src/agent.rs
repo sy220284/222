@@ -3681,7 +3681,7 @@ impl Agent {
     /// Replace previous turns with a model-generated, persistent compact summary.
     /// Do not modify the live transcript until the new session is durable.
     pub async fn compact_history(&mut self) -> Result<()> {
-        self.compact_history_with_trigger(false, None).await
+        self.compact_history_with_trigger(false, None, None).await
     }
 
     /// /compact instructions must influence the summarization request, not
@@ -3695,14 +3695,31 @@ impl Agent {
             } else {
                 Some(instructions)
             },
+            None,
         )
         .await
+    }
+
+    /// Source partialCompactConversation: pivot uses a zero-based index in
+    /// model-visible messages. From retains prefix; up_to retains suffix.
+    pub async fn compact_history_partial(
+        &mut self,
+        pivot: usize,
+        direction: crate::compact_source_prompts::CompactDirection,
+        user_feedback: Option<&str>,
+    ) -> Result<()> {
+        if direction == crate::compact_source_prompts::CompactDirection::Full {
+            bail!("Partial compaction requires from or up_to");
+        }
+        self.compact_history_with_trigger(false, user_feedback, Some((pivot, direction)))
+            .await
     }
 
     async fn compact_history_with_trigger(
         &mut self,
         automatic: bool,
         custom_instructions: Option<&str>,
+        partial: Option<(usize, crate::compact_source_prompts::CompactDirection)>,
     ) -> Result<()> {
         if std::env::var("ATLAS_DISABLE_COMPACT")
             .ok()
@@ -3718,6 +3735,41 @@ impl Agent {
         if self.session.messages.is_empty() {
             bail!("{}", crate::compact_command_source::NO_MESSAGES)
         }
+        // Match original pivot selection, validating before hooks/model work.
+        let all_messages = self.session.model_messages();
+        let messages_to_keep = if let Some((pivot, direction)) = partial {
+            if pivot > all_messages.len() {
+                bail!("Compaction pivot exceeds current message count")
+            }
+            let selected = match direction {
+                crate::compact_source_prompts::CompactDirection::From => &all_messages[pivot..],
+                crate::compact_source_prompts::CompactDirection::UpTo => &all_messages[..pivot],
+                crate::compact_source_prompts::CompactDirection::Full => {
+                    bail!("Partial compaction requires from or up_to")
+                }
+            };
+            if selected.is_empty() {
+                bail!(
+                    "{}",
+                    if direction == crate::compact_source_prompts::CompactDirection::UpTo {
+                        "Nothing to summarize before the selected message."
+                    } else {
+                        "Nothing to summarize after the selected message."
+                    }
+                )
+            }
+            Some(match direction {
+                crate::compact_source_prompts::CompactDirection::From => {
+                    all_messages[..pivot].to_vec()
+                }
+                crate::compact_source_prompts::CompactDirection::UpTo => {
+                    all_messages[pivot..].to_vec()
+                }
+                crate::compact_source_prompts::CompactDirection::Full => unreachable!(),
+            })
+        } else {
+            None
+        };
         runtime_contracts::clear_compact_warning_suppression();
         let before = self
             .hooks
@@ -3742,13 +3794,21 @@ impl Agent {
         }
         // Earlier compressed context is already present as a user turn in
         // model_messages, just as in 2.1.88. Do not duplicate it in system.
-        let mut prompt = crate::prompt_runtime::compact_prompt("");
+        let mut prompt = if let Some((_, direction)) = partial {
+            crate::compact_source_prompts::prompt_for_direction("", direction)
+        } else {
+            crate::prompt_runtime::compact_prompt("")
+        };
         // 2.1.88 mergeHookInstructions puts explicit user guidance first,
         // then successful PreCompact hook context, under one source-defined
         // Additional Instructions section (before the final tool ban).
         let mut additional_instructions = Vec::new();
         if let Some(custom) = custom_instructions.filter(|text| !text.trim().is_empty()) {
-            additional_instructions.push(custom.to_owned());
+            if partial.is_some() {
+                additional_instructions.push(format!("User context: {custom}"));
+            } else {
+                additional_instructions.push(custom.to_owned());
+            }
         }
         if !before.additional_context.is_empty() {
             additional_instructions.push(before.additional_context.join("\n\n"));
@@ -3760,7 +3820,13 @@ impl Agent {
         prompt.push_str(crate::compact_source_prompts::NO_TOOLS_TRAILER);
         // The original stripImagesFromMessages removes binary payloads only
         // from the summarization request, never from saved conversation data.
-        let mut history = self.session.model_messages();
+        // up_to sends only summarized prefix; from sends full model context.
+        let mut history = match partial {
+            Some((pivot, crate::compact_source_prompts::CompactDirection::UpTo)) => {
+                all_messages[..pivot].to_vec()
+            }
+            _ => all_messages,
+        };
         for message in &mut history {
             // In Rust, tool results are stored as role="tool" messages,
             // while the original TS stream represents them as user blocks.
@@ -3883,19 +3949,39 @@ impl Agent {
         // Persist a candidate before swapping it into the live Agent so a
         // disk failure cannot destroy the conversation in memory.
         let mut candidate = self.session.clone();
-        // Archive the preceding summary at its chronological boundary before
-        // replacing it, so repeated compactions preserve every prior segment.
-        if let Some(previous) = candidate.summary.as_deref() {
-            candidate.archived_messages.push(Message::text(
-                "user",
-                crate::compact_source_prompts::user_summary_message(previous, None, false, false),
-            ));
+        if let Some((_, direction)) = partial {
+            // Retain original chronological history independently from
+            // whichever segment remains in the new model context.
+            candidate.transcript_snapshot = Some(self.session.transcript_messages());
+            candidate.messages = messages_to_keep.expect("validated partial selection");
+            candidate.transcript_active_offset = candidate.messages.len();
+            candidate.archived_messages.clear();
+            candidate.summary_insert_at = Some(match direction {
+                crate::compact_source_prompts::CompactDirection::From => candidate.messages.len(),
+                crate::compact_source_prompts::CompactDirection::UpTo => 0,
+                crate::compact_source_prompts::CompactDirection::Full => unreachable!(),
+            });
+        } else if self.session.transcript_snapshot.is_some() {
+            candidate.transcript_snapshot = Some(self.session.transcript_messages());
+            candidate.transcript_active_offset = 0;
+            candidate.archived_messages.clear();
+            candidate.messages.clear();
+            candidate.summary_insert_at = None;
+        } else {
+            // Preserve the existing full-compaction archive path for legacy
+            // sessions; no active conversation is erased before disk commit.
+            if let Some(previous) = candidate.summary.as_deref() {
+                candidate.archived_messages.push(Message::text(
+                    "user",
+                    crate::compact_source_prompts::user_summary_message(
+                        previous, None, false, false,
+                    ),
+                ));
+            }
+            candidate.archived_messages.append(&mut candidate.messages);
+            candidate.summary_insert_at = None;
         }
         candidate.summary = Some(summary);
-        // Source 2.1.88 retains pre-compact transcript entries for later
-        // inspection. Persist them in the same atomic session write as the
-        // new summary, so retries never double-archive or erase the history.
-        candidate.archived_messages.append(&mut candidate.messages);
         candidate.memory_extraction_cursor = 0;
         candidate.surfaced_memories.clear();
         candidate.surfaced_memory_units = 0;
@@ -4407,7 +4493,7 @@ impl Agent {
         // per-session circuit breaker after three consecutive failures.
         // A failed summarizer must not discard the user's new prompt.
         if !auto_disabled && history_tokens >= threshold && self.auto_compact_failures < 3 {
-            match self.compact_history_with_trigger(true, None).await {
+            match self.compact_history_with_trigger(true, None, None).await {
                 Ok(()) => self.auto_compact_failures = 0,
                 Err(error) => {
                     self.auto_compact_failures = self.auto_compact_failures.saturating_add(1);
