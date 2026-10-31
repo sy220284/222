@@ -1725,6 +1725,9 @@ async fn chat(
                 if raw_rule.is_empty() {
                     bail!("Missing permission rule, e.g. Bash(git status)");
                 }
+                // Check the exact user input before the parser can collapse
+                // malformed parentheses into a broader tool-wide rule.
+                permission_rules::validate_rule_input(raw_rule)?;
                 let rule = permission_rules::parse_rule(raw_rule);
                 let paths =
                     permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?;
