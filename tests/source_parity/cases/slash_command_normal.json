@@ -1,0 +1,23 @@
+{
+  "id": "slash-command-ordinary",
+  "kind": "normal",
+  "source_ids": [
+    "src/utils/slashCommandParsing.ts:FunctionDeclaration:25-60:occurrence-1"
+  ],
+  "input": {
+    "command": " /mcp:tool (MCP) arg1 arg2 "
+  },
+  "timeout_seconds": 15,
+  "original": [
+    "node",
+    "--experimental-strip-types",
+    "--no-warnings",
+    "--input-type=module",
+    "--eval",
+    "import {readFileSync} from 'node:fs';\nimport {pathToFileURL} from 'node:url';\nconst req = JSON.parse(readFileSync(0, 'utf8'));\nconst original = await import(pathToFileURL(process.argv[1]).href);\nconst parsed = original.parseSlashCommand(req.input.command);\nprocess.stdout.write(JSON.stringify({\n  schema:'source-rust-observation/v1',\n  case_id:req.id,\n  executed_source_ids:['src/utils/slashCommandParsing.ts:FunctionDeclaration:25-60:occurrence-1'],\n  outcome:{parsed},\n  errors:[], state:{}, calls:['parseSlashCommand'], permissions:[],\n  events:['started','finished'], side_effects:[], persistence:{},\n  cancellation:{cancelled:false}\n}) + '\\n');",
+    "{ORIGINAL}/src/utils/slashCommandParsing.ts"
+  ],
+  "rust": [
+    "{REPO}/target/debug/parity_slash"
+  ]
+}
