@@ -3888,9 +3888,7 @@ impl Agent {
         if let Some(previous) = candidate.summary.as_deref() {
             candidate.archived_messages.push(Message::text(
                 "user",
-                crate::compact_source_prompts::user_summary_message(
-                    previous, None, false, false,
-                ),
+                crate::compact_source_prompts::user_summary_message(previous, None, false, false),
             ));
         }
         candidate.summary = Some(summary);
@@ -5874,10 +5872,7 @@ mod tests {
         assert!(restored_twice.messages.is_empty());
         assert_eq!(restored_twice.archived_messages.len(), 3 + new_turn_count);
         let export = crate::session_control::render(&restored_twice);
-        assert_eq!(
-            export.matches("This session is being continued").count(),
-            2
-        );
+        assert_eq!(export.matches("This session is being continued").count(), 2);
         let first_summary = export.find("This session is being continued").unwrap();
         let resumed_task = export.find("Continue from summary").unwrap();
         let final_summary = export.rfind("This session is being continued").unwrap();
