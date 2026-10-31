@@ -599,21 +599,16 @@ mod default_chat_cli_tests {
         .unwrap();
         assert!(matches!(globals.command, Commands::Chat { .. }));
         assert_eq!(globals.max_steps, 3);
-        let explicit = parse_cli_with_default_chat(vec![
-            "atlas-agent".into(),
-            "version".into(),
-        ])
-        .unwrap();
+        let explicit =
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "version".into()]).unwrap();
         assert!(matches!(explicit.command, Commands::Version));
     }
 
     #[test]
     fn unsupported_arguments_still_fail_before_startup() {
-        let error = parse_cli_with_default_chat(vec![
-            "atlas-agent".into(),
-            "--unknown-option".into(),
-        ])
-        .unwrap_err();
+        let error =
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "--unknown-option".into()])
+                .unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
     }
 }
