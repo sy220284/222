@@ -411,10 +411,17 @@ impl BackgroundTasks {
         if record.id != id {
             bail!("Task metadata ID mismatch");
         }
-        // Spawned processes are bound to their owning agent process.
-        // A stale 'running' record must not masquerade as a live task.
-        if record.status == "running" {
-            record.status = "interrupted".to_owned();
+        // Source Task.ts declares only pending/running/completed/failed/killed.
+        // The owning process is gone, so a persisted running record can no
+        // longer complete. Report a terminal failed state rather than an
+        // unrecognized "interrupted" status (SDK consumers otherwise may
+        // mistake it for successful completion).
+        // Normalize records written by previous Rust versions as well.
+        if matches!(record.status.as_str(), "running" | "interrupted") {
+            record.status = "failed".to_owned();
+            record.failure_reason.get_or_insert_with(|| {
+                "Background task was interrupted when its owning process exited".to_owned()
+            });
             Self::save(&self.directory, &record)?;
         }
         Ok(record)
@@ -1301,7 +1308,7 @@ async fn spool_merged<R: AsyncRead + Unpin>(
 pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"background_list",
-            "description":"List background shell tasks, including previously completed or interrupted jobs.",
+            "description":"List background shell tasks, including completed and failed jobs.",
             "parameters":{"type":"object","properties":{}}}}),
         json!({"type":"function","function":{"name":"task_output",
             "description":"Return status and saved output for a background shell task. block=true waits up to timeout milliseconds.",
@@ -1737,7 +1744,7 @@ mod tests {
     }
 
     #[test]
-    fn recovers_unfinished_record_as_interrupted() {
+    fn recovers_unfinished_record_with_source_terminal_status() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().canonicalize().unwrap();
         let tasks = BackgroundTasks::new(&root).unwrap();
@@ -1759,7 +1766,32 @@ mod tests {
         };
         BackgroundTasks::save(&tasks.directory, &record).unwrap();
         let value: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
-        assert_eq!(value["task"]["status"], "interrupted");
+        assert_eq!(value["task"]["status"], "failed");
+        assert!(value["task"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("owning process exited"));
+        let saved: TaskRecord =
+            serde_json::from_slice(&fs::read(tasks.directory.join(format!("{id}.json"))).unwrap())
+                .unwrap();
+        assert_eq!(saved.status, "failed");
+        assert_eq!(
+            saved.failure_reason.as_deref(),
+            value["task"]["error"].as_str()
+        );
+        // Re-reading the same record must not silently change its state.
+        let again: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
+        assert_eq!(again["task"]["status"], "failed");
+        assert_eq!(again["task"]["error"], value["task"]["error"]);
+        // Older Rust releases persisted a sixth status. Migrate it too.
+        let old = TaskRecord {
+            status: "interrupted".into(),
+            failure_reason: None,
+            ..record
+        };
+        BackgroundTasks::save(&tasks.directory, &old).unwrap();
+        let recovered: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
+        assert_eq!(recovered["task"]["status"], "failed");
     }
     fn tokio_test_output(tasks: &BackgroundTasks, id: &str) -> String {
         tokio::runtime::Builder::new_current_thread()
