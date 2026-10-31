@@ -284,7 +284,10 @@ mod tests {
         );
         assert_eq!(
             replacement,
-            vec![PathBuf::from("/tmp/other/config.json"), workspace.join(".env")]
+            vec![
+                PathBuf::from("/tmp/other/config.json"),
+                workspace.join(".env")
+            ]
         );
     }
 
