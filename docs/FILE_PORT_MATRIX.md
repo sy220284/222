@@ -1012,7 +1012,7 @@
 | `src/services/analytics/sinkKillswitch.ts` | 26 | 1063 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/services/api/adminRequests.ts` | 120 | 3208 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方组织管理员申请 API；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/bootstrap.ts` | 142 | 4634 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；原厂 CLI 服务端启动配置；不再跟进，通用本地能力与模型 API 保留 |
-| `src/services/api/claude.ts` | 3420 | 125779 | 替换：独立模型／访问管理 | `src/provider.rs / src/sse.rs` | 部分实现：多提供商、SSE 增量及 Token 归一化；原版 API 流程未全等 |
+| `src/services/api/claude.ts` | 3420 | 125779 | 替换：独立模型／访问管理 | `src/provider.rs / src/sse.rs` | 部分实现：多提供商、SSE 增量及 Token 归一化；流空闲超时现复用原版 parseInt 十进制前缀解析，保留 90 秒默认值；原版完整 API 状态机、事件时序及所有失败/恢复分支仍未等价 |
 | `src/services/api/client.ts` | 390 | 16164 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/dumpPrompts.ts` | 227 | 7332 | 重写：模型／Agent 循环 | `src/provider.rs / src/agent.rs` | 部分实现，回退与流式行为未等价 |
 | `src/services/api/emptyUsage.ts` | 23 | 712 | 重写：模型／Agent 循环 | `src/runtime_contracts.rs` | 已验收：零用量结构字段与嵌套默认值的完整静态对照；证据 runtime_contracts::tests::empty_usage_has_the_entire_original_schema |
@@ -1029,7 +1029,7 @@
 | `src/services/api/sessionIngress.ts` | 515 | 17055 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方远程会话持久化 API；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/ultrareviewQuota.ts` | 39 | 1219 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端审查配额；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/usage.ts` | 64 | 1685 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方订阅配额 API；本地费用统计保留；不再跟进，通用本地能力与模型 API 保留 |
-| `src/services/api/withRetry.ts` | 823 | 28238 | 重写：模型／Agent 循环 | `src/provider.rs / src/sse.rs / src/gemini_sse.rs / src/agent.rs` | 部分实现：多模型 HTTP/流式建立前的 408/409/429/5xx 与连接超时有限重试，尊重 x-should-retry:false、Retry-After 秒数，失败不执行工具或重复落盘；仍缺原版可取消等待、按查询来源的 529 策略、流中断恢复、模型回退及完整重试事件与自定义预算 |
+| `src/services/api/withRetry.ts` | 823 | 28238 | 重写：模型／Agent 循环 | `src/provider.rs / src/sse.rs / src/gemini_sse.rs / src/agent.rs` | 部分实现：多模型 HTTP/流式建立前的 408/409/429/5xx 与连接超时有限重试，成功响应禁止因 x-should-retry:true 重发；Retry-After 现采用原版 parseInt 十进制前缀，普通指数等待追加原版 0～25% 随机抖动并保留 32 秒基础上限；新增确定性范围测试和成功响应唯一请求 HTTP 测试，当前 HEAD 全量 CI 待复核；仍缺可取消等待、按查询来源的 529 策略、流中断恢复、模型回退及完整重试事件与自定义预算 |
 | `src/services/autoDream/autoDream.ts` | 325 | 11259 | 重写：保持通用行为 | `src/memory_extraction.rs / src/agent.rs` | 部分实现：默认关闭、明确启用后主 Agent 正常 Stop 检查24小时/5个其他会话门限，使用已配置 API 模型执行无工具本地记忆整理；原版 fork-agent、进度UI、后台运行和任务取消待对齐 |
 | `src/services/autoDream/config.ts` | 22 | 892 | 重写：保持通用行为 | `src/generated_ports/p_3f28a74b2c6e6.rs`| 部分实现：autoDream 决策纯函数（用户设置显式值覆盖实验默认，未设时实验值决定），settings/growthbook 读取由调用方传入；实验 flag 名按隐私门禁省略|
 | `src/services/autoDream/consolidationLock.ts` | 141 | 4548 | 重写：保持通用行为 | `src/memory_extraction.rs` | 部分实现：本地锁文件独占、双重时间门检查、成功更新时间戳、失败保持可重试；原版锁 mtime、进程诊断及手动 Dream 锁交互待验收 |
