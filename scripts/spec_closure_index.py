@@ -37,7 +37,7 @@ def load(spec_path: Path, matrix_path: Path, original_path: Path | None):
             io.StringIO(spec.read(file_list).decode("utf-8-sig")), delimiter="\t"))
         docs = {m.group(2): m.group(1) + "_" + m.group(2) + ".md"
                 for name in names
-                if (m := re.search(r"/功能模块/(\\d{2})_(.+)\\.md$", name))}
+                if (m := re.search(r"/功能模块/(\d{2})_(.+)\.md$", name))}
     if len(docs) != 40 or len(source_rows) != 1902 or len(matrix) != 1906:
         raise ValueError("40文档/1902第一方源码/1906冻结路径数量不一致")
     original = zipfile.ZipFile(original_path) if original_path else None
