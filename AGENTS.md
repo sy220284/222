@@ -133,3 +133,7 @@ docs/FILE_PORT_MATRIX.md 是原路径唯一状态台账；docs/PORT_STATUS.md �
 ## 本地任务触发能力恢复
 
 RemoteTriggerTool 原三条源码路径恢复为本地显式任务触发器，在 `.atlas/local-triggers/tasks.json` 保存任务内容（独立目录忽略规则，旧路径自动迁移），并通过 CLI `trigger set/run/list/delete` 或交互 `/trigger` 使用当前配置的任意模型。未经明确用户动作，不创建或启动定时计划，不触发远程 Worker，不保存云端任务数据。
+
+## 原版源码唯一合并门禁
+
+逐源码完整验收归 scripts/source_parity_gate.py gate 管理，统一依据 docs/SOURCE_PARITY.md。旧迁移工作台和规格/提示词生成脚本仅为证据输入，不能产生第二套完成率。每条非排除源路径须同时具有原版 ZIP 全文件哈希一致、函数行为契约、Rust 真实生产调用及 GitHub Actions 运行证据。任何缺失均必须由 CI 的“原版源码全量等价验收”作业拒绝合并，不得靠改状态、缩小范围、跳过原版输入来放行。

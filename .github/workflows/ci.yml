@@ -183,3 +183,50 @@ jobs:
         with:
           command: check advisories
           arguments: --all-features
+
+source-parity:
+    name: 原版源码全量等价验收
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: 检出当前提交
+        uses: actions/checkout@v4
+      - name: 获取私密 2.1.88 原版源码
+        shell: bash
+        env:
+          SOURCE_URL: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_URL }}
+          SOURCE_SHA256: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_SHA256 }}
+          SOURCE_TOKEN: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .port-audit
+          if [[ -z "$SOURCE_URL" || -z "$SOURCE_SHA256" ]]; then
+            echo "::error::未配置可信的原版源码与哈希，禁止放行"
+            exit 1
+          fi
+          [[ "$SOURCE_URL" == https://* ]] || { echo "::error::必须使用 HTTPS 原版源码地址"; exit 1; }
+          [[ "$SOURCE_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || { echo "::error::原版 ZIP SHA256 非法"; exit 1; }
+          if [[ -n "$SOURCE_TOKEN" ]]; then
+            curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
+              --header "Authorization: Bearer $SOURCE_TOKEN" "$SOURCE_URL" -o "$RUNNER_TEMP/original.zip"
+          else
+            curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
+              "$SOURCE_URL" -o "$RUNNER_TEMP/original.zip"
+          fi
+          echo "$SOURCE_SHA256  $RUNNER_TEMP/original.zip" | sha256sum -c -
+      - name: 原版源码逐文件、逐函数和 Rust 行为证据门禁
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/source_parity_gate.py gate --repo . \
+            --source-archive "$RUNNER_TEMP/original.zip" --output .port-audit
+      - name: 保存独立验收记录
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mandatory-source-parity
+          path: .port-audit/
+          if-no-files-found: warn
