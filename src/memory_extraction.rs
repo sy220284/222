@@ -336,9 +336,7 @@ Existing memories (full contents within budget):
 /// The original autoDream gate is disabled until opted in by the user.
 /// Consolidation is checked at a completed turn; there is no timer.
 pub fn dream_enabled() -> bool {
-    crate::env_runtime::is_env_truthy(
-        std::env::var("ATLAS_AUTO_DREAM").ok().as_deref(),
-    )
+    crate::env_runtime::is_env_truthy(std::env::var("ATLAS_AUTO_DREAM").ok().as_deref())
 }
 
 /// Check the source's 24-hour + five other sessions gate. A process-level
@@ -357,7 +355,10 @@ pub async fn dream_if_due(
     const MIN_SESSIONS: usize = 5;
     let dir = memory_dir(workspace)?;
     let stamp = dir.join(".dream-consolidated");
-    if stamp.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink() || !m.is_file()) {
+    if stamp
+        .symlink_metadata()
+        .is_ok_and(|m| m.file_type().is_symlink() || !m.is_file())
+    {
         bail!("Dream timestamp must be a regular file");
     }
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -409,7 +410,10 @@ pub async fn dream_if_due(
     changed.truncate(MIN_SESSIONS);
 
     let lock_path = dir.join(".dream-consolidation.lock");
-    if lock_path.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink() || !m.is_file()) {
+    if lock_path
+        .symlink_metadata()
+        .is_ok_and(|m| m.file_type().is_symlink() || !m.is_file())
+    {
         bail!("Dream lock must be a regular file");
     }
     let lock = fs::OpenOptions::new()
@@ -493,7 +497,12 @@ Recent local sessions:
             tools: vec![],
         })
         .await?;
-    if response.message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
+    if response
+        .message
+        .tool_calls
+        .as_ref()
+        .is_some_and(|calls| !calls.is_empty())
+    {
         bail!("Dream model requested tools");
     }
     let output: Output = serde_json::from_str(&response.message.visible_text())
@@ -636,11 +645,15 @@ mod tests {
         let active = uuid::Uuid::new_v4();
         for n in 0..4 {
             let mut session = crate::session::Session::fresh();
-            session.messages.push(Message::text("user", format!("Decision {n}")));
+            session
+                .messages
+                .push(Message::text("user", format!("Decision {n}")));
             session.save(&root).unwrap();
         }
-        let model = mock(r#"{"memories":[{"filename":"consolidated.md","type":"project",
-            "description":"Stable project decision","content":"Project decisions survive sessions."}]}"#);
+        let model = mock(
+            r#"{"memories":[{"filename":"consolidated.md","type":"project",
+            "description":"Stable project decision","content":"Project decisions survive sessions."}]}"#,
+        );
         assert!(dream_if_due(&root, active, &model, &profile())
             .await
             .unwrap()
@@ -648,7 +661,9 @@ mod tests {
         assert!(model.requests.lock().unwrap().is_empty());
 
         let mut fifth = crate::session::Session::fresh();
-        fifth.messages.push(Message::text("user", "Keep durable decisions"));
+        fifth
+            .messages
+            .push(Message::text("user", "Keep durable decisions"));
         fifth.save(&root).unwrap();
 
         let result = dream_if_due(&root, active, &model, &profile())
@@ -675,7 +690,9 @@ mod tests {
         let root = root.path().canonicalize().unwrap();
         for _ in 0..5 {
             let mut session = crate::session::Session::fresh();
-            session.messages.push(Message::text("user", "Important future decision"));
+            session
+                .messages
+                .push(Message::text("user", "Important future decision"));
             session.save(&root).unwrap();
         }
         let active = uuid::Uuid::new_v4();
