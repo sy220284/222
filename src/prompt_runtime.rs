@@ -772,7 +772,9 @@ mod tests {
         assert!(system.starts_with("CRITICAL: Respond with TEXT ONLY."));
         assert!(system.contains("Previous results"));
         assert_eq!(
-            compact_summary_content("<analysis>hidden</analysis>\n<summary>verified state</summary>"),
+            compact_summary_content(
+                "<analysis>hidden</analysis>\n<summary>verified state</summary>"
+            ),
             "verified state"
         );
         assert_eq!(compact_summary_content("bare summary"), "bare summary");
