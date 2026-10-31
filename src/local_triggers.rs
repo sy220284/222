@@ -177,6 +177,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(root.path().join(".atlas/local_triggers.lock"))
             .unwrap();
         fs2::FileExt::try_lock_exclusive(&held).unwrap();
