@@ -5671,7 +5671,7 @@ impl Agent {
                         Ok(output) => output,
                         Err(error) => format!("ERROR: {error:#}"),
                     }
-                } else if call.function.name == "spawn_agent" {
+                } else if crate::tool_names::canonical_name(&call.function.name) == "spawn_agent" {
                     match self.run_subagent(&call, &executor).await {
                         Ok(output) => output,
                         Err(error) => format!("ERROR: {error:#}"),
