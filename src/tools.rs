@@ -705,6 +705,9 @@ impl ToolExecutor {
         } else if crate::task_graph::handles(&call.function.name) {
             crate::task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
                 .with_context(|| format!("Invalid {} arguments", call.function.name))?;
+        } else if name == "LocalTrigger" {
+            crate::local_triggers::validate_model_input(&value)
+                .context("Invalid LocalTrigger input")?;
         } else if matches!(name, "task_stop" | "KillShell") {
             self.validate_task_stop(&value)
                 .context("Invalid TaskStop arguments")?;
@@ -810,6 +813,9 @@ impl ToolExecutor {
         crate::semantic_inputs::normalize_source_file_tool(&call.function.name, &mut args)?;
         crate::semantic_inputs::normalize_tool_fields(name, &mut args)?;
         match name {
+            "LocalTrigger" => crate::local_triggers::model_call(&self.root, &args, || {
+                self.require_approval("LocalTrigger", &args)
+            }),
             "read_file" => self.read_file_with_mode(&args, call.function.name == "Read"),
             "notebook_edit" => {
                 self.require_approval("notebook_edit", &args)?;
@@ -2382,6 +2388,7 @@ pub fn definitions() -> Vec<Value> {
                 "run_in_background":{"type":"boolean"},"description":{"type":"string"}
             },"required":["command"]}}}),
     ];
+    tools.push(crate::local_triggers::model_definition());
     tools.push(notebook::definition());
     tools.extend(search::definitions());
     tools.push(webfetch::definition());
@@ -2408,6 +2415,45 @@ pub fn definitions_with_checkpointing(enabled: bool) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn local_trigger_tool_dispatch_requires_permission_and_returns_real_saved_task() {
+        let root = tempfile::tempdir().unwrap();
+        let executor = executor(root.path(), Approval::Full);
+        let payload = json!({"action":"create","trigger_id":"check","body":{"prompt":"Inspect the workspace"}});
+        let call = ToolCall {
+            id: "local-create".into(), kind: "function".into(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(), arguments: payload.to_string(),
+            }
+        };
+        assert!(crate::local_triggers::model_definition()["function"]["name"] == "LocalTrigger");
+        executor.validate_call_before_hooks(&call).unwrap();
+        let output = executor.execute(&call).await;
+        assert!(output.contains("saved"), "{output}");
+        assert_eq!(crate::local_triggers::get(root.path(), "check").unwrap(), "Inspect the workspace");
+        let run = ToolCall {
+            id: "local-run".into(), kind: "function".into(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(),
+                arguments: json!({"action":"run","trigger_id":"check"}).to_string()
+            }
+        };
+        let result = executor.execute(&run).await;
+        assert!(result.contains("CURRENT Agent turn"), "{result}");
+        let denied = executor(root.path(), Approval::ReadOnly).execute(&run).await;
+        assert!(denied.starts_with("ERROR:"), "{denied}");
+        let invalid = ToolCall {
+            id: "bad-schedule".into(), kind:"function".into(),
+            function: FunctionCall {
+                name:"LocalTrigger".into(),
+                arguments:json!({"action":"create","trigger_id":"bad",
+                   "body":{"prompt":"run tomorrow","schedule":"daily"}}).to_string()
+            }
+        };
+        assert!(executor.validate_call_before_hooks(&invalid).is_err());
+        assert!(crate::local_triggers::get(root.path(), "bad").is_err());
+    }
+
     use crate::protocol::FunctionCall;
 
     fn executor(root: &Path, approval: Approval) -> ToolExecutor {
