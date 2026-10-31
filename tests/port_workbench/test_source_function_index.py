@@ -26,11 +26,16 @@ class SourceIndexTests(unittest.TestCase):
             with ZipFile(archive,"w") as z:
                 z.writestr("核验数据/全函数与方法核查.tsv",table.getvalue())
                 z.writestr("核验数据/文件与模块双向映射.tsv",mapping)
+                z.writestr("核验数据/export_missed_1212.csv",
+                           "file,line,kind,name,initializer_kind,initializer,wrapper,declared_type\n"
+                           "src/a.ts,1,export-var,CALL_AT_LOAD,CallExpression,register(),,\n")
             index,errors,stats=build_function_index(archive,{"src/a.ts":sha})
             self.assertEqual(errors,[]);self.assertEqual(stats["ast_functions"],2)
             self.assertEqual(stats["shared_position_groups"],1)
+            self.assertEqual(stats["exported_values"],1)
+            self.assertTrue(index["src/a.ts"][2]["needs_side_effect_review"])
             self.assertNotEqual(index["src/a.ts"][0]["source_id"],index["src/a.ts"][1]["source_id"])
-            self.assertEqual(validate_contract_coverage(index,{},{"src/a.ts"})[0]["missing"],2)
+            self.assertEqual(validate_contract_coverage(index,{},{"src/a.ts"})[0]["missing"],3)
             records={"src/a.ts":{"functions":[{"source_id":a["source_id"]} for a in index["src/a.ts"]]}}
             self.assertEqual(validate_contract_coverage(index,records,{"src/a.ts"}),[])
 
