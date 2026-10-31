@@ -2416,7 +2416,7 @@ mod tests {
         assert!(crate::local_triggers::model_definition()["function"]["name"] == "LocalTrigger");
         runner.validate_call_before_hooks(&call).unwrap();
         let output = runner.execute(&call).await;
-        assert!(output.contains("saved"), "{output}");
+        assert!(output.starts_with("HTTP 201\n"), "{output}");
         assert_eq!(
             crate::local_triggers::get(root.path(), "check").unwrap(),
             "Inspect the workspace"
@@ -2430,7 +2430,7 @@ mod tests {
             },
         };
         let result = runner.execute(&run).await;
-        assert!(result.contains("CURRENT Agent turn"), "{result}");
+        assert!(result.contains("current-agent-turn"), "{result}");
         let denied = executor(root.path(), Approval::ReadOnly)
             .execute(&run)
             .await;
