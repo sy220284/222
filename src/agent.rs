@@ -4894,13 +4894,13 @@ impl Agent {
                 crate::tool_pool_merge::merge_and_filter_tools(&[], &available_tools, None)?;
             // Source tools.ts::getTools: simple mode is a deliberately small
             // model tool surface, independent of plugins or MCP discovery.
-            let complete_catalog = if crate::env_runtime::is_env_truthy(
-                std::env::var("ATLAS_SIMPLE").ok().as_deref(),
-            ) {
-                crate::tool_pool_merge::filter_simple_model_tools(complete_catalog)?
-            } else {
-                complete_catalog
-            };
+            let complete_catalog =
+                if crate::env_runtime::is_env_truthy(std::env::var("ATLAS_SIMPLE").ok().as_deref())
+                {
+                    crate::tool_pool_merge::filter_simple_model_tools(complete_catalog)?
+                } else {
+                    complete_catalog
+                };
             let (visible_tools, deferred_names) =
                 crate::tool_search::visible_catalog(&complete_catalog, &selected_mcp_tools);
             let mut request_system = system.clone();
