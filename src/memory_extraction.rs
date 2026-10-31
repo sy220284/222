@@ -629,6 +629,68 @@ mod tests {
         assert!(!root.join(".atlas/memory/valid.md").exists());
         assert!(!root.join("leak.md").exists());
     }
+    #[tokio::test]
+    async fn dream_requires_five_other_sessions_and_runs_only_once_per_day() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        let active = uuid::Uuid::new_v4();
+        for n in 0..4 {
+            let mut session = crate::session::Session::fresh();
+            session.messages.push(Message::text("user", format!("Decision {n}")));
+            session.save(&root).unwrap();
+        }
+        let model = mock(r#"{"memories":[{"filename":"consolidated.md","type":"project",
+            "description":"Stable project decision","content":"Project decisions survive sessions."}]}"#);
+        assert!(dream_if_due(&root, active, &model, &profile())
+            .await
+            .unwrap()
+            .is_none());
+        assert!(model.requests.lock().unwrap().is_empty());
+
+        let mut fifth = crate::session::Session::fresh();
+        fifth.messages.push(Message::text("user", "Keep durable decisions"));
+        fifth.save(&root).unwrap();
+
+        let result = dream_if_due(&root, active, &model, &profile())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(result.0, 1);
+        assert!(root.join(".atlas/memory/consolidated.md").exists());
+        assert!(root.join(".atlas/memory/.dream-consolidated").exists());
+        let requests = model.requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].tools.is_empty());
+        assert!(requests[0].system.contains("Phase 3"));
+        drop(requests);
+        assert!(dream_if_due(&root, active, &model, &profile())
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn dream_error_does_not_advance_consolidation_timestamp() {
+        let root = tempfile::tempdir().unwrap();
+        let root = root.path().canonicalize().unwrap();
+        for _ in 0..5 {
+            let mut session = crate::session::Session::fresh();
+            session.messages.push(Message::text("user", "Important future decision"));
+            session.save(&root).unwrap();
+        }
+        let active = uuid::Uuid::new_v4();
+        let invalid = mock("This is not valid JSON");
+        assert!(dream_if_due(&root, active, &invalid, &profile())
+            .await
+            .is_err());
+        assert!(!root.join(".atlas/memory/.dream-consolidated").exists());
+        let valid = mock(r#"{"memories":[]}"#);
+        assert!(dream_if_due(&root, active, &valid, &profile())
+            .await
+            .unwrap()
+            .is_some());
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn rejects_symlinked_memory_directory() {
