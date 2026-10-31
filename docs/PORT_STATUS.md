@@ -1,3 +1,29 @@
+## 2026-10-31：未迁移公共文件与输出链首批接入
+
+- 原版依据：2.1.88 `utils/fsOperations.ts`（128–384、620–771）、`utils/mcpOutputStorage.ts`（全文件）、`utils/format.ts`（全文件）。原始 1,906 条清单已实际逐路径核对行数和字节数。
+- 实际生产链：Read/Write/Edit → `fs_operations::permission_paths`，包括链中间目标的显式拒绝；PromptHistory → `ReverseLines`，保持 UTF-8 原始字节跨 4KB 块；后台任务输出 → `read_range_from`，保留原有 O_NOFOLLOW 与普通文件检查。
+- MCP 工具超限文本、MCP prompt 音频/资源和 WebFetch 二进制统一使用 `mcp_output_storage`，保存完整字节、按大小写无关 MIME 选择扩展名、阻止 `.atlas` 链接越界；超限文本包含原版分块阅读完整性要求。会话列表和保存回执接入共享格式。
+- 行为验证包括 `intermediate_symlink_targets_obey_read_and_write_deny_rules`、`bounded_ranges_and_reverse_lines_preserve_utf8_across_chunks`、`large_mcp_output_is_saved_in_full_with_chunk_read_instructions`、`mixed_case_binary_response_is_saved_without_loss`、`escaped_results_directory_does_not_create_or_write_outside_workspace`；`original_formatter_snapshots` 使用原始 TS 运行生成的 175 组结果，先复现舍入偏差再修正。原始 TS 只用于生成测试预期，不进入运行时。
+- 台账仅将这 3 条由未迁移调整为部分实现，逐条保留日期/时区、FS 可替换层、MCP 全部内容变换等剩余缺口。未迁移 493 → 490，部分实现 1,183 → 1,186，已验收仍 38，剩余待完整验收仍 1,676。**本批不代表完成用户要求的全部剩余移植。**
+- 保留同期 LocalTrigger 模型调用链及路径授权提交。本批本地 1,217 项 Rust 测试、26 项工作台测试通过；全部目标编译、Clippy 正确性/可疑代码门禁、Rustfmt、迁移台账检查及原版全量扫描通过。提交后的 Linux/Windows CI 仍需按新 HEAD 独立验收，不沿用旧版通过结论。
+
+## 2026-10-31 本地通用能力模型工具链复查
+
+- 对照原版 RemoteTriggerTool（模型工具）的五种动作，查出此前 Rust 仅注册 CLI/REPL 的入口断链；新增 `LocalTrigger` 通用模型工具定义，连通模型函数调用、权限校验、持久化及返回结果。拒绝周期计划和远程任务字段，用户未明确要求时不启用后台 Agent。
+- 修复任务数据 `get/list` 可经符号链接访问其他工作区的越界问题，统一读写目录检查并增加回归测试。
+- 现有高级审查/规划与本地附件通过初步调用链审计；仍存在 UltraPlan 多阶段状态/草稿、SDK 关键词路由等明确缺口。7 条恢复的源文件均继续标记部分实现。
+- 新增真实模拟模型多轮工具调用测试和权限拒绝、越界测试；完整验收以最新 GitHub Actions HEAD 运行状态为准。保留 1,906 原始路径、192 排除和 1,714 待等价对齐范围。
+
+## 2026-10-31：PR6 审查问题按原版调用边界与模型协议修复
+
+- 原版依据：用户提供的 2.1.88 源码包，`bridge/inboundAttachments.ts` 将附件转为文件引用后交给 Read；`tools/FileReadTool/FileReadTool.ts::checkPermissions/validateInput` 在读盘前执行权限；`services/api/claude.ts` 在 `content_block_stop` 形成完整消息，`query.ts` 才把工具交给 `StreamingToolExecutor.addTool`；Bash 的 `readOnlyValidation.ts` 对只读命令做参数校验。
+- SDK 本地附件：接入当前 Agent 的统一 Read deny/ask 和真实路径规则；失败发生在读取附件及发送用户消息前，保留文本/图片块顺序。远程 Bridge 仍排除。
+- OpenAI-compatible 流：按 index 收集交错参数，收到协议完成标记后按原顺序交付工具；截断、拒绝不启动工具。该协议没有原版 `content_block_stop`，不能把 index 变化冒充块结束；保留流式文本、并发工具、一次性结果和 SDK 中断清理，原版精确中途执行时序仍有协议差异，不提升原路径验收状态。
+- Gemini：这是多模型适配，依据 Google REST thought-signatures 文档，原始签名与 part 边界作为供应商私有状态随会话保存、工具续写、重启恢复原样回放；思考片段不进入用户答案，跨提供商切换时不转发私有状态。非流式与流式共用保存/回放格式。
+- 本地高级审查：只读模式允许固定 argv 的 `gh pr view [PR]` / `gh pr diff [PR]`，沿用显式 deny/ask、超时及取消清理；不允许 Shell 展开、重定向、额外参数、后台执行或写文件。完整原版 Bash 只读命令集合仍待迁移。
+- 回归：`tests/pr6_review_regressions.rs` 先在修复前实际复现四项失败，修复后覆盖附件拒绝、交错参数、签名流/非流与会话恢复、PR 实际查询及权限限制；相邻流式中断测试继续验证进程存活期间取消 Hook。所有正式门禁以本次修复最终提交的真实运行结果为准。
+- 范围不变：1,906 条原路径，192 条排除，38 条已验收；不将本次缺陷修复扩大为全产品或完整源文件等价。
+
 > **2026-10-31 本地触发器范围补充：** RemoteTriggerTool 3 条源码路径恢复本地通用能力，当前原始 1,906 条中排除 **192 条**（既有 22 + 170），纳入对齐 **1,714 条**；该三条与此前高级审查/规划四条均暂列部分实现，完成等价验收后才能调整状态。
 
 > **2026-10-31 恢复更新（优先于历史统计）：** 由原排除 199 条中恢复 4 条本地通用高级审查/规划源路径，目前排除 **195 条**（既有 22 + 本次剩余 173）、非排除 **1,711 条**。恢复项处于部分实现、必须对照原始源码验收。远程控制、原厂云端服务与专属配额仍排除。

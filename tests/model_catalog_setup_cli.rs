@@ -10,6 +10,9 @@ use std::{
 };
 
 fn receive(stream: &mut std::net::TcpStream) -> (String, Value) {
+    // A nonblocking listener can yield nonblocking accepted streams on
+    // Windows. Request parsing needs a blocking stream with read timeout.
+    stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(20)))
         .unwrap();

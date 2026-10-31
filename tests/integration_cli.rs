@@ -6675,7 +6675,7 @@ fn sdk_remote_attachments_are_rejected_before_any_network_request() {
 }
 
 #[test]
-fn sdk_slash_skill_with_trailing_image_and_local_attachment_reaches_model_intact() {
+fn sdk_trailing_image_keeps_earlier_slash_literal_and_attachment_intact() {
     let workspace = tempfile::tempdir().unwrap();
     let skill = workspace.path().join(".atlas/skills/image_audit");
     fs::create_dir_all(&skill).unwrap();
@@ -6739,7 +6739,8 @@ fn sdk_slash_skill_with_trailing_image_and_local_attachment_reaches_model_intact
     assert!(wire.contains("skill and attachment accepted"), "{wire}");
     let request = received.join().unwrap();
     assert!(
-        request.contains("Inspect this skill request: inspect"),
+        request.contains("/image_audit inspect")
+            && !request.contains("Inspect this skill request: inspect"),
         "{request}"
     );
     assert!(request.contains("local reference text"), "{request}");
@@ -6821,8 +6822,8 @@ fn local_advanced_commands_reject_invalid_goals_before_model_calls() {
         .env("ATLAS_CONFIG", &config)
         .output()
         .unwrap();
-    assert!(!plan.status.success());
-    assert!(String::from_utf8_lossy(&plan.stderr).contains("non-empty objective"));
+    assert!(plan.status.success());
+    assert!(String::from_utf8_lossy(&plan.stdout).contains("Usage: /ultraplan GOAL"));
     let review = binary()
         .args([
             "--workspace",
@@ -6834,6 +6835,129 @@ fn local_advanced_commands_reject_invalid_goals_before_model_calls() {
         .output()
         .unwrap();
     assert!(!review.status.success());
+}
+
+#[test]
+fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("audit-note.txt"),
+        "VERIFIED_LOCAL_TASK_EXECUTION",
+    )
+    .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let request_log = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..5 {
+            let mut stream = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut stream);
+            let body = match step {
+                0 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"create-task","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                          "action":"create","trigger_id":"model_review",
+                          "body":{"prompt":"Inspect local project files"}
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                1 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"get-task","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                          "action":"get","trigger_id":"model_review"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                2 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"run-task","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                          "action":"run","trigger_id":"model_review"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                3 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"read-task-target","type":"function","function":{
+                        "name":"Read","arguments":json!({
+                          "file_path":"audit-note.txt"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                _ => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Confirmed saved local task was executed in current Agent turn"},
+                    "finish_reason":"stop"}]}),
+            }
+            .to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            stream.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let output = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "run",
+            "Create a reusable local task then inspect it",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let display = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        display.contains("LocalTrigger create model_review"),
+        "{display}"
+    );
+    assert!(display.contains("HTTP 201 (1 lines)"), "{display}");
+    assert!(
+        display.contains("LocalTrigger run model_review"),
+        "{display}"
+    );
+    let requests = request_log.join().unwrap();
+    assert_eq!(requests.len(), 5);
+    assert!(requests[0].contains("LocalTrigger"), "{}", requests[0]);
+    assert!(
+        requests[1].contains("HTTP 201") && requests[1].contains("model_review"),
+        "{}",
+        requests[1]
+    );
+    assert!(
+        requests[2].contains("Inspect local project files"),
+        "{}",
+        requests[2]
+    );
+    assert!(
+        requests[3].contains("current-agent-turn"),
+        "{}",
+        requests[3]
+    );
+    assert!(
+        requests[4].contains("VERIFIED_LOCAL_TASK_EXECUTION"),
+        "{}",
+        requests[4]
+    );
+    let stored = fs::read_to_string(root.path().join(".atlas/local-triggers/tasks.json")).unwrap();
+    assert!(stored.contains("Inspect local project files"));
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("Confirmed saved local task was executed"));
+    assert!(!root
+        .path()
+        .join(".atlas/local-triggers/schedules.json")
+        .exists());
 }
 
 #[test]
@@ -6933,17 +7057,21 @@ fn local_advanced_plan_uses_current_api_and_keeps_plan_permission() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
     let received = thread::spawn(move || {
-        let mut connection = accept_before(&listener, Duration::from_secs(15));
-        let request = read_request(&mut connection);
-        let body = json!({"choices":[{"message":{
-            "role":"assistant","content":"plan generated"},
-            "finish_reason":"stop"}]})
-        .to_string();
-        write!(connection,
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-            body.len(), body).unwrap();
-        connection.flush().unwrap();
-        request
+        let mut requests = Vec::new();
+        for _ in 0..3 {
+            let mut connection = accept_before(&listener, Duration::from_secs(15));
+            let request = read_request(&mut connection);
+            let body = json!({"choices":[{"message":{
+                "role":"assistant","content":"plan generated"},
+                "finish_reason":"stop"}]})
+            .to_string();
+            write!(connection,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(), body).unwrap();
+            connection.flush().unwrap();
+            requests.push(request);
+        }
+        requests
     });
     fs::write(
         &config,
@@ -6973,9 +7101,20 @@ fn local_advanced_plan_uses_current_api_and_keeps_plan_permission() {
     assert!(String::from_utf8(output.stdout)
         .unwrap()
         .contains("plan generated"));
-    let request = received.join().unwrap();
-    assert!(request.contains("Check local workflows"), "{request}");
-    assert!(request.contains("read-only/plan permissions"), "{request}");
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert!(
+        requests[0].contains("Check local workflows"),
+        "{}",
+        requests[0]
+    );
+    assert!(
+        requests[0].contains("read-only/plan permissions"),
+        "{}",
+        requests[0]
+    );
+    assert!(requests[1].contains("Second pass"));
+    assert!(requests[2].contains("Final pass"));
 }
 
 #[test]
@@ -7033,4 +7172,491 @@ fn local_marketplace_cli_add_install_list_and_remove_are_durable() {
         .path()
         .join(".atlas/plugins/reviewer/plugin.json")
         .is_file());
+}
+
+#[test]
+fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("note.txt"), "private local note").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..7 {
+            let mut stream = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut stream);
+            let response = json!({"choices":[{"message":{"role":"assistant",
+                "content":if step < 3 {"plan accepted"} else {"plain text accepted"}},
+                "finish_reason":"stop"}]})
+            .to_string();
+            write!(stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(), response).unwrap();
+            stream.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"vision",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user","content":"/ultrareview 0"})
+        )
+        .unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user","uuid":uuid::Uuid::new_v4().to_string(),
+                "content":[{"type":"text","text":"visual reference"},
+                    {"type":"image","source":{"type":"base64",
+                        "media_type":"image/jpeg","data":"/9j/AA=="}},
+                    {"type":"text","text":"/ultraplan repair local UI"}],
+                "file_attachments":[{"path":"note.txt"}],
+                "seedPlan":"Existing approved plan should be refined"
+            })
+        )
+        .unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"/ultraplan literal message, do not expand",
+            "skipSlashCommands":true})
+        )
+        .unwrap();
+        for prompt in [
+            "please ultraplan this is an ordinary SDK message",
+            "please ultrareview this is an ordinary SDK message",
+        ] {
+            writeln!(input, "{}", json!({"type":"user","content":prompt})).unwrap();
+        }
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user","content":[
+                {"type":"text","text":"/ultraplan mentioned in earlier block"},
+                {"type":"image","source":{"type":"base64",
+                    "media_type":"image/jpeg","data":"/9j/AA=="}}
+            ]})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    let wire = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let events: Vec<Value> = wire
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert!(
+        events.iter().any(|e| e["type"] == "error"
+            && e["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("/ultrareview expects")),
+        "{wire}"
+    );
+    assert_eq!(
+        events.iter().filter(|e| e["type"] == "result").count(),
+        5,
+        "{wire}"
+    );
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(), 7);
+    let first: Value = serde_json::from_str(requests[0].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    let first_user = first["messages"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()
+        .to_string();
+    assert!(first_user.contains("repair local UI"), "{first_user}");
+    assert!(
+        first_user.contains("Existing approved plan should be refined"),
+        "{first_user}"
+    );
+    assert!(
+        first_user.contains("detailed implementation plan"),
+        "{first_user}"
+    );
+    assert!(
+        first_user.contains("data:image/jpeg;base64,/9j/AA=="),
+        "{first_user}"
+    );
+    assert!(first_user.contains("private local note"), "{first_user}");
+    assert!(requests[1].contains("Second pass"), "{}", requests[1]);
+    assert!(requests[2].contains("Final pass"), "{}", requests[2]);
+    assert!(events
+        .iter()
+        .any(|e| e["type"] == "workflow" && e["phase"] == "ready" && e["workflow"] == "ultraplan"));
+    assert!(events.iter().any(|e| e["type"] == "workflow"
+        && e["phase"] == "verifying"
+        && e["workflow"] == "ultraplan"));
+    let second: Value =
+        serde_json::from_str(requests[3].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    let second_user = second["messages"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()
+        .to_string();
+    assert!(
+        second_user.contains("/ultraplan literal message, do not expand"),
+        "{second_user}"
+    );
+    assert!(
+        !second_user.contains("detailed implementation plan"),
+        "{second_user}"
+    );
+    let last_user = |index: usize| -> Value {
+        let v: Value =
+            serde_json::from_str(requests[index].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        v["messages"].as_array().unwrap().last().unwrap().clone()
+    };
+    assert!(last_user(4)
+        .to_string()
+        .contains("please ultraplan this is an ordinary SDK message"));
+    assert!(last_user(5)
+        .to_string()
+        .contains("please ultrareview this is an ordinary SDK message"));
+    assert!(last_user(6)
+        .to_string()
+        .contains("/ultraplan mentioned in earlier block"));
+    assert!(last_user(6)
+        .to_string()
+        .contains("data:image/jpeg;base64,/9j/AA=="));
+}
+
+#[test]
+fn sdk_advanced_phases_block_write_then_restore_original_mode() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..6 {
+            let mut stream = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut stream);
+            let response = match step {
+                0 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"blocked-plan-write","type":"function","function":{
+                        "name":"Write","arguments":json!({
+                          "file_path":"forbidden-plan-write.txt","content":"MUST_NOT_WRITE"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                1 => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Plan draft after denied edit"},"finish_reason":"stop"}]}),
+                2 => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Verified read-only draft"},"finish_reason":"stop"}]}),
+                3 => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Final plan ready"},"finish_reason":"stop"}]}),
+                4 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"allowed-normal-write","type":"function","function":{
+                        "name":"Write","arguments":json!({
+                          "file_path":"normal-after-plan.txt","content":"RESTORED"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                _ => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Normal write completed"},"finish_reason":"stop"}]}),
+            }
+            .to_string();
+            write!(stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(), response).unwrap();
+            stream.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"/ultraplan audit permissions"})
+        )
+        .unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"Now perform a normal write"})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let wire = String::from_utf8(output.stdout).unwrap();
+    let events: Vec<Value> = wire
+        .lines()
+        .map(|s| serde_json::from_str(s).unwrap())
+        .collect();
+    assert_eq!(
+        events.iter().filter(|e| e["type"] == "result").count(),
+        2,
+        "{wire}"
+    );
+    assert!(events
+        .iter()
+        .any(|e| e["type"] == "workflow" && e["phase"] == "ready" && e["workflow"] == "ultraplan"));
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 6);
+    assert!(requests[1].contains("ERROR:"), "{}", requests[1]);
+    assert!(!root.path().join("forbidden-plan-write.txt").exists());
+    assert_eq!(
+        fs::read_to_string(root.path().join("normal-after-plan.txt")).unwrap(),
+        "RESTORED"
+    );
+}
+
+#[test]
+fn sdk_local_trigger_body_only_create_emits_source_like_ui_metadata() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..2 {
+            let mut conn = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut conn);
+            let reply = if step == 0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"body-only-create","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                            "action":"create","body":{"prompt":"Check my local repository"}
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Saved locally"},"finish_reason":"stop"}]})
+            }
+            .to_string();
+            write!(conn,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                reply.len(), reply).unwrap();
+            conn.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"Save a reusable local task"})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let records: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(
+        records
+            .iter()
+            .any(|e| e["tool_use_display"][0]["display"] == "create"),
+        "{records:?}"
+    );
+    assert!(
+        records
+            .iter()
+            .any(|e| e["type"] == "tool_result" && e["display"] == "HTTP 201 (1 lines)"),
+        "{records:?}"
+    );
+    assert!(records
+        .iter()
+        .any(|e| e["type"] == "result" && e["content"] == "Saved locally"));
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1].contains("HTTP 201"), "{}", requests[1]);
+    assert!(requests[1].contains("trigger_id"), "{}", requests[1]);
+    let store = fs::read_to_string(root.path().join(".atlas/local-triggers/tasks.json")).unwrap();
+    assert!(store.contains("Check my local repository"));
+}
+
+#[test]
+fn sdk_ultrareview_branch_executes_three_verified_local_rounds() {
+    let root = tempfile::tempdir().unwrap();
+    let init = Command::new("git")
+        .arg("-C")
+        .arg(root.path())
+        .args(["init", "-q"])
+        .status()
+        .unwrap();
+    assert!(init.success());
+    fs::write(root.path().join("review-target.rs"), "pub fn target() {}\n").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..3 {
+            let mut conn = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut conn);
+            let reply = json!({"choices":[{"message":{"role":"assistant",
+                "content":format!("Review phase {} verified",step+1)},
+                "finish_reason":"stop"}]})
+            .to_string();
+            write!(conn,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                reply.len(), reply).unwrap();
+            conn.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"/ultrareview examine the local branch"})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let events: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(events.iter().filter(|e| e["type"] == "result").count(), 1);
+    assert!(events.iter().any(|e| e["type"] == "workflow"
+        && e["phase"] == "ready"
+        && e["workflow"] == "ultrareview"));
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert!(requests[0].contains("review-target.rs"), "{}", requests[0]);
+    assert!(
+        requests[0].contains("examine the local branch"),
+        "{}",
+        requests[0]
+    );
+    assert!(requests[1].contains("Second pass"), "{}", requests[1]);
+    assert!(requests[2].contains("Final pass"), "{}", requests[2]);
+    assert_eq!(
+        fs::read_to_string(root.path().join("review-target.rs")).unwrap(),
+        "pub fn target() {}\n"
+    );
 }

@@ -705,6 +705,9 @@ impl ToolExecutor {
         } else if crate::task_graph::handles(&call.function.name) {
             crate::task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
                 .with_context(|| format!("Invalid {} arguments", call.function.name))?;
+        } else if name == "LocalTrigger" {
+            crate::local_triggers::validate_model_input(&value)
+                .context("Invalid LocalTrigger input")?;
         } else if matches!(name, "task_stop" | "KillShell") {
             self.validate_task_stop(&value)
                 .context("Invalid TaskStop arguments")?;
@@ -810,6 +813,9 @@ impl ToolExecutor {
         crate::semantic_inputs::normalize_source_file_tool(&call.function.name, &mut args)?;
         crate::semantic_inputs::normalize_tool_fields(name, &mut args)?;
         match name {
+            "LocalTrigger" => crate::local_triggers::model_call(&self.root, &args, || {
+                self.require_approval("LocalTrigger", &args)
+            }),
             "read_file" => self.read_file_with_mode(&args, call.function.name == "Read"),
             "notebook_edit" => {
                 self.require_approval("notebook_edit", &args)?;
@@ -1232,26 +1238,23 @@ impl ToolExecutor {
     /// symlinked directories must not bypass a denied path pattern.
     fn file_rule_paths(&self, requested: &str) -> Result<Vec<String>> {
         let path = self.checked_path(requested)?;
-        let mut ancestor = path.as_path();
-        while !ancestor.exists() {
-            ancestor = ancestor
-                .parent()
-                .context("File path has no existing ancestor")?;
-        }
-        let resolved = ancestor.canonicalize()?.join(path.strip_prefix(ancestor)?);
-        let mut paths = vec![
-            requested.to_owned(),
-            path.to_string_lossy().into_owned(),
-            resolved.to_string_lossy().into_owned(),
-        ];
-        for candidate in [&path, &resolved] {
+        Ok(self.rule_paths_for(requested, &path))
+    }
+
+    fn rule_paths_for(&self, requested: &str, path: &Path) -> Vec<String> {
+        let candidates = crate::fs_operations::permission_paths(path);
+        let mut paths = vec![requested.to_owned()];
+        for candidate in &candidates {
+            paths.push(candidate.to_string_lossy().into_owned());
             for root in std::iter::once(&self.root).chain(self.extra_roots.iter()) {
                 if let Ok(relative) = candidate.strip_prefix(root) {
                     paths.push(relative.to_string_lossy().into_owned());
                 }
             }
         }
-        Ok(paths)
+        paths.sort();
+        paths.dedup();
+        paths
     }
 
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
@@ -1307,14 +1310,30 @@ impl ToolExecutor {
         if matched == Some(permission_rules::Behavior::Deny) {
             bail!("Tool {tool} denied by explicit permission rule");
         }
-        if self.approval == Approval::ReadOnly {
-            bail!("Tool {tool} denied in read-only mode");
-        }
-        // Plan mode forbids mutations. In don't-ask mode, explicit allow
-        // rules still work: only decisions that would ask are denied.
-        // Original permissions.ts hasPermissionsToUseTool (lines 480-516).
-        if self.mode == Some(permission_mode::Mode::Plan) {
-            bail!("Tool {tool} denied by permission mode");
+        if self.approval == Approval::ReadOnly || self.mode == Some(permission_mode::Mode::Plan) {
+            // Source BashTool/readOnlyValidation.ts validates read-only
+            // queries instead of rejecting every shell tool. Keep this
+            // local PR adaptation limited to fixed gh argv; no shell syntax,
+            // templates, output files or mutations are authorized here.
+            let query = (crate::tool_names::canonical_name(tool) == "run_command"
+                || tool == "PowerShell")
+                && args
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .and_then(crate::shell_runtime::read_only_pr_args)
+                    .is_some()
+                && args.get("run_in_background").and_then(Value::as_bool) != Some(true);
+            if !query {
+                if self.approval == Approval::ReadOnly {
+                    bail!("Tool {tool} denied in read-only mode");
+                }
+                bail!("Tool {tool} denied by permission mode");
+            }
+            // Explicit ask rules still require the normal prompt below;
+            // explicit deny rules have already been applied above.
+            if matched != Some(permission_rules::Behavior::Ask) {
+                return Ok(());
+            }
         }
         if matched == Some(permission_rules::Behavior::Allow) {
             return Ok(());
@@ -1378,19 +1397,7 @@ impl ToolExecutor {
         requested: &str,
         path: &Path,
     ) -> Result<Option<permission_rules::Behavior>> {
-        let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        let mut paths = vec![
-            requested.to_owned(),
-            path.to_string_lossy().into_owned(),
-            resolved.to_string_lossy().into_owned(),
-        ];
-        for candidate in [path, &resolved] {
-            for root in std::iter::once(&self.root).chain(self.extra_roots.iter()) {
-                if let Ok(relative) = candidate.strip_prefix(root) {
-                    paths.push(relative.to_string_lossy().into_owned());
-                }
-            }
-        }
+        let paths = self.rule_paths_for(requested, path);
         permission_rules::policy_for(
             &self.permission_rules,
             "read_file",
@@ -1415,7 +1422,7 @@ impl ToolExecutor {
         ))
     }
 
-    fn require_read_rules(&self, requested: &str, path: &Path) -> Result<()> {
+    pub(crate) fn require_read_rules(&self, requested: &str, path: &Path) -> Result<()> {
         match self.read_rule_decision(requested, path)? {
             Some(permission_rules::Behavior::Deny) => {
                 bail!("Read denied by explicit permission rule: {requested}")
@@ -2035,9 +2042,27 @@ impl ToolExecutor {
     ) -> Result<String> {
         let command = required(args, "command")?;
         let timeout_ms = Self::shell_timeout_ms(args)?;
-        let mut proc = kind.build_command(command)?;
+        let pr_args = if self.approval == Approval::ReadOnly
+            || self.mode == Some(permission_mode::Mode::Plan)
+        {
+            crate::shell_runtime::read_only_pr_args(command)
+        } else {
+            None
+        };
+        let read_only_query = pr_args.is_some();
+        let mut proc = if let Some(args) = pr_args {
+            let mut proc = tokio::process::Command::new("gh");
+            proc.args(args);
+            proc
+        } else {
+            kind.build_command(command)?
+        };
         proc.envs(&self.session_env);
         crate::subprocess_env::apply(&mut proc);
+        if read_only_query {
+            // Enforce this after applying session environment overrides.
+            proc.env("GH_PAGER", "cat").env("PAGER", "cat");
+        }
         // The original ShellCommand uses tree-kill on timeout and abort.
         // A dropped shell process alone leaves descendants alive, possibly
         // holding stdout/stderr pipes and continuing unauthorized side effects.
@@ -2348,6 +2373,7 @@ pub fn definitions() -> Vec<Value> {
                 "run_in_background":{"type":"boolean"},"description":{"type":"string"}
             },"required":["command"]}}}),
     ];
+    tools.push(crate::local_triggers::model_definition());
     tools.push(notebook::definition());
     tools.extend(search::definitions());
     tools.push(webfetch::definition());
@@ -2374,6 +2400,55 @@ pub fn definitions_with_checkpointing(enabled: bool) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn local_trigger_tool_dispatch_requires_permission_and_returns_real_saved_task() {
+        let root = tempfile::tempdir().unwrap();
+        let runner = executor(root.path(), Approval::Full);
+        let payload = json!({"action":"create","trigger_id":"check","body":{"prompt":"Inspect the workspace"}});
+        let call = ToolCall {
+            id: "local-create".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(),
+                arguments: payload.to_string(),
+            },
+        };
+        assert!(crate::local_triggers::model_definition()["function"]["name"] == "LocalTrigger");
+        runner.validate_call_before_hooks(&call).unwrap();
+        let output = runner.execute(&call).await;
+        assert!(output.starts_with("HTTP 201\n"), "{output}");
+        assert_eq!(
+            crate::local_triggers::get(root.path(), "check").unwrap(),
+            "Inspect the workspace"
+        );
+        let run = ToolCall {
+            id: "local-run".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(),
+                arguments: json!({"action":"run","trigger_id":"check"}).to_string(),
+            },
+        };
+        let result = runner.execute(&run).await;
+        assert!(result.contains("current-agent-turn"), "{result}");
+        let denied = executor(root.path(), Approval::ReadOnly)
+            .execute(&run)
+            .await;
+        assert!(denied.starts_with("ERROR:"), "{denied}");
+        let invalid = ToolCall {
+            id: "bad-schedule".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(),
+                arguments: json!({"action":"create","trigger_id":"bad",
+                   "body":{"prompt":"run tomorrow","schedule":"daily"}})
+                .to_string(),
+            },
+        };
+        assert!(runner.validate_call_before_hooks(&invalid).is_err());
+        assert!(crate::local_triggers::get(root.path(), "bad").is_err());
+    }
+
     use crate::protocol::FunctionCall;
 
     fn executor(root: &Path, approval: Approval) -> ToolExecutor {
@@ -3312,6 +3387,64 @@ mod tests {
         assert!(result.contains("read-only mode"), "{result}");
     }
 
+    #[test]
+    fn read_only_pr_queries_keep_argv_and_permission_boundaries_on_all_platforms() {
+        let root = tempfile::tempdir().unwrap();
+        for ceiling in [Approval::Full, Approval::ReadOnly] {
+            let tool = executor(root.path(), ceiling)
+                .with_permission_mode(permission_mode::Mode::Plan)
+                .with_permission_rules(vec![permission_rules::Rule {
+                    behavior: permission_rules::Behavior::Allow,
+                    value: permission_rules::parse_rule("Bash"),
+                }]);
+            for command in ["gh pr view 6", "gh pr diff 6", "gh pr view", "gh pr diff"] {
+                assert!(tool
+                    .require_approval("run_command", &json!({"command":command}))
+                    .is_ok());
+            }
+            for command in [
+                "gh pr edit 6",
+                "gh pr checkout 6",
+                "gh pr view 6 --web",
+                "gh pr diff 6 > output",
+                "gh pr diff 6 --output output",
+                "gh pr diff 6; touch output",
+                "gh pr diff 6\ntouch output",
+                "gh pr diff $(touch output)",
+                "gh pr diff 0",
+                "gh pr diff -1",
+            ] {
+                assert!(
+                    tool.require_approval("run_command", &json!({"command":command}))
+                        .is_err(),
+                    "{command}"
+                );
+            }
+            assert!(tool
+                .require_approval(
+                    "run_command",
+                    &json!({
+                        "command":"gh pr diff 6","run_in_background":true
+                    })
+                )
+                .is_err());
+            for behavior in [
+                permission_rules::Behavior::Deny,
+                permission_rules::Behavior::Ask,
+            ] {
+                let restricted = executor(root.path(), ceiling)
+                    .with_permission_mode(permission_mode::Mode::Plan)
+                    .with_permission_rules(vec![permission_rules::Rule {
+                        behavior,
+                        value: permission_rules::parse_rule("Bash"),
+                    }]);
+                assert!(restricted
+                    .require_approval("run_command", &json!({"command":"gh pr diff 6"}))
+                    .is_err());
+            }
+        }
+    }
+
     #[tokio::test]
     async fn dont_ask_respects_explicit_allow_but_denies_implicit_and_ask() {
         // Source: permissions.ts::hasPermissionsToUseTool, 480-516.
@@ -3473,6 +3606,40 @@ mod tests {
                 })
             )
             .is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn intermediate_symlink_targets_obey_read_and_write_deny_rules() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("public.txt"), "secret").unwrap();
+        symlink("public.txt", root.path().join("denied.txt")).unwrap();
+        symlink("denied.txt", root.path().join("alias.txt")).unwrap();
+        let rules = permission_rules::compile_rules(&[
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "Read(denied.txt)".into(),
+            },
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "Write(denied.txt)".into(),
+            },
+        ])
+        .unwrap();
+        let tool = executor(root.path(), Approval::Full).with_permission_rules(rules);
+        let path = tool.checked_path("alias.txt").unwrap();
+        assert!(tool.require_read_rules("alias.txt", &path).is_err());
+        assert!(tool
+            .require_approval(
+                "write_file",
+                &json!({"path":"alias.txt","content":"replace"})
+            )
+            .is_err());
+        assert_eq!(
+            fs::read_to_string(root.path().join("public.txt")).unwrap(),
+            "secret"
+        );
     }
 
     #[tokio::test]

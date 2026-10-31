@@ -9,7 +9,7 @@ use crate::{
     in_memory_mailbox,
     lsp::LspManager,
     mcp::McpManager,
-    memory, permission_mode, permission_rules,
+    memory, memory_extraction, permission_mode, permission_rules,
     protocol::ToolCall,
     protocol::{Message, ModelRequest, TokenUsage},
     provider::{self, ModelProvider},
@@ -23,7 +23,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use futures::stream::StreamExt;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     fs,
@@ -2112,8 +2112,81 @@ impl Agent {
         self.structured_output = enabled;
     }
 
-    fn emit(&self, event: serde_json::Value) {
+    fn emit(&self, mut event: serde_json::Value) {
+        // The original tool UI displays action/id and HTTP status/line count
+        // in interactive mode. SDK clients receive the same display fields.
+        if !self.structured_output {
+            if event.get("type").and_then(serde_json::Value::as_str) == Some("assistant") {
+                if let Some(calls) = event
+                    .pointer("/message/tool_calls")
+                    .and_then(serde_json::Value::as_array)
+                {
+                    for call in calls {
+                        if call
+                            .pointer("/function/name")
+                            .and_then(serde_json::Value::as_str)
+                            == Some("LocalTrigger")
+                        {
+                            if let Some(args) = call
+                                .pointer("/function/arguments")
+                                .and_then(serde_json::Value::as_str)
+                            {
+                                if let Ok(input) = serde_json::from_str(args) {
+                                    eprintln!(
+                                        "LocalTrigger {}",
+                                        crate::local_triggers::render_tool_use_message(&input)
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if event.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
+                && event.get("name").and_then(serde_json::Value::as_str) == Some("LocalTrigger")
+            {
+                if let Some(content) = event.get("content").and_then(serde_json::Value::as_str) {
+                    eprintln!(
+                        "{}",
+                        crate::local_triggers::render_tool_result_message(content)
+                    );
+                }
+            }
+            return;
+        }
         if self.structured_output {
+            if event.get("type").and_then(serde_json::Value::as_str) == Some("assistant") {
+                if let Some(calls) = event
+                    .pointer("/message/tool_calls")
+                    .and_then(serde_json::Value::as_array)
+                {
+                    let labels = calls
+                        .iter()
+                        .filter(|call| {
+                            call.pointer("/function/name")
+                                .and_then(serde_json::Value::as_str)
+                                == Some("LocalTrigger")
+                        })
+                        .filter_map(|call| {
+                            let id = call.get("id")?.as_str()?;
+                            let args = call.pointer("/function/arguments")?.as_str()?;
+                            let input: serde_json::Value = serde_json::from_str(args).ok()?;
+                            Some(json!({"tool_use_id":id,
+                                "display":crate::local_triggers::render_tool_use_message(&input)}))
+                        })
+                        .collect::<Vec<_>>();
+                    if !labels.is_empty() {
+                        event["tool_use_display"] = json!(labels);
+                    }
+                }
+            }
+            if event.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
+                && event.get("name").and_then(serde_json::Value::as_str) == Some("LocalTrigger")
+            {
+                if let Some(content) = event.get("content").and_then(serde_json::Value::as_str) {
+                    let display = crate::local_triggers::render_tool_result_message(content);
+                    event["display"] = json!(display);
+                }
+            }
             println!("{}", crate::ndjson::stringify_value(&event));
         }
     }
@@ -3011,6 +3084,16 @@ impl Agent {
         executor.list_skills()
     }
 
+    pub fn attach_local_files(&self, content: &Value, files: Option<&Value>) -> Result<Value> {
+        let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+            .with_permission_rules(self.permission_rules.clone())
+            .with_extra_roots(self.additional_dirs.clone())
+            .with_permission_mode(self.permission_mode);
+        crate::local_attachments::attach(&self.root, content, files, |raw, path| {
+            executor.require_read_rules(raw, path)
+        })
+    }
+
     pub fn list_user_skills(&self) -> Result<String> {
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_plugins(self.enabled_plugins.clone())
@@ -3665,16 +3748,21 @@ impl Agent {
         }
         let previous = self.session.summary.as_deref().unwrap_or("");
         let mut prompt = crate::prompt_runtime::compact_prompt(previous);
-        if let Some(custom) = custom_instructions {
-            prompt.push_str("\n\n[User's compaction instructions]\n");
-            prompt.push_str(custom);
+        // 2.1.88 mergeHookInstructions puts explicit user guidance first,
+        // then successful PreCompact hook context, under one source-defined
+        // Additional Instructions section (before the final tool ban).
+        let mut additional_instructions = Vec::new();
+        if let Some(custom) = custom_instructions.filter(|text| !text.trim().is_empty()) {
+            additional_instructions.push(custom.to_owned());
         }
-        // 2.1.88 executePreCompactHooks merges successful hook stdout as
-        // custom compaction instructions, respecting auto/manual matchers.
         if !before.additional_context.is_empty() {
-            prompt.push_str("\n\n[Additional PreCompact hook instructions]\n");
-            prompt.push_str(&before.additional_context.join("\n\n"));
+            additional_instructions.push(before.additional_context.join("\n\n"));
         }
+        if !additional_instructions.is_empty() {
+            prompt.push_str("\n\nAdditional Instructions:\n");
+            prompt.push_str(&additional_instructions.join("\n\n"));
+        }
+        prompt.push_str(crate::compact_source_prompts::NO_TOOLS_TRAILER);
         // The original stripImagesFromMessages removes binary payloads only
         // from the summarization request, never from saved conversation data.
         let mut history = self.session.messages.clone();
@@ -3789,7 +3877,8 @@ impl Agent {
             self.session.save(&self.root)?;
             bail!("Compaction model unexpectedly requested tools");
         }
-        let summary = response.message.visible_text();
+        let raw_summary = response.message.visible_text();
+        let summary = crate::prompt_runtime::compact_summary_content(&raw_summary).to_owned();
         if summary.trim().is_empty() {
             self.session.save(&self.root)?;
             bail!("Compaction returned empty text")
@@ -3801,6 +3890,7 @@ impl Agent {
         let mut candidate = self.session.clone();
         candidate.summary = Some(summary);
         candidate.messages.clear();
+        candidate.memory_extraction_cursor = 0;
         candidate.surfaced_memories.clear();
         candidate.surfaced_memory_units = 0;
         candidate.save(&self.root)?;
@@ -4093,6 +4183,18 @@ impl Agent {
     /// user's persisted permission setting. The guard restores the prior
     /// mode even if the future is cancelled or the provider fails.
     pub async fn ask_in_plan_mode(&mut self, prompt: &str) -> Result<String> {
+        self.ask_with_blocks_in_plan_mode(prompt, None, None).await
+    }
+
+    /// SDK advanced review/planning must keep image blocks and the original
+    /// user-message identity while restricting this single request to plan
+    /// permissions. Cancellation drops the guard and restores the caller mode.
+    pub async fn ask_with_blocks_in_plan_mode(
+        &mut self,
+        prompt: &str,
+        blocks: Option<Vec<serde_json::Value>>,
+        message_id: Option<uuid::Uuid>,
+    ) -> Result<String> {
         struct RestoreMode<'a> {
             agent: &'a mut Agent,
             previous: permission_mode::Mode,
@@ -4108,7 +4210,77 @@ impl Agent {
             previous,
         };
         guard.agent.permission_mode = permission_mode::Mode::Plan;
-        guard.agent.ask(prompt).await
+        guard
+            .agent
+            .ask_with_blocks_for_message(prompt, blocks, message_id)
+            .await
+    }
+
+    /// Three evidence-driven passes on the current Agent and selected model.
+    /// All phases use the same session and temporary read-only plan mode.
+    /// The first phase retains SDK images and user UUID; subsequent turns
+    /// review that same session's draft without duplicating attachments.
+    pub async fn run_advanced_with_blocks(
+        &mut self,
+        kind: crate::local_advanced_workflows::Kind,
+        prompt: &str,
+        blocks: Option<Vec<serde_json::Value>>,
+        message_id: Option<uuid::Uuid>,
+    ) -> Result<String> {
+        let workflow = kind.as_str();
+        self.emit(json!({
+            "type":"workflow","workflow":workflow,
+            "phase":"starting","session_id":self.session.id
+        }));
+        let phases = [
+            ("drafting", Some(prompt)),
+            ("verifying", Some(kind.verify_prompt())),
+            ("finalizing", Some(kind.finalize_prompt())),
+        ];
+        let mut first_blocks = blocks;
+        let mut first_id = message_id;
+        let mut answer = String::new();
+        for (phase, instruction) in phases {
+            if !self.structured_output {
+                eprintln!("{workflow}: {phase}");
+            }
+            self.emit(json!({
+                "type":"workflow","workflow":workflow,
+                "phase":phase,"session_id":self.session.id
+            }));
+            let result = self
+                .ask_with_blocks_in_plan_mode(
+                    instruction.context("Advanced workflow phase prompt is missing")?,
+                    first_blocks.take(),
+                    first_id.take(),
+                )
+                .await;
+            match result {
+                Ok(text) => answer = text,
+                Err(error) => {
+                    self.emit(json!({
+                        "type":"workflow","workflow":workflow,
+                        "phase":"failed","session_id":self.session.id,
+                        "message":format!("{error:#}")
+                    }));
+                    return Err(error);
+                }
+            }
+        }
+        self.emit(json!({
+            "type":"workflow","workflow":workflow,
+            "phase":"ready","session_id":self.session.id
+        }));
+        Ok(answer)
+    }
+
+    pub async fn run_advanced(
+        &mut self,
+        kind: crate::local_advanced_workflows::Kind,
+        prompt: &str,
+    ) -> Result<String> {
+        self.run_advanced_with_blocks(kind, prompt, None, None)
+            .await
     }
 
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
@@ -4374,9 +4546,9 @@ impl Agent {
                 system.push_str(&format!("{}\n", dir.display()));
             }
         }
-        if let Some(mcp) = &self.mcp {
-            system.push_str(&mcp.instruction_context());
-        }
+        // MCP instructions are a live snapshot. A server can reconnect,
+        // change its initialization instructions, or be removed between
+        // model steps in this same user turn. Do not freeze them here.
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_session_id(self.session.id.to_string())
             .with_history_message_id(history_message_id)
@@ -4524,6 +4696,12 @@ impl Agent {
             let (visible_tools, deferred_names) =
                 crate::tool_search::visible_catalog(&complete_catalog, &selected_mcp_tools);
             let mut request_system = system.clone();
+            // Refresh the MCP instructions after tool rediscovery, for every
+            // model step. This also revokes instructions from removed servers.
+            // The MCP manager quotes these lower-trust strings as data.
+            if let Some(mcp) = &self.mcp {
+                request_system.push_str(&mcp.instruction_context());
+            }
             if !deferred_names.is_empty() {
                 request_system.push_str("\n<available-deferred-tools>\n");
                 for name in deferred_names {
@@ -4853,6 +5031,58 @@ impl Agent {
                 self.snapshot_output_tokens_for_turn(None);
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
+                // Run only after a successful main-agent Stop. The original
+                // feature is opt-in; no background agent or timer is created.
+                if self.child_depth == 0 && memory_extraction::enabled() {
+                    match memory_extraction::extract(
+                        &self.root,
+                        &self.session.messages,
+                        self.session.memory_extraction_cursor,
+                        &system,
+                        self.provider.as_ref(),
+                        &self.profile,
+                    )
+                    .await
+                    {
+                        Ok(outcome) => {
+                            if let Some(usage) = outcome.usage {
+                                self.record_usage(usage);
+                            }
+                            self.session.memory_extraction_cursor = outcome.cursor;
+                            self.session.save(&self.root)?;
+                            if outcome.files_written > 0 {
+                                self.emit(json!({"type":"memory_saved",
+                                    "count":outcome.files_written,"session_id":self.session.id}));
+                            }
+                        }
+                        Err(error) => {
+                            eprintln!("Optional memory extraction failed: {error:#}");
+                        }
+                    }
+                }
+                if self.child_depth == 0 && memory_extraction::dream_enabled() {
+                    match memory_extraction::dream_if_due(
+                        &self.root,
+                        self.session.id,
+                        self.provider.as_ref(),
+                        &self.profile,
+                    )
+                    .await
+                    {
+                        Ok(Some((count, usage))) => {
+                            if let Some(usage) = usage {
+                                self.record_usage(usage);
+                            }
+                            self.session.save(&self.root)?;
+                            self.emit(json!({"type":"dream_completed",
+                                "count":count,"session_id":self.session.id}));
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            eprintln!("Optional local Dream consolidation failed: {error:#}");
+                        }
+                    }
+                }
                 return Ok(text);
             }
             if !text.trim().is_empty() {
@@ -5309,6 +5539,11 @@ fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<S
     prompt.push_str(
         &crate::conversation_context::project_instructions_with_dirs(root, additional_dirs)?,
     );
+    // Original 2.1.88 action-scope prompt is part of the actual system
+    // request. Rewrite the obsolete vendor-specific instruction path.
+    prompt.push_str("\n");
+    prompt.push_str(crate::prompt_runtime::active_source_sections());
+    prompt.push('\n');
     if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
         let instructions = crate::prompt_runtime::output_style_instructions(root, &style)?;
         prompt.push_str("\nOutput style:\n");
@@ -5343,6 +5578,16 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn original_actions_are_in_live_model_system_prompt() {
+        let root = tempfile::tempdir().unwrap();
+        let system = system_prompt(root.path()).unwrap();
+        assert!(system.contains("# Executing actions with care"));
+        assert!(system.contains("Authorization stands for the scope specified"));
+        assert!(system.contains("AGENTS.md"));
+        assert!(system.contains("AGENTS.md"));
+    }
 
     #[test]
     fn branch_uses_first_multimodal_text_block_and_switches_active_session() {
@@ -5503,8 +5748,14 @@ mod tests {
     impl ModelProvider for SummaryModel {
         async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
             assert!(request.tools.is_empty());
+            assert!(request
+                .system
+                .ends_with(crate::compact_source_prompts::NO_TOOLS_TRAILER));
             Ok(crate::protocol::ModelResponse {
-                message: Message::text("assistant", "Retain verified changes and next steps."),
+                message: Message::text(
+                    "assistant",
+                    "<analysis>internal draft</analysis>\n<summary>Retain verified changes and next steps.</summary>",
+                ),
                 finish_reason: Some("stop".into()),
                 usage: None,
             })
@@ -5592,7 +5843,7 @@ mod tests {
         assert!(restored.messages.is_empty());
         assert_eq!(
             restored.summary.as_deref(),
-            Some("Retain verified changes and next steps.")
+            Some("Summary:\nRetain verified changes and next steps.")
         );
     }
 
@@ -6597,6 +6848,11 @@ done"#;
         .unwrap();
         let before = agent.current_permission_mode();
         assert!(agent.ask_in_plan_mode("").await.is_err());
+        assert_eq!(agent.current_permission_mode(), before);
+        assert!(agent
+            .ask_with_blocks_in_plan_mode("", None, Some(uuid::Uuid::new_v4()))
+            .await
+            .is_err());
         assert_eq!(agent.current_permission_mode(), before);
         // Only the SDK's explicit change-permissions action may persist a
         // different user setting; a local advanced read-only turn must not.

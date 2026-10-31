@@ -207,7 +207,14 @@ impl LspManager {
     pub fn definition() -> Value {
         json!({"type":"function","function":{
             "name":"lsp_query",
-            "description":"Query a configured language server for definition, references, hover, symbols, implementation or call hierarchy.",
+            "description":format!(
+                "{}\nThis provider-neutral tool is called lsp_query. For documentSymbol and workspaceSymbol, line and character may be omitted; other position-based operations need both.",
+                crate::source_prompt_catalog::literal(
+                    "src/tools/LSPTool/prompt.ts",
+                    "Interact with Language Server Protocol",
+                )
+                .expect("Original LSP tool prompt must exist")
+            ),
             "parameters":{"type":"object","properties":{
                 "operation":{"type":"string","enum":[
                     "goToDefinition","findReferences","hover","documentSymbol",

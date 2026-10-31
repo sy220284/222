@@ -12,6 +12,7 @@ mod collections;
 mod command_lifecycle;
 mod command_manifest;
 mod compact_command_source;
+mod compact_source_prompts;
 mod compat_helpers;
 mod config;
 mod context_usage;
@@ -30,12 +31,15 @@ mod deep_link_register;
 mod detect_repository;
 mod diagnostics;
 mod diff_view;
+mod display_format;
 mod env_runtime;
 mod env_validation;
 mod event_signal;
 mod exec_file;
 mod exec_sync_compat;
 mod files_context;
+mod fs_operations;
+mod gemini_content;
 mod gemini_sse;
 mod generated_ports;
 mod git_config_parser;
@@ -62,10 +66,12 @@ mod mcp;
 mod mcp_cli;
 mod mcp_http;
 mod mcp_legacy_sse;
+mod mcp_output_storage;
 mod mcp_policy;
 mod mcp_prompt;
 mod memory;
 mod memory_age;
+mod memory_extraction;
 mod message_queue;
 mod model_catalog;
 mod multimodal;
@@ -126,6 +132,7 @@ mod side_question;
 mod skill_arguments;
 mod slash_command;
 mod sleep_helpers;
+mod source_prompt_catalog;
 mod source_semantics;
 mod source_semantics_osc;
 mod source_semantics_types;
@@ -428,7 +435,12 @@ enum Commands {
     /// Deep source-based review using the active API model and local tools
     UltraReview { pr_number: Option<u64> },
     /// Detailed read-only project plan using the active API model
-    UltraPlan { objective: Vec<String> },
+    UltraPlan {
+        /// Optional user-approved draft to refine using the same model
+        #[arg(long)]
+        seed_plan: Option<String>,
+        objective: Vec<String>,
+    },
     /// Manage user-owned, explicitly invoked local task triggers
     Trigger {
         #[command(subcommand)]
@@ -1200,12 +1212,7 @@ async fn run_cli() -> Result<()> {
         match &cli.command {
             Commands::Sessions { query } => {
                 for item in session_control::search(&root, query.as_deref().unwrap_or(""))? {
-                    println!(
-                        "{}  {}  ({} messages)",
-                        item.id,
-                        item.display_title(),
-                        item.messages
-                    );
+                    println!("{}  {}  ({})", item.id, item.title, item.display_metadata());
                 }
                 return Ok(());
             }
@@ -1263,12 +1270,7 @@ async fn run_cli() -> Result<()> {
             semantic_session_search::search(&root, query, provider.as_ref(), &profile.model)
                 .await?;
         for item in matches {
-            println!(
-                "{}  {}  ({} messages)",
-                item.id,
-                item.display_title(),
-                item.messages
-            );
+            println!("{}  {}  ({})", item.id, item.title, item.display_metadata());
         }
         return Ok(());
     }
@@ -1415,19 +1417,28 @@ async fn run_cli() -> Result<()> {
             let prompt =
                 local_advanced_workflows::review_prompt(agent.workspace_root(), *pr_number)?;
             agent
-                .ask_in_plan_mode(&prompt)
+                .run_advanced(local_advanced_workflows::Kind::Review, &prompt)
                 .await
                 .map(|answer| println!("{answer}"))
         }
-        Commands::UltraPlan { objective } => {
-            let prompt = local_advanced_workflows::plan_prompt(
-                agent.workspace_root(),
-                &objective.join(" "),
-            )?;
-            agent
-                .ask_in_plan_mode(&prompt)
-                .await
-                .map(|answer| println!("{answer}"))
+        Commands::UltraPlan {
+            objective,
+            seed_plan,
+        } => {
+            if objective.is_empty() && seed_plan.as_deref().unwrap_or("").trim().is_empty() {
+                println!("{}", local_advanced_workflows::plan_usage());
+                Ok(())
+            } else {
+                let prompt = local_advanced_workflows::plan_prompt_with_seed(
+                    agent.workspace_root(),
+                    &objective.join(" "),
+                    seed_plan.as_deref(),
+                )?;
+                agent
+                    .run_advanced(local_advanced_workflows::Kind::Plan, &prompt)
+                    .await
+                    .map(|answer| println!("{answer}"))
+            }
         }
         Commands::Trigger {
             action: LocalTriggerAction::Run { name },
@@ -2229,12 +2240,7 @@ async fn chat(
             }
             "/sessions" => {
                 for item in agent.list_sessions()? {
-                    println!(
-                        "{}  {}  ({} messages)",
-                        item.id,
-                        item.display_title(),
-                        item.messages
-                    );
+                    println!("{}  {}  ({})", item.id, item.title, item.display_metadata());
                 }
                 continue;
             }
@@ -3036,26 +3042,27 @@ async fn chat(
                 _ => None,
             };
             if name == "ultrareview" || name == "ultraplan" {
+                if name == "ultraplan" && args.trim().is_empty() {
+                    println!("{}", local_advanced_workflows::plan_usage());
+                    continue;
+                }
                 let prepared = if name == "ultrareview" {
-                    let pr = if args.trim().is_empty() {
-                        Ok(None)
-                    } else {
-                        args.trim()
-                            .parse::<u64>()
-                            .map(Some)
-                            .context("/ultrareview expects a positive PR number")
-                    };
-                    pr.and_then(|n| {
-                        local_advanced_workflows::review_prompt(agent.workspace_root(), n)
-                    })
+                    local_advanced_workflows::review_request(agent.workspace_root(), args)
                 } else {
                     local_advanced_workflows::plan_prompt(agent.workspace_root(), args)
                 };
                 match prepared {
-                    Ok(prompt) => match agent.ask_in_plan_mode(&prompt).await {
-                        Ok(answer) => println!("{answer}"),
-                        Err(error) => eprintln!("Error: {error:#}"),
-                    },
+                    Ok(prompt) => {
+                        let kind = if name == "ultraplan" {
+                            local_advanced_workflows::Kind::Plan
+                        } else {
+                            local_advanced_workflows::Kind::Review
+                        };
+                        match agent.run_advanced(kind, &prompt).await {
+                            Ok(answer) => println!("{answer}"),
+                            Err(error) => eprintln!("Error: {error:#}"),
+                        }
+                    }
                     Err(error) => eprintln!("Cannot prepare /{name}: {error:#}"),
                 }
                 continue;
@@ -3132,7 +3139,10 @@ async fn chat(
             match local_advanced_workflows::plan_prompt(agent.workspace_root(), &goal) {
                 Ok(prompt) => {
                     onboarding.maybe_mark_complete()?;
-                    match agent.ask_in_plan_mode(&prompt).await {
+                    match agent
+                        .run_advanced(local_advanced_workflows::Kind::Plan, &prompt)
+                        .await
+                    {
                         Ok(answer) => println!("{answer}"),
                         Err(error) => eprintln!("Local UltraPlan failed: {error:#}"),
                     }
@@ -3141,20 +3151,10 @@ async fn chat(
             }
             continue;
         }
-        if !local_advanced_keywords::ultrareview_positions(input).is_empty() {
-            match local_advanced_workflows::review_prompt(agent.workspace_root(), None) {
-                Ok(mut prompt) => {
-                    prompt.push_str("\n\nUser's review goal: ");
-                    prompt.push_str(input);
-                    onboarding.maybe_mark_complete()?;
-                    match agent.ask_in_plan_mode(&prompt).await {
-                        Ok(answer) => println!("{answer}"),
-                        Err(error) => eprintln!("Local UltraReview failed: {error:#}"),
-                    }
-                }
-                Err(error) => eprintln!("Cannot prepare UltraReview: {error:#}"),
-            }
-            continue;
+        // keyword.ts makes ultrareview a visual suggestion only. The user
+        // must explicitly invoke /ultrareview; ordinary requests stay ordinary.
+        if let Some(hint) = local_advanced_workflows::interactive_review_hint(input) {
+            eprintln!("{hint}");
         }
         // The original marks completion on prompt submission, not on a
         // successful model response; local project instructions may have
@@ -3173,6 +3173,33 @@ async fn chat(
 /// Each SDK model turn can be interrupted while the input reader continues
 /// accepting requests. Dropping the Agent future stops the active provider
 /// request and propagates cancellation into any awaited tool or hook future.
+/// Replace the last SDK text block without dropping other text or images.
+fn sdk_replace_last_text(input: &mut multimodal::Input, replacement: String) {
+    if let Some(blocks) = input.blocks.as_mut() {
+        if let Some(last_text) = blocks
+            .iter_mut()
+            .rev()
+            .find(|block| block["type"] == "text")
+        {
+            last_text["text"] = json!(replacement);
+        }
+        input.preview = blocks
+            .iter()
+            .map(|block| match block["type"].as_str() {
+                Some("text") => block["text"].as_str().unwrap_or("").to_owned(),
+                Some("image") => format!(
+                    "[image: {}]",
+                    block["mime_type"].as_str().unwrap_or("unknown")
+                ),
+                _ => String::new(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+    } else {
+        input.preview = replacement;
+    }
+}
+
 async fn sdk_interruptible_turn(
     agent: &mut Agent,
     prompt: &str,
@@ -3180,22 +3207,42 @@ async fn sdk_interruptible_turn(
     message_id: Option<uuid::Uuid>,
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
+    advanced_kind: Option<local_advanced_workflows::Kind>,
 ) -> Result<String> {
     let mut observer = interrupts.clone();
+    // Capture the session before the select borrows Agent mutably; an SDK
+    // interrupt must publish a terminal workflow state after dropping the
+    // in-flight request (which restores its temporary plan permission).
+    let session_id = agent.session_id();
+    let emit_interrupt = |phase: &str| {
+        if let Some(kind) = advanced_kind {
+            print_json!(json!({"type":"workflow","workflow":kind.as_str(),
+                "phase":phase,"session_id":session_id}));
+        }
+    };
     // The stdin reader may have parsed a later interrupt while the main loop
     // was preparing an earlier user event. Match event order, not scheduling.
     if *observer.borrow_and_update() > input_epoch {
+        emit_interrupt("cancelled");
         bail!("SDK request interrupted");
     }
     tokio::select! {
         biased;
         changed = observer.changed() => {
             if changed.is_ok() {
+                emit_interrupt("cancelled");
                 bail!("SDK request interrupted");
             }
+            emit_interrupt("failed");
             bail!("SDK interrupt control channel closed");
         }
-        response = agent.ask_with_blocks_for_message(prompt, blocks, message_id) => response,
+        response = async {
+            if let Some(kind) = advanced_kind {
+                agent.run_advanced_with_blocks(kind, prompt, blocks, message_id).await
+            } else {
+                agent.ask_with_blocks_for_message(prompt, blocks, message_id).await
+            }
+        } => response,
     }
 }
 
@@ -3204,7 +3251,7 @@ async fn sdk_run_initial_turn(
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
 ) {
-    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch).await {
+    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch, None).await {
         Ok(answer) => print_json!(json!({
             "type":"result","session_id":agent.session_id(),
             "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -3354,7 +3401,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                             .join("\n");
                         let input_epoch = *interrupt_rx.borrow();
                         match sdk_interruptible_turn(
-                            agent, &prompt, None, None, &interrupt_rx, input_epoch,
+                            agent, &prompt, None, None, &interrupt_rx, input_epoch, None,
                         ).await {
                             Ok(answer) => print_json!(json!({
                                 "type":"result","session_id":agent.session_id(),
@@ -3402,8 +3449,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
                 };
-                let content = match local_attachments::attach(
-                    agent.workspace_root(),
+                let content = match agent.attach_local_files(
                     raw_content,
                     event
                         .get("file_attachments")
@@ -3459,57 +3505,81 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         continue;
                     }
                 };
-                // processUserInput.ts:336-343,531-550 recognizes a slash
-                // command in the LAST text block, keeping earlier image/text
-                // blocks intact. A string-only check lost this SDK behavior.
+                // The original SDK user input and REPL both recognize advanced
+                // commands. Keep images, earlier blocks, UUID and skipSlashCommands
+                // intact, and apply plan permissions only for this one turn.
+                let mut advanced_kind: Option<local_advanced_workflows::Kind> = None;
                 if event.get("skipSlashCommands").and_then(Value::as_bool) != Some(true) {
+                    // processUserInput.ts:336-344 only interprets the LAST
+                    // input block when it is text. A trailing image must not
+                    // accidentally invoke a command in an earlier block.
                     let candidate = prompt_value.as_str().or_else(|| {
-                        prompt_value.as_array()?.iter().rev().find_map(|block| {
-                            (block.get("type").and_then(Value::as_str) == Some("text"))
-                                .then(|| block.get("text").and_then(Value::as_str))
-                                .flatten()
-                        })
+                        let last = prompt_value.as_array()?.last()?;
+                        (last.get("type").and_then(Value::as_str) == Some("text"))
+                            .then(|| last.get("text").and_then(Value::as_str))
+                            .flatten()
                     });
-                    if let Some(parsed) = candidate.and_then(slash_command::parse_slash_command) {
-                        match expand_user_skill_prompt(
-                            agent,
-                            config,
-                            &parsed.command_name,
-                            &parsed.args,
-                            parsed.is_mcp,
+                    if let Some(candidate) = candidate {
+                        let seed_plan = event
+                            .get("seedPlan")
+                            .or_else(|| event.get("seed_plan"))
+                            .and_then(Value::as_str);
+                        if let Some(parsed) = slash_command::parse_slash_command(candidate) {
+                            if !parsed.is_mcp
+                                && parsed.command_name == "ultraplan"
+                                && parsed.args.trim().is_empty()
+                                && seed_plan.map(str::trim).unwrap_or("").is_empty()
+                            {
+                                print_json!(json!({
+                                    "type":"result","session_id":agent.session_id(),
+                                    "content":local_advanced_workflows::plan_usage(),
+                                    "usage":agent.usage(),"cost":agent.cost_ledger()
+                                }));
+                                continue;
+                            }
+                        }
+                        match local_advanced_workflows::sdk_user_prompt_with_seed(
+                            agent.workspace_root(),
+                            candidate,
+                            seed_plan,
                         ) {
                             Ok(Some(expanded)) => {
-                                if let Some(blocks) = user.blocks.as_mut() {
-                                    if let Some(last_text) = blocks
-                                        .iter_mut()
-                                        .rev()
-                                        .find(|block| block["type"] == "text")
-                                    {
-                                        last_text["text"] = json!(expanded);
-                                    }
-                                    user.preview = blocks
-                                        .iter()
-                                        .map(|block| match block["type"].as_str() {
-                                            Some("text") => {
-                                                block["text"].as_str().unwrap_or("").to_owned()
-                                            }
-                                            Some("image") => format!(
-                                                "[image: {}]",
-                                                block["mime_type"].as_str().unwrap_or("unknown")
-                                            ),
-                                            _ => String::new(),
-                                        })
-                                        .collect::<Vec<_>>()
-                                        .join("\n");
-                                } else {
-                                    user.preview = expanded;
-                                }
+                                advanced_kind = slash_command::parse_slash_command(candidate)
+                                    .and_then(|parsed| match parsed.command_name.as_str() {
+                                        "ultraplan" => Some(local_advanced_workflows::Kind::Plan),
+                                        "ultrareview" => {
+                                            Some(local_advanced_workflows::Kind::Review)
+                                        }
+                                        _ => None,
+                                    });
+                                sdk_replace_last_text(&mut user, expanded);
                             }
                             Ok(None) => {}
                             Err(error) => {
                                 print_json!(json!({"type":"error",
-                                    "message":format!("Cannot invoke skill command: {error:#}")}));
+                                    "message":format!("Cannot prepare SDK advanced workflow: {error:#}")}));
                                 continue;
+                            }
+                        }
+                        if advanced_kind.is_none() {
+                            if let Some(parsed) = slash_command::parse_slash_command(candidate) {
+                                match expand_user_skill_prompt(
+                                    agent,
+                                    config,
+                                    &parsed.command_name,
+                                    &parsed.args,
+                                    parsed.is_mcp,
+                                ) {
+                                    Ok(Some(expanded)) => {
+                                        sdk_replace_last_text(&mut user, expanded)
+                                    }
+                                    Ok(None) => {}
+                                    Err(error) => {
+                                        print_json!(json!({"type":"error",
+                                            "message":format!("Cannot invoke skill command: {error:#}")}));
+                                        continue;
+                                    }
+                                }
                             }
                         }
                     }
@@ -3540,6 +3610,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     message_id,
                     &interrupt_rx,
                     input_epoch,
+                    advanced_kind,
                 )
                 .await
                 {
@@ -4102,11 +4173,25 @@ async fn sdk_nested_control(
                     agent.install_sdk_agent_definitions(prepared);
                 }
                 let agents = agent.sdk_agent_descriptors()?;
+                let available_output_styles =
+                    prompt_runtime::available_output_styles(agent.workspace_root())?;
+                let output_style =
+                    std::env::var("ATLAS_OUTPUT_STYLE").unwrap_or_else(|_| "default".to_owned());
+                // Existing lowercase environment values remain accepted; the
+                // SDK announces the canonical 2.1.88 built-in style names.
+                let output_style = match output_style.as_str() {
+                    "explanatory" => "Explanatory".to_owned(),
+                    "learning" => "Learning".to_owned(),
+                    _ => output_style,
+                };
+                if !available_output_styles.contains(&output_style) {
+                    anyhow::bail!("Configured output style is not available: {output_style}");
+                }
                 agent.set_sdk_system_prompts(system_prompt, append_system_prompt);
                 *sdk_initialized = true;
                 Ok(
-                    json!({"commands":commands,"agents":agents,"output_style":"default",
-                    "available_output_styles":["default"],"models":models,
+                    json!({"commands":commands,"agents":agents,"output_style":output_style,
+                    "available_output_styles":available_output_styles,"models":models,
                     "account":{},"pid":std::process::id()}),
                 )
             }

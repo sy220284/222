@@ -78,7 +78,12 @@ fn mcp_tool_timeout() -> Duration {
 
 /// Keep complete large MCP results reachable through the active workspace's
 /// Read/Shell tools instead of silently clipping them at 16,000 characters.
-fn present_mcp_tool_output(output: String, workspace: &Path, has_images: bool) -> String {
+fn present_mcp_tool_output(
+    output: String,
+    workspace: &Path,
+    has_images: bool,
+    format: crate::mcp_output_storage::ResultType,
+) -> String {
     let token_limit = std::env::var("MAX_MCP_OUTPUT_TOKENS")
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok())
@@ -105,40 +110,17 @@ fn present_mcp_tool_output(output: String, workspace: &Path, has_images: bool) -
             .collect();
         return format!("{preview}\n\n[OUTPUT TRUNCATED - exceeded {token_limit} token limit; image blocks cannot be persisted as text]");
     }
-    let save = (|| -> Result<PathBuf> {
-        use std::io::Write as _;
-        let root = workspace
-            .canonicalize()
-            .context("Cannot resolve MCP workspace")?;
-        let config = root.join(".atlas");
-        std::fs::create_dir_all(&config)?;
-        let config = config.canonicalize()?;
-        if !config.starts_with(&root) {
-            bail!("MCP output directory escapes workspace");
-        }
-        let directory = config.join("tool-results");
-        std::fs::create_dir_all(&directory)?;
-        let directory = directory.canonicalize()?;
-        if !directory.starts_with(&root) {
-            bail!("MCP output directory escapes workspace");
-        }
-        let path = directory.join(format!("mcp-output-{}.txt", uuid::Uuid::new_v4()));
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)?;
-        if let Err(error) = file
-            .write_all(output.as_bytes())
-            .and_then(|_| file.sync_all())
-        {
-            drop(file);
-            let _ = std::fs::remove_file(&path);
-            return Err(error).context("Cannot persist MCP output");
-        }
-        Ok(path)
-    })();
+    let save = crate::mcp_output_storage::persist_binary_content(
+        workspace,
+        output.as_bytes(),
+        Some("text/plain"),
+        &format!("mcp-output-{}", uuid::Uuid::new_v4()),
+    );
     match save {
-        Ok(path) => format!("MCP result ({length} characters) exceeded the {token_limit}-token budget and was saved in full to {}. Use Read or Shell to inspect it.", path.display()),
+        Ok(saved) => crate::mcp_output_storage::get_large_output_instructions(
+            &saved.filepath.to_string_lossy(), length,
+            &crate::mcp_output_storage::get_format_description(format, None), None,
+        ),
         Err(error) => format!("Error: MCP result ({length} characters) exceeds the output budget and could not be saved: {error:#}. Use server pagination or filtering."),
     }
 }
@@ -1307,7 +1289,16 @@ impl McpManager {
                 .iter()
                 .any(|item| item.get("type").and_then(Value::as_str) == Some("image"))
         });
-        Ok(present_mcp_tool_output(result, &self.root, has_images))
+        Ok(present_mcp_tool_output(
+            result,
+            &self.root,
+            has_images,
+            if only_text && response.get("structuredContent").is_none() {
+                crate::mcp_output_storage::ResultType::ToolResult
+            } else {
+                crate::mcp_output_storage::ResultType::StructuredContent
+            },
+        ))
     }
 }
 
@@ -1617,6 +1608,30 @@ impl McpManager {
             self.mark_expired_client(index, error);
         }
         result.map_err(|error| self.redact_request_error(index, error))
+    }
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+    #[test]
+    fn large_mcp_output_is_saved_in_full_with_chunk_read_instructions() {
+        let root = tempfile::tempdir().unwrap();
+        let output = "🦀result\n".repeat(15000);
+        let reply = present_mcp_tool_output(
+            output.clone(),
+            root.path(),
+            false,
+            crate::mcp_output_storage::ResultType::ToolResult,
+        );
+        assert!(reply.contains("100%"), "{reply}");
+        assert!(reply.contains("Format: Plain text"));
+        let entries = std::fs::read_dir(root.path().join(".atlas/tool-results"))
+            .unwrap()
+            .collect::<std::io::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(std::fs::read_to_string(entries[0].path()).unwrap(), output);
     }
 }
 
@@ -1992,7 +2007,11 @@ done"#;
             r#"while IFS= read -r line; do
 case "$line" in
   *'"method":"initialize"'*)
-    echo '{{"jsonrpc":"2.0","id":1,"result":{{"serverInfo":{{"name":"restarted"}}}}}}' ;;
+    if [ -e '{marker}' ]; then
+      echo '{{"jsonrpc":"2.0","id":1,"result":{{"instructions":"Second generation MCP guidance","serverInfo":{{"name":"restarted"}}}}}}'
+    else
+      echo '{{"jsonrpc":"2.0","id":1,"result":{{"instructions":"First generation MCP guidance","serverInfo":{{"name":"restarted"}}}}}}'
+    fi ;;
   *'"method":"tools/list"'*)
     if [ -e '{marker}' ]; then
       echo '{{"jsonrpc":"2.0","id":2,"result":{{"tools":[{{"name":"after","inputSchema":{{"type":"object"}}}}]}}}}'
@@ -2016,6 +2035,9 @@ done"#,
             headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[config]).await.unwrap();
+        let first_instructions = mgr.instruction_context();
+        assert!(first_instructions.contains("First generation MCP guidance"));
+        assert!(!first_instructions.contains("Second generation MCP guidance"));
         assert!(serde_json::to_string(&mgr.definitions())
             .unwrap()
             .contains("mcp__restart__before"));
@@ -2032,6 +2054,11 @@ done"#,
         assert!(!mgr.handles("mcp__restart__before"));
         assert!(mgr.handles("mcp__restart__after"));
         assert_eq!(mgr.statuses().unwrap()[0]["status"], "connected");
+        let new_instructions = mgr.instruction_context();
+        assert!(new_instructions.contains("Second generation MCP guidance"));
+        assert!(!new_instructions.contains("First generation MCP guidance"));
+        mgr.toggle_named("restart", false).await.unwrap();
+        assert!(mgr.instruction_context().is_empty());
     }
     #[tokio::test]
     async fn failed_stdio_server_cannot_break_healthy_server_and_indexing() {

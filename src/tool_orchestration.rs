@@ -67,6 +67,25 @@ pub fn is_concurrency_safe(tool_name: &str) -> bool {
     concurrency_safe_tools().contains(crate::tool_names::canonical_name(tool_name))
 }
 
+/// The source RemoteTrigger marks tool requests as concurrent-safe. Local
+/// mutations use a single durable file and therefore stay serialized; pure
+/// list/get calls can join other read-only work without waiting behind them.
+pub fn is_concurrency_safe_call(call: &ToolCall) -> bool {
+    if crate::tool_names::canonical_name(&call.function.name) == "LocalTrigger" {
+        let Ok(input) = serde_json::from_str::<serde_json::Value>(&call.function.arguments) else {
+            return false;
+        };
+        if crate::local_triggers::validate_model_input(&input).is_err() {
+            return false;
+        }
+        return matches!(
+            input.get("action").and_then(serde_json::Value::as_str),
+            Some("list" | "get")
+        );
+    }
+    is_concurrency_safe(&call.function.name)
+}
+
 /// `Batch` — a run of consecutive safe tools, or a single unsafe tool.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ToolBatch {
@@ -83,7 +102,7 @@ pub enum ToolBatch {
 pub fn partition_tool_calls(calls: Vec<ToolCall>) -> Vec<ToolBatch> {
     let mut batches: Vec<ToolBatch> = Vec::new();
     for call in calls {
-        let safe = is_concurrency_safe(&call.function.name);
+        let safe = is_concurrency_safe_call(&call);
         if safe {
             if let Some(ToolBatch::Safe(blocks)) = batches.last_mut() {
                 blocks.push(call);
@@ -122,6 +141,47 @@ mod tests {
         assert_eq!(parse_js_concurrency("0x10"), 10);
         assert_eq!(parse_js_concurrency("-5"), 10);
         assert_eq!(parse_js_concurrency("garbage"), 10);
+    }
+
+    #[test]
+    fn local_trigger_reads_join_safe_batches_and_mutations_stay_serial() {
+        let call = |action: &str, id: &str| ToolCall {
+            id: id.to_owned(),
+            kind: "function".to_owned(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(),
+                arguments: serde_json::json!({
+                    "action":action,
+                    "trigger_id":(action != "list").then_some("manual"),
+                    "body":(action == "create" || action == "update")
+                        .then_some(serde_json::json!({"prompt":"run locally"})),
+                })
+                .to_string(),
+            },
+        };
+        // Remove absent optional fields: the tool's strict schema rejects
+        // null optionals, as does the original Zod strictObject.
+        let normalized = |action: &str, id: &str| {
+            let mut call = call(action, id);
+            let mut input: serde_json::Value =
+                serde_json::from_str(&call.function.arguments).unwrap();
+            let fields = input.as_object_mut().unwrap();
+            fields.retain(|_, value| !value.is_null());
+            if action == "create" {
+                fields.remove("trigger_id");
+            }
+            call.function.arguments = input.to_string();
+            call
+        };
+        let list = normalized("list", "l");
+        let get = normalized("get", "g");
+        let create = normalized("create", "c");
+        assert!(is_concurrency_safe_call(&list));
+        assert!(is_concurrency_safe_call(&get));
+        assert!(!is_concurrency_safe_call(&create));
+        let batches = partition_tool_calls(vec![list, get, create]);
+        assert!(matches!(&batches[0], ToolBatch::Safe(v) if v.len() == 2));
+        assert!(matches!(&batches[1], ToolBatch::Unsafe(_)));
     }
 
     #[test]

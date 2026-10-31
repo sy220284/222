@@ -409,6 +409,32 @@ fn decode(reader: &mut impl Read, head: u8) -> io::Result<Key> {
         }
     }
 }
+/// ANSI rendering of original PromptInput keyword hints. The lexical source
+/// ranges are computed from the raw text; styling never mutates user input or
+/// changes the cursor's visible character count.
+#[cfg(unix)]
+fn highlight_advanced_keywords(input: &str) -> String {
+    let mut spans = crate::local_advanced_keywords::ultraplan_positions(input);
+    spans.extend(crate::local_advanced_keywords::ultrareview_positions(input));
+    spans.sort_by_key(|r| r.start);
+    let mut out = String::new();
+    let mut from = 0;
+    const RAINBOW: [u8; 6] = [203, 208, 220, 82, 45, 129];
+    for span in spans {
+        if span.start < from {
+            continue;
+        }
+        out.push_str(&input[from..span.start]);
+        for (i, ch) in input[span.start..span.end].chars().enumerate() {
+            out.push_str(&format!("\x1b[38;5;{}m{ch}", RAINBOW[i % RAINBOW.len()]));
+        }
+        out.push_str("\x1b[0m");
+        from = span.end;
+    }
+    out.push_str(&input[from..]);
+    out.replace('\n', "↵").replace('\t', "⇥")
+}
+
 #[cfg(unix)]
 fn redraw(out: &mut impl Write, prompt: &str, e: &Editor, vim: &VimKeys) -> io::Result<()> {
     let mode = if vim.enabled && !vim.insert {
@@ -417,12 +443,13 @@ fn redraw(out: &mut impl Write, prompt: &str, e: &Editor, vim: &VimKeys) -> io::
         ""
     };
     let displayed = e.text.replace('\n', "↵").replace('\t', "⇥");
+    let highlighted = highlight_advanced_keywords(&e.text);
     let to_cursor = e.text[..e.cursor].replace('\n', "↵").replace('\t', "⇥");
     let tail = displayed
         .chars()
         .count()
         .saturating_sub(to_cursor.chars().count());
-    write!(out, "\r\x1b[2K{mode}{prompt}{displayed}")?;
+    write!(out, "\r\x1b[2K{mode}{prompt}{highlighted}")?;
     if e.text.is_empty() {
         let view = text_input_semantics::render_placeholder(&json!({
             "placeholder":"Type a message or /help","value":"","showCursor":false,"focus":true,"terminalFocus":true
@@ -608,6 +635,19 @@ mod tests {
         e.cursor = e.text.len();
         assert!(e.insert('b').is_err());
     }
+    #[cfg(unix)]
+    #[test]
+    fn rainbow_hints_match_original_keyword_boundaries_without_editing_input() {
+        let input = "please ultraplan work; ultrareview after";
+        let highlighted = highlight_advanced_keywords(input);
+        assert!(highlighted.contains("\x1b[38;5;203mu"));
+        let quoted = "\u{60}ultraplan\u{60} src/ultrareview.tsx ultraplan?";
+        assert_eq!(highlight_advanced_keywords(quoted), quoted);
+        let with_newline = highlight_advanced_keywords("fix\nultraplan this");
+        assert!(with_newline.contains("↵"));
+        assert!(with_newline.contains("\x1b[38;5;203mu"));
+    }
+
     #[cfg(unix)]
     #[test]
     fn decode_terminal_controls_and_bracketed_paste() {

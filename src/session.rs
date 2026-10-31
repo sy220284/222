@@ -33,6 +33,9 @@ pub struct Session {
     /// Cumulative UTF-16 units of memory attachments in this session.
     #[serde(default)]
     pub surfaced_memory_units: usize,
+    /// Last message offset processed by optional local memory extraction.
+    #[serde(default)]
+    pub memory_extraction_cursor: usize,
     #[serde(default)]
     pub usage: TokenUsage,
     #[serde(default)]
@@ -78,6 +81,7 @@ impl Session {
             todos: Vec::new(),
             surfaced_memories: Vec::new(),
             surfaced_memory_units: 0,
+            memory_extraction_cursor: 0,
             usage: TokenUsage::default(),
             cost: CostLedger::default(),
             team_name: None,
@@ -157,6 +161,7 @@ impl Session {
         self.tasks.clear();
         self.surfaced_memories.clear();
         self.surfaced_memory_units = 0;
+        self.memory_extraction_cursor = 0;
         self.todos.clear();
     }
 }

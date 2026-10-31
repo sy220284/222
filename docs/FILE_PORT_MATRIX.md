@@ -265,8 +265,8 @@
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
 | `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
 | `src/commands/review/reviewRemote.ts` | 317 | 11926 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
-| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收 |
-| `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收 |
+| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：本地任意模型三轮深度审查、纯数字PR与其他分支目标分流、Git分叉点/暂存/未暂存/未跟踪变更及只读权限已接通；SDK阶段事件与失败/取消反馈已接通；原厂CCR/配额依授权排除，本地异步UI和原版远程并行交互尚未逐项等价验收 |
+| `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：原版厂商GrowthBook门控依授权去除，本地命令对任意模型可用；明确/ultrareview触发，普通文本关键词按原版只作提示不自动启动；需进一步核验完整交互展示 |
 | `src/commands/review.ts` | 58 | 2188 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：通过真实 Agent 执行 PR 审查任务；原版专属 Ultrareview 远程链仍待改造 |
 | `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/rewind/rewind.ts` | 14 | 376 | 重写：保持通用行为 | `src/generated_ports/p_0be79184937ef.rs` | 部分实现：完整等价：打开消息选择器+返回 skip 结果（不追加消息）含单测；LocalCommandResult 结构对齐 commands 体系，待验收 |
@@ -299,7 +299,7 @@
 | `src/commands/thinkback/thinkback.tsx` | 554 | 61993 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/thinkback-play/index.ts` | 18 | 608 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
 | `src/commands/thinkback-play/thinkback-play.ts` | 44 | 1430 | 重写：保持通用行为 | `src/generated_ports/p_a71cd9960b7a7.rs` | 部分实现：部分等价：pluginId 构造与缺安装文案完整等价（内部市场名品牌中性化占位，差异记录）；插件管理器与动画加载随插件链，待验收 |
-| `src/commands/ultraplan.tsx` | 471 | 66629 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收 |
+| `src/commands/ultraplan.tsx` | 471 | 66629 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：当前模型同一Agent三轮只读规划、无参数帮助、CLI/SDK seedPlan草稿细化、SDK starting/drafting/verifying/finalizing/ready/failed/cancelled、单轮权限恢复及实际模拟API调用已接通；原厂远程CCR依授权排除，本地异步进度/计划批准UI尚需等价验收 |
 | `src/commands/upgrade/index.ts` | 17 | 523 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂订阅升级；不再跟进，通用本地能力保留 |
 | `src/commands/upgrade/upgrade.tsx` | 38 | 7438 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；原厂订阅升级；不再跟进，通用本地能力保留 |
 | `src/commands/usage/index.ts` | 10 | 233 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -711,7 +711,7 @@
 | `src/constants/oauth.ts` | 235 | 8970 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/outputStyles.ts` | 217 | 9886 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_630eea798f5af.rs` | 部分实现：3 种内置输出风格及本地自定义 Markdown 风格已接入真实系统提示词；原版设置界面、完整格式与全局范围优先级未等价 |
 | `src/constants/product.ts` | 77 | 2563 | 重写：保持通用行为 | `src/generated_ports/p_9ae508cd79a96.rs`| 部分实现：远程会话环境路由（staging/local 判定 verbatim、本地优先于 staging 的 base URL 决策、cse_ 前缀兼容 shim 重写、会话 URL 构建）；URL 常量按仓库惯例 env 可覆盖+中性默认值，附 5 测试|
-| `src/constants/prompts.ts` | 915 | 54320 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_4573ed881a545.rs` | 部分实现：运行时主 system、来源边界与持续执行原则已实际发给模型；动态条件段落与原版完整指令仍待逐项对照，AST 常量仅供核查 |
+| `src/constants/prompts.ts` | 915 | 54320 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_4573ed881a545.rs` | 部分实现：新增 getActionsSection 原文2832字符与真实主 system 连接及模型请求回归测试；Reminders、Hooks 原文保留供对照；其余动态条件段落和合并优先级仍待完成 |
 | `src/constants/spinnerVerbs.ts` | 205 | 3453 | 重写：保持通用行为 | `src/generated_ports/p_7763c000d96fd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/constants/system.ts` | 96 | 3859 | 重写：保持通用行为 | `src/generated_ports/p_430f7712d1529.rs` |部分实现：语义等价：sysprompt 前缀识别决策（SDK preset 变体切换/缺省回退）完整等价含单测；三条品牌前缀串按隐私门禁由 prompt_runtime 运行时注入（差异记录），待验收；原厂品牌标识已采用中性命名，原始字面值差异保留待验收|
 | `src/constants/systemPromptSections.ts` | 69 | 1794 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
@@ -975,7 +975,7 @@
 | `src/native-ts/file-index/index.ts` | 371 | 12006 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/native-ts/yoga-layout/enums.ts` | 135 | 2823 | 重写：保持通用行为 | `src/generated_ports/p_166b646bc508b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/native-ts/yoga-layout/index.ts` | 2579 | 83377 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/outputStyles/loadOutputStylesDir.ts` | 99 | 3438 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/outputStyles/loadOutputStylesDir.ts` | 99 | 3438 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/main.rs` | 部分实现：三种内置风格、用户/项目 Markdown 风格发现、项目同名优先、路径安全检查与 SDK initialize 动态目录已接入真实模型 system；原版插件/托管设置来源、frontmatter 改名及完整设置交互待对齐验收 |
 | `src/plugins/builtinPlugins.ts` | 160 | 4980 | 重写：保持通用行为 | `src/generated_ports/p_2f9a1e26806ee.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/plugins/bundled/index.ts` | 24 | 843 | 重写：保持通用行为 | `src/generated_ports/p_9800afcbb78b9.rs` | 部分实现：完整等价：init_builtin_plugins 空脚手架与原版一致（含原文档注释）；待验收 |
 | `src/query/config.ts` | 47 | 1808 | 重写：保持通用行为 | `src/query_config.rs` | 部分实现：buildQueryConfig 读取 ATLAS_* 门快照；streaming_tool_execution 按进程开关生效并由 Agent 真实调度使用；全部门的原版时序和界面反馈仍待验收 |
@@ -1030,10 +1030,10 @@
 | `src/services/api/ultrareviewQuota.ts` | 39 | 1219 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端审查配额；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/usage.ts` | 64 | 1685 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方订阅配额 API；本地费用统计保留；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/withRetry.ts` | 823 | 28238 | 重写：模型／Agent 循环 | `src/provider.rs / src/sse.rs / src/gemini_sse.rs / src/agent.rs` | 部分实现：多模型 HTTP/流式建立前的 408/409/429/5xx 与连接超时有限重试，尊重 x-should-retry:false、Retry-After 秒数，失败不执行工具或重复落盘；仍缺原版可取消等待、按查询来源的 529 策略、流中断恢复、模型回退及完整重试事件与自定义预算 |
-| `src/services/autoDream/autoDream.ts` | 325 | 11259 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/autoDream/autoDream.ts` | 325 | 11259 | 重写：保持通用行为 | `src/memory_extraction.rs / src/agent.rs` | 部分实现：默认关闭、明确启用后主 Agent 正常 Stop 检查24小时/5个其他会话门限，使用已配置 API 模型执行无工具本地记忆整理；原版 fork-agent、进度UI、后台运行和任务取消待对齐 |
 | `src/services/autoDream/config.ts` | 22 | 892 | 重写：保持通用行为 | `src/generated_ports/p_3f28a74b2c6e6.rs`| 部分实现：autoDream 决策纯函数（用户设置显式值覆盖实验默认，未设时实验值决定），settings/growthbook 读取由调用方传入；实验 flag 名按隐私门禁省略|
-| `src/services/autoDream/consolidationLock.ts` | 141 | 4548 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/autoDream/consolidationPrompt.ts` | 66 | 3225 | 重写：保持通用行为 | `src/generated_ports/p_2debbeadd491a.rs` | 部分实现：完整等价：Dream 整合提示词模板逐字搬运（含会话记录 grep 指引），DIR_EXISTS_GUIDANCE 由调用方自 memdir 桩注入（同原版 import 形态）；待验收 |
+| `src/services/autoDream/consolidationLock.ts` | 141 | 4548 | 重写：保持通用行为 | `src/memory_extraction.rs` | 部分实现：本地锁文件独占、双重时间门检查、成功更新时间戳、失败保持可重试；原版锁 mtime、进程诊断及手动 Dream 锁交互待验收 |
+| `src/services/autoDream/consolidationPrompt.ts` | 66 | 3225 | 重写：保持通用行为 | `src/generated_ports/p_2debbeadd491a.rs / src/memory_extraction.rs` | 部分实现：原版模板仍在生成模块，新运行链提取其四阶段语义注入真实无工具模型请求；原版模板逐字运行、日志检索和外部工具调用待验收 |
 | `src/services/awaySummary.ts` | 75 | 2671 | 重写：保持通用行为 | `src/generated_ports/p_236bd5e7a80c6.rs` | 部分实现：完整等价：away 总结提示词逐字（memory 块条件前置）+30 条窗口常量含双分支单测；模型调用与 abort 随模型链，待验收 |
 | `src/services/claudeAiLimits.ts` | 516 | 16803 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅限额；保留第三方 API 用量统计；不再跟进 |
 | `src/services/claudeAiLimitsHook.ts` | 24 | 515 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅限额 Hook；不再跟进 |
@@ -1045,12 +1045,12 @@
 | `src/services/compact/grouping.ts` | 64 | 2794 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/microCompact.ts` | 531 | 19544 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/postCompactCleanup.ts` | 78 | 3778 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：用户约束及真实证据保留摘要模板已接入工具关闭的实际模型请求；原版部分压缩和历史分组仍未完全等价 |
+| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：原版 BASE/PARTIAL/UP_TO 三套正文及分析指令已接入 Rust 模板；普通 compact 无论旧摘要是否存在均用 BASE，用户及 PreCompact Hook 指令按原版顺序合并，原版无工具结尾置于最后；formatCompactSummary 已去分析段、保留外部文本及 Summary 标题。显式分段选择、UP_TO 消息前缀切割和恢复状态仍待生产链验收 |
 | `src/services/compact/sessionMemoryCompact.ts` | 631 | 21058 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/timeBasedMCConfig.ts` | 44 | 1766 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/diagnosticTracking.ts` | 398 | 12315 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
-| `src/services/extractMemories/extractMemories.ts` | 616 | 21684 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/extractMemories/prompts.ts` | 155 | 7673 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/extractMemories/extractMemories.ts` | 616 | 21684 | 重写：保持通用行为 | `src/memory_extraction.rs / src/agent.rs / src/session.rs` | 部分实现：显式开启后主 Agent 正常 Stop 增量提取、主 Agent 已写记忆时跳过、会话持久游标、无工具模型请求和记忆目录内安全写入；原版 fork-agent、异步通知、团队记忆与完整并发策略待验收 |
+| `src/services/extractMemories/prompts.ts` | 155 | 7673 | 重写：保持通用行为 | `src/memory_extraction.rs` | 部分实现：记忆四种类型、既有文件上下文、结构化模型请求及独立安全边界已接入；原版多轮工具提取完整提示词与团队模式待对齐 |
 | `src/services/internalLogging.ts` | 91 | 2799 | 重写：保持通用行为 | `src/generated_ports/p_55989d74f4cbb.rs` | 部分实现：完整等价：外部构建 ant 门折叠，K8s namespace 探测恒 null 含单测；内部集群日志目的地属厂商遥测面（排除），待验收 |
 | `src/services/lsp/LSPClient.ts` | 448 | 14361 | 重写：保持通用行为 | `src/lsp.rs` | 部分实现：JSON-RPC Content-Length、文档同步及查询测试通过 |
 | `src/services/lsp/LSPDiagnosticRegistry.ts` | 387 | 11957 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1115,7 +1115,7 @@
 | `src/services/tips/tipScheduler.ts` | 59 | 1664 | 重写：保持通用行为 | `src/generated_ports/p_7cdff970345df.rs` | 部分实现：完整等价：selectTipWithLongestTimeSinceShown 选择核心（空返回 None/单元素短路/降序取最长）纯函数含双单测；历史访问器与厂商事件随各自链路接线，待验收 |
 | `src/services/tokenEstimation.ts` | 496 | 16883 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/toolUseSummary/toolUseSummaryGenerator.ts` | 113 | 3376 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | `src/streaming_tool_executor.rs` | 部分实现：保序队列、一次性结果、延期独占工具及失败取消已接 Agent；共用输入验证与强制 Hook 审批，保留附加上下文/警告；执行器与块泵受同一模型轮次所有，discard/兄弟失败等待取消清理，SDK interrupt、真实 Shell 进程树和 SSE 回环有回归；中断的完整会话记录、所有提供方 fallback、进度消息和复杂上下文修饰仍待等价 |
+| `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | `src/streaming_tool_executor.rs` | 部分实现：保序队列、一次性结果、延期独占工具及失败取消已接 Agent；共用输入验证与强制 Hook 审批，保留附加上下文/警告；执行器与块泵受同一模型轮次所有，discard/兄弟失败等待取消清理，SDK interrupt、真实 Shell 进程树和 SSE 回环有回归；中断的完整会话记录、所有提供方 fallback、进度消息和复杂上下文修饰仍待等价；本次审查修复 Chat Completions 交错 index 过早交付，按协议完成边界执行，真实 SDK 双工具、续写与中断回归覆盖；该协议无原版块结束事件，中途执行时序差异保留 |
 | `src/services/tools/toolExecution.ts` | 1746 | 60309 | 重写：工具调用与 Hook 生命周期 | `src/agent.rs / src/hooks.rs / src/tools.rs` | 部分实现：三种调度共用工具输入验证及 Hook 强制审批；流式有效参数和前后 Hook 上下文/警告进入真实模型回合；非法输入或拒绝不触发执行后 Hook，真实 SSE/文件系统回归已增加；完整原版事件及所有入口仍待等价 |
 | `src/services/tools/toolHooks.ts` | 651 | 22333 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` | 部分实现：PostToolUse 的 MCP 输出替换和连续 Hook 可见性已接入 Agent；完整 Hook 事件/阻断/回调时序仍缺 |
 | `src/services/tools/toolOrchestration.ts` | 189 | 5501 | 重写：保持通用行为 | `src/tool_orchestration.rs` | 部分实现：partitionToolCalls 分区语义（连续只读合批/unsafe 断批/schema 失败与未知工具保守串行）、isConcurrencySafe 表（Read/Glob/Grep/WebFetch/WebSearch 对照原版逐工具核对；Bash 只读条件判定与 task/Agent 类 true 项因 Rust 执行体独占借用保守 false 已记差异）、并发上限 ATLAS_MAX_TOOL_USE_CONCURRENCY（parseInt 非零取值否则 10 语义）已接入 agent.rs 主循环批次调度（safe 批校验/hook 串行+executor.execute 与 PostToolUse hook 并发、结果按块序回填），contextModifier 队列待工具级 modifyContext 端口；待验收 |
@@ -1169,9 +1169,9 @@
 | `src/tools/AgentTool/agentMemorySnapshot.ts` | 198 | 5633 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/agentToolUtils.ts` | 687 | 22739 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/built-in/claudeCodeGuideAgent.ts` | 206 | 8959 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/built-in/exploreAgent.ts` | 84 | 4686 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：探索角色 system 和只读工具约束已进入真实执行链；原版最小搜索策略与边界待完整验收 |
-| `src/tools/AgentTool/built-in/generalPurposeAgent.ts` | 35 | 2185 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/built-in/planAgent.ts` | 93 | 4318 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：规划角色 system 和只读工具约束已进入真实执行链；原版完整计划流程仍待逐项验收 |
+| `src/tools/AgentTool/built-in/exploreAgent.ts` | 84 | 4686 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：由原版来源目录实时渲染完整探索角色模板、插值真实工具名并加入模型system；原版运行时按工具能力适配的条件路径仍待检查 |
+| `src/tools/AgentTool/built-in/generalPurposeAgent.ts` | 35 | 2185 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现：来自原版目录的前缀与长篇操作指南完整进入通用委派角色system，替换品牌和工具名；原版子代理自动决策和全部动态权限尚未验收 |
+| `src/tools/AgentTool/built-in/planAgent.ts` | 93 | 4318 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：由原版来源目录完整渲染规划角色模板及Critical Files输出条件，实际模型请求已接线；运行时可用工具和任务门控待完整验收 |
 | `src/tools/AgentTool/built-in/statuslineSetup.ts` | 145 | 7477 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/built-in/verificationAgent.ts` | 153 | 11410 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：独立验收 system 和只读工具隔离已接入模型请求；原版完整验收规范及所有权限分支待核对 |
 | `src/tools/AgentTool/builtInAgents.ts` | 73 | 2756 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1195,7 +1195,7 @@
 | `src/tools/BashTool/modeValidation.ts` | 116 | 3266 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/pathValidation.ts` | 1304 | 43679 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/prompt.ts` | 370 | 21130 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/BashTool/readOnlyValidation.ts` | 1991 | 68322 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/BashTool/readOnlyValidation.ts` | 1991 | 68322 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；本次接入高级 PR 审查所需的固定 argv gh pr view/diff 子集及拒绝/审批规则；完整安全命令与参数集合仍未等价 |
 | `src/tools/BashTool/sedEditParser.ts` | 323 | 9562 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/sedValidation.ts` | 685 | 21518 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/shouldUseSandbox.ts` | 154 | 5185 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1233,7 +1233,7 @@
 | `src/tools/FileEditTool/prompt.ts` | 29 | 1895 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileEditTool/types.ts` | 86 | 2612 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Edit 原版严格参数名和语义布尔已接入运行时（d061352e），仍缺完整输出结构，待验收； |
 | `src/tools/FileEditTool/utils.ts` | 776 | 22516 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；弯引号文本匹配、替换时保留引号排版和非 Markdown 行尾空白归一化（9eed00be、645510ed、f17bb1c9），源码已提交待验收； |
-| `src/tools/FileReadTool/FileReadTool.ts` | 1184 | 39073 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；读取状态在 Agent 跨轮共享，区分完整/部分读取与输出截断（ae165e76、2206e0f9），待验收；；原版 Read(file_path,offset,limit) 严格参数转换、256KiB 文件上限及不受通用16K截断的真实执行入口（41404581、d061352e、223c5e08），待验收；；原版 Read 同范围且 mtime 未变化时返回简短复用提示，避免重复长文本占用上下文（cf83f4b6、1e8b095a、1b661e19），待验收；；按原版项目临时目录语义读取本会话后台任务 stdout/stderr，保留 Read 规则和流式有界行读取，不扩大编辑权限（46319cca、e773d797），源码已提交待验收 |
+| `src/tools/FileReadTool/FileReadTool.ts` | 1184 | 39073 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；读取状态在 Agent 跨轮共享，区分完整/部分读取与输出截断（ae165e76、2206e0f9），待验收；；原版 Read(file_path,offset,limit) 严格参数转换、256KiB 文件上限及不受通用16K截断的真实执行入口（41404581、d061352e、223c5e08），待验收；；原版 Read 同范围且 mtime 未变化时返回简短复用提示，避免重复长文本占用上下文（cf83f4b6、1e8b095a、1b661e19），待验收；；按原版项目临时目录语义读取本会话后台任务 stdout/stderr，保留 Read 规则和流式有界行读取，不扩大编辑权限（46319cca、e773d797），源码已提交待验收；本次 SDK 本地附件复用统一 Read 授权，deny/ask 在读盘和发送前阻断，真实 SDK 回归覆盖 |
 | `src/tools/FileReadTool/UI.tsx` | 185 | 22540 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileReadTool/imageProcessor.ts` | 95 | 2881 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileReadTool/limits.ts` | 93 | 3219 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1243,14 +1243,14 @@
 | `src/tools/FileWriteTool/prompt.ts` | 19 | 969 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/GlobTool/GlobTool.ts` | 199 | 6064 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：通配符、结果排序与 100 项上限；原版全部边界待核对；本轮按原版补齐绝对路径通配、隐藏文件开关和可选 Git 忽略过滤，完整插件缓存排除和动态限制仍缺；新增按原版 `utils/glob.ts` 区分 Glob/Grep 的目录遍历：Glob 不再强行跳过 VCS、插件目录和构建目录，结果按修改时间从旧到新；代码 47684bbc、b734011b，已提交待验收；插件缓存排除、动态限制及完整边界仍缺；严格参数 schema 与语义布尔/数字转换接入 Agent PreToolUse 和 ToolExecutor 权限前置入口（f7fd05f、cc5bcc0、a24db99），源码已提交待验收，原版全部边界尚未等价；新增对每个候选文件执行 Read deny 路径过滤（ask 仍在搜索根目录审批），避免获准搜索目录内的被拒绝文件名泄露；真实调用链 ToolExecutor::dispatch→glob_files_filtered→search_read_allowed，代码 93fa1d9、7c5a8dd，已提交待验收；绝对通配符现按原版解析静态搜索根，经过额外工作区授权和真实 Read 审批后执行（814bb0d、33dc985），源码已提交待验收；特殊平台路径仍待验收；新增与原版 ripGrep 一致的 Glob 搜索时间预算：默认 20 秒，WSL 60 秒，可由 ATLAS_GLOB_TIMEOUT_SECONDS 正整数覆盖，遍历超时返回明确错误，不把未扫完的文件列表当成完整结果（17a8e25e，源码已提交待验收）；子进程级中止/完整忽略规则仍缺；Windows 正斜杠绝对通配符可按原版提取搜索根并进入授权/Glob 执行链（b7a54b76，已提交待验收）；UNC 和驱动器边界仍待验证；GlobTool 否定模式 !pattern 现排除匹配文件，保留原版 ripgrep --glob 语义（8510c3d2，源码已提交待验收）；复杂模式仍待验证；补齐过期插件缓存目录遍历前剪枝（952cf33f、5218a04f，已提交待验收）；会话级缓存冻结及重载仍缺 |
 | `src/tools/GlobTool/UI.tsx` | 63 | 8040 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/GlobTool/prompt.ts` | 8 | 439 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/GlobTool/prompt.ts` | 8 | 439 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现：2.1.88原版Glob工具描述已放入src/search.rs::definitions()真实模型请求，增加定义内容回归；其余Glob工具运行语义另验 |
 | `src/tools/GrepTool/GrepTool.ts` | 578 | 20087 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：内容/路径/计数/分页/上下文；原版 ripgrep 语义待对照；本轮按原版补齐跨行正则、逐行计数、-C/context 优先级、-n 行号及 head_limit=0 不限量，仍缺完整 ripgrep 忽略规则/中断语义；新增按原版 `GrepTool.ts::call` 的 `--hidden` 检索隐藏文件、仅排除原版六类 VCS 目录、移除错误的 2MiB 整文件跳过限制；代码 47684bbc，已提交待验收；取消和完整 ripgrep 语义仍缺；严格参数 schema 与语义布尔/数字转换接入 Agent PreToolUse 和 ToolExecutor 权限前置入口（f7fd05f、cc5bcc0、a24db99），源码已提交待验收，原版全部边界尚未等价；对照原版 GrepTool.ts::call 的 --max-columns=500 及 ripgrep 上下文分组输出，补齐 UTF-8/CRLF 长行省略、匹配/上下文省略提示、跨文件及非连续匹配的 -- 分隔符，并保持分页统计一致（b72b803d，源码已提交待验收）；完整忽略规则、取消与 ripgrep 边界仍待等价；对照原版 ripgrep.ts 的文本/二进制搜索路径，修复非 UTF-8 文本整文件被跳过、目录扫描二进制结果及显式二进制文件内容提示（e311d942，源码已提交待验收）；完整 ripgrep 错误/中断/忽略/编码语义仍待核验；按原版 ripgrep 类型表补充 TS/JS/Python/Markdown/JSON 常见扩展名筛选（ee329ec4、2c7d3ca7，源码已提交待验收）；新增逐文件 Read deny 过滤（ask 在搜索根目录审批），在打开文件前生效并覆盖 content/count/files_with_matches 三种模式；读取权限/IO 错误显式上报，已删除文件仍可继续搜索，代码 93fa1d9、7c5a8dd、e039a06，已提交待验收；用户指定的上下文/分页上限不再被静默裁剪，极大参数按平台范围明确处理（60ef1287，已提交待验收）；完整 ripgrep 行为仍未等价；Grep 搜索按原版 ripgrep.ts 采用 20 秒（WSL 60 秒）预算，逐目录/文件及输出检查超时并报告未完成，避免把部分搜索结果伪装为完整结果（fbd4a626，源码已提交待验收）；正在执行的阻塞 I/O 和正则无法立即抢占，取消/完整 ripgrep 语义仍缺；Grep 多个正反 glob 现按原版输入顺序由后命中规则覆盖（82b0bcd6，源码已提交待验收）；与 Git ignore 的跨来源覆盖仍缺；Grep content/count 不再被强制按文件时间重排，只有文件名模式按原版新到旧排序（98b6fc42，源码已提交待验收）；ripgrep 默认遍历顺序仍待验收；补齐过期插件缓存版本的检索排除（952cf33f、5218a04f，已提交待验收）；原版缓存刷新语义仍缺；增加 .ignore/.rgignore 多层目录规则、反向规则及高于 Git 忽略的优先级，Grep 与可选忽略模式 Glob 共同接入（6b3d3292、55328d32），源码已提交待验收；复杂 gitignore 目录恢复、全局忽略和外部取消仍待核对 |
 | `src/tools/GrepTool/UI.tsx` | 201 | 21784 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/GrepTool/prompt.ts` | 19 | 1150 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/GrepTool/prompt.ts` | 19 | 1150 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现：2.1.88原版Grep工具描述已放入src/search.rs::definitions()并按Rust工具名替换，占位符展开与定义内容回归；其余Grep行为另验 |
 | `src/tools/LSPTool/LSPTool.ts` | 861 | 25710 | 重写：工具行为、参数和权限 | `src/lsp.rs` | 部分实现：9 类请求与真实模拟服务器回环；LSP 管理行为未全等 |
 | `src/tools/LSPTool/UI.tsx` | 228 | 25038 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/LSPTool/formatters.ts` | 593 | 17399 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/LSPTool/prompt.ts` | 22 | 1114 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/LSPTool/prompt.ts` | 22 | 1114 | 重写：工具行为、参数和权限 | `src/source_prompt_catalog.rs / src/lsp.rs` | 部分实现：原版静态工具说明通过来源目录接入真实 ModelRequest 的工具定义，补充本地 API 参数及授权差异，并有实际定义断言；其它动态工具操作语义另行验收 |
 | `src/tools/LSPTool/schemas.ts` | 216 | 6064 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/LSPTool/symbolContext.ts` | 91 | 3392 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ListMcpResourcesTool/ListMcpResourcesTool.ts` | 124 | 3907 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1264,7 +1264,7 @@
 | `src/tools/NotebookEditTool/NotebookEditTool.ts` | 491 | 15271 | 重写：工具行为、参数和权限 | `src/notebook.rs / src/tools.rs` | 部分实现：插入、替换、删除、ID 定位及读后编辑测试通过；编码和 UI 待等价；笔记本读取修订跨模型轮次保持（2206e0f9），待验收； |
 | `src/tools/NotebookEditTool/UI.tsx` | 93 | 13540 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/NotebookEditTool/constants.ts` | 3 | 104 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
-| `src/tools/NotebookEditTool/prompt.ts` | 4 | 632 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/NotebookEditTool/prompt.ts` | 4 | 632 | 重写：工具行为、参数和权限 | `src/source_prompt_catalog.rs / src/notebook.rs` | 部分实现：原版静态工具说明通过来源目录接入真实 ModelRequest 的工具定义，补充本地 API 参数及授权差异，并有实际定义断言；其它动态工具操作语义另行验收 |
 | `src/tools/PowerShellTool/PowerShellTool.tsx` | 1001 | 144624 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；新增 PowerShell 超时毫秒与后台执行布尔值的原版语义字符串输入转换，实际执行器接线仍部分实现 |
 | `src/tools/PowerShellTool/UI.tsx` | 131 | 19768 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/PowerShellTool/clmTypes.ts` | 212 | 7229 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1284,9 +1284,9 @@
 | `src/tools/ReadMcpResourceTool/ReadMcpResourceTool.ts` | 159 | 4654 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ReadMcpResourceTool/UI.tsx` | 37 | 6109 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ReadMcpResourceTool/prompt.ts` | 17 | 544 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/RemoteTriggerTool/RemoteTriggerTool.ts` | 162 | 4715 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地任务持久保存、列出、删除、显式执行已接通当前模型 Agent；原版云端调度和完整 UI 语义不恢复，需继续核验输入/错误/并发行为 |
-| `src/tools/RemoteTriggerTool/UI.tsx` | 17 | 3096 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地任务持久保存、列出、删除、显式执行已接通当前模型 Agent；原版云端调度和完整 UI 语义不恢复，需继续核验输入/错误/并发行为 |
-| `src/tools/RemoteTriggerTool/prompt.ts` | 16 | 697 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地任务持久保存、列出、删除、显式执行已接通当前模型 Agent；原版云端调度和完整 UI 语义不恢复，需继续核验输入/错误/并发行为 |
+| `src/tools/RemoteTriggerTool/RemoteTriggerTool.ts` | 162 | 4715 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地模型工具list/get/create/update/run经过真实Agent工具/审批/持久化；create可省略ID自动生成，run返回已授权任务给同一Agent继续执行；本地模拟HTTP状态+JSON协议并按原版动作/权限分类；定时/云端异步执行依授权排除，真实模拟模型API已完成LocalTrigger创建/获取/执行后读取本地文件的端到端验收，外部模型执行差异继续复查 |
+| `src/tools/RemoteTriggerTool/UI.tsx` | 17 | 3096 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：SDK已接通原版动作+目标ID摘要以及HTTP状态和JSON行数的tool_result展示元数据；交互CLI同步展示工具动作、目标ID与HTTP状态/行数摘要；跨平台终端视觉与原版React UI还需继续核验 |
+| `src/tools/RemoteTriggerTool/prompt.ts` | 16 | 697 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地工具说明覆盖五种动作、无需厂商OAuth、免ID创建、当前Agent手动run及拒绝定时和远程调度；原版云端API说明已按授权替换，完整模型工具语义仍待最终验收 |
 | `src/tools/ScheduleCronTool/CronCreateTool.ts` | 158 | 5710 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ScheduleCronTool/CronDeleteTool.ts` | 96 | 2616 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ScheduleCronTool/CronListTool.ts` | 98 | 2888 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1315,7 +1315,7 @@
 | `src/tools/TaskOutputTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/TaskStopTool/TaskStopTool.ts` | 132 | 3935 | 重写：工具行为、参数和权限 | `src/background.rs / src/tools.rs / src/main.rs` | 部分实现：task_id、shell_id、KillShell、成功返回和异常状态对齐；停止与自然完成竞态及停止前实时状态核对已补；新增输出排空期取消和 SDK stop_task 的 task_notification 终止事件（源码已提交、待验收）；其他任务类型、完整异步通知和重启生命周期仍未等价 |
 | `src/tools/TaskStopTool/UI.tsx` | 41 | 5672 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/TaskStopTool/prompt.ts` | 9 | 280 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/TaskStopTool/prompt.ts` | 9 | 280 | 重写：工具行为、参数和权限 | `src/source_prompt_catalog.rs / src/background.rs` | 部分实现：原版静态工具说明通过来源目录接入真实 ModelRequest 的工具定义，补充本地 API 参数及授权差异，并有实际定义断言；其它动态工具操作语义另行验收 |
 | `src/tools/TaskUpdateTool/TaskUpdateTool.ts` | 407 | 12161 | 重写：工具行为、参数和权限 | `src/task_graph.rs / src/agent.rs / src/team_mailbox.rs` | 部分实现：状态/所有者/元数据、双向依赖与删除级联、TaskCompleted hook 阻断、队员启动任务自动认领及负责人邮箱通知；队员完成任务后收到领取下一任务的提示；验证提醒、UI 与完整时序未等价；完成 Hook 前校验全部 TaskUpdate 字段，非法参数不触发副作用（809afb、06c65cc） |
 | `src/tools/TaskUpdateTool/constants.ts` | 2 | 50 | 重写：工具行为、参数和权限 | `src/tool_names.rs` | 已验收：固定工具名常量的所有导出值；证据 tool_names::tests::names_and_aliases |
 | `src/tools/TaskUpdateTool/prompt.ts` | 78 | 2375 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1336,7 +1336,7 @@
 | `src/tools/WebFetchTool/UI.tsx` | 72 | 8083 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/WebFetchTool/WebFetchTool.ts` | 319 | 9324 | 重写：工具行为、参数和权限 | `src/webfetch.rs` | 部分实现：公网文本抓取/权限/跳转；原版网页摘要算法未等价 ；原版 domain:<hostname> 的精确域名权限 allow/ask/deny 已连通 web_fetch 权限检查 ；跨主机 3xx 跳转前重新按目标域名复核权限，禁止借已批准来源绕过 deny；本轮修复跨来源重定向返回新 URL 供重新授权，禁止继承来源审批自动抓取，仍缺完整原版网页摘要 |
 | `src/tools/WebFetchTool/preapproved.ts` | 167 | 5248 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/WebFetchTool/prompt.ts` | 47 | 2200 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/WebFetchTool/prompt.ts` | 47 | 2200 | 重写：工具行为、参数和权限 | `src/source_prompt_catalog.rs / src/webfetch.rs` | 部分实现：原版静态工具说明通过来源目录接入真实 ModelRequest 的工具定义，补充本地 API 参数及授权差异，并有实际定义断言；其它动态工具操作语义另行验收 |
 | `src/tools/WebFetchTool/utils.ts` | 531 | 16761 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/WebSearchTool/UI.tsx` | 101 | 12160 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/WebSearchTool/WebSearchTool.ts` | 436 | 13548 | 重写：工具行为、参数和权限 | `src/websearch.rs` | 部分实现：SearXNG/Brave 可配置搜索；原版搜索返回行为未等价；本轮在通用搜索后端支持 allowed_domains/blocked_domains 及子域名匹配、查询长度校验，原版模型内置检索/引用协议仍缺 |
@@ -1527,11 +1527,11 @@
 | `src/utils/findExecutable.ts` | 18 | 553 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/fingerprint.ts` | 77 | 2248 | 重写：保持通用行为 | `src/generated_ports/p_2cc5445fbf7a6.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/forkedAgent.ts` | 690 | 24635 | 重写：保持通用行为 | `src/generated_ports/p_c67576a3324b2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/utils/format.ts` | 309 | 9375 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/format.ts` | 309 | 9375 | 重写：保持通用行为 | `src/display_format.rs / src/session_control.rs / src/main.rs` | 部分实现：移植大小、时长、紧凑计数、相对时间、会话元数据和重置时间格式；会话列表及 MCP/WebFetch 保存回执使用共享格式。175 组原版运行快照验证常用边界及 toFixed 二进制舍入；完整日期解析、时区夏令时、极大紧凑计数及全部 UI 调用方仍待对齐 |
 | `src/utils/formatBriefTimestamp.ts` | 82 | 2223 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/fpsTracker.ts` | 48 | 1299 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/frontmatterParser.ts` | 371 | 12404 | 重写：保持通用行为 | `src/generated_ports/p_2e571c4a5ca80.rs`| 部分实现：frontmatter 解析——YAML 特殊字符引用表逐字（含冒号空格细节保护时间与 URL）、quoteProblematicValues（列表/块标量/已引用行不动）、--- 定界提取、known key 访问器（allowed-tools 列表拆分）；上游 parseYaml 无 Rust 等价，轻量 key-value 子集实现、嵌套 YAML 记差异，registry 兼容导出 parseBooleanFrontmatter，附 4 测试|
-| `src/utils/fsOperations.ts` | 771 | 24230 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/fsOperations.ts` | 771 | 24230 | 重写：保持通用行为 | `src/fs_operations.rs / src/tools.rs / src/prompt_history.rs / src/background.rs` | 部分实现：符号链接逐级权限路径、缺失路径祖先解析、去重、有界范围/尾部读取及 4KB UTF-8 安全倒序行读取已实现；接通 Read/Write/Edit 规则、历史记录和后台输出。多层链接 deny 及实际文件回归通过；完整可替换 FS 接口、所有原生文件操作适配和跨平台行为仍待等价 |
 | `src/utils/fullscreen.ts` | 203 | 8632 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/generatedFiles.ts` | 137 | 3481 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/generators.ts` | 89 | 2156 | 重写：保持通用行为 | `src/generated_ports/p_48282ce751286.rs`| 部分实现：last_x/toArray/fromArray 语义、raceGenerators→all_bounded（FuturesUnordered 有界并发竞速，Promise.race 公平性对齐）；AsyncGenerator→futures Stream 映射，return_value 的 return 注入语义以 stream 包装未单独实现，测试待 CI|
@@ -1607,7 +1607,7 @@
 | `src/utils/mcp/dateTimeParser.ts` | 122 | 4322 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcp/elicitationValidation.ts` | 337 | 9384 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcpInstructionsDelta.ts` | 131 | 4752 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/mcpOutputStorage.ts` | 190 | 7086 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/mcpOutputStorage.ts` | 190 | 7086 | 重写：保持通用行为 | `src/mcp_output_storage.rs / src/mcp.rs / src/mcp_prompt.rs / src/webfetch.rs` | 部分实现：共享 MIME 检测与扩展名、原子完整保存、大小回执和大输出顺序阅读指引，接通 MCP 工具大文本、MCP prompt 二进制附件和 WebFetch。真实 HTTP 混合大小写 PDF、完整大文本保存和目录越界回归通过；MCP 工具全部二进制内容转换、schema 透传和多模态超限仍待等价 |
 | `src/utils/mcpValidation.ts` | 209 | 6300 | 重写：保持通用行为 | `src/generated_ports/p_6287d1dbedede.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/mcpWebSocketTransport.ts` | 201 | 6052 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/memoize.ts` | 270 | 8612 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1903,7 +1903,7 @@
 | `src/utils/treeify.ts` | 171 | 5033 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/truncate.ts` | 180 | 5719 | 重写：保持通用行为 | `src/generated_ports/terminal_truncate.rs` | 部分实现：按终端显示宽度的截断、路径中间截断、头尾截断和换行 Rust 实现；全 UAX29 字素规则和 ANSI 边界待完成 |
 | `src/utils/ultraplan/ccrSession.ts` | 350 | 12987 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端规划专用工具；不再跟进，通用本地能力与模型 API 保留 |
-| `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 改造：本地任意模型通用工作流 | `src/local_advanced_keywords.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版关键词边界和替换已接入交互聊天；SDK 自动规划与完整阶段状态仍待验收 |
+| `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 改造：本地任意模型通用工作流 | `src/local_advanced_keywords.rs / src/main.rs` | 部分实现：原版词法边界、引用与代码路径、前缀斜杠、首个ultraplan替换及保留大小写已移植并测试；交互文字可自动本地规划，ultrareview普通文字不自动审查；SDK只允许明确命令以保持非交互语义；Unix原生终端已实现彩虹高亮和UltraReview关键词提示，Windows终端交互一致性仍待验收 |
 | `src/utils/unaryLogging.ts` | 40 | 1254 | 重写：保持通用行为 | `src/generated_ports/p_5386fc6ccfc1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/undercover.ts` | 90 | 3681 | 重写：保持通用行为 | `src/generated_ports/p_bba75aff43791.rs` | 部分实现：完整等价：外部构建语义（USER_TYPE 构建常量折叠，全函数 trivial return）恒 false/空清单含单测；内仓 allowlist 属厂商归因面（排除），待验收 |
 | `src/utils/user.ts` | 195 | 5714 | 重写：保持通用行为 | 待定 | 未迁移 |

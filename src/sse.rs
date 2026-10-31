@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Default)]
@@ -11,13 +11,8 @@ struct Assembler {
     content: String,
     reasoning_content: String,
     calls: BTreeMap<u64, ToolCall>,
-    emitted: HashSet<u64>,
     finish_reason: Option<String>,
     usage: Option<TokenUsage>,
-    /// Index of the tool call currently accepting argument deltas. The
-    /// OpenAI-compatible stream carries no per-block completion signal, so a
-    /// delta on a new index marks every earlier block complete.
-    active_tool_index: Option<u64>,
     /// Live sink for completed tool blocks; None keeps pure aggregation.
     tool_blocks: Option<UnboundedSender<ToolCall>>,
 }
@@ -110,31 +105,10 @@ impl Assembler {
             .flatten()
         {
             let index = part.get("index").and_then(Value::as_u64).unwrap_or(0);
-            // A delta on a new index ends every earlier in-flight block: the
-            // OpenAI-compatible stream has no per-block stop event, so the
-            // index switch is the completion boundary. Emit in index order.
-            if self.active_tool_index.is_some_and(|active| active != index) {
-                // Dispatch completed blocks once but retain them in the
-                // assistant transcript for SDK replay and model context.
-                let completed: Vec<u64> = self
-                    .calls
-                    .range(..index)
-                    .map(|(i, _)| *i)
-                    .filter(|i| !self.emitted.contains(i))
-                    .collect();
-                for done in completed {
-                    if let Some(call) = self.calls.get_mut(&done) {
-                        if call.id.is_empty() {
-                            call.id = uuid::Uuid::new_v4().to_string();
-                        }
-                        if let Some(sink) = &self.tool_blocks {
-                            let _ = sink.send(call.clone());
-                        }
-                        self.emitted.insert(done);
-                    }
-                }
-            }
-            self.active_tool_index = Some(index);
+            // The source API adapter yields tools only at content_block_stop.
+            // Chat Completions has no equivalent per-tool stop event: index
+            // identifies a call, and its later deltas may interleave with
+            // any other call. Aggregate until the transport is complete.
             let entry = self.calls.entry(index).or_insert_with(|| ToolCall {
                 id: String::new(),
                 kind: "function".into(),
@@ -159,28 +133,23 @@ impl Assembler {
         if self.content.is_empty() && self.calls.is_empty() {
             bail!("SSE stream contained no assistant content or tool calls")
         }
-        // Emit only undispatched blocks. Every call stays in the final
-        // assistant message with the same id used by the live executor.
-        for (index, call) in &mut self.calls {
+        // finish is reached only after a terminal marker. Do not start tools
+        // from a response the Agent will reject as truncated or refused.
+        let can_execute = self
+            .finish_reason
+            .as_deref()
+            .is_none_or(|reason| matches!(reason, "tool_calls" | "stop"));
+        for call in self.calls.values_mut() {
             if call.id.is_empty() {
                 call.id = uuid::Uuid::new_v4().to_string();
             }
-            if self.emitted.insert(*index) {
+            if can_execute {
                 if let Some(sink) = &self.tool_blocks {
                     let _ = sink.send(call.clone());
                 }
             }
         }
-        let calls = self
-            .calls
-            .into_values()
-            .map(|mut call| {
-                if call.id.is_empty() {
-                    call.id = uuid::Uuid::new_v4().to_string();
-                }
-                call
-            })
-            .collect::<Vec<_>>();
+        let calls = self.calls.into_values().collect::<Vec<_>>();
         Ok(ModelResponse {
             message: Message {
                 role: "assistant".into(),
@@ -218,7 +187,6 @@ fn consume_frame(
     frame: &[u8],
     assembler: &mut Assembler,
     deltas: &UnboundedSender<String>,
-    tool_blocks: &Option<UnboundedSender<ToolCall>>,
 ) -> Result<bool> {
     let lines = String::from_utf8_lossy(frame);
     let mut data = Vec::new();
@@ -280,9 +248,8 @@ pub async fn complete(
 }
 
 /// Streaming completion with an optional live tool-block sink. Blocks are
-/// forwarded as soon as the stream moves past them (new index or end of
-/// stream), preserving index order — the Rust equivalent of the original
-/// streaming loop handing complete tool_use blocks to the executor mid-turn.
+/// forwarded in index order only after a successful completion boundary.
+/// Chat Completions indices are not content_block_stop events.
 #[allow(clippy::too_many_arguments)]
 pub async fn complete_with_tool_blocks(
     client: &Client,
@@ -333,11 +300,7 @@ pub async fn complete_with_tool_blocks(
     }
     let mut stream = response.bytes_stream();
     let mut buffered = Vec::new();
-    // The assembler owns the sink; the frame loop shares a clone so both can
-    // emit blocks without fighting over ownership.
-    let frame_sink = tool_blocks.clone();
     let mut assembler = Assembler {
-        active_tool_index: None,
         tool_blocks,
         ..Default::default()
     };
@@ -354,7 +317,7 @@ pub async fn complete_with_tool_blocks(
         while let Some((position, separator)) = boundary(&buffered) {
             let frame = buffered[..position].to_vec();
             buffered.drain(..position + separator);
-            if consume_frame(&frame, &mut assembler, &deltas, &frame_sink)? {
+            if consume_frame(&frame, &mut assembler, &deltas)? {
                 finished = true;
                 break;
             }
@@ -367,7 +330,7 @@ pub async fn complete_with_tool_blocks(
         }
     }
     if !buffered.is_empty() && !finished {
-        consume_frame(&buffered, &mut assembler, &deltas, &frame_sink)?;
+        consume_frame(&buffered, &mut assembler, &deltas)?;
     }
     // A dropped HTTP connection is not a completed assistant turn. In
     // particular, never dispatch a syntactically complete tool call from a
@@ -457,7 +420,7 @@ mod tests {
         assert_eq!(call.function.arguments, "{\"path\":\"a.rs\"}");
     }
     #[test]
-    fn early_dispatched_tools_remain_in_assistant_transcript_without_duplication() {
+    fn completed_tools_remain_in_assistant_transcript_without_duplication() {
         let (deltas, _ignored) = tokio::sync::mpsc::unbounded_channel();
         let (blocks, mut incoming) = tokio::sync::mpsc::unbounded_channel();
         let mut assembler = Assembler {
@@ -482,10 +445,9 @@ mod tests {
                 &deltas,
             )
             .unwrap();
-        assert_eq!(incoming.try_recv().unwrap().id, "tool_a");
         assert!(
             incoming.try_recv().is_err(),
-            "second block is not complete yet"
+            "indices do not mark a completed response"
         );
         let result = assembler.finish().unwrap();
         let calls = result.message.tool_calls.unwrap();
@@ -493,6 +455,7 @@ mod tests {
             calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
             vec!["tool_a", "tool_b"]
         );
+        assert_eq!(incoming.try_recv().unwrap().id, "tool_a");
         assert_eq!(incoming.try_recv().unwrap().id, "tool_b");
         assert!(
             incoming.try_recv().is_err(),

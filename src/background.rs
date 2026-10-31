@@ -1171,14 +1171,11 @@ fn tail_with_limit(path: &Path, max_bytes: u64) -> Result<String> {
     }
     let len = file.metadata()?.len();
     let start = len.saturating_sub(max_bytes);
-    use std::io::{Read, Seek, SeekFrom};
-    file.seek(SeekFrom::Start(start))?;
-    let mut bytes = Vec::new();
-    file.take(max_bytes).read_to_end(&mut bytes)?;
-    let earlier = len.saturating_sub(bytes.len() as u64);
-    let content = String::from_utf8_lossy(&bytes);
+    let range = crate::fs_operations::read_range_from(&mut file, start, max_bytes)?;
+    let earlier = range.bytes_total.saturating_sub(range.bytes_read as u64);
+    let content = range.content;
     if earlier == 0 {
-        Ok(content.into_owned())
+        Ok(content)
     } else {
         Ok(format!(
             "[{}KB of earlier output omitted]\n{content}",
@@ -1319,12 +1316,37 @@ pub fn definitions() -> Vec<Value> {
                 "max_bytes":{"type":"integer","minimum":0,"maximum":5368709120_i64}
             },"required":["task_id"]}}}),
         json!({"type":"function","function":{"name":"task_stop",
-        "description":"Stop a running background shell task by ID. Requires approval.",
+        "description":format!("{}\nPermission approval is required before stopping a running task.",
+            crate::source_prompt_catalog::literal(
+                "src/tools/TaskStopTool/prompt.ts",
+                "\n- Stops a running background task by its ID",
+            ).expect("Original TaskStop prompt text must exist")),
         "parameters":{"type":"object","properties":{
             "task_id":{"type":"string"},
             "shell_id":{"type":"string","description":"Legacy alias for task_id"}
         }}}}),
     ]
+}
+
+#[cfg(test)]
+mod source_prompt_tests {
+    use super::*;
+
+    #[test]
+    fn task_stop_definition_contains_original_source_description() {
+        let definition = definitions()
+            .into_iter()
+            .find(|item| item["function"]["name"] == "task_stop")
+            .unwrap();
+        let original = crate::source_prompt_catalog::literal(
+            "src/tools/TaskStopTool/prompt.ts",
+            "\n- Stops a running background task by its ID",
+        )
+        .unwrap();
+        let desc = definition["function"]["description"].as_str().unwrap();
+        assert!(desc.starts_with(original));
+        assert!(desc.contains("approval"));
+    }
 }
 
 #[cfg(test)]

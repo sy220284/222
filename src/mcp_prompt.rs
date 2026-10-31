@@ -5,11 +5,7 @@ use crate::slash_command;
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::{Map, Value};
-use std::{
-    fs::{self, OpenOptions},
-    io::Write,
-    path::Path,
-};
+use std::path::Path;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,68 +66,18 @@ pub fn named_arguments(prompt: &Value, args: &str) -> Result<Map<String, Value>>
 /// returns a text block with the resulting file path. A random filename avoids
 /// trusting a server-controlled URI or name as a filesystem path.
 fn persist_mcp_blob(bytes: &[u8], mime: Option<&str>, workspace: &Path) -> Result<String> {
-    let root = workspace
-        .canonicalize()
-        .context("Cannot resolve MCP workspace")?;
-    let config_directory = root.join(".atlas");
-    fs::create_dir_all(&config_directory).context("Cannot create MCP workspace directory")?;
-    let config_directory = config_directory.canonicalize()?;
-    if !config_directory.starts_with(&root) {
-        bail!("MCP workspace directory escapes workspace");
-    }
-    let directory = config_directory.join("tool-results");
-    fs::create_dir_all(&directory).context("Cannot create MCP tool results directory")?;
-    let directory = directory.canonicalize()?;
-    if !directory.starts_with(&root) {
-        bail!("MCP tool results directory escapes workspace");
-    }
-    let mime = mime
-        .unwrap_or("")
-        .split(';')
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase();
-    let extension = match mime.as_str() {
-        "application/pdf" => "pdf",
-        "application/json" => "json",
-        "text/csv" => "csv",
-        "text/plain" => "txt",
-        "text/html" => "html",
-        "text/markdown" => "md",
-        "application/zip" => "zip",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => "pptx",
-        "application/msword" => "doc",
-        "application/vnd.ms-excel" => "xls",
-        "audio/mpeg" => "mp3",
-        "audio/wav" => "wav",
-        "audio/ogg" => "ogg",
-        "video/mp4" => "mp4",
-        "video/webm" => "webm",
-        "image/svg+xml" => "svg",
-        _ => "bin",
-    };
-    let path = directory.join(format!("mcp-blob-{}.{}", Uuid::new_v4(), extension));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&path)?;
-    if let Err(error) = file.write_all(bytes).and_then(|_| file.sync_all()) {
-        drop(file);
-        let _ = fs::remove_file(&path);
-        return Err(error).context("Cannot persist MCP binary resource");
-    }
-    Ok(format!(
-        "Binary content ({}, {} bytes) saved to {}",
-        if mime.is_empty() {
-            "unknown type"
-        } else {
-            &mime
-        },
-        bytes.len(),
-        path.display()
+    let saved = crate::mcp_output_storage::persist_binary_content(
+        workspace,
+        bytes,
+        mime,
+        &format!("mcp-blob-{}", Uuid::new_v4()),
+    )
+    .context("Cannot persist MCP binary resource")?;
+    Ok(crate::mcp_output_storage::get_binary_blob_saved_message(
+        &saved.filepath.to_string_lossy(),
+        mime,
+        saved.size,
+        "",
     ))
 }
 

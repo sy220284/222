@@ -9,6 +9,32 @@ use std::{
 };
 use tokio::process::Command;
 
+/// Read-only subset of the source's GH_READ_ONLY_COMMANDS needed by PR
+/// review. Return argv for direct execution, never an evaluated shell string.
+pub fn read_only_pr_args(command: &str) -> Option<Vec<&str>> {
+    if !command
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b' ' | b'\t'))
+    {
+        return None;
+    }
+    let words = command.split_ascii_whitespace().collect::<Vec<_>>();
+    if !(3..=4).contains(&words.len())
+        || words[0] != "gh"
+        || words[1] != "pr"
+        || !matches!(words[2], "view" | "diff")
+    {
+        return None;
+    }
+    if let Some(number) = words.get(3) {
+        if !number.bytes().all(|b| b.is_ascii_digit())
+            || number.parse::<u64>().ok().is_none_or(|n| n == 0)
+        {
+            return None;
+        }
+    }
+    Some(words[1..].to_vec())
+}
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ShellKind {
