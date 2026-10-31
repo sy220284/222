@@ -975,7 +975,7 @@
 | `src/native-ts/file-index/index.ts` | 371 | 12006 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/native-ts/yoga-layout/enums.ts` | 135 | 2823 | 重写：保持通用行为 | `src/generated_ports/p_166b646bc508b.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/native-ts/yoga-layout/index.ts` | 2579 | 83377 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/outputStyles/loadOutputStylesDir.ts` | 99 | 3438 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/outputStyles/loadOutputStylesDir.ts` | 99 | 3438 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/main.rs` | 部分实现：三种内置风格、用户/项目 Markdown 风格发现、项目同名优先、路径安全检查与 SDK initialize 动态目录已接入真实模型 system；原版插件/托管设置来源、frontmatter 改名及完整设置交互待对齐验收 |
 | `src/plugins/builtinPlugins.ts` | 160 | 4980 | 重写：保持通用行为 | `src/generated_ports/p_2f9a1e26806ee.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/plugins/bundled/index.ts` | 24 | 843 | 重写：保持通用行为 | `src/generated_ports/p_9800afcbb78b9.rs` | 部分实现：完整等价：init_builtin_plugins 空脚手架与原版一致（含原文档注释）；待验收 |
 | `src/query/config.ts` | 47 | 1808 | 重写：保持通用行为 | `src/query_config.rs` | 部分实现：buildQueryConfig 读取 ATLAS_* 门快照；streaming_tool_execution 按进程开关生效并由 Agent 真实调度使用；全部门的原版时序和界面反馈仍待验收 |
