@@ -711,7 +711,7 @@
 | `src/constants/oauth.ts` | 235 | 8970 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/constants/outputStyles.ts` | 217 | 9886 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_630eea798f5af.rs` | 部分实现：3 种内置输出风格及本地自定义 Markdown 风格已接入真实系统提示词；原版设置界面、完整格式与全局范围优先级未等价 |
 | `src/constants/product.ts` | 77 | 2563 | 重写：保持通用行为 | `src/generated_ports/p_9ae508cd79a96.rs`| 部分实现：远程会话环境路由（staging/local 判定 verbatim、本地优先于 staging 的 base URL 决策、cse_ 前缀兼容 shim 重写、会话 URL 构建）；URL 常量按仓库惯例 env 可覆盖+中性默认值，附 5 测试|
-| `src/constants/prompts.ts` | 915 | 54320 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_4573ed881a545.rs` | 部分实现：运行时主 system、来源边界与持续执行原则已实际发给模型；动态条件段落与原版完整指令仍待逐项对照，AST 常量仅供核查 |
+| `src/constants/prompts.ts` | 915 | 54320 | 重写：保持通用行为 | `src/prompt_runtime.rs / src/agent.rs / src/generated_ports/p_4573ed881a545.rs` | 部分实现：新增 getActionsSection 原文2832字符与真实主 system 连接及模型请求回归测试；Reminders、Hooks 原文保留供对照；其余动态条件段落和合并优先级仍待完成 |
 | `src/constants/spinnerVerbs.ts` | 205 | 3453 | 重写：保持通用行为 | `src/generated_ports/p_7763c000d96fd.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/constants/system.ts` | 96 | 3859 | 重写：保持通用行为 | `src/generated_ports/p_430f7712d1529.rs` |部分实现：语义等价：sysprompt 前缀识别决策（SDK preset 变体切换/缺省回退）完整等价含单测；三条品牌前缀串按隐私门禁由 prompt_runtime 运行时注入（差异记录），待验收；原厂品牌标识已采用中性命名，原始字面值差异保留待验收|
 | `src/constants/systemPromptSections.ts` | 69 | 1794 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
@@ -1045,7 +1045,7 @@
 | `src/services/compact/grouping.ts` | 64 | 2794 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/microCompact.ts` | 531 | 19544 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/postCompactCleanup.ts` | 78 | 3778 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：用户约束及真实证据保留摘要模板已接入工具关闭的实际模型请求；原版部分压缩和历史分组仍未完全等价 |
+| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：新增原版 NO_TOOLS_PREAMBLE 前置进入真实无工具摘要请求、summary标签正文提取与异常格式测试；原版BASE/PARTIAL完整长提示词和部分压缩保留差异 |
 | `src/services/compact/sessionMemoryCompact.ts` | 631 | 21058 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/timeBasedMCConfig.ts` | 44 | 1766 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/diagnosticTracking.ts` | 398 | 12315 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
@@ -1169,9 +1169,9 @@
 | `src/tools/AgentTool/agentMemorySnapshot.ts` | 198 | 5633 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/agentToolUtils.ts` | 687 | 22739 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/built-in/claudeCodeGuideAgent.ts` | 206 | 8959 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/built-in/exploreAgent.ts` | 84 | 4686 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：探索角色 system 和只读工具约束已进入真实执行链；原版最小搜索策略与边界待完整验收 |
-| `src/tools/AgentTool/built-in/generalPurposeAgent.ts` | 35 | 2185 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/AgentTool/built-in/planAgent.ts` | 93 | 4318 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：规划角色 system 和只读工具约束已进入真实执行链；原版完整计划流程仍待逐项验收 |
+| `src/tools/AgentTool/built-in/exploreAgent.ts` | 84 | 4686 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：恢复原版探索角色长提示词主体并映射glob_files/grep_files/read_file/run_command，真实角色system使用；原版最小搜索策略/完整条件分支待对齐 |
+| `src/tools/AgentTool/built-in/generalPurposeAgent.ts` | 35 | 2185 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现：原版通用Agent前缀与项目调查指南已进入真实角色system（多模型品牌和工具名替换）；原版工具列表/派生规则仍待完整行为验收 |
+| `src/tools/AgentTool/built-in/planAgent.ts` | 93 | 4318 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：恢复原版四步计划流程、只读约束和Critical Files输出要求并接入角色system；原版动态工具分支待对齐 |
 | `src/tools/AgentTool/built-in/statuslineSetup.ts` | 145 | 7477 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/AgentTool/built-in/verificationAgent.ts` | 153 | 11410 | 重写：工具行为、参数和权限 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：独立验收 system 和只读工具隔离已接入模型请求；原版完整验收规范及所有权限分支待核对 |
 | `src/tools/AgentTool/builtInAgents.ts` | 73 | 2756 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1243,10 +1243,10 @@
 | `src/tools/FileWriteTool/prompt.ts` | 19 | 969 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/GlobTool/GlobTool.ts` | 199 | 6064 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：通配符、结果排序与 100 项上限；原版全部边界待核对；本轮按原版补齐绝对路径通配、隐藏文件开关和可选 Git 忽略过滤，完整插件缓存排除和动态限制仍缺；新增按原版 `utils/glob.ts` 区分 Glob/Grep 的目录遍历：Glob 不再强行跳过 VCS、插件目录和构建目录，结果按修改时间从旧到新；代码 47684bbc、b734011b，已提交待验收；插件缓存排除、动态限制及完整边界仍缺；严格参数 schema 与语义布尔/数字转换接入 Agent PreToolUse 和 ToolExecutor 权限前置入口（f7fd05f、cc5bcc0、a24db99），源码已提交待验收，原版全部边界尚未等价；新增对每个候选文件执行 Read deny 路径过滤（ask 仍在搜索根目录审批），避免获准搜索目录内的被拒绝文件名泄露；真实调用链 ToolExecutor::dispatch→glob_files_filtered→search_read_allowed，代码 93fa1d9、7c5a8dd，已提交待验收；绝对通配符现按原版解析静态搜索根，经过额外工作区授权和真实 Read 审批后执行（814bb0d、33dc985），源码已提交待验收；特殊平台路径仍待验收；新增与原版 ripGrep 一致的 Glob 搜索时间预算：默认 20 秒，WSL 60 秒，可由 ATLAS_GLOB_TIMEOUT_SECONDS 正整数覆盖，遍历超时返回明确错误，不把未扫完的文件列表当成完整结果（17a8e25e，源码已提交待验收）；子进程级中止/完整忽略规则仍缺；Windows 正斜杠绝对通配符可按原版提取搜索根并进入授权/Glob 执行链（b7a54b76，已提交待验收）；UNC 和驱动器边界仍待验证；GlobTool 否定模式 !pattern 现排除匹配文件，保留原版 ripgrep --glob 语义（8510c3d2，源码已提交待验收）；复杂模式仍待验证；补齐过期插件缓存目录遍历前剪枝（952cf33f、5218a04f，已提交待验收）；会话级缓存冻结及重载仍缺 |
 | `src/tools/GlobTool/UI.tsx` | 63 | 8040 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/GlobTool/prompt.ts` | 8 | 439 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/GlobTool/prompt.ts` | 8 | 439 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现：2.1.88原版Glob工具描述已放入src/search.rs::definitions()真实模型请求，增加定义内容回归；其余Glob工具运行语义另验 |
 | `src/tools/GrepTool/GrepTool.ts` | 578 | 20087 | 重写：工具行为、参数和权限 | `src/search.rs` | 部分实现：内容/路径/计数/分页/上下文；原版 ripgrep 语义待对照；本轮按原版补齐跨行正则、逐行计数、-C/context 优先级、-n 行号及 head_limit=0 不限量，仍缺完整 ripgrep 忽略规则/中断语义；新增按原版 `GrepTool.ts::call` 的 `--hidden` 检索隐藏文件、仅排除原版六类 VCS 目录、移除错误的 2MiB 整文件跳过限制；代码 47684bbc，已提交待验收；取消和完整 ripgrep 语义仍缺；严格参数 schema 与语义布尔/数字转换接入 Agent PreToolUse 和 ToolExecutor 权限前置入口（f7fd05f、cc5bcc0、a24db99），源码已提交待验收，原版全部边界尚未等价；对照原版 GrepTool.ts::call 的 --max-columns=500 及 ripgrep 上下文分组输出，补齐 UTF-8/CRLF 长行省略、匹配/上下文省略提示、跨文件及非连续匹配的 -- 分隔符，并保持分页统计一致（b72b803d，源码已提交待验收）；完整忽略规则、取消与 ripgrep 边界仍待等价；对照原版 ripgrep.ts 的文本/二进制搜索路径，修复非 UTF-8 文本整文件被跳过、目录扫描二进制结果及显式二进制文件内容提示（e311d942，源码已提交待验收）；完整 ripgrep 错误/中断/忽略/编码语义仍待核验；按原版 ripgrep 类型表补充 TS/JS/Python/Markdown/JSON 常见扩展名筛选（ee329ec4、2c7d3ca7，源码已提交待验收）；新增逐文件 Read deny 过滤（ask 在搜索根目录审批），在打开文件前生效并覆盖 content/count/files_with_matches 三种模式；读取权限/IO 错误显式上报，已删除文件仍可继续搜索，代码 93fa1d9、7c5a8dd、e039a06，已提交待验收；用户指定的上下文/分页上限不再被静默裁剪，极大参数按平台范围明确处理（60ef1287，已提交待验收）；完整 ripgrep 行为仍未等价；Grep 搜索按原版 ripgrep.ts 采用 20 秒（WSL 60 秒）预算，逐目录/文件及输出检查超时并报告未完成，避免把部分搜索结果伪装为完整结果（fbd4a626，源码已提交待验收）；正在执行的阻塞 I/O 和正则无法立即抢占，取消/完整 ripgrep 语义仍缺；Grep 多个正反 glob 现按原版输入顺序由后命中规则覆盖（82b0bcd6，源码已提交待验收）；与 Git ignore 的跨来源覆盖仍缺；Grep content/count 不再被强制按文件时间重排，只有文件名模式按原版新到旧排序（98b6fc42，源码已提交待验收）；ripgrep 默认遍历顺序仍待验收；补齐过期插件缓存版本的检索排除（952cf33f、5218a04f，已提交待验收）；原版缓存刷新语义仍缺；增加 .ignore/.rgignore 多层目录规则、反向规则及高于 Git 忽略的优先级，Grep 与可选忽略模式 Glob 共同接入（6b3d3292、55328d32），源码已提交待验收；复杂 gitignore 目录恢复、全局忽略和外部取消仍待核对 |
 | `src/tools/GrepTool/UI.tsx` | 201 | 21784 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/GrepTool/prompt.ts` | 19 | 1150 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/GrepTool/prompt.ts` | 19 | 1150 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现：2.1.88原版Grep工具描述已放入src/search.rs::definitions()并按Rust工具名替换，占位符展开与定义内容回归；其余Grep行为另验 |
 | `src/tools/LSPTool/LSPTool.ts` | 861 | 25710 | 重写：工具行为、参数和权限 | `src/lsp.rs` | 部分实现：9 类请求与真实模拟服务器回环；LSP 管理行为未全等 |
 | `src/tools/LSPTool/UI.tsx` | 228 | 25038 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/LSPTool/formatters.ts` | 593 | 17399 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
