@@ -163,6 +163,18 @@ pub async fn control(
                     } else {
                         None
                     };
+                // The original /help is a local JSX command, so queued SDK
+                // prompts must not issue a model request or become stuck on
+                // the generic unsupported-slash path. Headless delivery is a
+                // text equivalent of the visible built-in command catalog.
+                let local_help = if next.command.mode == Mode::Prompt
+                    && next.command.is_input_slash()
+                    && slash_expansion.is_none()
+                {
+                    local_headless_help(&next.command.value)
+                } else {
+                    None
+                };
                 // processSlashCommand.tsx:333-359 returns "Unknown skill"
                 // without a model request. A typo must not stall all later
                 // queued prompts, while known built-ins remain with their
@@ -198,6 +210,7 @@ pub async fn control(
                 } else {
                     None
                 };
+                let local_reply = local_help.or(unknown_skill);
                 // Bail without consuming unsupported messages. A future caller
                 // can edit, inspect or explicitly remove them.
                 // Preserve completed results if a later item requires a different handler.
@@ -206,7 +219,7 @@ pub async fn control(
                     Mode::OrphanedPermission => Some("permission"),
                     _ if next.command.is_input_slash()
                         && slash_expansion.is_none()
-                        && unknown_skill.is_none() =>
+                        && local_reply.is_none() =>
                     {
                         Some("slash-command")
                     }
@@ -226,13 +239,13 @@ pub async fn control(
                     blocked = Some(json!({"identity":next.identity,"reason":reason}));
                     break;
                 }
-                if let Some(message) = unknown_skill {
+                if let Some(message) = local_reply {
                     let item = queue
                         .dequeue(|c| {
                             c.agent_id.is_none()
                                 && c.priority().rank_for_sdk() <= threshold.rank_for_sdk()
                         })
-                        .context("Unknown skill disappeared from queue")?;
+                        .context("Local slash command disappeared from queue")?;
                     if replay_user_messages {
                         if let Some(uuid) = item.command.uuid.as_deref() {
                             emit_user_replay(&item.command.value, uuid, &agent.session_id());
@@ -430,6 +443,28 @@ pub(crate) fn text_only_value(value: &Value) -> Result<String> {
     }
 }
 
+/// The interactive /help is local and cannot generate an API answer.
+/// Preserve that property in SDK queue drains while exposing the currently
+/// visible built-in command metadata in an inspectable text representation.
+fn local_headless_help(value: &Value) -> Option<String> {
+    let text = value.as_str().or_else(|| {
+        let last = value.as_array()?.last()?;
+        (last.get("type").and_then(Value::as_str) == Some("text"))
+            .then(|| last.get("text").and_then(Value::as_str))
+            .flatten()
+    })?;
+    let parsed = crate::slash_command::parse_slash_command(text)?;
+    if parsed.is_mcp || parsed.command_name != "help" {
+        return None;
+    }
+    Some(
+        crate::command_manifest::visible()
+            .map(|command| format!("/{}  {}", command.name, command.description))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+}
+
 fn parse_priority(value: Option<&Value>) -> Result<Priority> {
     if let Some(v) = value {
         Ok(serde_json::from_value(v.clone())
@@ -514,6 +549,19 @@ pub fn parse_task_notification(text: &str, session_id: &str) -> Option<Value> {
 #[cfg(test)]
 mod notification_tests {
     use super::*;
+    #[test]
+    fn slash_help_is_handled_locally_without_model_or_queue_stall() {
+        let help = local_headless_help(&json!("/help")).unwrap();
+        assert!(help.contains("/help"));
+        assert!(help.contains("/model"));
+        assert!(!help.contains("/ant-trace"));
+        assert_eq!(local_headless_help(&json!("/unknown")), None);
+        assert_eq!(local_headless_help(&json!("hi /help")), None);
+        assert_eq!(local_headless_help(&json!([{
+            "type":"image","source":{"type":"base64","data":"abc"}
+        },{"type":"text","text":"/help"}])), Some(help));
+    }
+
     #[test]
     fn headless_batch_anchors_last_uuid_and_ignores_missing_uuids() {
         use crate::message_queue::{Command, Item};
