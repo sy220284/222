@@ -286,16 +286,30 @@ pub const SOURCE_COMPACT_NO_TOOLS: &str = r#"CRITICAL: Respond with TEXT ONLY. D
 /// Extract only the user-facing summary envelope if the provider supplied
 /// both source-format tags. Plain-text summaries remain valid for providers
 /// that ignore XML formatting; malformed envelopes must not erase content.
-pub fn compact_summary_content(raw: &str) -> &str {
-    let trimmed = raw.trim();
-    if let Some(after_start) = trimmed.split_once("<summary>").map(|(_, rest)| rest) {
-        if let Some((body, _)) = after_start.split_once("</summary>") {
-            if !body.trim().is_empty() {
-                return body.trim();
-            }
+pub fn compact_summary_content(raw: &str) -> String {
+    // Match the original formatCompactSummary: discard the first complete
+    // drafting envelope, render the first summary envelope as a readable
+    // section, preserve any surrounding text, then normalize blank lines.
+    let mut text = raw.to_owned();
+    if let Some(start) = text.find("<analysis>") {
+        if let Some(end) = text[start + "<analysis>".len()..].find("</analysis>") {
+            let end = start + "<analysis>".len() + end + "</analysis>".len();
+            text.replace_range(start..end, "");
         }
     }
-    trimmed
+    if let Some(start) = text.find("<summary>") {
+        if let Some(end) = text[start + "<summary>".len()..].find("</summary>") {
+            let content_start = start + "<summary>".len();
+            let content_end = content_start + end;
+            let rendered = format!("Summary:\n{}", text[content_start..content_end].trim());
+            text.replace_range(start..content_end + "</summary>".len(), &rendered);
+        }
+    }
+    // Equivalent to JS /\\n\\n+/g; do not alter single line breaks.
+    while text.contains("\n\n\n") {
+        text = text.replace("\n\n\n", "\n\n");
+    }
+    text.trim().to_owned()
 }
 
 /// Compact in a separate tool-less model request and keep its summary factual.
@@ -775,9 +789,17 @@ mod tests {
             compact_summary_content(
                 "<analysis>hidden</analysis>\n<summary>verified state</summary>"
             ),
-            "verified state"
+            "Summary:\\nverified state"
         );
         assert_eq!(compact_summary_content("bare summary"), "bare summary");
+        assert_eq!(
+            compact_summary_content("intro\\n<analysis>discard</analysis>\\n\\n<summary>  result \\n </summary>\\n\\n\\ntrailing"),
+            "intro\\n\\nSummary:\\nresult\\n\\ntrailing"
+        );
+        assert_eq!(
+            compact_summary_content("<analysis>drafting</analysis>\\nfinal without tags"),
+            "final without tags"
+        );
         assert_eq!(
             compact_summary_content("<summary>unterminated"),
             "<summary>unterminated"
