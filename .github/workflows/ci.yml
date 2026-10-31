@@ -210,6 +210,7 @@ jobs:
           SOURCE_TOKEN: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_TOKEN }}
           SPEC_URL: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_URL }}
           SPEC_SHA256: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_SHA256 }}
+          SPEC_TOKEN: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p .port-audit
@@ -233,9 +234,10 @@ jobs:
           fi
           [[ "$SPEC_URL" == https://* ]] || { echo "::error::规格包必须通过 HTTPS 获取"; exit 1; }
           [[ "$SPEC_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || { echo "::error::规格包 SHA256 非法"; exit 1; }
-          if [[ -n "$SOURCE_TOKEN" ]]; then
+          # Avoid sending private source credentials to a different host.
+          if [[ -n "$SPEC_TOKEN" ]]; then
             curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
-              --header "Authorization: Bearer $SOURCE_TOKEN" "$SPEC_URL" -o "$RUNNER_TEMP/source-spec.zip"
+              --header "Authorization: Bearer $SPEC_TOKEN" "$SPEC_URL" -o "$RUNNER_TEMP/source-spec.zip"
           else
             curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
               "$SPEC_URL" -o "$RUNNER_TEMP/source-spec.zip"

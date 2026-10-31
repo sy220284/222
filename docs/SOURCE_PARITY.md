@@ -14,7 +14,7 @@ python3 scripts/source_parity_gate.py gate --repo . --source-archive /private/cl
 每条原版非排除路径使用原路径作为唯一键；每个函数使用函数名与原版起止行号标识，记录输入、输出、条件和功能逻辑、失败、权限、状态、时序、取消、持久化、副作用、真实调用链及测试。全文件需逐分支审查，内部动态入口不能因未导出而漏计；同一业务的 CLI、SDK、工具、MCP 多入口归并为同一功能链，同时保留路径级证据。文档和原版哈希匹配只能证明来源，完整功能仍需当前 Rust 行为与 CI 实测。
 
 ## CI 如何获取保密原版源码
-仓库 Secrets 必须配置 ORIGINAL_SOURCE_ARCHIVE_URL、ORIGINAL_SOURCE_ARCHIVE_SHA256、ORIGINAL_SPEC_ARCHIVE_URL、ORIGINAL_SPEC_ARCHIVE_SHA256；可选 ORIGINAL_SOURCE_ARCHIVE_TOKEN（Bearer，可共用受控域名）。URL 必须 HTTPS 且无需跨站重定向，CI 首先校验两个 ZIP 的整体哈希；门禁再逐项验证全部 1,906 个源文件的冻结 SHA256、大小及行数，以及 5,258 份规格包文件的内部 SHA256 和 1,902 条第一方源文件与详细规格的唯一双向关系。Secret 缺失也会使门禁失败。请使用私有且受控的存储，不要将源码放入公开仓库、发布物或 Actions Artifact。
+仓库 Secrets 必须配置 ORIGINAL_SOURCE_ARCHIVE_URL、ORIGINAL_SOURCE_ARCHIVE_SHA256、ORIGINAL_SPEC_ARCHIVE_URL、ORIGINAL_SPEC_ARCHIVE_SHA256；可选 ORIGINAL_SOURCE_ARCHIVE_TOKEN 与 ORIGINAL_SPEC_ARCHIVE_TOKEN（分别用于源码和规格包的 Bearer 认证，互不转发）。URL 必须 HTTPS 且无需跨站重定向，CI 首先校验两个 ZIP 的整体哈希；门禁再逐项验证全部 1,906 个源文件的冻结 SHA256、大小及行数，以及 5,258 份规格包文件的内部 SHA256 和 1,902 条第一方源文件与详细规格的唯一双向关系。Secret 缺失也会使门禁失败。请使用私有且受控的存储，不要将源码放入公开仓库、发布物或 Actions Artifact。
 
 ## GitHub 服务器端保护
 原版源码全量等价验收是固定作业名。要阻止 GitHub 网页/接口绕过失败的 CI，需对 main 设置 Ruleset 强制要求该检查且不允许 bypass；当前 GitHub 连接缺乏读取/配置分支保护的管理员权限，不能将工作流失败误称为已开启不可绕过的合并保护。
