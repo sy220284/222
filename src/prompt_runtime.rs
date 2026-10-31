@@ -457,7 +457,7 @@ mod tests {
         assert!(output_style_instructions(workspace.path(), "unknown").is_err());
         assert!(output_style_instructions(workspace.path(), "learning")
             .unwrap()
-            .contains("Explain"));
+            .contains("Learn by Doing"));
         #[cfg(unix)]
         {
             let outside = tempfile::tempdir().unwrap();
