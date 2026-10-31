@@ -565,13 +565,37 @@ def run(args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("command",choices=("audit","gate","report","index"))
+    legacy = ("scan", "check", "counts", "impact", "stubs", "reachability", "dashboard")
+    p.add_argument("command",choices=("audit","gate","report","index",*legacy,"sync-spec"))
     p.add_argument("--repo",type=Path,default=Path("."))
     p.add_argument("--source-archive",type=Path)
     p.add_argument("--spec-archive",type=Path)
     p.add_argument("--write-contracts", action="store_true", help="index: 显式更新待审契约清单")
+    p.add_argument("--source", type=Path, help="scan/impact/dashboard: 解压后的原版 source 目录")
+    p.add_argument("--changed", action="append", default=[])
+    p.add_argument("--changed-from-git", action="store_true")
+    p.add_argument("--allow-fixture", action="store_true")
+    p.add_argument("--write", action="store_true", help="sync-spec: 显式更新汇总")
     p.add_argument("--output",type=Path,default=Path(".port-audit"))
-    return run(p.parse_args())
+    args = p.parse_args()
+    if args.command in legacy:
+        from port_workbench import main as run_workbench
+        translated = [args.command, "--repo", str(args.repo),
+                      "--output", str(args.output)]
+        if args.source:
+            translated += ["--source", str(args.source)]
+        if args.changed_from_git:
+            translated.append("--changed-from-git")
+        if args.allow_fixture:
+            translated.append("--allow-fixture")
+        for changed in args.changed:
+            translated += ["--changed", changed]
+        return run_workbench(translated)
+    if args.command == "sync-spec":
+        from sync_spec_progress_summary import main as sync_spec_main
+        return sync_spec_main(["--repo", str(args.repo)] +
+                              (["--write"] if args.write else []))
+    return run(args)
 
 
 if __name__ == "__main__":
