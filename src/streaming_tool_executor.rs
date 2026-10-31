@@ -80,6 +80,7 @@ fn executor_handled(name: &str) -> bool {
             | "file_history_diff"
             | "file_revert"
             | "file_rewind"
+            | "LocalTrigger"
             | "git_diff"
             | "git_log"
             | "git_status"
@@ -96,8 +97,8 @@ fn is_shell(name: &str) -> bool {
 
 /// `isConcurrencySafe` for the streaming admission check — same table as
 /// the batch orchestration path.
-fn concurrency_safe(name: &str) -> bool {
-    crate::tool_orchestration::is_concurrency_safe(name)
+fn concurrency_safe(call: &ToolCall) -> bool {
+    crate::tool_orchestration::is_concurrency_safe_call(call)
 }
 
 /// `getToolDescription` — command, then file path, then pattern, truncated
@@ -232,14 +233,14 @@ impl StreamingExecutor {
             || (safe
                 && executing
                     .iter()
-                    .all(|t| concurrency_safe(&t.call.function.name)))
+                    .all(|t| concurrency_safe(&t.call)))
     }
 
     /// `addTool` — unknown tools to the executor become deferred (the agent
     /// serial path carries their full semantics); others enter the queue and
     /// start immediately when admission allows.
     pub fn add_tool(&mut self, call: ToolCall) {
-        let safe = concurrency_safe(&call.function.name);
+        let safe = concurrency_safe(&call);
         let handled = executor_handled(&call.function.name);
         // Agent-only tools cannot run in the streaming executor. Preserve
         // their order with every later tool by deferring the entire suffix.
@@ -291,7 +292,7 @@ impl StreamingExecutor {
             if self.has_errored || self.discarded {
                 break;
             }
-            let safe = concurrency_safe(&tracked.call.function.name);
+            let safe = concurrency_safe(&tracked.call);
             if self.can_execute(safe) {
                 self.start(i);
             } else {
@@ -680,6 +681,32 @@ mod tests {
             outcome: None,
             join: Some(task),
         }
+    }
+
+    #[tokio::test]
+    async fn streaming_local_trigger_reads_use_safe_path_and_writes_are_exclusive() {
+        let root = tempfile::tempdir().unwrap();
+        let mut deps = deps();
+        deps.executor = ToolExecutor::new(
+            root.path().canonicalize().unwrap(), Approval::Full, false
+        );
+        let mut executor = StreamingExecutor::new(deps);
+        let call = |action: &str, id: &str| ToolCall {
+            id:id.into(),kind:"function".into(),
+            function:FunctionCall{name:"LocalTrigger".into(),
+                arguments:serde_json::json!({"action":action}).to_string()},
+        };
+        executor.add_tool(call("list", "read"));
+        executor.add_tool(call("create", "invalid"));
+        assert_eq!(executor.tools.len(),2);
+        assert!(!executor.tools[0].deferred);
+        assert!(!executor.tools[1].deferred);
+        assert_eq!(executor.tools[1].status, ToolStatus::Queued);
+        let output = executor.drain().await;
+        assert_eq!(output.len(),2);
+        assert_eq!(output[0].call.id,"read");
+        assert!(output[0].result.starts_with("HTTP 200\n"),"{:?}",output[0].result);
+        assert!(output[1].result.starts_with("ERROR:"));
     }
 
     #[tokio::test]
