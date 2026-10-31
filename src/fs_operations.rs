@@ -2,6 +2,7 @@
 use std::{
     collections::HashSet,
     fs, io,
+    io::BufRead,
     path::{Path, PathBuf},
 };
 
@@ -160,6 +161,110 @@ pub fn permission_paths(path: &Path) -> Vec<PathBuf> {
     result
 }
 
+/// Source utils/readFileInRange.ts: stream the entire file to learn the
+/// total line count, but retain only the requested line window. A line outside
+/// the window may be gigabytes long without requiring a matching allocation.
+#[derive(Debug, PartialEq, Eq)]
+pub struct TextLineWindow {
+    pub formatted: String,
+    pub selected_lines: usize,
+    pub total_lines: usize,
+    pub total_bytes: u64,
+    pub read_bytes: usize,
+}
+
+fn append_selected_line(
+    number: usize,
+    bytes: &[u8],
+    content: &mut String,
+    count: &mut usize,
+    read_bytes: &mut usize,
+) {
+    let bytes = bytes.strip_suffix(b"\r").unwrap_or(bytes);
+    let bytes = if number == 1 {
+        bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes)
+    } else {
+        bytes
+    };
+    let text = String::from_utf8_lossy(bytes);
+    if *count > 0 {
+        content.push('\n');
+        *read_bytes += 1;
+    }
+    content.push_str(&number.to_string());
+    content.push_str(": ");
+    content.push_str(&text);
+    *read_bytes += text.len();
+    *count += 1;
+}
+
+pub fn read_text_line_window(
+    path: &Path,
+    start: usize,
+    count: usize,
+) -> io::Result<TextLineWindow> {
+    let file = fs::File::open(path)?;
+    let mut reader = io::BufReader::new(file);
+    let end = start.saturating_add(count);
+    let mut formatted = String::new();
+    let mut selected_bytes = Vec::new();
+    let mut selected_lines = 0;
+    let mut read_bytes = 0;
+    let mut total_bytes = 0_u64;
+    let mut line_number = 1_usize;
+    loop {
+        let chunk = reader.fill_buf()?;
+        if chunk.is_empty() {
+            break;
+        }
+        let chunk_len = chunk.len();
+        let mut segment_start = 0;
+        for (index, byte) in chunk.iter().enumerate() {
+            if *byte != b'\n' {
+                continue;
+            }
+            if line_number >= start && line_number < end {
+                selected_bytes.extend_from_slice(&chunk[segment_start..index]);
+                append_selected_line(
+                    line_number,
+                    &selected_bytes,
+                    &mut formatted,
+                    &mut selected_lines,
+                    &mut read_bytes,
+                );
+                selected_bytes.clear();
+            }
+            line_number = line_number.saturating_add(1);
+            segment_start = index + 1;
+        }
+        if line_number >= start && line_number < end {
+            selected_bytes.extend_from_slice(&chunk[segment_start..]);
+        } else {
+            selected_bytes.clear();
+        }
+        total_bytes += chunk_len as u64;
+        reader.consume(chunk_len);
+    }
+    // The original JS split/stream parser counts the last fragment, including
+    // a blank final line when the file ends with a newline.
+    if line_number >= start && line_number < end {
+        append_selected_line(
+            line_number,
+            &selected_bytes,
+            &mut formatted,
+            &mut selected_lines,
+            &mut read_bytes,
+        );
+    }
+    Ok(TextLineWindow {
+        formatted,
+        selected_lines,
+        total_lines: line_number,
+        total_bytes,
+        read_bytes,
+    })
+}
+
 pub struct ReadFileRangeResult {
     pub content: String,
     pub bytes_read: usize,
@@ -275,6 +380,35 @@ impl Iterator for ReverseLines {
 mod tests {
     use super::*;
     #[cfg(unix)]
+    #[test]
+    fn line_window_matches_source_crlf_bom_unicode_and_terminal_empty_line() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("source.txt");
+        fs::write(&path, b"\xef\xbb\xbfheader\r\n\xe4\xbd\xa0\xe5\xa5\xbd\r\n")
+            .unwrap();
+        let first = read_text_line_window(&path, 1, 1).unwrap();
+        assert_eq!(first.formatted, "1: header");
+        assert_eq!(first.total_lines, 3);
+        let end = read_text_line_window(&path, 2, 2).unwrap();
+        assert_eq!(end.formatted, "2: 你好\n3: ");
+        assert_eq!(end.selected_lines, 2);
+        assert_eq!(end.read_bytes, "你好\n".len());
+        assert_eq!(end.total_bytes, fs::metadata(&path).unwrap().len());
+        assert_eq!(read_text_line_window(&path, 5, 2).unwrap().selected_lines, 0);
+    }
+
+    #[test]
+    fn line_window_skips_huge_unselected_line_without_materializing_it() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("large.txt");
+        let mut data = vec![b'x'; 2_000_000];
+        data.extend_from_slice(b"\nend\n");
+        fs::write(&path, data).unwrap();
+        let result = read_text_line_window(&path, 2, 2).unwrap();
+        assert_eq!(result.formatted, "2: end\n3: ");
+        assert_eq!(result.total_lines, 3);
+    }
+
     #[test]
     fn permission_paths_include_each_link_and_uncreated_destination() {
         use std::os::unix::fs::symlink;

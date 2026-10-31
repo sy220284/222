@@ -1571,30 +1571,9 @@ impl ToolExecutor {
     /// just because the portion being read is small. Keep the window bounded
     /// without loading the complete source file into memory.
     fn read_large_text_window(path: &Path, start: usize, count: usize) -> Result<String> {
-        let file = fs::File::open(path).with_context(|| format!("Reading {}", path.display()))?;
-        let reader = io::BufReader::new(file);
-        let mut result = String::new();
-        let mut first_selected = true;
-        for (index, line) in reader.lines().enumerate() {
-            if index.saturating_add(1) < start {
-                continue;
-            }
-            if index.saturating_add(1) >= start.saturating_add(count) {
-                break;
-            }
-            let mut line = line?;
-            if index == 0 {
-                line = line.trim_start_matches('\u{feff}').to_owned();
-            }
-            if !first_selected {
-                result.push('\n');
-            }
-            first_selected = false;
-            result.push_str(&(index + 1).to_string());
-            result.push_str(": ");
-            result.push_str(&line);
-        }
-        Ok(result)
+        Ok(crate::fs_operations::read_text_line_window(path, start, count)
+            .with_context(|| format!("Reading {}", path.display()))?
+            .formatted)
     }
 
     fn read_file(&self, args: &Value) -> Result<String> {
@@ -1689,17 +1668,33 @@ impl ToolExecutor {
                 .unwrap_or(250)
                 .clamp(1, 500) as usize
         };
-        let result = if windowed_large_read {
-            Self::read_large_text_window(&path, start, count)?
+        let window = if windowed_large_read {
+            Some(crate::fs_operations::read_text_line_window(&path, start, count)?)
+        } else {
+            None
+        };
+        let result = if let Some(window) = &window {
+            window.formatted.clone()
         } else {
             content
-                .lines()
+                .split('\n')
                 .enumerate()
                 .skip(start - 1)
                 .take(count)
-                .map(|(i, line)| format!("{}: {}", i + 1, line))
+                .map(|(i, line)| format!("{}: {}", i + 1, line.trim_end_matches('\r')))
                 .collect::<Vec<_>>()
                 .join("\n")
+        };
+        let source_warning = if source_read && result.is_empty() {
+            let total_lines = window
+                .as_ref()
+                .map(|window| window.total_lines)
+                .unwrap_or_else(|| content.split('\n').count());
+            Some(format!(
+                "<system-reminder>Warning: the file exists but is shorter than the provided offset ({start}). The file has {total_lines} lines.</system-reminder>"
+            ))
+        } else {
+            None
         };
         let after = fs::metadata(&path)?;
         let before_ms = modified_millis(&metadata)?;
@@ -1710,7 +1705,7 @@ impl ToolExecutor {
                 full: !windowed_large_read
                     && unchanged
                     && start == 1
-                    && content.lines().count() <= count
+                    && content.split('\n').count() <= count
                     && (source_read || result.chars().count() <= MAX_OUTPUT_CHARS),
                 content,
                 timestamp_ms: before_ms,
@@ -1726,7 +1721,7 @@ impl ToolExecutor {
                 },
             },
         );
-        Ok(result)
+        Ok(source_warning.unwrap_or(result))
     }
 
     fn notebook_edit(&self, args: &Value) -> Result<String> {
@@ -2664,6 +2659,23 @@ mod tests {
             reader.read_file_with_mode(&args, true).unwrap(),
             "File unchanged since last read: large.rs"
         );
+    }
+
+    #[test]
+    fn source_read_reports_out_of_range_with_real_total_lines() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("source.rs");
+        fs::write(&path, "one\ntwo\n").unwrap();
+        let reader = executor(folder.path(), Approval::Full);
+        let result = reader
+            .read_file_with_mode(&json!({"path":"source.rs","start_line":5,"line_count":2}), true)
+            .unwrap();
+        assert!(result.contains("offset (5)"), "{result}");
+        assert!(result.contains("3 lines"), "{result}");
+        let final_line = reader
+            .read_file_with_mode(&json!({"path":"source.rs","start_line":3,"line_count":1}), true)
+            .unwrap();
+        assert_eq!(final_line, "3: ");
     }
 
     #[test]
