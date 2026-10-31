@@ -129,10 +129,9 @@ mod peer_address;
 pub use peer_address::{parse_peer_address, PeerScheme};
 
 // src/utils/sandbox/sandbox-ui-utils.ts
-pub fn remove_sandbox_violation_tags(text: &str) -> String {
-    let regex = Regex::new(r"(?s)<sandbox_violations>.*?</sandbox_violations>").unwrap();
-    regex.replace_all(text, "").into_owned()
-}
+#[path = "sandbox_ui_utils.rs"]
+mod sandbox_ui_utils;
+pub use sandbox_ui_utils::remove_sandbox_violation_tags;
 
 // src/utils/xdg.ts
 #[derive(Clone, Debug, Default)]
@@ -267,14 +266,9 @@ pub fn macos_option_char(value: &str) -> Option<&'static str> {
 }
 
 // src/utils/messagePredicates.ts
-pub fn is_human_turn(message: &Value) -> bool {
-    message.get("type").and_then(Value::as_str) == Some("user")
-        // Source uses JavaScript truthiness for !m.isMeta, not bool-only filtering.
-        && !message
-            .get("isMeta")
-            .is_some_and(crate::generated_ports::runtime::truthy)
-        && message.get("toolUseResult").is_none()
-}
+#[path = "message_predicates.rs"]
+mod message_predicates;
+pub use message_predicates::is_human_turn;
 
 // src/utils/systemPromptType.ts
 #[derive(Clone, Debug, PartialEq, Eq)]
