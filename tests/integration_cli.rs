@@ -6839,11 +6839,12 @@ fn local_advanced_commands_reject_invalid_goals_before_model_calls() {
 #[test]
 fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
     let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("audit-note.txt"), "VERIFIED_LOCAL_TASK_EXECUTION").unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
     let request_log = thread::spawn(move || {
         let mut requests = Vec::new();
-        for step in 0..3 {
+        for step in 0..5 {
             let mut stream = accept_before(&listener, Duration::from_secs(20));
             let request = read_request(&mut stream);
             let body = match step {
@@ -6860,8 +6861,21 @@ fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
                           "action":"get","trigger_id":"model_review"
                         }).to_string()
                     }}]},"finish_reason":"tool_calls"}]}),
+                2 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"run-task","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                          "action":"run","trigger_id":"model_review"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                3 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"read-task-target","type":"function","function":{
+                        "name":"Read","arguments":json!({
+                          "file_path":"audit-note.txt"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
                 _ => json!({"choices":[{"message":{"role":"assistant",
-                    "content":"Confirmed saved local task"},"finish_reason":"stop"}]}),
+                    "content":"Confirmed saved local task was executed in current Agent turn"},
+                    "finish_reason":"stop"}]}),
             }
             .to_string();
             write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -6898,7 +6912,7 @@ fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
         String::from_utf8_lossy(&output.stderr)
     );
     let requests = request_log.join().unwrap();
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 5);
     assert!(requests[0].contains("LocalTrigger"), "{}", requests[0]);
     assert!(
         requests[1].contains("HTTP 201") && requests[1].contains("model_review"),
@@ -6910,11 +6924,13 @@ fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
         "{}",
         requests[2]
     );
+    assert!(requests[3].contains("current-agent-turn"), "{}", requests[3]);
+    assert!(requests[4].contains("VERIFIED_LOCAL_TASK_EXECUTION"), "{}", requests[4]);
     let stored = fs::read_to_string(root.path().join(".atlas/local-triggers/tasks.json")).unwrap();
     assert!(stored.contains("Inspect local project files"));
     assert!(String::from_utf8(output.stdout)
         .unwrap()
-        .contains("Confirmed saved local task"));
+        .contains("Confirmed saved local task was executed"));
     assert!(!root
         .path()
         .join(".atlas/local-triggers/schedules.json")
