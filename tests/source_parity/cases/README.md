@@ -1,61 +1,21 @@
-# 原版与 Rust 同场景动态审计用例
+# 提交者本机原版/Rust 动态差异场景
 
-本目录只放由提交者逐项实际实现的 JSON 场景。没有用例时全量门禁必须失败；禁止通过占位样本或“已审核”字样冒充实测。
+此目录中的 JSON 用来针对**已选、已审阅的真实源码函数**重新运行原版与 Rust，两端均使用同一份 JSON 输入。日常验收以原版黄金结果和 Rust 单元、集成、端到端测试为主，参见 ../../docs 以外的 `docs/SOURCE_PARITY.md`。
 
-## 一个场景 JSON 的格式（示例，不能直接冒充已验收）
+每条用例至少包含 `id`、`kind`、`source_ids`、`input`、`timeout_seconds`、`original` 和 `rust`；命令必须为真实可执行 argv，支持 `{ORIGINAL}` 和 `{REPO}` 占位符，不经 shell 解析。两端从标准输入接收场景，输出统一的 `source-rust-observation/v1` 对象。必须核对最终结果、错误、状态、事件顺序、权限、磁盘副作用、持久化和取消状态；详情参见 `scripts/runtime_parity_gate.py`。
 
-```json
-{
-  "id": "session-regenerate-parent-normal",
-  "kind": "normal",
-  "source_ids": ["src/bootstrap/state.ts:FunctionDeclaration:435-450:occurrence-1"],
-  "input": {"setCurrentAsParent": true},
-  "timeout_seconds": 20,
-  "original": ["node", "{ORIGINAL}/test-bridge/session-original.mjs"],
-  "rust": ["{REPO}/target/debug/atlas-agent", "parity-session"]
-}
-```
+每个选定原版函数的正常和边界输入必须实际执行。源码确实涉及错误、权限、重启、取消、并发、流式或副作用，再要求相应专项测试；不再给纯函数虚构十种业务行为和冗长的“不适用”说明。
 
-这只是字段示意：实际函数 ID 必须从本次 `SOURCE_SEMANTIC_FUNCTIONS.jsonl` 取得，原版和 Rust 命令必须对应真正实现的可执行入口。示例所写的原版 bridge 和 Rust 子命令并未确认存在，**禁止复制为实际验收场景**。原版 bridge 应在提交者私人工作区内，不放在公开仓库；需要对其实际调用链进行独立审阅。Rust 执行入口必须通过当前提交编译得到。
+原版函数必须事先在 `docs/SOURCE_TEST_REGISTRY.jsonl` 的 `source_ids` 中登记，并与冻结的 AST 函数身份一致。原版执行入口位于提交者自己的原版目录，Rust 入口调用实际生产代码。`executed_source_ids` 为辅助追踪信息，必须复核真实代码调用和测试断言，禁止自报执行覆盖充当证据。
 
-`kind` 可以是 `normal`、`edge`、`error`、`permission_allow`、`permission_deny`、`cancel`、`concurrent`、`restart`、`stream`、`side_effect`。每条原版保留审计对象都需要十类中的适用场景，并且必须执行原版和 Rust 双端。确实不适用的行为族，逐个在 `docs/SOURCE_PARITY_CONTRACTS.jsonl` 对应 `functions[]` 中标注：
+示例命令：
 
-```json
-{
-  "source_id": "真实的源函数 ID",
-  "not_applicable_scenarios": {
-    "permission_deny": {
-      "source_lines": [1, 5],
-      "source_sha256": "对应冻结原版完整 SHA256",
-      "reason": "具体解释为什么这一源码范围不具有权限拒绝路径，并由审查者复核"
-    }
-  }
-}
-```
+~~~bash
+cargo build --locked --bins
+python3 scripts/source_diff_gate.py --repo . \
+  --source-root /path/to/private/source \
+  --spec-archive /path/to/private/spec.zip \
+  --cases tests/source_parity/cases --output .port-audit
+~~~
 
-说明必须定位到该源码函数本身的实际起止行，禁止豁免 `normal` 与 `edge`。对同一对象可用多个不同输入与 ID 覆盖同一行为族。
-
-## 双端输出契约
-
-两个命令都从标准输入读取一行 JSON：`{"id":"场景ID","input":{...}}`。都必须打印**唯一 JSON 对象**到标准输出，格式为：
-
-```json
-{
-  "schema":"source-rust-observation/v1",
-  "case_id":"场景ID",
-  "executed_source_ids":["实际执行过的原版函数审计 ID"],
-  "outcome":{"text":"最终用户可见结果"},
-  "errors":[],
-  "state":{},
-  "calls":[],
-  "permissions":[],
-  "events":[],
-  "side_effects":[],
-  "persistence":{},
-  "cancellation":{"cancelled":false}
-}
-```
-
-请真实记录每种状态及调用事件的先后顺序；`executed_source_ids` 必须能通过执行记录、运行时打点及源码调用链进行审阅，不允许直接把用例声明的 ID 照抄为“已执行”。测试适配器不应把系统时间、随机 UUID、路径等未经控制的值直接塞入结果；除经过源码证明的明确等价归一化外，门禁按原版/Rust 结构与内容逐字段严格比较，包括**进程退出码、标准错误哈希**。运行结果差异、任意一端未实际运行、异常、超时、漏列场景均阻断 CI。
-
-动态验收命令依赖的原版代码请放在**自己**的受控工作区，并保持完整 2.1.88 原版哈希；Rust adapter 在仓库中随生产代码审阅、构建。生产网络、密钥与用户真实数据不得进入动态执行环境。
+发现差异后，修复 Rust，并将能复现该差异的真实输入和原版预期追加至 `tests/source_parity/golden/` 对应文件，使此后无需重复依赖原版执行即可阻止同类回归。
