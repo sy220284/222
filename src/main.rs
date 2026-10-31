@@ -475,8 +475,14 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum LocalTriggerAction {
-    /// Save a reusable local task for the selected model
+    /// Save or replace a reusable local task
     Set { name: String, prompt: Vec<String> },
+    /// Create only if the task does not yet exist
+    Create { name: String, prompt: Vec<String> },
+    /// Update the prompt of an existing saved task
+    Update { name: String, prompt: Vec<String> },
+    /// Read the saved prompt of a task
+    Get { name: String },
     /// Execute an existing saved task through the active Agent and model
     Run { name: String },
     /// Show saved local trigger names
@@ -1274,6 +1280,20 @@ async fn run_cli() -> Result<()> {
                 println!("Saved local trigger: {name}");
                 return Ok(());
             }
+            LocalTriggerAction::Create { name, prompt } => {
+                local_triggers::create(&workspace, name, &prompt.join(" "))?;
+                println!("Created local trigger: {name}");
+                return Ok(());
+            }
+            LocalTriggerAction::Update { name, prompt } => {
+                local_triggers::change(&workspace, name, &prompt.join(" "))?;
+                println!("Updated local trigger: {name}");
+                return Ok(());
+            }
+            LocalTriggerAction::Get { name } => {
+                println!("{}", local_triggers::get(&workspace, name)?);
+                return Ok(());
+            }
             LocalTriggerAction::List => {
                 for name in local_triggers::list(&workspace)? {
                     println!("{name}");
@@ -1961,7 +1981,10 @@ async fn chat(
                 println!("/review [PR]             review a pull request through the active model");
                 println!("/ultrareview [PR]        deep local multi-angle code review");
                 println!("/ultraplan GOAL          detailed local read-only project planning");
-                println!("/trigger set NAME GOAL   save reusable task for any model");
+                println!("/trigger create NAME GOAL  create a new local task");
+                println!("/trigger get NAME          read a saved task");
+                println!("/trigger update NAME GOAL  update an existing local task");
+                println!("/trigger set NAME GOAL     save or replace a task for any model");
                 println!("/trigger run NAME        execute saved local task now");
                 println!("/trigger list|delete NAME  inspect or remove saved local tasks");
                 println!("/commit                  review changes and create a Git commit");
@@ -2969,6 +2992,18 @@ async fn chat(
                     Ok(()) => println!("Saved local trigger: {name}"),
                     Err(error) => eprintln!("Cannot save trigger: {error:#}"),
                 },
+                "create" => match local_triggers::create(agent.workspace_root(), name, tail) {
+                    Ok(()) => println!("Created local trigger: {name}"),
+                    Err(error) => eprintln!("Cannot create trigger: {error:#}"),
+                },
+                "update" => match local_triggers::change(agent.workspace_root(), name, tail) {
+                    Ok(()) => println!("Updated local trigger: {name}"),
+                    Err(error) => eprintln!("Cannot update trigger: {error:#}"),
+                },
+                "get" => match local_triggers::get(agent.workspace_root(), name) {
+                    Ok(prompt) => println!("{prompt}"),
+                    Err(error) => eprintln!("Cannot read trigger: {error:#}"),
+                },
                 "delete" => match local_triggers::delete(agent.workspace_root(), name) {
                     Ok(()) => println!("Deleted local trigger: {name}"),
                     Err(error) => eprintln!("Cannot delete trigger: {error:#}"),
@@ -2980,7 +3015,7 @@ async fn chat(
                     },
                     Err(error) => eprintln!("Cannot run trigger: {error:#}"),
                 },
-                _ => eprintln!("Usage: /trigger set NAME GOAL | run NAME | list | delete NAME"),
+                _ => eprintln!("Usage: /trigger create NAME GOAL | get NAME | update NAME GOAL | run NAME | list | delete NAME"),
             }
             continue;
         }
