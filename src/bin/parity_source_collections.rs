@@ -123,8 +123,9 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
         "objectGroupBy" => {
             let values = payload["values"].as_array().ok_or("missing values")?;
             let mode = payload["mode"].as_str().ok_or("missing grouping mode")?;
-            let grouped = collections::object_group_by(values.iter().cloned(),
-                |item,index| group_key(item,index,mode).expect("registered selector is valid"));
+            let grouped = collections::object_group_by(values.iter().cloned(), |item, index| {
+                group_key(item, index, mode).expect("registered selector is valid")
+            });
             let mut object = serde_json::Map::new();
             for (key, values) in grouped {
                 object.insert(key, json!(values));
