@@ -3774,7 +3774,7 @@ impl Agent {
                     all_messages[pivot..]
                         .iter()
                         .enumerate()
-                        .filter(|(index, _)| Some(pivot + index) != old_summary_index)
+                        .filter(|(index, _)| Some(pivot + *index) != old_summary_index)
                         .map(|(_, message)| message.clone())
                         .collect()
                 }
