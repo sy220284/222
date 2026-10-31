@@ -603,7 +603,7 @@ def run(args):
                     getattr(args, "runtime_cases", args.repo / "tests/source_parity/cases"),
                     function_index,
                     {p for p,r in rows.items() if r["status"] != "excluded"},
-                    output,
+                    output, contracts=contracts,
                 )
                 errors.extend("动态验收: " + issue for issue in dynamic_stats["errors"])
         if original_checked and spec_checked:
