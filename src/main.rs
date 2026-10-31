@@ -643,7 +643,7 @@ async fn run_cli() -> Result<()> {
     let cli = parse_cli_with_default_chat(std::env::args_os().collect())
         .unwrap_or_else(|error| error.exit());
     // Doctor must diagnose malformed user configuration without failing startup.
-    if !matches!(cli.command, Commands::Doctor) {
+    if !matches!(cli.command, Commands::Doctor | Commands::Version) {
         tls_ca::apply_user_startup_config()?;
     }
     match &cli.command {
