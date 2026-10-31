@@ -53,6 +53,16 @@ def build_worklist(rows: dict, hashes: dict, registration: list,
     for path in sorted(required):
         row, entry = rows[path], entries.get(path)
         nodes = (index or {}).get(path, [])
+        # The frozen TypeScript AST specification indexes 1,902 first-party
+        # sources. The four vendor originals are separately audited as
+        # whole-source units after all 1,906 source hashes are verified.
+        if detail and path.startswith("vendor/"):
+            nodes = [{
+                "source_id": f"{path}:vendor-file-level:1",
+                "kind": "VendorFileLevel",
+                "name": "complete original vendor source",
+                "source_lines": [1, row["source_lines"]],
+            }]
         ids = {node["source_id"] for node in nodes}
         linked = set(entry.get("source_ids", [])) if entry else set()
         if detail and not nodes:
