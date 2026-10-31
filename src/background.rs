@@ -43,15 +43,25 @@ fn canonical_shell_task_id(id: &str) -> Result<String> {
     bail!("Invalid background task ID")
 }
 
-fn new_shell_task_id() -> String {
+fn shell_task_id_from_random(bytes: [u8; 8]) -> String {
     const ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-    let random = Uuid::new_v4();
     let mut id = String::with_capacity(9);
     id.push('b');
-    for byte in random.as_bytes().iter().take(8) {
-        id.push(ALPHABET[(*byte as usize) % ALPHABET.len()] as char);
+    for byte in bytes {
+        id.push(ALPHABET[(byte as usize) % ALPHABET.len()] as char);
     }
     id
+}
+
+fn new_shell_task_id() -> Result<String> {
+    // Task.ts::generateTaskId calls crypto.randomBytes(8). A UUID v4 fixes
+    // several bits in its version/variant bytes and must not substitute for
+    // eight independent random bytes when creating task output filenames.
+    let mut bytes = [0u8; 8];
+    getrandom::getrandom(&mut bytes).map_err(
+        |error| anyhow::anyhow!("Cannot allocate task ID: system entropy unavailable: {error}"),
+    )?;
+    Ok(shell_task_id_from_random(bytes))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -465,15 +475,18 @@ impl BackgroundTasks {
         if command.len() > 100_000 {
             bail!("Background shell command too large")
         }
-        let id = (0..32)
-            .map(|_| new_shell_task_id())
-            .find(|candidate| {
-                !self.directory.join(format!("{candidate}.json")).exists()
-                    && !self.directory.join(format!("{candidate}.stdout")).exists()
-                    && !self.directory.join(format!("{candidate}.stderr")).exists()
-                    && !self.directory.join(format!("{candidate}.output")).exists()
-            })
-            .context("Could not allocate a unique background task ID")?;
+        let mut id = None;
+        for _ in 0..32 {
+            let candidate = new_shell_task_id()?;
+            if ["json", "stdout", "stderr", "output"]
+                .iter()
+                .all(|ext| !self.directory.join(format!("{candidate}.{ext}")).exists())
+            {
+                id = Some(candidate);
+                break;
+            }
+        }
+        let id = id.context("Could not allocate a unique background task ID")?;
         // Validate the shell command before reserving output files: a
         // command-construction failure must not leave stale task artifacts.
         let mut proc = kind.build_command(command)?;
@@ -1407,6 +1420,24 @@ mod tests {
     }
 
     #[test]
+    fn task_ids_use_all_eight_independent_crypto_bytes() {
+        // Covers the original modulo-36 conversion, especially positions
+        // whose entropy a version-4 UUID would accidentally constrain.
+        assert_eq!(shell_task_id_from_random([0; 8]), "b00000000");
+        assert_eq!(shell_task_id_from_random([35; 8]), "bzzzzzzzz");
+        assert_eq!(shell_task_id_from_random([36; 8]), "b00000000");
+        assert_eq!(shell_task_id_from_random([255; 8]), "b33333333");
+        for _ in 0..64 {
+            let id = new_shell_task_id().unwrap();
+            assert_eq!(id.len(), 9);
+            assert!(id.starts_with('b'));
+            assert!(id[1..]
+                .bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+        }
+    }
+
+    #[test]
     fn task_output_delta_schema_preserves_five_gibibyte_limit() {
         let definition = definitions()
             .into_iter()
@@ -1421,7 +1452,7 @@ mod tests {
         let root = root.path().canonicalize().unwrap();
         let source = BackgroundTasks::for_session(&root, Uuid::new_v4()).unwrap();
         let reader = BackgroundTasks::for_session(&root, Uuid::new_v4()).unwrap();
-        let id = new_shell_task_id();
+        let id = new_shell_task_id().unwrap();
         let output = source.directory.join(format!("{id}.stdout"));
         let error = source.directory.join(format!("{id}.stderr"));
         fs::write(&output, b"output from sibling session").unwrap();
