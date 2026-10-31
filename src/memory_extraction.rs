@@ -333,6 +333,176 @@ Existing memories (full contents within budget):
     })
 }
 
+/// The original autoDream gate is disabled until opted in by the user.
+/// Consolidation is checked at a completed turn; there is no timer.
+pub fn dream_enabled() -> bool {
+    crate::env_runtime::is_env_truthy(
+        std::env::var("ATLAS_AUTO_DREAM").ok().as_deref(),
+    )
+}
+
+/// Check the source's 24-hour + five other sessions gate. A process-level
+/// lock prevents concurrent sessions consolidating the same memories.
+/// The model receives no tools and every returned file is validated by save().
+pub async fn dream_if_due(
+    workspace: &Path,
+    active_session: uuid::Uuid,
+    provider: &dyn ModelProvider,
+    profile: &ProviderProfile,
+) -> Result<Option<(usize, Option<TokenUsage>)>> {
+    use fs2::FileExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    const MIN_SECONDS: u64 = 24 * 3600;
+    const MIN_SESSIONS: usize = 5;
+    let dir = memory_dir(workspace)?;
+    let stamp = dir.join(".dream-consolidated");
+    if stamp.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink() || !m.is_file()) {
+        bail!("Dream timestamp must be a regular file");
+    }
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let last = if stamp.exists() {
+        fs::read_to_string(&stamp)?
+            .trim()
+            .parse::<u64>()
+            .context("Invalid Dream timestamp")?
+    } else {
+        0
+    };
+    if now.saturating_sub(last) < MIN_SECONDS {
+        return Ok(None);
+    }
+
+    let base = workspace.canonicalize()?.join(".atlas/sessions");
+    if !base.exists() {
+        return Ok(None);
+    }
+    if !base.canonicalize()?.starts_with(workspace.canonicalize()?) {
+        bail!("Dream transcript directory escapes workspace");
+    }
+    let mut changed = Vec::new();
+    for entry in fs::read_dir(&base)? {
+        let entry = entry?;
+        let metadata = entry.metadata()?;
+        if !entry.file_type()?.is_file() || !metadata.is_file() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(raw) = name.to_str().and_then(|n| n.strip_suffix(".json")) else {
+            continue;
+        };
+        let Ok(id) = uuid::Uuid::parse_str(raw) else {
+            continue;
+        };
+        if id == active_session {
+            continue;
+        }
+        let modified = metadata.modified()?.duration_since(UNIX_EPOCH)?.as_secs();
+        if modified > last {
+            changed.push((modified, id));
+        }
+    }
+    if changed.len() < MIN_SESSIONS {
+        return Ok(None);
+    }
+    changed.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+    changed.truncate(MIN_SESSIONS);
+
+    let lock_path = dir.join(".dream-consolidation.lock");
+    if lock_path.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink() || !m.is_file()) {
+        bail!("Dream lock must be a regular file");
+    }
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(lock_path)?;
+    match lock.try_lock_exclusive() {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => return Ok(None),
+        Err(error) => return Err(error.into()),
+    }
+    // A second session may have finished consolidation before this lock.
+    if stamp.exists() {
+        let actual = fs::read_to_string(&stamp)?
+            .trim()
+            .parse::<u64>()
+            .context("Invalid Dream timestamp")?;
+        if actual != last {
+            return Ok(None);
+        }
+    }
+
+    let (existing, visible) = manifest(&dir)?;
+    let mut transcripts = String::new();
+    for (_, id) in &changed {
+        let session = crate::session::Session::load(workspace, &id.to_string())?;
+        let mut excerpt = String::new();
+        for message in session.messages.iter().rev().take(15) {
+            if !matches!(message.role.as_str(), "user" | "assistant") {
+                continue;
+            }
+            let text = message.visible_text();
+            if text.is_empty() {
+                continue;
+            }
+            let short = text.chars().take(600).collect::<String>();
+            excerpt.insert_str(0, &format!("{}: {}\n", message.role, short));
+        }
+        if transcripts.len().saturating_add(excerpt.len()) > MAX_INPUT {
+            break;
+        }
+        transcripts.push_str(&format!("\n## Session {id}\n{excerpt}"));
+    }
+
+    let system = format!(
+        r#"# Dream: Memory Consolidation
+Source: services/autoDream/consolidationPrompt.ts.
+You are performing a reflective pass over existing memory files and recently
+completed local sessions. Synthesize durable, organized memories so future
+sessions can orient quickly. Use the established four types: user, feedback,
+project, reference.
+
+Phase 1 — Orient: review the existing topic files below; preserve valid facts.
+Phase 2 — Gather: use only the supplied recent session excerpts, without
+inventing or fetching unprovided transcripts.
+Phase 3 — Consolidate: merge durable signals, resolve contradictions, convert
+relative dates to absolute dates only when the reference date is known.
+Phase 4 — Prune and index: the caller will maintain the MEMORY.md index.
+Do not store credentials, user secrets, speculative inferences or duplicates.
+Return ONLY JSON in the exact shape:
+{{"memories":[{{"filename":"topic_name.md","type":"project",
+"description":"one-line hook","content":"complete Markdown memory"}}]}}
+At most {MAX_ITEMS} files; empty array when already consolidated.
+The request has no tools and cannot delete files.
+
+Existing topic contents:
+{existing}
+
+Recent local sessions:
+{transcripts}"#
+    );
+    let response = provider
+        .complete(&ModelRequest {
+            model: profile.model.clone(),
+            system,
+            messages: vec![Message::text(
+                "user",
+                "Consolidate only the supplied memory and session context.",
+            )],
+            tools: vec![],
+        })
+        .await?;
+    if response.message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty()) {
+        bail!("Dream model requested tools");
+    }
+    let output: Output = serde_json::from_str(&response.message.visible_text())
+        .context("Invalid Dream model output")?;
+    let written = save(&dir, &output.memories, &visible)?;
+    atomic_write(&stamp, now.to_string().as_bytes())?;
+    Ok(Some((written, response.usage)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
