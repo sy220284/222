@@ -87,3 +87,14 @@ SDK 示例：
 新增/扩展的真实模拟模型接口验收涉及：多轮规划与状态、图片/本地附件、seedPlan、非交互普通关键词不误触发、尾随图片/skipSlashCommands、当前会话 LocalTrigger 实际工具回合、自动 ID、SDK 工具摘要、只读计划期间写操作拒绝及权限恢复，并以真实 Git 仓库检查分支已提交差异。
 
 **验收边界**：本地功能的三轮交互等价与原版云端多 Agent 的执行资源、异步终端自由使用、任务进度 GUI 属于不同实现。本轮不能把已授权排除的云端能力反算成未迁移；同时也不能仅凭上述静态代码和测试存在就将全部 7 路径改为「完整 verified」。维持部分实现状态，待最新 HEAD 完整 CI 及后续 UI/并发语义差异核实后逐项核销。
+
+
+## 2026-10-31 本地交互与并发语义补验
+
+- 对照原版 RemoteTriggerTool.isConcurrencySafe 和 isReadOnly：list/get 在本地工具批处理与流式入口保留并发安全读取，create/update/run 因本地持久化及副作用需要排队串行，防止不同任务同时改写同一任务库。相应工具分类及流式执行均新增回归测试。
+- 对照原版 RemoteTriggerTool/UI.tsx：SDK 的 tool_use_display、tool_result.display 以及交互 CLI stderr 都展示动作名称、可选任务 ID、HTTP 状态及 JSON 行数；原始工具结果完整保留，方便模型继续分析。
+- 对照原版 PromptInput.tsx：Unix 原生终端高亮有效 ultraplan/ultrareview 关键词，其他斜杠命令、文件路径及引号内词不高亮。普通 ultrareview 只提示用户显式运行审查，绝不自动启动；光标仍按不含 ANSI 颜色码的字符位置计算。
+- 实际测试增加 LocalTrigger 免 ID 自动创建、存储/列出/读取、模型调用 run 后使用当前 Agent 工具读取真实本地文件、多轮只读计划禁止写入及后续普通轮次权限恢复。
+- 本地所有功能代码曾在提交 60aa67587a4559be6ae70dfdc89216373689a951 的完整六作业 CI 通过；此后的提示词与文档并行提交需按其自身 HEAD 的 CI 单独验收。
+
+**仍未宣告原版 UI 完全等价**：Windows 交互式输入框的彩虹提示、原版 React/InK 组件视觉表现、原厂 CCR 远程窗口已授权排除部分的取舍边界，继续按证据验收。七条记录保留部分实现标识，避免将本地功能改造与原始云端全量功能混为一谈。
