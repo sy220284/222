@@ -2626,9 +2626,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("large.rs");
         let mut text = String::new();
-        text.push_str("\u{feff}header\\r\\n");
+        text.push_str("\u{feff}header\r\n");
         for n in 1..=12_000 {
-            text.push_str(&format!("{n}: {}\\r\\n", "x".repeat(100)));
+            text.push_str(&format!("{n}: {}\r\n", "x".repeat(100)));
         }
         fs::write(&path, &text).unwrap();
         assert!(fs::metadata(&path).unwrap().len() > MAX_FILE_BYTES);
@@ -2636,7 +2636,7 @@ mod tests {
         assert_eq!(
             window,
             format!(
-                "10000: 9999: {}\\n10001: 10000: {}",
+                "10000: 9999: {}\n10001: 10000: {}",
                 "x".repeat(100),
                 "x".repeat(100)
             )

@@ -5594,6 +5594,7 @@ impl Agent {
                     || pre_blocked.is_some()
                     || hook_ask_rejection.is_some();
                 let tool_started = Instant::now();
+                let mut mcp_blocks = None;
                 let result = if let Some(reason) = invalid_input {
                     format!("ERROR: {reason}")
                 } else if let Some(reason) = pre_hook_failure {
@@ -5686,7 +5687,11 @@ impl Agent {
                 } else if let Some(mcp) = &mut self.mcp {
                     if mcp.handles(&call.function.name) {
                         match executor.approve_external(&call) {
-                            Ok(()) => mcp.execute(&call).await,
+                            Ok(()) => {
+                                let output = mcp.execute_content(&call).await;
+                                mcp_blocks = output.blocks;
+                                output.text
+                            }
                             Err(error) => format!("ERROR: {error:#}"),
                         }
                     } else {
@@ -5698,20 +5703,32 @@ impl Agent {
                 self.session.cost.add_tool_duration(tool_started.elapsed());
                 let (added, removed) = self.file_metrics.counts();
                 self.session.cost.set_changed_lines(added, removed);
-                let (post, mut result): (crate::hooks::HookOutcome, String) = if skipped_tool {
-                    (Default::default(), result)
-                } else {
-                    match self.hooks.after_tool_with_context(&call, &result, self.tool_hook_input()).await {
-                        Ok(outcome)=>(outcome,result),
-                        Err(error)=>(
-                            Default::default(),
-                            // The tool already executed: tell the next model
-                            // turn about the side effect instead of inviting
-                            // an unsafe blind retry.
-                            format!("ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: {result}")
-                        )
-                    }
+                let result = crate::mcp_content::Output {
+                    text: result,
+                    blocks: mcp_blocks,
                 };
+                let (post, mut result): (crate::hooks::HookOutcome, crate::mcp_content::Output) =
+                    if skipped_tool {
+                        (Default::default(), result)
+                    } else {
+                        match self
+                            .hooks
+                            .after_tool_with_response(
+                                &call,
+                                &result.text,
+                                result.hook_value(),
+                                self.tool_hook_input(),
+                            )
+                            .await
+                        {
+                            Ok(outcome) => (outcome, result),
+                            Err(error) => {
+                                let mut result = result;
+                                result.prepend(&format!("ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: "));
+                                (Default::default(), result)
+                            }
+                        }
+                    };
                 for warning in &post.non_blocking_errors {
                     eprintln!("{warning}");
                     self.emit(json!({
@@ -5728,14 +5745,17 @@ impl Agent {
                     .is_some_and(|m| m.handles(&call.function.name))
                 {
                     if let Some(replacement) = post.updated_mcp_tool_output {
-                        result = match replacement {
-                            serde_json::Value::String(text) => text,
-                            other => other.to_string(),
-                        };
+                        result =
+                            match crate::mcp_content::from_hook_output(&replacement, &self.root) {
+                                Ok(output) => output,
+                                Err(error) => crate::mcp_content::Output::text(format!(
+                                    "ERROR: Invalid updated MCP tool output: {error:#}"
+                                )),
+                            };
                     }
                 }
                 if let Some(reason) = post.blocking_reason {
-                    result.push_str(&format!(
+                    result.append(&format!(
                         "\nPostToolUse hook blocked continuation: {reason}"
                     ));
                 }
@@ -5744,20 +5764,20 @@ impl Agent {
                 // not rewrite arguments or force a permission decision.
                 if let Some(pre) = pre.as_ref() {
                     for context in &pre.additional_context {
-                        result.push_str(&format!("\n[PreToolUse hook context] {context}"));
+                        result.append(&format!("\n[PreToolUse hook context] {context}"));
                     }
                 }
                 for context in post.additional_context {
-                    result.push_str(&format!("\n[Local hook context] {context}"));
+                    result.append(&format!("\n[Local hook context] {context}"));
                 }
                 self.emit(json!({
                     "type":"tool_result","tool_use_id":call.id,
-                    "name":call.function.name,"content":result,
+                    "name":call.function.name,"content":result.hook_value(),
                     "session_id":self.session.id,
                 }));
-                self.session
-                    .messages
-                    .push(Message::tool_result(&call, result));
+                let mut message = Message::tool_result(&call, result.text);
+                message.content_blocks = result.blocks;
+                self.session.messages.push(message);
                 self.session.save(&self.root)?;
                 if self.shutdown_requested {
                     self.session.cost.add_wall_duration(ask_started.elapsed());

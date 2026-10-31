@@ -1,3 +1,12 @@
+## 2026-10-31：MCP 工具结果完整内容链与多模型图片回放
+
+- 对照原版 `services/mcp/client.ts::transformResultContent/inferCompactSchema/transformMCPResult/processMCPResult/callMCPTool`（2478–2814、3124–3174）、`utils/mcpValidation.ts` 与 `utils/mcpOutputStorage.ts`。使用 `mcp_content` 收敛工具和 prompt 内容转换；优先选择 legacy toolResult、structuredContent、content，未知响应明确报错；isError 在内容转换及文件保存前优先返回原始失败原因。
+- 真实入口为 Agent MCP 授权 → McpManager → 同一内容转换 → PostToolUse 标准内容块/改写 → 会话保存 → Provider。音频和非图片资源完整落盘、返回路径，模型上下文不再出现原始 base64。结构化结果及数组大输出保存实际内容并显示推导的 schema。
+- 图片在会话中保持统一类型，SDK/Hook 使用标准 base64 source：Chat Completions 在相邻工具回执完成后附上用户图片内容，Responses 使用 function_call_output 的 input_image，Gemini 将对应图片与函数回执共同传递并合并相邻并行回执。真实 PNG 测试覆盖三种协议、CLI 子进程、MCP HTTP、模型 HTTP、会话重启及工具不重放；Hook 能读取图片并完全替换旧内容，附加上下文不丢失原块。
+- 已实际执行完整 `cargo test --locked --offline --all-targets`，1,360 项通过；新增规范化/schema/保存失败/UTF-16/图像完整性/多工具关联及真实调用链回归。工作台 33 项通过，原版 1,906 条扫描和台账检查通过；编译/Clippy/Rustfmt 及提交后 Linux/Windows 结果按最终 SHA 独立记录。
+- 相邻回归修复：现有 MCP 错误用例按原版失败优先语义断言；重启用例等待真实子进程退出，消除固定 35ms 竞争；大文件窗口样本改用实际 BOM/CRLF；队列失败的模拟响应通过真实 X-Should-Retry:false 声明终止重试，专门验证后续任务保留。补上 -p JSON/SDK 公共结果中的标准 result 字段，保留已有 content 消费方。
+- 迁移矩阵保持部分实现，不增加排除、不新增已验收路径。图像重采样与超限压缩、精确 token 计数、完整 OAuth 和交互审批仍须继续对齐。
+
 ## 2026-10-31 文件监听新建事件漏报修复（第39份产品规格）
 
 - 源码 `utils/hooks/fileChangedWatcher.ts:67-85` 在 `ignoreInitial:true` 后监听 `add/change/unlink`；Rust 原 `diff_events` 对静态 watch path 的 `None -> Some` 漏报 `add`。PR6 提交 [0479c35e](https://github.com/sy220284/222/commit/0479c35e276969d921efac6a32b97a2ab64fff04) 修复首次创建及删除后再次创建；单测使用真实临时目录读写验证三次状态过渡。

@@ -319,9 +319,15 @@ pub(crate) async fn send_model_request(
 pub(crate) fn openai_messages(request: &ModelRequest) -> Result<Vec<Value>> {
     crate::multimodal::validate_images_for_api(&request.messages)?;
     let mut messages = Vec::with_capacity(request.messages.len() + 1);
+    let mut tool_images = Vec::new();
     for msg in std::iter::once(Message::text("system", &request.system))
         .chain(request.messages.iter().cloned())
     {
+        // Chat Completions accepts text in tool messages. Emit images after
+        // all adjacent tool results so parallel call IDs stay contiguous.
+        if msg.role != "tool" && !tool_images.is_empty() {
+            messages.push(json!({"role":"user","content":std::mem::take(&mut tool_images)}));
+        }
         let mut wire = serde_json::to_value(&msg)?;
         // Responses/Gemini reasoning envelopes are provider-bound opaque state.
         // Never forward this internal envelope as DeepSeek reasoning text.
@@ -334,12 +340,28 @@ pub(crate) fn openai_messages(request: &ModelRequest) -> Result<Vec<Value>> {
             }
         }
         if let Some(blocks) = msg.content_blocks.as_deref() {
-            wire["content"] = json!(crate::multimodal::openai(blocks)?);
+            let content = crate::multimodal::openai(blocks)?;
+            if msg.role == "tool" {
+                let images = content
+                    .into_iter()
+                    .filter(|block| block["type"] == "image_url")
+                    .collect::<Vec<_>>();
+                if !images.is_empty() {
+                    tool_images.push(json!({"type":"text","text":format!("Images returned by tool call {}",msg.tool_call_id.as_deref().context("Tool image has no call ID")?)}));
+                    tool_images.extend(images);
+                }
+                wire["content"] = json!(msg.content.as_deref().unwrap_or(""));
+            } else {
+                wire["content"] = json!(content);
+            }
             if let Some(map) = wire.as_object_mut() {
                 map.remove("content_blocks");
             }
         }
         messages.push(wire);
+    }
+    if !tool_images.is_empty() {
+        messages.push(json!({"role":"user","content":tool_images}));
     }
     Ok(messages)
 }
@@ -524,7 +546,7 @@ fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
             names.insert(call.id.clone(), call.function.name.clone());
         }
     }
-    let mut contents = Vec::new();
+    let mut contents: Vec<Value> = Vec::new();
     for msg in &request.messages {
         let parts: Vec<Value> = match msg.role.as_str() {
             "assistant" => {
@@ -555,7 +577,17 @@ fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
                 let name = names
                     .get(id)
                     .context("Tool response has no matching call")?;
-                vec![json!({"functionResponse":{"name":name,"response":{"content":msg.content}}})]
+                let mut parts = vec![
+                    json!({"functionResponse":{"name":name,"response":{"content":msg.content}}}),
+                ];
+                if let Some(blocks) = msg.content_blocks.as_deref() {
+                    parts.extend(
+                        crate::multimodal::gemini(blocks)?
+                            .into_iter()
+                            .filter(|part| part.get("inlineData").is_some()),
+                    );
+                }
+                parts
             }
             _ => {
                 if let Some(blocks) = msg.content_blocks.as_deref() {
@@ -567,6 +599,23 @@ fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
         };
         if parts.is_empty() {
             continue;
+        }
+        if msg.role == "tool" {
+            if let Some(previous) = contents.last_mut() {
+                if previous["role"] == "user"
+                    && previous["parts"].as_array().is_some_and(|parts| {
+                        parts
+                            .iter()
+                            .any(|part| part.get("functionResponse").is_some())
+                    })
+                {
+                    previous["parts"]
+                        .as_array_mut()
+                        .expect("Checked tool response parts")
+                        .extend(parts);
+                    continue;
+                }
+            }
         }
         contents.push(
             json!({"role": if msg.role == "assistant" {"model"} else {"user"}, "parts":parts}),
@@ -848,6 +897,61 @@ fn error_summary(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tool_images_follow_all_parallel_results_in_chat_and_stay_with_gemini_responses() {
+        let calls = vec![
+            ToolCall {
+                id: "first".into(),
+                kind: "function".into(),
+                function: FunctionCall {
+                    name: "fetch".into(),
+                    arguments: "{}".into(),
+                },
+            },
+            ToolCall {
+                id: "second".into(),
+                kind: "function".into(),
+                function: FunctionCall {
+                    name: "fetch".into(),
+                    arguments: "{}".into(),
+                },
+            },
+        ];
+        let mut assistant = Message::text("assistant", "");
+        assistant.tool_calls = Some(calls.clone());
+        let mut first = Message::tool_result(&calls[0], "first image".into());
+        first.content_blocks = Some(vec![
+            json!({"type":"image","mime_type":"image/png","data":"AQID"}),
+        ]);
+        let second = Message::tool_result(&calls[1], "second result".into());
+        let request = ModelRequest {
+            model: "mock".into(),
+            system: "rules".into(),
+            messages: vec![assistant, first, second, Message::text("assistant", "done")],
+            tools: vec![],
+        };
+        let chat = openai_messages(&request).unwrap();
+        assert_eq!(chat[2]["role"], "tool");
+        assert_eq!(chat[3]["role"], "tool");
+        assert_eq!(chat[4]["role"], "user");
+        assert_eq!(chat[5]["role"], "assistant");
+        assert_eq!(chat[2]["tool_call_id"], "first");
+        assert_eq!(chat[3]["tool_call_id"], "second");
+        assert_eq!(
+            chat[4]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,AQID"
+        );
+        let gemini = gemini_request_body(&request).unwrap();
+        let response = gemini["contents"][1]["parts"].as_array().unwrap();
+        assert_eq!(
+            response
+                .iter()
+                .filter(|p| p.get("functionResponse").is_some())
+                .count(),
+            2
+        );
+        assert_eq!(response[1]["inlineData"]["data"], "AQID");
+    }
     #[test]
     fn gemini_signed_parts_are_not_sent_to_openai_compatible_models() {
         let mut message = Message::text("assistant", "visible answer");

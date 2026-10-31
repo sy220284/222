@@ -610,6 +610,17 @@ impl HookRunner {
         &self,
         call: &ToolCall,
         output: &str,
+        context: Value,
+    ) -> Result<HookOutcome> {
+        self.after_tool_with_response(call, output, json!(output), context)
+            .await
+    }
+
+    pub async fn after_tool_with_response(
+        &self,
+        call: &ToolCall,
+        output: &str,
+        response: Value,
         mut context: Value,
     ) -> Result<HookOutcome> {
         let event = if output.starts_with("ERROR:") {
@@ -626,7 +637,7 @@ impl HookRunner {
             context["error"] = json!(output.strip_prefix("ERROR:").unwrap_or(output).trim());
             context["is_interrupt"] = json!(false);
         } else {
-            context["tool_response"] = json!(output);
+            context["tool_response"] = response;
         }
         self.run(event, Some(&call.function.name), context).await
     }

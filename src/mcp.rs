@@ -76,55 +76,6 @@ fn mcp_tool_timeout() -> Duration {
         .unwrap_or(DEFAULT_MCP_TOOL_TIMEOUT)
 }
 
-/// Keep complete large MCP results reachable through the active workspace's
-/// Read/Shell tools instead of silently clipping them at 16,000 characters.
-fn present_mcp_tool_output(
-    output: String,
-    workspace: &Path,
-    has_images: bool,
-    format: crate::mcp_output_storage::ResultType,
-) -> String {
-    let token_limit = std::env::var("MAX_MCP_OUTPUT_TOKENS")
-        .ok()
-        .and_then(|v| v.trim().parse::<usize>().ok())
-        .filter(|n| *n > 0)
-        .unwrap_or(25_000);
-    let char_limit = token_limit.saturating_mul(4);
-    let length = output.encode_utf16().count();
-    if length <= char_limit {
-        return output;
-    }
-    if has_images {
-        let mut units = 0;
-        let preview: String = output
-            .chars()
-            .take_while(|ch| {
-                let next = units + ch.len_utf16();
-                if next > char_limit {
-                    false
-                } else {
-                    units = next;
-                    true
-                }
-            })
-            .collect();
-        return format!("{preview}\n\n[OUTPUT TRUNCATED - exceeded {token_limit} token limit; image blocks cannot be persisted as text]");
-    }
-    let save = crate::mcp_output_storage::persist_binary_content(
-        workspace,
-        output.as_bytes(),
-        Some("text/plain"),
-        &format!("mcp-output-{}", uuid::Uuid::new_v4()),
-    );
-    match save {
-        Ok(saved) => crate::mcp_output_storage::get_large_output_instructions(
-            &saved.filepath.to_string_lossy(), length,
-            &crate::mcp_output_storage::get_format_description(format, None), None,
-        ),
-        Err(error) => format!("Error: MCP result ({length} characters) exceeds the output budget and could not be saved: {error:#}. Use server pagination or filtering."),
-    }
-}
-
 struct Client {
     name: String,
     _child: Child,
@@ -1216,27 +1167,33 @@ impl McpManager {
     }
 
     pub async fn execute(&mut self, call: &ToolCall) -> String {
+        self.execute_content(call).await.text
+    }
+
+    pub async fn execute_content(&mut self, call: &ToolCall) -> crate::mcp_content::Output {
         match self.call(call).await {
             Ok(content) => content,
             Err(error) => {
                 let diagnostic = format!("ERROR: {error:#}");
                 // Request errors can include a resolved URL and query token.
                 // Apply the same sanitization as connection-status output.
-                self.routes
-                    .get(&call.function.name)
-                    .and_then(|(index, _)| {
-                        self.status_clients
-                            .iter()
-                            .position(|slot| *slot == Some(*index))
-                    })
-                    .and_then(|position| self.configs.get(position))
-                    .map(|config| Self::redact_connection_error(config, diagnostic.clone()))
-                    .unwrap_or(diagnostic)
+                crate::mcp_content::Output::text(
+                    self.routes
+                        .get(&call.function.name)
+                        .and_then(|(index, _)| {
+                            self.status_clients
+                                .iter()
+                                .position(|slot| *slot == Some(*index))
+                        })
+                        .and_then(|position| self.configs.get(position))
+                        .map(|config| Self::redact_connection_error(config, diagnostic.clone()))
+                        .unwrap_or(diagnostic),
+                )
             }
         }
     }
 
-    async fn call(&mut self, call: &ToolCall) -> Result<String> {
+    async fn call(&mut self, call: &ToolCall) -> Result<crate::mcp_content::Output> {
         // The prior invocation may have failed with HTTP 401 or a stale
         // session. Reopen the affected server before a *new* tool call even
         // when the agent is still in the same model turn. No failed call is
@@ -1288,47 +1245,17 @@ impl McpManager {
                 return Err(error);
             }
         };
-        // Keep non-text blocks and structured data intact: silently dropping
-        // image/resource content corrupts the tool response seen by the model.
-        let parts = response.get("content").and_then(Value::as_array);
-        let only_text = parts.is_some_and(|items| {
-            items.iter().all(|item| {
-                item.get("type").and_then(Value::as_str) == Some("text")
-                    && item.get("text").and_then(Value::as_str).is_some()
-            })
-        });
-        let result = if only_text && response.get("structuredContent").is_none() {
-            let texts = parts
-                .unwrap()
-                .iter()
-                .filter_map(|item| item["text"].as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
-            if response["isError"] == true {
-                format!("ERROR: {texts}")
-            } else {
-                texts
-            }
-        } else if response["isError"] == true {
-            format!("ERROR: {}", response)
-        } else {
-            response.to_string()
-        };
-        let has_images = parts.is_some_and(|items| {
-            items
-                .iter()
-                .any(|item| item.get("type").and_then(Value::as_str) == Some("image"))
-        });
-        Ok(present_mcp_tool_output(
-            result,
+        let position = self
+            .status_clients
+            .iter()
+            .position(|slot| *slot == Some(index))
+            .context("MCP tool connection has no server owner")?;
+        crate::mcp_content::process(
+            &response,
+            &real_name,
+            &self.configs[position].id,
             &self.root,
-            has_images,
-            if only_text && response.get("structuredContent").is_none() {
-                crate::mcp_output_storage::ResultType::ToolResult
-            } else {
-                crate::mcp_output_storage::ResultType::StructuredContent
-            },
-        ))
+        )
     }
 }
 
@@ -1648,12 +1575,14 @@ mod output_tests {
     fn large_mcp_output_is_saved_in_full_with_chunk_read_instructions() {
         let root = tempfile::tempdir().unwrap();
         let output = "🦀result\n".repeat(15000);
-        let reply = present_mcp_tool_output(
-            output.clone(),
+        let reply = crate::mcp_content::process(
+            &json!({"toolResult":output}),
+            "fetch",
+            "files",
             root.path(),
-            false,
-            crate::mcp_output_storage::ResultType::ToolResult,
-        );
+        )
+        .unwrap()
+        .text;
         assert!(reply.contains("100%"), "{reply}");
         assert!(reply.contains("Format: Plain text"));
         let entries = std::fs::read_dir(root.path().join(".atlas/tool-results"))
@@ -2079,7 +2008,15 @@ done"#,
         assert!(serde_json::to_string(&mgr.definitions())
             .unwrap()
             .contains("mcp__restart__before"));
-        tokio::time::sleep(std::time::Duration::from_millis(35)).await;
+        // Wait for the actual lifecycle transition; a fixed delay races
+        // shell exit when the full test suite is running concurrently.
+        let TransportClient::Stdio(first) = &mut mgr.clients[0] else {
+            panic!("Expected stdio fixture")
+        };
+        tokio::time::timeout(Duration::from_secs(4), first._child.wait())
+            .await
+            .unwrap()
+            .unwrap();
         mgr.refresh_changed_tools().await.unwrap();
         let definitions = mgr.definitions();
         assert_eq!(definitions.len(), 1);
@@ -2173,7 +2110,7 @@ done"#;
         assert_eq!(states[0]["status"], "failed");
     }
     #[tokio::test]
-    async fn mcp_tool_error_and_structured_payload_survive_model_output() {
+    async fn mcp_tool_error_precedes_structured_payload_like_source() {
         let script = r#"while IFS= read -r line; do
 case "$line" in
   *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
@@ -2201,9 +2138,7 @@ done"#;
             },
         };
         let result = mgr.execute(&call).await;
-        assert!(result.starts_with("ERROR:"));
-        assert!(result.contains("permission denied"));
-        assert!(result.contains("structuredContent"));
+        assert_eq!(result, "ERROR: permission denied");
         let illegal = ToolCall {
             id: "illegal".into(),
             kind: "function".into(),

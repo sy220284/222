@@ -719,11 +719,16 @@ mod tests {
     #[test]
     fn explicit_model_override_trims_without_lowercasing_and_revalidates_tuning() {
         let mut config = Config::default();
-        let override_model = config.select(Some("openai"), Some("  CaseSensitive-Deployment  "))
+        let override_model = config
+            .select(Some("openai"), Some("  CaseSensitive-Deployment  "))
             .unwrap();
         assert_eq!(override_model.model, "CaseSensitive-Deployment");
         assert!(config.select(Some("openai"), Some("   ")).is_err());
-        let profile = config.providers.iter_mut().find(|p| p.id == "openai").unwrap();
+        let profile = config
+            .providers
+            .iter_mut()
+            .find(|p| p.id == "openai")
+            .unwrap();
         profile.tuning.reasoning_effort = Some("none".into());
         assert!(config.select(Some("openai"), Some("gpt-6.1-sol")).is_err());
     }

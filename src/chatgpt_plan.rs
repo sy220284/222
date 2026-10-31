@@ -577,10 +577,27 @@ fn input_items(request: &ModelRequest) -> Result<Vec<Value>> {
     for message in &request.messages {
         match message.role.as_str() {
             "tool" => {
+                let output = if let Some(blocks) = message.content_blocks.as_deref() {
+                    let mut content = Vec::new();
+                    for block in crate::multimodal::openai(blocks)? {
+                        match block["type"].as_str() {
+                            Some("text") => {
+                                content.push(json!({"type":"input_text","text":block["text"]}))
+                            }
+                            Some("image_url") => content.push(
+                                json!({"type":"input_image","image_url":block["image_url"]["url"]}),
+                            ),
+                            _ => bail!("Unsupported Responses tool output block"),
+                        }
+                    }
+                    json!(content)
+                } else {
+                    json!(message.visible_text())
+                };
                 items.push(json!({
                     "type":"function_call_output",
                     "call_id":message.tool_call_id.as_deref().context("Missing call ID in tool output")?,
-                    "output":message.visible_text(),
+                    "output":output,
                 }));
             }
             "user" | "assistant" => {

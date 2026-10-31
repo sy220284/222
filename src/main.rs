@@ -68,6 +68,7 @@ mod marketplace_registry;
 mod marketplace_source;
 mod mcp;
 mod mcp_cli;
+mod mcp_content;
 mod mcp_http;
 mod mcp_instructions_delta;
 mod mcp_legacy_sse;
@@ -3566,7 +3567,7 @@ fn structured_output_payload(answer: &str) -> Result<serde_json::Value, String> 
 fn structured_result_event(agent: &Agent, answer: &str) -> serde_json::Value {
     let mut event = json!({
         "type":"result","session_id":agent.session_id(),
-        "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
+        "result":answer,"content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
     });
     if let Some(reason) = agent.last_turn_stop_reason() {
         event["stop_reason"] = json!(reason);

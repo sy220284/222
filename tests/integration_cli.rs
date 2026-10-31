@@ -2684,8 +2684,10 @@ fn sdk_failed_model_turn_stops_drain_without_consuming_following_work() {
     let server = thread::spawn(move || {
         let (mut conn, _) = listener.accept().unwrap();
         let request = read_request(&mut conn);
+        // This response explicitly ends provider retries so the queue observes
+        // the final model error; retry policy has separate HTTP coverage.
         let body = r#"{"error":{"message":"model unavailable"}}"#;
-        write!(conn,"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        write!(conn,"HTTP/1.1 500 Internal Server Error\r\nX-Should-Retry: false\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             body.len(),body).unwrap();
         conn.flush().unwrap();
         request
@@ -7732,7 +7734,8 @@ fn print_alias_json_returns_one_real_model_result() {
         let request = read_request(&mut stream);
         let body = json!({"choices":[{"message":{
             "role":"assistant","content":"print-mode-ok"
-        },"finish_reason":"stop"}]}).to_string();
+        },"finish_reason":"stop"}]})
+        .to_string();
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -7786,7 +7789,8 @@ fn simple_mode_restricts_live_provider_tool_catalog_and_background_schema() {
         let request: Value = serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         let body = json!({"choices":[{"message":{
             "role":"assistant","content":"simple-tools-ok"
-        },"finish_reason":"stop"}]}).to_string();
+        },"finish_reason":"stop"}]})
+        .to_string();
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -7813,12 +7817,23 @@ fn simple_mode_restricts_live_provider_tool_catalog_and_background_schema() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let names = request["tools"].as_array().unwrap().iter()
+    let names = request["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
         .map(|tool| tool["function"]["name"].as_str().unwrap())
         .collect::<Vec<_>>();
     assert_eq!(names, ["edit_file", "read_file", "run_command"]);
-    let bash = request["tools"].as_array().unwrap().iter()
-        .find(|tool| tool["function"]["name"] == "run_command").unwrap();
-    assert!(bash.pointer("/function/parameters/properties/run_in_background").is_none());
-    assert!(bash.pointer("/function/parameters/properties/command").is_some());
+    let bash = request["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["function"]["name"] == "run_command")
+        .unwrap();
+    assert!(bash
+        .pointer("/function/parameters/properties/run_in_background")
+        .is_none());
+    assert!(bash
+        .pointer("/function/parameters/properties/command")
+        .is_some());
 }

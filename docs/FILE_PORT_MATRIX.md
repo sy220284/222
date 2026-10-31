@@ -1067,7 +1067,7 @@
 | `src/services/mcp/channelNotification.ts` | 317 | 12540 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/channelPermissions.ts` | 241 | 8981 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/claudeai.ts` | 165 | 6126 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 组织托管 MCP；保留标准 MCP；不再跟进 |
-| `src/services/mcp/client.ts` | 3349 | 119060 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、故障隔离、资源/提示订阅及重连、MCP Prompt 命令发现/位置参数绑定/服务端取回/进入真实模型请求；多模态 Prompt、OAuth、独立 SSE GET/退避、其他传输及完整回调/UI 仍未等价；新增服务端 roots/list、ping、elicitation 初始化安全取消与 HTTP SSE 双向请求回执，交互式审批仍缺 ；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/资源等仍待验证；roots/list 按实际工作区或子代理 worktree 返回，断线重建保留原根目录，并校验 stdio/HTTP 双传输 ；独立 GET 通知流增加 SDK 显式长轮询/Last-Event-ID 续传及资源变更监听，常驻自动监听未实现 |
+| `src/services/mcp/client.ts` | 3349 | 119060 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_content.rs / src/mcp_http.rs / src/mcp_prompt.rs / src/agent.rs / src/provider.rs / src/chatgpt_plan.rs` | 部分实现：stdio/HTTP/SSE、故障隔离、资源/提示订阅及重连、MCP Prompt 命令发现/位置参数绑定/服务端取回/进入真实模型请求；多模态 Prompt、OAuth、独立 SSE GET/退避、其他传输及完整回调/UI 仍未等价；新增服务端 roots/list、ping、elicitation 初始化安全取消与 HTTP SSE 双向请求回执，交互式审批仍缺 ；MCP Prompt 的 base64 图片内容经同一多模态通道真实送达模型，音频/PDF 等二进制工具内容已真实落盘并经模型请求验证；roots/list 按实际工作区或子代理 worktree 返回，断线重建保留原根目录，并校验 stdio/HTTP 双传输 ；独立 GET 通知流增加 SDK 显式长轮询/Last-Event-ID 续传及资源变更监听，常驻自动监听未实现；工具结果按 toolResult/structuredContent/content 顺序选择，标准图片经 Chat Completions、Responses、Gemini 实际 HTTP 请求送达并跨会话重启回放，PostToolUse 接收标准内容块并能完全替换；失败原因先于结构化字段处理；图像重采样/超限压缩、精确 token 计数及完整 OAuth/交互链仍待等价 |
 | `src/services/mcp/config.ts` | 1579 | 51130 | 重写：多模型通用 MCP | `src/mcp.rs / src/mcp_http.rs / src/config.rs` | 部分实现：stdio/HTTP/SSE、故障隔离、资源/提示订阅及重连、MCP Prompt 命令发现/位置参数绑定/服务端取回/进入真实模型请求；多模态 Prompt、OAuth、独立 SSE GET/退避、其他传输及完整回调/UI 仍未等价 |
 | `src/services/mcp/elicitationHandler.ts` | 314 | 10166 | 重写：多模型通用 MCP | `src/mcp.rs` | 部分实现，仅基础 stdio |
 | `src/services/mcp/envExpansion.ts` | 39 | 1047 | 重写：多模型通用 MCP | `src/compat_helpers.rs` | 已验收：环境变量展开、默认值、缺失列表及重复缺失项的纯函数语义对照；证据 compat_helpers::tests::source_env_expansion_cases |
@@ -1607,8 +1607,8 @@
 | `src/utils/mcp/dateTimeParser.ts` | 122 | 4322 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcp/elicitationValidation.ts` | 337 | 9384 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcpInstructionsDelta.ts` | 131 | 4752 | 重写：保持通用行为 | `src/mcp_instructions_delta.rs / src/mcp.rs / src/session.rs / src/agent.rs` | 部分实现：手工移植服务端/客户端指令合并、增删重放、断开/重连差量，接入真实 MCP 管理器与 Agent 回合，增删历史会话持久化及恢复；原版指令附件的模型历史呈现和动态客户端说明仍待等价验收 |
-| `src/utils/mcpOutputStorage.ts` | 190 | 7086 | 重写：保持通用行为 | `src/mcp_output_storage.rs / src/mcp.rs / src/mcp_prompt.rs / src/webfetch.rs` | 部分实现：共享 MIME 检测与扩展名、原子完整保存、大小回执和大输出顺序阅读指引，接通 MCP 工具大文本、MCP prompt 二进制附件和 WebFetch。真实 HTTP 混合大小写 PDF、完整大文本保存和目录越界回归通过；MCP 工具全部二进制内容转换、schema 透传和多模态超限仍待等价 |
-| `src/utils/mcpValidation.ts` | 209 | 6300 | 重写：保持通用行为 | `src/generated_ports/p_6287d1dbedede.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
+| `src/utils/mcpOutputStorage.ts` | 190 | 7086 | 重写：保持通用行为 | `src/mcp_output_storage.rs / src/mcp_content.rs / src/mcp.rs / src/mcp_prompt.rs / src/webfetch.rs` | 部分实现：共享 MIME/扩展名、原子完整保存、大小回执和大输出顺序阅读指引已接入工具、提示词和 WebFetch；本次补齐工具音频/资源落盘、结构化/内容数组 schema 提示与完整保存，保留错误及 UTF-16 边界。函数全边界和最新跨平台独立验收仍待完成，不将相邻 MCP 图片压缩/计数缺口核销 |
+| `src/utils/mcpValidation.ts` | 209 | 6300 | 重写：保持通用行为 | `src/mcp_content.rs / src/mcp.rs / src/generated_ports/p_6287d1dbedede.rs` | 部分实现：实际 MCP 调用使用正整数十进制前缀环境上限、UTF-16 文本预算与图片估算、显式截断回执；图片保留类型及完整 base64，不再截坏 JSON 后转文本，支持关闭大输出文件和 IDE 直通。原版模型 token 精确计数、图像压缩及极小图片预算处理仍有差异 |
 | `src/utils/mcpWebSocketTransport.ts` | 201 | 6052 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/memoize.ts` | 270 | 8612 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/memory/types.ts` | 13 | 264 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
