@@ -78,7 +78,7 @@ fn all_registered_source_goldens_execute_against_production_adapters() {
                 .expect("Rust adapter did not return one JSON observation");
             assert_eq!(result["schema"], "source-rust-observation/v1");
             assert_eq!(result["case_id"], case["id"]);
-            assert_eq!(&result["executed_source_ids"], source_ids);
+            assert_eq!(result["executed_source_ids"], entry["source_ids"]);
             let actual = result.pointer(pointer).unwrap_or_else(|| {
                 panic!("{source_path}: Rust adapter missing expected runtime output {pointer}")
             });

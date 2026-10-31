@@ -98,7 +98,7 @@ class SourceTestGateTests(unittest.TestCase):
 
     def test_cargo_inventory_parses_only_real_test_lines(self):
         file=self.repo/"list.txt"
-        file.write_text("sample::tests::unit: test\ngolden_match: test\n2 tests\n")
+        file.write_text("sample::tests::unit: test\ngolden_match: test\nall_registered_source_goldens_execute_against_production_adapters: test\n3 tests\n")
         self.assertEqual(inventory_tests(file),self.discovered)
         file.write_text("some documentation says tests exist")
         with self.assertRaises(Exception):
