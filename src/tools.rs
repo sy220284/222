@@ -2421,34 +2421,44 @@ mod tests {
         let runner = executor(root.path(), Approval::Full);
         let payload = json!({"action":"create","trigger_id":"check","body":{"prompt":"Inspect the workspace"}});
         let call = ToolCall {
-            id: "local-create".into(), kind: "function".into(),
+            id: "local-create".into(),
+            kind: "function".into(),
             function: FunctionCall {
-                name: "LocalTrigger".into(), arguments: payload.to_string(),
-            }
+                name: "LocalTrigger".into(),
+                arguments: payload.to_string(),
+            },
         };
         assert!(crate::local_triggers::model_definition()["function"]["name"] == "LocalTrigger");
         runner.validate_call_before_hooks(&call).unwrap();
         let output = runner.execute(&call).await;
         assert!(output.contains("saved"), "{output}");
-        assert_eq!(crate::local_triggers::get(root.path(), "check").unwrap(), "Inspect the workspace");
+        assert_eq!(
+            crate::local_triggers::get(root.path(), "check").unwrap(),
+            "Inspect the workspace"
+        );
         let run = ToolCall {
-            id: "local-run".into(), kind: "function".into(),
+            id: "local-run".into(),
+            kind: "function".into(),
             function: FunctionCall {
                 name: "LocalTrigger".into(),
-                arguments: json!({"action":"run","trigger_id":"check"}).to_string()
-            }
+                arguments: json!({"action":"run","trigger_id":"check"}).to_string(),
+            },
         };
         let result = runner.execute(&run).await;
         assert!(result.contains("CURRENT Agent turn"), "{result}");
-        let denied = executor(root.path(), Approval::ReadOnly).execute(&run).await;
+        let denied = executor(root.path(), Approval::ReadOnly)
+            .execute(&run)
+            .await;
         assert!(denied.starts_with("ERROR:"), "{denied}");
         let invalid = ToolCall {
-            id: "bad-schedule".into(), kind:"function".into(),
+            id: "bad-schedule".into(),
+            kind: "function".into(),
             function: FunctionCall {
-                name:"LocalTrigger".into(),
-                arguments:json!({"action":"create","trigger_id":"bad",
-                   "body":{"prompt":"run tomorrow","schedule":"daily"}}).to_string()
-            }
+                name: "LocalTrigger".into(),
+                arguments: json!({"action":"create","trigger_id":"bad",
+                   "body":{"prompt":"run tomorrow","schedule":"daily"}})
+                .to_string(),
+            },
         };
         assert!(runner.validate_call_before_hooks(&invalid).is_err());
         assert!(crate::local_triggers::get(root.path(), "bad").is_err());

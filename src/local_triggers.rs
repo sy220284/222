@@ -72,25 +72,35 @@ fn ensure_private_directory(dir: &Path) -> Result<()> {
 /// directory belongs to the invoking workspace and holds private prompts;
 /// an external symlink must never let get/list read another directory.
 fn validate_storage_path(root: &Path, path: &Path) -> Result<()> {
-    let workspace = root.canonicalize().context("Cannot resolve task workspace")?;
-    let relative = path.strip_prefix(root).context("Task storage path is outside workspace")?;
+    let workspace = root
+        .canonicalize()
+        .context("Cannot resolve task workspace")?;
+    let relative = path
+        .strip_prefix(root)
+        .context("Task storage path is outside workspace")?;
     let mut current = root.to_path_buf();
     for component in relative.components() {
         current.push(component);
         match fs::symlink_metadata(&current) {
             Ok(meta) => {
                 if meta.file_type().is_symlink() {
-                    bail!("Task storage path contains a symlink: {}", current.display());
+                    bail!(
+                        "Task storage path contains a symlink: {}",
+                        current.display()
+                    );
                 }
-                let actual = current.canonicalize()
-                    .with_context(|| format!("Cannot verify task storage: {}", current.display()))?;
+                let actual = current.canonicalize().with_context(|| {
+                    format!("Cannot verify task storage: {}", current.display())
+                })?;
                 if !actual.starts_with(&workspace) {
                     bail!("Task storage escapes workspace: {}", current.display());
                 }
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
-            Err(error) => return Err(error)
-                .with_context(|| format!("Cannot inspect task storage: {}", current.display())),
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("Cannot inspect task storage: {}", current.display()))
+            }
         }
     }
     Ok(())
@@ -294,13 +304,17 @@ pub fn model_definition() -> serde_json::Value {
     }})
 }
 pub fn validate_model_input(args: &serde_json::Value) -> Result<()> {
-    let object = args.as_object().context("LocalTrigger requires a JSON object")?;
+    let object = args
+        .as_object()
+        .context("LocalTrigger requires a JSON object")?;
     for key in object.keys() {
         if !matches!(key.as_str(), "action" | "trigger_id" | "body") {
             bail!("Unknown LocalTrigger field: {key}");
         }
     }
-    let action = object.get("action").and_then(serde_json::Value::as_str)
+    let action = object
+        .get("action")
+        .and_then(serde_json::Value::as_str)
         .context("LocalTrigger requires action")?;
     match action {
         "list" => {
@@ -309,26 +323,42 @@ pub fn validate_model_input(args: &serde_json::Value) -> Result<()> {
             }
         }
         "get" | "run" => {
-            check_name(object.get("trigger_id").and_then(serde_json::Value::as_str)
-                .context("LocalTrigger requires trigger_id")?)?;
+            check_name(
+                object
+                    .get("trigger_id")
+                    .and_then(serde_json::Value::as_str)
+                    .context("LocalTrigger requires trigger_id")?,
+            )?;
             if object.contains_key("body") {
                 bail!("LocalTrigger get/run cannot include body");
             }
         }
         "create" | "update" => {
             if action == "update" {
-                check_name(object.get("trigger_id").and_then(serde_json::Value::as_str)
-                    .context("LocalTrigger update requires trigger_id")?)?;
+                check_name(
+                    object
+                        .get("trigger_id")
+                        .and_then(serde_json::Value::as_str)
+                        .context("LocalTrigger update requires trigger_id")?,
+                )?;
             } else if object.contains_key("trigger_id") {
-                check_name(object.get("trigger_id").and_then(serde_json::Value::as_str)
-                    .context("LocalTrigger create trigger_id must be a string")?)?;
+                check_name(
+                    object
+                        .get("trigger_id")
+                        .and_then(serde_json::Value::as_str)
+                        .context("LocalTrigger create trigger_id must be a string")?,
+                )?;
             }
-            let body = object.get("body").and_then(serde_json::Value::as_object)
+            let body = object
+                .get("body")
+                .and_then(serde_json::Value::as_object)
                 .context("LocalTrigger requires a body object")?;
             if body.len() != 1 || !body.contains_key("prompt") {
                 bail!("LocalTrigger accepts only body.prompt; scheduling metadata is unsupported");
             }
-            let prompt = body.get("prompt").and_then(serde_json::Value::as_str)
+            let prompt = body
+                .get("prompt")
+                .and_then(serde_json::Value::as_str)
                 .context("LocalTrigger body.prompt must be a string")?;
             if prompt.trim().is_empty() || prompt.len() > MAX_PROMPT_BYTES {
                 bail!("LocalTrigger prompt must be 1-65536 bytes");
@@ -356,14 +386,20 @@ pub fn model_call(
     match action {
         "list" => Ok(serde_json::to_string(&list(root)?)?),
         "get" => Ok(serde_json::json!({"trigger_id":name,
-            "prompt":get(root, name.context("Missing trigger_id")?)?}).to_string()),
+            "prompt":get(root, name.context("Missing trigger_id")?)?})
+        .to_string()),
         "create" | "update" => {
             authorize_mutation()?;
             let name = name.context("Missing trigger_id")?;
-            let prompt = args.pointer("/body/prompt").and_then(serde_json::Value::as_str)
+            let prompt = args
+                .pointer("/body/prompt")
+                .and_then(serde_json::Value::as_str)
                 .context("Missing prompt")?;
-            if action == "create" { create(root, name, prompt)?; }
-            else { change(root, name, prompt)?; }
+            if action == "create" {
+                create(root, name, prompt)?;
+            } else {
+                change(root, name, prompt)?;
+            }
             Ok(format!("LocalTrigger {action} saved: {name}"))
         }
         "run" => {
@@ -376,26 +412,42 @@ pub fn model_call(
     }
 }
 
-    #[test]
-    fn model_tool_contract_rejects_schedules_and_invalid_actions() {
-        let root = tempfile::tempdir().unwrap();
-        let valid = serde_json::json!({"action":"create","trigger_id":"manual","body":{"prompt":"review local files"}});
-        assert!(validate_model_input(&valid).is_ok());
-        assert!(model_call(root.path(), &valid, || Ok(())).is_ok());
-        assert!(model_call(root.path(), &serde_json::json!({"action":"get","trigger_id":"manual"}), || Ok(())).unwrap().contains("review local files"));
-        let task = model_call(root.path(), &serde_json::json!({"action":"run","trigger_id":"manual"}), || Ok(())).unwrap();
-        assert!(task.contains("CURRENT Agent turn"));
-        assert!(model_call(root.path(), &serde_json::json!({"action":"update","trigger_id":"manual","body":{"prompt":"mutate"}}), || anyhow::bail!("requires approval")).is_err());
-        assert_eq!(get(root.path(), "manual").unwrap(), "review local files");
-        for args in [
-            serde_json::json!({"action":"create","trigger_id":"future","body":{"prompt":"next","schedule":"hourly"}}),
-            serde_json::json!({"action":"run","trigger_id":"manual","schedule":"hourly"}),
-            serde_json::json!({"action":"delete","trigger_id":"manual"}),
-            serde_json::json!({"action":"list","trigger_id":"manual"}),
-        ] {
-            assert!(validate_model_input(&args).is_err(), "{args}");
-        }
+#[test]
+fn model_tool_contract_rejects_schedules_and_invalid_actions() {
+    let root = tempfile::tempdir().unwrap();
+    let valid = serde_json::json!({"action":"create","trigger_id":"manual","body":{"prompt":"review local files"}});
+    assert!(validate_model_input(&valid).is_ok());
+    assert!(model_call(root.path(), &valid, || Ok(())).is_ok());
+    assert!(model_call(
+        root.path(),
+        &serde_json::json!({"action":"get","trigger_id":"manual"}),
+        || Ok(())
+    )
+    .unwrap()
+    .contains("review local files"));
+    let task = model_call(
+        root.path(),
+        &serde_json::json!({"action":"run","trigger_id":"manual"}),
+        || Ok(()),
+    )
+    .unwrap();
+    assert!(task.contains("CURRENT Agent turn"));
+    assert!(model_call(
+        root.path(),
+        &serde_json::json!({"action":"update","trigger_id":"manual","body":{"prompt":"mutate"}}),
+        || anyhow::bail!("requires approval")
+    )
+    .is_err());
+    assert_eq!(get(root.path(), "manual").unwrap(), "review local files");
+    for args in [
+        serde_json::json!({"action":"create","trigger_id":"future","body":{"prompt":"next","schedule":"hourly"}}),
+        serde_json::json!({"action":"run","trigger_id":"manual","schedule":"hourly"}),
+        serde_json::json!({"action":"delete","trigger_id":"manual"}),
+        serde_json::json!({"action":"list","trigger_id":"manual"}),
+    ] {
+        assert!(validate_model_input(&args).is_err(), "{args}");
     }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -516,7 +568,11 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join(".atlas")).unwrap();
-        fs::write(outside.path().join("tasks.json"), r#"{"private":{"prompt":"outside"}}"#).unwrap();
+        fs::write(
+            outside.path().join("tasks.json"),
+            r#"{"private":{"prompt":"outside"}}"#,
+        )
+        .unwrap();
         symlink(outside.path(), store_dir(root.path())).unwrap();
         assert!(list(root.path()).is_err());
         assert!(get(root.path(), "private").is_err());
