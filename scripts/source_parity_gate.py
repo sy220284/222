@@ -5,6 +5,8 @@ A file mapping or successful compilation never implies behavioral parity.
 """
 from __future__ import annotations
 import argparse
+import csv
+import io
 import hashlib
 import json
 from pathlib import Path
@@ -64,6 +66,78 @@ def verify_original(archive: Path, rows: dict, baseline: dict):
         if (size, lines) != (rows[path]["source_bytes"], rows[path]["source_lines"]):
             errors.append("原版大小或行数不一致: " + path)
     return errors
+
+
+
+def verify_spec_archive(archive: Path, baseline: dict):
+    """Verify all specification members, deduplicate mapping by original path.
+
+    The documentation contains static reasoning; none of its entries are
+    automatically promoted to equivalent Rust runtime behavior.
+    """
+    if not archive.is_file():
+        return ["规格包不存在: " + str(archive)], {}
+    errors = []
+    stats = {"members":0,"manifest_checked":0,"mapped_firstparty":0,"duplicates":0}
+    with ZipFile(archive) as z:
+        names = {item.filename for item in z.infolist() if not item.is_dir()}
+        stats["members"] = len(names)
+        if len(names) != len([item for item in z.infolist() if not item.is_dir()]):
+            errors.append("规格包包含重复 ZIP 成员")
+        manifest = "MANIFEST.sha256"
+        if manifest not in names:
+            errors.append("规格包未提供 MANIFEST.sha256")
+        else:
+            seen_names = set()
+            for line in z.read(manifest).decode("utf-8").splitlines():
+                try:
+                    sha, name = line.split("  ", 1)
+                except ValueError:
+                    errors.append("规格包 manifest 记录格式错误")
+                    continue
+                if name in seen_names or name not in names:
+                    errors.append("规格包 manifest 重复或缺文件: " + name)
+                    continue
+                seen_names.add(name)
+                if hashlib.sha256(z.read(name)).hexdigest() != sha:
+                    errors.append("规格包文件内容哈希不一致: " + name)
+                stats["manifest_checked"] += 1
+            if seen_names != names - {manifest}:
+                errors.append("规格包 manifest 未覆盖所有文件")
+        mapping = "核验数据/文件与模块双向映射.tsv"
+        if mapping not in names:
+            errors.append("规格包缺失源码与文档双向映射表")
+        else:
+            rows = list(csv.DictReader(io.StringIO(
+                z.read(mapping).decode("utf-8-sig")), delimiter="\t"))
+            expected_src = {p for p in baseline["source_hashes"] if p.startswith("src/")}
+            mapped = set()
+            docs = set()
+            for item in rows:
+                path = "src/" + item["源文件"]
+                doc = item["对应详细文档"]
+                if path in mapped or doc in docs:
+                    errors.append("源码或详细规格重复: " + path)
+                    stats["duplicates"] += 1
+                mapped.add(path)
+                docs.add(doc)
+                if path not in expected_src:
+                    errors.append("规格登记了不存在的原版源码: " + path)
+                elif item["源文件sha256"] != baseline["source_hashes"][path]:
+                    errors.append("规格使用不同版本源码: " + path)
+                if doc not in names:
+                    errors.append("详细规格文档缺失: " + doc)
+            stats["mapped_firstparty"] = len(mapped)
+            errors.extend("第一方规格缺失: " + p for p in sorted(expected_src - mapped))
+            # Duplicate payloads in empty stderr/stdout are allowed as evidence;
+            # duplicated functional documents remain a fatal mistake.
+            doc_hashes = {}
+            for doc in sorted(docs & names):
+                sha = hashlib.sha256(z.read(doc)).hexdigest()
+                if sha in doc_hashes:
+                    errors.append("功能文档内容重复: " + doc_hashes[sha] + " / " + doc)
+                doc_hashes[sha] = doc
+    return errors, stats
 
 
 def load_contracts(path: Path):
@@ -156,19 +230,27 @@ def run(args):
         problem, stats = verify_contracts(rows, baseline, contracts)
         errors.extend(problem)
         original_checked = False
+        spec_checked = False
+        spec_stats = {}
         if args.source_archive:
             original_problems = verify_original(args.source_archive, rows, baseline)
             errors.extend(original_problems)
             original_checked = not original_problems
         elif args.command == "gate":
             errors.append("缺少原版源码 ZIP，拒绝放行")
+        if args.spec_archive:
+            spec_problems, spec_stats = verify_spec_archive(args.spec_archive, baseline)
+            errors.extend(spec_problems)
+            spec_checked = not spec_problems
+        elif args.command == "gate":
+            errors.append("缺少完整源码功能规格 ZIP，拒绝放行")
         if args.command == "gate" and progress["remaining"]:
             errors.append("尚有 " + str(progress["remaining"]) + " 条源码路径未完整验收")
         if args.command == "gate" and progress["accepted"] != stats["fully_evidenced"]:
             errors.append("已验收台账与逐函数证据未对齐")
-        passed = not errors and (args.command == "audit" or original_checked)
+        passed = not errors and (args.command == "audit" or (original_checked and spec_checked))
         result = {"schema":"source-parity/v1", "pass":passed, "mode":args.command,
-                  "original_checked":original_checked,"progress":progress,
+                  "original_checked":original_checked,"spec_checked":spec_checked,"spec_stats":spec_stats,"progress":progress,
                   "evidence":evidence,"contracts":stats,
                   "error_count":len(errors),"errors":errors}
         (output/"SOURCE_PARITY.json").write_text(
@@ -197,6 +279,7 @@ def main():
     p.add_argument("command",choices=("audit","gate"))
     p.add_argument("--repo",type=Path,default=Path("."))
     p.add_argument("--source-archive",type=Path)
+    p.add_argument("--spec-archive",type=Path)
     p.add_argument("--output",type=Path,default=Path(".port-audit"))
     return run(p.parse_args())
 
