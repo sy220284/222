@@ -9,6 +9,7 @@ import csv
 import io
 import hashlib
 import json
+import re
 from pathlib import Path
 import re
 import sys
@@ -78,7 +79,9 @@ def verify_spec_archive(archive: Path, baseline: dict):
     if not archive.is_file():
         return ["规格包不存在: " + str(archive)], {}
     errors = []
-    stats = {"members":0,"manifest_checked":0,"mapped_firstparty":0,"duplicates":0}
+    stats = {"members":0,"manifest_checked":0,"mapped_firstparty":0,"duplicates":0,
+             "source_declarations":0,"function_like":0,"file_level_only":0,
+             "function_queue": []}
     with ZipFile(archive) as z:
         names = {item.filename for item in z.infolist() if not item.is_dir()}
         stats["members"] = len(names)
@@ -127,6 +130,55 @@ def verify_spec_archive(archive: Path, baseline: dict):
                     errors.append("规格使用不同版本源码: " + path)
                 if doc not in names:
                     errors.append("详细规格文档缺失: " + doc)
+                else:
+                    detail = z.read(doc).decode("utf-8")
+                    section = detail.split("## 一、函数与类型声明入口", 1)
+                    if len(section) != 2:
+                        errors.append("规格缺少函数声明章节: " + doc)
+                        continue
+                    table = section[1].split("## 二", 1)[0]
+                    pattern = re.compile(
+                        r"^\|\s*(\d+)\s*[–-]\s*(\d+)\s*\|\s*([A-Za-z][A-Za-z0-9_]*)"
+                        r"\s*\|\s*\x60([^\x60]+)\x60\s*\|"
+                    )
+                    seen_anchors = set()
+                    added = 0
+                    for text_line in table.splitlines():
+                        m = pattern.match(text_line)
+                        if not m:
+                            continue
+                        start, end, kind, symbol = m.groups()
+                        start, end = int(start), int(end)
+                        if not 1 <= start <= end <= int(item["源文件行数"]):
+                            errors.append("源码函数位置越界: " + path + ":" + symbol)
+                            continue
+                        anchor = (start, end, kind, symbol)
+                        if anchor in seen_anchors:
+                            errors.append("规格函数声明重复: " + path + ":" + symbol)
+                            continue
+                        seen_anchors.add(anchor)
+                        if kind == "ImportDeclaration":
+                            continue
+                        stats["function_queue"].append({
+                            "source":path, "source_sha256":item["源文件sha256"],
+                            "spec_doc":doc, "symbol":symbol, "kind":kind,
+                            "source_lines":[start,end], "audit_status":"pending",
+                        })
+                        added += 1
+                        if kind in ("FunctionDeclaration","MethodDeclaration"):
+                            stats["function_like"] += 1
+                    stats["source_declarations"] += added
+                    if added == 0:
+                        # Constants-only modules still contain executable exports.
+                        # Treat their whole file as a source-review obligation.
+                        stats["file_level_only"] += 1
+                        stats["function_queue"].append({
+                            "source":path, "source_sha256":item["源文件sha256"],
+                            "spec_doc":doc, "symbol":"<file-level>",
+                            "kind":"FileLevelDeclarationOrConstant",
+                            "source_lines":[1,int(item["源文件行数"])],
+                            "audit_status":"pending",
+                        })
             stats["mapped_firstparty"] = len(mapped)
             errors.extend("第一方规格缺失: " + p for p in sorted(expected_src - mapped))
             # Duplicate payloads in empty stderr/stdout are allowed as evidence;
@@ -241,6 +293,12 @@ def run(args):
         if args.spec_archive:
             spec_problems, spec_stats = verify_spec_archive(args.spec_archive, baseline)
             errors.extend(spec_problems)
+            queue = spec_stats.pop("function_queue", [])
+            if queue:
+                (output/"SOURCE_FUNCTION_INDEX.json").write_text(
+                    json.dumps({"schema":"source-function-index/v1","total":len(queue),
+                                "notice":"仅列原版声明位置；不代表 Rust 行为等价。",
+                                "items":queue},ensure_ascii=False)+"\n",encoding="utf-8")
             spec_checked = not spec_problems
         elif args.command == "gate":
             errors.append("缺少完整源码功能规格 ZIP，拒绝放行")
