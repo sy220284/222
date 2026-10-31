@@ -217,6 +217,17 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
                             errors.append(path + ": 正常与边界场景必须使用不同的原版输入")
                         actual_covered = set()
                         default_export = fixture.get("export")
+                        operations = {c.get("export", default_export)
+                                      for c in fixture["cases"] if isinstance(c, dict)}
+                        if len(operations) > 1 and (not isinstance(adapter, dict) or
+                            not adapter.get("operation_key")):
+                            errors.append(path + ": 多导出原版模块缺少 Rust 函数选择字段")
+                        if isinstance(adapter, dict) and adapter.get("operation_key") is not None:
+                            key = adapter["operation_key"]
+                            if (not isinstance(key, str) or
+                                not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key) or
+                                key == adapter.get("input_key")):
+                                errors.append(path + ": Rust 函数选择字段名称无效")
                         for case in fixture["cases"]:
                             symbol = case.get("export", default_export)
                             if driver is None and (not isinstance(symbol, str) or

@@ -84,6 +84,14 @@ class SourceTestGateTests(unittest.TestCase):
         self.entry["original_driver"]="../../source-private.mjs"
         self.assertFalse(self.result()["pass"])
 
+    def test_multiple_original_exports_require_a_rust_operation_selector(self):
+        self.fixture["cases"][1]["export"]="secondExport"
+        self.write_golden()
+        self.assertFalse(self.result()["pass"])
+        self.assertTrue(any("多导出" in e for e in self.result()["errors"]))
+        self.entry["adapter"]["operation_key"]="operation"
+        self.assertTrue(self.result()["pass"], self.result()["errors"])
+
     def test_source_sha_mismatch_fails(self):
         self.entry["source_sha256"]="b"*64
         self.assertFalse(self.result()["pass"])
