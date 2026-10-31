@@ -573,7 +573,13 @@ fn parse_cli_with_default_chat(
     mut args: Vec<std::ffi::OsString>,
 ) -> std::result::Result<Cli, clap::Error> {
     match Cli::try_parse_from(args.clone()) {
-        Err(error) if error.kind() == clap::error::ErrorKind::MissingSubcommand => {
+        Err(error)
+            if matches!(
+                error.kind(),
+                clap::error::ErrorKind::MissingSubcommand
+                    | clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            ) =>
+        {
             args.push(std::ffi::OsString::from("chat"));
             Cli::try_parse_from(args)
         }
@@ -610,6 +616,9 @@ mod default_chat_cli_tests {
             parse_cli_with_default_chat(vec!["atlas-agent".into(), "--unknown-option".into()])
                 .unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
+        let help = parse_cli_with_default_chat(vec!["atlas-agent".into(), "--help".into()])
+            .unwrap_err();
+        assert_eq!(help.kind(), clap::error::ErrorKind::DisplayHelp);
     }
 }
 
