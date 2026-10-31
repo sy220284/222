@@ -39,23 +39,27 @@ pub struct QueryConfig {
 
 /// `buildQueryConfig()`.
 pub fn build_query_config(session_id: Uuid) -> QueryConfig {
+    build_query_config_with_env(session_id, |name| std::env::var(name).ok())
+}
+
+/// The original query() takes a snapshot once. Passing the environment
+/// lookup in makes that behavior deterministic under concurrently running
+/// CLI/SDK tasks, and lets tests exercise it without changing process globals.
+fn build_query_config_with_env(
+    session_id: Uuid,
+    mut get: impl FnMut(&str) -> Option<String>,
+) -> QueryConfig {
+    let streaming = get("ATLAS_STREAMING_TOOL_EXECUTION");
+    let summaries = get("ATLAS_EMIT_TOOL_USE_SUMMARIES");
+    let user_type = get("USER_TYPE");
+    let fast_disabled = get("ATLAS_DISABLE_FAST_MODE");
     QueryConfig {
         session_id,
         gates: QueryGates {
-            streaming_tool_execution: crate::env_runtime::is_env_truthy(
-                std::env::var("ATLAS_STREAMING_TOOL_EXECUTION")
-                    .ok()
-                    .as_deref(),
-            ),
-            emit_tool_use_summaries: is_env_truthy(
-                std::env::var("ATLAS_EMIT_TOOL_USE_SUMMARIES")
-                    .ok()
-                    .as_deref(),
-            ),
-            is_ant: std::env::var("USER_TYPE").ok().as_deref() == Some("ant"),
-            fast_mode_enabled: !is_env_truthy(
-                std::env::var("ATLAS_DISABLE_FAST_MODE").ok().as_deref(),
-            ),
+            streaming_tool_execution: is_env_truthy(streaming.as_deref()),
+            emit_tool_use_summaries: is_env_truthy(summaries.as_deref()),
+            is_ant: user_type.as_deref() == Some("ant"),
+            fast_mode_enabled: !is_env_truthy(fast_disabled.as_deref()),
         },
     }
 }
@@ -64,71 +68,58 @@ pub fn build_query_config(session_id: Uuid) -> QueryConfig {
 mod tests {
     use super::*;
 
+    fn with_value(key: &str, value: &str) -> QueryConfig {
+        build_query_config_with_env(Uuid::nil(), |name| {
+            (name == key).then(|| value.to_owned())
+        })
+    }
+
     #[test]
     fn env_gates_follow_isenvtruthy_semantics() {
-        // fast mode is on unless explicitly disabled
-        std::env::remove_var("ATLAS_DISABLE_FAST_MODE");
-        assert!(build_query_config(Uuid::nil()).gates.fast_mode_enabled);
+        assert!(build_query_config_with_env(Uuid::nil(), |_| None)
+            .gates
+            .fast_mode_enabled);
         for truthy in ["1", "true", "TRUE", " yes ", "on"] {
-            std::env::set_var("ATLAS_DISABLE_FAST_MODE", truthy);
-            assert!(!build_query_config(Uuid::nil()).gates.fast_mode_enabled);
+            assert!(!with_value("ATLAS_DISABLE_FAST_MODE", truthy)
+                .gates
+                .fast_mode_enabled);
+            assert!(with_value("ATLAS_EMIT_TOOL_USE_SUMMARIES", truthy)
+                .gates
+                .emit_tool_use_summaries);
         }
         for falsy in ["0", "false", "no", "off", ""] {
-            std::env::set_var("ATLAS_DISABLE_FAST_MODE", falsy);
-            assert!(build_query_config(Uuid::nil()).gates.fast_mode_enabled);
+            assert!(with_value("ATLAS_DISABLE_FAST_MODE", falsy)
+                .gates
+                .fast_mode_enabled);
+            assert!(!with_value("ATLAS_EMIT_TOOL_USE_SUMMARIES", falsy)
+                .gates
+                .emit_tool_use_summaries);
         }
-        std::env::remove_var("ATLAS_DISABLE_FAST_MODE");
-
-        // summary emission is opt-in truthy
-        std::env::remove_var("ATLAS_EMIT_TOOL_USE_SUMMARIES");
-        assert!(
-            !build_query_config(Uuid::nil())
-                .gates
-                .emit_tool_use_summaries
-        );
-        std::env::set_var("ATLAS_EMIT_TOOL_USE_SUMMARIES", "1");
-        assert!(
-            build_query_config(Uuid::nil())
-                .gates
-                .emit_tool_use_summaries
-        );
-        std::env::remove_var("ATLAS_EMIT_TOOL_USE_SUMMARIES");
-        assert!(
-            !build_query_config(Uuid::nil())
-                .gates
-                .emit_tool_use_summaries
-        );
+        assert!(!build_query_config_with_env(Uuid::nil(), |_| None)
+            .gates
+            .emit_tool_use_summaries);
     }
 
     #[test]
     fn is_ant_requires_exact_user_type() {
-        std::env::remove_var("USER_TYPE");
-        assert!(!build_query_config(Uuid::nil()).gates.is_ant);
-        std::env::set_var("USER_TYPE", "external");
-        assert!(!build_query_config(Uuid::nil()).gates.is_ant);
-        std::env::set_var("USER_TYPE", "ant");
-        assert!(build_query_config(Uuid::nil()).gates.is_ant);
-        std::env::remove_var("USER_TYPE");
+        assert!(!build_query_config_with_env(Uuid::nil(), |_| None)
+            .gates
+            .is_ant);
+        assert!(!with_value("USER_TYPE", "external").gates.is_ant);
+        assert!(with_value("USER_TYPE", "ant").gates.is_ant);
     }
 
     #[test]
     fn streaming_tool_execution_follows_process_switch() {
-        std::env::remove_var("ATLAS_EMIT_TOOL_USE_SUMMARIES");
-        std::env::remove_var("ATLAS_DISABLE_FAST_MODE");
-        std::env::remove_var("USER_TYPE");
-        std::env::remove_var("ATLAS_STREAMING_TOOL_EXECUTION");
-        assert!(
-            !build_query_config(Uuid::nil())
-                .gates
-                .streaming_tool_execution
-        );
-        std::env::set_var("ATLAS_STREAMING_TOOL_EXECUTION", "1");
-        assert!(
-            build_query_config(Uuid::nil())
-                .gates
-                .streaming_tool_execution
-        );
-        std::env::remove_var("ATLAS_STREAMING_TOOL_EXECUTION");
+        assert!(!build_query_config_with_env(Uuid::nil(), |_| None)
+            .gates
+            .streaming_tool_execution);
+        assert!(with_value("ATLAS_STREAMING_TOOL_EXECUTION", "1")
+            .gates
+            .streaming_tool_execution);
+        assert!(!with_value("ATLAS_STREAMING_TOOL_EXECUTION", "off")
+            .gates
+            .streaming_tool_execution);
     }
 
     #[test]
