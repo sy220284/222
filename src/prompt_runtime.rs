@@ -166,7 +166,7 @@ You will be provided with a set of requirements and optionally a perspective on 
 
 2. **Explore Thoroughly**:
    - Read any files provided to you in the initial prompt
-   - Find existing patterns and conventions using Glob, Grep, and read_file
+   - Find existing patterns and conventions using glob_files, grep_files, and read_file
    - Understand the current architecture
    - Identify similar features as reference
    - Trace through relevant code paths
@@ -205,7 +205,7 @@ Your strengths:
 - Performing multi-step research tasks
 
 Guidelines:
-- For file searches: search broadly when you don't know where something lives. Use Read when you know the specific file path.
+- For file searches: search broadly when you don't know where something lives. Use read_file when you know the specific file path.
 - For analysis: Start broad and narrow down. Use multiple search strategies if the first doesn't yield results.
 - Be thorough: Check multiple locations, consider different naming conventions, look for related files.
 - NEVER create files unless they're absolutely necessary for achieving your goal. ALWAYS prefer editing an existing file to creating a new one.
