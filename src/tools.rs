@@ -18,6 +18,31 @@ use std::{
 use tokio::{process::Command, time::timeout};
 use walkdir::WalkDir;
 
+/// FileReadTool.ts::isBlockedDevicePath. Never open device streams that
+/// cannot reach EOF or that read from the terminal, even when the workspace
+/// itself is /dev or /proc. Safe devices such as /dev/null stay allowed.
+fn blocked_read_device(path: &Path) -> bool {
+    let name = path.to_string_lossy();
+    matches!(
+        name.as_ref(),
+        "/dev/zero"
+            | "/dev/random"
+            | "/dev/urandom"
+            | "/dev/full"
+            | "/dev/stdin"
+            | "/dev/tty"
+            | "/dev/console"
+            | "/dev/stdout"
+            | "/dev/stderr"
+            | "/dev/fd/0"
+            | "/dev/fd/1"
+            | "/dev/fd/2"
+    ) || (name.starts_with("/proc/")
+        && ["/fd/0", "/fd/1", "/fd/2"]
+            .iter()
+            .any(|suffix| name.ends_with(suffix)))
+}
+
 const MAX_FILE_BYTES: u64 = 1_048_576;
 const MAX_OUTPUT_CHARS: usize = 16_000;
 
@@ -687,6 +712,9 @@ impl ToolExecutor {
     /// modification time; never manufacture a read of newer content.
     pub fn seed_read_state(&self, requested: &str, observed_ms: u64) -> Result<()> {
         let path = self.checked_path(requested)?;
+        if blocked_read_device(&path) {
+            bail!("Cannot read '{requested}': this device file would block or produce infinite output");
+        }
         self.require_read_rules(requested, &path)?;
         let before = match fs::metadata(&path) {
             Ok(metadata) => metadata,
@@ -1534,6 +1562,9 @@ impl ToolExecutor {
             Some(path) => path,
             None => self.checked_path(requested)?,
         };
+        if blocked_read_device(&path) {
+            bail!("Cannot read '{requested}': this device file would block or produce infinite output");
+        }
         self.require_read_rules(requested, &path)?;
         if trusted_task_output {
             // Reading a temporary task log must never grant Edit/Write
@@ -2474,6 +2505,37 @@ pub fn definitions_with_checkpointing(enabled: bool) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_read_blocks_infinite_or_interactive_devices_before_io() {
+        for path in [
+            "/dev/zero",
+            "/dev/random",
+            "/dev/urandom",
+            "/dev/full",
+            "/dev/stdin",
+            "/dev/tty",
+            "/dev/console",
+            "/dev/stdout",
+            "/dev/stderr",
+            "/dev/fd/0",
+            "/dev/fd/1",
+            "/dev/fd/2",
+            "/proc/self/fd/0",
+            "/proc/123/fd/1",
+            "/proc/123/fd/2",
+        ] {
+            assert!(blocked_read_device(Path::new(path)), "{path}");
+        }
+        for path in [
+            "/dev/null",
+            "/proc/123/fd/3",
+            "/dev/zero-copy",
+            "/project/normal.txt",
+        ] {
+            assert!(!blocked_read_device(Path::new(path)), "{path}");
+        }
+    }
     #[tokio::test]
     async fn local_trigger_tool_dispatch_requires_permission_and_returns_real_saved_task() {
         let root = tempfile::tempdir().unwrap();
