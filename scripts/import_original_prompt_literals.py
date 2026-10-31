@@ -48,6 +48,47 @@ def extract_literals(code):
     return results
 
 
+# Anchor verified source export/return templates that contain nested JS backticks.
+# Regex-only scanning can merge adjacent literals across ${...} expressions.
+KNOWN_LITERALS = {
+    'source/src/constants/prompts.ts': [
+        ('function getActionsSection(): string {\n  return `', '`\n}'),
+        ('function getSystemRemindersSection(): string {\n  return `', '`\n}'),
+        ('function getHooksSection(): string {\n  return `', '`\n}'),
+    ],
+    'source/src/services/compact/prompt.ts': [
+        ('const NO_TOOLS_PREAMBLE = `', '`\n'),
+    ],
+    'source/src/tools/AgentTool/built-in/verificationAgent.ts': [
+        ('const VERIFICATION_SYSTEM_PROMPT = `', '`\n'),
+    ],
+    'source/src/tools/AgentTool/built-in/generalPurposeAgent.ts': [
+        ('const SHARED_PREFIX = `', '`\n'),
+        ('const SHARED_GUIDELINES = `', '`\n'),
+    ],
+}
+
+
+def guaranteed_literals(path, code, scanned):
+    for open_marker, close_marker in KNOWN_LITERALS.get(path, []):
+        if code.count(open_marker) != 1:
+            raise ValueError(f'Original literal anchor changed: {path}: {open_marker}')
+        start = code.index(open_marker) + len(open_marker)
+        close = code.find(close_marker, start)
+        if close < 0:
+            raise ValueError(f'Original literal end changed: {path}')
+        value = code[start:close]
+        if not any(fragment['raw'] == value for fragment in scanned):
+            scanned.append({
+                'line': code.count('\n', 0, start) + 1,
+                'quote': '`',
+                'raw': value,
+                'dynamic': '${' in value,
+            })
+    scanned.sort(key=lambda item: item['line'])
+    return scanned
+
+
 def build(archive, index):
     with zipfile.ZipFile(archive) as zipped:
         with open(index, encoding='utf-8-sig', newline='') as handle:
@@ -67,7 +108,7 @@ def build(archive, index):
                 'source_sha256': hashlib.sha256(data).hexdigest(),
                 'source_bytes': len(data),
                 'excluded': is_excluded,
-                'literal_candidates': extract_literals(source) if included else [],
+                'literal_candidates': guaranteed_literals(path, source, extract_literals(source)) if included else [],
             })
     return output
 
