@@ -92,3 +92,9 @@ python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
 校验命令：cargo fmt --all -- --check、cargo clippy --locked --all-targets -- -D clippy::correctness -D clippy::suspicious、cargo check --locked --all-targets、cargo test --locked --all-targets。CI 对工作台进行强制校验并保存最新报告。
 
 本工具不创建定时任务、不自动开启派生 Agent；提交/CI 触发工作台生成只属于一次已有构建，不代表后台任务持续运行。
+
+## 2026-10-31 双端等价验收器边界修复
+
+- 本轮只对原版与 Rust 双端实际输出的核验器增加输入类型检查：`executed_source_ids` 出现对象、数组或其它非字符串值时，明确记录此场景失败，不允许 Python `set()` 抛出异常导致整套验收过程提前中断。
+- 真实修复见 `scripts/runtime_parity_gate.py`，异常输入回归见 `tests/port_workbench/test_runtime_parity_gate.py::test_malformed_runtime_function_ids_fail_closed_without_crashing`。
+- 该修复保证台账执行器遇到畸形适配器数据仍能继续输出失败报告；不会将任何原版功能自行提升为“已验收”。原版路径统计仍以 `docs/FILE_PORT_MATRIX.md` 为唯一事实来源，最新提交的独立 CI 结果须另行验证。
