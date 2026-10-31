@@ -1,7 +1,7 @@
 //! Exact pure merge from 2.1.88 hooks/useMergedTools.ts and utils/toolPool.ts.
 //! First-seen tool name wins; sorting uses separate built-in and MCP partitions
 //! to preserve the provider's built-in-prefix cache boundary.
-use anyhow::{bail, Result};
+use anyhow::Result;
 use serde_json::Value;
 use std::collections::HashSet;
 
@@ -58,9 +58,6 @@ pub fn merge_and_filter_tools(
             .cmp(tool_name(b).expect("validated tool"))
     });
     built_in.extend(mcp);
-    if built_in.len() > 2048 {
-        bail!("Tool pool exceeds the supported limit");
-    }
     Ok(built_in)
 }
 
