@@ -6,9 +6,28 @@ pub struct ParsedSlashCommand {
     pub args: String,
     pub is_mcp: bool,
 }
+fn is_ecmascript_trim_char(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0009}'..='\u{000D}'
+            | ' '
+            | '\u{00A0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200A}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{202F}'
+            | '\u{205F}'
+            | '\u{3000}'
+            | '\u{FEFF}'
+    )
+}
+
 pub fn parse_slash_command(input: &str) -> Option<ParsedSlashCommand> {
-    // JavaScript trim() includes U+FEFF even though Rust's trim() does not.
-    let trimmed = input.trim_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
+    // ECMAScript String.prototype.trim uses the spec's WhiteSpace and
+    // LineTerminator set. Unicode White_Space includes U+0085 (NEL), which
+    // JS intentionally preserves. Rust char::is_whitespace is too broad.
+    let trimmed = input.trim_matches(is_ecmascript_trim_char);
     let without_slash = trimmed.strip_prefix('/')?;
     let words: Vec<&str> = without_slash.split(' ').collect();
     if words.first().copied().unwrap_or("").is_empty() {
@@ -73,6 +92,23 @@ mod tests {
             })
         );
     }
+    #[test]
+    fn ecmascript_trim_excludes_nel_and_zero_width_space() {
+        // Independently verified against the 2.1.88 TypeScript source via Node.
+        assert_eq!(parse_slash_command("\u{0085}/foo bar"), None);
+        assert_eq!(parse_slash_command("\u{200B}/foo bar"), None);
+        assert_eq!(
+            parse_slash_command("/foo bar\u{0085}").unwrap().args,
+            "bar\u{0085}"
+        );
+        for whitespace in ['\u{00A0}', '\u{FEFF}', '\u{2029}', '\u{3000}'] {
+            let input = format!("{whitespace}/foo bar{whitespace}");
+            let value = parse_slash_command(&input).unwrap();
+            assert_eq!(value.command_name, "foo");
+            assert_eq!(value.args, "bar");
+        }
+    }
+
     #[test]
     fn invalid_inputs_and_literal_space_behavior() {
         for invalid in ["", "abc", "/", "/    ", "   /  foo"] {
