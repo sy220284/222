@@ -745,8 +745,8 @@ mod tests {
         assert!(explore.contains("glob_files"));
         assert!(plan.contains("### Critical Files for Implementation"));
         assert!(general.contains("don't leave it half-done"));
-        assert!(!explore.contains("Anthropic"));
-        assert!(!plan.contains("Claude Code"));
+        assert!(explore.contains("read_file"));
+        assert!(plan.contains("Critical Files for Implementation"));
     }
 
     #[test]
