@@ -111,9 +111,9 @@ mod portable_settings_runtime;
 mod portable_source_utils;
 mod portable_ui_runtime;
 mod powershell_permission_matching;
+mod process_text_prompt;
 mod project_init;
 mod project_onboarding;
-mod process_text_prompt;
 mod prompt_history;
 mod prompt_runtime;
 mod protocol;
@@ -630,7 +630,10 @@ mod default_chat_cli_tests {
         let value = structured_output_payload("  {\"answer\": 42}  ").unwrap();
         assert_eq!(value["answer"], 42);
         let error = structured_output_payload("The answer is 42").unwrap_err();
-        assert!(error.contains("StructuredOutput schema mismatch"), "{error}");
+        assert!(
+            error.contains("StructuredOutput schema mismatch"),
+            "{error}"
+        );
         assert!(error.contains("not valid JSON"), "{error}");
     }
 }
@@ -3452,10 +3455,9 @@ async fn sdk_interruptible_turn(
 /// unstructured text (coreSchemas.ts `error_max_structured_output_retries`
 /// surfaces after server-side retries; the client guard fails fast).
 fn structured_output_payload(answer: &str) -> Result<serde_json::Value, String> {
-    serde_json::from_str::<serde_json::Value>(answer.trim())
-        .map_err(|error| {
-            format!("StructuredOutput schema mismatch: final answer is not valid JSON ({error})")
-        })
+    serde_json::from_str::<serde_json::Value>(answer.trim()).map_err(|error| {
+        format!("StructuredOutput schema mismatch: final answer is not valid JSON ({error})")
+    })
 }
 
 /// Build the SDK result event for a completed turn. When an initialize
