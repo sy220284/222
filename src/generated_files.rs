@@ -132,14 +132,14 @@ mod tests {
             "src/bundle.bundle.css", "src/foo.generated.ts",
             "proto/account.pb.go", "proto/account_pb2.py",
             "proto/account_pb.py", "proto/service.grpc.ts",
-            "schema.openapi.json", "src/A-min.js", "src/a_auto.py",
+            "schema.openapi.json", "src/A-min.js", "src/a.auto.py",
             "src/a.gen.rs", "src/data.pb.h", "src/foo.swagger.yaml",
         ] {
             assert!(is_generated_file(path), "expected generated: {path}");
         }
         for path in [
             "src/normal.rs", "Cargo.toml", "src/types.ts",
-            "src/package-lock.json.bak", "src/production.locked",
+            "src/package-lock.json.bak", "src/production.locked", "src/a_auto.py",
             "src/distinguished/file.rs", "src/a.pb.h.txt",
             "src/README.md",
         ] {
