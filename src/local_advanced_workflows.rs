@@ -66,11 +66,12 @@ pub fn review_prompt(root: &Path, number: Option<u64>) -> Result<String> {
                     .filter(|sha| !sha.trim().is_empty())
                     .map(|sha| (reference, sha.trim().to_owned()))
             });
-        let committed = if let Some((reference, base_sha)) = base {
+        let (committed, has_committed_changes) = if let Some((reference, base_sha)) = base {
             let diff = git(root, &["diff", "--stat", &base_sha, "HEAD"])?;
-            format!("Base {reference}, merge-base {base_sha}:\n{diff}")
+            let has_changes = !diff.trim().is_empty();
+            (format!("Base {reference}, merge-base {base_sha}:\n{diff}"), has_changes)
         } else {
-            "No local main/master or origin base ref available; committed branch comparison is unavailable. This review covers the visible working tree only.".to_owned()
+            ("No local main/master or origin base ref available; committed branch comparison is unavailable. This review covers the visible working tree only.".to_owned(), false)
         };
         let status = git(root, &["status", "--short"])?;
         let stat = git(root, &["diff", "--stat"])?;
@@ -78,7 +79,7 @@ pub fn review_prompt(root: &Path, number: Option<u64>) -> Result<String> {
         if status.trim().is_empty()
             && stat.trim().is_empty()
             && staged.trim().is_empty()
-            && !committed.starts_with("Base ")
+            && !has_committed_changes
         {
             bail!("No local changes to review, and no branch base is available");
         }
