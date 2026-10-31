@@ -1512,7 +1512,7 @@
 | `src/utils/dxt/helpers.ts` | `bd9042454bdc7fc72908ffb24d7e98e613902029999cbd9a600d6da0a7ede128` | 部分实现 | `src/generated_ports/p_f2da3e94e87ce.rs` | 部分实现：MCPB 清单必填字段校验（manifestVersion/name/displayName/author.name/version 非空字符串）、扁平化错误格式（field: msg; formErrors）、parseAndValidateManifest 三入口（对象/字节/文本）、generateExtensionId sanitize 正则（非字母数字转连字符+压缩+修剪）与 .dxt 后缀剥离，附 6 测试；zod schema 细则（可选字段类型/嵌套 mcpServers 配置形状）以必填骨架覆盖，记差异 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/dxt/zip.ts` | `3eb2ddf6cb8ef5c6ee0c47f59c51237a4bbd00e4b92c99d860b2adc31c9f0a9d` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/earlyInput.ts` | `4e7cf8cd39cc678ebba72cb591c39f05ab2611126a54c7ae55d53add56a7d3a6` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
-| `src/utils/editor.ts` | `fa346125c81e3c1ff7694b8674ad48c43d605b0d525f93875a1dda9ccdb5428a` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
+| `src/utils/editor.ts` | `fa346125c81e3c1ff7694b8674ad48c43d605b0d525f93875a1dda9ccdb5428a` | 部分实现 | `src/editor_runtime.rs / src/memory_command.rs / src/main.rs` | 已按原版源码补齐编辑器识别、GUI/终端分流、行号参数、外部编辑器选择和命令安全调用；Ink屏幕交接、Windows批处理与真实交互尚待测试 | 本次已检查生产接线及新增单元测试，当前HEAD全量验收未完成 |
 | `src/utils/effort.ts` | `0bb9ccf6afc3de0472266de1811dc6b44918abdc58ccf03ceb90d2c44c623104` | 部分实现 | `src/generated_ports/p_062c5079e1519.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/embeddedTools.ts` | `944ea83bc5bd3ed16f4daac2038ad19ada53bfd20ec968d77daf2a154aee6973` | 部分实现 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/env.ts` | `534a837cd1771d6c74ccadee08c7c01511f8f9630c906cc812326ff6d970e4b0` | 部分实现 | `src/generated_ports/p_1580d3dd08c1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 | 待按规格逐函数核实、补齐并验收 |
