@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn full_source_text_and_partial_selection() {
         assert_eq!(BASE_COMPACT_PROMPT.len(), 4220);
-        assert_eq!(PARTIAL_COMPACT_PROMPT.len(), 2362);
+        assert_eq!(PARTIAL_COMPACT_PROMPT.len(), 2364);
         assert_eq!(PARTIAL_COMPACT_UP_TO_PROMPT.len(), 2326);
         let base = prompt("", false);
         let partial = prompt("verified work", true);
