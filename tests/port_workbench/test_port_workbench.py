@@ -154,6 +154,12 @@ class WorkbenchTests(unittest.TestCase):
         self.baseline()
         self.assertEqual(check_evidence(self.repo,read_matrix(self.repo),False)['new_verified'],0)
 
+    def test_historic_verified_entry_cannot_lose_its_evidence(self):
+        self.write_matrix(status1='已验收')
+        self.baseline()
+        with self.assertRaisesRegex(AuditError, '可追溯证据'):
+            check_evidence(self.repo, read_matrix(self.repo), False)
+
     def test_promotion_without_evidence_is_rejected(self):
         self.baseline()
         self.write_matrix(status1='已验收')
