@@ -1545,8 +1545,7 @@ mod tests {
             "---\ndescription: Fetch release notes\n---\nBody",
         )
         .unwrap();
-        let descriptors =
-            command_descriptors(temporary.path(), &["demo".to_string()]).unwrap();
+        let descriptors = command_descriptors(temporary.path(), &["demo".to_string()]).unwrap();
         assert_eq!(descriptors.len(), 1);
         assert_eq!(descriptors[0]["name"], "demo:demo");
         assert_eq!(descriptors[0]["description"], "(demo) Fetch release notes");

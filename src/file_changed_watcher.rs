@@ -167,7 +167,10 @@ pub fn spawn(rules: &[HookRule], workspace: &Path) -> anyhow::Result<Option<File
             previous = current;
         }
     });
-    Ok(Some(FileChangedWatcher { handle, messages: rx }))
+    Ok(Some(FileChangedWatcher {
+        handle,
+        messages: rx,
+    }))
 }
 
 #[cfg(test)]
@@ -223,10 +226,7 @@ mod tests {
         let b = PathBuf::from("/tmp/b");
         let t1 = SystemTime::UNIX_EPOCH;
         let t2 = t1 + Duration::from_secs(1);
-        let prev = Snapshot::from([
-            (a.clone(), Some(t1)),
-            (b.clone(), Some(t1)),
-        ]);
+        let prev = Snapshot::from([(a.clone(), Some(t1)), (b.clone(), Some(t1))]);
         // a modified, b removed, c added
         let c = PathBuf::from("/tmp/c");
         let next = Snapshot::from([(a.clone(), Some(t2)), (c.clone(), Some(t1))]);
