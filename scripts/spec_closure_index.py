@@ -38,6 +38,40 @@ def load(spec_path: Path, matrix_path: Path, original_path: Path | None):
         docs = {m.group(2): m.group(1) + "_" + m.group(2) + ".md"
                 for name in names
                 if (m := re.search(r"/功能模块/(\d{2})_(.+)\.md$", name))}
+        # Each document's 0.9 section lists the concrete upstream function
+        # entrypoints and source-line ranges. Preserve them as a separate
+        # manual acceptance queue; a path mapping alone cannot close a function.
+        function_rows = []
+        function_pattern = re.compile(
+            r"(?m)^- `([^`]+)` — `source/([^`\:]+):(\d+)-(\d+)`"
+        )
+        for archive_name in names:
+            match = re.search(r"/功能模块/(\d{2})_(.+)\.md$", archive_name)
+            if not match:
+                continue
+            document = match.group(1) + "_" + match.group(2) + ".md"
+            document_text = spec.read(archive_name).decode("utf-8")
+            if "### 0.9" not in document_text:
+                raise ValueError("规格文档缺少第0.9函数索引：" + document)
+            section = document_text.split("### 0.9", 1)[1].split("\n---\n", 1)[0]
+            functions = function_pattern.findall(section)
+            if not functions:
+                raise ValueError("规格文档未列出关键函数：" + document)
+            for name, source_path, first, last in functions:
+                if source_path not in matrix or int(first) > int(last):
+                    raise ValueError("规格关键函数源范围无效：" + document + ":" + name)
+                status, target, details = matrix[source_path]
+                function_rows.append(dict(
+                    document=document, function=name, source=source_path,
+                    source_start=int(first), source_end=int(last),
+                    rust_target=target, path_status=status,
+                    function_verified=False,
+                    acceptance="已批准排除" if status == "批准排除" else "待函数级源码与运行行为验收",
+                ))
+        # The current enhanced artifact carries nine declared upstream
+        # entrypoints per module. A lost section must fail reconciliation.
+        if len(function_rows) != 360:
+            raise ValueError(f"预期360个原版函数入口，实际{len(function_rows)}")
     if len(docs) != 40 or len(source_rows) != 1902 or len(matrix) != 1906:
         raise ValueError("40文档/1902第一方源码/1906冻结路径数量不一致")
     original = zipfile.ZipFile(original_path) if original_path else None
@@ -74,13 +108,15 @@ def load(spec_path: Path, matrix_path: Path, original_path: Path | None):
             registered=c["已登记验收"], partial=c["部分实现"],
             unported=c["未迁移"], excluded=c["批准排除"],
             closed=False))
-    return dict(modules=groups, summary=summary, original_files=1902, baseline=1906)
+    return dict(modules=groups, summary=summary, functions=function_rows,
+                original_files=1902, baseline=1906)
 
 def main():
     p = argparse.ArgumentParser(description="40份产品规格与Rust功能实现逐源码对照工作台")
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--original-source", type=Path)
     p.add_argument("--matrix", type=Path, default=Path("docs/FILE_PORT_MATRIX.md"))
+    p.add_argument("--function-csv-out", type=Path)
     p.add_argument("--json-out", type=Path)
     p.add_argument("--markdown-out", type=Path)
     args = p.parse_args()
@@ -102,6 +138,15 @@ def main():
     if args.json_out:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    if args.function_csv_out:
+        args.function_csv_out.parent.mkdir(parents=True, exist_ok=True)
+        with args.function_csv_out.open("w", encoding="utf-8-sig", newline="") as output:
+            fieldnames = ["document", "function", "source", "source_start",
+                          "source_end", "rust_target", "path_status",
+                          "function_verified", "acceptance"]
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(data["functions"])
 
 if __name__ == "__main__":
     sys.exit(main())
