@@ -2415,7 +2415,9 @@ fn truncate(input: &str, max: usize) -> String {
 /// validator on the same setting, so a model cannot bypass the omission.
 fn background_tasks_disabled() -> bool {
     crate::env_runtime::is_env_truthy(
-        std::env::var("ATLAS_DISABLE_BACKGROUND_TASKS").ok().as_deref(),
+        std::env::var("ATLAS_DISABLE_BACKGROUND_TASKS")
+            .ok()
+            .as_deref(),
     )
 }
 
@@ -2510,9 +2512,7 @@ pub fn definitions() -> Vec<Value> {
     ];
     if background_tasks_disabled() {
         for tool in &mut tools {
-            if tool.pointer("/function/name").and_then(Value::as_str)
-                == Some("run_command")
-            {
+            if tool.pointer("/function/name").and_then(Value::as_str) == Some("run_command") {
                 hide_background_parameter(tool);
             }
         }
@@ -2578,12 +2578,16 @@ mod tests {
     #[test]
     fn background_flag_omission_matches_simple_source_schema() {
         let mut definition = json!({"type":"function","function":{
-            "name":"run_command","parameters":{"type":"object","properties":{
-                "command":{"type":"string"},"run_in_background":{"type":"boolean"}
-            }}}});
+        "name":"run_command","parameters":{"type":"object","properties":{
+            "command":{"type":"string"},"run_in_background":{"type":"boolean"}
+        }}}});
         hide_background_parameter(&mut definition);
-        assert!(definition.pointer("/function/parameters/properties/run_in_background").is_none());
-        assert!(definition.pointer("/function/parameters/properties/command").is_some());
+        assert!(definition
+            .pointer("/function/parameters/properties/run_in_background")
+            .is_none());
+        assert!(definition
+            .pointer("/function/parameters/properties/command")
+            .is_some());
     }
 
     #[tokio::test]
