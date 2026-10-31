@@ -1500,7 +1500,7 @@
 | `src/utils/dxt/helpers.ts` | 89 | 2599 | 重写：保持通用行为 | `src/generated_ports/p_f2da3e94e87ce.rs`| 部分实现：MCPB 清单必填字段校验（manifestVersion/name/displayName/author.name/version 非空字符串）、扁平化错误格式（field: msg; formErrors）、parseAndValidateManifest 三入口（对象/字节/文本）、generateExtensionId sanitize 正则（非字母数字转连字符+压缩+修剪）与 .dxt 后缀剥离，附 6 测试；zod schema 细则（可选字段类型/嵌套 mcpServers 配置形状）以必填骨架覆盖，记差异|
 | `src/utils/dxt/zip.ts` | 227 | 7704 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/earlyInput.ts` | 192 | 5398 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/editor.ts` | 184 | 6634 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/editor.ts` | 184 | 6634 | 重写：保持通用行为 | `src/editor_runtime.rs / src/memory_command.rs / src/main.rs` | 部分实现：共享编辑器运行时已接入 /memory 生产路径；按原版区分 GUI 与终端编辑器、保留可配置 VISUAL/EDITOR 和参数、GUI 非阻塞启动、终端编辑器同步退出、代码类编辑器 -g file:line / subl file:line / vi 等 +line、PATH 默认发现、所有文件名仅走独立 argv，加入路径空格/单引号/命令元字符与 Windows 反斜线回归。待补：原版 Ink 备用屏幕完整切换、Windows .cmd/bat shell 适配、真实启动错误路径及跨平台端到端验证 |
 | `src/utils/effort.ts` | 330 | 11583 | 重写：保持通用行为 | `src/generated_ports/p_062c5079e1519.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/embeddedTools.ts` | 30 | 1043 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
 | `src/utils/env.ts` | 348 | 10943 | 重写：保持通用行为 | `src/generated_ports/p_1580d3dd08c1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
