@@ -142,7 +142,10 @@ mod tests {
         assert_eq!(result.added_names, ["alpha", "zeta"]);
         assert_eq!(
             result.added_blocks,
-            ["## alpha\nUse prompt A", "## zeta\nRead only\n\nClient adds detail"]
+            [
+                "## alpha\nUse prompt A",
+                "## zeta\nRead only\n\nClient adds detail"
+            ]
         );
         assert!(result.removed_names.is_empty());
     }
@@ -151,8 +154,7 @@ mod tests {
     fn replay_announcements_detects_disconnection_and_reconnection() {
         let history = [announcement(&["a", "b"], &[]), announcement(&[], &["a"])];
         assert_eq!(
-            get_mcp_instructions_delta(&[server("a", Some("new"))], &history, &[])
-                .unwrap(),
+            get_mcp_instructions_delta(&[server("a", Some("new"))], &history, &[]).unwrap(),
             McpInstructionsDelta {
                 added_names: vec!["a".into()],
                 added_blocks: vec!["## a\nnew".into()],
@@ -171,11 +173,6 @@ mod tests {
     fn only_instruction_bearing_servers_are_announced() {
         let mut gone = server("gone", Some("unused"));
         gone.connected = false;
-        assert!(get_mcp_instructions_delta(
-            &[server("without", None), gone],
-            &[],
-            &[]
-        )
-        .is_none());
+        assert!(get_mcp_instructions_delta(&[server("without", None), gone], &[], &[]).is_none());
     }
 }
