@@ -3476,8 +3476,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         ) {
                             Ok(Some(expanded)) => {
                                 if let Some(blocks) = user.blocks.as_mut() {
-                                    if let Some(last) = blocks.last_mut() {
-                                        last["text"] = json!(expanded);
+                                    if let Some(last_text) = blocks.iter_mut().rev()
+                                        .find(|block| block["type"] == "text") {
+                                        last_text["text"] = json!(expanded);
                                     }
                                     user.preview = blocks
                                         .iter()
