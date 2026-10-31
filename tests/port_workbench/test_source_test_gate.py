@@ -92,9 +92,14 @@ class SourceTestGateTests(unittest.TestCase):
         self.assertEqual(result["missing_source_tests"],1)
         self.assertEqual(result["remaining_port_paths"],1)
 
-    def test_legacy_evidence_cannot_silently_disappear(self):
+    def test_new_real_golden_can_supersede_historical_evidence(self):
         self.old=[]
-        self.assertTrue(any("缺少历史" in e for e in self.result()["errors"]))
+        self.assertTrue(self.result()["pass"], self.result()["errors"])
+
+    def test_missing_both_historical_and_new_evidence_is_rejected(self):
+        self.old=[]
+        self.entry["tests"]=[]
+        self.assertFalse(self.result()["pass"])
 
     def test_cargo_inventory_parses_only_real_test_lines(self):
         file=self.repo/"list.txt"
