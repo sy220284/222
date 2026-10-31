@@ -778,6 +778,11 @@ impl ToolExecutor {
     /// concurrent and streaming dispatch share this boundary; dispatch still
     /// validates the effective arguments after hook rewrites.
     pub fn validate_call_before_hooks(&self, call: &ToolCall) -> Result<()> {
+        if crate::env_runtime::is_env_truthy(std::env::var("ATLAS_SIMPLE").ok().as_deref())
+            && !crate::tool_pool_merge::is_simple_model_tool(&call.function.name)
+        {
+            bail!("Tool {} is unavailable in simple mode", call.function.name);
+        }
         let value: Value = serde_json::from_str(&call.function.arguments)
             .context("Invalid tool arguments JSON")?;
         if !value.is_object() {
