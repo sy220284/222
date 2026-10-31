@@ -47,6 +47,26 @@ pub fn resolve_watch_paths(rules: &[HookRule], workspace: &Path) -> Vec<PathBuf>
     paths.into_iter().collect()
 }
 
+/// Combine matcher paths and the latest dynamic watchPaths hook output.
+/// An empty hook output does not replace a previous dynamic set; callers only
+/// apply this function after a hook returns one or more explicit watch paths.
+fn combined_watch_paths(
+    static_paths: &[PathBuf],
+    dynamic_paths: &[String],
+    workspace: &Path,
+) -> Vec<PathBuf> {
+    let mut combined: BTreeSet<PathBuf> = static_paths.iter().cloned().collect();
+    for path in dynamic_paths {
+        let raw = Path::new(path);
+        combined.insert(if raw.is_absolute() {
+            raw.to_path_buf()
+        } else {
+            workspace.join(raw)
+        });
+    }
+    combined.into_iter().collect()
+}
+
 /// One snapshot entry per watched path: existence plus modification time.
 type Snapshot = HashMap<PathBuf, Option<SystemTime>>;
 
@@ -127,10 +147,11 @@ impl Drop for FileChangedWatcher {
 /// Start polling for FileChanged hook rules. Returns None when no rule
 /// contributes a watch path, matching the source early-return.
 pub fn spawn(rules: &[HookRule], workspace: &Path) -> anyhow::Result<Option<FileChangedWatcher>> {
-    let watch_paths = resolve_watch_paths(rules, workspace);
-    if watch_paths.is_empty() {
+    let static_paths = resolve_watch_paths(rules, workspace);
+    if static_paths.is_empty() {
         return Ok(None);
     }
+    let workspace = workspace.to_path_buf();
     let hook_rules: Vec<HookRule> = rules
         .iter()
         .filter(|rule| rule.event == HookEvent::FileChanged)
@@ -141,12 +162,14 @@ pub fn spawn(rules: &[HookRule], workspace: &Path) -> anyhow::Result<Option<File
         .with_project_root(workspace.to_path_buf());
     let (tx, rx) = unbounded_channel::<String>();
     let handle = tokio::spawn(async move {
+        let mut watch_paths = static_paths.clone();
         let mut previous = snapshot(&watch_paths);
         let mut interval = tokio::time::interval(POLL_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
             let current = snapshot(&watch_paths);
+            let mut replacement_paths = None;
             for (path, event) in diff_events(&previous, &current) {
                 match runner
                     .run(
@@ -157,6 +180,16 @@ pub fn spawn(rules: &[HookRule], workspace: &Path) -> anyhow::Result<Option<File
                     .await
                 {
                     Ok(outcome) => {
+                        if !outcome.watch_paths.is_empty() {
+                            let candidate = combined_watch_paths(
+                                &static_paths,
+                                &outcome.watch_paths,
+                                &workspace,
+                            );
+                            if candidate != watch_paths {
+                                replacement_paths = Some(candidate);
+                            }
+                        }
                         for message in outcome_messages(&outcome) {
                             if !tx.send(message).is_ok() {
                                 return;
@@ -168,7 +201,14 @@ pub fn spawn(rules: &[HookRule], workspace: &Path) -> anyhow::Result<Option<File
                     }
                 }
             }
-            previous = current;
+            if let Some(paths) = replacement_paths {
+                // Original restartWatching uses ignoreInitial. Seeding the
+                // new watcher snapshot avoids replaying existing files as adds.
+                watch_paths = paths;
+                previous = snapshot(&watch_paths);
+            } else {
+                previous = current;
+            }
         }
     });
     Ok(Some(FileChangedWatcher {
@@ -225,6 +265,30 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_watch_paths_replace_previous_set_but_keep_static_matchers() {
+        let workspace = Path::new("/tmp/work");
+        let static_paths = vec![workspace.join(".env")];
+        let first = combined_watch_paths(
+            &static_paths,
+            &["generated/app.json".into(), ".env".into()],
+            workspace,
+        );
+        assert_eq!(
+            first,
+            vec![workspace.join(".env"), workspace.join("generated/app.json")]
+        );
+        let replacement = combined_watch_paths(
+            &static_paths,
+            &["/tmp/other/config.json".into()],
+            workspace,
+        );
+        assert_eq!(
+            replacement,
+            vec![PathBuf::from("/tmp/other/config.json"), workspace.join(".env")]
+        );
+    }
+
+    #[test]
     fn diff_reports_change_add_unlink() {
         let a = PathBuf::from("/tmp/a");
         let b = PathBuf::from("/tmp/b");
@@ -250,10 +314,7 @@ mod tests {
 
         std::fs::write(&path, "value=1").unwrap();
         let created = snapshot(&[path.clone()]);
-        assert_eq!(
-            diff_events(&missing, &created),
-            vec![(path.clone(), "add")]
-        );
+        assert_eq!(diff_events(&missing, &created), vec![(path.clone(), "add")]);
 
         std::fs::remove_file(&path).unwrap();
         let removed = snapshot(&[path.clone()]);
@@ -293,6 +354,7 @@ mod tests {
             blocking_reasons: vec!["blocked".into()],
             additional_context: vec!["note".into()],
             initial_user_message: None,
+            watch_paths: Vec::new(),
             updated_input: None,
             permission_decision: None,
             updated_mcp_tool_output: None,
