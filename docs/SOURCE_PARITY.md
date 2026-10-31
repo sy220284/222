@@ -33,3 +33,44 @@ scripts/sync_spec_progress_summary.py：同步显示数字，不再定义独立�
 ## 实际来源锁定
 
 本轮独立读取用户资料库原版 ZIP：SHA256 23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d；完整逐行规格包：SHA256 3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93。规格包 ZIP CRC 通过，内部 5,258 条哈希记录验证一致，1,902 条第一方映射没有重复、源码 SHA 不匹配或详细文档缺失。该静态来源审计不等于动态运行行为对齐。
+
+
+## 2026-10-31 契约底稿重构及可执行路径
+
+**现状必须分层显示：** 本次把零字节的 `SOURCE_PARITY_CONTRACTS.jsonl` 建成覆盖 1,714 条应迁移路径的**待审基线**，内容是已有冻结 SHA256、路径、源码行数、Rust 映射和明确的待验证状态。这仅消除了空文件导致的断档；1,714 条当前没有一条可以凭这份底稿通过新版完整行为验收。禁止把 JSONL 记录条数称为验收完成率。
+
+需要真实源码逐函数索引时，在有两份用户授权原版 ZIP 的可信环境运行：
+
+```bash
+python3 scripts/source_parity_gate.py index --repo . \
+  --source-archive /private/claude-code-2.1.88.zip \
+  --spec-archive /private/complete-source-spec.zip \
+  --output .port-audit --write-contracts
+python3 scripts/source_parity_gate.py report --repo . --output .port-audit
+python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
+```
+
+`index` 在写入前重新校验全部 1,906 个文件及冻结哈希；可选核对 1,902 份第一方详细规格，并生成声明候选、源码位置与规格文件引用。重复执行按源路径覆盖同一个待审底稿，已经验收的人工契约保持原样。提取器捕获的是待复核函数线索，自动登记不生成语义、权限、失败、持久化等运行结论，也不自动调整台账。需要逐个补足 `functions` 的十二种行为维度、真实 Rust 入口及回归测试，再重新审计。
+
+已在本轮独立验证的私有资料：源码 ZIP SHA256 为
+`23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d`，
+详细规格 ZIP SHA256 为
+`3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93`。
+对原版 1,906 个源码文件及 1,902 份第一方详细规格逐行核对，共计 **513,237 行原文，零差异**。这只说明规格文本准确复现了原版源码，不等于 Rust 功能已等价。
+
+### GitHub 私有资料接入（仓库管理员一次性配置）
+
+GitHub 仓库 `Settings → Secrets and variables → Actions → Repository secrets` 中配置：
+
+- `ORIGINAL_SOURCE_ARCHIVE_URL`：可通过 HTTPS 无重定向获取完整原版 ZIP 的私有地址。
+- `ORIGINAL_SPEC_ARCHIVE_URL`：完整逐行规格 ZIP 的私有地址。
+- `ORIGINAL_SOURCE_ARCHIVE_TOKEN`：源码服务需要 Bearer 鉴权时提供。
+- `ORIGINAL_SPEC_ARCHIVE_TOKEN`：规格服务需要 Bearer 鉴权时提供。
+
+整体 SHA256 已固定在 `.github/workflows/ci.yml`，无须将公开的哈希重复存为 Secret。建议两份档案放在访问受控、支持短时密钥的私有对象存储中；CI 不向日志或工件上传原版 ZIP。
+
+**不能把 ChatGPT 资料库路径当作 GitHub Actions 可访问的路径**。Actions 运行器无权直接读取本会话资料库。仓库管理员完成私有下载地址及 Token 配置前，下载会失败，随后仍执行唯一契约门禁并上传失败原因及缺口报告；这个失败是按设计拒绝放行。
+
+当前 CI 已将台账校验、调用范围审计、迁移报告、规格进度同步与完整源码验收统一从 `scripts/source_parity_gate.py` 进入。旧脚本仍作为内部数据处理模块或兼容入口保留，原始迁移状态继续以单一矩阵为准。
+
+GitHub 网页/API 真正禁止合并仍需要有管理权限的仓库人员设置 `main` Ruleset，要求状态检查 `原版源码全量等价验收` 成功且禁止绕过；PR 保持 Draft，直到所有必需证据闭环。
