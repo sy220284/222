@@ -225,45 +225,14 @@ pub fn generate_temp_file_path(
 }
 
 // src/utils/timeouts.ts
-fn decimal_prefix(raw: &str) -> Option<u64> {
-    let raw = raw.trim_start();
-    let digits = raw.strip_prefix('+').unwrap_or(raw);
-    if digits.starts_with('-') {
-        return None;
-    }
-    let text = digits
-        .chars()
-        .take_while(char::is_ascii_digit)
-        .collect::<String>();
-    if text.is_empty() {
-        None
-    } else {
-        text.parse::<u64>().ok()
-    }
-}
-pub fn default_bash_timeout_ms(env: &HashMap<String, String>) -> u64 {
-    env.get("BASH_DEFAULT_TIMEOUT_MS")
-        .and_then(|s| decimal_prefix(s))
-        .filter(|n| *n > 0)
-        .unwrap_or(120_000)
-}
-pub fn max_bash_timeout_ms(env: &HashMap<String, String>) -> u64 {
-    env.get("BASH_MAX_TIMEOUT_MS")
-        .and_then(|s| decimal_prefix(s))
-        .filter(|n| *n > 0)
-        .unwrap_or(600_000)
-        .max(default_bash_timeout_ms(env))
-}
+#[path = "source_timeouts.rs"]
+mod source_timeouts;
+pub use source_timeouts::{default_bash_timeout_ms, max_bash_timeout_ms};
 
 // src/utils/keyboardShortcuts.ts
-pub fn macos_option_char(value: &str) -> Option<&'static str> {
-    match value {
-        "†" => Some("alt+t"),
-        "π" => Some("alt+p"),
-        "ø" => Some("alt+o"),
-        _ => None,
-    }
-}
+#[path = "source_keyboard.rs"]
+mod source_keyboard;
+pub use source_keyboard::{is_macos_option_char, macos_option_char};
 
 // src/utils/messagePredicates.ts
 #[path = "message_predicates.rs"]
