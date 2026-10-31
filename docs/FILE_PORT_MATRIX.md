@@ -1284,8 +1284,8 @@
 | `src/tools/ReadMcpResourceTool/ReadMcpResourceTool.ts` | 159 | 4654 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ReadMcpResourceTool/UI.tsx` | 37 | 6109 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ReadMcpResourceTool/prompt.ts` | 17 | 544 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/RemoteTriggerTool/RemoteTriggerTool.ts` | 162 | 4715 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地模型工具list/get/create/update/run经过真实Agent工具/审批/持久化；create可省略ID自动生成，run返回已授权任务给同一Agent继续执行；本地模拟HTTP状态+JSON协议并按原版动作/权限分类；定时/云端异步执行依授权排除，当前Agent执行结果仍需完整行为证明 |
-| `src/tools/RemoteTriggerTool/UI.tsx` | 17 | 3096 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：SDK已接通原版动作+目标ID摘要以及HTTP状态和JSON行数的tool_result展示元数据；尚无完全同形的Ink React终端组件，需继续UI用户体验验收 |
+| `src/tools/RemoteTriggerTool/RemoteTriggerTool.ts` | 162 | 4715 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地模型工具list/get/create/update/run经过真实Agent工具/审批/持久化；create可省略ID自动生成，run返回已授权任务给同一Agent继续执行；本地模拟HTTP状态+JSON协议并按原版动作/权限分类；定时/云端异步执行依授权排除，真实模拟模型API已完成LocalTrigger创建/获取/执行后读取本地文件的端到端验收，外部模型执行差异继续复查 |
+| `src/tools/RemoteTriggerTool/UI.tsx` | 17 | 3096 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：SDK已接通原版动作+目标ID摘要以及HTTP状态和JSON行数的tool_result展示元数据；交互CLI同步展示工具动作、目标ID与HTTP状态/行数摘要；跨平台终端视觉与原版React UI还需继续核验 |
 | `src/tools/RemoteTriggerTool/prompt.ts` | 16 | 697 | 改造：手动本地任务触发 | `src/local_triggers.rs / src/main.rs` | 部分实现：本地工具说明覆盖五种动作、无需厂商OAuth、免ID创建、当前Agent手动run及拒绝定时和远程调度；原版云端API说明已按授权替换，完整模型工具语义仍待最终验收 |
 | `src/tools/ScheduleCronTool/CronCreateTool.ts` | 158 | 5710 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/ScheduleCronTool/CronDeleteTool.ts` | 96 | 2616 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1903,7 +1903,7 @@
 | `src/utils/treeify.ts` | 171 | 5033 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/truncate.ts` | 180 | 5719 | 重写：保持通用行为 | `src/generated_ports/terminal_truncate.rs` | 部分实现：按终端显示宽度的截断、路径中间截断、头尾截断和换行 Rust 实现；全 UAX29 字素规则和 ANSI 边界待完成 |
 | `src/utils/ultraplan/ccrSession.ts` | 350 | 12987 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端规划专用工具；不再跟进，通用本地能力与模型 API 保留 |
-| `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 改造：本地任意模型通用工作流 | `src/local_advanced_keywords.rs / src/main.rs` | 部分实现：原版词法边界、引用与代码路径、前缀斜杠、首个ultraplan替换及保留大小写已移植并测试；交互文字可自动本地规划，ultrareview普通文字不自动审查；SDK只允许明确命令以保持非交互语义；输入框高亮/提示UI仍待验收 |
+| `src/utils/ultraplan/keyword.ts` | 128 | 4691 | 改造：本地任意模型通用工作流 | `src/local_advanced_keywords.rs / src/main.rs` | 部分实现：原版词法边界、引用与代码路径、前缀斜杠、首个ultraplan替换及保留大小写已移植并测试；交互文字可自动本地规划，ultrareview普通文字不自动审查；SDK只允许明确命令以保持非交互语义；Unix原生终端已实现彩虹高亮和UltraReview关键词提示，Windows终端交互一致性仍待验收 |
 | `src/utils/unaryLogging.ts` | 40 | 1254 | 重写：保持通用行为 | `src/generated_ports/p_5386fc6ccfc1e.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/undercover.ts` | 90 | 3681 | 重写：保持通用行为 | `src/generated_ports/p_bba75aff43791.rs` | 部分实现：完整等价：外部构建语义（USER_TYPE 构建常量折叠，全函数 trivial return）恒 false/空清单含单测；内仓 allowlist 属厂商归因面（排除），待验收 |
 | `src/utils/user.ts` | 195 | 5714 | 重写：保持通用行为 | 待定 | 未迁移 |
