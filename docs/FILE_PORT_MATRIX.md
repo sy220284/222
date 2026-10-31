@@ -1030,10 +1030,10 @@
 | `src/services/api/ultrareviewQuota.ts` | 39 | 1219 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端审查配额；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/usage.ts` | 64 | 1685 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方订阅配额 API；本地费用统计保留；不再跟进，通用本地能力与模型 API 保留 |
 | `src/services/api/withRetry.ts` | 823 | 28238 | 重写：模型／Agent 循环 | `src/provider.rs / src/sse.rs / src/gemini_sse.rs / src/agent.rs` | 部分实现：多模型 HTTP/流式建立前的 408/409/429/5xx 与连接超时有限重试，尊重 x-should-retry:false、Retry-After 秒数，失败不执行工具或重复落盘；仍缺原版可取消等待、按查询来源的 529 策略、流中断恢复、模型回退及完整重试事件与自定义预算 |
-| `src/services/autoDream/autoDream.ts` | 325 | 11259 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/services/autoDream/autoDream.ts` | 325 | 11259 | 重写：保持通用行为 | `src/memory_extraction.rs / src/agent.rs` | 部分实现：默认关闭、明确启用后主 Agent 正常 Stop 检查24小时/5个其他会话门限，使用已配置 API 模型执行无工具本地记忆整理；原版 fork-agent、进度UI、后台运行和任务取消待对齐 |
 | `src/services/autoDream/config.ts` | 22 | 892 | 重写：保持通用行为 | `src/generated_ports/p_3f28a74b2c6e6.rs`| 部分实现：autoDream 决策纯函数（用户设置显式值覆盖实验默认，未设时实验值决定），settings/growthbook 读取由调用方传入；实验 flag 名按隐私门禁省略|
-| `src/services/autoDream/consolidationLock.ts` | 141 | 4548 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/autoDream/consolidationPrompt.ts` | 66 | 3225 | 重写：保持通用行为 | `src/generated_ports/p_2debbeadd491a.rs` | 部分实现：完整等价：Dream 整合提示词模板逐字搬运（含会话记录 grep 指引），DIR_EXISTS_GUIDANCE 由调用方自 memdir 桩注入（同原版 import 形态）；待验收 |
+| `src/services/autoDream/consolidationLock.ts` | 141 | 4548 | 重写：保持通用行为 | `src/memory_extraction.rs` | 部分实现：本地锁文件独占、双重时间门检查、成功更新时间戳、失败保持可重试；原版锁 mtime、进程诊断及手动 Dream 锁交互待验收 |
+| `src/services/autoDream/consolidationPrompt.ts` | 66 | 3225 | 重写：保持通用行为 | `src/generated_ports/p_2debbeadd491a.rs / src/memory_extraction.rs` | 部分实现：原版模板仍在生成模块，新运行链提取其四阶段语义注入真实无工具模型请求；原版模板逐字运行、日志检索和外部工具调用待验收 |
 | `src/services/awaySummary.ts` | 75 | 2671 | 重写：保持通用行为 | `src/generated_ports/p_236bd5e7a80c6.rs` | 部分实现：完整等价：away 总结提示词逐字（memory 块条件前置）+30 条窗口常量含双分支单测；模型调用与 abort 随模型链，待验收 |
 | `src/services/claudeAiLimits.ts` | 516 | 16803 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅限额；保留第三方 API 用量统计；不再跟进 |
 | `src/services/claudeAiLimitsHook.ts` | 24 | 515 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅限额 Hook；不再跟进 |
