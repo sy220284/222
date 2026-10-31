@@ -2567,7 +2567,7 @@ mod tests {
             ),
             mk(
                 "WebSearch",
-                json!({"query":"猫","allowed_domains":["example.org"]}),
+                json!({"query":"猫咪","allowed_domains":["example.org"]}),
             ),
             mk(
                 "ToolSearch",
