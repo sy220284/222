@@ -2643,6 +2643,16 @@ mod tests {
         );
         let header = ToolExecutor::read_large_text_window(&path, 1, 1).unwrap();
         assert_eq!(header, "1: header");
+
+        // Verify the production Read path and its cache, not only the
+        // standalone byte-window helper.
+        let reader = executor(dir.path(), Approval::Full);
+        let args = json!({"path":"large.rs","start_line":10000,"line_count":2});
+        assert_eq!(reader.read_file_with_mode(&args, true).unwrap(), window);
+        assert_eq!(
+            reader.read_file_with_mode(&args, true).unwrap(),
+            "File unchanged since last read: large.rs"
+        );
     }
 
     #[test]
