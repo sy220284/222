@@ -242,8 +242,12 @@ jobs:
         run: |
           set -euo pipefail
           args=(gate --repo . --output .port-audit)
-          [[ -f "$RUNNER_TEMP/original.zip" ]] && args+=(--source-archive "$RUNNER_TEMP/original.zip")
-          [[ -f "$RUNNER_TEMP/source-spec.zip" ]] && args+=(--spec-archive "$RUNNER_TEMP/source-spec.zip")
+          if [[ -f "$RUNNER_TEMP/original.zip" ]]; then
+            args+=(--source-archive "$RUNNER_TEMP/original.zip")
+          fi
+          if [[ -f "$RUNNER_TEMP/source-spec.zip" ]]; then
+            args+=(--spec-archive "$RUNNER_TEMP/source-spec.zip")
+          fi
           python3 scripts/source_parity_gate.py "${args[@]}"
       - name: 保存独立验收记录
         if: always()
