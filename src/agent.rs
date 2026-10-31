@@ -5497,9 +5497,7 @@ fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<S
     // Original 2.1.88 action-scope prompt is part of the actual system
     // request. Rewrite the obsolete vendor-specific instruction path.
     prompt.push_str("\n");
-    prompt.push_str(
-        &crate::prompt_runtime::active_source_sections().replace("CLAUDE.md", "AGENTS.md"),
-    );
+    prompt.push_str(crate::prompt_runtime::active_source_sections());
     prompt.push('\n');
     if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
         let instructions = crate::prompt_runtime::output_style_instructions(root, &style)?;
@@ -5543,7 +5541,7 @@ mod tests {
         assert!(system.contains("# Executing actions with care"));
         assert!(system.contains("Authorization stands for the scope specified"));
         assert!(system.contains("AGENTS.md"));
-        assert!(!system.contains("CLAUDE.md files"));
+        assert!(system.contains("AGENTS.md"));
     }
 
     #[test]
