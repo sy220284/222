@@ -2,6 +2,14 @@
 use anyhow::{bail, Context, Result};
 use std::{path::Path, process::Command};
 
+/// 2.1.88 PromptInput only highlights the UltraReview keyword and prompts
+/// for explicit /ultrareview after work finishes; it never launches a
+/// review from an ordinary natural-language mention.
+pub fn interactive_review_hint(text: &str) -> Option<&'static str> {
+    (!crate::local_advanced_keywords::ultrareview_positions(text).is_empty())
+        .then_some("提示：如需单独审查本地代码，请在完成当前任务后运行 /ultrareview。")
+}
+
 /// One local Agent performs all passes; no remote workers, scheduled jobs,
 /// detached execution or child agents are involved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -266,6 +274,8 @@ mod tests {
                 .contains("User's review focus: inspect local branch")
         );
         assert!(sdk_user_prompt(root.path(), "/ultrareview 0").is_err());
+        assert!(interactive_review_hint("please ultrareview the changes").is_some());
+        assert!(interactive_review_hint("src/ultrareview.tsx").is_none());
     }
 
     #[test]
