@@ -1,6 +1,7 @@
 //! Hand translation of src/utils/mcpInstructionsDelta.ts (2.1.88).
 //! Server-authored instructions are data, never a permission grant.
 //! Vendor feature flags and telemetry have deliberately been omitted.
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,7 +17,7 @@ pub struct ClientSideInstruction {
     pub block: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InstructionAnnouncement {
     pub added_names: Vec<String>,
     pub removed_names: Vec<String>,
