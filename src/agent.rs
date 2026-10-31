@@ -3737,6 +3737,29 @@ impl Agent {
         }
         // Match original pivot selection, validating before hooks/model work.
         let all_messages = self.session.model_messages();
+        // 2.1.88 tracks isCompactSummary on each message. In this Rust
+        // session, old summaries that survive from mode are indexed in the
+        // retained message array. Translate those offsets into the current
+        // model sequence, which also contains the latest synthetic summary.
+        let current_summary_index = self
+            .session
+            .summary
+            .as_deref()
+            .filter(|summary| !summary.trim().is_empty())
+            .map(|_| self.session.summary_insert_at.unwrap_or(0).min(self.session.messages.len()));
+        let mut prior_summary_indices = self
+            .session
+            .retained_summary_indices
+            .iter()
+            .map(|index| {
+                index + usize::from(
+                    current_summary_index.is_some_and(|summary| summary <= *index),
+                )
+            })
+            .collect::<Vec<_>>();
+        if let Some(index) = current_summary_index {
+            prior_summary_indices.push(index);
+        }
         let messages_to_keep = if let Some((pivot, direction)) = partial {
             if pivot > all_messages.len() {
                 bail!("Compaction pivot exceeds current message count")
@@ -3766,15 +3789,12 @@ impl Agent {
                     // 2.1.88 removes old compaction summaries from the
                     // retained suffix, otherwise the later old boundary
                     // can shadow the new partial summary on resume.
-                    let old_summary_index = self
-                        .session
-                        .summary
-                        .as_ref()
-                        .map(|_| self.session.summary_insert_at.unwrap_or(0));
                     all_messages[pivot..]
                         .iter()
                         .enumerate()
-                        .filter(|(index, _)| Some(pivot + *index) != old_summary_index)
+                        .filter(|(index, _)| {
+                            !prior_summary_indices.contains(&(pivot + *index))
+                        })
                         .map(|(_, message)| message.clone())
                         .collect()
                 }
@@ -3972,6 +3992,16 @@ impl Agent {
             // whichever segment remains in the new model context.
             candidate.transcript_snapshot = Some(self.session.transcript_messages());
             candidate.messages = messages_to_keep.expect("validated partial selection");
+            candidate.retained_summary_indices = if direction
+                == crate::compact_source_prompts::CompactDirection::From
+            {
+                prior_summary_indices
+                    .into_iter()
+                    .filter(|index| *index < candidate.messages.len())
+                    .collect()
+            } else {
+                Vec::new()
+            };
             candidate.transcript_active_offset = candidate.messages.len();
             candidate.archived_messages.clear();
             candidate.summary_insert_at = Some(match direction {
@@ -3985,6 +4015,7 @@ impl Agent {
             candidate.archived_messages.clear();
             candidate.messages.clear();
             candidate.summary_insert_at = None;
+            candidate.retained_summary_indices.clear();
         } else {
             // Preserve the existing full-compaction archive path for legacy
             // sessions; no active conversation is erased before disk commit.
@@ -3998,6 +4029,7 @@ impl Agent {
             }
             candidate.archived_messages.append(&mut candidate.messages);
             candidate.summary_insert_at = None;
+            candidate.retained_summary_indices.clear();
         }
         candidate.summary = Some(summary);
         candidate.memory_extraction_cursor = 0;
@@ -6033,6 +6065,7 @@ mod tests {
             .unwrap();
         let from_saved = Session::load(dir.path(), &id).unwrap();
         assert_eq!(from_saved.summary_insert_at, Some(3));
+        assert_eq!(from_saved.retained_summary_indices, vec![0]);
         assert_eq!(from_saved.messages.len(), 3);
         assert_eq!(from_saved.model_messages().len(), 4);
         assert!(from_saved.model_messages()[3]
@@ -6065,6 +6098,7 @@ mod tests {
             .unwrap();
         let up_to_saved = Session::load(dir.path(), &id).unwrap();
         assert_eq!(up_to_saved.summary_insert_at, Some(0));
+        assert!(up_to_saved.retained_summary_indices.is_empty());
         assert_eq!(up_to_saved.messages.len(), 1);
         assert_eq!(up_to_saved.model_messages().len(), 2);
         assert!(up_to_saved.model_messages()[0]
