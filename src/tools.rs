@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use std::{
     collections::{HashMap, VecDeque},
     fs,
-    io::{self, Write},
+    io::{self, BufRead, Write},
     path::{Path, PathBuf},
     process::Stdio,
     sync::{Arc, Mutex},
@@ -1555,6 +1555,37 @@ impl ToolExecutor {
         }
     }
 
+    /// Original utils/readFileInRange.ts streams only the requested lines
+    /// when the caller supplies a limit. A large file must not be rejected
+    /// just because the portion being read is small. Keep the window bounded
+    /// without loading the complete source file into memory.
+    fn read_large_text_window(path: &Path, start: usize, count: usize) -> Result<String> {
+        let file = fs::File::open(path).with_context(|| format!("Reading {}", path.display()))?;
+        let reader = io::BufReader::new(file);
+        let mut result = String::new();
+        let mut first_selected = true;
+        for (index, line) in reader.lines().enumerate() {
+            if index.saturating_add(1) < start {
+                continue;
+            }
+            if index.saturating_add(1) >= start.saturating_add(count) {
+                break;
+            }
+            let mut line = line?;
+            if index == 0 {
+                line = line.trim_start_matches('\u{feff}').to_owned();
+            }
+            if !first_selected {
+                result.push('\n');
+            }
+            first_selected = false;
+            result.push_str(&(index + 1).to_string());
+            result.push_str(": ");
+            result.push_str(&line);
+        }
+        Ok(result)
+    }
+
     fn read_file(&self, args: &Value) -> Result<String> {
         self.read_file_with_mode(args, false)
     }
@@ -1611,16 +1642,26 @@ impl ToolExecutor {
         } else {
             MAX_FILE_BYTES
         };
-        if metadata.len() > max_bytes {
-            bail!("File too large (limit {max_bytes} bytes)");
+        // FileReadTool.ts::callInner forwards maxBytes only if limit is
+        // absent. An explicit offset+limit may read a small portion of an
+        // arbitrarily large regular text file.
+        let windowed_large_read = metadata.len() > max_bytes && requested_limit.is_some();
+        if metadata.len() > max_bytes && !windowed_large_read {
+            bail!("File too large (limit {max_bytes} bytes); supply line_count to read a window");
         }
-        let content = read_editable_text(&path)
-            .with_context(|| format!("Reading {}", path.display()))?
-            .content;
-        self.reads
-            .lock()
-            .unwrap()
-            .insert(path.canonicalize()?, notebook::revision(&content));
+        let content = if windowed_large_read {
+            String::new()
+        } else {
+            read_editable_text(&path)
+                .with_context(|| format!("Reading {}", path.display()))?
+                .content
+        };
+        if !windowed_large_read {
+            self.reads
+                .lock()
+                .unwrap()
+                .insert(path.canonicalize()?, notebook::revision(&content));
+        }
         let start = args
             .get("start_line")
             .and_then(Value::as_u64)
@@ -1637,21 +1678,26 @@ impl ToolExecutor {
                 .unwrap_or(250)
                 .clamp(1, 500) as usize
         };
-        let result = content
-            .lines()
-            .enumerate()
-            .skip(start - 1)
-            .take(count)
-            .map(|(i, line)| format!("{}: {}", i + 1, line))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let result = if windowed_large_read {
+            Self::read_large_text_window(&path, start, count)?
+        } else {
+            content
+                .lines()
+                .enumerate()
+                .skip(start - 1)
+                .take(count)
+                .map(|(i, line)| format!("{}: {}", i + 1, line))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
         let after = fs::metadata(&path)?;
         let before_ms = modified_millis(&metadata)?;
         let unchanged = modified_millis(&after)? == before_ms && after.len() == metadata.len();
         self.file_reads.lock().unwrap().insert(
             path.canonicalize()?,
             FileReadState {
-                full: unchanged
+                full: !windowed_large_read
+                    && unchanged
                     && start == 1
                     && content.lines().count() <= count
                     && (source_read || result.chars().count() <= MAX_OUTPUT_CHARS),
@@ -2575,6 +2621,30 @@ mod tests {
             assert!(!blocked_read_device(Path::new(path)), "{path}");
         }
     }
+    #[test]
+    fn large_source_file_with_line_window_streams_only_selected_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("large.rs");
+        let mut text = String::new();
+        text.push_str("\u{feff}header\\r\\n");
+        for n in 1..=12_000 {
+            text.push_str(&format!("{n}: {}\\r\\n", "x".repeat(100)));
+        }
+        fs::write(&path, &text).unwrap();
+        assert!(fs::metadata(&path).unwrap().len() > MAX_FILE_BYTES);
+        let window = ToolExecutor::read_large_text_window(&path, 10_000, 2).unwrap();
+        assert_eq!(
+            window,
+            format!(
+                "10000: 9999: {}\\n10001: 10000: {}",
+                "x".repeat(100),
+                "x".repeat(100)
+            )
+        );
+        let header = ToolExecutor::read_large_text_window(&path, 1, 1).unwrap();
+        assert_eq!(header, "1: header");
+    }
+
     #[test]
     fn background_flag_omission_matches_simple_source_schema() {
         let mut definition = json!({"type":"function","function":{
