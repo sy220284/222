@@ -6090,7 +6090,10 @@ mod tests {
             .await;
         assert!(error.is_err());
         let after_failure = Session::load(dir.path(), &id).unwrap();
-        assert_eq!(before_failure.model_messages(), after_failure.model_messages());
+        assert_eq!(
+            before_failure.model_messages(),
+            after_failure.model_messages()
+        );
         assert_eq!(
             before_failure.transcript_messages(),
             after_failure.transcript_messages()
@@ -6101,7 +6104,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl ModelProvider for FailingPartialModel {
-        async fn complete(&self, _request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
+        async fn complete(
+            &self,
+            _request: &ModelRequest,
+        ) -> Result<crate::protocol::ModelResponse> {
             Err(anyhow::anyhow!("Injected compaction model failure"))
         }
     }
