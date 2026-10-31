@@ -7128,11 +7128,11 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
     let addr = listener.local_addr().unwrap();
     let received = thread::spawn(move || {
         let mut requests = Vec::new();
-        for step in 0..2 {
+        for step in 0..4 {
             let mut stream = accept_before(&listener, Duration::from_secs(20));
             let request = read_request(&mut stream);
             let response = json!({"choices":[{"message":{"role":"assistant",
-                "content":if step==0 {"plan accepted"} else {"plain text accepted"}},
+                "content":if step < 3 {"plan accepted"} else {"plain text accepted"}},
                 "finish_reason":"stop"}]})
             .to_string();
             write!(stream,
@@ -7221,7 +7221,7 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
         "{wire}"
     );
     let requests = received.join().unwrap();
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 4);
     let first: Value = serde_json::from_str(requests[0].split("\r\n\r\n").nth(1).unwrap()).unwrap();
     let first_user = first["messages"]
         .as_array()
@@ -7239,8 +7239,14 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
         "{first_user}"
     );
     assert!(first_user.contains("private local note"), "{first_user}");
+    assert!(requests[1].contains("Second pass"), "{}", requests[1]);
+    assert!(requests[2].contains("Final pass"), "{}", requests[2]);
+    assert!(events.iter().any(|e| e["type"]=="workflow"
+        && e["phase"]=="ready" && e["workflow"]=="ultraplan"));
+    assert!(events.iter().any(|e| e["type"]=="workflow"
+        && e["phase"]=="verifying" && e["workflow"]=="ultraplan"));
     let second: Value =
-        serde_json::from_str(requests[1].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        serde_json::from_str(requests[3].split("\r\n\r\n").nth(1).unwrap()).unwrap();
     let second_user = second["messages"]
         .as_array()
         .unwrap()
