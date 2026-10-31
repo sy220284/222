@@ -3151,6 +3151,9 @@ async fn chat(
         }
         // keyword.ts makes ultrareview a visual suggestion only. The user
         // must explicitly invoke /ultrareview; ordinary requests stay ordinary.
+        if let Some(hint) = local_advanced_workflows::interactive_review_hint(input) {
+            eprintln!("{hint}");
+        }
         // The original marks completion on prompt submission, not on a
         // successful model response; local project instructions may have
         // been created by the user outside this chat.
