@@ -71,6 +71,19 @@ class SourceTestGateTests(unittest.TestCase):
         self.entry["differential_kinds"]=["normal"]
         self.assertFalse(self.result()["pass"])
 
+    def test_stateful_original_driver_is_reviewable_and_required(self):
+        (self.repo/"scripts/source_parity_drivers").mkdir(parents=True)
+        valid="scripts/source_parity_drivers/lifecycle.mjs"
+        (self.repo/valid).write_text("throw Error('fixture-only script');",encoding="utf8")
+        self.entry["original_driver"]=valid
+        self.fixture.pop("export")
+        self.write_golden()
+        self.assertTrue(self.result()["pass"],self.result()["errors"])
+        self.entry["original_driver"]="scripts/source_parity_drivers/missing.mjs"
+        self.assertFalse(self.result()["pass"])
+        self.entry["original_driver"]="../../source-private.mjs"
+        self.assertFalse(self.result()["pass"])
+
     def test_source_sha_mismatch_fails(self):
         self.entry["source_sha256"]="b"*64
         self.assertFalse(self.result()["pass"])
