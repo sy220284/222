@@ -41,8 +41,7 @@ pub fn targets(workspace: &Path, user_config: &Path) -> Vec<MemoryTarget> {
         .filter(|target| {
             // Only expose auto-memory after creation by the normal memory
             // engine; opening /memory must not fabricate an empty index.
-            (target.create_if_missing || target.path.is_file())
-                && seen.insert(target.path.clone())
+            (target.create_if_missing || target.path.is_file()) && seen.insert(target.path.clone())
         })
         .collect()
 }
@@ -55,7 +54,9 @@ pub fn select(targets: &[MemoryTarget], raw: &str) -> Result<Option<PathBuf>> {
     let selected: usize = answer
         .parse()
         .context("Choose a listed memory-file number, or q to cancel")?;
-    let target = targets.get(selected.saturating_sub(1)).filter(|_| selected > 0)
+    let target = targets
+        .get(selected.saturating_sub(1))
+        .filter(|_| selected > 0)
         .context("Memory-file selection out of range")?;
     Ok(Some(target.path.clone()))
 }
@@ -63,7 +64,9 @@ pub fn select(targets: &[MemoryTarget], raw: &str) -> Result<Option<PathBuf>> {
 /// Equivalent to original writeFile(flag='wx'): preexisting content is never
 /// truncated, and every other filesystem error reaches the caller.
 pub fn ensure_exists(path: &Path) -> Result<()> {
-    let directory = path.parent().context("Memory file has no parent directory")?;
+    let directory = path
+        .parent()
+        .context("Memory file has no parent directory")?;
     fs::create_dir_all(directory)
         .with_context(|| format!("Create memory directory {}", directory.display()))?;
     match OpenOptions::new().write(true).create_new(true).open(path) {
@@ -159,7 +162,9 @@ fn launch_editor(path: &Path) -> Result<&'static str> {
 
 pub fn run(workspace: &Path) -> Result<String> {
     let config = crate::config::Config::path()?;
-    let user_dir = config.parent().context("User configuration has no parent directory")?;
+    let user_dir = config
+        .parent()
+        .context("User configuration has no parent directory")?;
     let candidates = targets(workspace, user_dir);
     println!("Memory files:");
     for (index, target) in candidates.iter().enumerate() {
@@ -193,7 +198,10 @@ pub fn run(workspace: &Path) -> Result<String> {
     } else {
         format!("Using {source}. To change editors, set $EDITOR or $VISUAL.")
     };
-    Ok(format!("Opened memory file at {}\n\n{hint}", chosen.display()))
+    Ok(format!(
+        "Opened memory file at {}\n\n{hint}",
+        chosen.display()
+    ))
 }
 
 #[cfg(test)]
@@ -223,7 +231,10 @@ mod tests {
         ensure_exists(&project).unwrap();
         fs::write(&project, "important user text\n").unwrap();
         ensure_exists(&project).unwrap();
-        assert_eq!(fs::read_to_string(&project).unwrap(), "important user text\n");
+        assert_eq!(
+            fs::read_to_string(&project).unwrap(),
+            "important user text\n"
+        );
         let auto = root.join(".atlas/memory/MEMORY.md");
         fs::create_dir_all(auto.parent().unwrap()).unwrap();
         fs::write(&auto, "facts").unwrap();
