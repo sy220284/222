@@ -27,7 +27,10 @@ fn original_2_1_88_golden_cases_match_the_rust_parser() {
             })
         });
         let observed = serde_json::to_value(output).unwrap();
-        assert_eq!(observed, case["expected"], "original golden case: {}", case["id"]);
+        assert_eq!(
+            observed, case["expected"],
+            "original golden case: {}", case["id"]
+        );
     }
 }
 
@@ -59,7 +62,10 @@ fn paired_test_binary_executes_real_rust_parser_for_all_golden_inputs() {
             String::from_utf8_lossy(&output.stderr)
         );
         let result: Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(result["outcome"]["parsed"], case["expected"], "case {}", case["id"]);
+        assert_eq!(
+            result["outcome"]["parsed"], case["expected"],
+            "case {}", case["id"]
+        );
         assert_eq!(
             result["executed_source_ids"][0],
             "src/utils/slashCommandParsing.ts:FunctionDeclaration:25-60:occurrence-1"
