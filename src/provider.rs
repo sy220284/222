@@ -282,7 +282,9 @@ pub(crate) async fn send_model_request(
                 return Ok(response);
             }
             Err(error) if attempt + 1 < ATTEMPTS && (error.is_connect() || error.is_timeout()) => {
-                tokio::time::sleep(Duration::from_millis(200u64 << attempt)).await;
+                // withRetry.ts applies the same exponential backoff and
+                // jitter to transport errors and retryable HTTP responses.
+                tokio::time::sleep(model_backoff(attempt)?).await;
             }
             Err(error) => return Err(error.into()),
         }
