@@ -6029,6 +6029,7 @@ mod tests {
             conversation_context: ConversationContext::capture(dir),
             structured_output: false,
             sdk_response_schema: None,
+            last_turn_stop_reason: None,
             child_depth: 0,
             mcp_configs: Vec::new(),
             lsp_configs: Vec::new(),
