@@ -17,7 +17,13 @@ fn accept_before(listener: &TcpListener, timeout: Duration) -> TcpStream {
     let deadline = std::time::Instant::now() + timeout;
     loop {
         match listener.accept() {
-            Ok((stream, _)) => return stream,
+            Ok((stream, _)) => {
+                // Windows can inherit nonblocking mode from the listening
+                // socket. Every test mock HTTP reader below requires a
+                // blocking accepted stream with its own read timeout.
+                stream.set_nonblocking(false).unwrap();
+                return stream;
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 assert!(
                     std::time::Instant::now() < deadline,
