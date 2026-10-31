@@ -48,8 +48,11 @@ pub fn literal(path: &str, beginning: &str) -> Option<&'static str> {
 
 /// Original Glob has no template parameters.
 pub fn glob_description() -> &'static str {
-    literal("src/tools/GlobTool/prompt.ts", "- Fast file pattern matching tool")
-        .expect("Glob description must exist in prompt catalog")
+    literal(
+        "src/tools/GlobTool/prompt.ts",
+        "- Fast file pattern matching tool",
+    )
+    .expect("Glob description must exist in prompt catalog")
 }
 
 /// Only wire-name interpolation and JS template escaping differ from source.
@@ -226,8 +229,7 @@ mod tests {
             .expect("The original action safety instructions must be present");
         assert!(original.contains("Authorization stands for the scope specified"));
         assert!(crate::prompt_runtime::SOURCE_ACTIONS.contains("AGENTS.md files"));
-        assert!(crate::prompt_runtime::SOURCE_ACTIONS.contains(
-            "Authorization stands for the scope specified"
-        ));
+        assert!(crate::prompt_runtime::SOURCE_ACTIONS
+            .contains("Authorization stands for the scope specified"));
     }
 }
