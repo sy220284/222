@@ -97,6 +97,31 @@ pub fn extract_inbound_user_fields(message: &Value) -> Option<(Value, Option<Str
     ))
 }
 
+/// Source: 2.1.88 utils/imageResizer.ts overDim precheck (401-410). A PNG
+/// stores its IHDR width/height at fixed offsets; read them without a full
+/// decode so oversized dimensions get a pixel-dimension error instead of a
+/// generic byte-size message. Size-under-5MB does not imply
+/// dimensions-under-cap, and dimension checks are useful even above 5MB.
+const IMAGE_MAX_WIDTH: u32 = 2000;
+const IMAGE_MAX_HEIGHT: u32 = 2000;
+
+fn png_over_dimensions(base64_data: &str) -> Option<(u32, u32)> {
+    let raw = STANDARD.decode(base64_data).ok()?;
+    // PNG signature is 8 bytes, IHDR width/height live at offsets 16-24.
+    if raw.len() < 24
+        || raw[0] != 0x89
+        || raw[1] != 0x50
+        || raw[2] != 0x4e
+        || raw[3] != 0x47
+    {
+        return None;
+    }
+    let width = u32::from_be_bytes([raw[16], raw[17], raw[18], raw[19]]);
+    let height = u32::from_be_bytes([raw[20], raw[21], raw[22], raw[23]]);
+    (width > IMAGE_MAX_WIDTH || height > IMAGE_MAX_HEIGHT)
+        .then_some((width, height))
+}
+
 /// Source: 2.1.88 utils/imageValidation.ts::validateImagesForAPI.
 /// Validate the entire outgoing user history at the model boundary. The limit
 /// applies to encoded base64 *characters*, not decoded bytes. The importer
@@ -131,6 +156,24 @@ pub fn validate_images_for_api(messages: &[crate::protocol::Message]) -> Result<
         }
     }
     let max_size = crate::display_format::format_file_size(MAX_IMAGE_DATA as f64);
+    // The source resizer attempts compression and only reports dimension
+    // overflow after it fails. Without a local decode engine the pixel check
+    // runs first for PNGs, so oversized dimensions get the precise guidance.
+    let dimension_oversized = oversized
+        .iter()
+        .filter_map(|(index, size)| {
+            png_over_dimensions(oversized_data(messages, *index))
+                .map(|(width, height)| (*index, *size, width, height))
+        })
+        .collect::<Vec<_>>();
+    if let [(_, size, width, height)] = dimension_oversized.as_slice() {
+        bail!(
+            "Image base64 size ({}) exceeds API limit ({max_size}); PNG header reports {width}x{height}px, \
+             above the {IMAGE_MAX_WIDTH}x{IMAGE_MAX_HEIGHT}px cap. \
+             Please resize the image to reduce its pixel dimensions before sending.",
+            crate::display_format::format_file_size(*size as f64),
+        );
+    }
     match oversized.as_slice() {
         [] => Ok(()),
         [(_, size)] => bail!(
@@ -154,6 +197,38 @@ pub fn validate_images_for_api(messages: &[crate::protocol::Message]) -> Result<
             )
         }
     }
+}
+
+/// Fetch the base64 payload of the nth (1-based) oversized image block so the
+/// dimension precheck can inspect its PNG header.
+fn oversized_data(messages: &[crate::protocol::Message], target: usize) -> &str {
+    let mut image_index = 0usize;
+    for message in messages {
+        if message.role != "user" {
+            continue;
+        }
+        let Some(blocks) = message.content_blocks.as_ref() else {
+            continue;
+        };
+        for block in blocks {
+            if block.get("type").and_then(Value::as_str) != Some("image") {
+                continue;
+            }
+            if let Some(data) = block
+                .get("source")
+                .filter(|source| source.get("type").and_then(Value::as_str) == Some("base64"))
+                .and_then(|source| source.get("data"))
+                .or_else(|| block.get("data"))
+                .and_then(Value::as_str)
+            {
+                image_index += 1;
+                if image_index == target {
+                    return data;
+                }
+            }
+        }
+    }
+    ""
 }
 
 pub fn parse(value: &Value) -> Result<Input> {
@@ -261,6 +336,33 @@ pub fn gemini(blocks: &[Value]) -> Result<Vec<Value>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn png_header_precheck_reads_ihdr_dimensions() {
+        // Minimal PNG: 8-byte signature + IHDR chunk with 3000x1000.
+        let mut raw = vec![0x89u8, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+        raw.extend_from_slice(&[0, 0, 0, 13]); // IHDR length
+        raw.extend_from_slice(b"IHDR");
+        raw.extend_from_slice(&3000u32.to_be_bytes());
+        raw.extend_from_slice(&1000u32.to_be_bytes());
+        raw.extend_from_slice(&[8, 6, 0, 0, 0]); // bit depth, color, etc.
+        let encoded = STANDARD.encode(&raw);
+        assert_eq!(
+            png_over_dimensions(&encoded),
+            Some((3000, 1000)),
+            "width above the 2000px cap must be detected"
+        );
+        // Under the cap -> None.
+        raw[16..20].copy_from_slice(&2000u32.to_be_bytes());
+        raw[20..24].copy_from_slice(&1000u32.to_be_bytes());
+        assert_eq!(
+            png_over_dimensions(&STANDARD.encode(&raw)),
+            None,
+            "dimensions within the cap pass"
+        );
+        // Non-PNG data never reports dimensions.
+        assert_eq!(png_over_dimensions(&STANDARD.encode(b"plain text")), None);
+    }
+
     #[test]
     fn preserves_text_and_images_without_exposing_binary_in_preview() {
         let input = parse(&json!([
