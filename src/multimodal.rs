@@ -97,6 +97,61 @@ pub fn extract_inbound_user_fields(message: &Value) -> Option<(Value, Option<Str
     ))
 }
 
+/// Source: 2.1.88 utils/imageValidation.ts::validateImagesForAPI.
+/// Validate the entire outgoing user history at the model boundary. The limit
+/// applies to encoded base64 *characters*, not decoded bytes. The importer
+/// normalizes image blocks, while resumed sessions may retain raw SDK blocks.
+pub fn validate_images_for_api(messages: &[crate::protocol::Message]) -> Result<()> {
+    let mut oversized = Vec::new();
+    let mut image_index = 0usize;
+    for message in messages {
+        if message.role != "user" {
+            continue;
+        }
+        let Some(blocks) = message.content_blocks.as_ref() else {
+            continue;
+        };
+        for block in blocks {
+            if block.get("type").and_then(Value::as_str) != Some("image") {
+                continue;
+            }
+            let data = block
+                .get("source")
+                .filter(|source| source.get("type").and_then(Value::as_str) == Some("base64"))
+                .and_then(|source| source.get("data"))
+                .or_else(|| block.get("data"))
+                .and_then(Value::as_str);
+            let Some(data) = data else {
+                continue;
+            };
+            image_index += 1;
+            if data.len() > MAX_IMAGE_DATA {
+                oversized.push((image_index, data.len()));
+            }
+        }
+    }
+    match oversized.as_slice() {
+        [] => Ok(()),
+        [(index, size)] => bail!(
+            "Image base64 size ({} bytes) exceeds API limit ({} bytes) for image {index}. Please resize the image before sending.",
+            size,
+            MAX_IMAGE_DATA
+        ),
+        _ => {
+            let details = oversized
+                .iter()
+                .map(|(index, size)| format!("Image {index}: {size} bytes"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            bail!(
+                "{} images exceed the API limit ({} bytes): {details}. Please resize these images before sending.",
+                oversized.len(),
+                MAX_IMAGE_DATA
+            )
+        }
+    }
+}
+
 pub fn parse(value: &Value) -> Result<Input> {
     if let Some(text) = value.as_str() {
         if text.len() > MAX_TOTAL_DATA {
@@ -243,6 +298,33 @@ mod tests {
         assert!(parse(&json!([{"type":"image","source":{"type":"base64",
             "data":"AQID","mediaType":"application/pdf"}}]))
         .is_err());
+    }
+
+    #[test]
+    fn api_image_validation_scans_all_user_messages_and_reports_positions() {
+        use crate::protocol::Message;
+        let mut small = Message::text("user", "small");
+        small.content_blocks = Some(vec![json!({
+            "type":"image", "data":"AQID", "mime_type":"image/png"
+        })]);
+        let mut first = Message::text("user", "large");
+        first.content_blocks = Some(vec![json!({
+            "type":"image",
+            "source":{"type":"base64","data":"A".repeat(MAX_IMAGE_DATA + 4)}
+        })]);
+        let mut second = Message::text("user", "large again");
+        second.content_blocks = Some(vec![json!({
+            "type":"image","data":"A".repeat(MAX_IMAGE_DATA + 8)
+        })]);
+        let mut assistant = Message::text("assistant", "ignored");
+        assistant.content_blocks = second.content_blocks.clone();
+        assert!(validate_images_for_api(&[small.clone(), assistant]).is_ok());
+        let error = validate_images_for_api(&[small, first, second])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("2 images exceed the API limit"), "{error}");
+        assert!(error.contains("Image 2:"), "{error}");
+        assert!(error.contains("Image 3:"), "{error}");
     }
 
     #[test]
