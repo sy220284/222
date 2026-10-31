@@ -449,7 +449,13 @@ fn bash_ghost_suffix<'a>(e: &Editor, history: &'a [String], vim: &VimKeys) -> Op
 }
 
 #[cfg(unix)]
-fn redraw(out: &mut impl Write, prompt: &str, e: &Editor, vim: &VimKeys, history: &[String]) -> io::Result<()> {
+fn redraw(
+    out: &mut impl Write,
+    prompt: &str,
+    e: &Editor,
+    vim: &VimKeys,
+    history: &[String],
+) -> io::Result<()> {
     let mode = if vim.enabled && !vim.insert {
         "[NORMAL] "
     } else {
@@ -473,7 +479,7 @@ fn redraw(out: &mut impl Write, prompt: &str, e: &Editor, vim: &VimKeys, history
     } else if tail > 0 {
         write!(out, "\x1b[{tail}D")?;
     } else if let Some(suffix) = bash_ghost_suffix(e, history, vim) {
-        let ghost = suffix.replace('\\n', "↵").replace('\\t', "⇥");
+        let ghost = suffix.replace('\n', "↵").replace('\t', "⇥");
         // Ghost text is visual only. Restore the cursor before user input;
         // it is accepted only by an explicit Right/Ctrl-F keystroke.
         write!(out, "\x1b[2m{ghost}\x1b[22m\x1b[{}D", ghost.chars().count())?;
