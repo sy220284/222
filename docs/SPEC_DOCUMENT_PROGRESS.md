@@ -1187,7 +1187,7 @@
 | `src/tools/AgentTool/built-in/statuslineSetup.ts` | `d364fd003c1d8295aaf44709d33e9279dba87b5dd7ea892b837df65ce3d42c59` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/AgentTool/built-in/verificationAgent.ts` | `467f06234a59cdc07f52e4a418d8b66ec98507e793ef0bed3c1c45afa0b2559e` | 部分实现 | `src/prompt_runtime.rs / src/agent.rs / src/tools.rs` | 部分实现：独立验收 system 和只读工具隔离已接入模型请求；原版完整验收规范及所有权限分支待核对 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/AgentTool/builtInAgents.ts` | `24df97f95532f86108d60176d1c708edf4040bda028ee8f22a52f1bac6acfb22` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
-| `src/tools/AgentTool/constants.ts` | `d2da1c4ab62404ccc09186704994fccb6559ecb0342563fee14adce8e4d51866` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
+| `src/tools/AgentTool/constants.ts` | `d2da1c4ab62404ccc09186704994fccb6559ecb0342563fee14adce8e4d51866` | 部分实现 | `src/tool_names.rs` / `src/agent.rs` / `src/tools.rs` | 部分实现：Agent/Task 原版工具名和 verification 常量已对齐、主 Agent 子任务分发已接线；Explore/Plan 单次内建代理结果省略规则仍待等价 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/AgentTool/forkSubagent.ts` | `483073ec16219f522e787facd043ada1169804476b17acebd62bbcf03ec35c55` | 部分实现 | `src/agent.rs` / `src/worktree.rs` | 部分实现：独立子任务和隔离，团队及远程不等价 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/AgentTool/loadAgentsDir.ts` | `06cb0d5a3e05b5b59d0e48aef0e0c3af24f9677e642f3243a619b66459ab4eab` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/AgentTool/prompt.ts` | `ac61c37854a6dde6201351095154504cfbf4a932be24dd340b80df40604de8e3` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
@@ -1241,7 +1241,7 @@
 | `src/tools/ExitWorktreeTool/prompt.ts` | `e05427490c8746eba1f50f87b7a41d92b1a762b61757e43373d80955edb87c42` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/FileEditTool/FileEditTool.ts` | `a9fa2ac618273f5b1d48b20ae54e6a3b06d4be2c731daa78dfae654c1ca6652e` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全；Edit 现检查会话已读完整内容及外部修改，成功写入后更新状态（ae165e76），待验收；；Edit 弯引号容错及排版保真接入真实文件修改链（9eed00be），源码已提交待验收；；原版 Edit(file_path,old_string,new_string,replace_all) 经原版输入门禁进入跨轮读后编辑与 Hook 链（41404581、d061352e、7959a531），待验收； | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/FileEditTool/UI.tsx` | `e22c46c42021b42f32a3513e278968c0dd46e629455576cfa629ca10cb621059` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
-| `src/tools/FileEditTool/constants.ts` | `d636ab7d64f8561a691bfa4e3f3922ac33d0a3b6d33e5bdf1146925de805c8a5` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
+| `src/tools/FileEditTool/constants.ts` | `d636ab7d64f8561a691bfa4e3f3922ac33d0a3b6d33e5bdf1146925de805c8a5` | 部分实现 | `src/tool_names.rs` / `src/tools.rs` | 部分实现：Edit 外部工具名接入真实编辑路由；.claude 专有权限常量与并发修改错误原文尚有差异 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/FileEditTool/prompt.ts` | `c23ed3f0688dab0fa7c33c2ab86f51d734901b5a1db7dc207e6a744a92211748` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全 | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/FileEditTool/types.ts` | `ca47715dc02c3b3f697697457f519fa3cb0b9a32c6bb19104e0ad81416e0394a` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全；Edit 原版严格参数名和语义布尔已接入运行时（d061352e），仍缺完整输出结构，待验收； | 待按规格逐函数核实、补齐并验收 |
 | `src/tools/FileEditTool/utils.ts` | `8f4d77d8bb7d641fb2a62378635e873d55e2c1cd330f11741a04105dd806cf09` | 部分实现 | `src/tools.rs` | 部分实现，工具种类尚不全；弯引号文本匹配、替换时保留引号排版和非 Markdown 行尾空白归一化（9eed00be、645510ed、f17bb1c9），源码已提交待验收； | 待按规格逐函数核实、补齐并验收 |
