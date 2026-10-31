@@ -1571,9 +1571,11 @@ impl ToolExecutor {
     /// just because the portion being read is small. Keep the window bounded
     /// without loading the complete source file into memory.
     fn read_large_text_window(path: &Path, start: usize, count: usize) -> Result<String> {
-        Ok(crate::fs_operations::read_text_line_window(path, start, count)
-            .with_context(|| format!("Reading {}", path.display()))?
-            .formatted)
+        Ok(
+            crate::fs_operations::read_text_line_window(path, start, count)
+                .with_context(|| format!("Reading {}", path.display()))?
+                .formatted,
+        )
     }
 
     fn read_file(&self, args: &Value) -> Result<String> {
@@ -1669,7 +1671,9 @@ impl ToolExecutor {
                 .clamp(1, 500) as usize
         };
         let window = if windowed_large_read {
-            Some(crate::fs_operations::read_text_line_window(&path, start, count)?)
+            Some(crate::fs_operations::read_text_line_window(
+                &path, start, count,
+            )?)
         } else {
             None
         };
@@ -2668,12 +2672,18 @@ mod tests {
         fs::write(&path, "one\ntwo\n").unwrap();
         let reader = executor(folder.path(), Approval::Full);
         let result = reader
-            .read_file_with_mode(&json!({"path":"source.rs","start_line":5,"line_count":2}), true)
+            .read_file_with_mode(
+                &json!({"path":"source.rs","start_line":5,"line_count":2}),
+                true,
+            )
             .unwrap();
         assert!(result.contains("offset (5)"), "{result}");
         assert!(result.contains("3 lines"), "{result}");
         let final_line = reader
-            .read_file_with_mode(&json!({"path":"source.rs","start_line":3,"line_count":1}), true)
+            .read_file_with_mode(
+                &json!({"path":"source.rs","start_line":3,"line_count":1}),
+                true,
+            )
             .unwrap();
         assert_eq!(final_line, "3: ");
     }

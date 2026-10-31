@@ -384,8 +384,7 @@ mod tests {
     fn line_window_matches_source_crlf_bom_unicode_and_terminal_empty_line() {
         let folder = tempfile::tempdir().unwrap();
         let path = folder.path().join("source.txt");
-        fs::write(&path, b"\xef\xbb\xbfheader\r\n\xe4\xbd\xa0\xe5\xa5\xbd\r\n")
-            .unwrap();
+        fs::write(&path, b"\xef\xbb\xbfheader\r\n\xe4\xbd\xa0\xe5\xa5\xbd\r\n").unwrap();
         let first = read_text_line_window(&path, 1, 1).unwrap();
         assert_eq!(first.formatted, "1: header");
         assert_eq!(first.total_lines, 3);
@@ -394,7 +393,10 @@ mod tests {
         assert_eq!(end.selected_lines, 2);
         assert_eq!(end.read_bytes, "你好\n".len());
         assert_eq!(end.total_bytes, fs::metadata(&path).unwrap().len());
-        assert_eq!(read_text_line_window(&path, 5, 2).unwrap().selected_lines, 0);
+        assert_eq!(
+            read_text_line_window(&path, 5, 2).unwrap().selected_lines,
+            0
+        );
     }
 
     #[test]
