@@ -4137,6 +4137,69 @@ impl Agent {
             .await
     }
 
+    /// Three evidence-driven passes on the current Agent and selected model.
+    /// All phases use the same session and temporary read-only plan mode.
+    /// The first phase retains SDK images and user UUID; subsequent turns
+    /// review that same session's draft without duplicating attachments.
+    pub async fn run_advanced_with_blocks(
+        &mut self,
+        kind: crate::local_advanced_workflows::Kind,
+        prompt: &str,
+        blocks: Option<Vec<serde_json::Value>>,
+        message_id: Option<uuid::Uuid>,
+    ) -> Result<String> {
+        let workflow = kind.as_str();
+        self.emit(json!({
+            "type":"workflow","workflow":workflow,
+            "phase":"starting","session_id":self.session.id
+        }));
+        let phases = [
+            ("drafting", Some(prompt)),
+            ("verifying", Some(kind.verify_prompt())),
+            ("finalizing", Some(kind.finalize_prompt())),
+        ];
+        let mut first_blocks = blocks;
+        let mut first_id = message_id;
+        let mut answer = String::new();
+        for (phase, instruction) in phases {
+            self.emit(json!({
+                "type":"workflow","workflow":workflow,
+                "phase":phase,"session_id":self.session.id
+            }));
+            let result = self
+                .ask_with_blocks_in_plan_mode(
+                    instruction.context("Advanced workflow phase prompt is missing")?,
+                    first_blocks.take(),
+                    first_id.take(),
+                )
+                .await;
+            match result {
+                Ok(text) => answer = text,
+                Err(error) => {
+                    self.emit(json!({
+                        "type":"workflow","workflow":workflow,
+                        "phase":"failed","session_id":self.session.id,
+                        "message":format!("{error:#}")
+                    }));
+                    return Err(error);
+                }
+            }
+        }
+        self.emit(json!({
+            "type":"workflow","workflow":workflow,
+            "phase":"ready","session_id":self.session.id
+        }));
+        Ok(answer)
+    }
+
+    pub async fn run_advanced(
+        &mut self,
+        kind: crate::local_advanced_workflows::Kind,
+        prompt: &str,
+    ) -> Result<String> {
+        self.run_advanced_with_blocks(kind, prompt, None, None).await
+    }
+
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
         self.ask_with_blocks(prompt, None).await
     }
