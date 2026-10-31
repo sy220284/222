@@ -208,6 +208,8 @@ jobs:
           SOURCE_URL: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_URL }}
           SOURCE_SHA256: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_SHA256 }}
           SOURCE_TOKEN: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_TOKEN }}
+          SPEC_URL: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_URL }}
+          SPEC_SHA256: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_SHA256 }}
         run: |
           set -euo pipefail
           mkdir -p .port-audit
@@ -225,12 +227,27 @@ jobs:
               "$SOURCE_URL" -o "$RUNNER_TEMP/original.zip"
           fi
           echo "$SOURCE_SHA256  $RUNNER_TEMP/original.zip" | sha256sum -c -
+          if [[ -z "$SPEC_URL" || -z "$SPEC_SHA256" ]]; then
+            echo "::error::缺少完整源码功能规格包与 SHA256，禁止放行"
+            exit 1
+          fi
+          [[ "$SPEC_URL" == https://* ]] || { echo "::error::规格包必须通过 HTTPS 获取"; exit 1; }
+          [[ "$SPEC_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || { echo "::error::规格包 SHA256 非法"; exit 1; }
+          if [[ -n "$SOURCE_TOKEN" ]]; then
+            curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
+              --header "Authorization: Bearer $SOURCE_TOKEN" "$SPEC_URL" -o "$RUNNER_TEMP/source-spec.zip"
+          else
+            curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
+              "$SPEC_URL" -o "$RUNNER_TEMP/source-spec.zip"
+          fi
+          echo "$SPEC_SHA256  $RUNNER_TEMP/source-spec.zip" | sha256sum -c -
       - name: 原版源码逐文件、逐函数和 Rust 行为证据门禁
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 scripts/source_parity_gate.py gate --repo . \
-            --source-archive "$RUNNER_TEMP/original.zip" --output .port-audit
+            --source-archive "$RUNNER_TEMP/original.zip" \
+            --spec-archive "$RUNNER_TEMP/source-spec.zip" --output .port-audit
       - name: 保存独立验收记录
         if: always()
         uses: actions/upload-artifact@v4

@@ -5,7 +5,7 @@ from pathlib import Path
 from zipfile import ZipFile
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-from source_parity_gate import AuditError, original_entries, verify_original, verify_contracts
+from source_parity_gate import AuditError, original_entries, verify_original, verify_contracts, verify_spec_archive
 
 class SourceParityGateTests(unittest.TestCase):
     def test_archive_hash_full_inventory_and_mismatch(self):
@@ -75,6 +75,34 @@ class SourceParityGateTests(unittest.TestCase):
                     f.writestr("source/src/a.ts","b")
             with self.assertRaises(AuditError):
                 original_entries(z)
+
+
+    def test_spec_manifest_source_mapping_and_duplicate_rejected(self):
+        import io
+        import csv
+        with tempfile.TemporaryDirectory() as tmp:
+            file = Path(tmp)/"spec.zip"
+            code = b"const a=1\n"
+            digest = hashlib.sha256(code).hexdigest()
+            mapping = ("模块\t源文件\t源文件行数\t可执行单元\t静态操作节点\t唯一标注行数\t源文件sha256\t对应详细文档\n"
+                       "M\ta.ts\t1\t1\t1\t1\t"+digest+"\t逐文件逐行/M/a.ts.md\n")
+            docs = {
+                "核验数据/文件与模块双向映射.tsv":mapping.encode(),
+                "逐文件逐行/M/a.ts.md":b"document",
+            }
+            manifest = "".join(hashlib.sha256(data).hexdigest()+"  "+name+"\n"
+                               for name,data in docs.items()).encode()
+            with ZipFile(file,"w") as archive:
+                for name,data in docs.items():
+                    archive.writestr(name,data)
+                archive.writestr("MANIFEST.sha256",manifest)
+            baseline = {"source_hashes":{"src/a.ts":digest}}
+            errors,summary=verify_spec_archive(file,baseline)
+            self.assertEqual(errors,[])
+            self.assertEqual(summary["mapped_firstparty"],1)
+            baseline["source_hashes"]["src/a.ts"]="0"*64
+            errors,_=verify_spec_archive(file,baseline)
+            self.assertTrue(any("不同版本源码" in e for e in errors))
 
 if __name__=="__main__":
     unittest.main()

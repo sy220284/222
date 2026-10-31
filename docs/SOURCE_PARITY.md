@@ -6,7 +6,7 @@
 ## 检查入口
 python3 scripts/source_parity_gate.py audit --repo . --output .port-audit
 python3 scripts/source_parity_gate.py audit --repo . --source-archive /private/claude-code-2.1.88.zip --output .port-audit
-python3 scripts/source_parity_gate.py gate --repo . --source-archive /private/claude-code-2.1.88.zip --output .port-audit
+python3 scripts/source_parity_gate.py gate --repo . --source-archive /private/claude-code-2.1.88.zip --spec-archive /private/2.1.88-spec.zip --output .port-audit
 
 统一输出 SOURCE_PARITY.json 和 SOURCE_PARITY.md。audit 可核查缺口，gate 是拒绝未闭环的最终验收。源码缺失、文件哈希/大小/行数不符、函数/行为证据遗漏、仍有未迁移/部分实现、测试凭证不存在，全部使 gate 返回失败。它永远不自动把一条路径改为已验收。原版只用于对照，不能发布到公开 GitHub 仓库。
 
@@ -14,7 +14,7 @@ python3 scripts/source_parity_gate.py gate --repo . --source-archive /private/cl
 每条原版非排除路径使用原路径作为唯一键；每个函数使用函数名与原版起止行号标识，记录输入、输出、条件和功能逻辑、失败、权限、状态、时序、取消、持久化、副作用、真实调用链及测试。全文件需逐分支审查，内部动态入口不能因未导出而漏计；同一业务的 CLI、SDK、工具、MCP 多入口归并为同一功能链，同时保留路径级证据。文档和原版哈希匹配只能证明来源，完整功能仍需当前 Rust 行为与 CI 实测。
 
 ## CI 如何获取保密原版源码
-仓库 Secrets 必须配置 ORIGINAL_SOURCE_ARCHIVE_URL 与 ORIGINAL_SOURCE_ARCHIVE_SHA256，可选 ORIGINAL_SOURCE_ARCHIVE_TOKEN（Bearer）。URL 必须 HTTPS 且无需跨站重定向，脚本首先校验 ZIP 整体哈希，再逐项验证全部 1,906 个源文件的冻结 SHA256、大小及行数。Secret 缺失也会使门禁失败。请使用私有且受控的存储，不要将源码放入公开仓库、发布物或 Actions Artifact。
+仓库 Secrets 必须配置 ORIGINAL_SOURCE_ARCHIVE_URL、ORIGINAL_SOURCE_ARCHIVE_SHA256、ORIGINAL_SPEC_ARCHIVE_URL、ORIGINAL_SPEC_ARCHIVE_SHA256；可选 ORIGINAL_SOURCE_ARCHIVE_TOKEN（Bearer，可共用受控域名）。URL 必须 HTTPS 且无需跨站重定向，CI 首先校验两个 ZIP 的整体哈希；门禁再逐项验证全部 1,906 个源文件的冻结 SHA256、大小及行数，以及 5,258 份规格包文件的内部 SHA256 和 1,902 条第一方源文件与详细规格的唯一双向关系。Secret 缺失也会使门禁失败。请使用私有且受控的存储，不要将源码放入公开仓库、发布物或 Actions Artifact。
 
 ## GitHub 服务器端保护
 原版源码全量等价验收是固定作业名。要阻止 GitHub 网页/接口绕过失败的 CI，需对 main 设置 Ruleset 强制要求该检查且不允许 bypass；当前 GitHub 连接缺乏读取/配置分支保护的管理员权限，不能将工作流失败误称为已开启不可绕过的合并保护。
@@ -29,3 +29,7 @@ scripts/sync_spec_progress_summary.py：同步显示数字，不再定义独立�
 当前 FILE_PORT_MATRIX 登记：排除 192、已验收 38、部分实现 1,212、未迁移 464。剩余 1,676 项必须继续完成逐函数与行为验收。现有 PORT_EVIDENCE.jsonl 仅 11 条历史新增验证记录，且历史的验收项并不具有本门禁所需的全函数契约。因此初次强制门禁预期失败；这是真实问题清单，不能用占位数据改成通过。
 
 现有工作流此前没有原版 ZIP 输入，外部完整原版档案也未入库，故本次不会声称已完成全量动态等价。按照本门禁持续补齐之后，应从原始源码重新复查所有非排除路径，直到完整真实证据全部通过。
+
+## 实际来源锁定
+
+本轮独立读取用户资料库原版 ZIP：SHA256 23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d；完整逐行规格包：SHA256 3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93。规格包 ZIP CRC 通过，内部 5,258 条哈希记录验证一致，1,902 条第一方映射没有重复、源码 SHA 不匹配或详细文档缺失。该静态来源审计不等于动态运行行为对齐。
