@@ -571,6 +571,7 @@ pub async fn run(action: &AccountAction) -> Result<()> {
 }
 
 fn input_items(request: &ModelRequest) -> Result<Vec<Value>> {
+    crate::multimodal::validate_images_for_api(&request.messages)?;
     let mut items =
         vec![json!({"role":"developer","content":[{"type":"input_text","text":request.system}]})];
     for message in &request.messages {
