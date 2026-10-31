@@ -3746,15 +3746,18 @@ impl Agent {
             .summary
             .as_deref()
             .filter(|summary| !summary.trim().is_empty())
-            .map(|_| self.session.summary_insert_at.unwrap_or(0).min(self.session.messages.len()));
+            .map(|_| {
+                self.session
+                    .summary_insert_at
+                    .unwrap_or(0)
+                    .min(self.session.messages.len())
+            });
         let mut prior_summary_indices = self
             .session
             .retained_summary_indices
             .iter()
             .map(|index| {
-                index + usize::from(
-                    current_summary_index.is_some_and(|summary| summary <= *index),
-                )
+                index + usize::from(current_summary_index.is_some_and(|summary| summary <= *index))
             })
             .collect::<Vec<_>>();
         if let Some(index) = current_summary_index {
@@ -3792,9 +3795,7 @@ impl Agent {
                     all_messages[pivot..]
                         .iter()
                         .enumerate()
-                        .filter(|(index, _)| {
-                            !prior_summary_indices.contains(&(pivot + *index))
-                        })
+                        .filter(|(index, _)| !prior_summary_indices.contains(&(pivot + *index)))
                         .map(|(_, message)| message.clone())
                         .collect()
                 }
@@ -3992,16 +3993,15 @@ impl Agent {
             // whichever segment remains in the new model context.
             candidate.transcript_snapshot = Some(self.session.transcript_messages());
             candidate.messages = messages_to_keep.expect("validated partial selection");
-            candidate.retained_summary_indices = if direction
-                == crate::compact_source_prompts::CompactDirection::From
-            {
-                prior_summary_indices
-                    .into_iter()
-                    .filter(|index| *index < candidate.messages.len())
-                    .collect()
-            } else {
-                Vec::new()
-            };
+            candidate.retained_summary_indices =
+                if direction == crate::compact_source_prompts::CompactDirection::From {
+                    prior_summary_indices
+                        .into_iter()
+                        .filter(|index| *index < candidate.messages.len())
+                        .collect()
+                } else {
+                    Vec::new()
+                };
             candidate.transcript_active_offset = candidate.messages.len();
             candidate.archived_messages.clear();
             candidate.summary_insert_at = Some(match direction {
