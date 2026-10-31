@@ -502,6 +502,20 @@ fn redraw(
     }
     out.flush()
 }
+/// While a terminal sends bracketed paste, accumulate the entire payload
+/// before drawing once at PasteEnd. Redrawing per codepoint repeatedly
+/// reprints an ever-growing buffer, causing quadratic work for large pastes.
+#[cfg(unix)]
+fn append_pasted_key(editor: &mut Editor, key: &Key) -> Result<()> {
+    match key {
+        Key::Char(ch) => editor.insert(*ch)?,
+        Key::Enter => editor.insert('\n')?,
+        Key::Backspace => editor.insert('\u{8}')?,
+        _ => {}
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<PromptRead> {
     let _raw = RawMode::enter()?;
@@ -537,13 +551,9 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
                 continue;
             }
             if paste {
-                match key {
-                    Key::Char(c) => e.insert(c)?,
-                    Key::Enter => e.insert('\n')?,
-                    Key::Backspace => e.insert('\u{8}')?,
-                    _ => {}
-                }
-                redraw(&mut out, prompt, &e, &vim, history)?;
+                append_pasted_key(&mut e, &key)?;
+                // PasteEnd redraws the final text once. Never repaint on
+                // every character of a large multi-line clipboard payload.
                 continue;
             }
             if vim.handle(&mut e, &key)? {
@@ -746,6 +756,22 @@ mod tests {
         let with_newline = highlight_advanced_keywords("fix\nultraplan this");
         assert!(with_newline.contains("↵"));
         assert!(with_newline.contains("\x1b[38;5;203mu"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bracketed_paste_buffers_unicode_and_newlines_with_input_boundaries() {
+        let mut editor = Editor::default();
+        for ch in "中😀文".chars() {
+            append_pasted_key(&mut editor, &Key::Char(ch)).unwrap();
+        }
+        append_pasted_key(&mut editor, &Key::Enter).unwrap();
+        append_pasted_key(&mut editor, &Key::Char('A')).unwrap();
+        append_pasted_key(&mut editor, &Key::Backspace).unwrap();
+        assert_eq!(editor.text, "中😀文\nA\u{8}");
+        editor.text = "x".repeat(MAX_INPUT_BYTES);
+        editor.cursor = editor.text.len();
+        assert!(append_pasted_key(&mut editor, &Key::Char('x')).is_err());
     }
 
     #[cfg(unix)]
