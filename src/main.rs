@@ -627,9 +627,7 @@ fn normalize_print_cli(mut cli: Cli) -> Result<Cli> {
         }
         cli.command = Commands::Run { prompt };
     }
-    if cli.output_format != OutputFormat::Text
-        && !matches!(cli.command, Commands::Run { .. })
-    {
+    if cli.output_format != OutputFormat::Text && !matches!(cli.command, Commands::Run { .. }) {
         bail!("--output-format requires a one-shot run or --print prompt");
     }
     Ok(cli)
@@ -641,32 +639,40 @@ mod default_chat_cli_tests {
 
     #[test]
     fn source_print_alias_routes_to_run_and_stream_json_is_scoped() {
-        let plain = parse_cli_with_default_chat(vec![
-            "atlas-agent".into(), "-p".into(), "hello".into()
-        ]).unwrap();
+        let plain =
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "-p".into(), "hello".into()])
+                .unwrap();
         let normalized = normalize_print_cli(plain).unwrap();
         assert!(matches!(normalized.command, Commands::Run { prompt } if prompt == "hello"));
 
-        let from_stdin = normalize_print_cli(parse_cli_with_default_chat(vec![
-            "atlas-agent".into(), "-p".into()
-        ]).unwrap()).unwrap();
+        let from_stdin = normalize_print_cli(
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "-p".into()]).unwrap(),
+        )
+        .unwrap();
         assert!(matches!(
             from_stdin.command,
             Commands::Run { prompt } if prompt == "-"
         ));
 
         let streamed = parse_cli_with_default_chat(vec![
-            "atlas-agent".into(), "--print".into(), "hello".into(),
-            "--output-format".into(), "stream-json".into()
-        ]).unwrap();
+            "atlas-agent".into(),
+            "--print".into(),
+            "hello".into(),
+            "--output-format".into(),
+            "stream-json".into(),
+        ])
+        .unwrap();
         let normalized = normalize_print_cli(streamed).unwrap();
         assert_eq!(normalized.output_format, OutputFormat::StreamJson);
         assert!(matches!(normalized.command, Commands::Run { .. }));
 
         let incompatible = parse_cli_with_default_chat(vec![
-            "atlas-agent".into(), "--output-format".into(), "json".into(),
-            "version".into()
-        ]).unwrap();
+            "atlas-agent".into(),
+            "--output-format".into(),
+            "json".into(),
+            "version".into(),
+        ])
+        .unwrap();
         assert!(normalize_print_cli(incompatible).is_err());
     }
 
