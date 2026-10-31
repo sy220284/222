@@ -204,6 +204,8 @@ pub struct TextLineWindow {
     pub total_lines: usize,
     pub total_bytes: u64,
     pub read_bytes: usize,
+    /// Modification time from the same opened file descriptor, truncated to ms.
+    pub mtime_ms: u64,
     pub truncated_by_bytes: bool,
 }
 
@@ -263,6 +265,12 @@ pub fn read_text_line_window_with_limit(
 ) -> io::Result<TextLineWindow> {
     let file = fs::File::open(path)?;
     let file_meta = file.metadata()?;
+    let mtime_ms = file_meta
+        .modified()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64;
     if !truncate_on_byte_limit {
         if let Some(limit) = max_bytes {
             if file_meta.is_file() && file_meta.len() > limit as u64 {
@@ -362,6 +370,7 @@ pub fn read_text_line_window_with_limit(
         total_lines: line_number,
         total_bytes: total_bytes.saturating_sub(if has_bom { 3 } else { 0 }),
         read_bytes,
+        mtime_ms,
         truncated_by_bytes,
     })
 }
@@ -545,6 +554,14 @@ mod tests {
         assert_eq!(end.content, "你好\n");
         assert_eq!(end.selected_lines, 2);
         assert_eq!(end.read_bytes, "你好\n".len());
+        let expected_mtime = fs::metadata(&path)
+            .unwrap()
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        assert_eq!(end.mtime_ms, expected_mtime);
         assert_eq!(end.total_bytes, fs::metadata(&path).unwrap().len() - 3);
         assert_eq!(
             read_text_line_window(&path, 5, 2).unwrap().selected_lines,

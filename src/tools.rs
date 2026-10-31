@@ -1702,7 +1702,12 @@ impl ToolExecutor {
         };
         let after = fs::metadata(&path)?;
         let before_ms = modified_millis(&metadata)?;
-        let unchanged = modified_millis(&after)? == before_ms && after.len() == metadata.len();
+        let unchanged = modified_millis(&after)? == before_ms
+            && after.len() == metadata.len()
+            && window
+                .as_ref()
+                .map(|selected| selected.mtime_ms == before_ms)
+                .unwrap_or(true);
         self.file_reads.lock().unwrap().insert(
             path.canonicalize()?,
             FileReadState {
