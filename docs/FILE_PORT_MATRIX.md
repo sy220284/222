@@ -804,7 +804,7 @@
 | `src/hooks/useMemoryUsage.ts` | 40 | 1293 | 重写：终端 UI／交互 | `src/generated_ports/p_3ec18e2d10ecb.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useMergedClients.ts` | 24 | 745 | 重写：终端 UI／交互 | `src/generated_ports/p_f8b2a3a4b3021.rs` | 部分实现：完整等价：merge_clients 纯函数（initial 优先 uniq_by name 合并，与 lodash uniqBy 语义一致）含去重用例；React useMemo 宿主待统一验收 |
 | `src/hooks/useMergedCommands.ts` | 16 | 423 | 重写：终端 UI／交互 | `src/generated_ports/p_e4d668e812d0c.rs` | 部分实现：完整等价：merge_commands 纯函数（mcp 非空时 uniq_by name 合并）含去重用例；React useMemo 宿主待统一验收 |
-| `src/hooks/useMergedTools.ts` | 45 | 1645 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/hooks/useMergedTools.ts` | 45 | 1645 | 重写：终端 UI／交互 | `src/tool_pool_merge.rs / src/agent.rs` | 部分实现：手工核对原版 initialTools 优先、按名称去重、内置工具前缀与 MCP 尾部分区排序，真实 Agent 模型工具目录已接入；React hook 交互/协调模式与更多动态权限变更仍待完整回归 |
 | `src/hooks/useMinDisplayTime.ts` | 36 | 1010 | 重写：终端 UI／交互 | `src/generated_ports/p_90bb112bfdd77.rs` | 部分实现：完整等价：最小展示时间节流决策（立即展示或剩余等待，区别于防抖/节流）纯函数含单测；延迟换值定时器归宿主，待验收 |
 | `src/hooks/useNotifyAfterTimeout.ts` | 66 | 2471 | 重写：终端 UI／交互 | `src/generated_ports/p_a0553423b570f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/hooks/useOfficialMarketplaceNotification.tsx` | 48 | 7299 | 重写：终端 UI／交互 | `src/generated_ports/p_311cf4a518266.rs` | 部分实现：完整等价：三类通知元数据（config 失败 immediate/10s、成功 info/8s、失败 immediate/10s）键位匹配含单测；文案品牌域中性化，待验收 |
@@ -1533,7 +1533,7 @@
 | `src/utils/frontmatterParser.ts` | 371 | 12404 | 重写：保持通用行为 | `src/generated_ports/p_2e571c4a5ca80.rs`| 部分实现：frontmatter 解析——YAML 特殊字符引用表逐字（含冒号空格细节保护时间与 URL）、quoteProblematicValues（列表/块标量/已引用行不动）、--- 定界提取、known key 访问器（allowed-tools 列表拆分）；上游 parseYaml 无 Rust 等价，轻量 key-value 子集实现、嵌套 YAML 记差异，registry 兼容导出 parseBooleanFrontmatter，附 4 测试|
 | `src/utils/fsOperations.ts` | 771 | 24230 | 重写：保持通用行为 | `src/fs_operations.rs / src/tools.rs / src/prompt_history.rs / src/background.rs` | 部分实现：符号链接逐级权限路径、缺失路径祖先解析、去重、有界范围/尾部读取及 4KB UTF-8 安全倒序行读取已实现；接通 Read/Write/Edit 规则、历史记录和后台输出。多层链接 deny 及实际文件回归通过；完整可替换 FS 接口、所有原生文件操作适配和跨平台行为仍待等价 |
 | `src/utils/fullscreen.ts` | 203 | 8632 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/generatedFiles.ts` | 137 | 3481 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/generatedFiles.ts` | 137 | 3481 | 重写：保持通用行为 | `src/generated_files.rs` | 部分实现：完整手工重写锁文件、扩展名、复合扩展名、生成文件正则、源码目录排除及保序过滤，测试覆盖正反样例；原版 commitAttribution.ts 的调用链未整体迁移，暂不记完整验收 |
 | `src/utils/generators.ts` | 89 | 2156 | 重写：保持通用行为 | `src/generated_ports/p_48282ce751286.rs`| 部分实现：last_x/toArray/fromArray 语义、raceGenerators→all_bounded（FuturesUnordered 有界并发竞速，Promise.race 公平性对齐）；AsyncGenerator→futures Stream 映射，return_value 的 return 注入语义以 stream 包装未单独实现，测试待 CI|
 | `src/utils/genericProcessUtils.ts` | 185 | 6403 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/getWorktreePaths.ts` | 71 | 2048 | 重写：Git 工作树隔离 | `src/worktree.rs` | 部分实现：创建、变更保留与清理测试通过 |
@@ -1606,7 +1606,7 @@
 | `src/utils/markdownConfigLoader.ts` | 601 | 21312 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcp/dateTimeParser.ts` | 122 | 4322 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcp/elicitationValidation.ts` | 337 | 9384 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/mcpInstructionsDelta.ts` | 131 | 4752 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/mcpInstructionsDelta.ts` | 131 | 4752 | 重写：保持通用行为 | `src/mcp_instructions_delta.rs / src/mcp.rs` | 部分实现：手工移植服务端/客户端指令合并、历史增删重放、离线撤销、重连差量、按名称排序，真实 MCP 管理器和进程初始化测试已接通；会话附件持久化和动态注入仍待等价 |
 | `src/utils/mcpOutputStorage.ts` | 190 | 7086 | 重写：保持通用行为 | `src/mcp_output_storage.rs / src/mcp.rs / src/mcp_prompt.rs / src/webfetch.rs` | 部分实现：共享 MIME 检测与扩展名、原子完整保存、大小回执和大输出顺序阅读指引，接通 MCP 工具大文本、MCP prompt 二进制附件和 WebFetch。真实 HTTP 混合大小写 PDF、完整大文本保存和目录越界回归通过；MCP 工具全部二进制内容转换、schema 透传和多模态超限仍待等价 |
 | `src/utils/mcpValidation.ts` | 209 | 6300 | 重写：保持通用行为 | `src/generated_ports/p_6287d1dbedede.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/mcpWebSocketTransport.ts` | 201 | 6052 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1895,7 +1895,7 @@
 | `src/utils/tokenBudget.ts` | 74 | 2675 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：解析/定位/续写文案全链接入 agent.rs ask 入口（parse_token_budget + 轮首快照沿用上一轮预算）与主循环完成点；待验收 |
 | `src/utils/tokens.ts` | 262 | 9606 | 重写：保持通用行为 | `src/generated_ports/p_faf3dbb033a1d.rs`| 部分实现：token 记账纯核——getTokenUsage 四重门（assistant/有 usage/合成模型/合成文本标记集）、usage 四桶合计、倒序扫最后真实 usage、iterations 末窗公式（非缓存输入+输出，#304930 语义两分支一致）、纯 output 查询、registry 兼容导出 getTokenCountFromUsage，附 4 测试；合成标记值由 messages 端口持有|
 | `src/utils/toolErrors.ts` | 133 | 4012 | 重写：保持通用行为 | `src/tool_errors.rs / src/tools.rs` | 部分实现：按原版补充错误头尾保留、Shell 错误字段、JSON 参数校验提示，接入真实工具执行错误输出；原版 Zod Schema 输入与 AbortError 类型传播仍待验收 |
-| `src/utils/toolPool.ts` | 80 | 3136 | 重写：保持通用行为 | `src/portable_async_runtime.rs` | 部分实现：Rust 异步/队列状态机已编写，生产上下游与完整生命周期待最终核对 |
+| `src/utils/toolPool.ts` | 80 | 3136 | 重写：保持通用行为 | `src/tool_pool_merge.rs / src/agent.rs` | 部分实现：原版 mergeAndFilterTools 和 PR activity 后缀准入已手工对照并接到 Agent 工具请求，覆盖优先级、去重、排序和协调过滤测试；assembleToolPool 中的所有原版 MCP deny/缓存细节仍需全链路验收 |
 | `src/utils/toolResultStorage.ts` | 1041 | 38384 | 重写：保持通用行为 | `src/generated_ports/p_8aa6e76dd0af2.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/toolSchemaCache.ts` | 27 | 1061 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/toolSearch.ts` | 757 | 26606 | 重写：保持通用行为 | `src/generated_ports/p_82c13c954be66.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
