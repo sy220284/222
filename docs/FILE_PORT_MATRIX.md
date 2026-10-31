@@ -1787,7 +1787,7 @@
 | `src/utils/settings/schemaOutput.ts` | 9 | 317 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/settings/settings.ts` | 1016 | 32185 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/settings/settingsCache.ts` | 81 | 2416 | 重写：保持通用行为 | `src/generated_ports/p_57eeca3eff1c9.rs`| 部分实现：session/project/marketplace 三缓存全局单例、get/clear/reset 语义、按 source key+路径键控，附 2 测试；SettingsJson zod 校验由 settings types 桩承担（本桩收 parsed Value），parseSettingsFile 接线待 settings.ts 迁移|
-| `src/utils/settings/toolValidationConfig.ts` | 104 | 3100 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/settings/toolValidationConfig.ts` | 104 | 3100 | 重写：保持通用行为 | `src/permission_rules.rs / src/permission_settings.rs / src/main.rs` | 部分实现：WebSearch/WebFetch 自定义规则、Bash/文件通配符规则由原版规则分类实现；新增交互 `/permission` 原文校验门禁，拒绝空括号和畸形通配符被规范化为更广权限；单测已提交待最新 HEAD 验收，配置界面完整错误建议及其余规则入口需复核 |
 | `src/utils/settings/types.ts` | 1149 | 42784 | 重写：保持通用行为 | `src/generated_ports/p_71c09040fae60.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/settings/validateEditTool.ts` | 46 | 1695 | 重写：保持通用行为 | `src/portable_settings_runtime.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/settings/validation.ts` | 266 | 7951 | 重写：保持通用行为 | 待定 | 未迁移 |
