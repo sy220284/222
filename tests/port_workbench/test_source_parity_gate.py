@@ -53,13 +53,13 @@ class SourceParityGateTests(unittest.TestCase):
                   patch("source_parity_gate.load_contracts", return_value=({}, []))):
                 output = repo / "audit"
                 self.assertEqual(run(Namespace(repo=repo, output=output,
-                                               command="report", source_archive=None)), 0)
+                                               command="report", source_archive=None, spec_archive=None)), 0)
                 report = json.loads((output / "SOURCE_PARITY.json").read_text())
                 self.assertFalse(report["pass"])
                 self.assertEqual(report["contracts"]["missing"], 1)
                 self.assertEqual(report["mode"], "report")
                 self.assertEqual(run(Namespace(repo=repo, output=output,
-                                               command="gate", source_archive=None)), 1)
+                                               command="gate", source_archive=None, spec_archive=None)), 1)
                 gated = json.loads((output / "SOURCE_PARITY.json").read_text())
                 self.assertFalse(gated["pass"])
                 self.assertIn("缺少原版源码 ZIP，拒绝放行", gated["errors"])
