@@ -295,7 +295,6 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
             "source_sha256": baseline["source_hashes"][path],
             "source_lines": row["source_lines"],
             "source_declarations": declarations,
-            "spec_declarations": [],
             "source_function_nodes": function_by_source.get(path, []),
             "index_method": "static-declaration-candidates/v1",
             "review_status": "pending",
@@ -534,12 +533,9 @@ def run(args):
         if getattr(args, "spec_archive", None):
             spec_problems, spec_stats = verify_spec_archive(args.spec_archive, baseline)
             errors.extend(spec_problems)
-            queue = spec_stats.pop("function_queue", [])
-            if queue:
-                (output/"SOURCE_FUNCTION_INDEX.json").write_text(
-                    json.dumps({"schema":"source-function-index/v1","total":len(queue),
-                                "notice":"仅列原版声明位置；不代表 Rust 行为等价。",
-                                "items":queue},ensure_ascii=False)+"\n",encoding="utf-8")
+            # AST 函数队列统一由 build_function_index 产出；
+            # 旧声明清单只用于规格内部一致性，不再生成第二份函数验收表。
+            spec_stats.pop("function_queue", None)
             spec_checked = not spec_problems
         elif args.command == "gate":
             errors.append("缺少完整源码功能规格 ZIP，拒绝放行")
