@@ -209,7 +209,7 @@
 | `src/commands/mcp/mcp.tsx` | 85 | 12126 | 重写：保持通用行为 | `src/generated_ports/p_7522da9606aa2.rs` | 部分实现：/mcp 原版参数路由已接真实 chat 入口，支持 enable/disable all、状态过滤、命名目标和持久化（附真实 CLI 回归）；原有 /mcp 参数路由（no-redirect/设置视图、reconnect <name>、enable/disable [target]）+MCPToggle 目标解析纯核——ide 客户端恒排除、all 按 enable 筛 disabled/disable 筛非 disabled、命名按 name 匹配、空选择 already/not-found 消息、成功计数或单服务器结果；toggle 动作注入，settings/reconnect 视图归组件域，附 5 测试 |
 | `src/commands/mcp/xaaIdpCommand.ts` | 267 | 10290 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/commands/memory/index.ts` | 11 | 220 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
-| `src/commands/memory/memory.tsx` | 90 | 12608 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/commands/memory/memory.tsx` | 90 | 12608 | 重写：保持通用行为 | `src/memory_command.rs / src/main.rs / src/memory.rs` | 部分实现：已接通交互式 /memory 的用户/项目指令及已有自动记忆选择、文件 wx 原子新建且绝不覆盖、取消无副作用、VISUAL/EDITOR 优先顺序及安全 argv 编辑器调用，增加单元测试；待完整实现原版 MemoryFileSelector 的导入文件树、代理记忆文件夹、自动记忆与 Dream 开关及其设置持久化、编辑后缓存刷新和跨平台终端实际回归 |
 | `src/commands/mobile/index.ts` | 12 | 282 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端移动端伴随入口；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/mobile/mobile.tsx` | 274 | 21797 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端移动端伴随入口；不再跟进，通用本地能力与模型 API 保留 |
 | `src/commands/mock-limits/index.js` | 2 | 73 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
