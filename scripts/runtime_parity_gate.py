@@ -301,8 +301,8 @@ def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
               "pass":not errors,"required_units":len(expected),
               "scenarios":len(cases),"executed":attempted,"passed":passed,
               "missing_units":len(uncovered),
-              "missing_examples":dict(list(uncovered.items())[:50]),
-              "mismatches":mismatches[:100],"errors":errors,
+              "missing_examples":uncovered,
+              "mismatches":mismatches,"errors":errors,
               "note":"源代码须由提交者工作区提供；此结果仅对本次真实执行有效。"}
     output.mkdir(parents=True,exist_ok=True)
     (output/"DYNAMIC_PARITY.json").write_text(
