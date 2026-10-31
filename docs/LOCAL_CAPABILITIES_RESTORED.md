@@ -32,3 +32,14 @@ SDK 示例：
 - 本地存储与源代码无关的提示词，执行时直接使用当前配置的模型和 Agent 工具权限；不调用云端 Worker，不会主动执行或添加定时任务。
 
 截至本次补充，排除 192 条，纳入对齐 1,714 条；上述 7 条重新纳入路径全部按“部分实现”继续源代码级验收。
+
+## 2026-10-31 源码级复核修复
+
+已从资料库原始 `claude-code-2.1.88-main(2).zip` 逐文件核对 `source/src/utils/ultraplan/keyword.ts`、`commands/ultraplan.tsx`、`commands/review/ultrareviewCommand.tsx`、`tools/RemoteTriggerTool/{prompt.ts,RemoteTriggerTool.ts,UI.tsx}` 与 `bridge/inboundAttachments.ts`。
+
+- 新增 `src/local_advanced_keywords.rs`，覆盖原版的有效关键词边界、成对引号及括号、代码路径、疑问句、斜杠命令跳过及仅替换首个 `ultraplan` 的行为，交互聊天走真实模型执行入口。
+- 本地高级规划/审查改为只在**该次请求**使用计划权限，退出或异常时恢复此前用户权限，避免原实现通过 `set_sdk_permission_mode` 永久更改会话。
+- 多模态 SDK 本地附件在最后一个原始文本块之前插入，修复附件导致最后文本块/斜杠命令无法识别的问题；SDK 从最后一个**文本块**读取命令，而不假定最后一块一定是文本。
+- 本地任务支持源版五类动作对应的 `create/get/update/run/list`，以及额外的 `set/delete`；严格区分创建已存在与修改不存在的报错。本地任务仍仅为用户显式调用，**没有云端调度、周期触发和自动派生 Agent**。
+
+**尚未等价的部分（不可标记 verified）：** 原版高级审查、规划的原厂计费/云端会话及远端执行已按用户要求排除；原版 UltraPlan 的多阶段独立探索、seedPlan 细化、状态/取消/计划回传 UI 尚缺本地完整等价实现。原压缩包未包含其 `source/src/utils/ultraplan/prompt.txt` 原文。RemoteTrigger 的 `isReadOnly`、模型工具调用入口、输出结果格式及调度元数据尚未完成本地等价，当前 CLI 是独立用户入口。SDK 的关键词自动高级工作流也仍待单独完成贯通。全部保持**部分实现**，不以新增提示词或 CI 通过替代等价验收。

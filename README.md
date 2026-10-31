@@ -13,9 +13,9 @@
 
 ### 本地通用高级能力（使用当前配置的任意模型）
 
-- `atlas-agent ultra-review [PR]` 或交互 `/ultrareview [PR]`：本地多视角代码审查。
-- `atlas-agent ultra-plan 目标` 或交互 `/ultraplan 目标`：只读完整规划。
-- `atlas-agent trigger set 名称 任务内容` 保存本地任务，`trigger run 名称` 显式执行，`trigger list` 查看、`trigger delete 名称` 删除；不会创建定时任务。
+- `atlas-agent ultra-review [PR]` 或交互 `/ultrareview [PR]`：本地多视角代码审查；普通输入中合法的 ultrareview 关键词也会触发。
+- `atlas-agent ultra-plan 目标` 或交互 `/ultraplan 目标`：仅当前回合只读规划；普通输入中合法的 ultraplan 关键词也会触发，遵循原版引号/路径/疑问句过滤规则。
+- `atlas-agent trigger create 名称 任务内容` 创建任务，`trigger get 名称` 读取、`trigger update 名称 新内容` 修改、`trigger run 名称` 显式执行；另外支持 `set/list/delete` 管理；不会创建定时任务。
 - SDK `user.file_attachments` 支持本地工作区文件和图片；拒绝远端文件、URL 和工作区越权。
 
 

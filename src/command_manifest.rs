@@ -61,7 +61,7 @@ permissions|permissions|local-jsx|allowed-tools|-|Tool permissions
 plan|plan|local-jsx||[open|description]|Planning mode
 ultraplan|ultraplan|local-jsx||[goal]|Detailed local planning with active model
 ultrareview|ultrareview|local-jsx||[PR]|Deep local code review with active model
-trigger|trigger|local-jsx||[set|run|list|delete]|Run saved local Agent tasks with active model
+trigger|trigger|local-jsx||[create|get|update|run|list|set|delete]|Run user-invoked local tasks with active model
 plugin|plugin|local-jsx|plugins,marketplace|-|Plugin manager
 pr_comments|pr-comments|text||-|PR comments
 privacy-settings|privacy-settings|local-jsx||-|Privacy options

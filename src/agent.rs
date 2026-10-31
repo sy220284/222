@@ -6574,6 +6574,28 @@ done"#;
     }
 
     #[tokio::test]
+    async fn local_advanced_plan_restores_permission_mode_after_error() {
+        let root = tempfile::tempdir().unwrap();
+        let profile = ProviderProfile {
+            id: "mock".into(),
+            kind: "openai-compatible".into(),
+            base_url: "http://127.0.0.1:1/v1".into(),
+            model: "mock".into(),
+            api_key_env: None,
+            stream: false,
+            tuning: Default::default(),
+        };
+        let session = Session::fresh();
+        let mut agent = Agent::new(
+            profile, root.path().to_path_buf(), Approval::Ask, false, 5, session
+        ).unwrap();
+        let before = agent.current_permission_mode();
+        assert!(agent.ask_in_plan_mode("").await.is_err());
+        assert_eq!(agent.current_permission_mode(), before);
+        // Only the SDK's explicit change-permissions action may persist a
+        // different user setting; a local advanced read-only turn must not.
+    }
+    #[tokio::test]
     async fn resumed_teammate_restores_permission_mode_without_escalation() {
         let root = tempfile::tempdir().unwrap();
         let profile = ProviderProfile {

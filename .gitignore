@@ -17,6 +17,6 @@
 .credentials.json
 
 # Reusable local task prompts are user data and can contain sensitive context.
-/.atlas/local_triggers.json
-/.atlas/local_triggers.lock
-/.atlas/.local_triggers-*.tmp
+**/.atlas/local_triggers.json
+**/.atlas/local_triggers.lock
+**/.atlas/.local_triggers-*.tmp

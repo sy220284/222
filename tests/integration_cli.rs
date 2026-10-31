@@ -6803,6 +6803,15 @@ fn local_task_trigger_cli_persists_and_calls_configured_model_once() {
     let list = invoke(&["trigger", "list"]);
     assert!(list.status.success());
     assert!(String::from_utf8(list.stdout).unwrap().contains("smoke"));
+    let read = invoke(&["trigger", "get", "smoke"]);
+    assert!(read.status.success());
+    assert!(String::from_utf8(read.stdout).unwrap().contains("Inspect saved task without cloud"));
+    let duplicate = invoke(&["trigger", "create", "smoke", "must", "fail"]);
+    assert!(!duplicate.status.success());
+    let updated = invoke(&["trigger", "update", "smoke", "Inspect", "saved", "task", "without", "cloud", "and", "verify", "update"]);
+    assert!(updated.status.success(), "{}", String::from_utf8_lossy(&updated.stderr));
+    let missing = invoke(&["trigger", "update", "nonexistent", "fail"]);
+    assert!(!missing.status.success());
     let run = invoke(&["trigger", "run", "smoke"]);
     assert!(
         run.status.success(),
