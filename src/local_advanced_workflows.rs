@@ -2,6 +2,34 @@
 use anyhow::{bail, Context, Result};
 use std::{path::Path, process::Command};
 
+/// One local Agent performs all passes; no remote workers, scheduled jobs,
+/// detached execution or child agents are involved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Plan,
+    Review,
+}
+impl Kind {
+    pub fn as_str(self) -> &'static str {
+        match self { Self::Plan => "ultraplan", Self::Review => "ultrareview" }
+    }
+
+    pub fn verify_prompt(self) -> &'static str {
+        match self {
+            Self::Plan => "Second pass: independently inspect the actual files, dependencies, permission and rollback paths underlying your prior draft. Identify unsupported assumptions, missing stages, security risks and tests. Stay in read-only plan mode. Do not modify files. Report required corrections with evidence.",
+            Self::Review => "Second pass: independently re-check every suspected defect against the complete relevant code and callers. Attempt to disprove each finding, check omitted edge cases and permissions, and distinguish confirmed defects from hypotheses. Do not edit files or run destructive commands."
+        }
+    }
+
+    pub fn finalize_prompt(self) -> &'static str {
+        match self {
+            Self::Plan => "Final pass: deliver one complete, actionable, evidence-backed plan that incorporates the verified second-pass corrections. Include ordered steps, existing code integration points, tests, failure and cancellation behavior, and measurable acceptance criteria. Do not claim actions have already been executed.",
+            Self::Review => "Final pass: deliver the consolidated review, confirmed defects first in severity order with file/line evidence, affected behavior, fixes and missing regression tests. Separate unverified concerns and exclude disproven findings. Do not modify the code."
+        }
+    }
+}
+
+
 fn git(root: &Path, args: &[&str]) -> Result<String> {
     let output = Command::new("git")
         .arg("-C")
