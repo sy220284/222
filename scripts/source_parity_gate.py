@@ -606,6 +606,17 @@ def run(args):
                     output, contracts=contracts,
                 )
                 errors.extend("动态验收: " + issue for issue in dynamic_stats["errors"])
+        # The dynamic side executes the live workspace, not the previously
+        # hashed temporary archive: re-hash after all processes finish to
+        # detect source mutation or a source swap during acceptance.
+        if args.command == "gate" and original_checked and getattr(args, "source_root", None):
+            with tempfile.TemporaryDirectory(prefix="original-after-runtime-") as new_tmp:
+                after_zip = Path(new_tmp) / "original.zip"
+                pack_workspace_original(args.source_root, args.repo, after_zip)
+                after_errors = verify_original(after_zip, rows, baseline)
+            if after_errors:
+                errors.extend("动态执行后原版文件发生变化: " + item for item in after_errors)
+                dynamic_stats["pass"] = False
         if original_checked and spec_checked:
             line_problems, line_stats = verify_source_lines(args.source_archive, args.spec_archive)
             errors.extend(line_problems)
