@@ -94,6 +94,12 @@ Respond in Chinese."#
     ))
 }
 
+/// A bare slash command displays usage without consuming model tokens,
+/// like launchUltraplan's no-blurb/no-seed-plan branch.
+pub fn plan_usage() -> &'static str {
+    "Usage: /ultraplan GOAL\nUse the currently configured model to research, verify and refine a detailed local plan. No cloud session or background worker is started."
+}
+
 /// Source reviewRemote.ts treats only decimal arguments as PR numbers.
 /// Every other argument takes the local branch/worktree review route.
 pub fn review_request(root: &Path, args: &str) -> Result<String> {
@@ -158,12 +164,18 @@ Respond in Chinese."#,
 /// bare-word UltraPlan launch to interactive mode; UltraReview bare words
 /// are only an input hint. Unknown commands go through SDK Skill/MCP.
 pub fn sdk_user_prompt(root: &Path, text: &str) -> Result<Option<String>> {
+    sdk_user_prompt_with_seed(root, text, None)
+}
+
+/// A plan-approval client may supply its already approved draft for
+/// refinement; all content remains local in this selected Agent session.
+pub fn sdk_user_prompt_with_seed(root: &Path, text: &str, seed: Option<&str>) -> Result<Option<String>> {
     if let Some(parsed) = crate::slash_command::parse_slash_command(text) {
         if parsed.is_mcp {
             return Ok(None);
         }
         return match parsed.command_name.as_str() {
-            "ultraplan" => plan_prompt(root, &parsed.args).map(Some),
+            "ultraplan" => plan_prompt_with_seed(root, &parsed.args, seed).map(Some),
             "ultrareview" => review_request(root, &parsed.args).map(Some),
             _ => Ok(None),
         };
@@ -236,6 +248,8 @@ mod tests {
         assert!(seeded.starts_with("Here is a draft plan to refine:"));
         assert!(seeded.contains("Existing rollout draft"));
         assert!(plan_prompt_with_seed(root.path(), "", Some("  ")).is_err());
+        assert!(sdk_user_prompt_with_seed(root.path(), "/ultraplan", Some("Seed draft")).unwrap().unwrap().contains("Seed draft"));
+        assert!(plan_usage().contains("Usage: /ultraplan GOAL"));
     }
     #[test]
     fn reviewer_is_read_only_and_validates_pr_number() {
