@@ -435,8 +435,21 @@ fn highlight_advanced_keywords(input: &str) -> String {
     out.replace('\n', "↵").replace('\t', "⇥")
 }
 
+/// Bash-only ghost completion: mirror the original history lookup on a
+/// current, already-loaded prompt-history snapshot. Never complete mid-cursor
+/// or while Vim is in NORMAL mode.
 #[cfg(unix)]
-fn redraw(out: &mut impl Write, prompt: &str, e: &Editor, vim: &VimKeys) -> io::Result<()> {
+fn bash_ghost_suffix<'a>(e: &Editor, history: &'a [String], vim: &VimKeys) -> Option<&'a str> {
+    if e.cursor != e.text.len() || (vim.enabled && !vim.insert) {
+        return None;
+    }
+    let bash_input = e.text.strip_prefix('!')?;
+    crate::shell_history_completion::get_shell_history_completion(bash_input, history)
+        .map(|matched| matched.suffix)
+}
+
+#[cfg(unix)]
+fn redraw(out: &mut impl Write, prompt: &str, e: &Editor, vim: &VimKeys, history: &[String]) -> io::Result<()> {
     let mode = if vim.enabled && !vim.insert {
         "[NORMAL] "
     } else {
@@ -459,6 +472,11 @@ fn redraw(out: &mut impl Write, prompt: &str, e: &Editor, vim: &VimKeys) -> io::
         }
     } else if tail > 0 {
         write!(out, "\x1b[{tail}D")?;
+    } else if let Some(suffix) = bash_ghost_suffix(e, history, vim) {
+        let ghost = suffix.replace('\\n', "↵").replace('\\t', "⇥");
+        // Ghost text is visual only. Restore the cursor before user input;
+        // it is accepted only by an explicit Right/Ctrl-F keystroke.
+        write!(out, "\x1b[2m{ghost}\x1b[22m\x1b[{}D", ghost.chars().count())?;
     }
     out.flush()
 }
@@ -475,7 +493,7 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
     let mut paste = false;
     write!(out, "\x1b[?2004h")?;
     let result = (|| -> Result<PromptRead> {
-        redraw(&mut out, prompt, &e, &vim)?;
+        redraw(&mut out, prompt, &e, &vim, history)?;
         loop {
             let Some(b) = byte(&mut input)? else {
                 continue;
@@ -487,7 +505,7 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
             }
             if key == Key::PasteEnd {
                 paste = false;
-                redraw(&mut out, prompt, &e, &vim)?;
+                redraw(&mut out, prompt, &e, &vim, history)?;
                 continue;
             }
             if paste {
@@ -497,11 +515,11 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
                     Key::Backspace => e.insert('\u{8}')?,
                     _ => {}
                 }
-                redraw(&mut out, prompt, &e, &vim)?;
+                redraw(&mut out, prompt, &e, &vim, history)?;
                 continue;
             }
             if vim.handle(&mut e, &key)? {
-                redraw(&mut out, prompt, &e, &vim)?;
+                redraw(&mut out, prompt, &e, &vim, history)?;
                 continue;
             }
             let (input_string, named, ctrl) = match &key {
@@ -561,7 +579,17 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
                     (None, Key::Backspace) => e.backspace(),
                     (None, Key::Delete) => e.delete(),
                     (None, Key::Left | Key::Ctrl('b')) => e.left(),
-                    (None, Key::Right | Key::Ctrl('f')) => e.right(),
+                    (None, Key::Right | Key::Ctrl('f')) => {
+                        if let Some(suffix) = bash_ghost_suffix(&e, history, &vim) {
+                            if e.text.len().saturating_add(suffix.len()) > MAX_INPUT_BYTES {
+                                bail!("Interactive input exceeds 1 MiB");
+                            }
+                            e.text.push_str(suffix);
+                            e.cursor = e.text.len();
+                        } else {
+                            e.right();
+                        }
+                    }
                     (None, Key::Home | Key::Ctrl('a')) => e.cursor = 0,
                     (None, Key::End | Key::Ctrl('e')) => e.cursor = e.text.len(),
                     (None, Key::Ctrl('k')) => e.kill_end(),
@@ -570,7 +598,7 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
                     _ => {}
                 }
             }
-            redraw(&mut out, prompt, &e, &vim)?;
+            redraw(&mut out, prompt, &e, &vim, history)?;
         }
     })();
     write!(out, "\x1b[?2004l")?;
@@ -622,6 +650,29 @@ mod tests {
         e.next(&h);
         assert_eq!(e.text, "x");
     }
+    #[cfg(unix)]
+    #[test]
+    fn bash_history_ghost_only_when_inserting_at_end() {
+        let mut e = Editor::default();
+        let vim = VimKeys::new(false);
+        let history = vec!["!git status".to_owned(), "!git stash".to_owned()];
+        for ch in "!git st".chars() {
+            e.insert(ch).unwrap();
+        }
+        assert_eq!(bash_ghost_suffix(&e, &history, &vim), Some("atus"));
+        e.left();
+        assert_eq!(bash_ghost_suffix(&e, &history, &vim), None);
+        e.cursor = e.text.len();
+        e.text = "git st".to_owned();
+        e.cursor = e.text.len();
+        assert_eq!(bash_ghost_suffix(&e, &history, &vim), None);
+        e.text = "!git st".to_owned();
+        e.cursor = e.text.len();
+        let mut normal = VimKeys::new(true);
+        normal.insert = false;
+        assert_eq!(bash_ghost_suffix(&e, &history, &normal), None);
+    }
+
     #[test]
     fn size_limit_and_kill_yank() {
         let mut e = Editor::default();
