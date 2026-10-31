@@ -400,6 +400,25 @@ def approved_removed_paths(repo: Path) -> set[str]:
     return set(paths)
 
 
+def indexed_rust_test_names(repo: Path) -> set[str]:
+    """Index real Rust test definitions once, never ordinary same-named functions."""
+    names = set()
+    # Test attributes may carry Tokio options. Reject production functions
+    # with the same name when they have no test attribute.
+    test_fn = re.compile(
+        r'(?m)^\s*#\s*\[\s*(?:tokio::)?test(?:\([^\]]*\))?\s*\]'
+        r'(?:\s*#\s*\[[^\]]*\])*\s*'
+        r'(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+'
+        r'([A-Za-z_][A-Za-z_0-9]*)\s*\('
+    )
+    for directory in (repo / 'src', repo / 'tests'):
+        if not directory.is_dir():
+            continue
+        for source in directory.rglob('*.rs'):
+            names.update(test_fn.findall(source.read_text(encoding='utf-8')))
+    return names
+
+
 def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
     counts = verify_counts(rows, strict=strict)
     baseline_path = repo / BASELINE
@@ -428,6 +447,7 @@ def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
         raise AuditError('缺少 1,906 条原版文件 SHA-256 锁定值')
     # Historic verified rows require the same auditable proof as newly promoted
     # rows. Otherwise deleting an old JSONL record silently retains acceptance.
+    test_names = indexed_rust_test_names(repo)
     for path in all_verified:
         item = proof.get(path)
         required = ('source_sha256', 'rust_entrypoints', 'test_names',
@@ -447,18 +467,12 @@ def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
         # real executable live in tests/. Both must be discoverable; a passed
         # integration test is stronger evidence than a source-only assertion.
         # Ignore docstrings and file extensions other than .rs.
-        rust_sources = [
-            source.read_text(encoding='utf-8')
-            for directory in (repo / 'src', repo / 'tests')
-            if directory.is_dir()
-            for source in directory.rglob('*.rs')
-        ]
         for test in item['test_names']:
             token = test.split('::')[-1]
             if not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', token):
                 raise AuditError(f'{path}: 测试标识不合法: {test}')
-            if not any(re.search(r'\bfn\s+' + re.escape(token) + r'\s*\(', s) for s in rust_sources):
-                raise AuditError(f'{path}: Rust 测试函数不存在: {test}')
+            if token not in test_names:
+                raise AuditError(f'{path}: Rust 测试函数不存在或缺少 #[test] 标记: {test}')
         if not re.fullmatch(r'[0-9a-f]{40}', item['tested_commit']):
             raise AuditError(f'{path}: tested_commit 必须是有效完整提交 SHA')
         if strict and path in newly_verified:
