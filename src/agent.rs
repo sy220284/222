@@ -4130,7 +4130,10 @@ impl Agent {
             previous,
         };
         guard.agent.permission_mode = permission_mode::Mode::Plan;
-        guard.agent.ask_with_blocks_for_message(prompt, blocks, message_id).await
+        guard
+            .agent
+            .ask_with_blocks_for_message(prompt, blocks, message_id)
+            .await
     }
 
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
