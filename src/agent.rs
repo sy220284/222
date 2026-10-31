@@ -3832,7 +3832,8 @@ impl Agent {
             self.session.save(&self.root)?;
             bail!("Compaction model unexpectedly requested tools");
         }
-        let summary = response.message.visible_text();
+        let raw_summary = response.message.visible_text();
+        let summary = crate::prompt_runtime::compact_summary_content(&raw_summary).to_owned();
         if summary.trim().is_empty() {
             self.session.save(&self.root)?;
             bail!("Compaction returned empty text")
