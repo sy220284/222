@@ -10,7 +10,10 @@ use std::{
 
 const MAX_FILES: usize = 8;
 const MAX_TEXT_BYTES: u64 = 1_048_576;
-const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
+// Original 2.1.88 apiLimits.ts: the 5 MiB API cap applies to the
+// BASE64 STRING, so locally read raw image files must fit in 3.75 MiB.
+const MAX_IMAGE_BASE64_BYTES: u64 = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES: u64 = MAX_IMAGE_BASE64_BYTES * 3 / 4;
 const MAX_TOTAL_BYTES: u64 = 12 * 1024 * 1024;
 
 fn image_type(bytes: &[u8]) -> Option<&'static str> {
@@ -102,7 +105,7 @@ pub fn attach(
             .context("Invalid attachment filename")?;
         let meta = fs::metadata(&path).context("Cannot stat local attachment")?;
         if meta.len() > MAX_IMAGE_BYTES {
-            bail!("Attachment exceeds 5 MiB: {name}");
+            bail!("Attachment {name} exceeds the 3.75 MiB raw limit for the API's 5 MiB base64 image limit");
         }
         total = total
             .checked_add(meta.len())
@@ -113,8 +116,12 @@ pub fn attach(
         let bytes =
             fs::read(&path).with_context(|| format!("Cannot read local attachment: {name}"))?;
         if let Some(mime) = image_type(&bytes) {
+            let encoded = STANDARD.encode(&bytes);
+            if encoded.len() as u64 > MAX_IMAGE_BASE64_BYTES {
+                bail!("Attachment {name} exceeds the API's 5 MiB base64 image limit");
+            }
             attached.push(json!({"type":"text","text":format!("Attached local image: {name}")}));
-            attached.push(json!({"type":"image","source":{"type":"base64","media_type":mime,"data":STANDARD.encode(&bytes)}}));
+            attached.push(json!({"type":"image","source":{"type":"base64","media_type":mime,"data":encoded}}));
         } else {
             if meta.len() > MAX_TEXT_BYTES {
                 bail!("Local text attachment exceeds 1 MiB: {name}");
@@ -172,6 +179,24 @@ mod tests {
             .iter()
             .any(|block| block["type"] == "image"));
     }
+    #[test]
+    fn raw_image_attachment_respects_encoded_api_boundary() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("boundary.png");
+        let mut bytes = vec![0_u8; MAX_IMAGE_BYTES as usize];
+        bytes[..8].copy_from_slice(&[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        fs::write(&path, &bytes).unwrap();
+        let input = attach(root.path(), &json!("Inspect"), Some(&json!([{"path":"boundary.png"}])))
+            .unwrap();
+        let image = input.as_array().unwrap().iter().find(|item| item["type"] == "image").unwrap();
+        assert_eq!(image["source"]["data"].as_str().unwrap().len(), MAX_IMAGE_BASE64_BYTES as usize);
+        assert!(crate::multimodal::parse(&input).is_ok());
+        bytes.push(0);
+        fs::write(&path, &bytes).unwrap();
+        let result = attach(root.path(), &json!("Inspect"), Some(&json!([{"path":"boundary.png"}])));
+        assert!(result.unwrap_err().to_string().contains("base64 image limit"));
+    }
+
     #[test]
     fn local_attachments_preserve_last_user_text_and_slash_command() {
         let root = tempfile::tempdir().unwrap();
