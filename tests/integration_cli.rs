@@ -6567,58 +6567,29 @@ fn sdk_bridge_inbound_media_type_fallback_reaches_real_model_for_direct_and_queu
 }
 
 #[test]
-fn sdk_remote_attachment_download_and_model_request_share_session() {
-    use std::process::Stdio;
-    let root = tempfile::tempdir().unwrap();
-    let file_server = TcpListener::bind("127.0.0.1:0").unwrap();
-    let file_url = format!("http://{}", file_server.local_addr().unwrap());
-    let file_thread = thread::spawn(move || {
-        let mut connection = accept_before(&file_server, Duration::from_secs(15));
-        let request = read_request(&mut connection);
-        assert!(
-            request.starts_with("GET /files/uuid-photo/content HTTP/1.1"),
-            "{request}"
-        );
-        assert!(request
-            .to_ascii_lowercase()
-            .contains("authorization: bearer authorized"));
-        let body = b"reference attachment data";
-        write!(
-            connection,
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            body.len()
-        )
-        .unwrap();
-        connection.write_all(body).unwrap();
-        connection.flush().unwrap();
-    });
-    let model_server = TcpListener::bind("127.0.0.1:0").unwrap();
-    let model_url = format!("http://{}/v1", model_server.local_addr().unwrap());
-    let model_thread = thread::spawn(move || {
-        let mut connection = accept_before(&model_server, Duration::from_secs(15));
-        let request = read_request(&mut connection);
-        let reply =
-            json!({"choices":[{"message":{"role":"assistant","content":"reference received"},
-            "finish_reason":"stop"}]})
-            .to_string();
-        write!(connection,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",reply.len(),reply).unwrap();
-        connection.flush().unwrap();
-        request
-    });
-    let config = root.path().join("config.json");
+fn sdk_remote_attachments_are_rejected_before_any_network_request() {
+    let workspace = tempfile::tempdir().unwrap();
+    let remote_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    remote_listener.set_nonblocking(true).unwrap();
+    let model_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    model_listener.set_nonblocking(true).unwrap();
+    let remote_url = format!("http://{}", remote_listener.local_addr().unwrap());
+    let model_url = format!("http://{}/v1", model_listener.local_addr().unwrap());
+    let config = workspace.path().join("config.json");
     fs::write(
         &config,
-        json!({"default_provider":"local","providers":[{
-            "id":"local","kind":"openai-compatible","model":"test","base_url":model_url
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible",
+            "model":"mock","base_url":model_url
         }]})
         .to_string(),
     )
     .unwrap();
     let mut child = binary()
-        .args(["--workspace", root.path().to_str().unwrap(), "sdk"])
+        .args(["--workspace", workspace.path().to_str().unwrap(), "sdk"])
         .env("ATLAS_CONFIG", &config)
-        .env("ATLAS_BRIDGE_ATTACHMENT_BASE_URL", &file_url)
-        .env("ATLAS_BRIDGE_ATTACHMENT_TOKEN", "authorized")
+        .env("ATLAS_BRIDGE_ATTACHMENT_BASE_URL", &remote_url)
+        .env("ATLAS_BRIDGE_ATTACHMENT_TOKEN", "should-stay-private")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -6629,8 +6600,9 @@ fn sdk_remote_attachment_download_and_model_request_share_session() {
         writeln!(
             stdin,
             "{}",
-            json!({"type":"user","content":"Check attached file",
-            "file_attachments":[{"file_uuid":"uuid-photo","file_name":"../../invoice file.txt"}]})
+            json!({"type":"user","content":"Read the attachment",
+                "file_attachments":[{"file_uuid":"remote-photo",
+                    "file_name":"../../private.txt"}]})
         )
         .unwrap();
     }
@@ -6640,26 +6612,21 @@ fn sdk_remote_attachment_download_and_model_request_share_session() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("reference received"), "{stdout}");
-    file_thread.join().unwrap();
-    let model_request = model_thread.join().unwrap();
-    assert!(
-        model_request.contains("invoice_file.txt")
-            || model_request.contains("reference attachment data"),
-        "{model_request}"
-    );
-    let upload_root = root.path().join(".atlas/uploads");
-    let dirs = fs::read_dir(&upload_root).unwrap().collect::<Vec<_>>();
-    assert_eq!(dirs.len(), 1);
-    let paths = fs::read_dir(dirs[0].as_ref().unwrap().path())
+    let events: Vec<Value> = String::from_utf8(output.stdout)
         .unwrap()
-        .collect::<Vec<_>>();
-    assert_eq!(paths.len(), 1);
-    assert_eq!(
-        fs::read(paths[0].as_ref().unwrap().path()).unwrap(),
-        b"reference attachment data"
-    );
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect();
+    assert!(events.iter().any(|event| {
+        event["type"] == "error"
+            && event["message"].as_str().is_some_and(|text| {
+                text.contains("Remote file attachments are disabled")
+            })
+    }), "{events:?}");
+    assert!(!events.iter().any(|event| event["type"] == "result"));
+    assert!(remote_listener.accept().is_err(), "SDK attempted remote download");
+    assert!(model_listener.accept().is_err(), "SDK forwarded a missing attachment");
+    assert!(!format!("{events:?}").contains("should-stay-private"));
 }
 
 #[test]
