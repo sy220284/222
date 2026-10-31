@@ -57,6 +57,9 @@ pub fn review_request(root: &Path, args: &str) -> Result<String> {
     if !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()) {
         let pr = value.parse::<u64>()
             .context("PR number exceeds u64 range")?;
+        if pr == 0 {
+            bail!("/ultrareview expects a positive PR number");
+        }
         return review_prompt(root, Some(pr));
     }
     let mut review = review_prompt(root, None)?;
