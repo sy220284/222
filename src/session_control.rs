@@ -619,7 +619,9 @@ mod tests {
         session
             .archived_messages
             .push(Message::text("assistant", "Original design reply"));
-        session.messages.push(Message::text("user", "Latest request"));
+        session
+            .messages
+            .push(Message::text("user", "Latest request"));
         let text = render(&session);
         let first = text.find("Original design request").unwrap();
         let second = text.find("Original design reply").unwrap();
