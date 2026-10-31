@@ -6617,15 +6617,24 @@ fn sdk_remote_attachments_are_rejected_before_any_network_request() {
         .lines()
         .map(|line| serde_json::from_str::<Value>(line).unwrap())
         .collect();
-    assert!(events.iter().any(|event| {
-        event["type"] == "error"
-            && event["message"].as_str().is_some_and(|text| {
-                text.contains("Remote file attachments are disabled")
-            })
-    }), "{events:?}");
+    assert!(
+        events.iter().any(|event| {
+            event["type"] == "error"
+                && event["message"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("Remote file attachments are disabled"))
+        }),
+        "{events:?}"
+    );
     assert!(!events.iter().any(|event| event["type"] == "result"));
-    assert!(remote_listener.accept().is_err(), "SDK attempted remote download");
-    assert!(model_listener.accept().is_err(), "SDK forwarded a missing attachment");
+    assert!(
+        remote_listener.accept().is_err(),
+        "SDK attempted remote download"
+    );
+    assert!(
+        model_listener.accept().is_err(),
+        "SDK forwarded a missing attachment"
+    );
     assert!(!format!("{events:?}").contains("should-stay-private"));
 }
 
