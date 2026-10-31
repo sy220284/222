@@ -5746,7 +5746,9 @@ mod tests {
     impl ModelProvider for SummaryModel {
         async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
             assert!(request.tools.is_empty());
-            assert!(request.system.ends_with(crate::compact_source_prompts::NO_TOOLS_TRAILER));
+            assert!(request
+                .system
+                .ends_with(crate::compact_source_prompts::NO_TOOLS_TRAILER));
             Ok(crate::protocol::ModelResponse {
                 message: Message::text(
                     "assistant",
