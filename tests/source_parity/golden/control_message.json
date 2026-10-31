@@ -1,0 +1,286 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/controlMessageCompat.ts",
+  "source_sha256": "ddc212c0d9300a38b22393709b1befefaf9af9da32b0c8f5379a9bea8290dc11",
+  "export": "normalizeControlMessageKeys",
+  "cases": [
+    {
+      "id": "control_message-00",
+      "kind": "normal",
+      "input": null,
+      "expected": null
+    },
+    {
+      "id": "control_message-01",
+      "kind": "edge",
+      "input": false,
+      "expected": false
+    },
+    {
+      "id": "control_message-02",
+      "kind": "edge",
+      "input": 12,
+      "expected": 12
+    },
+    {
+      "id": "control_message-03",
+      "kind": "edge",
+      "input": "text",
+      "expected": "text"
+    },
+    {
+      "id": "control_message-04",
+      "kind": "edge",
+      "input": [],
+      "expected": []
+    },
+    {
+      "id": "control_message-05",
+      "kind": "edge",
+      "input": [
+        {
+          "requestId": "x"
+        }
+      ],
+      "expected": [
+        {
+          "requestId": "x"
+        }
+      ]
+    },
+    {
+      "id": "control_message-06",
+      "kind": "edge",
+      "input": {},
+      "expected": {}
+    },
+    {
+      "id": "control_message-07",
+      "kind": "normal",
+      "input": {
+        "requestId": "abc"
+      },
+      "expected": {
+        "request_id": "abc"
+      }
+    },
+    {
+      "id": "control_message-08",
+      "kind": "edge",
+      "input": {
+        "request_id": "z",
+        "requestId": "abc"
+      },
+      "expected": {
+        "request_id": "z",
+        "requestId": "abc"
+      }
+    },
+    {
+      "id": "control_message-09",
+      "kind": "edge",
+      "input": {
+        "requestId": null
+      },
+      "expected": {
+        "request_id": null
+      }
+    },
+    {
+      "id": "control_message-10",
+      "kind": "edge",
+      "input": {
+        "requestId": false
+      },
+      "expected": {
+        "request_id": false
+      }
+    },
+    {
+      "id": "control_message-11",
+      "kind": "edge",
+      "input": {
+        "requestId": 22
+      },
+      "expected": {
+        "request_id": 22
+      }
+    },
+    {
+      "id": "control_message-12",
+      "kind": "edge",
+      "input": {
+        "response": {
+          "requestId": "nested"
+        }
+      },
+      "expected": {
+        "response": {
+          "request_id": "nested"
+        }
+      }
+    },
+    {
+      "id": "control_message-13",
+      "kind": "edge",
+      "input": {
+        "requestId": "outer",
+        "response": {
+          "requestId": "inner",
+          "ok": true
+        }
+      },
+      "expected": {
+        "response": {
+          "ok": true,
+          "request_id": "inner"
+        },
+        "request_id": "outer"
+      }
+    },
+    {
+      "id": "control_message-14",
+      "kind": "edge",
+      "input": {
+        "response": {
+          "request_id": null,
+          "requestId": "old"
+        }
+      },
+      "expected": {
+        "response": {
+          "request_id": null,
+          "requestId": "old"
+        }
+      }
+    },
+    {
+      "id": "control_message-15",
+      "kind": "edge",
+      "input": {
+        "response": [
+          {
+            "requestId": "a"
+          }
+        ]
+      },
+      "expected": {
+        "response": [
+          {
+            "requestId": "a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "control_message-16",
+      "kind": "edge",
+      "input": {
+        "response": null
+      },
+      "expected": {
+        "response": null
+      }
+    },
+    {
+      "id": "control_message-17",
+      "kind": "edge",
+      "input": {
+        "untouched": {
+          "requestId": "x"
+        }
+      },
+      "expected": {
+        "untouched": {
+          "requestId": "x"
+        }
+      }
+    },
+    {
+      "id": "control_message-18",
+      "kind": "edge",
+      "input": {
+        "requestId": "old",
+        "request_id": null,
+        "response": {
+          "requestId": "before",
+          "request_id": "after"
+        }
+      },
+      "expected": {
+        "requestId": "old",
+        "request_id": null,
+        "response": {
+          "requestId": "before",
+          "request_id": "after"
+        }
+      }
+    },
+    {
+      "id": "control_message-19",
+      "kind": "edge",
+      "input": {
+        "response": {
+          "requestId": {
+            "x": 1
+          }
+        }
+      },
+      "expected": {
+        "response": {
+          "request_id": {
+            "x": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "control_message-20",
+      "kind": "edge",
+      "input": {
+        "requestId": "",
+        "response": {
+          "requestId": []
+        }
+      },
+      "expected": {
+        "response": {
+          "request_id": []
+        },
+        "request_id": ""
+      }
+    },
+    {
+      "id": "control_message-21",
+      "kind": "edge",
+      "input": {
+        "requestId": {
+          "foo": "bar"
+        }
+      },
+      "expected": {
+        "request_id": {
+          "foo": "bar"
+        }
+      }
+    },
+    {
+      "id": "control_message-22",
+      "kind": "edge",
+      "input": {
+        "response": {
+          "response": {
+            "requestId": "deeper"
+          }
+        }
+      },
+      "expected": {
+        "response": {
+          "response": {
+            "requestId": "deeper"
+          }
+        }
+      }
+    }
+  ]
+}

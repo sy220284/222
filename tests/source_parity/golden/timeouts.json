@@ -1,0 +1,508 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/timeouts.ts",
+  "source_sha256": "6f7427a322809386a41ae5b8af9b72624de936024571a65af9d42f3021a249b3",
+  "cases": [
+    {
+      "id": "getDefaultBashTimeoutMs-0",
+      "kind": "normal",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {},
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 120000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-1",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "2500"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 2500
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-2",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_MAX_TIMEOUT_MS": "3500"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 120000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-3",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "1000000"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 1000000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-4",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "50000",
+        "BASH_MAX_TIMEOUT_MS": "100000"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 50000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-5",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "900000",
+        "BASH_MAX_TIMEOUT_MS": "200000"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 900000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-6",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "0",
+        "BASH_MAX_TIMEOUT_MS": "0"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 120000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-7",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "-20",
+        "BASH_MAX_TIMEOUT_MS": "-15"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 120000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-8",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "15ms",
+        "BASH_MAX_TIMEOUT_MS": "30ms"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 15
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-9",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": " +42s",
+        "BASH_MAX_TIMEOUT_MS": "  +50foo"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 42
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-10",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "5e3",
+        "BASH_MAX_TIMEOUT_MS": "6e3"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 5
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-11",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "1.9",
+        "BASH_MAX_TIMEOUT_MS": "2.9"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 1
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-12",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "NaN",
+        "BASH_MAX_TIMEOUT_MS": "Infinity"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 120000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-13",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "0x10",
+        "BASH_MAX_TIMEOUT_MS": "0x100"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 120000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-14",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "0033",
+        "BASH_MAX_TIMEOUT_MS": "044"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 33
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-15",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "12",
+        "BASH_MAX_TIMEOUT_MS": "15"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 120000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-16",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "﻿123",
+        "BASH_MAX_TIMEOUT_MS": "﻿234"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 123
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-17",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "  ",
+        "BASH_MAX_TIMEOUT_MS": ""
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 120000
+    },
+    {
+      "id": "getDefaultBashTimeoutMs-18",
+      "kind": "edge",
+      "export": "getDefaultBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "\n500\r",
+        "BASH_MAX_TIMEOUT_MS": "\n650\r"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1"
+      ],
+      "expected": 500
+    },
+    {
+      "id": "getMaxBashTimeoutMs-0",
+      "kind": "normal",
+      "export": "getMaxBashTimeoutMs",
+      "input": {},
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 600000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-1",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "2500"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 600000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-2",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_MAX_TIMEOUT_MS": "3500"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 120000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-3",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "1000000"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 1000000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-4",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "50000",
+        "BASH_MAX_TIMEOUT_MS": "100000"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 100000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-5",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "900000",
+        "BASH_MAX_TIMEOUT_MS": "200000"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 900000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-6",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "0",
+        "BASH_MAX_TIMEOUT_MS": "0"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 600000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-7",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "-20",
+        "BASH_MAX_TIMEOUT_MS": "-15"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 600000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-8",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "15ms",
+        "BASH_MAX_TIMEOUT_MS": "30ms"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 30
+    },
+    {
+      "id": "getMaxBashTimeoutMs-9",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": " +42s",
+        "BASH_MAX_TIMEOUT_MS": "  +50foo"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 50
+    },
+    {
+      "id": "getMaxBashTimeoutMs-10",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "5e3",
+        "BASH_MAX_TIMEOUT_MS": "6e3"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 6
+    },
+    {
+      "id": "getMaxBashTimeoutMs-11",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "1.9",
+        "BASH_MAX_TIMEOUT_MS": "2.9"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 2
+    },
+    {
+      "id": "getMaxBashTimeoutMs-12",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "NaN",
+        "BASH_MAX_TIMEOUT_MS": "Infinity"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 600000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-13",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "0x10",
+        "BASH_MAX_TIMEOUT_MS": "0x100"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 600000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-14",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "0033",
+        "BASH_MAX_TIMEOUT_MS": "044"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 44
+    },
+    {
+      "id": "getMaxBashTimeoutMs-15",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "12",
+        "BASH_MAX_TIMEOUT_MS": "15"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 600000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-16",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "﻿123",
+        "BASH_MAX_TIMEOUT_MS": "﻿234"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 234
+    },
+    {
+      "id": "getMaxBashTimeoutMs-17",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "  ",
+        "BASH_MAX_TIMEOUT_MS": ""
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 600000
+    },
+    {
+      "id": "getMaxBashTimeoutMs-18",
+      "kind": "edge",
+      "export": "getMaxBashTimeoutMs",
+      "input": {
+        "BASH_DEFAULT_TIMEOUT_MS": "\n500\r",
+        "BASH_MAX_TIMEOUT_MS": "\n650\r"
+      },
+      "source_ids": [
+        "src/utils/timeouts.ts:FunctionDeclaration:12-21:occurrence-1",
+        "src/utils/timeouts.ts:FunctionDeclaration:28-39:occurrence-1"
+      ],
+      "expected": 650
+    }
+  ]
+}

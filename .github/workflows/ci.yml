@@ -4,11 +4,15 @@ on:
   pull_request:
     branches: [main, feat/full-rust-parity]
   push:
-    branches: [main]
+    branches: [main, pr7]
 
 permissions:
   contents: read
+  actions: read
 
+# Verify only the current PR revision. A newer push invalidates old-head
+# acceptance evidence; cancel stale Linux/Windows runs so the latest complete
+# test suite starts promptly without reducing any current-head coverage.
 concurrency:
   group: rust-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -21,10 +25,32 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: 核对全量迁移台账与新增验收证据
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          python3 scripts/port_workbench.py check --repo .
+          python3 scripts/source_test_gate.py lint --repo . --output .port-audit
+          python3 scripts/source_parity_gate.py check --repo .
+          python3 scripts/source_parity_gate.py reachability --repo . --output .port-audit
+          python3 scripts/source_parity_gate.py dashboard --repo . --output .port-audit --changed-from-git
+          python3 scripts/source_parity_gate.py sync-spec --repo .
           python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
+      - name: 保存迁移工作台报告和本次改动复验范围
+        uses: actions/upload-artifact@v4
+        with:
+          name: port-workbench-dashboard
+          path: |
+            .port-audit/PORT_DASHBOARD.json
+            .port-audit/PORT_DASHBOARD.md
+          if-no-files-found: error
+      - name: 保留自动生成模块调用路径审计结果
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-ports-reachability
+          path: .port-audit/generated-reachability.json
+          if-no-files-found: error
       - name: 使用固定 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -37,9 +63,67 @@ jobs:
       - name: Clippy 严格检查
         run: cargo clippy --locked --all-targets -- -D clippy::correctness -D clippy::suspicious
 
+
+  model-providers:
+    name: 模型品牌与 ChatGPT 登录专项验收
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 使用固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+      - name: 模型配置、目录、协议与 ChatGPT OAuth 逻辑
+        run: |
+          cargo test --locked --bin atlas-agent config::tests
+          cargo test --locked --bin atlas-agent model_catalog::tests
+          cargo test --locked --bin atlas-agent chatgpt_plan::tests
+          cargo test --locked --bin atlas-agent provider::tests
+      - name: 品牌、鉴权、实时型号选择与参数全链路
+        run: |
+          cargo test --locked --test domestic_models_cli
+          cargo test --locked --test model_catalog_setup_cli
+
+  audit-regression:
+    name: 审计修复专项 Rust 行为测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+      - name: 使用固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 缓存 Rust 依赖
+        uses: Swatinem/rust-cache@v2
+      - name: MCP 超大 JSON/流式响应边界
+        run: |
+          cargo test --locked --bin atlas-agent oversized_json_tool_result_is_bounded_before_body_read
+          cargo test --locked --bin atlas-agent streamed_json_tool_result_is_bounded_without_content_length
+      - name: 本地 SDK 队列顺序、通知隔离与取消恢复
+        run: |
+          set -euo pipefail
+          cargo test --locked --bin atlas-agent -- --list > /tmp/available-queue-tests.txt
+          for case in \
+            message_queue::tests::priority_fifo_and_nonmatching_agent_isolation \
+            sdk_queue::notification_tests::background_notifications_cannot_spoof_new_user_commands \
+            query_guard::tests::cancelling_or_forcing_end_invalidates_stale_finally
+          do
+            grep -Fxq "$case: test" /tmp/available-queue-tests.txt
+            cargo test --locked --bin atlas-agent "$case" -- --exact
+          done
+      - name: 模型密钥与 Gemini 流式配置
+        run: |
+          cargo test --locked --bin atlas-agent credentialed_endpoints_require_tls_except_loopback
+          cargo test --locked --bin atlas-agent gemini_streaming_preserves_native_json_schema_and_thinking_budget
+          cargo test --locked --bin atlas-agent rejects_url_credentials_and_reserved_headers_without_network
+
   test:
-    # 临时暂停 Linux 完整测试，待需要时移除 if 条件恢复。
-    if: ${{ false }}
     name: 编译与全部测试
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -59,44 +143,90 @@ jobs:
       - name: Linux Rust 单元测试
         timeout-minutes: 8
         run: cargo test --locked --bins
-      - name: Linux 集成测试 - deep_link_banner
-        timeout-minutes: 8
-        run: cargo test --locked --test deep_link_banner
-      - name: Linux 集成测试 - git_state_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test git_state_cli
-      - name: Linux 集成测试 - git_workflows_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test git_workflows_cli
-      - name: Linux 集成测试 - integration_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test integration_cli
-      - name: Linux 集成测试 - integration_hook_lifecycle
-        timeout-minutes: 8
-        run: cargo test --locked --test integration_hook_lifecycle
-      - name: Linux 集成测试 - migration_matrix
-        timeout-minutes: 8
-        run: cargo test --locked --test migration_matrix
-      - name: Linux 集成测试 - partial_source_targets
-        timeout-minutes: 8
-        run: cargo test --locked --test partial_source_targets
-      - name: Linux 集成测试 - privacy
-        timeout-minutes: 8
-        run: cargo test --locked --test privacy
-      - name: Linux 集成测试 - prompt_history_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test prompt_history_cli
-      - name: Linux 集成测试 - queue_journal_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test queue_journal_cli
-      - name: Linux 集成测试 - standalone_utilities
-        timeout-minutes: 8
-        run: cargo test --locked --test standalone_utilities
+      # Automatically discover every integration test target; newly ported SDK,
+      # MCP and CLI behavior must never bypass the Linux/Windows gate.
+      - name: Linux 全部集成测试（自动发现）
+        timeout-minutes: 20
+        run: cargo test --locked --tests
+
+      - name: 固化本次已编译 Rust 单元集成端到端测试实际发现清单
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .port-audit
+          cargo test --locked --all-targets -- --list > .port-audit/RUST_TEST_INVENTORY.txt
+      - name: 留存本次已完整执行测试的真实清单
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-test-inventory
+          path: .port-audit/RUST_TEST_INVENTORY.txt
+          if-no-files-found: error
+
+  source-regression:
+    name: 原版驱动 Rust 回归与测试登记检查
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出当前 Rust 源码与原版预期结果
+        uses: actions/checkout@v4
+      - name: 读取本次已通过的全部 Rust 测试清单
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-test-inventory
+          path: .port-audit
+      - name: 核对已验收路径、真实生产入口与全部可执行 Rust 测试
+        run: |
+          python3 scripts/source_test_gate.py check --repo . \
+            --inventory .port-audit/RUST_TEST_INVENTORY.txt --output .port-audit
+          cat .port-audit/SOURCE_TEST_SUITE.md >> "$GITHUB_STEP_SUMMARY"
+      - name: 为完整原版路径生成连续可复用测试任务与缺口
+        run: |
+          python3 scripts/source_test_factory.py --repo . --output .port-audit
+          cat .port-audit/SOURCE_TEST_WORKLIST.md >> "$GITHUB_STEP_SUMMARY"
+      - name: 归档真实测试证据和待补范围
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-driven-regression
+          path: |
+            .port-audit/SOURCE_TEST_SUITE.json
+            .port-audit/SOURCE_TEST_SUITE.md
+            .port-audit/SOURCE_TEST_WORKLIST.json
+            .port-audit/SOURCE_TEST_WORKLIST.jsonl
+            .port-audit/SOURCE_TEST_WORKLIST.md
+          if-no-files-found: warn
+
+  source-completeness:
+    name: 原版全部保留功能完成度强制验收
+    needs: source-regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出源代码与冻结原版索引
+        uses: actions/checkout@v4
+      - name: 读取本次真实 Rust 测试清单
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-test-inventory
+          path: .port-audit
+      - name: 全量原版到 Rust 行为回归闭环验收
+        run: |
+          python3 scripts/source_test_gate.py gate --repo . \
+            --inventory .port-audit/RUST_TEST_INVENTORY.txt --output .port-audit
+          cat .port-audit/SOURCE_TEST_SUITE.md >> "$GITHUB_STEP_SUMMARY"
+      - name: 归档完整验收报告及全部缺口
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-completeness
+          path: |
+            .port-audit/SOURCE_TEST_SUITE.json
+            .port-audit/SOURCE_TEST_SUITE.md
+          if-no-files-found: warn
 
 
   windows-check:
-    # 临时暂停 Windows 回归测试，待需要时移除 if 条件恢复。
-    if: ${{ false }}
     name: Windows Shell 与跨平台编译
     runs-on: windows-latest
     timeout-minutes: 35
@@ -112,39 +242,11 @@ jobs:
       - name: Windows Rust 单元测试
         timeout-minutes: 8
         run: cargo test --locked --bins
-      - name: Windows 集成测试 - deep_link_banner
-        timeout-minutes: 8
-        run: cargo test --locked --test deep_link_banner
-      - name: Windows 集成测试 - git_state_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test git_state_cli
-      - name: Windows 集成测试 - git_workflows_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test git_workflows_cli
-      - name: Windows 集成测试 - integration_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test integration_cli
-      - name: Windows 集成测试 - integration_hook_lifecycle
-        timeout-minutes: 8
-        run: cargo test --locked --test integration_hook_lifecycle
-      - name: Windows 集成测试 - migration_matrix
-        timeout-minutes: 8
-        run: cargo test --locked --test migration_matrix
-      - name: Windows 集成测试 - partial_source_targets
-        timeout-minutes: 8
-        run: cargo test --locked --test partial_source_targets
-      - name: Windows 集成测试 - privacy
-        timeout-minutes: 8
-        run: cargo test --locked --test privacy
-      - name: Windows 集成测试 - prompt_history_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test prompt_history_cli
-      - name: Windows 集成测试 - queue_journal_cli
-        timeout-minutes: 8
-        run: cargo test --locked --test queue_journal_cli
-      - name: Windows 集成测试 - standalone_utilities
-        timeout-minutes: 8
-        run: cargo test --locked --test standalone_utilities
+      # Automatically discover every integration test target; newly ported SDK,
+      # MCP and CLI behavior must never bypass the Linux/Windows gate.
+      - name: Windows 全部集成测试（自动发现）
+        timeout-minutes: 20
+        run: cargo test --locked --tests
 
   security:
     name: 依赖漏洞与来源检查

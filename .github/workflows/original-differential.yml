@@ -1,0 +1,64 @@
+name: 提交者原版源码与 Rust 差异复验
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-differential:
+    # A workflow-dispatch ref can otherwise select unreviewed code. The
+    # protected main branch is the only trusted CI source for private originals.
+    # Review PR revisions locally in the submitter's own isolated workspace.
+    if: github.ref == 'refs/heads/main'
+    name: 原版工作区黄金结果及指定源码动态差异复验
+    runs-on: [self-hosted, linux, source-parity-222]
+    timeout-minutes: 120
+    steps:
+      - name: 检出当前代码
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: 固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 固定 Node.js 运行时
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 构建实际 Rust 生产入口与差异执行桥接程序
+        run: cargo build --locked --bins
+      - name: 提交者本机原版源码及规格路径
+        id: source
+        shell: bash
+        env:
+          ORIGINAL_SOURCE_ROOT: ${{ vars.ORIGINAL_SOURCE_ROOT }}
+          ORIGINAL_SPEC_ARCHIVE: ${{ vars.ORIGINAL_SPEC_ARCHIVE }}
+        run: |
+          set -euo pipefail
+          src="${ORIGINAL_SOURCE_ROOT:-${RUNNER_WORKSPACE}/original-2.1.88/source}"
+          spec="${ORIGINAL_SPEC_ARCHIVE:-${RUNNER_WORKSPACE}/original-2.1.88/spec.zip}"
+          test -d "$src/src"
+          test -f "$spec"
+          echo "root=$src" >> "$GITHUB_OUTPUT"
+          echo "spec=$spec" >> "$GITHUB_OUTPUT"
+      - name: 验证固化黄金结果来自本机原版源码
+        run: |
+          python3 scripts/source_test_gate.py verify-original --repo . \
+            --source-root "${{ steps.source.outputs.root }}" --output .port-audit
+      - name: 原版 AST 范围、逐行哈希及 Rust 实际结果差异复核
+        run: |
+          python3 scripts/source_diff_gate.py --repo . \
+            --source-root "${{ steps.source.outputs.root }}" \
+            --spec-archive "${{ steps.source.outputs.spec }}" --output .port-audit
+      - name: 保存不含原版源码的核验结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-differential-audit
+          path: |
+            .port-audit/SOURCE_TEST_SUITE.json
+            .port-audit/DYNAMIC_PARITY.json
+          if-no-files-found: warn

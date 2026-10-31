@@ -4,10 +4,8 @@ use reqwest::{Client, Url};
 use serde_json::{json, Value};
 use std::{
     collections::VecDeque,
-    fs::{self, OpenOptions},
-    io::Write,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Mutex, OnceLock},
     time::{Duration, Instant},
 };
@@ -30,6 +28,12 @@ static URL_CACHE: OnceLock<Mutex<VecDeque<CachedPage>>> = OnceLock::new();
 
 fn cache() -> &'static Mutex<VecDeque<CachedPage>> {
     URL_CACHE.get_or_init(|| Mutex::new(VecDeque::new()))
+}
+
+/// Original WebFetchTool/utils.ts::clearWebFetchCache. /clear and /resume
+/// must not retain cached page text from an earlier conversation.
+pub(crate) fn clear_cache() {
+    cache().lock().unwrap().clear();
 }
 
 fn cached_page(key: &str) -> Option<Value> {
@@ -69,70 +73,6 @@ fn cache_page(key: String, value: Value, size: usize) {
         size: size.max(1),
         fetched: Instant::now(),
     });
-}
-
-fn binary_mime(mime: &str) -> bool {
-    let mime = mime.split(';').next().unwrap_or("").trim();
-    if mime.is_empty() || mime.starts_with("text/") {
-        return false;
-    }
-    if mime == "application/json"
-        || mime.ends_with("+json")
-        || mime == "application/xml"
-        || mime.ends_with("+xml")
-        || mime.starts_with("application/javascript")
-        || mime == "application/x-www-form-urlencoded"
-    {
-        return false;
-    }
-    true
-}
-
-fn binary_extension(mime: &str) -> &'static str {
-    match mime.split(';').next().unwrap_or("").trim() {
-        "application/pdf" => "pdf",
-        "application/zip" => "zip",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => "pptx",
-        "application/msword" => "doc",
-        "application/vnd.ms-excel" => "xls",
-        "audio/mpeg" => "mp3",
-        "audio/wav" => "wav",
-        "audio/ogg" => "ogg",
-        "video/mp4" => "mp4",
-        "video/webm" => "webm",
-        "image/png" => "png",
-        "image/jpeg" => "jpg",
-        "image/gif" => "gif",
-        "image/webp" => "webp",
-        "image/svg+xml" => "svg",
-        _ => "bin",
-    }
-}
-
-fn persist_binary(bytes: &[u8], mime: &str, root: &Path) -> Result<PathBuf> {
-    // Workspace-local tool results remain inspectable by subsequent Read/Shell
-    // calls without leaking the original provider's account/session directory.
-    let directory = root.join(".atlas").join("tool-results");
-    fs::create_dir_all(&directory)?;
-    let directory = directory.canonicalize()?;
-    let root = root.canonicalize()?;
-    if !directory.starts_with(&root) {
-        bail!("Tool results directory escapes workspace");
-    }
-    let target = directory.join(format!(
-        "webfetch-{}.{}",
-        Uuid::new_v4(),
-        binary_extension(mime)
-    ));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&target)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    Ok(target)
 }
 
 fn acceptable_ip(ip: IpAddr) -> bool {
@@ -462,7 +402,7 @@ async fn fetch_with_redirect_policy_in_workspace(
             .map_err(|_| anyhow::anyhow!("Cannot upgrade WebFetch URL to HTTPS"))?;
     }
     for _ in 0..=10 {
-        let mut builder = Client::builder()
+        let mut builder = crate::tls_ca::client_builder()?
             .timeout(Duration::from_secs(60))
             .redirect(reqwest::redirect::Policy::none())
             .user_agent("AtlasAgent/0.1 (+user-requested-web-fetch)");
@@ -553,24 +493,32 @@ async fn fetch_with_redirect_policy_in_workspace(
         } else {
             body.to_string()
         };
-        let persisted = if binary_mime(&kind) {
-            workspace.and_then(|root| match persist_binary(&bytes, &kind, root) {
-                Ok(path) => Some(path),
-                Err(err) => {
-                    eprintln!("WebFetch binary attachment could not be saved: {err:#}");
-                    None
+        let persisted = if crate::mcp_output_storage::is_binary_content_type(&kind) {
+            workspace.and_then(|root| {
+                match crate::mcp_output_storage::persist_binary_content(
+                    root,
+                    &bytes,
+                    Some(&kind),
+                    &format!("webfetch-{}", Uuid::new_v4()),
+                ) {
+                    Ok(path) => Some(path),
+                    Err(err) => {
+                        eprintln!("WebFetch binary attachment could not be saved: {err:#}");
+                        None
+                    }
                 }
             })
         } else {
             None
         };
         let mut content = truncate_source_markdown(&text);
-        if let Some(path) = persisted.as_ref() {
-            content.push_str(&format!(
-                "\n\n[Binary content ({}, {} bytes) also saved to {}]",
-                kind,
-                bytes.len(),
-                path.display()
+        if let Some(saved) = persisted.as_ref() {
+            content.push_str("\n\n");
+            content.push_str(&crate::mcp_output_storage::get_binary_blob_saved_message(
+                &saved.filepath.to_string_lossy(),
+                Some(&kind),
+                saved.size,
+                "",
             ));
         }
         let mut output = json!({
@@ -578,9 +526,9 @@ async fn fetch_with_redirect_policy_in_workspace(
             "content":content,"contentType":kind,
             "codeText":code.canonical_reason().unwrap_or("")
         });
-        if let Some(path) = persisted {
-            output["persistedPath"] = json!(path.to_string_lossy().to_string());
-            output["persistedSize"] = json!(bytes.len());
+        if let Some(saved) = persisted {
+            output["persistedPath"] = json!(saved.filepath.to_string_lossy().to_string());
+            output["persistedSize"] = json!(saved.size);
         }
         if let Some(key) = cache_key.as_ref() {
             cache_page(key.clone(), output.clone(), text.len());
@@ -649,9 +597,16 @@ pub async fn execute(args: &Value) -> Result<String> {
 pub fn definition() -> Value {
     json!({"type":"function","function":{
         "name":"web_fetch",
-        "description":"Fetch public web text (HTML converted to plain text). This only runs after explicit network approval. Model applies the prompt to fetched content.",
-        "parameters":{"type":"object","properties":{
-            "url":{"type":"string"},"prompt":{"type":"string"}
+        "description":format!(
+                "{}\nThis implementation converts HTML to plain text, restricts URLs to public addresses and requires explicit network permission. The model applies the prompt to the returned text.",
+                crate::source_prompt_catalog::literal(
+                    "src/tools/WebFetchTool/prompt.ts",
+                    "\n- Fetches content from a specified URL",
+                )
+                .expect("Original WebFetch tool prompt must exist")
+            ),
+        "parameters":{"type":"object","additionalProperties":false,"properties":{
+            "url":{"type":"string","format":"uri"},"prompt":{"type":"string"}
         },"required":["url","prompt"]}
     }})
 }
@@ -659,6 +614,18 @@ pub fn definition() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn clearing_session_cache_evicts_web_content_and_reopens_fresh_fetch() {
+        clear_cache();
+        cache_page("session-A:url".into(), json!({"content":"old"}), 3);
+        assert_eq!(cached_page("session-A:url").unwrap()["content"], "old");
+        clear_cache();
+        assert!(cached_page("session-A:url").is_none());
+        cache_page("session-A:url".into(), json!({"content":"new"}), 3);
+        assert_eq!(cached_page("session-A:url").unwrap()["content"], "new");
+        clear_cache();
+    }
+
     #[test]
     fn blocks_non_public_ip_ranges() {
         for host in [
@@ -727,6 +694,34 @@ mod tests {
         .unwrap_err();
         assert!(denied.to_string().contains("explicitly denied"));
         server.await.unwrap();
+    }
+    #[tokio::test]
+    async fn mixed_case_binary_response_is_saved_without_loss() {
+        use tokio::io::AsyncWriteExt;
+        let root = tempfile::tempdir().unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            crate::test_http::consume_request(&mut stream)
+                .await
+                .unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: APPLICATION/PDF; charset=binary\r\nContent-Length: 6\r\nConnection: close\r\n\r\n%PDF\0\xff").await.unwrap();
+        });
+        let result = fetch_with_redirect_policy_in_workspace(
+            &format!("http://{address}/file"),
+            true,
+            &|_| Ok(()),
+            Some(root.path()),
+        )
+        .await
+        .unwrap();
+        server.await.unwrap();
+        let saved = Path::new(result["persistedPath"].as_str().unwrap());
+        assert_eq!(saved.extension().unwrap(), "pdf");
+        assert_eq!(std::fs::read(saved).unwrap(), b"%PDF\0\xff");
+        assert_eq!(result["persistedSize"], 6);
+        assert!(result["content"].as_str().unwrap().contains("6 bytes"));
     }
     #[tokio::test]
     async fn web_fetch_reads_local_mock_only_with_internal_test_override() {

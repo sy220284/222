@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    io::Write,
     path::{Path, PathBuf},
     time::SystemTime,
 };
@@ -221,43 +221,19 @@ impl PromptHistory {
                 return Ok(entries);
             }
         }
-        let mut file = match File::open(self.history_path()) {
+        let file = match File::open(self.history_path()) {
             Ok(file) => file,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Ok(entries);
             }
             Err(error) => return Err(error.into()),
         };
-        let mut position = file.metadata()?.len();
-        let mut reversed_line = Vec::new();
-        while position > 0 {
-            let chunk_size = position.min(64 * 1024) as usize;
-            position -= chunk_size as u64;
-            file.seek(SeekFrom::Start(position))?;
-            let mut chunk = vec![0; chunk_size];
-            file.read_exact(&mut chunk)?;
-            for byte in chunk.into_iter().rev() {
-                if byte == b'\n' {
-                    if reversed_line.is_empty() {
-                        continue;
-                    }
-                    reversed_line.reverse();
-                    let keep_scanning = serde_json::from_slice::<LogEntry>(&reversed_line)
-                        .map(|entry| include(entry))
-                        .unwrap_or(true);
-                    reversed_line.clear();
-                    if !keep_scanning {
-                        return Ok(entries);
-                    }
-                } else {
-                    reversed_line.push(byte);
+        for line in crate::fs_operations::ReverseLines::from_file(file)? {
+            let line = line?;
+            if let Ok(entry) = serde_json::from_str::<LogEntry>(&line) {
+                if !include(entry) {
+                    break;
                 }
-            }
-        }
-        if !reversed_line.is_empty() {
-            reversed_line.reverse();
-            if let Ok(entry) = serde_json::from_slice::<LogEntry>(&reversed_line) {
-                include(entry);
             }
         }
         Ok(entries)

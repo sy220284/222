@@ -1,5 +1,14 @@
 //! Public, provider-neutral names of coding tools.
 pub const BASH_TOOL_NAME: &str = "Bash";
+// AgentTool/constants.ts: both external names are the same local Agent.
+pub const AGENT_TOOL_NAME: &str = "Agent";
+pub const LEGACY_AGENT_TOOL_NAME: &str = "Task";
+pub const VERIFICATION_AGENT_TYPE: &str = "verification";
+pub const ONE_SHOT_BUILTIN_AGENT_TYPES: &[&str] = &["Explore", "Plan"];
+pub fn is_one_shot_builtin_agent_type(agent_type: &str) -> bool {
+    ONE_SHOT_BUILTIN_AGENT_TYPES.contains(&agent_type)
+}
+pub const FILE_EDIT_TOOL_NAME: &str = "Edit";
 pub const CONFIG_TOOL_NAME: &str = "Config";
 pub const ENTER_PLAN_MODE_TOOL_NAME: &str = "EnterPlanMode";
 pub const EXIT_PLAN_MODE_TOOL_NAME: &str = "ExitPlanMode";
@@ -17,12 +26,14 @@ pub const SEND_MESSAGE_TOOL_NAME: &str = "SendMessage";
 pub const SKILL_TOOL_NAME: &str = "Skill";
 pub const POWERSHELL_TOOL_NAME: &str = "PowerShell";
 pub const TOOL_SEARCH_TOOL_NAME: &str = "ToolSearch";
+pub const TODO_WRITE_TOOL_NAME: &str = "TodoWrite";
 pub const EXIT_PLAN_MODE_V2_TOOL_NAME: &str = EXIT_PLAN_MODE_TOOL_NAME;
 pub fn canonical_name(name: &str) -> &str {
     match name {
         BASH_TOOL_NAME => "run_command",
         "Read" => "read_file",
-        "Edit" => "edit_file",
+        FILE_EDIT_TOOL_NAME => "edit_file",
+        AGENT_TOOL_NAME | LEGACY_AGENT_TOOL_NAME => "spawn_agent",
         "Write" => "write_file",
         NOTEBOOK_EDIT_TOOL_NAME => "notebook_edit",
         TASK_OUTPUT_TOOL_NAME | "AgentOutputTool" | "BashOutputTool" => "task_output",
@@ -41,6 +52,10 @@ mod tests {
     fn names_and_aliases() {
         let cases: &[(&str, &str)] = &[
             (BASH_TOOL_NAME, "Bash"),
+            (AGENT_TOOL_NAME, "Agent"),
+            (LEGACY_AGENT_TOOL_NAME, "Task"),
+            (VERIFICATION_AGENT_TYPE, "verification"),
+            (FILE_EDIT_TOOL_NAME, "Edit"),
             (CONFIG_TOOL_NAME, "Config"),
             (ENTER_PLAN_MODE_TOOL_NAME, "EnterPlanMode"),
             (EXIT_PLAN_MODE_TOOL_NAME, "ExitPlanMode"),
@@ -58,8 +73,9 @@ mod tests {
             (SKILL_TOOL_NAME, "Skill"),
             (POWERSHELL_TOOL_NAME, "PowerShell"),
             (TOOL_SEARCH_TOOL_NAME, "ToolSearch"),
+            (TODO_WRITE_TOOL_NAME, "TodoWrite"),
         ];
-        assert_eq!(cases.len(), 18);
+        assert_eq!(cases.len(), 23);
         for (actual, expected) in cases {
             assert_eq!(actual, expected);
         }
@@ -72,5 +88,12 @@ mod tests {
         assert_eq!(canonical_name("Grep"), "grep_files");
         assert_eq!(canonical_name("WebSearch"), "web_search");
         assert_eq!(canonical_name("Config"), "Config");
+        assert_eq!(canonical_name("Agent"), "spawn_agent");
+        assert_eq!(ONE_SHOT_BUILTIN_AGENT_TYPES, &["Explore", "Plan"]);
+        assert!(is_one_shot_builtin_agent_type("Explore"));
+        assert!(is_one_shot_builtin_agent_type("Plan"));
+        assert!(!is_one_shot_builtin_agent_type("explore"));
+        assert_eq!(canonical_name("Task"), "spawn_agent");
+        assert_eq!(canonical_name("Edit"), "edit_file");
     }
 }

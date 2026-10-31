@@ -1,0 +1,142 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/slashCommandParsing.ts",
+  "source_sha256": "7f41f7c35c6bd73ba1e0c132bbe03a1ce1876832b24049ca2f1f488155932fad",
+  "export": "parseSlashCommand",
+  "cases": [
+    {
+      "id": "ordinary",
+      "input": "/search foo bar",
+      "expected": {
+        "commandName": "search",
+        "args": "foo bar",
+        "isMcp": false
+      },
+      "kind": "normal"
+    },
+    {
+      "id": "mcp",
+      "input": " /mcp:tool (MCP) arg1 arg2 ",
+      "expected": {
+        "commandName": "mcp:tool (MCP)",
+        "args": "arg1 arg2",
+        "isMcp": true
+      },
+      "kind": "edge"
+    },
+    {
+      "id": "multiple-spaces",
+      "input": "/foo  bar",
+      "expected": {
+        "commandName": "foo",
+        "args": " bar",
+        "isMcp": false
+      },
+      "kind": "edge"
+    },
+    {
+      "id": "not-mcp-with-two-spaces",
+      "input": "/foo  (MCP) bar",
+      "expected": {
+        "commandName": "foo",
+        "args": " (MCP) bar",
+        "isMcp": false
+      },
+      "kind": "edge"
+    },
+    {
+      "id": "mcp-empty-args",
+      "input": "/foo (MCP)",
+      "expected": {
+        "commandName": "foo (MCP)",
+        "args": "",
+        "isMcp": true
+      },
+      "kind": "edge"
+    },
+    {
+      "id": "tab-is-not-word-separator",
+      "input": "/foo\tx",
+      "expected": {
+        "commandName": "foo\tx",
+        "args": "",
+        "isMcp": false
+      },
+      "kind": "edge"
+    },
+    {
+      "id": "slash-only",
+      "input": "/",
+      "expected": null,
+      "kind": "edge"
+    },
+    {
+      "id": "missing-slash",
+      "input": "abc",
+      "expected": null,
+      "kind": "edge"
+    },
+    {
+      "id": "nel-leading-not-trimmed",
+      "input": "/foo bar",
+      "expected": null,
+      "kind": "edge"
+    },
+    {
+      "id": "nel-trailing-preserved",
+      "input": "/foo bar",
+      "expected": {
+        "commandName": "foo",
+        "args": "bar",
+        "isMcp": false
+      },
+      "kind": "edge"
+    },
+    {
+      "id": "bom-trimmed",
+      "input": "﻿/foo bar﻿",
+      "expected": {
+        "commandName": "foo",
+        "args": "bar",
+        "isMcp": false
+      },
+      "kind": "edge"
+    },
+    {
+      "id": "nbsp-not-internal-separator",
+      "input": " /foo x ",
+      "expected": {
+        "commandName": "foo x",
+        "args": "",
+        "isMcp": false
+      },
+      "kind": "edge"
+    },
+    {
+      "id": "embedded-newline",
+      "input": "/foo\nbar",
+      "expected": {
+        "commandName": "foo\nbar",
+        "args": "",
+        "isMcp": false
+      },
+      "kind": "edge"
+    },
+    {
+      "id": "space-after-slash",
+      "input": "/ foo",
+      "expected": null,
+      "kind": "edge"
+    },
+    {
+      "id": "trailing-spaces",
+      "input": " /foo  x  ",
+      "expected": {
+        "commandName": "foo",
+        "args": " x",
+        "isMcp": false
+      },
+      "kind": "edge"
+    }
+  ]
+}

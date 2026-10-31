@@ -14,7 +14,7 @@ use tokio::{
     time::timeout,
 };
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum HookEvent {
     SessionStart,
@@ -135,6 +135,8 @@ pub struct HookOutcome {
     pub additional_context: Vec<String>,
     /// SessionStart may enqueue the first user turn for headless execution.
     pub initial_user_message: Option<String>,
+    /// FileChanged/CwdChanged hooks may replace dynamically watched paths.
+    pub watch_paths: Vec<String>,
     pub updated_input: Option<Value>,
     /// PreToolUse hook decision. An explicit `ask` requires user approval
     /// even when the CLI normally grants full tool access.
@@ -148,8 +150,37 @@ pub struct HookOutcome {
     pub non_blocking_errors: Vec<String>,
 }
 
+impl HookOutcome {
+    /// All tool schedulers must honor an explicit hook `ask`, even when
+    /// ordinary tools are allowed without prompting. This does not replace
+    /// the executor's own permission policy.
+    pub fn require_tool_approval(&self, interactive: bool, tool_name: &str) -> Result<()> {
+        if self.permission_decision.as_deref() != Some("ask") {
+            return Ok(());
+        }
+        if !interactive {
+            bail!("PreToolUse hook requires interactive approval");
+        }
+        use std::io::Write;
+        eprintln!("PreToolUse hook requests approval for {tool_name}");
+        eprint!("Allow once? [y/N] ");
+        std::io::stderr()
+            .flush()
+            .context("PreToolUse approval failed")?;
+        let mut response = String::new();
+        std::io::stdin()
+            .read_line(&mut response)
+            .context("PreToolUse approval failed")?;
+        if !matches!(response.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+            bail!("User rejected PreToolUse hook approval");
+        }
+        Ok(())
+    }
+}
+
 /// Source hook matchers use exact tool names for simple strings, not
 /// substring regexes. A missing event query bypasses matcher filtering.
+#[derive(Clone)]
 enum HookMatcher {
     Any,
     Exact(Vec<String>),
@@ -287,7 +318,7 @@ fn hook_if_matches(condition: &str, event: &str, tool_name: Option<&str>, input:
     )
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct HookRunner {
     rules: Vec<(HookRule, HookMatcher)>,
     workspace: Option<PathBuf>,
@@ -345,6 +376,17 @@ impl HookRunner {
 
     pub fn is_empty(&self) -> bool {
         self.rules.is_empty()
+    }
+
+    /// FileChanged rules in registration order, for the file watcher that
+    /// mirrors utils/hooks/fileChangedWatcher.ts (it re-reads the hook config
+    /// snapshot to decide what to watch and which commands to run).
+    pub fn file_changed_rules(&self) -> Vec<HookRule> {
+        self.rules
+            .iter()
+            .filter(|(rule, _)| rule.event == HookEvent::FileChanged)
+            .map(|(rule, _)| rule.clone())
+            .collect()
     }
 
     pub async fn run(
@@ -484,6 +526,7 @@ impl HookRunner {
             outcome
                 .additional_context
                 .extend(response.additional_context);
+            outcome.watch_paths.extend(response.watch_paths);
             if let Some(message) = response.initial_user_message {
                 outcome.initial_user_message = Some(message);
             }
@@ -567,6 +610,17 @@ impl HookRunner {
         &self,
         call: &ToolCall,
         output: &str,
+        context: Value,
+    ) -> Result<HookOutcome> {
+        self.after_tool_with_response(call, output, json!(output), context)
+            .await
+    }
+
+    pub async fn after_tool_with_response(
+        &self,
+        call: &ToolCall,
+        output: &str,
+        response: Value,
         mut context: Value,
     ) -> Result<HookOutcome> {
         let event = if output.starts_with("ERROR:") {
@@ -583,7 +637,7 @@ impl HookRunner {
             context["error"] = json!(output.strip_prefix("ERROR:").unwrap_or(output).trim());
             context["is_interrupt"] = json!(false);
         } else {
-            context["tool_response"] = json!(output);
+            context["tool_response"] = response;
         }
         self.run(event, Some(&call.function.name), context).await
     }
@@ -595,14 +649,11 @@ fn validate_hook_json(value: &Value, expected: &str) -> Result<()> {
     if !value.is_object() {
         bail!("Hook output must be an object")
     }
-    if let Some(async_field) = value.get("async") {
-        if async_field != true {
-            bail!("async must be literal true");
-        }
-        // Do not misrepresent an asynchronous hook as completed. Its process
-        // registration, wakeup and timeout must be implemented separately.
-        bail!("Async hook registry is not yet implemented");
-    }
+    // `async` / `asyncTimeout` belong to the union's async variant. When one
+    // still reaches the sync validation path (e.g. pretty-printed output the
+    // first-line handshake could not parse), the original falls through to the
+    // non-strict sync schema: both keys are stripped as unknown and the result
+    // is an empty, successful no-op (hooks.ts:2535 outcome 'success').
     for name in ["continue", "suppressOutput"] {
         if value.get(name).is_some_and(|x| !x.is_boolean()) {
             bail!("{name}: expected boolean")
@@ -1320,6 +1371,21 @@ async fn run_command(
             .filter(|message| !message.trim().is_empty())
             .map(str::to_owned);
     }
+    if matches!(
+        payload["hook_event_name"].as_str(),
+        Some("FileChanged" | "CwdChanged")
+    ) {
+        if let Some(paths) = hook_output
+            .and_then(|v| v.get("watchPaths"))
+            .and_then(Value::as_array)
+        {
+            result.watch_paths = paths
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect();
+        }
+    }
     if let Some(input) = hook_output.and_then(|v| v.get("updatedInput")) {
         if !input.is_object() {
             bail!("updatedInput must be a JSON object")
@@ -1355,6 +1421,33 @@ async fn read_limited<R: tokio::io::AsyncRead + Unpin>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn file_changed_hook_returns_dynamic_watch_paths_in_registration_order() {
+        let hooks = HookRunner::new(&[HookRule {
+            async_background: false,
+            async_rewake: false,
+            event: HookEvent::FileChanged,
+            matcher: None,
+            if_condition: None,
+            plugin_root: None,
+            command: r#"printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"FileChanged","watchPaths":["generated/config.json",".env"]}}'"#.into(),
+            shell: None,
+            timeout_seconds: 3,
+        }])
+        .unwrap();
+        let outcome = hooks
+            .run(
+                HookEvent::FileChanged,
+                None,
+                json!({"file_path":"/project/.env","event":"change"}),
+            )
+            .await
+            .unwrap();
+        assert!(outcome.non_blocking_errors.is_empty(), "{outcome:?}");
+        assert_eq!(outcome.watch_paths, vec!["generated/config.json", ".env"]);
+    }
 
     #[cfg(unix)]
     #[tokio::test]
@@ -1593,6 +1686,25 @@ mod tests {
         assert!(result.prevent_continuation);
         assert!(result.blocking_reason.is_none());
         assert!(result.permission_decision.is_none());
+    }
+    #[test]
+    fn async_variant_output_reaching_sync_validation_is_a_stripped_noop() {
+        // types/hooks.ts:171-177 — the hookJSONOutputSchema union validates the
+        // async variant; hooks.ts:2535 then yields plain 'success'. When the
+        // first-line handshake misses the acknowledgement (pretty-printed
+        // JSON), the sync path must not error: unknown union keys are stripped
+        // and every remaining field is absent, so the outcome is a no-op.
+        for output in [
+            json!({"async": true}),
+            json!({"async": true, "asyncTimeout": 30_000}),
+            // Non-literal async values fail the async schema but are stripped
+            // by the non-strict sync schema exactly like any unknown key.
+            json!({"async": false}),
+            json!({"async": "true"}),
+        ] {
+            validate_hook_json(&output, "PreToolUse")
+                .unwrap_or_else(|error| panic!("{output}: {error:#}"));
+        }
     }
     #[test]
     fn agent_tool_hooks_match_the_reachable_rust_spawn_entrypoints() {

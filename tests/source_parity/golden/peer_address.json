@@ -1,0 +1,176 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/peerAddress.ts",
+  "source_sha256": "07a1782f998ee6bd63b1c1a89170817032e69cb5180f6e1ad414491bbee0eb38",
+  "export": "parseAddress",
+  "cases": [
+    {
+      "id": "uds-normal",
+      "kind": "normal",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "uds:/tmp/agent.sock",
+      "expected": {
+        "scheme": "uds",
+        "target": "/tmp/agent.sock"
+      }
+    },
+    {
+      "id": "bridge-normal",
+      "kind": "normal",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "bridge:session-1",
+      "expected": {
+        "scheme": "bridge",
+        "target": "session-1"
+      }
+    },
+    {
+      "id": "absolute-legacy",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "/tmp/test.sock",
+      "expected": {
+        "scheme": "uds",
+        "target": "/tmp/test.sock"
+      }
+    },
+    {
+      "id": "plain-teammate",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "agent_foo",
+      "expected": {
+        "scheme": "other",
+        "target": "agent_foo"
+      }
+    },
+    {
+      "id": "empty",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "",
+      "expected": {
+        "scheme": "other",
+        "target": ""
+      }
+    },
+    {
+      "id": "uds-empty",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "uds:",
+      "expected": {
+        "scheme": "uds",
+        "target": ""
+      }
+    },
+    {
+      "id": "bridge-empty",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "bridge:",
+      "expected": {
+        "scheme": "bridge",
+        "target": ""
+      }
+    },
+    {
+      "id": "uppercase-prefix",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "UDS:/tmp/foo",
+      "expected": {
+        "scheme": "other",
+        "target": "UDS:/tmp/foo"
+      }
+    },
+    {
+      "id": "relative-dot",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "./tmp/test",
+      "expected": {
+        "scheme": "other",
+        "target": "./tmp/test"
+      }
+    },
+    {
+      "id": "prefix-inside",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "XXuds:/tmp",
+      "expected": {
+        "scheme": "other",
+        "target": "XXuds:/tmp"
+      }
+    },
+    {
+      "id": "utf8-target",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "uds:/临时/用户😀",
+      "expected": {
+        "scheme": "uds",
+        "target": "/临时/用户😀"
+      }
+    },
+    {
+      "id": "double-slash",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "//server/foo",
+      "expected": {
+        "scheme": "uds",
+        "target": "//server/foo"
+      }
+    },
+    {
+      "id": "space-before-scheme",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": " uds:/tmp",
+      "expected": {
+        "scheme": "other",
+        "target": " uds:/tmp"
+      }
+    },
+    {
+      "id": "url",
+      "kind": "edge",
+      "source_ids": [
+        "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1"
+      ],
+      "input": "https://example.com",
+      "expected": {
+        "scheme": "other",
+        "target": "https://example.com"
+      }
+    }
+  ]
+}

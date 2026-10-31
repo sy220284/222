@@ -1,0 +1,371 @@
+//! Verbatim 2.1.88 compaction prompt text from services/compact/prompt.ts.
+//! Static source stays separate from runtime policy and provider-neutral wiring.
+pub const DETAILED_ANALYSIS_INSTRUCTION_BASE: &str = r########"Before providing your final summary, wrap your analysis in <analysis> tags to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
+
+1. Chronologically analyze each message and section of the conversation. For each section thoroughly identify:
+   - The user's explicit requests and intents
+   - Your approach to addressing the user's requests
+   - Key decisions, technical concepts and code patterns
+   - Specific details like:
+     - file names
+     - full code snippets
+     - function signatures
+     - file edits
+   - Errors that you ran into and how you fixed them
+   - Pay special attention to specific user feedback that you received, especially if the user told you to do something differently.
+2. Double-check for technical accuracy and completeness, addressing each required element thoroughly."########;
+
+pub const DETAILED_ANALYSIS_INSTRUCTION_PARTIAL: &str = r########"Before providing your final summary, wrap your analysis in <analysis> tags to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
+
+1. Analyze the recent messages chronologically. For each section thoroughly identify:
+   - The user's explicit requests and intents
+   - Your approach to addressing the user's requests
+   - Key decisions, technical concepts and code patterns
+   - Specific details like:
+     - file names
+     - full code snippets
+     - function signatures
+     - file edits
+   - Errors that you ran into and how you fixed them
+   - Pay special attention to specific user feedback that you received, especially if the user told you to do something differently.
+2. Double-check for technical accuracy and completeness, addressing each required element thoroughly."########;
+
+pub const BASE_COMPACT_PROMPT: &str = r########"Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
+This summary should be thorough in capturing technical details, code patterns, and architectural decisions that would be essential for continuing development work without losing context.
+
+${DETAILED_ANALYSIS_INSTRUCTION_BASE}
+
+Your summary should include the following sections:
+
+1. Primary Request and Intent: Capture all of the user's explicit requests and intents in detail
+2. Key Technical Concepts: List all important technical concepts, technologies, and frameworks discussed.
+3. Files and Code Sections: Enumerate specific files and code sections examined, modified, or created. Pay special attention to the most recent messages and include full code snippets where applicable and include a summary of why this file read or edit is important.
+4. Errors and fixes: List all errors that you ran into, and how you fixed them. Pay special attention to specific user feedback that you received, especially if the user told you to do something differently.
+5. Problem Solving: Document problems solved and any ongoing troubleshooting efforts.
+6. All user messages: List ALL user messages that are not tool results. These are critical for understanding the users' feedback and changing intent.
+7. Pending Tasks: Outline any pending tasks that you have explicitly been asked to work on.
+8. Current Work: Describe in detail precisely what was being worked on immediately before this summary request, paying special attention to the most recent messages from both user and assistant. Include file names and code snippets where applicable.
+9. Optional Next Step: List the next step that you will take that is related to the most recent work you were doing. IMPORTANT: ensure that this step is DIRECTLY in line with the user's most recent explicit requests, and the task you were working on immediately before this summary request. If your last task was concluded, then only list next steps if they are explicitly in line with the users request. Do not start on tangential requests or really old requests that were already completed without confirming with the user first.
+                       If there is a next step, include direct quotes from the most recent conversation showing exactly what task you were working on and where you left off. This should be verbatim to ensure there's no drift in task interpretation.
+
+Here's an example of how your output should be structured:
+
+<example>
+<analysis>
+[Your thought process, ensuring all points are covered thoroughly and accurately]
+</analysis>
+
+<summary>
+1. Primary Request and Intent:
+   [Detailed description]
+
+2. Key Technical Concepts:
+   - [Concept 1]
+   - [Concept 2]
+   - [...]
+
+3. Files and Code Sections:
+   - [File Name 1]
+      - [Summary of why this file is important]
+      - [Summary of the changes made to this file, if any]
+      - [Important Code Snippet]
+   - [File Name 2]
+      - [Important Code Snippet]
+   - [...]
+
+4. Errors and fixes:
+    - [Detailed description of error 1]:
+      - [How you fixed the error]
+      - [User feedback on the error if any]
+    - [...]
+
+5. Problem Solving:
+   [Description of solved problems and ongoing troubleshooting]
+
+6. All user messages: 
+    - [Detailed non tool use user message]
+    - [...]
+
+7. Pending Tasks:
+   - [Task 1]
+   - [Task 2]
+   - [...]
+
+8. Current Work:
+   [Precise description of current work]
+
+9. Optional Next Step:
+   [Optional Next step to take]
+
+</summary>
+</example>
+
+Please provide your summary based on the conversation so far, following this structure and ensuring precision and thoroughness in your response. 
+
+There may be additional summarization instructions provided in the included context. If so, remember to follow these instructions when creating the above summary. Examples of instructions include:
+<example>
+## Compact Instructions
+When summarizing the conversation focus on typescript code changes and also remember the mistakes you made and how you fixed them.
+</example>
+
+<example>
+# Summary instructions
+When you are using compact - please focus on test output and code changes. Include file reads verbatim.
+</example>
+"########;
+
+pub const PARTIAL_COMPACT_PROMPT: &str = r########"Your task is to create a detailed summary of the RECENT portion of the conversation — the messages that follow earlier retained context. The earlier messages are being kept intact and do NOT need to be summarized. Focus your summary on what was discussed, learned, and accomplished in the recent messages only.
+
+${DETAILED_ANALYSIS_INSTRUCTION_PARTIAL}
+
+Your summary should include the following sections:
+
+1. Primary Request and Intent: Capture the user's explicit requests and intents from the recent messages
+2. Key Technical Concepts: List important technical concepts, technologies, and frameworks discussed recently.
+3. Files and Code Sections: Enumerate specific files and code sections examined, modified, or created. Include full code snippets where applicable and include a summary of why this file read or edit is important.
+4. Errors and fixes: List errors encountered and how they were fixed.
+5. Problem Solving: Document problems solved and any ongoing troubleshooting efforts.
+6. All user messages: List ALL user messages from the recent portion that are not tool results.
+7. Pending Tasks: Outline any pending tasks from the recent messages.
+8. Current Work: Describe precisely what was being worked on immediately before this summary request.
+9. Optional Next Step: List the next step related to the most recent work. Include direct quotes from the most recent conversation.
+
+Here's an example of how your output should be structured:
+
+<example>
+<analysis>
+[Your thought process, ensuring all points are covered thoroughly and accurately]
+</analysis>
+
+<summary>
+1. Primary Request and Intent:
+   [Detailed description]
+
+2. Key Technical Concepts:
+   - [Concept 1]
+   - [Concept 2]
+
+3. Files and Code Sections:
+   - [File Name 1]
+      - [Summary of why this file is important]
+      - [Important Code Snippet]
+
+4. Errors and fixes:
+    - [Error description]:
+      - [How you fixed it]
+
+5. Problem Solving:
+   [Description]
+
+6. All user messages:
+    - [Detailed non tool use user message]
+
+7. Pending Tasks:
+   - [Task 1]
+
+8. Current Work:
+   [Precise description of current work]
+
+9. Optional Next Step:
+   [Optional Next step to take]
+
+</summary>
+</example>
+
+Please provide your summary based on the RECENT messages only (after the retained earlier context), following this structure and ensuring precision and thoroughness in your response.
+"########;
+
+pub const PARTIAL_COMPACT_UP_TO_PROMPT: &str = r########"Your task is to create a detailed summary of this conversation. This summary will be placed at the start of a continuing session; newer messages that build on this context will follow after your summary (you do not see them here). Summarize thoroughly so that someone reading only your summary and then the newer messages can fully understand what happened and continue the work.
+
+${DETAILED_ANALYSIS_INSTRUCTION_BASE}
+
+Your summary should include the following sections:
+
+1. Primary Request and Intent: Capture the user's explicit requests and intents in detail
+2. Key Technical Concepts: List important technical concepts, technologies, and frameworks discussed.
+3. Files and Code Sections: Enumerate specific files and code sections examined, modified, or created. Include full code snippets where applicable and include a summary of why this file read or edit is important.
+4. Errors and fixes: List errors encountered and how they were fixed.
+5. Problem Solving: Document problems solved and any ongoing troubleshooting efforts.
+6. All user messages: List ALL user messages that are not tool results.
+7. Pending Tasks: Outline any pending tasks.
+8. Work Completed: Describe what was accomplished by the end of this portion.
+9. Context for Continuing Work: Summarize any context, decisions, or state that would be needed to understand and continue the work in subsequent messages.
+
+Here's an example of how your output should be structured:
+
+<example>
+<analysis>
+[Your thought process, ensuring all points are covered thoroughly and accurately]
+</analysis>
+
+<summary>
+1. Primary Request and Intent:
+   [Detailed description]
+
+2. Key Technical Concepts:
+   - [Concept 1]
+   - [Concept 2]
+
+3. Files and Code Sections:
+   - [File Name 1]
+      - [Summary of why this file is important]
+      - [Important Code Snippet]
+
+4. Errors and fixes:
+    - [Error description]:
+      - [How you fixed it]
+
+5. Problem Solving:
+   [Description]
+
+6. All user messages:
+    - [Detailed non tool use user message]
+
+7. Pending Tasks:
+   - [Task 1]
+
+8. Work Completed:
+   [Description of what was accomplished]
+
+9. Context for Continuing Work:
+   [Key context, decisions, or state needed to continue the work]
+
+</summary>
+</example>
+
+Please provide your summary following this structure, ensuring precision and thoroughness in your response.
+"########;
+
+/// The original partial mode scopes its request to recent messages when
+/// an older summary is retained; all input/output remains tool-less.
+/// 2.1.88 services/compact/prompt.ts::getCompactUserSummaryMessage.
+/// The summary is an API user turn, not trusted system instructions.
+pub fn user_summary_message(
+    formatted_summary: &str,
+    transcript_path: Option<&str>,
+    recent_messages_preserved: bool,
+    suppress_follow_up_questions: bool,
+) -> String {
+    let mut text = format!(
+        "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\n{formatted_summary}"
+    );
+    if let Some(path) = transcript_path.filter(|path| !path.is_empty()) {
+        text.push_str("\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: ");
+        text.push_str(path);
+    }
+    if recent_messages_preserved {
+        text.push_str("\n\nRecent messages are preserved verbatim.");
+    }
+    if suppress_follow_up_questions {
+        text.push_str("\nContinue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with \"I'll continue\" or similar. Pick up the last task as if the break never happened.");
+    }
+    text
+}
+
+pub const NO_TOOLS_TRAILER: &str = "\n\nREMINDER: Do NOT call any tools. Respond with plain text only — an <analysis> block followed by a <summary> block. Tool calls will be rejected and you will fail the task.";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompactDirection {
+    Full,
+    From,
+    UpTo,
+}
+
+/// Original source templates, with a retained local session summary supplied
+/// as context when one already exists. The caller appends hook/user
+/// instructions and NO_TOOLS_TRAILER as the final instruction.
+pub fn prompt_for_direction(previous: &str, direction: CompactDirection) -> String {
+    let (template, analysis) = match direction {
+        CompactDirection::Full => (BASE_COMPACT_PROMPT, DETAILED_ANALYSIS_INSTRUCTION_BASE),
+        CompactDirection::From => (
+            PARTIAL_COMPACT_PROMPT,
+            DETAILED_ANALYSIS_INSTRUCTION_PARTIAL,
+        ),
+        CompactDirection::UpTo => (
+            PARTIAL_COMPACT_UP_TO_PROMPT,
+            DETAILED_ANALYSIS_INSTRUCTION_BASE,
+        ),
+    };
+    let body = template
+        .replace(
+            concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_BASE}"),
+            analysis,
+        )
+        .replace(
+            concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_PARTIAL}"),
+            analysis,
+        );
+    let mut prompt = format!("{}{}", crate::prompt_runtime::SOURCE_COMPACT_NO_TOOLS, body);
+    if !previous.trim().is_empty() {
+        prompt.push_str("\n\nPrevious summary:\n");
+        prompt.push_str(previous);
+    }
+    prompt
+}
+
+pub fn prompt(previous: &str, partial: bool) -> String {
+    prompt_for_direction(
+        previous,
+        if partial {
+            CompactDirection::From
+        } else {
+            CompactDirection::Full
+        },
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_three_source_directions_expand_exact_boundaries() {
+        let full = prompt_for_direction("", CompactDirection::Full);
+        let from = prompt_for_direction("earlier verified summary", CompactDirection::From);
+        let up_to = prompt_for_direction("", CompactDirection::UpTo);
+        assert!(full.contains("the conversation so far"));
+        assert!(from.contains("RECENT portion"));
+        assert!(up_to.contains("newer messages that build on this context"));
+        assert!(from.contains("Previous summary:\nearlier verified summary"));
+        for text in [&full, &from, &up_to] {
+            assert!(text.starts_with("CRITICAL: Respond with TEXT ONLY"));
+            assert!(!text.contains(concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_BASE}")));
+            assert!(!text.contains(concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_PARTIAL}")));
+        }
+        assert!(NO_TOOLS_TRAILER.contains("Tool calls will be rejected"));
+    }
+    #[test]
+    fn source_summary_user_turn_preserves_transcript_and_continuation() {
+        let content = user_summary_message(
+            "Summary:\nVerified state",
+            Some("/work/session.jsonl"),
+            true,
+            true,
+        );
+        assert!(content.starts_with("This session is being continued from a previous conversation"));
+        assert!(content.contains("\n\nSummary:\nVerified state"));
+        assert!(content.contains("read the full transcript at: /work/session.jsonl"));
+        assert!(content.contains("Recent messages are preserved verbatim."));
+        assert!(content.ends_with("Pick up the last task as if the break never happened."));
+        let default = user_summary_message("Summary:\nDone", None, false, false);
+        assert!(!default.contains("Recent messages are preserved"));
+        assert!(!default.contains("Continue the conversation from where it left off"));
+    }
+
+    #[test]
+    fn full_source_text_and_partial_selection() {
+        assert_eq!(BASE_COMPACT_PROMPT.len(), 4220);
+        assert_eq!(PARTIAL_COMPACT_PROMPT.len(), 2364);
+        assert_eq!(PARTIAL_COMPACT_UP_TO_PROMPT.len(), 2326);
+        let base = prompt("", false);
+        let partial = prompt("verified work", true);
+        assert!(base.starts_with("CRITICAL: Respond with TEXT ONLY"));
+        assert!(base.contains("1. Primary Request and Intent:"));
+        assert!(partial.contains("RECENT portion"));
+        assert!(partial.contains("verified work"));
+        assert!(!base.contains(concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_BASE}")));
+        assert!(!partial.contains(concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_PARTIAL}")));
+        assert!(base.contains("Primary Request and Intent"));
+        assert!(partial.contains("Pending Tasks"));
+    }
+}

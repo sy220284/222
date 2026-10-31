@@ -162,9 +162,44 @@ pub fn sanitize_path(name: &str) -> String {
     )
 }
 
+/// Render canonical workspace paths as readable paths without altering the
+/// canonical value used by permission checks and file operations.
+pub fn display_path_for_user(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    #[cfg(windows)]
+    {
+        if let Some(unc) = raw.strip_prefix(r"\\?\UNC\") {
+            return format!(r"\\{}", unc);
+        }
+        if let Some(regular) = raw.strip_prefix(r"\\?\") {
+            return regular.to_owned();
+        }
+    }
+    raw.into_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_path_never_changes_a_regular_path() {
+        let path = Path::new("ordinary/path");
+        assert_eq!(display_path_for_user(path), "ordinary/path");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn display_path_removes_win32_verbatim_prefix_only_for_display() {
+        assert_eq!(
+            display_path_for_user(Path::new(r"\\?\C:\Users\test")),
+            r"C:\Users\test"
+        );
+        assert_eq!(
+            display_path_for_user(Path::new(r"\\?\UNC\server\share")),
+            r"\\server\share"
+        );
+    }
 
     #[test]
     fn source_expansion_absolute_relative_home_and_empty() {

@@ -32,6 +32,11 @@ fn chat_history_persists_across_real_cli_processes_and_model_http() {
         while received.len() < 2 && Instant::now() < deadline {
             match listener.accept() {
                 Ok((mut socket, _)) => {
+                    // Windows accepts a socket in the listener's nonblocking
+                    // mode. Switch the accepted connection to blocking reads
+                    // before applying a timeout; otherwise read() can fail
+                    // immediately with WSAEWOULDBLOCK despite incoming data.
+                    socket.set_nonblocking(false).unwrap();
                     socket
                         .set_read_timeout(Some(Duration::from_secs(4)))
                         .unwrap();

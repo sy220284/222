@@ -1,12 +1,27 @@
 # Atlas Agent
 
-**独立 Rust 多模型编程智能体**。不需要特定厂商登录，不捆绑官方 SDK、专有 API、品牌资源或账号体系。使用自己的模型接口或本地模型即可。
+**独立 Rust 多模型编程智能体**。不需要特定厂商登录，不捆绑官方 SDK、专有 API、品牌资源或账号体系。仅使用用户指定的模型 API，不再包含本地推理模型和远程云端控制。
 
 本项目从零编写 Rust 代码，用通用 Agent 概念实现对话、工具调用、工作区操作、审批与会话恢复。**当前为可运行核心版本，不是任何第三方产品的全功能等价移植。**
 
+## 运行范围（2026-10-30 用户确认）
+
+- 只通过模型 API 推理，取消默认 Ollama 配置；存量配置指向 11434 端口会明确报错。
+- 移除跨设备 Bridge、远程 SDK、云端 Trigger、云端专项审查/规划、官方账号权益及团队云端同步。
+- 保留普通本地 SDK、Agent、模型 API、HTTP MCP、WebSearch/WebFetch、本地文件、任务、设置与记忆。
+- 当前排除 **192 条**原始路径（新增排除 170 条、原有 22 条），另外 7 条可通过任意模型在本地完成的功能重新纳入完整对齐范围；参见 [本地功能恢复清单](docs/LOCAL_CAPABILITIES_RESTORED.md) 和 [逐项排除清单](docs/REMOVED_SCOPE.json)。
+
+### 本地通用高级能力（使用当前配置的任意模型）
+
+- `atlas-agent ultra-review [PR]` 或交互 `/ultrareview [PR]`：本地多视角代码审查；普通输入中合法的 ultrareview 关键词也会触发。
+- `atlas-agent ultra-plan 目标` 或交互 `/ultraplan 目标`：仅当前回合只读规划；普通输入中合法的 ultraplan 关键词也会触发，遵循原版引号/路径/疑问句过滤规则。
+- `atlas-agent trigger create 名称 任务内容` 创建任务，`trigger get 名称` 读取、`trigger update 名称 新内容` 修改、`trigger run 名称` 显式执行；另外支持 `set/list/delete` 管理；不会创建定时任务；任务记录存于本地独立忽略目录，避免误提交源码仓库。
+- SDK `user.file_attachments` 支持本地工作区文件和图片；拒绝远端文件、URL 和工作区越权。
+
+
 ## 已实现
 
-- 多模型提供商：OpenAI 兼容 Chat Completions（OpenAI、OpenRouter、DeepSeek、Qwen、vLLM、LM Studio 等需各自兼容函数调用）；Ollama 本地兼容接口；Gemini 原生 generateContent。
+- 多模型提供商：OpenAI 兼容 Chat Completions（OpenAI、OpenRouter、DeepSeek、Qwen 等需各自兼容函数调用）；Gemini 原生 generateContent。
 - 通用模型消息格式，支持模型请求多次工具调用、工具结果回填与继续决策。
 - 文件读取、递归文件列表、正则全文检索、文件写入、唯一文本替换、带超时的 Shell 命令；以及 Git 只读工具。
 - 项目技能（`.atlas/skills/<名称>/SKILL.md`）列表与加载，模型可选择使用相关指导。
@@ -52,15 +67,7 @@ cargo run -- models
 cargo run -- init
 ```
 
-默认使用本地 Ollama。准备模型（需要支持函数调用）：
-
-```bash
-ollama serve
-ollama pull qwen2.5-coder:7b
-cargo run -- chat
-```
-
-选择其他模型：
+默认使用 OpenAI API（需要配置密钥）；也可以选择其他模型 API：
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
@@ -71,6 +78,72 @@ cargo run -- --provider gemini chat
 ```
 
 无需固定账号也可使用自建兼容服务：运行 `cargo run -- init`，编辑配置文件中 `base_url`、`model`、`api_key_env`，或添加新的 `openai-compatible` 配置。配置默认在系统配置目录下的 `atlas-agent/config.json`；可以用环境变量 `ATLAS_CONFIG` 指定位置。
+
+### 模型品牌、实时模型目录与能力标签
+
+预置 DeepSeek、Kimi（月之暗面）、智谱 GLM、MiniMax、OpenAI API、Gemini 和独立的 ChatGPT 套餐模式。内置型号仅为开箱默认选择；**实际可用模型以用户密钥请求的官方 `/models` 列表为准**，目录内可用的模型型号可以随时更新。目录中的上下文长度、输出长度、输入模态、思考档位和函数调用等元数据会转为能力标签；没有返回的能力明确保持未知。列表可见不保证当前账号具有推理调用权，`probe` 或 `use` 会进行一次实际调用检验，并可能产生少量费用。
+
+| 品牌 | 当前推荐的预置模型 | 密钥环境变量 |
+| --- | --- | --- |
+| DeepSeek | `deepseek-flash`（V4.1 Flash 线上别名） | `DEEPSEEK_API_KEY` |
+| Kimi | `kimi-k3.1-pro` | `MOONSHOT_API_KEY` |
+| 智谱 GLM | `glm-5.3` | `ZHIPU_API_KEY` |
+| MiniMax | `MiniMax-M3` | `MINIMAX_API_KEY` |
+| OpenAI API | `gpt-6.1-sol`（全新安装，旧配置仍兼容） | `OPENAI_API_KEY` |
+| ChatGPT 套餐 | `gpt-6.1-sol`（可用型号以账号目录为准） | 通过官方 OAuth 登录，无需 API Key |
+
+**连接和选择模型：**
+
+```bash
+cargo run -- models setup
+# 一次完成品牌选择、密钥校验、实时型号与能力标签展示、模型可调用验证和保存
+cargo run -- models setup kimi
+# 也可以使用下面的分步命令：
+cargo run -- models brands
+cargo run -- models connect deepseek
+# 在提示后从标准输入提供密钥；验证 /models 成功后，密钥仅写入本地 0600 文件
+cargo run -- models discover deepseek
+cargo run -- models probe deepseek deepseek-v4-pro
+cargo run -- models use deepseek deepseek-v4-pro
+cargo run -- --provider deepseek chat
+```
+
+如果只需临时查询，不想保存密钥，可用 `models discover deepseek --key-stdin` 从标准输入读取。环境变量密钥优先于本地已保存密钥，均不回显。保存在配置文件旁的 `.model-api-keys.json` 具有 Unix 用户独享访问权限（0600），仍属于本地明文密钥文件，请保证机器账号和磁盘受保护；不可提交到 Git。已有配置和自定义供应商优先保留。不同品牌的 Coding 套餐、国际区域、付费 API 可能使用不同的密钥和 URL，允许覆盖同名条目的根地址。
+
+普通 OpenAI API 的新预置型号 `gpt-6.1-sol` 使用官方 Responses API 及命名空间函数工具调用，适配 GPT-6 系列的推理能力；该模式通过 API Key 计费。对于已有 `openai-compatible` 配置，保持旧模型兼容；切换到官方 GPT-6 模型时自动启用 Responses 协议。ChatGPT 套餐登录使用独立 OAuth 凭据与额度，两种身份互不混用。实际可选 GPT-6 型号由账户 API 目录和权限决定。
+
+Gemini 使用官方原生 `models.list` 分页目录、`x-goog-api-key` 鉴权与 `generateContent` 实际调用检测；只列出支持 `generateContent` 的型号。其 `temperature`、`topP`、`maxOutputTokens` 和 `thinkingLevel` 会映射到 Gemini 原生 `generationConfig`，并拒绝不支持的思考档位。`chatgpt` 的模型发现使用登录账户的官方专属目录，`models setup chatgpt` 会启动账号授权，不接受 API Key。
+
+官方参数差异已在模型调用前校验：DeepSeek 默认开启思考，此时 `temperature` 不生效；Flash 思考模式的 `top_p` 最低有效值为 0.95，非思考模式的 `top_p` 不生效。Kimi K3.1 Pro（含高速版）仅支持开启思考；GPT-6.1 Sol 不接受 `reasoning_effort=none`。这些无效组合会明确报错，避免界面显示设置成功、实际被服务端忽略。可以使用 `models tune deepseek --reasoning-effort none --temperature 0.3` 选择 DeepSeek 非思考模式下可生效的温度参数。
+
+**调整模型参数：**
+
+```bash
+cargo run -- models tune deepseek --reasoning-effort high --max-output-tokens 8192 --context-window 1048576
+cargo run -- models tune kimi --reasoning-effort high
+cargo run -- models tune minimax --temperature 0.3 --top-p 0.95
+cargo run -- models tune minimax --reset
+```
+
+默认参数原则是使用官方服务端自身的推荐值，特别是开启思考的模型，temperature/top_p 可能被忽略或被拒绝，**不会虚构通用最优值**。明确调整的参数才会发至 Chat Completions（温度 0–2、Top-P (0,1]、输出 token 上限、reasoning_effort）；`context_window` 为本地设置的上下文容量提示，不会作为不存在的 HTTP 参数发送，有实时目录元数据时，选择模型会保存其上下文容量，并将该容量应用于 Agent 的自动压缩阈值；若提供商未返回则继续使用默认阈值或用户显式设置。具体可用上下文以模型实际限制为准。流式和非流式采用相同设置。使用其他版本可通过 `models use` 或 `--model MODEL_ID` 调整。
+
+### ChatGPT 账号登录使用套餐额度（独立于普通 API）
+
+官方开源/本地应用的 Sign in with ChatGPT 要求用户在系统浏览器授权 `chatgpt.tokens.use.direct`，获得经过签名验证的 OIDC 身份令牌和可轮换 OAuth Token，才能使用 ChatGPT 套餐推理。直接调用公开的 `POST https://api.openai.com/v1/responses`，强制 `store:false` 与 `stream:true`，使用相同凭据获取账号专属模型列表；不使用 ChatGPT 私有 backend-api。
+
+```bash
+cargo run -- chatgpt login
+cargo run -- chatgpt status
+cargo run -- chatgpt models
+cargo run -- --provider chatgpt --model gpt-6.1-sol chat
+cargo run -- chatgpt logout
+```
+
+OAuth 令牌保存在配置目录旁的 `.chatgpt-plan.json`，Unix 权限为 0600，host ID 跨启动保持稳定；每次登录使用新的 state、nonce、PKCE，并通过 OpenAI JWKS 验证 ID Token 的签名、issuer、audience、expiry、nonce 和账号身份。应用运行于本地，浏览器回调只监听 `127.0.0.1`。到期自动续期、退出时撤销会话。用户应在 ChatGPT Settings → Usage 检查官方套餐和应用用量。需拥有支持该功能的 ChatGPT 套餐并明确授权；可见模型仍需通过真实请求确认可用。ChatGPT 套餐与 OpenAI API Key 是两条独立计费与授权路径。
+
+官方参考：[Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/)、
+[OAuth 注册与授权](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)、
+[Responses 推理规范](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)。
 
 ## 本地 Hooks（不上传事件）
 
@@ -129,7 +202,7 @@ Hook 经 stdin 接收 JSON，返回 JSON（`decision:block`、`hookSpecificOutpu
 {"type":"user","content":"检查当前项目"}
 ```
 
-返回以 `system`、`assistant`、`tool_result`、`result` 等事件组成的 NDJSON。支持 `{"type":"control","action":"model","provider":"local","model":"..."}`、`clear`、`compact`，无需私有 SDK 或账号登录。SDK 默认非交互，写入类工具需要明确 `--approval full`。
+返回以 `system`、`assistant`、`tool_result`、`result` 等事件组成的 NDJSON。支持 `{"type":"control","action":"model","provider":"openai","model":"..."}`、`clear`、`compact`，无需私有 SDK 或账号登录。SDK 默认非交互，写入类工具需要明确 `--approval full`。
 
 ## MCP 本地工具
 
@@ -182,7 +255,7 @@ cargo run -- chat --resume <上次输出的UUID>
 | 并发 Agent 团队任务 | 已实现基础 1—4 成员执行与结果汇总 |
 | 团队持久通信、后台任务和取消 | 未实现 |
 | SDK JSON Lines 标准输入输出 | 已实现基础多轮交互、工具及控制消息 |
-| 完整终端 UI、完整 SDK 控制协议、远程桥接、语音和 IDE | 未实现 |
+| 完整终端 UI、完整 SDK 控制协议和 IDE | 待完整验收；远程桥接和官方语音服务已移除 |
 
 具体分层及迁移清单见 `docs/MIGRATION.md`。
 

@@ -15,6 +15,14 @@ use uuid::Uuid;
 pub struct Session {
     pub id: Uuid,
     pub messages: Vec<Message>,
+    /// Replayable MCP server instruction announcements survive resume, just
+    /// as 2.1.88 preserves mcp_instructions_delta attachment history.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp_instruction_announcements: Vec<crate::mcp_instructions_delta::InstructionAnnouncement>,
+    /// Durable pre-compaction transcript. Never sent to the model again:
+    /// the compact summary represents this portion in active context.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub archived_messages: Vec<Message>,
     /// Insertion-ordered user-turn IDs for message-level file snapshots.
     /// Old sessions simply have no rewindable user-turn index.
     #[serde(default)]
@@ -23,6 +31,21 @@ pub struct Session {
     pub history_message_aliases: std::collections::BTreeMap<Uuid, Uuid>,
     #[serde(default)]
     pub summary: Option<String>,
+    /// Model-visible summary position for source 2.1.88 prefix-preserving
+    /// partial compaction. Full/up_to summaries appear at offset zero.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary_insert_at: Option<usize>,
+    /// Source isCompactSummary state for earlier summaries retained by
+    /// prefix-preserving compaction; indices refer to self.messages.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retained_summary_indices: Vec<usize>,
+    /// Immutable transcript prefix covering all turns before a partial
+    /// compaction. Retained model messages may already occur in this prefix.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript_snapshot: Option<Vec<Message>>,
+    /// Number of active model turns already contained in transcript_snapshot.
+    #[serde(default)]
+    pub transcript_active_offset: usize,
     #[serde(default)]
     pub tasks: Vec<Task>,
     #[serde(default)]
@@ -33,6 +56,9 @@ pub struct Session {
     /// Cumulative UTF-16 units of memory attachments in this session.
     #[serde(default)]
     pub surfaced_memory_units: usize,
+    /// Last message offset processed by optional local memory extraction.
+    #[serde(default)]
+    pub memory_extraction_cursor: usize,
     #[serde(default)]
     pub usage: TokenUsage,
     #[serde(default)]
@@ -45,6 +71,8 @@ pub struct Session {
     pub permission_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_color: Option<String>,
     /// SDK-generated title, separate from the user's explicit rename.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ai_title: Option<String>,
@@ -69,19 +97,27 @@ impl Session {
         Self {
             id: Uuid::new_v4(),
             messages: Vec::new(),
+            mcp_instruction_announcements: Vec::new(),
+            archived_messages: Vec::new(),
             history_message_ids: Vec::new(),
             history_message_aliases: std::collections::BTreeMap::new(),
             summary: None,
+            summary_insert_at: None,
+            retained_summary_indices: Vec::new(),
+            transcript_snapshot: None,
+            transcript_active_offset: 0,
             tasks: Vec::new(),
             todos: Vec::new(),
             surfaced_memories: Vec::new(),
             surfaced_memory_units: 0,
+            memory_extraction_cursor: 0,
             usage: TokenUsage::default(),
             cost: CostLedger::default(),
             team_name: None,
             agent_name: None,
             permission_mode: None,
             custom_title: None,
+            agent_color: None,
             ai_title: None,
             tag: None,
             git_branch: None,
@@ -148,12 +184,68 @@ impl Session {
         result
     }
 
+    /// Complete local transcript (archived and active) in chronological order.
+    /// Keep this separate from model_messages: old turns must not be resent
+    /// to the model after compaction has replaced them with a summary.
+    pub fn transcript_messages(&self) -> Vec<Message> {
+        let mut history = if let Some(snapshot) = &self.transcript_snapshot {
+            snapshot.clone()
+        } else {
+            self.archived_messages.clone()
+        };
+        // Synthetic summaries are stored once at their compaction boundary.
+        if let Some(summary) = self.summary.as_deref().filter(|s| !s.trim().is_empty()) {
+            history.push(Message::text(
+                "user",
+                crate::compact_source_prompts::user_summary_message(summary, None, false, false),
+            ));
+        }
+        let from = if self.transcript_snapshot.is_some() {
+            self.transcript_active_offset.min(self.messages.len())
+        } else {
+            0
+        };
+        history.extend(self.messages[from..].iter().cloned());
+        history
+    }
+
+    /// Source 2.1.88 places the compacted conversation summary back into
+    /// the model transcript as a user message. Keep the persisted session
+    /// normalized: the synthetic message is composed once per API request,
+    /// never re-appended on retries, resume or per-tool model turns.
+    pub fn model_messages(&self) -> Vec<Message> {
+        let mut messages = self.messages.clone();
+        if let Some(summary) = self.summary.as_deref().filter(|s| !s.trim().is_empty()) {
+            let summary = Message::text(
+                "user",
+                crate::compact_source_prompts::user_summary_message(
+                    summary,
+                    (!self.archived_messages.is_empty() || self.transcript_snapshot.is_some())
+                        .then(|| format!(".atlas/sessions/{}.json", self.id))
+                        .as_deref(),
+                    false,
+                    false,
+                ),
+            );
+            let insert_at = self.summary_insert_at.unwrap_or(0).min(messages.len());
+            messages.insert(insert_at, summary);
+        }
+        messages
+    }
+
     pub fn clear(&mut self) {
         self.summary = None;
+        self.summary_insert_at = None;
+        self.retained_summary_indices.clear();
+        self.transcript_snapshot = None;
+        self.transcript_active_offset = 0;
         self.messages.clear();
+        self.mcp_instruction_announcements.clear();
+        self.archived_messages.clear();
         self.tasks.clear();
         self.surfaced_memories.clear();
         self.surfaced_memory_units = 0;
+        self.memory_extraction_cursor = 0;
         self.todos.clear();
     }
 }
@@ -161,6 +253,90 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mcp_instruction_announcements_persist_resume_and_clear() {
+        let mut session = Session::fresh();
+        session.mcp_instruction_announcements.push(
+            crate::mcp_instructions_delta::InstructionAnnouncement {
+                added_names: vec!["review-server".to_owned()],
+                removed_names: Vec::new(),
+            },
+        );
+        let encoded = serde_json::to_vec(&session).unwrap();
+        let restored: Session = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(
+            restored.mcp_instruction_announcements,
+            session.mcp_instruction_announcements
+        );
+        let mut restored = restored;
+        restored.clear();
+        assert!(restored.mcp_instruction_announcements.is_empty());
+        let legacy: Session = serde_json::from_value(serde_json::json!({
+            "id": uuid::Uuid::new_v4(),
+            "messages": []
+        }))
+        .unwrap();
+        assert!(legacy.mcp_instruction_announcements.is_empty());
+    }
+
+    #[test]
+    fn compact_context_is_a_single_user_turn_and_not_a_system_override() {
+        let mut session = Session::fresh();
+        session.summary = Some("Summary:\nVerified state".to_owned());
+        session
+            .messages
+            .push(Message::text("user", "Continue work"));
+        let once = session.model_messages();
+        let twice = session.model_messages();
+        assert_eq!(once, twice);
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(once.len(), 2);
+        assert_eq!(once[0].role, "user");
+        assert!(once[0].visible_text().contains("Summary:\nVerified state"));
+        assert_eq!(once[1].visible_text(), "Continue work");
+        session.summary = None;
+        assert_eq!(session.model_messages().len(), 1);
+    }
+
+    #[test]
+    fn partial_compaction_preserves_model_position_without_duplicating_transcript() {
+        let mut s = Session::fresh();
+        s.messages = vec![
+            Message::text("user", "kept-first"),
+            Message::text("assistant", "kept-answer"),
+        ];
+        s.transcript_snapshot = Some(vec![
+            Message::text("user", "kept-first"),
+            Message::text("assistant", "kept-answer"),
+            Message::text("user", "summarized-tail"),
+        ]);
+        s.transcript_active_offset = 2;
+        s.summary = Some("Summary:\nSummarized tail".into());
+        s.summary_insert_at = Some(2);
+        s.retained_summary_indices.push(0);
+        assert_eq!(s.model_messages().len(), 3);
+        assert_eq!(s.model_messages()[0].visible_text(), "kept-first");
+        assert_eq!(s.model_messages()[1].visible_text(), "kept-answer");
+        assert!(s.model_messages()[2]
+            .visible_text()
+            .contains("Summarized tail"));
+        s.messages.push(Message::text("user", "new-task"));
+        let model = s.model_messages();
+        assert_eq!(model[3].visible_text(), "new-task");
+        let transcript = s.transcript_messages();
+        assert_eq!(transcript.len(), 5);
+        assert_eq!(transcript[2].visible_text(), "summarized-tail");
+        assert_eq!(transcript[4].visible_text(), "new-task");
+        s.summary_insert_at = Some(0);
+        assert!(s.model_messages()[0]
+            .visible_text()
+            .contains("Summarized tail"));
+        s.clear();
+        assert!(s.transcript_snapshot.is_none());
+        assert!(s.summary_insert_at.is_none());
+        assert!(s.retained_summary_indices.is_empty());
+    }
+
     #[test]
     fn session_storage_rejects_symlink_escape() {
         #[cfg(unix)]

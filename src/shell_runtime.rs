@@ -9,6 +9,32 @@ use std::{
 };
 use tokio::process::Command;
 
+/// Read-only subset of the source's GH_READ_ONLY_COMMANDS needed by PR
+/// review. Return argv for direct execution, never an evaluated shell string.
+pub fn read_only_pr_args(command: &str) -> Option<Vec<&str>> {
+    if !command
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b' ' | b'\t'))
+    {
+        return None;
+    }
+    let words = command.split_ascii_whitespace().collect::<Vec<_>>();
+    if !(3..=4).contains(&words.len())
+        || words[0] != "gh"
+        || words[1] != "pr"
+        || !matches!(words[2], "view" | "diff")
+    {
+        return None;
+    }
+    if let Some(number) = words.get(3) {
+        if !number.bytes().all(|b| b.is_ascii_digit())
+            || number.parse::<u64>().ok().is_none_or(|n| n == 0)
+        {
+            return None;
+        }
+    }
+    Some(words[1..].to_vec())
+}
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ShellKind {
@@ -341,14 +367,22 @@ pub fn powershell_edition(path: &Path) -> &'static str {
 pub fn build_powershell_args(command: &str) -> [&str; 4] {
     ["-NoProfile", "-NonInteractive", "-Command", command]
 }
-pub fn max_output_length() -> usize {
+// src/utils/shell/outputLimits.ts — preserve exported upper/default limits.
+pub const BASH_MAX_OUTPUT_UPPER_LIMIT: usize = 150_000;
+pub const BASH_MAX_OUTPUT_DEFAULT: usize = 30_000;
+
+pub fn max_output_length_for_value(value: Option<&str>) -> usize {
     crate::env_validation::validate(
         "BASH_MAX_OUTPUT_LENGTH",
-        std::env::var("BASH_MAX_OUTPUT_LENGTH").ok().as_deref(),
-        30_000,
-        150_000,
+        value,
+        BASH_MAX_OUTPUT_DEFAULT as u64,
+        BASH_MAX_OUTPUT_UPPER_LIMIT as u64,
     )
     .effective as usize
+}
+
+pub fn max_output_length() -> usize {
+    max_output_length_for_value(std::env::var("BASH_MAX_OUTPUT_LENGTH").ok().as_deref())
 }
 pub fn from_config(value: Option<&str>) -> Result<ShellKind> {
     match value.unwrap_or("bash") {
@@ -361,6 +395,28 @@ pub fn from_config(value: Option<&str>) -> Result<ShellKind> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn bash_output_limits_match_source_get_max_output_length() {
+        assert_eq!(BASH_MAX_OUTPUT_UPPER_LIMIT, 150_000);
+        assert_eq!(BASH_MAX_OUTPUT_DEFAULT, 30_000);
+        let scenarios = [
+            (None, 30_000),
+            (Some(""), 30_000),
+            (Some("0"), 30_000),
+            (Some("-2"), 30_000),
+            (Some("invalid"), 30_000),
+            (Some("12.9"), 12),
+            (Some("1e3"), 1),
+            (Some("+42 trailing"), 42),
+            (Some("150000"), 150_000),
+            (Some("150001"), 150_000),
+            (Some("99999999999999999999999999"), 150_000),
+        ];
+        for (raw, expected) in scenarios {
+            assert_eq!(max_output_length_for_value(raw), expected, "{raw:?}");
+        }
+    }
+
     #[test]
     fn default_and_provider_protocol_match() {
         assert_eq!(from_config(None).unwrap(), ShellKind::Bash);

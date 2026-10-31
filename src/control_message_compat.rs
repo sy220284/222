@@ -39,6 +39,56 @@ mod tests {
         assert_eq!(normalize_control_message_keys(v.clone()), v);
     }
     #[test]
+    fn nested_only_null_and_non_string_request_ids_preserve_json_meaning() {
+        let original = json!({
+            "type": "control_response",
+            "response": {
+                "requestId": null,
+                "request": {"requestId": "nested-deeper"},
+                "error": {"code": 400}
+            },
+            "untouched": {"requestId": "other"}
+        });
+        let expected = json!({
+            "type": "control_response",
+            "response": {
+                "request_id": null,
+                "request": {"requestId": "nested-deeper"},
+                "error": {"code": 400}
+            },
+            "untouched": {"requestId": "other"}
+        });
+        let normalized = normalize_control_message_keys(original);
+        assert_eq!(normalized, expected);
+        assert_eq!(normalize_control_message_keys(normalized.clone()), expected);
+        assert_eq!(
+            normalize_control_message_keys(json!({
+                "requestId": 12,
+                "response": {"requestId": false}
+            })),
+            json!({"request_id": 12, "response": {"request_id": false}})
+        );
+    }
+
+    #[test]
+    fn mixed_old_and_new_ids_keep_explicit_precedence_without_discarding_fields() {
+        let input = json!({
+            "requestId": "obsolete",
+            "request_id": null,
+            "response": {
+                "requestId": "old-response",
+                "request_id": "new-response",
+                "other": "unchanged"
+            }
+        });
+        // The source checks whether request_id exists, not whether its
+        // value is truthy; null still wins, and requestId is retained.
+        let normalized = normalize_control_message_keys(input.clone());
+        assert_eq!(normalized, input);
+        assert_eq!(normalize_control_message_keys(normalized), input);
+    }
+
+    #[test]
     fn arrays_primitives_and_more_nested_objects_are_untouched() {
         for v in [
             Value::Null,

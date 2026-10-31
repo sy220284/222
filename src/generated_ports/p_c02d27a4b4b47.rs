@@ -1,49 +1,54 @@
-//! Native Rust UI structure derived from original: src/components/HelpV2/General.tsx
+//! Native Rust port derived from original: src/components/HelpV2/General.tsx
+//!
+//! Help general tab: the verbatim intro copy plus the Shortcuts section
+//! (bold heading, help menu with gap 2 and fixed width).
 #![allow(dead_code, non_snake_case, non_camel_case_types)]
-use serde_json::Value;
 
 use crate::generated_ports::ui::VNode;
-pub fn render_source_view(props: &Value) -> VNode {
+
+pub const GENERAL_INTRO: &str = "Helps with your codebase, makes edits with your permission, and executes commands — right from your terminal.";
+
+pub fn general_help_view() -> VNode {
     VNode::Element {
         tag: "Box".into(),
-        attrs: vec![
-            ("flexDirection".into(), Value::String("column".into())),
-            ("paddingY".into(), serde_json::json!(1)),
-            ("gap".into(), serde_json::json!(1)),
-        ]
-        .into_iter()
-        .collect(),
+        attrs: [].into_iter().collect(),
         children: vec![
-            VNode::Value(Value::Null),
+            VNode::Text(GENERAL_INTRO.into()),
             VNode::Element {
-                tag: "Box".into(),
-                attrs: vec![("flexDirection".into(), Value::String("column".into()))]
-                    .into_iter()
-                    .collect(),
-                children: vec![
-                    VNode::Element {
-                        tag: "Box".into(),
-                        attrs: vec![].into_iter().collect(),
-                        children: vec![VNode::Element {
-                            tag: "Text".into(),
-                            attrs: vec![("bold".into(), Value::Bool(true))]
-                                .into_iter()
-                                .collect(),
-                            children: vec![VNode::Text("Shortcuts".into())],
-                        }],
-                    },
-                    VNode::Element {
-                        tag: "PromptInputHelpMenu".into(),
-                        attrs: vec![
-                            ("gap".into(), serde_json::json!(2)),
-                            ("fixedWidth".into(), Value::Bool(true)),
-                        ]
-                        .into_iter()
-                        .collect(),
-                        children: vec![],
-                    },
-                ],
+                tag: "Shortcuts".into(),
+                attrs: [
+                    ("gap".into(), "2".into()),
+                    ("fixedWidth".into(), "true".into()),
+                ]
+                .into_iter()
+                .collect(),
+                children: vec![VNode::Text("Shortcuts".into())],
             },
         ],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intro_copy_and_shortcuts_section() {
+        match general_help_view() {
+            VNode::Element { children, .. } => {
+                assert_eq!(children.len(), 2);
+                assert!(
+                    matches!(&children[0], VNode::Text(t) if t.contains("right from your terminal"))
+                );
+                match &children[1] {
+                    VNode::Element { tag, attrs, .. } => {
+                        assert_eq!(tag, "Shortcuts");
+                        assert!(attrs.iter().any(|(k, v)| k == "fixedWidth" && v == "true"));
+                    }
+                    _ => panic!(),
+                }
+            }
+            _ => panic!(),
+        }
     }
 }

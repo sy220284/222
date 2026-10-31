@@ -1,0 +1,365 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/commandLifecycle.ts",
+  "source_sha256": "652c75607897b5aab1fd1532e89588391dc33e810d82c8dd15c6effb4932d075",
+  "cases": [
+    {
+      "id": "normal-sequence",
+      "kind": "normal",
+      "input": {
+        "steps": [
+          {
+            "op": "set",
+            "listener": "primary"
+          },
+          {
+            "op": "notify",
+            "uuid": "task-1",
+            "state": "started"
+          },
+          {
+            "op": "notify",
+            "uuid": "task-1",
+            "state": "completed"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:10-14:occurrence-1",
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": [
+        {
+          "listener": "primary",
+          "uuid": "task-1",
+          "state": "started"
+        },
+        {
+          "listener": "primary",
+          "uuid": "task-1",
+          "state": "completed"
+        }
+      ]
+    },
+    {
+      "id": "no-listener",
+      "kind": "edge",
+      "input": {
+        "steps": [
+          {
+            "op": "notify",
+            "uuid": "task-1",
+            "state": "started"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": []
+    },
+    {
+      "id": "listener-replaced",
+      "kind": "edge",
+      "input": {
+        "steps": [
+          {
+            "op": "set",
+            "listener": "first"
+          },
+          {
+            "op": "notify",
+            "uuid": "a",
+            "state": "started"
+          },
+          {
+            "op": "set",
+            "listener": "second"
+          },
+          {
+            "op": "notify",
+            "uuid": "a",
+            "state": "completed"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:10-14:occurrence-1",
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": [
+        {
+          "listener": "first",
+          "uuid": "a",
+          "state": "started"
+        },
+        {
+          "listener": "second",
+          "uuid": "a",
+          "state": "completed"
+        }
+      ]
+    },
+    {
+      "id": "unregister",
+      "kind": "edge",
+      "input": {
+        "steps": [
+          {
+            "op": "set",
+            "listener": "first"
+          },
+          {
+            "op": "notify",
+            "uuid": "a",
+            "state": "started"
+          },
+          {
+            "op": "clear"
+          },
+          {
+            "op": "notify",
+            "uuid": "a",
+            "state": "completed"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:10-14:occurrence-1",
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": [
+        {
+          "listener": "first",
+          "uuid": "a",
+          "state": "started"
+        }
+      ]
+    },
+    {
+      "id": "only-unregister",
+      "kind": "edge",
+      "input": {
+        "steps": [
+          {
+            "op": "clear"
+          },
+          {
+            "op": "clear"
+          },
+          {
+            "op": "notify",
+            "uuid": "ignored",
+            "state": "started"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:10-14:occurrence-1",
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": []
+    },
+    {
+      "id": "multiple-identifiers",
+      "kind": "edge",
+      "input": {
+        "steps": [
+          {
+            "op": "set",
+            "listener": "event"
+          },
+          {
+            "op": "notify",
+            "uuid": "a",
+            "state": "started"
+          },
+          {
+            "op": "notify",
+            "uuid": "b",
+            "state": "started"
+          },
+          {
+            "op": "notify",
+            "uuid": "a",
+            "state": "completed"
+          },
+          {
+            "op": "notify",
+            "uuid": "b",
+            "state": "completed"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:10-14:occurrence-1",
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": [
+        {
+          "listener": "event",
+          "uuid": "a",
+          "state": "started"
+        },
+        {
+          "listener": "event",
+          "uuid": "b",
+          "state": "started"
+        },
+        {
+          "listener": "event",
+          "uuid": "a",
+          "state": "completed"
+        },
+        {
+          "listener": "event",
+          "uuid": "b",
+          "state": "completed"
+        }
+      ]
+    },
+    {
+      "id": "override-before-notify",
+      "kind": "edge",
+      "input": {
+        "steps": [
+          {
+            "op": "set",
+            "listener": "first"
+          },
+          {
+            "op": "set",
+            "listener": "last"
+          },
+          {
+            "op": "notify",
+            "uuid": "x",
+            "state": "started"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:10-14:occurrence-1",
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": [
+        {
+          "listener": "last",
+          "uuid": "x",
+          "state": "started"
+        }
+      ]
+    },
+    {
+      "id": "unicode-identifiers",
+      "kind": "edge",
+      "input": {
+        "steps": [
+          {
+            "op": "set",
+            "listener": "回调"
+          },
+          {
+            "op": "notify",
+            "uuid": "任务-甲😀",
+            "state": "started"
+          },
+          {
+            "op": "notify",
+            "uuid": "任务-甲😀",
+            "state": "completed"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:10-14:occurrence-1",
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": [
+        {
+          "listener": "回调",
+          "uuid": "任务-甲😀",
+          "state": "started"
+        },
+        {
+          "listener": "回调",
+          "uuid": "任务-甲😀",
+          "state": "completed"
+        }
+      ]
+    },
+    {
+      "id": "clear-then-set",
+      "kind": "edge",
+      "input": {
+        "steps": [
+          {
+            "op": "set",
+            "listener": "first"
+          },
+          {
+            "op": "clear"
+          },
+          {
+            "op": "set",
+            "listener": "second"
+          },
+          {
+            "op": "notify",
+            "uuid": "x",
+            "state": "completed"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:10-14:occurrence-1",
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": [
+        {
+          "listener": "second",
+          "uuid": "x",
+          "state": "completed"
+        }
+      ]
+    },
+    {
+      "id": "repeat-callback-events",
+      "kind": "edge",
+      "input": {
+        "steps": [
+          {
+            "op": "set",
+            "listener": "repeat"
+          },
+          {
+            "op": "notify",
+            "uuid": "x",
+            "state": "started"
+          },
+          {
+            "op": "notify",
+            "uuid": "x",
+            "state": "started"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:10-14:occurrence-1",
+        "src/utils/commandLifecycle.ts:FunctionDeclaration:16-21:occurrence-1"
+      ],
+      "expected": [
+        {
+          "listener": "repeat",
+          "uuid": "x",
+          "state": "started"
+        },
+        {
+          "listener": "repeat",
+          "uuid": "x",
+          "state": "started"
+        }
+      ]
+    }
+  ]
+}

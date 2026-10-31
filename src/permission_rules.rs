@@ -192,6 +192,30 @@ pub fn valid_stored_rule(raw: &str) -> bool {
     true
 }
 
+/// Validate the original user input *before* parse_rule() normalizes it.
+/// In particular, Bash() must never become a tool-wide Bash allow rule.
+/// Source: utils/settings/toolValidationConfig.ts and
+/// utils/permissions/permissionValidation.ts.
+pub fn validate_rule_input(raw: &str) -> Result<()> {
+    if valid_stored_rule(raw) {
+        return Ok(());
+    }
+    let parsed = parse_rule(raw);
+    let content = parsed.rule_content.as_deref().unwrap_or("");
+    match parsed.tool_name.as_str() {
+        "WebSearch" if content.contains('*') || content.contains('?') => {
+            bail!("WebSearch does not support wildcards. Use exact search terms without * or ?")
+        }
+        "WebFetch" if content.contains("://") || content.starts_with("http") => {
+            bail!("WebFetch permissions use domain format, not URLs. Use WebFetch(domain:hostname)")
+        }
+        "WebFetch" if !content.starts_with("domain:") => {
+            bail!("WebFetch permissions must use domain: prefix. Example: WebFetch(domain:github.com)")
+        }
+        _ => bail!("Invalid permission rule: {raw}"),
+    }
+}
+
 pub fn format_rule(value: &RuleValue) -> String {
     match value.rule_content.as_deref().filter(|s| !s.is_empty()) {
         Some(content) => format!("{}({})", value.tool_name, escape_content(content)),
@@ -260,6 +284,14 @@ pub fn suggestion_for_exact_command(tool_name: &str, command: &str) -> Value {
 }
 
 pub fn suggestion_for_prefix(tool_name: &str, prefix: &str) -> Value {
+    // The original PowerShell suggestion gate suppresses persistent prefix
+    // allows for executable/script/network/alias-mutating cmdlets. The
+    // caller can still approve a single invocation through its prompt.
+    if tool_name == "PowerShell"
+        && crate::powershell_permission_matching::never_suggest_wildcard(prefix)
+    {
+        return serde_json::json!([]);
+    }
     serde_json::json!([{
         "type":"addRules",
         "rules":[{"toolName":tool_name,"ruleContent":format!("{prefix}:*")}],
@@ -726,6 +758,33 @@ mod tests {
     }
 
     #[test]
+    fn raw_permission_validation_prevents_silent_broadening() {
+        for rule in [
+            "Bash()",
+            "Bash(echo (",
+            "WebSearch(test*)",
+            "WebFetch(https://example.com)",
+            "WebFetch(example.com)",
+            "Read(src*config)",
+        ] {
+            assert!(validate_rule_input(rule).is_err(), "{rule}");
+        }
+        for rule in [
+            "Bash(git status)",
+            "Bash",
+            "WebSearch(rust language)",
+            "WebFetch(domain:github.com)",
+            "Read(src/**)",
+        ] {
+            validate_rule_input(rule).unwrap();
+        }
+        let error = validate_rule_input("WebFetch(https://example.com)")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("domain"), "{error}");
+    }
+
+    #[test]
     fn original_shell_rule_permission_suggestions_are_exact() {
         // Ref: src/utils/permissions/shellRuleMatching.ts:189-228.
         assert_eq!(
@@ -758,6 +817,16 @@ mod tests {
         assert_eq!(
             suggestion_for_exact_command("Bash", "echo 'a:b(*)'")[0]["rules"][0]["ruleContent"],
             "echo 'a:b(*)'"
+        );
+        assert_eq!(
+            suggestion_for_prefix("PowerShell", "Invoke-Expression"),
+            json!([])
+        );
+        assert_eq!(suggestion_for_prefix("PowerShell", "iwr"), json!([]));
+        assert_eq!(suggestion_for_prefix("PowerShell", "node"), json!([]));
+        assert_eq!(
+            suggestion_for_prefix("PowerShell", "Get-Content")[0]["rules"][0]["ruleContent"],
+            "Get-Content:*"
         );
     }
 

@@ -1,0 +1,258 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/keyboardShortcuts.ts",
+  "source_sha256": "6e7d75eab99ae08b7571a680cf00c1f3eddf3107f93855a0d67e46988b17d2f4",
+  "export": "isMacosOptionChar",
+  "cases": [
+    {
+      "id": "key-0",
+      "kind": "normal",
+      "export": "isMacosOptionChar",
+      "input": "†",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-1",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "π",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-2",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "ø",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-3",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "x",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "key-4",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "key-5",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": " ",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "key-6",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "T",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "key-7",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "††",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "key-8",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "Π",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "key-9",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "o",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "key-10",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "toString",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-11",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "constructor",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-12",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "__proto__",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-13",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "hasOwnProperty",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-14",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "valueOf",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-15",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "isPrototypeOf",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-16",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "propertyIsEnumerable",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-17",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "toLocaleString",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-18",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "__defineGetter__",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-19",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "__defineSetter__",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-20",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "__lookupGetter__",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-21",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "__lookupSetter__",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "key-22",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "\u0002",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "key-23",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "🙂",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "key-24",
+      "kind": "edge",
+      "export": "isMacosOptionChar",
+      "input": "π ",
+      "source_ids": [
+        "src/utils/keyboardShortcuts.ts:FunctionDeclaration:10-14:occurrence-1"
+      ],
+      "expected": false
+    }
+  ]
+}

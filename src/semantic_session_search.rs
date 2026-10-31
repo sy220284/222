@@ -89,13 +89,14 @@ fn prompt(query: &str, candidates: &[(SessionItem, Option<Session>)]) -> String 
                     // The original sends the full summary to the ranker.
                     fields.push(format!("- Summary: {summary}"));
                 }
-                if let Some(first) = session.messages.iter().find(|m| m.role == "user") {
+                let transcript = session.transcript_messages();
+                if let Some(first) = transcript.iter().find(|m| m.role == "user") {
                     let text = excerpt(std::slice::from_ref(first));
                     if !text.is_empty() {
                         fields.push(format!("- First message: {}", first_message_preview(&text)));
                     }
                 }
-                let text = excerpt(&session.messages);
+                let text = excerpt(&transcript);
                 if !text.is_empty() {
                     fields.push(format!("- Transcript: {text}"));
                 }

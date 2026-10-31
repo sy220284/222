@@ -1,7 +1,8 @@
 //! Source parity: permissionsLoader.ts, settings/constants.ts and settings/settings.ts.
 //! Paths and policy injection are vendor-neutral; incomplete UI/MDM behavior is audited.
 use crate::permission_rules::{
-    format_rule, parse_rule, valid_stored_rule, Behavior, RuleSetting, RuleValue,
+    format_rule, parse_rule, valid_stored_rule, validate_rule_input, Behavior, RuleSetting,
+    RuleValue,
 };
 use anyhow::{bail, Context, Result};
 use fs2::FileExt;
@@ -707,6 +708,11 @@ impl SettingsPaths {
         behavior: Behavior,
         rules: &[RuleValue],
     ) -> Result<bool> {
+        // Enforce the same rule syntax for all persistence callers (CLI, SDK
+        // and UI). Invalid settings must never be written and later ignored.
+        for rule in rules {
+            validate_rule_input(&format_rule(rule))?;
+        }
         self.edit(source, |settings| {
             if rules.is_empty() {
                 return Ok(false);
@@ -888,6 +894,35 @@ mod tests {
     fn write(path: &Path, value: &Value) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, serde_json::to_vec(value).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn invalid_permission_writes_are_rejected_without_touching_settings() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = paths(root.path());
+        for rule in [
+            RuleValue {
+                tool_name: "WebSearch".into(),
+                rule_content: Some("token*".into()),
+            },
+            RuleValue {
+                tool_name: "WebFetch".into(),
+                rule_content: Some("https://example.com".into()),
+            },
+        ] {
+            assert!(paths
+                .add(EditableSource::Local, Behavior::Allow, &[rule])
+                .is_err());
+            assert!(!paths.local.exists());
+        }
+        assert!(paths
+            .add(
+                EditableSource::Local,
+                Behavior::Allow,
+                &[parse_rule("Bash(git status)")]
+            )
+            .unwrap());
+        assert!(paths.local.exists());
     }
 
     #[test]

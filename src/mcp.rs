@@ -76,73 +76,6 @@ fn mcp_tool_timeout() -> Duration {
         .unwrap_or(DEFAULT_MCP_TOOL_TIMEOUT)
 }
 
-/// Keep complete large MCP results reachable through the active workspace's
-/// Read/Shell tools instead of silently clipping them at 16,000 characters.
-fn present_mcp_tool_output(output: String, workspace: &Path, has_images: bool) -> String {
-    let token_limit = std::env::var("MAX_MCP_OUTPUT_TOKENS")
-        .ok()
-        .and_then(|v| v.trim().parse::<usize>().ok())
-        .filter(|n| *n > 0)
-        .unwrap_or(25_000);
-    let char_limit = token_limit.saturating_mul(4);
-    let length = output.encode_utf16().count();
-    if length <= char_limit {
-        return output;
-    }
-    if has_images {
-        let mut units = 0;
-        let preview: String = output
-            .chars()
-            .take_while(|ch| {
-                let next = units + ch.len_utf16();
-                if next > char_limit {
-                    false
-                } else {
-                    units = next;
-                    true
-                }
-            })
-            .collect();
-        return format!("{preview}\n\n[OUTPUT TRUNCATED - exceeded {token_limit} token limit; image blocks cannot be persisted as text]");
-    }
-    let save = (|| -> Result<PathBuf> {
-        use std::io::Write as _;
-        let root = workspace
-            .canonicalize()
-            .context("Cannot resolve MCP workspace")?;
-        let config = root.join(".atlas");
-        std::fs::create_dir_all(&config)?;
-        let config = config.canonicalize()?;
-        if !config.starts_with(&root) {
-            bail!("MCP output directory escapes workspace");
-        }
-        let directory = config.join("tool-results");
-        std::fs::create_dir_all(&directory)?;
-        let directory = directory.canonicalize()?;
-        if !directory.starts_with(&root) {
-            bail!("MCP output directory escapes workspace");
-        }
-        let path = directory.join(format!("mcp-output-{}.txt", uuid::Uuid::new_v4()));
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)?;
-        if let Err(error) = file
-            .write_all(output.as_bytes())
-            .and_then(|_| file.sync_all())
-        {
-            drop(file);
-            let _ = std::fs::remove_file(&path);
-            return Err(error).context("Cannot persist MCP output");
-        }
-        Ok(path)
-    })();
-    match save {
-        Ok(path) => format!("MCP result ({length} characters) exceeded the {token_limit}-token budget and was saved in full to {}. Use Read or Shell to inspect it.", path.display()),
-        Err(error) => format!("Error: MCP result ({length} characters) exceeds the output budget and could not be saved: {error:#}. Use server pagination or filtering."),
-    }
-}
-
 struct Client {
     name: String,
     _child: Child,
@@ -281,17 +214,70 @@ impl Client {
     }
 }
 
-fn mcp_tool_alias(server: &str, tool: &str) -> String {
+// src/services/mcp/mcpStringUtils.ts. Keep tool names qualified at the
+// permission and routing boundary so an MCP tool named Read cannot inherit
+// the built-in Read tool's permissions.
+pub fn mcp_info_from_string(value: &str) -> Option<(&str, Option<String>)> {
+    let mut parts = value.split("__");
+    if parts.next()? != "mcp" {
+        return None;
+    }
+    let server = parts.next()?;
+    if server.is_empty() {
+        return None;
+    }
+    let tool_parts = parts.collect::<Vec<_>>();
+    let tool = (!tool_parts.is_empty()).then(|| tool_parts.join("__"));
+    Some((server, tool))
+}
+
+pub fn get_mcp_prefix(server_name: &str) -> String {
     format!(
-        "mcp__{}__{}",
-        runtime_contracts::normalize_mcp_name(server),
-        runtime_contracts::normalize_mcp_name(tool)
+        "mcp__{}__",
+        runtime_contracts::normalize_mcp_name(server_name)
     )
+}
+
+pub fn build_mcp_tool_name(server_name: &str, tool_name: &str) -> String {
+    format!(
+        "{}{}",
+        get_mcp_prefix(server_name),
+        runtime_contracts::normalize_mcp_name(tool_name)
+    )
+}
+
+pub fn get_tool_name_for_permission_check(name: &str, mcp_info: Option<(&str, &str)>) -> String {
+    match mcp_info {
+        Some((server, tool)) => build_mcp_tool_name(server, tool),
+        None => name.to_owned(),
+    }
+}
+
+pub fn get_mcp_display_name(full_name: &str, server_name: &str) -> String {
+    full_name.replacen(&get_mcp_prefix(server_name), "", 1)
+}
+
+pub fn extract_mcp_tool_display_name(user_facing_name: &str) -> String {
+    let value = user_facing_name.trim_end();
+    let value = value
+        .strip_suffix("(MCP)")
+        .map(str::trim_end)
+        .unwrap_or(value)
+        .trim();
+    if let Some(index) = value.find(" - ") {
+        return value[index + 3..].trim().to_owned();
+    }
+    value.to_owned()
+}
+
+fn mcp_tool_alias(server: &str, tool: &str) -> String {
+    build_mcp_tool_name(server, tool)
 }
 
 enum TransportClient {
     Stdio(Client),
     Http(crate::mcp_http::HttpClient),
+    Sse(crate::mcp_legacy_sse::LegacySseClient),
 }
 impl TransportClient {
     async fn connect(config: &McpServerConfig, root: &Path) -> Result<Self> {
@@ -300,6 +286,9 @@ impl TransportClient {
             "http" => Ok(Self::Http(
                 crate::mcp_http::HttpClient::connect_with_root(config, root).await?,
             )),
+            "sse" => Ok(Self::Sse(
+                crate::mcp_legacy_sse::LegacySseClient::connect_with_root(config, root).await?,
+            )),
             other => bail!("Unsupported MCP transport: {other}"),
         }
     }
@@ -307,42 +296,49 @@ impl TransportClient {
         match self {
             Self::Stdio(c) => c.request(method, params).await,
             Self::Http(c) => c.request(method, params).await,
+            Self::Sse(c) => c.request(method, params).await,
         }
     }
     fn instructions(&self) -> Option<&str> {
         match self {
             Self::Stdio(c) => c.instructions.as_deref(),
             Self::Http(c) => c.instructions.as_deref(),
+            Self::Sse(c) => c.instructions.as_deref(),
         }
     }
     fn capabilities(&self) -> Option<&Value> {
         match self {
             Self::Stdio(c) => c.capabilities.as_ref(),
             Self::Http(c) => c.capabilities.as_ref(),
+            Self::Sse(c) => c.capabilities.as_ref(),
         }
     }
     fn take_resource_updates(&mut self) -> Vec<Value> {
         match self {
             Self::Stdio(c) => std::mem::take(&mut c.resource_updates),
-            Self::Http(c) => std::mem::take(&mut c.resource_updates),
+            Self::Http(c) => c.drain_resource_updates(),
+            Self::Sse(c) => c.drain_resource_updates(),
         }
     }
     fn take_tools_changed(&mut self) -> bool {
         match self {
             Self::Stdio(c) => std::mem::take(&mut c.tools_changed),
             Self::Http(c) => std::mem::take(&mut c.tools_changed),
+            Self::Sse(c) => std::mem::take(&mut c.tools_changed),
         }
     }
     fn mark_tools_changed(&mut self) {
         match self {
             Self::Stdio(c) => c.tools_changed = true,
             Self::Http(c) => c.tools_changed = true,
+            Self::Sse(c) => c.tools_changed = true,
         }
     }
     fn server_info(&self) -> Option<Value> {
         match self {
             Self::Stdio(c) => c.server_info.clone(),
             Self::Http(c) => c.server_info.clone(),
+            Self::Sse(c) => c.server_info.clone(),
         }
     }
     fn failed_process(&mut self) -> Result<Option<String>> {
@@ -351,7 +347,7 @@ impl TransportClient {
                 ._child
                 .try_wait()?
                 .map(|status| format!("MCP process exited: {status}"))),
-            Self::Http(_) => Ok(None),
+            Self::Http(_) | Self::Sse(_) => Ok(None),
         }
     }
 }
@@ -1101,6 +1097,36 @@ impl McpManager {
         Ok(statuses)
     }
 
+    /// Query changes in *real* connected MCP server instructions using the
+    /// source's replayable announcements, rather than a guessed tool list.
+    pub fn instruction_delta(
+        &self,
+        announcements: &[crate::mcp_instructions_delta::InstructionAnnouncement],
+        client_side: &[crate::mcp_instructions_delta::ClientSideInstruction],
+    ) -> Option<crate::mcp_instructions_delta::McpInstructionsDelta> {
+        let clients = self
+            .server_statuses
+            .iter()
+            .zip(&self.status_clients)
+            .map(|(status, index)| {
+                let connected = status["status"] == "connected";
+                crate::mcp_instructions_delta::ConnectedServer {
+                    name: status["name"].as_str().unwrap_or("unknown").to_owned(),
+                    connected,
+                    instructions: index
+                        .and_then(|index| self.clients.get(index))
+                        .and_then(TransportClient::instructions)
+                        .map(str::to_owned),
+                }
+            })
+            .collect::<Vec<_>>();
+        crate::mcp_instructions_delta::get_mcp_instructions_delta(
+            &clients,
+            announcements,
+            client_side,
+        )
+    }
+
     /// MCP instructions are lower-trust server data and never grant permissions.
     pub fn instruction_context(&self) -> String {
         let mut entries = Vec::new();
@@ -1141,27 +1167,33 @@ impl McpManager {
     }
 
     pub async fn execute(&mut self, call: &ToolCall) -> String {
+        self.execute_content(call).await.text
+    }
+
+    pub async fn execute_content(&mut self, call: &ToolCall) -> crate::mcp_content::Output {
         match self.call(call).await {
             Ok(content) => content,
             Err(error) => {
                 let diagnostic = format!("ERROR: {error:#}");
                 // Request errors can include a resolved URL and query token.
                 // Apply the same sanitization as connection-status output.
-                self.routes
-                    .get(&call.function.name)
-                    .and_then(|(index, _)| {
-                        self.status_clients
-                            .iter()
-                            .position(|slot| *slot == Some(*index))
-                    })
-                    .and_then(|position| self.configs.get(position))
-                    .map(|config| Self::redact_connection_error(config, diagnostic.clone()))
-                    .unwrap_or(diagnostic)
+                crate::mcp_content::Output::text(
+                    self.routes
+                        .get(&call.function.name)
+                        .and_then(|(index, _)| {
+                            self.status_clients
+                                .iter()
+                                .position(|slot| *slot == Some(*index))
+                        })
+                        .and_then(|position| self.configs.get(position))
+                        .map(|config| Self::redact_connection_error(config, diagnostic.clone()))
+                        .unwrap_or(diagnostic),
+                )
             }
         }
     }
 
-    async fn call(&mut self, call: &ToolCall) -> Result<String> {
+    async fn call(&mut self, call: &ToolCall) -> Result<crate::mcp_content::Output> {
         // The prior invocation may have failed with HTTP 401 or a stale
         // session. Reopen the affected server before a *new* tool call even
         // when the agent is still in the same model turn. No failed call is
@@ -1213,38 +1245,17 @@ impl McpManager {
                 return Err(error);
             }
         };
-        // Keep non-text blocks and structured data intact: silently dropping
-        // image/resource content corrupts the tool response seen by the model.
-        let parts = response.get("content").and_then(Value::as_array);
-        let only_text = parts.is_some_and(|items| {
-            items.iter().all(|item| {
-                item.get("type").and_then(Value::as_str) == Some("text")
-                    && item.get("text").and_then(Value::as_str).is_some()
-            })
-        });
-        let result = if only_text && response.get("structuredContent").is_none() {
-            let texts = parts
-                .unwrap()
-                .iter()
-                .filter_map(|item| item["text"].as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
-            if response["isError"] == true {
-                format!("ERROR: {texts}")
-            } else {
-                texts
-            }
-        } else if response["isError"] == true {
-            format!("ERROR: {}", response)
-        } else {
-            response.to_string()
-        };
-        let has_images = parts.is_some_and(|items| {
-            items
-                .iter()
-                .any(|item| item.get("type").and_then(Value::as_str) == Some("image"))
-        });
-        Ok(present_mcp_tool_output(result, &self.root, has_images))
+        let position = self
+            .status_clients
+            .iter()
+            .position(|slot| *slot == Some(index))
+            .context("MCP tool connection has no server owner")?;
+        crate::mcp_content::process(
+            &response,
+            &real_name,
+            &self.configs[position].id,
+            &self.root,
+        )
     }
 }
 
@@ -1472,6 +1483,7 @@ impl McpManager {
             }
             let outcome = match &mut self.clients[client_index] {
                 TransportClient::Http(client) => Some(client.poll_notifications(remaining).await),
+                TransportClient::Sse(client) => Some(client.poll_notifications(remaining).await),
                 TransportClient::Stdio(_) => None,
             };
             if let Some(Err(error)) = outcome {
@@ -1556,6 +1568,32 @@ impl McpManager {
     }
 }
 
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+    #[test]
+    fn large_mcp_output_is_saved_in_full_with_chunk_read_instructions() {
+        let root = tempfile::tempdir().unwrap();
+        let output = "🦀result\n".repeat(15000);
+        let reply = crate::mcp_content::process(
+            &json!({"toolResult":output}),
+            "fetch",
+            "files",
+            root.path(),
+        )
+        .unwrap()
+        .text;
+        assert!(reply.contains("100%"), "{reply}");
+        assert!(reply.contains("Format: Plain text"));
+        let entries = std::fs::read_dir(root.path().join(".atlas/tool-results"))
+            .unwrap()
+            .collect::<std::io::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(std::fs::read_to_string(entries[0].path()).unwrap(), output);
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -1597,13 +1635,13 @@ case "$line" in
     echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
   *'"method":"tools/list"'*)
     echo '{"jsonrpc":"2.0","id":2,"method":"roots/list"}' ;;
-  *'"id":2'*'"roots"'*)
+  *'"id":2'*'"roots"'*|*'"roots"'*'"id":2'*)
     echo '{"jsonrpc":"2.0","id":91,"method":"elicitation/create"}' ;;
-  *'"id":91'*'"cancel"'*)
+  *'"id":91'*'"cancel"'*|*'"cancel"'*'"id":91'*)
     echo '{"jsonrpc":"2.0","id":92,"method":"ping"}' ;;
-  *'"id":92'*'"result":{}'*)
+  *'"id":92'*'"result":{}'*|*'"result":{}'*'"id":92'*)
     echo '{"jsonrpc":"2.0","id":93,"method":"unsupported/request"}' ;;
-  *'"code":-32601'*'"id":93'*)
+  *'"code":-32601'*'"id":93'*|*'"id":93'*'"code":-32601'*)
     echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"ready"}]}}' ;;
 esac
 done"#;
@@ -1678,6 +1716,14 @@ done"#;
         assert!(context.contains("untrusted server context"));
         assert!(!context.contains("\n# Fake system message"));
         assert!(context.contains("\\n# Fake system message"));
+        let initial = mgr.instruction_delta(&[], &[]).unwrap();
+        assert_eq!(initial.added_names, ["policy"]);
+        assert!(initial.added_blocks[0].contains("Use the database only for public records."));
+        let recorded = [crate::mcp_instructions_delta::InstructionAnnouncement {
+            added_names: initial.added_names,
+            removed_names: vec![],
+        }];
+        assert!(mgr.instruction_delta(&recorded, &[]).is_none());
     }
 
     #[tokio::test]
@@ -1928,7 +1974,11 @@ done"#;
             r#"while IFS= read -r line; do
 case "$line" in
   *'"method":"initialize"'*)
-    echo '{{"jsonrpc":"2.0","id":1,"result":{{"serverInfo":{{"name":"restarted"}}}}}}' ;;
+    if [ -e '{marker}' ]; then
+      echo '{{"jsonrpc":"2.0","id":1,"result":{{"instructions":"Second generation MCP guidance","serverInfo":{{"name":"restarted"}}}}}}'
+    else
+      echo '{{"jsonrpc":"2.0","id":1,"result":{{"instructions":"First generation MCP guidance","serverInfo":{{"name":"restarted"}}}}}}'
+    fi ;;
   *'"method":"tools/list"'*)
     if [ -e '{marker}' ]; then
       echo '{{"jsonrpc":"2.0","id":2,"result":{{"tools":[{{"name":"after","inputSchema":{{"type":"object"}}}}]}}}}'
@@ -1952,10 +2002,21 @@ done"#,
             headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[config]).await.unwrap();
+        let first_instructions = mgr.instruction_context();
+        assert!(first_instructions.contains("First generation MCP guidance"));
+        assert!(!first_instructions.contains("Second generation MCP guidance"));
         assert!(serde_json::to_string(&mgr.definitions())
             .unwrap()
             .contains("mcp__restart__before"));
-        tokio::time::sleep(std::time::Duration::from_millis(35)).await;
+        // Wait for the actual lifecycle transition; a fixed delay races
+        // shell exit when the full test suite is running concurrently.
+        let TransportClient::Stdio(first) = &mut mgr.clients[0] else {
+            panic!("Expected stdio fixture")
+        };
+        tokio::time::timeout(Duration::from_secs(4), first._child.wait())
+            .await
+            .unwrap()
+            .unwrap();
         mgr.refresh_changed_tools().await.unwrap();
         let definitions = mgr.definitions();
         assert_eq!(definitions.len(), 1);
@@ -1968,6 +2029,11 @@ done"#,
         assert!(!mgr.handles("mcp__restart__before"));
         assert!(mgr.handles("mcp__restart__after"));
         assert_eq!(mgr.statuses().unwrap()[0]["status"], "connected");
+        let new_instructions = mgr.instruction_context();
+        assert!(new_instructions.contains("Second generation MCP guidance"));
+        assert!(!new_instructions.contains("First generation MCP guidance"));
+        mgr.toggle_named("restart", false).await.unwrap();
+        assert!(mgr.instruction_context().is_empty());
     }
     #[tokio::test]
     async fn failed_stdio_server_cannot_break_healthy_server_and_indexing() {
@@ -2044,7 +2110,7 @@ done"#;
         assert_eq!(states[0]["status"], "failed");
     }
     #[tokio::test]
-    async fn mcp_tool_error_and_structured_payload_survive_model_output() {
+    async fn mcp_tool_error_precedes_structured_payload_like_source() {
         let script = r#"while IFS= read -r line; do
 case "$line" in
   *'"method":"initialize"'*) echo '{"jsonrpc":"2.0","id":1,"result":{}}' ;;
@@ -2072,9 +2138,7 @@ done"#;
             },
         };
         let result = mgr.execute(&call).await;
-        assert!(result.starts_with("ERROR:"));
-        assert!(result.contains("permission denied"));
-        assert!(result.contains("structuredContent"));
+        assert_eq!(result, "ERROR: permission denied");
         let illegal = ToolCall {
             id: "illegal".into(),
             kind: "function".into(),
@@ -2415,5 +2479,51 @@ mod remote_tests {
             "mcp__stream__after"
         );
         server.await.unwrap();
+    }
+    #[test]
+    fn original_mcp_name_string_helpers_and_permission_identity() {
+        assert_eq!(
+            mcp_info_from_string("mcp__docs__search__full"),
+            Some(("docs", Some("search__full".to_owned())))
+        );
+        assert_eq!(mcp_info_from_string("mcp__docs"), Some(("docs", None)));
+        assert_eq!(
+            mcp_info_from_string("mcp__docs__"),
+            Some(("docs", Some(String::new())))
+        );
+        assert_eq!(mcp_info_from_string("mcp____search"), None);
+        assert_eq!(mcp_info_from_string("mytool__docs__search"), None);
+        assert_eq!(mcp_info_from_string("mcp__"), None);
+        assert_eq!(get_mcp_prefix("my server"), "mcp__my_server__");
+        assert_eq!(
+            build_mcp_tool_name("my server", "read.file"),
+            "mcp__my_server__read_file"
+        );
+        assert_eq!(
+            get_tool_name_for_permission_check("Read", Some(("my server", "Read"))),
+            "mcp__my_server__Read"
+        );
+        assert_eq!(get_tool_name_for_permission_check("Read", None), "Read");
+        assert_eq!(
+            get_mcp_display_name("prefix_mcp__my_server__run", "my server"),
+            "prefix_run"
+        );
+        assert_eq!(
+            get_mcp_display_name("mcp__unrelated__run", "my server"),
+            "mcp__unrelated__run"
+        );
+        assert_eq!(
+            extract_mcp_tool_display_name("github - Add comment to issue (MCP)   "),
+            "Add comment to issue"
+        );
+        assert_eq!(
+            extract_mcp_tool_display_name("Add comment (MCP)"),
+            "Add comment"
+        );
+        assert_eq!(
+            extract_mcp_tool_display_name("server -  update - item  "),
+            "update - item"
+        );
+        assert_eq!(extract_mcp_tool_display_name("no suffix"), "no suffix");
     }
 }

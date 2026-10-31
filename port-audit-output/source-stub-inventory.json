@@ -1,0 +1,1402 @@
+{
+  "count": 174,
+  "disclaimer": "仅是自动生成空壳的静态检测，不证明手写代码功能完整。",
+  "items": [
+    {
+      "null_expression_count": 49,
+      "rust": "src/generated_ports/p_ee2a843014c61.rs",
+      "rust_lines": 109,
+      "source": "src/components/PromptInput/PromptInput.tsx",
+      "source_lines": 2339,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 34,
+      "rust": "src/generated_ports/p_fe5e0a874b3c2.rs",
+      "rust_lines": 155,
+      "source": "src/screens/REPL.tsx",
+      "source_lines": 5006,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 27,
+      "rust": "src/generated_ports/p_752a76791bf16.rs",
+      "rust_lines": 63,
+      "source": "src/components/Spinner.tsx",
+      "source_lines": 562,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 18,
+      "rust": "src/generated_ports/p_304f6b94b4985.rs",
+      "rust_lines": 56,
+      "source": "src/components/Settings/Config.tsx",
+      "source_lines": 1822,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 18,
+      "rust": "src/generated_ports/p_9f44ff177a927.rs",
+      "rust_lines": 39,
+      "source": "src/components/Message.tsx",
+      "source_lines": 627,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 17,
+      "rust": "src/generated_ports/p_b8e758d1581c8.rs",
+      "rust_lines": 33,
+      "source": "src/components/MessageRow.tsx",
+      "source_lines": 383,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 16,
+      "rust": "src/generated_ports/p_210fb85258179.rs",
+      "rust_lines": 68,
+      "source": "src/components/Spinner/SpinnerAnimationRow.tsx",
+      "source_lines": 265,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 15,
+      "rust": "src/generated_ports/p_4f1f5ef1057ac.rs",
+      "rust_lines": 57,
+      "source": "src/components/agents/ToolSelector.tsx",
+      "source_lines": 562,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 14,
+      "rust": "src/generated_ports/p_b2359c395e89f.rs",
+      "rust_lines": 95,
+      "source": "src/commands/plugin/DiscoverPlugins.tsx",
+      "source_lines": 781,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 14,
+      "rust": "src/generated_ports/p_57123442b4dd6.rs",
+      "rust_lines": 39,
+      "source": "src/components/GlobalSearchDialog.tsx",
+      "source_lines": 343,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 13,
+      "rust": "src/generated_ports/p_d32fceeb42c6c.rs",
+      "rust_lines": 95,
+      "source": "src/components/StructuredDiff/Fallback.tsx",
+      "source_lines": 487,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 13,
+      "rust": "src/generated_ports/p_72b601fb5bd8f.rs",
+      "rust_lines": 38,
+      "source": "src/components/QuickOpenDialog.tsx",
+      "source_lines": 244,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 12,
+      "rust": "src/generated_ports/p_7337a24f3e0b4.rs",
+      "rust_lines": 129,
+      "source": "src/commands/plugin/ManageMarketplaces.tsx",
+      "source_lines": 838,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 12,
+      "rust": "src/generated_ports/p_65895b818e969.rs",
+      "rust_lines": 49,
+      "source": "src/components/agents/AgentsList.tsx",
+      "source_lines": 440,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 12,
+      "rust": "src/generated_ports/p_c78fd261d2dd8.rs",
+      "rust_lines": 124,
+      "source": "src/components/design-system/FuzzyPicker.tsx",
+      "source_lines": 312,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 11,
+      "rust": "src/generated_ports/p_6ed34733fbcc3.rs",
+      "rust_lines": 39,
+      "source": "src/components/LogSelector.tsx",
+      "source_lines": 1575,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 11,
+      "rust": "src/generated_ports/p_aa9a2fff6266e.rs",
+      "rust_lines": 182,
+      "source": "src/commands/plugin/BrowseMarketplace.tsx",
+      "source_lines": 802,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 10,
+      "rust": "src/generated_ports/p_9d478e1ba087e.rs",
+      "rust_lines": 152,
+      "source": "src/commands/plugin/ManagePlugins.tsx",
+      "source_lines": 2215,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 10,
+      "rust": "src/generated_ports/p_808a4f8e2054f.rs",
+      "rust_lines": 39,
+      "source": "src/components/HistorySearchDialog.tsx",
+      "source_lines": 118,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 9,
+      "rust": "src/generated_ports/p_0b6fa0f37f0d7.rs",
+      "rust_lines": 153,
+      "source": "src/components/ResumeTask.tsx",
+      "source_lines": 268,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 8,
+      "rust": "src/generated_ports/p_5c70f2e61245e.rs",
+      "rust_lines": 34,
+      "source": "src/components/Messages.tsx",
+      "source_lines": 834,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 8,
+      "rust": "src/generated_ports/p_d5494fca23881.rs",
+      "rust_lines": 31,
+      "source": "src/components/SessionPreview.tsx",
+      "source_lines": 194,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 8,
+      "rust": "src/generated_ports/p_cce865c493883.rs",
+      "rust_lines": 54,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/GenerateStep.tsx",
+      "source_lines": 143,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 8,
+      "rust": "src/generated_ports/p_b91406e37fdf3.rs",
+      "rust_lines": 44,
+      "source": "src/components/agents/ColorPicker.tsx",
+      "source_lines": 112,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 8,
+      "rust": "src/generated_ports/p_68ce9b76726b6.rs",
+      "rust_lines": 83,
+      "source": "src/components/ContextSuggestions.tsx",
+      "source_lines": 47,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 7,
+      "rust": "src/generated_ports/p_58fbc53b1f78a.rs",
+      "rust_lines": 32,
+      "source": "src/components/Feedback.tsx",
+      "source_lines": 592,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 7,
+      "rust": "src/generated_ports/p_40acc6bc55581.rs",
+      "rust_lines": 147,
+      "source": "src/components/ContextVisualization.tsx",
+      "source_lines": 489,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 7,
+      "rust": "src/generated_ports/p_3289389e68d82.rs",
+      "rust_lines": 33,
+      "source": "src/commands/install.tsx",
+      "source_lines": 300,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 7,
+      "rust": "src/generated_ports/p_baa83b625cf4b.rs",
+      "rust_lines": 36,
+      "source": "src/components/LanguagePicker.tsx",
+      "source_lines": 86,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_584ab0ab3562d.rs",
+      "rust_lines": 24,
+      "source": "src/components/agents/AgentsMenu.tsx",
+      "source_lines": 800,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_917c310662d72.rs",
+      "rust_lines": 31,
+      "source": "src/components/CustomSelect/select-input-option.tsx",
+      "source_lines": 488,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_b297abdcbeb6f.rs",
+      "rust_lines": 29,
+      "source": "src/components/StatusLine.tsx",
+      "source_lines": 324,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_beab21f3c4363.rs",
+      "rust_lines": 68,
+      "source": "src/commands/fast/fast.tsx",
+      "source_lines": 269,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_e8590503524b9.rs",
+      "rust_lines": 41,
+      "source": "src/components/EffortCallout.tsx",
+      "source_lines": 265,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_6d672a8f7d5df.rs",
+      "rust_lines": 31,
+      "source": "src/components/NativeAutoUpdater.tsx",
+      "source_lines": 193,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_cacc692b263f9.rs",
+      "rust_lines": 28,
+      "source": "src/components/FeedbackSurvey/FeedbackSurvey.tsx",
+      "source_lines": 174,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_912880da11cd9.rs",
+      "rust_lines": 37,
+      "source": "src/components/LogoV2/CondensedLogo.tsx",
+      "source_lines": 161,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_fdf5a5900b02b.rs",
+      "rust_lines": 37,
+      "source": "src/components/TagTabs.tsx",
+      "source_lines": 139,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_cd5dd5eb5b5b8.rs",
+      "rust_lines": 33,
+      "source": "src/components/Settings/Settings.tsx",
+      "source_lines": 137,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_f96c082aa2c27.rs",
+      "rust_lines": 21,
+      "source": "src/components/AutoUpdaterWrapper.tsx",
+      "source_lines": 91,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_d3216b1df5fb4.rs",
+      "rust_lines": 8,
+      "source": "src/components/LspRecommendation/LspRecommendationMenu.tsx",
+      "source_lines": 88,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_4e97f317c2f21.rs",
+      "rust_lines": 28,
+      "source": "src/components/VirtualMessageList.tsx",
+      "source_lines": 1082,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_62d3536bfc7ba.rs",
+      "rust_lines": 62,
+      "source": "src/components/MessageSelector.tsx",
+      "source_lines": 831,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_8f8e588ccdcf6.rs",
+      "rust_lines": 77,
+      "source": "src/components/TaskListV2.tsx",
+      "source_lines": 378,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_24eaf2e46f24a.rs",
+      "rust_lines": 19,
+      "source": "src/commands/plugin/PluginOptionsDialog.tsx",
+      "source_lines": 357,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_da009de33c5ba.rs",
+      "rust_lines": 29,
+      "source": "src/components/permissions/PermissionPrompt.tsx",
+      "source_lines": 336,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_8f75dbf7e21af.rs",
+      "rust_lines": 21,
+      "source": "src/commands/model/model.tsx",
+      "source_lines": 297,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_cbf04f614d757.rs",
+      "rust_lines": 35,
+      "source": "src/components/Settings/Status.tsx",
+      "source_lines": 241,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_1bacff6173180.rs",
+      "rust_lines": 35,
+      "source": "src/components/WorktreeExitDialog.tsx",
+      "source_lines": 231,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_33630f62d996d.rs",
+      "rust_lines": 29,
+      "source": "src/components/AutoUpdater.tsx",
+      "source_lines": 198,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_74a5887cc8c7d.rs",
+      "rust_lines": 25,
+      "source": "src/components/FileEditToolDiff.tsx",
+      "source_lines": 181,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_79aee3a3a9f2c.rs",
+      "rust_lines": 21,
+      "source": "src/components/FileEditToolUseRejectedMessage.tsx",
+      "source_lines": 170,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_d7e7ec5a41e23.rs",
+      "rust_lines": 20,
+      "source": "src/components/SkillImprovementSurvey.tsx",
+      "source_lines": 152,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_6df1d1f49fc09.rs",
+      "rust_lines": 28,
+      "source": "src/components/AgentProgressLine.tsx",
+      "source_lines": 136,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_63b6a6c13e478.rs",
+      "rust_lines": 21,
+      "source": "src/components/FileEditToolUpdatedMessage.tsx",
+      "source_lines": 124,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_9d5de99c90d12.rs",
+      "rust_lines": 33,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/TypeStep.tsx",
+      "source_lines": 103,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_d899e6008e2c6.rs",
+      "rust_lines": 39,
+      "source": "src/components/SandboxViolationExpandedView.tsx",
+      "source_lines": 99,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_686b4d7de99f9.rs",
+      "rust_lines": 20,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/ConfirmStepWrapper.tsx",
+      "source_lines": 74,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_2757935ec52a4.rs",
+      "rust_lines": 28,
+      "source": "src/components/agents/ModelSelector.tsx",
+      "source_lines": 68,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_0b29474a0ccd4.rs",
+      "rust_lines": 32,
+      "source": "src/components/BashModeProgress.tsx",
+      "source_lines": 56,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_9ffbccf7a7015.rs",
+      "rust_lines": 53,
+      "source": "src/components/FullscreenLayout.tsx",
+      "source_lines": 637,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_f1c50b7cfd309.rs",
+      "rust_lines": 33,
+      "source": "src/components/CoordinatorAgentStatus.tsx",
+      "source_lines": 273,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_a72db0598ed11.rs",
+      "rust_lines": 18,
+      "source": "src/components/HighlightedCode.tsx",
+      "source_lines": 190,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_ad25a57c00fc4.rs",
+      "rust_lines": 36,
+      "source": "src/components/HelpV2/HelpV2.tsx",
+      "source_lines": 184,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_31b29ef90def3.rs",
+      "rust_lines": 42,
+      "source": "src/components/agents/AgentEditor.tsx",
+      "source_lines": 178,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_403601f46d449.rs",
+      "rust_lines": 38,
+      "source": "src/components/IdeOnboardingDialog.tsx",
+      "source_lines": 167,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_c89223875c3fc.rs",
+      "rust_lines": 41,
+      "source": "src/components/InvalidConfigDialog.tsx",
+      "source_lines": 156,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_e827f2867375a.rs",
+      "rust_lines": 21,
+      "source": "src/components/ThinkingToggle.tsx",
+      "source_lines": 153,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_5d92d9ccbc122.rs",
+      "rust_lines": 37,
+      "source": "src/components/ValidationErrorsList.tsx",
+      "source_lines": 148,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_f8adfbabecf36.rs",
+      "rust_lines": 24,
+      "source": "src/components/OutputStylePicker.tsx",
+      "source_lines": 112,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_e842880c14f05.rs",
+      "rust_lines": 37,
+      "source": "src/components/ChannelDowngradeDialog.tsx",
+      "source_lines": 102,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_5df7355c6cbdd.rs",
+      "rust_lines": 21,
+      "source": "src/components/agents/new-agent-creation/CreateAgentWizard.tsx",
+      "source_lines": 97,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_17e756c76b4c5.rs",
+      "rust_lines": 29,
+      "source": "src/components/design-system/LoadingState.tsx",
+      "source_lines": 94,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_d283d404b97e8.rs",
+      "rust_lines": 61,
+      "source": "src/components/FeedbackSurvey/TranscriptSharePrompt.tsx",
+      "source_lines": 88,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_25c626561a30d.rs",
+      "rust_lines": 18,
+      "source": "src/components/ClickableImageRef.tsx",
+      "source_lines": 73,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_2e288793aaf3b.rs",
+      "rust_lines": 24,
+      "source": "src/components/LogoV2/FeedColumn.tsx",
+      "source_lines": 59,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_b0d8db582e8fb.rs",
+      "rust_lines": 19,
+      "source": "src/components/ConfigurableShortcutHint.tsx",
+      "source_lines": 57,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_239f0550e25c5.rs",
+      "rust_lines": 67,
+      "source": "src/components/KeybindingWarnings.tsx",
+      "source_lines": 55,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_d57f9f8b75cd8.rs",
+      "rust_lines": 18,
+      "source": "src/commands/ide/ide.tsx",
+      "source_lines": 646,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_3553102a913de.rs",
+      "rust_lines": 23,
+      "source": "src/components/ModelPicker.tsx",
+      "source_lines": 448,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_f4f160d5e6a79.rs",
+      "rust_lines": 34,
+      "source": "src/cli/handlers/mcp.tsx",
+      "source_lines": 362,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_b8623882ef24c.rs",
+      "rust_lines": 29,
+      "source": "src/components/ThemePicker.tsx",
+      "source_lines": 333,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_489fa54bdb60f.rs",
+      "rust_lines": 20,
+      "source": "src/components/ShowInIDEPrompt.tsx",
+      "source_lines": 170,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_3efd291fe36da.rs",
+      "rust_lines": 18,
+      "source": "src/components/LogoV2/AnimatedClawd.tsx",
+      "source_lines": 124,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_aacc3f689f27c.rs",
+      "rust_lines": 20,
+      "source": "src/components/ApproveApiKey.tsx",
+      "source_lines": 123,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_4ef6869f716c2.rs",
+      "rust_lines": 62,
+      "source": "src/components/CompactSummary.tsx",
+      "source_lines": 118,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_5b716827434fa.rs",
+      "rust_lines": 52,
+      "source": "src/components/FallbackToolUseErrorMessage.tsx",
+      "source_lines": 116,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_28b59eec0efcf.rs",
+      "rust_lines": 18,
+      "source": "src/components/MCPServerApprovalDialog.tsx",
+      "source_lines": 115,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_31d30d3206690.rs",
+      "rust_lines": 36,
+      "source": "src/components/FeedbackSurvey/FeedbackSurveyView.tsx",
+      "source_lines": 108,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_336c8aa7f1741.rs",
+      "rust_lines": 14,
+      "source": "src/buddy/useBuddyNotification.tsx",
+      "source_lines": 98,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_dde39deb9414b.rs",
+      "rust_lines": 24,
+      "source": "src/components/AwsAuthStatusBox.tsx",
+      "source_lines": 82,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_3d04352c988c3.rs",
+      "rust_lines": 27,
+      "source": "src/components/Spinner/SpinnerGlyph.tsx",
+      "source_lines": 80,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_df8523c974296.rs",
+      "rust_lines": 22,
+      "source": "src/components/MessageResponse.tsx",
+      "source_lines": 78,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_90f4b2e173492.rs",
+      "rust_lines": 35,
+      "source": "src/components/PromptInput/SandboxPromptFooterHint.tsx",
+      "source_lines": 64,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_e55bdaf86a903.rs",
+      "rust_lines": 17,
+      "source": "src/components/App.tsx",
+      "source_lines": 56,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_0465d9076d4a5.rs",
+      "rust_lines": 20,
+      "source": "src/components/LogoV2/AnimatedAsterisk.tsx",
+      "source_lines": 50,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_50bf5166734f7.rs",
+      "rust_lines": 12,
+      "source": "src/components/Spinner/GlimmerMessage.tsx",
+      "source_lines": 328,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_67d9d2b82e9b7.rs",
+      "rust_lines": 23,
+      "source": "src/components/Markdown.tsx",
+      "source_lines": 236,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_0b420be1b193b.rs",
+      "rust_lines": 8,
+      "source": "src/components/agents/AgentDetail.tsx",
+      "source_lines": 220,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_ce20cba9c18c8.rs",
+      "rust_lines": 17,
+      "source": "src/components/HighlightedCode/Fallback.tsx",
+      "source_lines": 193,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_5b170911b9f28.rs",
+      "rust_lines": 20,
+      "source": "src/components/StructuredDiff.tsx",
+      "source_lines": 190,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_942c3541355e4.rs",
+      "rust_lines": 17,
+      "source": "src/commands/effort/effort.tsx",
+      "source_lines": 183,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_998a62fbd6f32.rs",
+      "rust_lines": 44,
+      "source": "src/components/permissions/FilePermissionDialog/permissionOptions.tsx",
+      "source_lines": 177,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_146d6a79b5789.rs",
+      "rust_lines": 8,
+      "source": "src/components/LogoV2/Feed.tsx",
+      "source_lines": 112,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_c67bd922d31e8.rs",
+      "rust_lines": 18,
+      "source": "src/components/design-system/KeyboardShortcutHint.tsx",
+      "source_lines": 81,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_48b72004b31de.rs",
+      "rust_lines": 12,
+      "source": "src/components/Spinner/FlashingChar.tsx",
+      "source_lines": 61,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_efeefe8aa34bc.rs",
+      "rust_lines": 27,
+      "source": "src/components/IdeStatusIndicator.tsx",
+      "source_lines": 58,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_1f9cbcf671874.rs",
+      "rust_lines": 17,
+      "source": "src/components/StatusNotices.tsx",
+      "source_lines": 55,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_96e0a274d18c4.rs",
+      "rust_lines": 17,
+      "source": "src/components/ExitFlow.tsx",
+      "source_lines": 48,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_6f565c2c13b92.rs",
+      "rust_lines": 15,
+      "source": "src/components/OffscreenFreeze.tsx",
+      "source_lines": 44,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_f0fb508cfc148.rs",
+      "rust_lines": 17,
+      "source": "src/commands/permissions/permissions.tsx",
+      "source_lines": 10,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_0fde04c6a0116.rs",
+      "rust_lines": 12,
+      "source": "src/components/CustomSelect/select.tsx",
+      "source_lines": 690,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_1f8d93c1c6b27.rs",
+      "rust_lines": 12,
+      "source": "src/components/MarkdownTable.tsx",
+      "source_lines": 322,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_90f7490644747.rs",
+      "rust_lines": 20,
+      "source": "src/components/design-system/ListItem.tsx",
+      "source_lines": 244,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_086673d16adbb.rs",
+      "rust_lines": 35,
+      "source": "src/components/LogoV2/Clawd.tsx",
+      "source_lines": 240,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_67610e3e6c4b3.rs",
+      "rust_lines": 29,
+      "source": "src/components/SessionBackgroundHint.tsx",
+      "source_lines": 108,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_3869eb9c14573.rs",
+      "rust_lines": 26,
+      "source": "src/components/PackageManagerAutoUpdater.tsx",
+      "source_lines": 104,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_739e7c996602c.rs",
+      "rust_lines": 18,
+      "source": "src/components/design-system/Pane.tsx",
+      "source_lines": 77,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_3225eaf0db243.rs",
+      "rust_lines": 12,
+      "source": "src/commands/context/context.tsx",
+      "source_lines": 64,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_eb6ebe3e9e07d.rs",
+      "rust_lines": 32,
+      "source": "src/components/LogoV2/EmergencyTip.tsx",
+      "source_lines": 58,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_92ccc82ba7039.rs",
+      "rust_lines": 32,
+      "source": "src/components/LogoV2/Opus1mMergeNotice.tsx",
+      "source_lines": 55,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_7fa135c73cbe6.rs",
+      "rust_lines": 24,
+      "source": "src/components/CtrlOToExpand.tsx",
+      "source_lines": 51,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_0e01a1adf25b5.rs",
+      "rust_lines": 20,
+      "source": "src/components/DevBar.tsx",
+      "source_lines": 49,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_c6fbf2ff82c98.rs",
+      "rust_lines": 17,
+      "source": "src/components/FastIcon.tsx",
+      "source_lines": 46,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_632353e8f57fc.rs",
+      "rust_lines": 235,
+      "source": "src/commands/plugin/PluginSettings.tsx",
+      "source_lines": 1072,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_48aef09fe12b8.rs",
+      "rust_lines": 17,
+      "source": "src/commands/plugin/UnifiedInstalledCell.tsx",
+      "source_lines": 565,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_ea10c11eb3bed.rs",
+      "rust_lines": 60,
+      "source": "src/components/LogoV2/WelcomeV2.tsx",
+      "source_lines": 433,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_317c3c95bd58f.rs",
+      "rust_lines": 45,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/ConfirmStep.tsx",
+      "source_lines": 378,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_c886837faf980.rs",
+      "rust_lines": 49,
+      "source": "src/commands/copy/copy.tsx",
+      "source_lines": 371,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_0c75706230e07.rs",
+      "rust_lines": 8,
+      "source": "src/components/TrustDialog/TrustDialog.tsx",
+      "source_lines": 290,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_9d6b2f5def3de.rs",
+      "rust_lines": 60,
+      "source": "src/components/MCPServerDesktopImportDialog.tsx",
+      "source_lines": 203,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_d3509722b2b3c.rs",
+      "rust_lines": 14,
+      "source": "src/components/DesktopHandoff.tsx",
+      "source_lines": 193,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_b4669dd7c2988.rs",
+      "rust_lines": 8,
+      "source": "src/components/ManagedSettingsSecurityDialog/ManagedSettingsSecurityDialog.tsx",
+      "source_lines": 149,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_5bbc621df3eba.rs",
+      "rust_lines": 35,
+      "source": "src/components/design-system/Dialog.tsx",
+      "source_lines": 138,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_498bc5257103e.rs",
+      "rust_lines": 60,
+      "source": "src/components/MCPServerMultiselectDialog.tsx",
+      "source_lines": 133,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_11a1cccd83ccb.rs",
+      "rust_lines": 60,
+      "source": "src/components/WorkflowMultiselectDialog.tsx",
+      "source_lines": 128,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_6c70a25431244.rs",
+      "rust_lines": 57,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/PromptStep.tsx",
+      "source_lines": 128,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_afafd1aeec08f.rs",
+      "rust_lines": 57,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/DescriptionStep.tsx",
+      "source_lines": 123,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_b53eb6713e37d.rs",
+      "rust_lines": 45,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/MemoryStep.tsx",
+      "source_lines": 113,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_b476dbe9d3b70.rs",
+      "rust_lines": 8,
+      "source": "src/components/DevChannelsDialog.tsx",
+      "source_lines": 105,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_7433840558392.rs",
+      "rust_lines": 16,
+      "source": "src/components/InvalidSettingsDialog.tsx",
+      "source_lines": 89,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_ec56e2d844582.rs",
+      "rust_lines": 45,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/ColorStep.tsx",
+      "source_lines": 84,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_639c60e23091f.rs",
+      "rust_lines": 45,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/LocationStep.tsx",
+      "source_lines": 80,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_b9891a496c986.rs",
+      "rust_lines": 45,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/MethodStep.tsx",
+      "source_lines": 80,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_d64688e260f00.rs",
+      "rust_lines": 45,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/ToolsStep.tsx",
+      "source_lines": 61,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 0,
+      "rust": "src/generated_ports/p_70d76a64a3322.rs",
+      "rust_lines": 45,
+      "source": "src/components/agents/new-agent-creation/wizard-steps/ModelStep.tsx",
+      "source_lines": 52,
+      "view_export_unreachable": true
+    },
+    {
+      "null_expression_count": 18,
+      "rust": "src/generated_ports/p_bab2fac86d685.rs",
+      "rust_lines": 102,
+      "source": "src/ink/layout/geometry.ts",
+      "source_lines": 98,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 13,
+      "rust": "src/generated_ports/p_ab10542ccfa4c.rs",
+      "rust_lines": 73,
+      "source": "src/buddy/CompanionSprite.tsx",
+      "source_lines": 371,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 7,
+      "rust": "src/generated_ports/p_8882c41a85e4f.rs",
+      "rust_lines": 87,
+      "source": "src/utils/messages.ts",
+      "source_lines": 5513,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 7,
+      "rust": "src/generated_ports/p_9b038cbf2e98a.rs",
+      "rust_lines": 47,
+      "source": "src/ink/selection.ts",
+      "source_lines": 918,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 6,
+      "rust": "src/generated_ports/p_e0abda6bc6c38.rs",
+      "rust_lines": 28,
+      "source": "src/utils/proxy.ts",
+      "source_lines": 427,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_d6a11c5239e9b.rs",
+      "rust_lines": 43,
+      "source": "src/utils/sessionStorage.ts",
+      "source_lines": 5106,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 5,
+      "rust": "src/generated_ports/p_c67576a3324b2.rs",
+      "rust_lines": 39,
+      "source": "src/utils/forkedAgent.ts",
+      "source_lines": 690,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_2980dcfa0210a.rs",
+      "rust_lines": 20,
+      "source": "src/Tool.ts",
+      "source_lines": 793,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_971a6526ff4ab.rs",
+      "rust_lines": 27,
+      "source": "src/utils/cleanup.ts",
+      "source_lines": 603,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_9ae508cd79a96.rs",
+      "rust_lines": 44,
+      "source": "src/constants/product.ts",
+      "source_lines": 77,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_1f1e68eb35633.rs",
+      "rust_lines": 38,
+      "source": "src/ink/termio/ansi.ts",
+      "source_lines": 76,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 4,
+      "rust": "src/generated_ports/p_ffb259d974835.rs",
+      "rust_lines": 62,
+      "source": "src/components/permissions/FilePermissionDialog/ideDiffConfig.ts",
+      "source_lines": 43,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_875b44513014b.rs",
+      "rust_lines": 44,
+      "source": "src/components/ScrollKeybindingHandler.tsx",
+      "source_lines": 1012,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_75dd35b9b8459.rs",
+      "rust_lines": 22,
+      "source": "src/components/tasks/taskStatusUtils.tsx",
+      "source_lines": 107,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_43185acc13130.rs",
+      "rust_lines": 15,
+      "source": "src/components/Spinner/utils.ts",
+      "source_lines": 85,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 3,
+      "rust": "src/generated_ports/p_a3cea9130934b.rs",
+      "rust_lines": 24,
+      "source": "src/vim/motions.ts",
+      "source_lines": 83,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_e813a809bd066.rs",
+      "rust_lines": 16,
+      "source": "src/utils/plugins/schemas.ts",
+      "source_lines": 1682,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_ee9950d29aa12.rs",
+      "rust_lines": 18,
+      "source": "src/utils/plugins/mcpbHandler.ts",
+      "source_lines": 969,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_191decb55832d.rs",
+      "rust_lines": 29,
+      "source": "src/utils/plugins/marketplaceHelpers.ts",
+      "source_lines": 593,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_955a1746e1a31.rs",
+      "rust_lines": 18,
+      "source": "src/utils/suggestions/commandSuggestions.ts",
+      "source_lines": 568,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_b9afda97bc9a8.rs",
+      "rust_lines": 13,
+      "source": "src/utils/statsCache.ts",
+      "source_lines": 435,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_1b3d61a277808.rs",
+      "rust_lines": 51,
+      "source": "src/types/textInputTypes.ts",
+      "source_lines": 388,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_a1327fd797f0d.rs",
+      "rust_lines": 34,
+      "source": "src/utils/swarm/backends/types.ts",
+      "source_lines": 312,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 2,
+      "rust": "src/generated_ports/p_f4d7ac6b4c8c0.rs",
+      "rust_lines": 65,
+      "source": "src/vim/types.ts",
+      "source_lines": 200,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_c4d0f9a46fa38.rs",
+      "rust_lines": 10,
+      "source": "src/utils/powershell/parser.ts",
+      "source_lines": 1805,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_bb3d7b51ba520.rs",
+      "rust_lines": 19,
+      "source": "src/utils/plugins/zipCache.ts",
+      "source_lines": 407,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_6060310ec2cbf.rs",
+      "rust_lines": 10,
+      "source": "src/utils/plugins/pluginStartupCheck.ts",
+      "source_lines": 342,
+      "view_export_unreachable": false
+    },
+    {
+      "null_expression_count": 1,
+      "rust": "src/generated_ports/p_6ae88763d0d0f.rs",
+      "rust_lines": 10,
+      "source": "src/utils/aws.ts",
+      "source_lines": 75,
+      "view_export_unreachable": false
+    }
+  ],
+  "schema": "port-stubs/v1",
+  "total_null_expressions": 852,
+  "unreachable_views": 146,
+  "with_null": 152
+}

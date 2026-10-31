@@ -24,12 +24,13 @@ pub struct HttpClient {
     pub instructions: Option<String>,
     pub tools_changed: bool,
     pub resource_updates: Vec<Value>,
+    resource_update_bytes: usize,
     root: PathBuf,
     last_event_id: Option<HeaderValue>,
 }
 /// Execute a configured credential helper once when opening a remote MCP connection.
 /// A failed helper must not disable the server: the static headers remain usable.
-async fn load_dynamic_headers(
+pub(crate) async fn load_dynamic_headers(
     config: &McpServerConfig,
     url: &Url,
     root: &Path,
@@ -71,7 +72,64 @@ async fn load_dynamic_headers(
     serde_json::from_str(&output.stdout).ok()
 }
 
+// MCP tools may return large results, but a malformed peer must never force
+// unbounded in-memory buffering of JSON or an unterminated SSE frame.
+const MAX_MCP_CONTROL_BYTES: usize = 2 * 1024 * 1024;
+const MAX_MCP_TOOL_BYTES: usize = 128 * 1024 * 1024;
+const MAX_MCP_PENDING_RESOURCE_EVENTS: usize = 256;
+const MAX_MCP_PENDING_RESOURCE_BYTES: usize = 8 * 1024 * 1024;
+
+fn append_resource_update(
+    queue: &mut Vec<Value>,
+    queued_bytes: &mut usize,
+    event: Value,
+) -> Result<()> {
+    let size = serde_json::to_vec(&event)?.len();
+    let next_bytes = queued_bytes
+        .checked_add(size)
+        .context("MCP resource notification byte count overflow")?;
+    if queue.len() >= MAX_MCP_PENDING_RESOURCE_EVENTS || next_bytes > MAX_MCP_PENDING_RESOURCE_BYTES
+    {
+        bail!("MCP resource notification backlog full; drain pending updates before retrying");
+    }
+    queue.push(event);
+    *queued_bytes = next_bytes;
+    Ok(())
+}
+
+async fn bounded_json_response(mut response: reqwest::Response, limit: usize) -> Result<Value> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
+        bail!("MCP JSON response exceeds {limit} byte limit");
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if body
+            .len()
+            .checked_add(chunk.len())
+            .is_none_or(|size| size > limit)
+        {
+            bail!("MCP JSON response exceeds {limit} byte limit");
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&body).context("Invalid MCP JSON response")
+}
+
 impl HttpClient {
+    pub fn drain_resource_updates(&mut self) -> Vec<Value> {
+        self.resource_update_bytes = 0;
+        std::mem::take(&mut self.resource_updates)
+    }
+    fn queue_resource_update(&mut self, event: Value) -> Result<()> {
+        append_resource_update(
+            &mut self.resource_updates,
+            &mut self.resource_update_bytes,
+            event,
+        )
+    }
     pub async fn connect(config: &McpServerConfig) -> Result<Self> {
         let root = std::env::current_dir().context("MCP workspace directory unavailable")?;
         Self::connect_with_root(config, &root).await
@@ -106,6 +164,16 @@ impl HttpClient {
         for (key, value) in &dynamic_headers {
             merged.insert(key.to_ascii_lowercase(), value.as_str());
         }
+        crate::config::require_secure_credential_transport(
+            url.as_str(),
+            config
+                .headers_helper
+                .as_deref()
+                .is_some_and(|helper| !helper.trim().is_empty())
+                || merged
+                    .iter()
+                    .any(|(name, value)| crate::config::credential_header(name, value)),
+        )?;
         let mut headers = HeaderMap::new();
         for (key, value) in merged {
             let key = HeaderName::from_str(&key).context("Invalid MCP header name")?;
@@ -133,7 +201,7 @@ impl HttpClient {
                 HeaderValue::from_str(&expanded.expanded).context("Invalid MCP header value")?,
             );
         }
-        let client = Client::builder()
+        let client = crate::tls_ca::client_builder()?
             // Only bound connection establishment here. Request-specific
             // deadlines are enforced by the MCP manager; tools/call can
             // legitimately run far longer than discovery or initialization.
@@ -152,6 +220,7 @@ impl HttpClient {
             instructions: None,
             tools_changed: false,
             resource_updates: Vec::new(),
+            resource_update_bytes: 0,
             root: root.to_path_buf(),
             last_event_id: None,
         };
@@ -220,6 +289,11 @@ impl HttpClient {
     async fn post(&mut self, request: &Value, expect_response: bool) -> Result<Option<Value>> {
         let headers = self.request_headers();
         let is_tool_call = request.get("method").and_then(Value::as_str) == Some("tools/call");
+        let response_limit = if is_tool_call {
+            MAX_MCP_TOOL_BYTES
+        } else {
+            MAX_MCP_CONTROL_BYTES
+        };
         let mut reply = self
             .client
             .post(self.url.clone())
@@ -285,8 +359,8 @@ impl HttpClient {
                 received = received
                     .checked_add(chunk.len())
                     .context("MCP SSE response length overflow")?;
-                if !is_tool_call && received > 2 * 1024 * 1024 {
-                    bail!("MCP HTTP control response exceeds 2 MB")
+                if received > response_limit {
+                    bail!("MCP HTTP response exceeds {response_limit} byte limit")
                 }
                 pending.extend_from_slice(&chunk);
                 while let Some((end, separator_len)) = sse_event_boundary(&pending) {
@@ -310,7 +384,7 @@ impl HttpClient {
                                     | "notifications/resources/list_changed"
                             )
                         ) {
-                            self.resource_updates.push(event.clone());
+                            self.queue_resource_update(event.clone())?;
                         }
                         if event.get("id") == Some(id) {
                             return Ok(Some(event));
@@ -322,13 +396,7 @@ impl HttpClient {
             bail!("MCP SSE stream ended without matching RPC response")
         }
         if type_header.starts_with("application/json") {
-            let bytes = reply.bytes().await?;
-            if !is_tool_call && bytes.len() > 2 * 1024 * 1024 {
-                bail!("MCP HTTP control response exceeds 2 MB")
-            }
-            return Ok(Some(
-                serde_json::from_slice(&bytes).context("Invalid MCP JSON response")?,
-            ));
+            return Ok(Some(bounded_json_response(reply, response_limit).await?));
         }
         bail!("MCP HTTP response has unsupported content type")
     }
@@ -423,7 +491,7 @@ impl HttpClient {
                                 "notifications/resources/updated"
                                 | "notifications/resources/list_changed",
                             ) => {
-                                self.resource_updates.push(event);
+                                self.queue_resource_update(event)?;
                                 count += 1;
                             }
                             _ => {}
@@ -519,6 +587,79 @@ fn parse_sse(text: &str) -> Result<Vec<Value>> {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    #[test]
+    fn resource_notifications_have_count_and_byte_backpressure() {
+        let mut queue = Vec::new();
+        let mut queued_bytes = 0;
+        for _ in 0..MAX_MCP_PENDING_RESOURCE_EVENTS {
+            append_resource_update(&mut queue, &mut queued_bytes, json!({"method":"updated"}))
+                .unwrap();
+        }
+        assert!(append_resource_update(&mut queue, &mut queued_bytes, json!("next")).is_err());
+        assert_eq!(queue.len(), MAX_MCP_PENDING_RESOURCE_EVENTS);
+        queue.clear();
+        queued_bytes = 0;
+        assert!(append_resource_update(
+            &mut queue,
+            &mut queued_bytes,
+            json!("x".repeat(MAX_MCP_PENDING_RESOURCE_BYTES)),
+        )
+        .is_err());
+        assert!(queue.is_empty());
+        assert_eq!(queued_bytes, 0);
+        append_resource_update(&mut queue, &mut queued_bytes, json!({"method":"updated"})).unwrap();
+        assert_eq!(queue.len(), 1);
+    }
+    #[tokio::test]
+    async fn oversized_json_tool_result_is_bounded_before_body_read() {
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 2048];
+            let _ = socket.read(&mut request).await.unwrap();
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4096\r\nConnection: close\r\n\r\n").await.unwrap();
+        });
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .unwrap();
+        let err = bounded_json_response(response, 32).await.unwrap_err();
+        assert!(err.to_string().contains("exceeds 32 byte limit"));
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn streamed_json_tool_result_is_bounded_without_content_length() {
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 2048];
+            let _ = socket.read(&mut request).await.unwrap();
+            let payload = format!("{{\"message\":\"{}\"}}", "x".repeat(1000));
+            let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:X}\r\n{}\r\n0\r\n\r\n", payload.len(), payload);
+            socket.write_all(response.as_bytes()).await.unwrap();
+        });
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .unwrap();
+        let err = bounded_json_response(response, 64).await.unwrap_err();
+        assert!(err.to_string().contains("exceeds 64 byte limit"));
+        server.await.unwrap();
+    }
+
     fn config(url: String) -> McpServerConfig {
         McpServerConfig {
             id: "remote".into(),
@@ -904,7 +1045,28 @@ mod tests {
         assert!(
             format!("{:#}", HttpClient::connect(&c).await.err().unwrap()).contains("credentials")
         );
+        c.url = Some("http://example.com/mcp".into());
+        c.headers
+            .insert("Authorization".into(), "Bearer secret".into());
+        assert!(
+            format!("{:#}", HttpClient::connect(&c).await.err().unwrap())
+                .contains("must use HTTPS")
+        );
+        c.headers.clear();
+        c.headers.insert("X-Custom".into(), "${SECRET}".into());
+        assert!(
+            format!("{:#}", HttpClient::connect(&c).await.err().unwrap())
+                .contains("must use HTTPS")
+        );
+        c.headers.clear();
+        c.headers_helper = Some("printf '{}'".into());
+        assert!(
+            format!("{:#}", HttpClient::connect(&c).await.err().unwrap())
+                .contains("must use HTTPS")
+        );
+        c.headers_helper = None;
         c.url = Some("http://127.0.0.1:1/mcp".into());
+        c.headers.clear();
         c.headers.insert("Mcp-Session-Id".into(), "forged".into());
         assert!(
             format!("{:#}", HttpClient::connect(&c).await.err().unwrap())

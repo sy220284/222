@@ -1,16 +1,18 @@
+mod advisor_command;
 mod agent;
 mod agent_definition;
 mod array_utils;
 mod ask_user_question;
 mod background;
 mod bash_permission_suggestions;
-mod bridge_core;
-mod bridge_inbound_attachments;
 mod browser_launcher;
+mod chatgpt_plan;
 mod cleanup_registry;
 mod collections;
 mod command_lifecycle;
 mod command_manifest;
+mod compact_command_source;
+mod compact_source_prompts;
 mod compat_helpers;
 mod config;
 mod context_usage;
@@ -18,6 +20,11 @@ mod control_message_compat;
 mod conversation_context;
 mod copy_response;
 mod cost;
+mod cross_project_resume;
+mod custom_multi_select_source;
+mod custom_select_exports;
+mod custom_select_input_source;
+mod custom_select_source;
 mod deep_link;
 mod deep_link_banner;
 mod deep_link_protocol;
@@ -25,18 +32,25 @@ mod deep_link_register;
 mod detect_repository;
 mod diagnostics;
 mod diff_view;
+mod display_format;
+mod editor_runtime;
 mod env_runtime;
 mod env_validation;
 mod event_signal;
 mod exec_file;
 mod exec_sync_compat;
+mod file_changed_watcher;
 mod files_context;
+mod fs_operations;
+mod gemini_content;
 mod gemini_sse;
+mod generated_files;
 mod generated_ports;
 mod git_config_parser;
 mod git_filesystem;
 mod git_ignore;
 mod git_workflows;
+
 mod github_repo_mapping;
 mod history;
 mod hooks;
@@ -45,16 +59,28 @@ mod ink_constants;
 mod json_read;
 mod json_runtime;
 mod keybindings;
+mod local_advanced_keywords;
+mod local_advanced_workflows;
+mod local_attachments;
+mod local_triggers;
 mod lsp;
 mod marketplace_registry;
 mod marketplace_source;
 mod mcp;
+mod mcp_cli;
+mod mcp_content;
 mod mcp_http;
+mod mcp_instructions_delta;
+mod mcp_legacy_sse;
+mod mcp_output_storage;
 mod mcp_policy;
 mod mcp_prompt;
 mod memory;
 mod memory_age;
+mod memory_command;
+mod memory_extraction;
 mod message_queue;
+mod model_catalog;
 mod multimodal;
 mod ndjson;
 mod notebook;
@@ -70,7 +96,11 @@ mod permission_settings;
 mod plain_text_storage;
 mod platform_source_utilities;
 mod plugin_commands;
+mod plugin_error_messages_source;
+mod plugin_lsp;
 mod plugin_manager;
+mod plugin_pagination_source;
+mod plugin_trust_warning_source;
 mod plugins;
 mod portable_async_runtime;
 mod portable_configuration;
@@ -82,36 +112,46 @@ mod portable_settings_runtime;
 mod portable_source_utils;
 mod portable_ui_runtime;
 mod powershell_permission_matching;
+mod process_text_prompt;
 mod project_init;
 mod project_onboarding;
 mod prompt_history;
 mod prompt_runtime;
 mod protocol;
 mod provider;
+mod query_config;
 mod query_guard;
+mod query_token_budget;
 mod queue_journal;
 mod queued_prompt_batch;
 mod reactive_store;
 mod release_notes;
+mod render_options;
 mod runtime_contracts;
 mod sdk_queue;
+mod sdk_system_init;
 mod search;
 mod secure_fallback;
 mod semantic_inputs;
 mod semantic_session_search;
 mod session;
+mod session_color;
 mod session_control;
+mod shell_history_completion;
 mod shell_quote;
 mod shell_runtime;
 mod side_question;
 mod skill_arguments;
 mod slash_command;
 mod sleep_helpers;
+mod source_prompt_catalog;
 mod source_semantics;
 mod source_semantics_osc;
 mod source_semantics_types;
 mod sse;
 mod stats;
+mod statusline_command_source;
+mod streaming_tool_executor;
 mod subprocess_env;
 mod task;
 mod task_events;
@@ -120,17 +160,24 @@ mod task_guards;
 mod task_output_format;
 mod team_mailbox;
 mod team_registry;
+mod teammate_context;
+mod terminal_input;
 mod terminal_launcher;
 #[cfg(test)]
 mod test_http;
+mod tls_ca;
 mod tool_errors;
 mod tool_metrics;
 mod tool_names;
+mod tool_orchestration;
+mod tool_pool_merge;
 mod tool_search;
 mod tools;
 mod transcript_search;
 mod unicode_sanitization;
 mod version;
+mod vim;
+mod vim_mode_source;
 mod webfetch;
 mod websearch;
 mod workspace_dirs;
@@ -167,6 +214,14 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
+    /// Source-compatible one-shot prompt: -p "prompt" / --print "prompt".
+    #[arg(short = 'p', long = "print", global = true, num_args = 0..=1, default_missing_value = "-")]
+    print: Option<String>,
+
+    /// Print plain text, one JSON result, or an ordered JSON event stream.
+    #[arg(long = "output-format", global = true, value_enum, default_value_t = OutputFormat::Text)]
+    output_format: OutputFormat,
+
     /// Provider id from config.json (e.g. local, openai, gemini)
     #[arg(long, global = true)]
     provider: Option<String>,
@@ -190,6 +245,13 @@ struct Cli {
     /// Limit model/tool cycles per request
     #[arg(long, global = true, default_value_t = 24)]
     max_steps: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum OutputFormat {
+    Text,
+    Json,
+    StreamJson,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -262,6 +324,11 @@ enum Commands {
     Init,
     /// Inspect local installation, settings, Git and MCP availability offline
     Doctor,
+    /// Manage MCP server configuration without connecting to the server
+    Mcp {
+        #[command(subcommand)]
+        action: mcp_cli::McpCommand,
+    },
     /// Set up project instructions, skills and hooks through guided model tools
     ProjectInit,
     /// Validate or save a user-defined multi-model agent from JSON
@@ -383,9 +450,31 @@ enum Commands {
     /// Clear screen and supported terminal scrollback
     ClearScreen,
     /// Show configured providers and active default without connecting to them
-    Models,
+    Models {
+        #[command(subcommand)]
+        action: Option<model_catalog::ModelAction>,
+    },
+    /// Manage official Sign in with ChatGPT and subscription usage.
+    Chatgpt {
+        #[command(subcommand)]
+        action: chatgpt_plan::AccountAction,
+    },
     /// Perform a local PR review through the selected model and GitHub CLI
     Review { pr_number: Option<u64> },
+    /// Deep source-based review using the active API model and local tools
+    UltraReview { pr_number: Option<u64> },
+    /// Detailed read-only project plan using the active API model
+    UltraPlan {
+        /// Optional user-approved draft to refine using the same model
+        #[arg(long)]
+        seed_plan: Option<String>,
+        objective: Vec<String>,
+    },
+    /// Manage user-owned, explicitly invoked local task triggers
+    Trigger {
+        #[command(subcommand)]
+        action: LocalTriggerAction,
+    },
     /// Review staged/unstaged changes and create a new Git commit
     Commit { instructions: Option<String> },
     /// Commit, push and create/update a Chinese pull request
@@ -423,6 +512,24 @@ enum Commands {
         #[arg(long)]
         resume: Option<String>,
     },
+}
+
+#[derive(Subcommand, Debug)]
+enum LocalTriggerAction {
+    /// Save or replace a reusable local task
+    Set { name: String, prompt: Vec<String> },
+    /// Create only if the task does not yet exist
+    Create { name: String, prompt: Vec<String> },
+    /// Update the prompt of an existing saved task
+    Update { name: String, prompt: Vec<String> },
+    /// Read the saved prompt of a task
+    Get { name: String },
+    /// Execute an existing saved task through the active Agent and model
+    Run { name: String },
+    /// Show saved local trigger names
+    List,
+    /// Delete a local trigger
+    Delete { name: String },
 }
 
 fn main() -> Result<()> {
@@ -476,9 +583,156 @@ fn sdk_message_id(external: &str, session_id: &str) -> uuid::Uuid {
     uuid::Uuid::from_bytes(bytes)
 }
 
+// src/commands/output-style/output-style.tsx::call. Keep the legacy
+// command's system notice in one place; config changes apply next session.
+const LEGACY_OUTPUT_STYLE_NOTICE: &str = "/output-style has been deprecated. Use /config to change your output style, or set it in your settings file. Changes take effect on the next session.";
+
+/// Source entrypoints/cli.tsx and main.tsx default to an interactive REPL.
+/// Only recover the *missing-subcommand* parser case: explicit commands,
+/// invalid flags, --version and --help retain clap's original diagnostics.
+fn parse_cli_with_default_chat(
+    mut args: Vec<std::ffi::OsString>,
+) -> std::result::Result<Cli, clap::Error> {
+    match Cli::try_parse_from(args.clone()) {
+        Err(error)
+            if matches!(
+                error.kind(),
+                clap::error::ErrorKind::MissingSubcommand
+                    | clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            ) =>
+        {
+            // Insert the implicit subcommand before global options. Appending
+            // it could be swallowed as the optional value of bare '-p',
+            // leaving a missing subcommand instead of reading stdin.
+            args.insert(1, std::ffi::OsString::from("chat"));
+            Cli::try_parse_from(args)
+        }
+        result => result,
+    }
+}
+
+/// Map the original single-prompt CLI into the existing Run execution
+/// path. This keeps permissions, session ownership and API processing shared
+/// across 'run PROMPT' and '-p PROMPT', rather than introducing a second actor.
+fn normalize_print_cli(mut cli: Cli) -> Result<Cli> {
+    if let Some(prompt) = cli.print.take() {
+        if !matches!(
+            &cli.command,
+            Commands::Chat {
+                resume: None,
+                prefill: None,
+                ..
+            }
+        ) {
+            bail!("--print cannot be combined with a separate command or restored chat");
+        }
+        cli.command = Commands::Run { prompt };
+    }
+    if cli.output_format != OutputFormat::Text && !matches!(cli.command, Commands::Run { .. }) {
+        bail!("--output-format requires a one-shot run or --print prompt");
+    }
+    Ok(cli)
+}
+
+#[cfg(test)]
+mod default_chat_cli_tests {
+    use super::*;
+
+    #[test]
+    fn source_print_alias_routes_to_run_and_stream_json_is_scoped() {
+        let plain =
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "-p".into(), "hello".into()])
+                .unwrap();
+        let normalized = normalize_print_cli(plain).unwrap();
+        assert!(matches!(normalized.command, Commands::Run { prompt } if prompt == "hello"));
+
+        let from_stdin = normalize_print_cli(
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "-p".into()]).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            from_stdin.command,
+            Commands::Run { prompt } if prompt == "-"
+        ));
+
+        let streamed = parse_cli_with_default_chat(vec![
+            "atlas-agent".into(),
+            "--print".into(),
+            "hello".into(),
+            "--output-format".into(),
+            "stream-json".into(),
+        ])
+        .unwrap();
+        let normalized = normalize_print_cli(streamed).unwrap();
+        assert_eq!(normalized.output_format, OutputFormat::StreamJson);
+        assert!(matches!(normalized.command, Commands::Run { .. }));
+
+        let incompatible = parse_cli_with_default_chat(vec![
+            "atlas-agent".into(),
+            "--output-format".into(),
+            "json".into(),
+            "version".into(),
+        ])
+        .unwrap();
+        assert!(normalize_print_cli(incompatible).is_err());
+    }
+
+    #[test]
+    fn invoking_without_subcommand_enters_chat_and_preserves_global_options() {
+        let no_args = parse_cli_with_default_chat(vec!["atlas-agent".into()]).unwrap();
+        assert!(matches!(no_args.command, Commands::Chat { .. }));
+        let globals = parse_cli_with_default_chat(vec![
+            "atlas-agent".into(),
+            "--workspace".into(),
+            ".".into(),
+            "--max-steps".into(),
+            "3".into(),
+        ])
+        .unwrap();
+        assert!(matches!(globals.command, Commands::Chat { .. }));
+        assert_eq!(globals.max_steps, 3);
+        let explicit =
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "version".into()]).unwrap();
+        assert!(matches!(explicit.command, Commands::Version));
+    }
+
+    #[test]
+    fn unsupported_arguments_still_fail_before_startup() {
+        let error =
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "--unknown-option".into()])
+                .unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
+        let help =
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "--help".into()]).unwrap_err();
+        assert_eq!(help.kind(), clap::error::ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn structured_output_payload_accepts_json_and_rejects_prose() {
+        let value = structured_output_payload("  {\"answer\": 42}  ").unwrap();
+        assert_eq!(value["answer"], 42);
+        let error = structured_output_payload("The answer is 42").unwrap_err();
+        assert!(
+            error.contains("StructuredOutput schema mismatch"),
+            "{error}"
+        );
+        assert!(error.contains("not valid JSON"), "{error}");
+    }
+}
+
 async fn run_cli() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = parse_cli_with_default_chat(std::env::args_os().collect())
+        .unwrap_or_else(|error| error.exit());
+    let cli = normalize_print_cli(cli)?;
+    // Doctor/version must work even with malformed user settings and no network.
+    if !matches!(cli.command, Commands::Doctor | Commands::Version) {
+        tls_ca::apply_user_startup_config()?;
+    }
     match &cli.command {
+        Commands::Chatgpt { action } => {
+            chatgpt_plan::run(action).await?;
+            return Ok(());
+        }
         Commands::ReleaseNotes => {
             let home = keybindings::config_home()?;
             let url = std::env::var("ATLAS_RELEASE_NOTES_URL").ok();
@@ -539,6 +793,11 @@ async fn run_cli() -> Result<()> {
                 ),
                 _ => bail!("Credential action must be read, write, delete, or status"),
             }
+            return Ok(());
+        }
+        Commands::Mcp { action } => {
+            let root = canonical_workspace(&cli.workspace)?;
+            println!("{}", mcp_cli::run(&root, action).await?);
             return Ok(());
         }
         Commands::Plugin { args } => {
@@ -1117,19 +1376,15 @@ async fn run_cli() -> Result<()> {
         match &cli.command {
             Commands::Sessions { query } => {
                 for item in session_control::search(&root, query.as_deref().unwrap_or(""))? {
-                    println!(
-                        "{}  {}  ({} messages)",
-                        item.id,
-                        item.display_title(),
-                        item.messages
-                    );
+                    println!("{}  {}  ({})", item.id, item.title, item.display_metadata());
                 }
                 return Ok(());
             }
             Commands::TranscriptSearch { session_id, query } => {
                 let session = session_control::resolve(&root, session_id)?;
                 for hit in
-                    transcript_search::TranscriptIndex::from_stored(&session.messages).find(query)
+                    transcript_search::TranscriptIndex::from_stored(&session.transcript_messages())
+                        .find(query)
                 {
                     println!("{}  {}  {}", hit.message_index, hit.role, hit.excerpt);
                 }
@@ -1154,7 +1409,11 @@ async fn run_cli() -> Result<()> {
         }
     }
     let mut config = Config::load()?;
-    if let Commands::Models = &cli.command {
+    if let Commands::Models { action } = &cli.command {
+        if let Some(action) = action {
+            model_catalog::run(action, &mut config).await?;
+            return Ok(());
+        }
         for profile in &config.providers {
             let default = if profile.id == config.default_provider {
                 " (default)"
@@ -1176,14 +1435,45 @@ async fn run_cli() -> Result<()> {
             semantic_session_search::search(&root, query, provider.as_ref(), &profile.model)
                 .await?;
         for item in matches {
-            println!(
-                "{}  {}  ({} messages)",
-                item.id,
-                item.display_title(),
-                item.messages
-            );
+            println!("{}  {}  ({})", item.id, item.title, item.display_metadata());
         }
         return Ok(());
+    }
+    if let Commands::Trigger { action } = &cli.command {
+        let workspace = canonical_workspace(&cli.workspace)?;
+        match action {
+            LocalTriggerAction::Set { name, prompt } => {
+                local_triggers::set(&workspace, name, &prompt.join(" "))?;
+                println!("Saved local trigger: {name}");
+                return Ok(());
+            }
+            LocalTriggerAction::Create { name, prompt } => {
+                local_triggers::create(&workspace, name, &prompt.join(" "))?;
+                println!("Created local trigger: {name}");
+                return Ok(());
+            }
+            LocalTriggerAction::Update { name, prompt } => {
+                local_triggers::change(&workspace, name, &prompt.join(" "))?;
+                println!("Updated local trigger: {name}");
+                return Ok(());
+            }
+            LocalTriggerAction::Get { name } => {
+                println!("{}", local_triggers::get(&workspace, name)?);
+                return Ok(());
+            }
+            LocalTriggerAction::List => {
+                for name in local_triggers::list(&workspace)? {
+                    println!("{name}");
+                }
+                return Ok(());
+            }
+            LocalTriggerAction::Delete { name } => {
+                local_triggers::delete(&workspace, name)?;
+                println!("Deleted local trigger: {name}");
+                return Ok(());
+            }
+            LocalTriggerAction::Run { .. } => {}
+        }
     }
     if cli.max_steps == 0 {
         bail!("--max-steps must be at least 1")
@@ -1209,7 +1499,9 @@ async fn run_cli() -> Result<()> {
         Commands::Chat {
             resume: Some(id), ..
         } => session_control::resolve(&root, id)?,
-        Commands::Sdk { resume: Some(id) } => Session::load(&root, id)?,
+        Commands::Sdk {
+            resume: Some(id), ..
+        } => Session::load(&root, id)?,
         _ => Session::fresh(),
     };
     // A managed/user disable flag is stronger than a CLI bypass request and
@@ -1261,10 +1553,12 @@ async fn run_cli() -> Result<()> {
     agent.set_model_prices(&config.model_prices);
     agent.set_permission_rules(&active_permission_rules)?;
     agent.set_search_backend(config.search_backend.clone());
-    let mut mcp_profiles = config.mcp_servers.clone();
+    let mut mcp_profiles = mcp_cli::active_servers(agent.workspace_root(), &config)?;
     mcp_profiles.extend(plugins.mcp_servers);
     agent.attach_mcp(&mcp_profiles).await?;
-    agent.attach_lsp(&config.lsp_servers).await?;
+    let mut lsp_profiles = config.lsp_servers.clone();
+    lsp_profiles.extend(plugins.lsp_servers);
+    agent.attach_lsp(&lsp_profiles).await?;
     let mut hooks = config.hooks.clone();
     hooks.extend(plugins.hooks);
     agent.attach_hooks(&hooks).await?;
@@ -1285,6 +1579,42 @@ async fn run_cli() -> Result<()> {
                 &pr_number.map(|n| n.to_string()).unwrap_or_default(),
             )?;
             agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+        }
+        Commands::UltraReview { pr_number } => {
+            let prompt =
+                local_advanced_workflows::review_prompt(agent.workspace_root(), *pr_number)?;
+            agent
+                .run_advanced(local_advanced_workflows::Kind::Review, &prompt)
+                .await
+                .map(|answer| println!("{answer}"))
+        }
+        Commands::UltraPlan {
+            objective,
+            seed_plan,
+        } => {
+            if objective.is_empty() && seed_plan.as_deref().unwrap_or("").trim().is_empty() {
+                println!("{}", local_advanced_workflows::plan_usage());
+                Ok(())
+            } else {
+                let prompt = local_advanced_workflows::plan_prompt_with_seed(
+                    agent.workspace_root(),
+                    &objective.join(" "),
+                    seed_plan.as_deref(),
+                )?;
+                agent
+                    .run_advanced(local_advanced_workflows::Kind::Plan, &prompt)
+                    .await
+                    .map(|answer| println!("{answer}"))
+            }
+        }
+        Commands::Trigger {
+            action: LocalTriggerAction::Run { name },
+        } => {
+            let prompt = local_triggers::get(agent.workspace_root(), name)?;
+            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+        }
+        Commands::Trigger { .. } => {
+            unreachable!("Local trigger management is handled before model creation")
         }
         Commands::Commit { instructions } => {
             let prompt = git_workflows::prompt(
@@ -1310,10 +1640,24 @@ async fn run_cli() -> Result<()> {
             } else {
                 prompt.clone()
             };
-            agent
-                .ask(&actual_prompt)
-                .await
-                .map(|answer| println!("{answer}"))
+            match cli.output_format {
+                OutputFormat::Text => agent
+                    .ask(&actual_prompt)
+                    .await
+                    .map(|answer| println!("{answer}")),
+                OutputFormat::Json => agent
+                    .ask(&actual_prompt)
+                    .await
+                    .map(|answer| print_json!(structured_result_event(&agent, &answer))),
+                OutputFormat::StreamJson => {
+                    agent.set_structured_output(true);
+                    print_json!(sdk_system_init::build_for_agent(&mut agent, &config)?);
+                    agent
+                        .ask(&actual_prompt)
+                        .await
+                        .map(|answer| print_json!(structured_result_event(&agent, &answer)))
+                }
+            }
         }
         Commands::ProjectInit => {
             let prompt = project_init::prompt(agent.workspace_root())?;
@@ -1451,17 +1795,38 @@ async fn chat(
         println!("{}", deep_link_banner::build_deep_link_banner(&banner));
     }
     let mut initial_prefill = prefill.map(str::to_owned);
+    // utils/hooks/fileChangedWatcher.ts: the interactive session watches the
+    // paths named by FileChanged hook matchers and surfaces hook messages at
+    // the next input boundary. Headless runs never start a watcher.
+    let mut file_changed_watcher =
+        file_changed_watcher::spawn(&agent.file_changed_rules(), agent.workspace_root())?;
     loop {
-        if let Some(ref suggested) = initial_prefill {
+        let prompt = if let Some(ref suggested) = initial_prefill {
             println!("Proposed prompt: {suggested}");
-            print!("atlas [Enter: use linked prompt; or type replacement]> ");
+            "atlas [Enter: use linked prompt; or type replacement]> ".to_owned()
         } else {
-            print!("atlas> ");
-        }
-        io::stdout().flush()?;
-        let mut line = String::new();
-        if io::stdin().read_line(&mut line)? == 0 {
-            break;
+            use std::io::IsTerminal as _;
+            session_color::prompt_prefix(agent.session_color(), io::stdout().is_terminal())
+        };
+        let mut entries: Vec<String> = prompt_history
+            .get_history()?
+            .into_iter()
+            .map(|entry| entry.display)
+            .collect();
+        let line = match terminal_input::read_prompt(
+            &prompt,
+            &mut entries,
+            config.editor_mode == "vim",
+            &mut prompt_history,
+        )? {
+            terminal_input::PromptRead::Line(line) => line,
+            terminal_input::PromptRead::Cancelled => continue,
+            terminal_input::PromptRead::Eof => break,
+        };
+        if let Some(watcher) = file_changed_watcher.as_mut() {
+            while let Ok(message) = watcher.messages.try_recv() {
+                println!("FileChanged: {message}");
+            }
         }
         let entry = if line.trim().is_empty() {
             initial_prefill.take().unwrap_or_default()
@@ -1484,6 +1849,29 @@ async fn chat(
             Some(format!("/{}{}", command.name, rest))
         });
         let input = normalized.as_deref().unwrap_or(input);
+        if input == "/advisor" || input.starts_with("/advisor ") {
+            let args = input.strip_prefix("/advisor").unwrap_or("").trim();
+            match advisor_command::execute(config, agent.profile(), args) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Cannot change advisor model: {error:#}"),
+            }
+            continue;
+        }
+        if input == "/memory" {
+            match memory_command::run(agent.workspace_root()) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Memory editing failed: {error:#}"),
+            }
+            continue;
+        }
+        if input == "/color" || input.starts_with("/color ") {
+            let color = input.strip_prefix("/color").unwrap_or("").trim();
+            match agent.set_session_color(color) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Cannot set session color: {error:#}"),
+            }
+            continue;
+        }
         if input == "/keybindings" || input.starts_with("/keybindings ") {
             let arg = input.strip_prefix("/keybindings").unwrap_or("").trim();
             let path = keybindings::keybindings_path(&keybindings::config_home()?);
@@ -1537,6 +1925,9 @@ async fn chat(
                 if raw_rule.is_empty() {
                     bail!("Missing permission rule, e.g. Bash(git status)");
                 }
+                // Check the exact user input before the parser can collapse
+                // malformed parentheses into a broader tool-wide rule.
+                permission_rules::validate_rule_input(raw_rule)?;
                 let rule = permission_rules::parse_rule(raw_rule);
                 let paths =
                     permission_settings::SettingsPaths::for_workspace(agent.workspace_root())?;
@@ -1665,41 +2056,66 @@ async fn chat(
             }
             continue;
         }
-        if let Some(name) = input.strip_prefix("/mcp enable ") {
-            let name = name.trim();
-            if name.is_empty() {
-                eprintln!("Usage: /mcp enable SERVER_NAME");
-            } else {
-                match agent.toggle_named_mcp(name, true).await {
-                    Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
-                    Err(error) => eprintln!("MCP enable failed: {error:#}"),
+        if let Some(raw) = input.strip_prefix("/mcp ") {
+            use generated_ports::p_7522da9606aa2::{
+                resolve_toggle, route_args, toggle_enabled_state, McpClient, McpRoute,
+                McpToggleOutcome,
+            };
+            // Keep the existing manual reconnect-failed shortcut; named
+            // reconnects and all enable/disable actions use the 2.1.88
+            // /mcp command route and target selection.
+            if raw.trim() != "reconnect" {
+                match route_args(Some(raw)) {
+                    McpRoute::Reconnect(name) => match agent.reconnect_named_mcp(&name).await {
+                        Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
+                        Err(error) => eprintln!("MCP reconnect failed: {error:#}"),
+                    },
+                    McpRoute::Toggle { action, target } => {
+                        let clients = agent
+                            .mcp_statuses()?
+                            .iter()
+                            .filter_map(|value| {
+                                Some(McpClient {
+                                    name: value.get("name")?.as_str()?.to_owned(),
+                                    ctype: value.get("status")?.as_str()?.to_owned(),
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        let (outcome, names) = resolve_toggle(&action, &target, &clients);
+                        let mut succeeded = 0;
+                        for name in &names {
+                            let client = clients
+                                .iter()
+                                .find(|client| &client.name == name)
+                                .with_context(|| format!("MCP toggle target {name:?} vanished"))?;
+                            let target_enabled = toggle_enabled_state(&action, &target, client);
+                            match agent.toggle_named_mcp(name, target_enabled).await {
+                                Ok(_) => succeeded += 1,
+                                Err(error) => eprintln!("MCP {action} {name} failed: {error:#}"),
+                            }
+                        }
+                        match outcome {
+                            McpToggleOutcome::AlreadyAll(message) => println!("{message}"),
+                            McpToggleOutcome::NotFound(message) => println!("{message}"),
+                            McpToggleOutcome::ToggledAll { enabled, .. } => {
+                                let action = if enabled { "Enabled" } else { "Disabled" };
+                                println!("{action} {succeeded} MCP server(s)");
+                            }
+                            McpToggleOutcome::ToggledOne { name, enabled } if succeeded == 1 => {
+                                let state = if enabled { "enabled" } else { "disabled" };
+                                println!("MCP server \"{name}\" {state}");
+                            }
+                            McpToggleOutcome::ToggledOne { .. } => {}
+                        }
+                    }
+                    McpRoute::Settings => {
+                        for status in agent.mcp_statuses()? {
+                            println!("{}", serde_json::to_string_pretty(&status)?);
+                        }
+                    }
                 }
+                continue;
             }
-            continue;
-        }
-        if let Some(name) = input.strip_prefix("/mcp disable ") {
-            let name = name.trim();
-            if name.is_empty() {
-                eprintln!("Usage: /mcp disable SERVER_NAME");
-            } else {
-                match agent.toggle_named_mcp(name, false).await {
-                    Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
-                    Err(error) => eprintln!("MCP disable failed: {error:#}"),
-                }
-            }
-            continue;
-        }
-        if let Some(name) = input.strip_prefix("/mcp reconnect ") {
-            let name = name.trim();
-            if name.is_empty() {
-                eprintln!("Usage: /mcp reconnect SERVER_NAME");
-            } else {
-                match agent.reconnect_named_mcp(name).await {
-                    Ok(status) => println!("{}", serde_json::to_string_pretty(&status)?),
-                    Err(error) => eprintln!("MCP reconnect failed: {error:#}"),
-                }
-            }
-            continue;
         }
         if let Some(raw) = input.strip_prefix("/mode set ") {
             let raw = raw.trim();
@@ -1785,6 +2201,14 @@ async fn chat(
                 println!("/stats                   report real local session usage and costs");
                 println!("/release-notes           show trusted cached release notes");
                 println!("/review [PR]             review a pull request through the active model");
+                println!("/ultrareview [PR]        deep local multi-angle code review");
+                println!("/ultraplan GOAL          detailed local read-only project planning");
+                println!("/trigger create NAME GOAL  create a new local task");
+                println!("/trigger get NAME          read a saved task");
+                println!("/trigger update NAME GOAL  update an existing local task");
+                println!("/trigger set NAME GOAL     save or replace a task for any model");
+                println!("/trigger run NAME        execute saved local task now");
+                println!("/trigger list|delete NAME  inspect or remove saved local tasks");
                 println!("/commit                  review changes and create a Git commit");
                 println!("/commit-push-pr          commit, push and create/update a Chinese PR");
                 println!("/history [query]         search saved prompt history");
@@ -1822,6 +2246,7 @@ async fn chat(
                 println!("/sessions --semantic QUERY use model-ranked session search");
                 println!("One-shot model search: atlas-agent semantic-sessions QUERY");
                 println!("/resume [TERM]           pick or directly resume a saved conversation");
+                println!("/resume --project PATH -- ID  get a safe command to resume another project's session");
                 println!("/rename [NAME]           rename conversation or generate a name using active model");
                 println!("/export [filename]       save full conversation to a local text file");
                 println!("Resume: atlas-agent chat --resume SESSION_ID");
@@ -1840,6 +2265,7 @@ async fn chat(
                 println!("/env [NAME=VALUE | -u NAME] configure environment for child commands");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
+                println!("/memory                  edit user, project, or existing local auto-memory files");
                 println!("/commands                list migrated command registration metadata");
                 println!("@teammate MESSAGE        send directly to active team mailbox");
                 println!("/shell-spec [name]       show registered shell command specs");
@@ -1854,6 +2280,9 @@ async fn chat(
             "/shell-spec" => {
                 for spec in portable_missing_utilities::builtin_command_specs() {
                     println!("{} — {}", spec.name, spec.description);
+                    for argument in spec.arguments {
+                        println!("  {} — {}", argument.name, argument.description);
+                    }
                 }
                 continue;
             }
@@ -2018,13 +2447,12 @@ async fn chat(
             }
             "/sessions" => {
                 for item in agent.list_sessions()? {
-                    println!(
-                        "{}  {}  ({} messages)",
-                        item.id,
-                        item.display_title(),
-                        item.messages
-                    );
+                    println!("{}  {}  ({})", item.id, item.title, item.display_metadata());
                 }
+                continue;
+            }
+            "/vim" => {
+                println!("{}", vim_mode_source::toggle_editor_mode(config)?);
                 continue;
             }
             "/mode" => {
@@ -2035,7 +2463,7 @@ async fn chat(
                 println!("{}", agent.background_tasks()?);
                 continue;
             }
-            "/mcp" | "/mcp status" => {
+            "/mcp" => {
                 for status in agent.mcp_statuses()? {
                     println!("{}", serde_json::to_string_pretty(&status)?);
                 }
@@ -2072,6 +2500,10 @@ async fn chat(
                 println!("{}", version::running_version());
                 continue;
             }
+            "/output-style" => {
+                println!("{}", LEGACY_OUTPUT_STYLE_NOTICE);
+                continue;
+            }
             "/cost" => {
                 println!("{}", agent.cost_summary());
                 continue;
@@ -2097,14 +2529,43 @@ async fn chat(
             }
             "/compact" => {
                 agent.compact_history().await?;
-                println!("Session context compacted.");
+                println!(
+                    "{}",
+                    compact_command_source::build_display_text(false, "ctrl+o", None, None)
+                );
                 continue;
             }
             _ => {}
         }
+        // Message-selector equivalent for local terminal users: indices are
+        // zero-based in the current model-visible context, as in 2.1.88.
+        if let Some(selection) = input
+            .strip_prefix("/compact from ")
+            .or_else(|| input.strip_prefix("/compact up_to "))
+        {
+            let direction = if input.starts_with("/compact from ") {
+                compact_source_prompts::CompactDirection::From
+            } else {
+                compact_source_prompts::CompactDirection::UpTo
+            };
+            let pivot = selection.trim().parse::<usize>().context(
+                "Partial compact requires a zero-based message index: /compact from 2 or /compact up_to 2",
+            )?;
+            agent
+                .compact_history_partial(pivot, direction, None)
+                .await?;
+            println!(
+                "{}",
+                compact_command_source::build_display_text(false, "ctrl+o", None, None)
+            );
+            continue;
+        }
         if let Some(instructions) = input.strip_prefix("/compact ") {
             agent.compact_history_custom(instructions).await?;
-            println!("Session context compacted.");
+            println!(
+                "{}",
+                compact_command_source::build_display_text(false, "ctrl+o", None, None)
+            );
             continue;
         }
         if input == "/sessions --semantic" || input.starts_with("/sessions --semantic ") {
@@ -2544,8 +3005,82 @@ async fn chat(
             }
             continue;
         }
-        if input == "/resume" || input.starts_with("/resume ") {
-            let query = input.trim_start_matches("/resume").trim();
+        if let Some(query) = input
+            .strip_prefix("/resume")
+            .or_else(|| input.strip_prefix("/continue"))
+            .filter(|tail| tail.is_empty() || tail.starts_with(' '))
+        {
+            let mut query = query.trim();
+            // Source: utils/crossProjectResume.ts::checkCrossProjectResume.
+            // A cross-project path never causes a hidden CWD/agent switch:
+            // display a shell-safe invocation to resume it locally.
+            if let Some(spec) = query.strip_prefix("--project ") {
+                let external = (|| -> Result<(std::path::PathBuf, &str)> {
+                    let (path, selector) = spec
+                        .split_once(" -- ")
+                        .context("Usage: /resume --project PROJECT_PATH -- SESSION_ID")?;
+                    if path.trim().is_empty() || selector.trim().is_empty() {
+                        bail!("Project path and session selector are required");
+                    }
+                    let root = std::path::Path::new(path.trim())
+                        .canonicalize()
+                        .with_context(|| {
+                            format!("Project directory unavailable: {}", path.trim())
+                        })?;
+                    if !root.is_dir() {
+                        bail!("Project must be a directory");
+                    }
+                    Ok((root, selector.trim()))
+                })();
+                match external {
+                    Ok((project, selector)) if project == agent.workspace_root() => {
+                        query = selector;
+                    }
+                    Ok((project, selector)) => {
+                        let worktrees =
+                            cross_project_resume::active_worktree_paths(agent.workspace_root())
+                                .await;
+                        let worktrees = match worktrees {
+                            Ok(paths) => paths,
+                            Err(error) => {
+                                eprintln!("Could not inspect Git worktrees: {error:#}");
+                                continue;
+                            }
+                        };
+                        let location = cross_project_resume::check_cross_project_resume(
+                            agent.workspace_root(),
+                            Some(&project),
+                            true,
+                            &worktrees,
+                            selector,
+                        );
+                        match location {
+                            cross_project_resume::ResumeLocation::AnotherProject {
+                                command,
+                                ..
+                            } => {
+                                println!("Resume in the other project using: {command}");
+                            }
+                            cross_project_resume::ResumeLocation::SameRepositoryWorktree {
+                                ..
+                            } => {
+                                println!(
+                                    "Resume in that worktree using: {}",
+                                    cross_project_resume::resume_command(&project, selector)
+                                );
+                            }
+                            cross_project_resume::ResumeLocation::Current => {
+                                unreachable!("Different canonical project path was validated above")
+                            }
+                        }
+                        continue;
+                    }
+                    Err(error) => {
+                        eprintln!("Resume selection failed: {error:#}");
+                        continue;
+                    }
+                }
+            }
             let selection = (|| -> Result<Option<String>> {
                 if !query.is_empty() {
                     return Ok(Some(query.to_owned()));
@@ -2751,6 +3286,51 @@ async fn chat(
             println!("Model: {} / {}", agent.profile().id, agent.profile().model);
             continue;
         }
+        if let Some(rest) = input.strip_prefix("/trigger ") {
+            let mut parts = rest.trim().splitn(3, char::is_whitespace);
+            let action = parts.next().unwrap_or("");
+            let name = parts.next().unwrap_or("").trim();
+            let tail = parts.next().unwrap_or("").trim();
+            match action {
+                "list" if name.is_empty() => match local_triggers::list(agent.workspace_root()) {
+                    Ok(names) => {
+                        for name in names {
+                            println!("{name}");
+                        }
+                    }
+                    Err(error) => eprintln!("Cannot list triggers: {error:#}"),
+                },
+                "set" => match local_triggers::set(agent.workspace_root(), name, tail) {
+                    Ok(()) => println!("Saved local trigger: {name}"),
+                    Err(error) => eprintln!("Cannot save trigger: {error:#}"),
+                },
+                "create" => match local_triggers::create(agent.workspace_root(), name, tail) {
+                    Ok(()) => println!("Created local trigger: {name}"),
+                    Err(error) => eprintln!("Cannot create trigger: {error:#}"),
+                },
+                "update" => match local_triggers::change(agent.workspace_root(), name, tail) {
+                    Ok(()) => println!("Updated local trigger: {name}"),
+                    Err(error) => eprintln!("Cannot update trigger: {error:#}"),
+                },
+                "get" => match local_triggers::get(agent.workspace_root(), name) {
+                    Ok(prompt) => println!("{prompt}"),
+                    Err(error) => eprintln!("Cannot read trigger: {error:#}"),
+                },
+                "delete" => match local_triggers::delete(agent.workspace_root(), name) {
+                    Ok(()) => println!("Deleted local trigger: {name}"),
+                    Err(error) => eprintln!("Cannot delete trigger: {error:#}"),
+                },
+                "run" => match local_triggers::get(agent.workspace_root(), name) {
+                    Ok(prompt) => match agent.ask(&prompt).await {
+                        Ok(answer) => println!("{answer}"),
+                        Err(error) => eprintln!("Trigger failed: {error:#}"),
+                    },
+                    Err(error) => eprintln!("Cannot run trigger: {error:#}"),
+                },
+                _ => eprintln!("Usage: /trigger create NAME GOAL | get NAME | update NAME GOAL | run NAME | list | delete NAME"),
+            }
+            continue;
+        }
         if let Some((name, args)) = input
             .strip_prefix('/')
             .map(|t| t.split_once(' ').unwrap_or((t, "")))
@@ -2761,6 +3341,32 @@ async fn chat(
                 "commit-push-pr" => Some(git_workflows::Action::CommitPushPr),
                 _ => None,
             };
+            if name == "ultrareview" || name == "ultraplan" {
+                if name == "ultraplan" && args.trim().is_empty() {
+                    println!("{}", local_advanced_workflows::plan_usage());
+                    continue;
+                }
+                let prepared = if name == "ultrareview" {
+                    local_advanced_workflows::review_request(agent.workspace_root(), args)
+                } else {
+                    local_advanced_workflows::plan_prompt(agent.workspace_root(), args)
+                };
+                match prepared {
+                    Ok(prompt) => {
+                        let kind = if name == "ultraplan" {
+                            local_advanced_workflows::Kind::Plan
+                        } else {
+                            local_advanced_workflows::Kind::Review
+                        };
+                        match agent.run_advanced(kind, &prompt).await {
+                            Ok(answer) => println!("{answer}"),
+                            Err(error) => eprintln!("Error: {error:#}"),
+                        }
+                    }
+                    Err(error) => eprintln!("Cannot prepare /{name}: {error:#}"),
+                }
+                continue;
+            }
             if let Some(action) = action {
                 match git_workflows::prompt(action, agent.workspace_root(), args) {
                     Ok(prompt) => match agent.ask(&prompt).await {
@@ -2821,6 +3427,35 @@ async fn chat(
                 }
             }
         }
+        // The original 2.1.88 keyword.ts recognizes standalone launch
+        // directives in ordinary text, but ignores quoted references, paths,
+        // switches, questions and slash commands. Respect the same boundaries
+        // for the provider-neutral local advanced workflows.
+        if let Some(goal) = local_advanced_keywords::replace_ultraplan_keyword(input) {
+            if goal.trim().is_empty() {
+                println!("Usage: /ultraplan GOAL");
+                continue;
+            }
+            match local_advanced_workflows::plan_prompt(agent.workspace_root(), &goal) {
+                Ok(prompt) => {
+                    onboarding.maybe_mark_complete()?;
+                    match agent
+                        .run_advanced(local_advanced_workflows::Kind::Plan, &prompt)
+                        .await
+                    {
+                        Ok(answer) => println!("{answer}"),
+                        Err(error) => eprintln!("Local UltraPlan failed: {error:#}"),
+                    }
+                }
+                Err(error) => eprintln!("Cannot prepare UltraPlan: {error:#}"),
+            }
+            continue;
+        }
+        // keyword.ts makes ultrareview a visual suggestion only. The user
+        // must explicitly invoke /ultrareview; ordinary requests stay ordinary.
+        if let Some(hint) = local_advanced_workflows::interactive_review_hint(input) {
+            eprintln!("{hint}");
+        }
         // The original marks completion on prompt submission, not on a
         // successful model response; local project instructions may have
         // been created by the user outside this chat.
@@ -2838,6 +3473,33 @@ async fn chat(
 /// Each SDK model turn can be interrupted while the input reader continues
 /// accepting requests. Dropping the Agent future stops the active provider
 /// request and propagates cancellation into any awaited tool or hook future.
+/// Replace the last SDK text block without dropping other text or images.
+fn sdk_replace_last_text(input: &mut multimodal::Input, replacement: String) {
+    if let Some(blocks) = input.blocks.as_mut() {
+        if let Some(last_text) = blocks
+            .iter_mut()
+            .rev()
+            .find(|block| block["type"] == "text")
+        {
+            last_text["text"] = json!(replacement);
+        }
+        input.preview = blocks
+            .iter()
+            .map(|block| match block["type"].as_str() {
+                Some("text") => block["text"].as_str().unwrap_or("").to_owned(),
+                Some("image") => format!(
+                    "[image: {}]",
+                    block["mime_type"].as_str().unwrap_or("unknown")
+                ),
+                _ => String::new(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+    } else {
+        input.preview = replacement;
+    }
+}
+
 async fn sdk_interruptible_turn(
     agent: &mut Agent,
     prompt: &str,
@@ -2845,23 +3507,84 @@ async fn sdk_interruptible_turn(
     message_id: Option<uuid::Uuid>,
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
+    advanced_kind: Option<local_advanced_workflows::Kind>,
 ) -> Result<String> {
     let mut observer = interrupts.clone();
+    // Capture the session before the select borrows Agent mutably; an SDK
+    // interrupt must publish a terminal workflow state after dropping the
+    // in-flight request (which restores its temporary plan permission).
+    let session_id = agent.session_id();
+    let emit_interrupt = |phase: &str| {
+        if let Some(kind) = advanced_kind {
+            print_json!(json!({"type":"workflow","workflow":kind.as_str(),
+                "phase":phase,"session_id":session_id}));
+        }
+    };
     // The stdin reader may have parsed a later interrupt while the main loop
     // was preparing an earlier user event. Match event order, not scheduling.
     if *observer.borrow_and_update() > input_epoch {
+        emit_interrupt("cancelled");
         bail!("SDK request interrupted");
     }
     tokio::select! {
         biased;
         changed = observer.changed() => {
             if changed.is_ok() {
+                emit_interrupt("cancelled");
                 bail!("SDK request interrupted");
             }
+            emit_interrupt("failed");
             bail!("SDK interrupt control channel closed");
         }
-        response = agent.ask_with_blocks_for_message(prompt, blocks, message_id) => response,
+        response = async {
+            if let Some(kind) = advanced_kind {
+                agent.run_advanced_with_blocks(kind, prompt, blocks, message_id).await
+            } else {
+                agent.ask_with_blocks_for_message(prompt, blocks, message_id).await
+            }
+        } => response,
     }
+}
+
+/// Parse the final answer into the `structured_output` payload when a schema
+/// is active. Mirrors the SyntheticOutputTool runtime guard: a non-JSON
+/// answer fails with an explicit mismatch message instead of returning
+/// unstructured text (coreSchemas.ts `error_max_structured_output_retries`
+/// surfaces after server-side retries; the client guard fails fast).
+fn structured_output_payload(answer: &str) -> Result<serde_json::Value, String> {
+    serde_json::from_str::<serde_json::Value>(answer.trim()).map_err(|error| {
+        format!("StructuredOutput schema mismatch: final answer is not valid JSON ({error})")
+    })
+}
+
+/// Build the SDK result event for a completed turn. When an initialize
+/// jsonSchema is active, the final answer must parse as JSON and is attached
+/// as `structured_output` (coreSchemas.ts SDKResultSuccessSchema); a
+/// non-JSON answer fails loudly instead of returning unstructured text.
+/// JSON-Schema-level validation is enforced provider-side (OpenAI strict
+/// response_format / Gemini responseJsonSchema); the parse here is the
+/// client-side guard for providers without hard guarantees.
+fn structured_result_event(agent: &Agent, answer: &str) -> serde_json::Value {
+    let mut event = json!({
+        "type":"result","session_id":agent.session_id(),
+        "result":answer,"content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
+    });
+    if let Some(reason) = agent.last_turn_stop_reason() {
+        event["stop_reason"] = json!(reason);
+        event["subtype"] = json!("stopped");
+    }
+    if agent.sdk_response_schema().is_some() {
+        match structured_output_payload(answer) {
+            Ok(value) => event["structured_output"] = value,
+            Err(message) => {
+                return json!({
+                    "type":"error","session_id":agent.session_id(),
+                    "message":message
+                });
+            }
+        }
+    }
+    event
 }
 
 async fn sdk_run_initial_turn(
@@ -2869,11 +3592,8 @@ async fn sdk_run_initial_turn(
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
 ) {
-    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch).await {
-        Ok(answer) => print_json!(json!({
-            "type":"result","session_id":agent.session_id(),
-            "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
-        })),
+    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch, None).await {
+        Ok(answer) => print_json!(structured_result_event(agent, &answer)),
         Err(error) => print_json!(json!({
             "type":"error","session_id":agent.session_id(),
             "message":format!("{error:#}")
@@ -2935,16 +3655,12 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
     let mut queue = message_queue::Queue::default();
     queue.enable_journal(agent.workspace_root(), &agent.session_id())?;
     let mut query_guard = query_guard::QueryGuard::default();
-    let mut bridge_session = bridge_core::BridgeSession::new(agent.session_id());
     let mut sdk_initialized = false;
     let mut sdk_end_requested = false;
     let mut side_question_tasks = Vec::<tokio::task::JoinHandle<()>>::new();
     let (title_tx, mut title_rx) = tokio::sync::mpsc::unbounded_channel::<SdkTitleDone>();
     let mut title_pending = 0usize;
-    print_json!(json!({"type":"system","subtype":"init",
-        "session_id":agent.session_id(),"provider":agent.profile().id,
-        "model":agent.profile().model,
-        "usage_schema":runtime_contracts::empty_usage()}));
+    print_json!(sdk_system_init::build_for_agent(agent, config)?);
     // Source print.ts queues the SessionStart message and drains it only
     // after initialize has installed systemPrompt, agents and hooks. Eager
     // execution previously rejected a subsequent valid initialize request.
@@ -3008,6 +3724,30 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
             // AsyncHookRegistry response-delivery path.
             _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {
                 agent.pump_async_hook_events().await?;
+                // The 2.1.88 asyncRewake path injects a task notification
+                // between API rounds, or wakes the model when the SDK is idle.
+                if sdk_initialized && !initial_turn_pending && !sdk_end_requested {
+                    let notifications = agent.take_rewake_notifications();
+                    if !notifications.is_empty() {
+                        let prompt = notifications
+                            .iter()
+                            .map(|message| agent::wrap_in_system_reminder(message))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        let input_epoch = *interrupt_rx.borrow();
+                        match sdk_interruptible_turn(
+                            agent, &prompt, None, None, &interrupt_rx, input_epoch, None,
+                        ).await {
+                            Ok(answer) => {
+                                print_json!(structured_result_event(agent, &answer))
+                            }
+                            Err(error) => print_json!(json!({
+                                "type":"error","session_id":agent.session_id(),
+                                "message":format!("{error:#}")
+                            })),
+                        }
+                    }
+                }
                 continue;
             }
         };
@@ -3033,29 +3773,31 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     initial_turn_pending = false;
                     sdk_run_initial_turn(agent, &interrupt_rx, input_epoch).await;
                 }
-                // Keep bridge user content and UUID on the validated SDK path.
-                let bridge_user = multimodal::extract_inbound_user_fields(&event);
-                let prompt_value = event
+                // Accept both direct content and SDK message envelopes.
+                // Older SDK clients send message.content with replay metadata.
+                let raw_content = event
                     .get("content")
-                    .or_else(|| bridge_user.as_ref().map(|(content, _)| content));
-                let Some(prompt_value) = prompt_value else {
+                    .or_else(|| event.pointer("/message/content"));
+                let Some(raw_content) = raw_content else {
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
                 };
+                let content = match agent.attach_local_files(
+                    raw_content,
+                    event
+                        .get("file_attachments")
+                        .or_else(|| event.get("fileAttachments")),
+                ) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        print_json!(json!({"type":"error","message":format!("{error:#}")}));
+                        continue;
+                    }
+                };
+                let prompt_value = &content;
                 // First SDK user message implicitly initializes the stream,
                 // matching the original print.ts user-message path.
                 sdk_initialized = true;
-                let attachment_base = std::env::var("ATLAS_BRIDGE_ATTACHMENT_BASE_URL").ok();
-                let attachment_token = std::env::var("ATLAS_BRIDGE_ATTACHMENT_TOKEN").ok();
-                let resolved_content = bridge_inbound_attachments::resolve_and_prepend(
-                    &event,
-                    prompt_value,
-                    agent.workspace_root(),
-                    &agent.session_id(),
-                    attachment_base.as_deref().zip(attachment_token.as_deref()),
-                )
-                .await;
-                let prompt_value = &resolved_content;
                 if event.get("queued").and_then(Value::as_bool) == Some(true) {
                     let mut command: message_queue::Command = match serde_json::from_value(json!({
                         "value":prompt_value,"mode":"prompt","priority":event.get("priority")
@@ -3096,55 +3838,81 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         continue;
                     }
                 };
-                // processUserInput.ts:336-343,531-550 recognizes a slash
-                // command in the LAST text block, keeping earlier image/text
-                // blocks intact. A string-only check lost this SDK behavior.
+                // The original SDK user input and REPL both recognize advanced
+                // commands. Keep images, earlier blocks, UUID and skipSlashCommands
+                // intact, and apply plan permissions only for this one turn.
+                let mut advanced_kind: Option<local_advanced_workflows::Kind> = None;
                 if event.get("skipSlashCommands").and_then(Value::as_bool) != Some(true) {
+                    // processUserInput.ts:336-344 only interprets the LAST
+                    // input block when it is text. A trailing image must not
+                    // accidentally invoke a command in an earlier block.
                     let candidate = prompt_value.as_str().or_else(|| {
-                        prompt_value.as_array()?.last().and_then(|block| {
-                            if block.get("type").and_then(Value::as_str) == Some("text") {
-                                block.get("text").and_then(Value::as_str)
-                            } else {
-                                None
-                            }
-                        })
+                        let last = prompt_value.as_array()?.last()?;
+                        (last.get("type").and_then(Value::as_str) == Some("text"))
+                            .then(|| last.get("text").and_then(Value::as_str))
+                            .flatten()
                     });
-                    if let Some(parsed) = candidate.and_then(slash_command::parse_slash_command) {
-                        match expand_user_skill_prompt(
-                            agent,
-                            config,
-                            &parsed.command_name,
-                            &parsed.args,
-                            parsed.is_mcp,
+                    if let Some(candidate) = candidate {
+                        let seed_plan = event
+                            .get("seedPlan")
+                            .or_else(|| event.get("seed_plan"))
+                            .and_then(Value::as_str);
+                        if let Some(parsed) = slash_command::parse_slash_command(candidate) {
+                            if !parsed.is_mcp
+                                && parsed.command_name == "ultraplan"
+                                && parsed.args.trim().is_empty()
+                                && seed_plan.map(str::trim).unwrap_or("").is_empty()
+                            {
+                                print_json!(json!({
+                                    "type":"result","session_id":agent.session_id(),
+                                    "content":local_advanced_workflows::plan_usage(),
+                                    "usage":agent.usage(),"cost":agent.cost_ledger()
+                                }));
+                                continue;
+                            }
+                        }
+                        match local_advanced_workflows::sdk_user_prompt_with_seed(
+                            agent.workspace_root(),
+                            candidate,
+                            seed_plan,
                         ) {
                             Ok(Some(expanded)) => {
-                                if let Some(blocks) = user.blocks.as_mut() {
-                                    if let Some(last) = blocks.last_mut() {
-                                        last["text"] = json!(expanded);
-                                    }
-                                    user.preview = blocks
-                                        .iter()
-                                        .map(|block| match block["type"].as_str() {
-                                            Some("text") => {
-                                                block["text"].as_str().unwrap_or("").to_owned()
-                                            }
-                                            Some("image") => format!(
-                                                "[image: {}]",
-                                                block["mime_type"].as_str().unwrap_or("unknown")
-                                            ),
-                                            _ => String::new(),
-                                        })
-                                        .collect::<Vec<_>>()
-                                        .join("\n");
-                                } else {
-                                    user.preview = expanded;
-                                }
+                                advanced_kind = slash_command::parse_slash_command(candidate)
+                                    .and_then(|parsed| match parsed.command_name.as_str() {
+                                        "ultraplan" => Some(local_advanced_workflows::Kind::Plan),
+                                        "ultrareview" => {
+                                            Some(local_advanced_workflows::Kind::Review)
+                                        }
+                                        _ => None,
+                                    });
+                                sdk_replace_last_text(&mut user, expanded);
                             }
                             Ok(None) => {}
                             Err(error) => {
                                 print_json!(json!({"type":"error",
-                                    "message":format!("Cannot invoke skill command: {error:#}")}));
+                                    "message":format!("Cannot prepare SDK advanced workflow: {error:#}")}));
                                 continue;
+                            }
+                        }
+                        if advanced_kind.is_none() {
+                            if let Some(parsed) = slash_command::parse_slash_command(candidate) {
+                                match expand_user_skill_prompt(
+                                    agent,
+                                    config,
+                                    &parsed.command_name,
+                                    &parsed.args,
+                                    parsed.is_mcp,
+                                ) {
+                                    Ok(Some(expanded)) => {
+                                        sdk_replace_last_text(&mut user, expanded)
+                                    }
+                                    Ok(None) => {}
+                                    Err(error) => {
+                                        print_json!(json!({"type":"error",
+                                            "message":format!("Cannot invoke skill command: {error:#}")}));
+                                        continue;
+                                    }
+                                }
                             }
                         }
                     }
@@ -3175,13 +3943,11 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     message_id,
                     &interrupt_rx,
                     input_epoch,
+                    advanced_kind,
                 )
                 .await
                 {
-                    Ok(answer) => print_json!(json!({
-                        "type":"result","session_id":agent.session_id(),
-                        "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
-                    })),
+                    Ok(answer) => print_json!(structured_result_event(agent, &answer)),
                     Err(error) => print_json!(json!({
                         "type":"error","session_id":agent.session_id(),
                         "message":format!("{error:#}")
@@ -3347,7 +4113,6 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     config,
                     &event,
                     &mut queue,
-                    &mut bridge_session,
                     &mut sdk_initialized,
                     &mut sdk_end_requested,
                 )
@@ -3380,16 +4145,6 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 if action == "interrupt" {
                     send_control!(json!({"type":"control_response",
                         "action":"interrupt","ok":true}));
-                    continue;
-                }
-                if action.starts_with("bridge_") {
-                    let outcome = bridge_session.dispatch(action, &event);
-                    match outcome {
-                        Ok(result) => send_control!(json!({"type":"control_response",
-                            "action":action,"ok":true,"result":result})),
-                        Err(error) => send_control!(json!({"type":"control_response",
-                            "action":action,"ok":false,"error":format!("{error:#}")})),
-                    }
                     continue;
                 }
                 if action.starts_with("queue_") {
@@ -3502,15 +4257,42 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 let result = match action {
                     "clear" => agent.clear_history().await,
                     "compact" => {
-                        agent
-                            .compact_history_custom(
-                                event
-                                    .get("instructions")
-                                    .or_else(|| event.get("customInstructions"))
-                                    .and_then(Value::as_str)
-                                    .unwrap_or(""),
-                            )
-                            .await
+                        let instructions = event
+                            .get("instructions")
+                            .or_else(|| event.get("customInstructions"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        match event.get("direction").and_then(Value::as_str) {
+                            None => agent.compact_history_custom(instructions).await,
+                            Some("from" | "up_to") => {
+                                let direction = if event["direction"] == "from" {
+                                    compact_source_prompts::CompactDirection::From
+                                } else {
+                                    compact_source_prompts::CompactDirection::UpTo
+                                };
+                                match event
+                                    .get("pivotIndex")
+                                    .and_then(Value::as_u64)
+                                    .and_then(|n| usize::try_from(n).ok())
+                                {
+                                    Some(pivot) => {
+                                        agent
+                                            .compact_history_partial(
+                                                pivot,
+                                                direction,
+                                                Some(instructions),
+                                            )
+                                            .await
+                                    }
+                                    None => Err(anyhow::anyhow!(
+                                        "Partial compact requires nonnegative integer pivotIndex"
+                                    )),
+                                }
+                            }
+                            Some(other) => {
+                                Err(anyhow::anyhow!("Unsupported compact direction: {other}"))
+                            }
+                        }
                     }
                     "model" => {
                         let provider = event.get("provider").and_then(Value::as_str);
@@ -3647,7 +4429,6 @@ async fn sdk_nested_control(
     config: &Config,
     event: &Value,
     queue: &mut message_queue::Queue,
-    bridge_session: &mut bridge_core::BridgeSession,
     sdk_initialized: &mut bool,
     sdk_end_requested: &mut bool,
 ) -> Value {
@@ -3683,7 +4464,6 @@ async fn sdk_nested_control(
                 for key in [
                     "hooks",
                     "sdkMcpServers",
-                    "jsonSchema",
                     "promptSuggestions",
                     "agentProgressSummaries",
                 ] {
@@ -3733,15 +4513,42 @@ async fn sdk_nested_control(
                         })
                     })
                     .transpose()?;
-                if let Some(agents) = request.get("agents").filter(|value| !value.is_null()) {
-                    agent.set_sdk_agent_definitions(agents)?;
+                // Parse the new SDK agent catalog without mutating the active
+                // session. A schema error must not leak partially installed
+                // agents into a subsequent initialize attempt.
+                let prepared_agents = request
+                    .get("agents")
+                    .filter(|value| !value.is_null())
+                    .map(|definitions| agent.prepare_sdk_agent_definitions(definitions))
+                    .transpose()?;
+                let schema = request
+                    .get("jsonSchema")
+                    .filter(|value| !value.is_null())
+                    .cloned();
+                agent.set_sdk_response_schema(schema)?;
+                if let Some(prepared) = prepared_agents {
+                    agent.install_sdk_agent_definitions(prepared);
                 }
                 let agents = agent.sdk_agent_descriptors()?;
+                let available_output_styles =
+                    prompt_runtime::available_output_styles(agent.workspace_root())?;
+                let output_style =
+                    std::env::var("ATLAS_OUTPUT_STYLE").unwrap_or_else(|_| "default".to_owned());
+                // Existing lowercase environment values remain accepted; the
+                // SDK announces the canonical 2.1.88 built-in style names.
+                let output_style = match output_style.as_str() {
+                    "explanatory" => "Explanatory".to_owned(),
+                    "learning" => "Learning".to_owned(),
+                    _ => output_style,
+                };
+                if !available_output_styles.contains(&output_style) {
+                    anyhow::bail!("Configured output style is not available: {output_style}");
+                }
                 agent.set_sdk_system_prompts(system_prompt, append_system_prompt);
                 *sdk_initialized = true;
                 Ok(
-                    json!({"commands":commands,"agents":agents,"output_style":"default",
-                    "available_output_styles":["default"],"models":models,
+                    json!({"commands":commands,"agents":agents,"output_style":output_style,
+                    "available_output_styles":available_output_styles,"models":models,
                     "account":{},"pid":std::process::id()}),
                 )
             }
@@ -3950,9 +4757,6 @@ async fn sdk_nested_control(
                 // print.ts::stop_task acknowledges with an empty object;
                 // the task's lifecycle is delivered by the event above.
                 Ok(json!({}))
-            }
-            other if other.starts_with("bridge_") => {
-                bridge_session.dispatch(other, &Value::Object(request.clone()))
             }
             other => bail!("Unsupported SDK control subtype: {other}"),
         }

@@ -1,0 +1,271 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/cliArgs.ts",
+  "source_sha256": "e3a7e0f064bd5470f82419837cca0c06ef4513bfbf1145ebf9211a06b0df7b38",
+  "cases": [
+    {
+      "id": "flag-equals",
+      "kind": "normal",
+      "export": "eagerParseCliFlag",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1"
+      ],
+      "input": {
+        "flag": "--settings",
+        "argv": [
+          "atlas",
+          "--settings=/tmp/config.json"
+        ]
+      },
+      "expected": "/tmp/config.json"
+    },
+    {
+      "id": "flag-space",
+      "kind": "edge",
+      "export": "eagerParseCliFlag",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1"
+      ],
+      "input": {
+        "flag": "--settings",
+        "argv": [
+          "atlas",
+          "--settings",
+          "config.json"
+        ]
+      },
+      "expected": "config.json"
+    },
+    {
+      "id": "flag-missing",
+      "kind": "edge",
+      "export": "eagerParseCliFlag",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1"
+      ],
+      "input": {
+        "flag": "--config",
+        "argv": [
+          "atlas",
+          "--other",
+          "x"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "flag-no-value",
+      "kind": "edge",
+      "export": "eagerParseCliFlag",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1"
+      ],
+      "input": {
+        "flag": "--config",
+        "argv": [
+          "--config"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "flag-empty-equals",
+      "kind": "edge",
+      "export": "eagerParseCliFlag",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1"
+      ],
+      "input": {
+        "flag": "--config",
+        "argv": [
+          "--config="
+        ]
+      },
+      "expected": ""
+    },
+    {
+      "id": "flag-next-empty",
+      "kind": "edge",
+      "export": "eagerParseCliFlag",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1"
+      ],
+      "input": {
+        "flag": "--config",
+        "argv": [
+          "--config",
+          ""
+        ]
+      },
+      "expected": ""
+    },
+    {
+      "id": "flag-near-match",
+      "kind": "edge",
+      "export": "eagerParseCliFlag",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1"
+      ],
+      "input": {
+        "flag": "--config",
+        "argv": [
+          "--configuration=x",
+          "--config-abc"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "id": "flag-first-wins",
+      "kind": "edge",
+      "export": "eagerParseCliFlag",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1"
+      ],
+      "input": {
+        "flag": "--config",
+        "argv": [
+          "--config=first",
+          "--config=second"
+        ]
+      },
+      "expected": "first"
+    },
+    {
+      "id": "flag-equals-unicode",
+      "kind": "edge",
+      "export": "eagerParseCliFlag",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1"
+      ],
+      "input": {
+        "flag": "--key",
+        "argv": [
+          "--key=你好 😀"
+        ]
+      },
+      "expected": "你好 😀"
+    },
+    {
+      "id": "dash-standard",
+      "kind": "normal",
+      "export": "extractArgsAfterDoubleDash",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:49-60:occurrence-1"
+      ],
+      "input": {
+        "command": "--",
+        "args": [
+          "run",
+          "-v",
+          "file"
+        ]
+      },
+      "expected": {
+        "command": "run",
+        "args": [
+          "-v",
+          "file"
+        ]
+      }
+    },
+    {
+      "id": "dash-empty",
+      "kind": "edge",
+      "export": "extractArgsAfterDoubleDash",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:49-60:occurrence-1"
+      ],
+      "input": {
+        "command": "--",
+        "args": []
+      },
+      "expected": {
+        "command": "--",
+        "args": []
+      }
+    },
+    {
+      "id": "normal-command",
+      "kind": "edge",
+      "export": "extractArgsAfterDoubleDash",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:49-60:occurrence-1"
+      ],
+      "input": {
+        "command": "run",
+        "args": [
+          "a",
+          "b"
+        ]
+      },
+      "expected": {
+        "command": "run",
+        "args": [
+          "a",
+          "b"
+        ]
+      }
+    },
+    {
+      "id": "dash-single",
+      "kind": "edge",
+      "export": "extractArgsAfterDoubleDash",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:49-60:occurrence-1"
+      ],
+      "input": {
+        "command": "--",
+        "args": [
+          "only"
+        ]
+      },
+      "expected": {
+        "command": "only",
+        "args": []
+      }
+    },
+    {
+      "id": "dash-double",
+      "kind": "edge",
+      "export": "extractArgsAfterDoubleDash",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:49-60:occurrence-1"
+      ],
+      "input": {
+        "command": "--",
+        "args": [
+          "--",
+          "value"
+        ]
+      },
+      "expected": {
+        "command": "--",
+        "args": [
+          "value"
+        ]
+      }
+    },
+    {
+      "id": "dash-utf8",
+      "kind": "edge",
+      "export": "extractArgsAfterDoubleDash",
+      "source_ids": [
+        "src/utils/cliArgs.ts:FunctionDeclaration:49-60:occurrence-1"
+      ],
+      "input": {
+        "command": "--",
+        "args": [
+          "中文",
+          "☃"
+        ]
+      },
+      "expected": {
+        "command": "中文",
+        "args": [
+          "☃"
+        ]
+      }
+    }
+  ]
+}

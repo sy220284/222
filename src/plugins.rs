@@ -19,6 +19,8 @@ struct Manifest {
     hooks: Value,
     #[serde(default, alias = "mcpServers")]
     mcp_servers: Value,
+    #[serde(default, alias = "lspServers")]
+    lsp_servers: Value,
     #[serde(default)]
     skills: Value,
     #[serde(default)]
@@ -57,6 +59,7 @@ fn read_manifest(root: &Path, fallback: &str) -> Result<Manifest> {
             version: None,
             hooks: Value::Null,
             mcp_servers: Value::Null,
+            lsp_servers: Value::Null,
             skills: Value::Null,
             commands: Value::Null,
             user_config: Value::Null,
@@ -538,6 +541,7 @@ pub fn validate_local(location: &Path) -> Result<String> {
 pub struct PluginSet {
     pub hooks: Vec<HookRule>,
     pub mcp_servers: Vec<McpServerConfig>,
+    pub lsp_servers: Vec<crate::config::LspServerConfig>,
     /// Failed plugin MCP configurations, kept visible to SDK reload callers.
     pub errors: Vec<String>,
 }
@@ -697,6 +701,7 @@ impl PluginSet {
         let mut set = Self {
             hooks: Vec::new(),
             mcp_servers: Vec::new(),
+            lsp_servers: Vec::new(),
             errors: Vec::new(),
         };
         let (active, dependency_errors) = active_plugin_names(root, enabled);
@@ -776,6 +781,30 @@ impl PluginSet {
                 server.id = format!("{}_{}", name, server.id);
                 set.mcp_servers.push(server);
             }
+            let options = if !manifest.user_config.is_null() {
+                match crate::permission_settings::SettingsPaths::for_workspace(root)?
+                    .plugin_public_options(name)
+                {
+                    Ok(value) => value,
+                    Err(error) => {
+                        set.errors.push(format!(
+                            "Plugin '{name}' LSP public options unavailable: {error:#}"
+                        ));
+                        serde_json::Map::new()
+                    }
+                }
+            } else {
+                serde_json::Map::new()
+            };
+            let (lsp_servers, lsp_errors) = crate::plugin_lsp::load_plugin_lsp(
+                &location,
+                name,
+                &manifest.lsp_servers,
+                &manifest.user_config,
+                &options,
+            );
+            set.lsp_servers.extend(lsp_servers);
+            set.errors.extend(lsp_errors);
         }
         Ok(set)
     }
@@ -1487,8 +1516,13 @@ pub fn command_descriptors(root: &Path, enabled: &[String]) -> Result<Vec<Value>
         })?;
         let (description, hint) =
             crate::skill_arguments::command_metadata(&content, "Installed plugin command or skill");
+        // Source parity: commands.ts formatDescriptionWithSource prefixes the
+        // owning plugin name for prompt commands from the plugin source so the
+        // catalog stays attributable. Non-prompt commands keep the bare text.
         descriptors.push(serde_json::json!({
-            "name":name,"description":description,"argumentHint":hint
+            "name":name,
+            "description":format!("({plugin}) {description}"),
+            "argumentHint":hint
         }));
     }
     Ok(descriptors)
@@ -1496,6 +1530,27 @@ pub fn command_descriptors(root: &Path, enabled: &[String]) -> Result<Vec<Value>
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn plugin_command_descriptors_carry_plugin_name_prefix() {
+        let temporary = tempfile::tempdir().unwrap();
+        let installed = temporary.path().join(".atlas/plugins/demo");
+        fs::create_dir_all(installed.join("commands/demo")).unwrap();
+        fs::write(
+            installed.join("plugin.json"),
+            serde_json::json!({"name":"demo"}).to_string(),
+        )
+        .unwrap();
+        fs::write(
+            installed.join("commands/demo/SKILL.md"),
+            "---\ndescription: Fetch release notes\n---\nBody",
+        )
+        .unwrap();
+        let descriptors = command_descriptors(temporary.path(), &["demo".to_string()]).unwrap();
+        assert_eq!(descriptors.len(), 1);
+        assert_eq!(descriptors[0]["name"], "demo:demo");
+        assert_eq!(descriptors[0]["description"], "(demo) Fetch release notes");
+    }
+
     use super::*;
     #[test]
     fn plugin_command_respects_user_invocable_and_expands_root() {
@@ -1591,6 +1646,64 @@ mod tests {
             Some("session-42")
         )
         .is_err());
+    }
+
+    #[test]
+    fn enabled_plugin_lsp_config_is_scoped_and_does_not_hide_other_plugins() {
+        let root = tempfile::tempdir().unwrap();
+        let installed = root.path().join(".atlas/plugins");
+        let healthy = installed.join("healthy");
+        let invalid = installed.join("invalid");
+        fs::create_dir_all(&healthy).unwrap();
+        fs::create_dir_all(&invalid).unwrap();
+        fs::write(
+            healthy.join(".lsp.json"),
+            serde_json::json!({
+                "syntax":{"command":"first","extensionToLanguage":{".rs":"rust"}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(
+            healthy.join("plugin.json"),
+            serde_json::json!({
+                "name":"healthy",
+                "lspServers":{"syntax":{"command":"second","args":["--stdio"],
+                    "extensionToLanguage":{".rs":"rust",".toml":"toml"}}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        fs::write(
+            invalid.join("plugin.json"),
+            serde_json::json!({"name":"invalid","lspServers":{
+                "broken":{"command":"","extensionToLanguage":{".rs":"rust"}}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let disabled = PluginSet::load(root.path(), &[]).unwrap();
+        assert!(disabled.lsp_servers.is_empty());
+        let result = PluginSet::load(root.path(), &["invalid".into(), "healthy".into()]).unwrap();
+        assert_eq!(result.lsp_servers.len(), 1);
+        let server = &result.lsp_servers[0];
+        assert_eq!(server.id, "plugin:healthy:syntax");
+        assert_eq!(server.command, "second");
+        assert_eq!(server.extensions, ["rs", "toml"]);
+        assert_eq!(server.extension_to_language["toml"], "toml");
+        assert_eq!(server.args, ["--stdio"]);
+        assert_eq!(
+            server.env.get("ATLAS_PLUGIN_ROOT").unwrap(),
+            &healthy
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        );
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.contains("invalid") && e.contains("broken")));
     }
 
     #[test]

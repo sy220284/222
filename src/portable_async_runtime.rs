@@ -2,7 +2,6 @@
 //! sources. No vendor login, network reporting or JavaScript engine required.
 #![allow(dead_code)]
 use anyhow::{bail, Context, Result};
-use regex::Regex;
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, VecDeque},
@@ -28,8 +27,16 @@ pub fn generate_request_id(kind: &str, id: &str, timestamp_ms: i64) -> String {
 pub fn parse_request_id(value: &str) -> Option<(String, i64, String)> {
     let (prefix, agent) = value.split_once('@')?;
     let (kind, date) = prefix.rsplit_once('-')?;
-    let value = date.parse::<i64>().ok()?;
-    Some((kind.into(), value, agent.into()))
+    // Upstream agentId.ts uses JavaScript parseInt(timestampStr, 10):
+    // a decimal prefix is accepted even when trailing text is present.
+    let decimal = date.trim_start_matches(char::is_whitespace);
+    let decimal = decimal.strip_prefix('+').unwrap_or(decimal);
+    let digit_count = decimal.bytes().take_while(u8::is_ascii_digit).count();
+    if digit_count == 0 {
+        return None;
+    }
+    let timestamp = decimal[..digit_count].parse::<i64>().ok()?;
+    Some((kind.into(), timestamp, agent.into()))
 }
 
 // src/utils/queueProcessor.ts: priority deque, main-thread-only, mode-stable.
@@ -301,48 +308,46 @@ impl SdkEventQueue {
     }
 }
 
-// src/utils/userPromptKeywords.ts — detect explicit continuation.
-pub fn matches_negative_keyword(input: &str) -> bool {
-    let pattern=Regex::new(r"(?i)\b(wtf|wth|ffs|omfg|shit(ty|tiest)?|dumbass|horrible|awful|piss(ed|ing)? off|piece of (shit|crap|junk)|what the (fuck|hell)|fucking? (broken|useless|terrible|awful|horrible)|fuck you|screw (this|you)|so frustrating|this sucks|damn it)\b").unwrap();
-    pattern.is_match(input)
-}
-pub fn matches_keep_going_keyword(input: &str) -> bool {
-    let trimmed = input.trim();
-    if trimmed.eq_ignore_ascii_case("continue") {
-        return true;
-    }
-    Regex::new(r"(?i)\b(keep going|go on)\b")
-        .unwrap()
-        .is_match(trimmed)
-}
+// src/utils/userPromptKeywords.ts
+#[path = "source_user_keywords.rs"]
+mod source_user_keywords;
+pub use source_user_keywords::{matches_keep_going_keyword, matches_negative_keyword};
 
 // src/utils/sessionUrl.ts — SDK resume selectors: UUID, JSONL, URL.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedSessionIdentifier {
     pub session_id: String,
     pub ingress_url: Option<String>,
+    pub is_url: bool,
     pub jsonl_file: Option<String>,
+    pub is_jsonl_file: bool,
 }
 pub fn parse_session_identifier(id: &str) -> Option<ParsedSessionIdentifier> {
     if id.to_ascii_lowercase().ends_with(".jsonl") {
         return Some(ParsedSessionIdentifier {
             session_id: Uuid::new_v4().to_string(),
             ingress_url: None,
+            is_url: false,
             jsonl_file: Some(id.into()),
+            is_jsonl_file: true,
         });
     }
     if crate::portable_source_utils::validate_uuid(&json!(id)).is_some() {
         return Some(ParsedSessionIdentifier {
             session_id: id.into(),
             ingress_url: None,
+            is_url: false,
             jsonl_file: None,
+            is_jsonl_file: false,
         });
     }
     let url = reqwest::Url::parse(id).ok()?;
     Some(ParsedSessionIdentifier {
         session_id: Uuid::new_v4().to_string(),
         ingress_url: Some(url.to_string()),
+        is_url: true,
         jsonl_file: None,
+        is_jsonl_file: false,
     })
 }
 
@@ -609,6 +614,70 @@ mod tests {
         assert_eq!(q.len(), 2);
     }
     #[test]
+    fn resume_identifier_preserves_source_url_jsonl_and_uuid_flags() {
+        let file = parse_session_identifier(r"C:\Users\User\chat.JSONL").unwrap();
+        assert!(file.is_jsonl_file);
+        assert!(!file.is_url);
+        assert_eq!(
+            file.jsonl_file.as_deref(),
+            Some(r"C:\Users\User\chat.JSONL")
+        );
+        assert!(file.ingress_url.is_none());
+        assert!(Uuid::parse_str(&file.session_id).is_ok());
+
+        let plain = "550e8400-e29b-41d4-a716-446655440000";
+        let uuid = parse_session_identifier(plain).unwrap();
+        assert_eq!(uuid.session_id, plain);
+        assert!(!uuid.is_url);
+        assert!(!uuid.is_jsonl_file);
+        assert!(uuid.jsonl_file.is_none());
+        assert!(uuid.ingress_url.is_none());
+
+        let remote =
+            parse_session_identifier("HTTPS://EXAMPLE.COM/v1/session_ingress/session?id=1#hash")
+                .unwrap();
+        assert!(remote.is_url);
+        assert!(!remote.is_jsonl_file);
+        assert_eq!(
+            remote.ingress_url.as_deref(),
+            Some("https://example.com/v1/session_ingress/session?id=1#hash")
+        );
+        assert!(Uuid::parse_str(&remote.session_id).is_ok());
+        assert!(parse_session_identifier("not a url or uuid").is_none());
+    }
+
+    #[test]
+    fn user_prompt_keyword_boundaries_match_source_javascript_ascii_rules() {
+        for (input, negative, keep_going) in [
+            ("éwtf!", true, false),
+            ("wtfé", true, false),
+            ("wtf_", false, false),
+            ("wtf👌", true, false),
+            ("继续go on结束", false, true),
+            ("foo go on_bar", false, false),
+            ("GO ON!", false, true),
+            ("Keep Going", false, true),
+            ("discontinue", false, false),
+            ("Foo go on.", false, true),
+        ] {
+            assert_eq!(
+                matches_negative_keyword(input),
+                negative,
+                "negative: {input}"
+            );
+            assert_eq!(
+                matches_keep_going_keyword(input),
+                keep_going,
+                "keep going: {input}"
+            );
+        }
+        assert!(matches_keep_going_keyword("  CONTINUE  "));
+        assert!(!matches_keep_going_keyword("Continue the task"));
+        assert!(!matches_negative_keyword("awfulness"));
+        assert!(matches_negative_keyword("what the hell!"));
+    }
+
+    #[test]
     fn identity_and_session_parsing() {
         let id = format_agent_id("a", "team");
         assert_eq!(parse_agent_id(&id), Some(("a", "team")));
@@ -628,6 +697,27 @@ mod tests {
         assert!(parse_session_identifier("not-a-session").is_none());
         assert!(matches_keep_going_keyword("Please keep going"));
         assert!(!matches_keep_going_keyword("Continue the process"));
+    }
+    #[test]
+    fn request_id_parse_matches_js_parse_int_prefix_and_rejects_nonnumeric() {
+        assert_eq!(
+            parse_request_id("plan-123tail@worker@team"),
+            Some(("plan".into(), 123, "worker@team".into()))
+        );
+        assert_eq!(
+            parse_request_id("stop-+17junk@worker"),
+            Some(("stop".into(), 17, "worker".into()))
+        );
+        assert_eq!(
+            parse_request_id("step-0x10@worker"),
+            Some(("step".into(), 0, "worker".into()))
+        );
+        assert_eq!(
+            parse_request_id("step- 42.8@worker"),
+            Some(("step".into(), 42, "worker".into()))
+        );
+        assert!(parse_request_id("step-abc123@worker").is_none());
+        assert!(parse_request_id("step-123-no-at-sign").is_none());
     }
     #[tokio::test]
     async fn abort_propagation_sequential_workload() {

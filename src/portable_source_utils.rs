@@ -8,58 +8,16 @@ use regex::Regex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
 use uuid::Uuid;
 
 // src/utils/CircularBuffer.ts
-#[derive(Debug, Clone)]
-pub struct CircularBuffer<T> {
-    capacity: usize,
-    buffer: VecDeque<T>,
-}
-impl<T> CircularBuffer<T> {
-    pub fn new(capacity: usize) -> Result<Self> {
-        if capacity == 0 {
-            bail!("CircularBuffer capacity must be greater than zero")
-        }
-        Ok(Self {
-            capacity,
-            buffer: VecDeque::with_capacity(capacity),
-        })
-    }
-    pub fn add(&mut self, value: T) {
-        if self.buffer.len() == self.capacity {
-            self.buffer.pop_front();
-        }
-        self.buffer.push_back(value);
-    }
-    pub fn add_all(&mut self, values: impl IntoIterator<Item = T>) {
-        for value in values {
-            self.add(value);
-        }
-    }
-    pub fn get_recent(&self, count: usize) -> Vec<&T> {
-        self.buffer
-            .iter()
-            .skip(self.buffer.len().saturating_sub(count))
-            .collect()
-    }
-    pub fn to_array(&self) -> Vec<&T> {
-        self.buffer.iter().collect()
-    }
-    pub fn clear(&mut self) {
-        self.buffer.clear()
-    }
-    pub fn len(&self) -> usize {
-        self.buffer.len()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.buffer.is_empty()
-    }
-}
+#[path = "circular_buffer.rs"]
+mod circular_buffer;
+pub use circular_buffer::CircularBuffer;
 
 // src/utils/binaryCheck.ts and src/utils/findExecutable.ts
 static BINARY_CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
@@ -166,30 +124,14 @@ pub fn cache_mcp_log_path(cache_root: &Path, workspace: &Path, server: &str) -> 
 }
 
 // src/utils/peerAddress.ts
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PeerScheme {
-    Uds,
-    Bridge,
-    Other,
-}
-pub fn parse_peer_address(value: &str) -> (PeerScheme, &str) {
-    if let Some(to) = value.strip_prefix("uds:") {
-        return (PeerScheme::Uds, to);
-    }
-    if let Some(to) = value.strip_prefix("bridge:") {
-        return (PeerScheme::Bridge, to);
-    }
-    if value.starts_with('/') {
-        return (PeerScheme::Uds, value);
-    }
-    (PeerScheme::Other, value)
-}
+#[path = "peer_address.rs"]
+mod peer_address;
+pub use peer_address::{parse_peer_address, PeerScheme};
 
 // src/utils/sandbox/sandbox-ui-utils.ts
-pub fn remove_sandbox_violation_tags(text: &str) -> String {
-    let regex = Regex::new(r"(?s)<sandbox_violations>.*?</sandbox_violations>").unwrap();
-    regex.replace_all(text, "").into_owned()
-}
+#[path = "sandbox_ui_utils.rs"]
+mod sandbox_ui_utils;
+pub use sandbox_ui_utils::remove_sandbox_violation_tags;
 
 // src/utils/xdg.ts
 #[derive(Clone, Debug, Default)]
@@ -228,27 +170,9 @@ impl XdgOptions {
 }
 
 // src/utils/cliArgs.ts
-pub fn eager_parse_cli_flag(flag: &str, argv: &[String]) -> Option<String> {
-    for (i, arg) in argv.iter().enumerate() {
-        if let Some(value) = arg.strip_prefix(flag).and_then(|v| v.strip_prefix('=')) {
-            return Some(value.into());
-        }
-        if arg == flag {
-            if let Some(v) = argv.get(i + 1) {
-                return Some(v.clone());
-            }
-        }
-    }
-    None
-}
-pub fn extract_args_after_double_dash(command: &str, args: &[String]) -> (String, Vec<String>) {
-    if command == "--" {
-        if let Some((first, rest)) = args.split_first() {
-            return (first.clone(), rest.to_vec());
-        }
-    }
-    (command.into(), args.to_vec())
-}
+#[path = "cli_args.rs"]
+mod cli_args;
+pub use cli_args::{eager_parse_cli_flag, extract_args_after_double_dash};
 
 // src/utils/uuid.ts and src/utils/crypto.ts
 pub fn validate_uuid(value: &Value) -> Option<&str> {
@@ -301,52 +225,19 @@ pub fn generate_temp_file_path(
 }
 
 // src/utils/timeouts.ts
-fn decimal_prefix(raw: &str) -> Option<u64> {
-    let raw = raw.trim_start();
-    let digits = raw.strip_prefix('+').unwrap_or(raw);
-    if digits.starts_with('-') {
-        return None;
-    }
-    let text = digits
-        .chars()
-        .take_while(char::is_ascii_digit)
-        .collect::<String>();
-    if text.is_empty() {
-        None
-    } else {
-        text.parse::<u64>().ok()
-    }
-}
-pub fn default_bash_timeout_ms(env: &HashMap<String, String>) -> u64 {
-    env.get("BASH_DEFAULT_TIMEOUT_MS")
-        .and_then(|s| decimal_prefix(s))
-        .filter(|n| *n > 0)
-        .unwrap_or(120_000)
-}
-pub fn max_bash_timeout_ms(env: &HashMap<String, String>) -> u64 {
-    env.get("BASH_MAX_TIMEOUT_MS")
-        .and_then(|s| decimal_prefix(s))
-        .filter(|n| *n > 0)
-        .unwrap_or(600_000)
-        .max(default_bash_timeout_ms(env))
-}
+#[path = "source_timeouts.rs"]
+mod source_timeouts;
+pub use source_timeouts::{default_bash_timeout_ms, max_bash_timeout_ms};
 
 // src/utils/keyboardShortcuts.ts
-pub fn macos_option_char(value: &str) -> Option<&'static str> {
-    match value {
-        "†" => Some("alt+t"),
-        "π" => Some("alt+p"),
-        "ø" => Some("alt+o"),
-        _ => None,
-    }
-}
+#[path = "source_keyboard.rs"]
+mod source_keyboard;
+pub use source_keyboard::{is_macos_option_char, macos_option_char};
 
 // src/utils/messagePredicates.ts
-pub fn is_human_turn(message: &Value) -> bool {
-    message.get("type").and_then(Value::as_str) == Some("user")
-        && message.get("isMeta").and_then(Value::as_bool) != Some(true)
-        && message.get("toolUseResult").is_none()
-}
+#[path = "message_predicates.rs"]
+mod message_predicates;
+pub use message_predicates::is_human_turn;
 
 // src/utils/systemPromptType.ts
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -534,6 +425,14 @@ mod tests {
         );
         assert!(is_human_turn(&json!({"type":"user","content":"human"})));
         assert!(!is_human_turn(&json!({"type":"user","toolUseResult":{}})));
+        for meta in [json!(true), json!("hidden"), json!(1), json!([]), json!({})] {
+            assert!(!is_human_turn(&json!({"type":"user","isMeta":meta})));
+        }
+        for meta in [json!(false), json!(""), json!(0), Value::Null] {
+            assert!(is_human_turn(&json!({"type":"user","isMeta":meta})));
+        }
+        assert!(!is_human_turn(&json!({"type":"user","toolUseResult":null})));
+        assert!(!is_human_turn(&json!({"type":"assistant","isMeta":false})));
     }
     #[test]
     fn tags_paths_and_timeouts() {

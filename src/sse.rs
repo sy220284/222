@@ -9,9 +9,12 @@ use tokio::sync::mpsc::UnboundedSender;
 #[derive(Default)]
 struct Assembler {
     content: String,
+    reasoning_content: String,
     calls: BTreeMap<u64, ToolCall>,
     finish_reason: Option<String>,
     usage: Option<TokenUsage>,
+    /// Live sink for completed tool blocks; None keeps pure aggregation.
+    tool_blocks: Option<UnboundedSender<ToolCall>>,
 }
 
 impl Assembler {
@@ -86,6 +89,11 @@ impl Assembler {
                 refusal.chars().take(500).collect::<String>()
             );
         }
+        if let Some(reasoning) = delta.get("reasoning_content").and_then(Value::as_str) {
+            // Reasoning stays in the model transcript for subsequent tool
+            // calls, but is never broadcast as a user-visible text delta.
+            self.reasoning_content.push_str(reasoning);
+        }
         if let Some(text) = delta.get("content").and_then(Value::as_str) {
             self.content.push_str(text);
             let _ = deltas.send(text.into());
@@ -97,6 +105,10 @@ impl Assembler {
             .flatten()
         {
             let index = part.get("index").and_then(Value::as_u64).unwrap_or(0);
+            // The source API adapter yields tools only at content_block_stop.
+            // Chat Completions has no equivalent per-tool stop event: index
+            // identifies a call, and its later deltas may interleave with
+            // any other call. Aggregate until the transport is complete.
             let entry = self.calls.entry(index).or_insert_with(|| ToolCall {
                 id: String::new(),
                 kind: "function".into(),
@@ -117,20 +129,27 @@ impl Assembler {
         }
         Ok(())
     }
-    fn finish(self) -> Result<ModelResponse> {
+    fn finish(mut self) -> Result<ModelResponse> {
         if self.content.is_empty() && self.calls.is_empty() {
             bail!("SSE stream contained no assistant content or tool calls")
         }
-        let calls = self
-            .calls
-            .into_values()
-            .map(|mut call| {
-                if call.id.is_empty() {
-                    call.id = uuid::Uuid::new_v4().to_string();
+        // finish is reached only after a terminal marker. Do not start tools
+        // from a response the Agent will reject as truncated or refused.
+        let can_execute = self
+            .finish_reason
+            .as_deref()
+            .is_none_or(|reason| matches!(reason, "tool_calls" | "stop"));
+        for call in self.calls.values_mut() {
+            if call.id.is_empty() {
+                call.id = uuid::Uuid::new_v4().to_string();
+            }
+            if can_execute {
+                if let Some(sink) = &self.tool_blocks {
+                    let _ = sink.send(call.clone());
                 }
-                call
-            })
-            .collect::<Vec<_>>();
+            }
+        }
+        let calls = self.calls.into_values().collect::<Vec<_>>();
         Ok(ModelResponse {
             message: Message {
                 role: "assistant".into(),
@@ -138,6 +157,11 @@ impl Assembler {
                     None
                 } else {
                     Some(self.content)
+                },
+                reasoning_content: if self.reasoning_content.is_empty() {
+                    None
+                } else {
+                    Some(self.reasoning_content)
                 },
                 content_blocks: None,
                 tool_calls: if calls.is_empty() { None } else { Some(calls) },
@@ -208,10 +232,40 @@ pub async fn complete(
     request: &ModelRequest,
     deltas: UnboundedSender<String>,
     response_schema: Option<&Value>,
+    tuning: &crate::config::ModelTuning,
+) -> Result<ModelResponse> {
+    complete_with_tool_blocks(
+        client,
+        base_url,
+        key,
+        request,
+        deltas,
+        response_schema,
+        None,
+        tuning,
+    )
+    .await
+}
+
+/// Streaming completion with an optional live tool-block sink. Blocks are
+/// forwarded in index order only after a successful completion boundary.
+/// Chat Completions indices are not content_block_stop events.
+#[allow(clippy::too_many_arguments)]
+pub async fn complete_with_tool_blocks(
+    client: &Client,
+    base_url: &str,
+    key: Option<&str>,
+    request: &ModelRequest,
+    deltas: UnboundedSender<String>,
+    response_schema: Option<&Value>,
+    tool_blocks: Option<UnboundedSender<ToolCall>>,
+    tuning: &crate::config::ModelTuning,
 ) -> Result<ModelResponse> {
     let mut body = json!({"model":request.model,
         "messages":crate::provider::openai_messages(request)?,
         "stream":true,"stream_options":{"include_usage":true}});
+    tuning.validate_for_model(&request.model)?;
+    tuning.apply_chat_completions(&mut body);
     // Keep structured-output semantics identical for streaming and ordinary
     // Chat Completions. Omitting this silently drops the SDK output contract.
     if let Some(schema) = response_schema {
@@ -246,7 +300,10 @@ pub async fn complete(
     }
     let mut stream = response.bytes_stream();
     let mut buffered = Vec::new();
-    let mut assembler = Assembler::default();
+    let mut assembler = Assembler {
+        tool_blocks,
+        ..Default::default()
+    };
     let mut finished = false;
     // Reset the watchdog after every received chunk, rather than applying a
     // total deadline to a healthy multi-minute model generation.
@@ -287,6 +344,39 @@ pub async fn complete(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preserves_streamed_reasoning_for_deepseek_tool_followup() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut parser = Assembler::default();
+        parser
+            .consume(
+                &json!({"choices":[{"delta":{
+            "reasoning_content":"inspect "}}]}),
+                &tx,
+            )
+            .unwrap();
+        parser
+            .consume(
+                &json!({"choices":[{"delta":{
+            "reasoning_content":"first",
+            "tool_calls":[{"index":0,"id":"call_1","type":"function",
+                "function":{"name":"read_file","arguments":"{}"}}]},
+            "finish_reason":"tool_calls"}]}),
+                &tx,
+            )
+            .unwrap();
+        let response = parser.finish().unwrap();
+        assert_eq!(
+            response.message.reasoning_content.as_deref(),
+            Some("inspect first")
+        );
+        assert_eq!(response.message.tool_calls.unwrap()[0].id, "call_1");
+        assert!(
+            rx.try_recv().is_err(),
+            "reasoning must not leak to displayed text"
+        );
+    }
+
     #[test]
     fn joins_tool_call_fragments_by_index() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
@@ -329,6 +419,50 @@ mod tests {
         assert_eq!(call.function.name, "read_file");
         assert_eq!(call.function.arguments, "{\"path\":\"a.rs\"}");
     }
+    #[test]
+    fn completed_tools_remain_in_assistant_transcript_without_duplication() {
+        let (deltas, _ignored) = tokio::sync::mpsc::unbounded_channel();
+        let (blocks, mut incoming) = tokio::sync::mpsc::unbounded_channel();
+        let mut assembler = Assembler {
+            tool_blocks: Some(blocks),
+            ..Default::default()
+        };
+        assembler
+            .consume(
+                &json!({"choices":[{"delta":{"tool_calls":[{
+                    "index":0,"id":"tool_a","function":{"name":"read_file",
+                        "arguments":"{\"file_path\":\"one\"}"}}
+                ]}}]}),
+                &deltas,
+            )
+            .unwrap();
+        assembler
+            .consume(
+                &json!({"choices":[{"delta":{"tool_calls":[{
+            "index":1,"id":"tool_b","function":{"name":"read_file",
+                "arguments":"{\"file_path\":\"two\"}"}}
+        ]},"finish_reason":"tool_calls"}]}),
+                &deltas,
+            )
+            .unwrap();
+        assert!(
+            incoming.try_recv().is_err(),
+            "indices do not mark a completed response"
+        );
+        let result = assembler.finish().unwrap();
+        let calls = result.message.tool_calls.unwrap();
+        assert_eq!(
+            calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            vec!["tool_a", "tool_b"]
+        );
+        assert_eq!(incoming.try_recv().unwrap().id, "tool_a");
+        assert_eq!(incoming.try_recv().unwrap().id, "tool_b");
+        assert!(
+            incoming.try_recv().is_err(),
+            "tool ids must not be emitted twice"
+        );
+    }
+
     #[tokio::test]
     async fn reads_real_split_sse_http_stream() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -363,6 +497,7 @@ mod tests {
             },
             tx,
             None,
+            &crate::config::ModelTuning::default(),
         )
         .await
         .unwrap();
@@ -414,6 +549,7 @@ mod tests {
             },
             tx,
             None,
+            &crate::config::ModelTuning::default(),
         )
         .await
         .unwrap();

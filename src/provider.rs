@@ -35,31 +35,144 @@ pub trait ModelProvider: Send + Sync {
     ) -> Result<ModelResponse> {
         self.complete(request).await
     }
+    /// Streaming completion with live tool-block delivery. The default keeps
+    /// the aggregate contract: blocks are emitted only once the full response
+    /// is assembled. Transports that can detect block boundaries mid-stream
+    /// (OpenAI-compatible index switching) override this.
+    async fn complete_stream_with_tool_blocks(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+        tool_blocks: UnboundedSender<ToolCall>,
+    ) -> Result<ModelResponse> {
+        let response = self.complete_stream(request, deltas).await?;
+        if let Some(calls) = response.message.tool_calls.as_ref() {
+            for call in calls {
+                let _ = tool_blocks.send(call.clone());
+            }
+        }
+        Ok(response)
+    }
+}
+
+/// Only used while a selected API model has not yet been authenticated.
+/// Cloning the configuration preserves all model-specific tuning settings.
+struct DeferredCredentialProvider {
+    profile: ProviderProfile,
+    response_schema: Option<Value>,
+    thinking_budget: Option<u32>,
+}
+
+impl DeferredCredentialProvider {
+    fn resolve(&self) -> Result<Box<dyn ModelProvider>> {
+        let key = crate::model_catalog::load_api_key(&self.profile)?;
+        if key.is_none() {
+            let env = self.profile.api_key_env.as_deref().unwrap_or("API_KEY");
+            bail!(
+                "Provider '{}' requires {env}; run 'atlas-agent models connect {}' or set {env}",
+                self.profile.id,
+                self.profile.id
+            );
+        }
+        let mut actual = create(&self.profile)?;
+        actual.set_response_schema(self.response_schema.clone())?;
+        actual.set_thinking_budget(self.thinking_budget)?;
+        Ok(actual)
+    }
+}
+
+#[async_trait]
+impl ModelProvider for DeferredCredentialProvider {
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        self.response_schema = schema;
+        Ok(())
+    }
+
+    fn set_thinking_budget(&mut self, budget: Option<u32>) -> Result<()> {
+        if budget.is_some() && self.profile.kind != "gemini" {
+            bail!("Selected model provider has no token-precise thinking budget capability");
+        }
+        self.thinking_budget = budget;
+        Ok(())
+    }
+
+    async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
+        self.resolve()?.complete(request).await
+    }
+
+    async fn complete_stream(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+    ) -> Result<ModelResponse> {
+        self.resolve()?.complete_stream(request, deltas).await
+    }
+
+    async fn complete_stream_with_tool_blocks(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+        tool_blocks: UnboundedSender<ToolCall>,
+    ) -> Result<ModelResponse> {
+        self.resolve()?
+            .complete_stream_with_tool_blocks(request, deltas, tool_blocks)
+            .await
+    }
 }
 
 pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
-    let key = match &profile.api_key_env {
-        Some(env) => Some(std::env::var(env).with_context(|| {
-            format!(
-                "Provider '{}' requires environment variable {env}",
-                profile.id
-            )
-        })?),
-        None => None,
-    };
+    crate::config::require_secure_credential_transport(
+        &profile.base_url,
+        profile.api_key_env.is_some(),
+    )?;
+    let key = crate::model_catalog::load_api_key(profile)?;
+    if key.is_none() && profile.api_key_env.is_some() {
+        // Keep the local CLI/SDK operational while a user chooses an API brand.
+        // No unauthenticated model request is sent; the first real inference
+        // resolves the credential and yields a specific setup error if missing.
+        return Ok(Box::new(DeferredCredentialProvider {
+            profile: profile.clone(),
+            response_schema: None,
+            thinking_budget: None,
+        }));
+    }
     // A client-wide timeout measures the entire streamed completion. It
     // aborts healthy long-running generations after 180 seconds even while
     // tokens are arriving. Streaming adapters enforce per-chunk idle timeouts;
     // non-streaming requests retain their own bounded deadline.
-    let client = Client::builder()
+    let client = crate::tls_ca::client_builder()?
         .connect_timeout(Duration::from_secs(30))
+        // Do not follow a TLS-to-HTTP redirect with credentials or tool data.
+        .redirect(reqwest::redirect::Policy::none())
         .build()?;
     match profile.kind.as_str() {
+        "openai-responses" => Ok(Box::new(OpenAiResponses {
+            key: key.context("OpenAI Responses requires an API key")?,
+            base_url: profile.base_url.clone(),
+            tuning: profile.tuning.clone(),
+            response_schema: None,
+        })),
+        "openai-compatible"
+            if profile.id == "openai"
+                && profile.model.starts_with("gpt-6")
+                && profile.base_url.trim_end_matches('/') == "https://api.openai.com/v1" =>
+        {
+            Ok(Box::new(OpenAiResponses {
+                key: key.context("OpenAI Responses requires an API key")?,
+                base_url: profile.base_url.clone(),
+                tuning: profile.tuning.clone(),
+                response_schema: None,
+            }))
+        }
         "openai-compatible" => Ok(Box::new(OpenAiCompatible {
             client,
             base_url: profile.base_url.clone(),
             key,
             response_schema: None,
+            tuning: profile.tuning.clone(),
+        })),
+        "chatgpt-plan" => Ok(Box::new(ChatGptPlan {
+            tuning: profile.tuning.clone(),
         })),
         "gemini" => Ok(Box::new(Gemini {
             client,
@@ -67,6 +180,7 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
             key: key.context("Gemini endpoint requires an API key")?,
             thinking_budget: None,
             response_schema: None,
+            tuning: profile.tuning.clone(),
         })),
         other => bail!("Unsupported provider kind: {other}"),
     }
@@ -77,20 +191,80 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
 /// during a retry. HTTP failures with an explicit no-retry header are final.
 /// Once an SSE response has started, its parser owns the stream and we never
 /// replay a partially delivered completion.
-pub(crate) fn stream_idle_timeout() -> Duration {
-    let millis = std::env::var("ATLAS_STREAM_IDLE_TIMEOUT_MS")
-        .ok()
-        .and_then(|raw| raw.parse::<u64>().ok())
+fn stream_idle_timeout_from(raw: Option<&str>) -> Duration {
+    // The original idle-timeout parser uses parseInt(value, 10) || 90000.
+    // preserves numeric prefixes, e.g. 30000ms and 1e3 -> 30000 and 1.
+    let millis = raw
+        .and_then(crate::env_validation::decimal_prefix)
         .filter(|millis| *millis > 0)
         .unwrap_or(90_000);
     Duration::from_millis(millis)
 }
 
+pub(crate) fn stream_idle_timeout() -> Duration {
+    let configured = std::env::var("ATLAS_STREAM_IDLE_TIMEOUT_MS").ok();
+    stream_idle_timeout_from(configured.as_deref())
+}
+
+/// withRetry.ts::getRetryDelay uses parseInt(header, 10), including
+/// numeric prefixes with suffixes. The source does not cap Retry-After at
+/// six hours: respect the server's actual retry window rather than retrying
+/// prematurely and issuing additional model requests.
+fn retry_after_delay(header: &str) -> Option<Duration> {
+    let seconds = crate::env_validation::decimal_prefix(header)?;
+    Some(Duration::from_secs(seconds))
+}
+
+/// withRetry.ts::getRetryDelay adds up to 25% jitter after capping
+/// the exponential base at 32 seconds. Accept a supplied random sample to
+/// make the source's retry range verifiable without probabilistic tests.
+fn model_backoff_millis(attempt: usize, sample: u64) -> u64 {
+    let base = if attempt >= 6 {
+        32_000
+    } else {
+        500u64 << attempt
+    };
+    let jitter = (u128::from(sample) * u128::from(base) / ((u128::from(u64::MAX) + 1) * 4)) as u64;
+    base + jitter
+}
+
+fn model_backoff(attempt: usize) -> Result<Duration> {
+    let mut entropy = [0_u8; 8];
+    getrandom::getrandom(&mut entropy)
+        .map_err(|error| anyhow!("Cannot select model retry jitter: {error}"))?;
+    Ok(Duration::from_millis(model_backoff_millis(
+        attempt,
+        u64::from_le_bytes(entropy),
+    )))
+}
+
+/// Source withRetry.ts DEFAULT_MAX_RETRIES=10 plus the initial attempt.
+/// Expose the portable ATLAS_MAX_RETRIES counterpart to the original
+/// Original retry environment setting; parseInt tolerates a decimal numeric prefix.
+fn model_retry_attempts_from(raw: Option<&str>) -> Result<usize> {
+    let Some(raw) = raw else {
+        return Ok(11);
+    };
+    let value = raw.trim_start();
+    let value = value.strip_prefix('+').unwrap_or(value);
+    if value.starts_with('-') {
+        bail!("ATLAS_MAX_RETRIES must not be negative");
+    }
+    let digits: String = value.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let retries = digits
+        .parse::<usize>()
+        .context("ATLAS_MAX_RETRIES must start with a nonnegative decimal integer")?;
+    retries
+        .checked_add(1)
+        .context("ATLAS_MAX_RETRIES exceeds the supported count")
+}
+
 pub(crate) async fn send_model_request(
     request: reqwest::RequestBuilder,
 ) -> Result<reqwest::Response> {
-    const ATTEMPTS: usize = 4;
-    for attempt in 0..ATTEMPTS {
+    let configured = std::env::var("ATLAS_MAX_RETRIES").ok();
+    let attempts = model_retry_attempts_from(configured.as_deref())?;
+    for attempt in 0..attempts {
         let attempt_request = request
             .try_clone()
             .context("Model request body cannot be replayed safely")?;
@@ -101,24 +275,26 @@ pub(crate) async fn send_model_request(
                     .headers()
                     .get("x-should-retry")
                     .and_then(|v| v.to_str().ok());
-                let retryable = header != Some("false")
+                // x-should-retry is meaningful only on an unsuccessful
+                // response. A successful request must never be replayed:
+                // doing so can charge twice or produce a second completion.
+                let retryable = !status.is_success()
+                    && header != Some("false")
                     && (header == Some("true")
                         || matches!(
                             status.as_u16(),
                             408 | 409 | 429 | 500 | 502 | 503 | 504 | 529
                         ));
-                if retryable && attempt + 1 < ATTEMPTS {
+                if retryable && attempt + 1 < attempts {
                     let delay = response
                         .headers()
                         .get(reqwest::header::RETRY_AFTER)
                         .and_then(|v| v.to_str().ok())
-                        .and_then(|v| v.trim().parse::<u64>().ok())
-                        // withRetry.ts::getRetryDelay honors the server's
-                        // Retry-After directive even when it exceeds normal
-                        // exponential backoff. Retrying after only 30 seconds
-                        // on a longer rate-limit window repeatedly fails.
-                        .map(|seconds| Duration::from_secs(seconds.min(6 * 60 * 60)))
-                        .unwrap_or_else(|| Duration::from_millis((500u64 << attempt).min(32_000)));
+                        .and_then(retry_after_delay)
+                        // The source honors Retry-After over ordinary backoff;
+                        // do not retry a longer rate-limit window too early.
+                        .map(Ok)
+                        .unwrap_or_else(|| model_backoff(attempt))?;
                     // Drop the failed HTTP response before waiting; do not
                     // retain a busy connection across capacity retries.
                     drop(response);
@@ -127,8 +303,10 @@ pub(crate) async fn send_model_request(
                 }
                 return Ok(response);
             }
-            Err(error) if attempt + 1 < ATTEMPTS && (error.is_connect() || error.is_timeout()) => {
-                tokio::time::sleep(Duration::from_millis(200u64 << attempt)).await;
+            Err(error) if attempt + 1 < attempts && (error.is_connect() || error.is_timeout()) => {
+                // withRetry.ts applies the same exponential backoff and
+                // jitter to transport errors and retryable HTTP responses.
+                tokio::time::sleep(model_backoff(attempt)?).await;
             }
             Err(error) => return Err(error.into()),
         }
@@ -139,20 +317,115 @@ pub(crate) async fn send_model_request(
 /// Serialize session messages to provider-native blocks without leaking the
 /// internal persisted content_blocks attribute to an OpenAI-compatible API.
 pub(crate) fn openai_messages(request: &ModelRequest) -> Result<Vec<Value>> {
+    crate::multimodal::validate_images_for_api(&request.messages)?;
     let mut messages = Vec::with_capacity(request.messages.len() + 1);
+    let mut tool_images = Vec::new();
     for msg in std::iter::once(Message::text("system", &request.system))
         .chain(request.messages.iter().cloned())
     {
+        // Chat Completions accepts text in tool messages. Emit images after
+        // all adjacent tool results so parallel call IDs stay contiguous.
+        if msg.role != "tool" && !tool_images.is_empty() {
+            messages.push(json!({"role":"user","content":std::mem::take(&mut tool_images)}));
+        }
         let mut wire = serde_json::to_value(&msg)?;
+        // Responses/Gemini reasoning envelopes are provider-bound opaque state.
+        // Never forward this internal envelope as DeepSeek reasoning text.
+        if msg.reasoning_content.as_deref().is_some_and(|value| {
+            value.starts_with(crate::chatgpt_plan::REASONING_ITEMS_PREFIX)
+                || value.starts_with(crate::gemini_content::PARTS_PREFIX)
+        }) {
+            if let Some(map) = wire.as_object_mut() {
+                map.remove("reasoning_content");
+            }
+        }
         if let Some(blocks) = msg.content_blocks.as_deref() {
-            wire["content"] = json!(crate::multimodal::openai(blocks)?);
+            let content = crate::multimodal::openai(blocks)?;
+            if msg.role == "tool" {
+                let images = content
+                    .into_iter()
+                    .filter(|block| block["type"] == "image_url")
+                    .collect::<Vec<_>>();
+                if !images.is_empty() {
+                    tool_images.push(json!({"type":"text","text":format!("Images returned by tool call {}",msg.tool_call_id.as_deref().context("Tool image has no call ID")?)}));
+                    tool_images.extend(images);
+                }
+                wire["content"] = json!(msg.content.as_deref().unwrap_or(""));
+            } else {
+                wire["content"] = json!(content);
+            }
             if let Some(map) = wire.as_object_mut() {
                 map.remove("content_blocks");
             }
         }
         messages.push(wire);
     }
+    if !tool_images.is_empty() {
+        messages.push(json!({"role":"user","content":tool_images}));
+    }
     Ok(messages)
+}
+
+struct OpenAiResponses {
+    key: String,
+    base_url: String,
+    tuning: crate::config::ModelTuning,
+    response_schema: Option<Value>,
+}
+
+#[async_trait]
+impl ModelProvider for OpenAiResponses {
+    fn set_response_schema(&mut self, schema: Option<Value>) -> Result<()> {
+        self.response_schema = schema;
+        Ok(())
+    }
+
+    async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
+        crate::chatgpt_plan::complete_api(
+            request,
+            &self.tuning,
+            None,
+            &self.key,
+            self.response_schema.as_ref(),
+            &self.base_url,
+        )
+        .await
+    }
+
+    async fn complete_stream(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+    ) -> Result<ModelResponse> {
+        crate::chatgpt_plan::complete_api(
+            request,
+            &self.tuning,
+            Some(deltas),
+            &self.key,
+            self.response_schema.as_ref(),
+            &self.base_url,
+        )
+        .await
+    }
+}
+
+struct ChatGptPlan {
+    tuning: crate::config::ModelTuning,
+}
+
+#[async_trait]
+impl ModelProvider for ChatGptPlan {
+    async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
+        crate::chatgpt_plan::complete(request, &self.tuning, None).await
+    }
+
+    async fn complete_stream(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+    ) -> Result<ModelResponse> {
+        crate::chatgpt_plan::complete(request, &self.tuning, Some(deltas)).await
+    }
 }
 
 struct OpenAiCompatible {
@@ -160,6 +433,7 @@ struct OpenAiCompatible {
     base_url: String,
     key: Option<String>,
     response_schema: Option<Value>,
+    tuning: crate::config::ModelTuning,
 }
 
 #[async_trait]
@@ -171,6 +445,8 @@ impl ModelProvider for OpenAiCompatible {
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
         let mut body = json!({"model":request.model,
             "messages":openai_messages(request)?});
+        self.tuning.validate_for_model(&request.model)?;
+        self.tuning.apply_chat_completions(&mut body);
         if let Some(schema) = &self.response_schema {
             body["response_format"] = json!({"type":"json_schema",
                 "json_schema":{"name":"structured_output","strict":true,"schema":schema}});
@@ -238,22 +514,48 @@ impl ModelProvider for OpenAiCompatible {
             request,
             deltas,
             self.response_schema.as_ref(),
+            &self.tuning,
+        )
+        .await
+    }
+    async fn complete_stream_with_tool_blocks(
+        &self,
+        request: &ModelRequest,
+        deltas: UnboundedSender<String>,
+        tool_blocks: UnboundedSender<ToolCall>,
+    ) -> Result<ModelResponse> {
+        crate::sse::complete_with_tool_blocks(
+            &self.client,
+            &self.base_url,
+            self.key.as_deref(),
+            request,
+            deltas,
+            self.response_schema.as_ref(),
+            Some(tool_blocks),
+            &self.tuning,
         )
         .await
     }
 }
 
 fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
+    crate::multimodal::validate_images_for_api(&request.messages)?;
     let mut names = HashMap::<String, String>::new();
     for msg in &request.messages {
         for call in msg.tool_calls.as_deref().unwrap_or(&[]) {
             names.insert(call.id.clone(), call.function.name.clone());
         }
     }
-    let mut contents = Vec::new();
+    let mut contents: Vec<Value> = Vec::new();
     for msg in &request.messages {
         let parts: Vec<Value> = match msg.role.as_str() {
             "assistant" => {
+                if let Some(parts) =
+                    crate::gemini_content::decode(msg.reasoning_content.as_deref())?
+                {
+                    contents.push(json!({"role":"model","parts":parts}));
+                    continue;
+                }
                 let mut p: Vec<Value> = msg
                     .content
                     .as_ref()
@@ -275,7 +577,17 @@ fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
                 let name = names
                     .get(id)
                     .context("Tool response has no matching call")?;
-                vec![json!({"functionResponse":{"name":name,"response":{"content":msg.content}}})]
+                let mut parts = vec![
+                    json!({"functionResponse":{"name":name,"response":{"content":msg.content}}}),
+                ];
+                if let Some(blocks) = msg.content_blocks.as_deref() {
+                    parts.extend(
+                        crate::multimodal::gemini(blocks)?
+                            .into_iter()
+                            .filter(|part| part.get("inlineData").is_some()),
+                    );
+                }
+                parts
             }
             _ => {
                 if let Some(blocks) = msg.content_blocks.as_deref() {
@@ -287,6 +599,23 @@ fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
         };
         if parts.is_empty() {
             continue;
+        }
+        if msg.role == "tool" {
+            if let Some(previous) = contents.last_mut() {
+                if previous["role"] == "user"
+                    && previous["parts"].as_array().is_some_and(|parts| {
+                        parts
+                            .iter()
+                            .any(|part| part.get("functionResponse").is_some())
+                    })
+                {
+                    previous["parts"]
+                        .as_array_mut()
+                        .expect("Checked tool response parts")
+                        .extend(parts);
+                    continue;
+                }
+            }
         }
         contents.push(
             json!({"role": if msg.role == "assistant" {"model"} else {"user"}, "parts":parts}),
@@ -320,6 +649,39 @@ struct Gemini {
     key: String,
     thinking_budget: Option<u32>,
     response_schema: Option<Value>,
+    tuning: crate::config::ModelTuning,
+}
+
+impl Gemini {
+    fn request_body(&self, request: &ModelRequest) -> Result<Value> {
+        let mut body = gemini_request_body(request)?;
+        if let Some(temperature) = self.tuning.temperature {
+            body["generationConfig"]["temperature"] = json!(temperature);
+        }
+        if let Some(top_p) = self.tuning.top_p {
+            body["generationConfig"]["topP"] = json!(top_p);
+        }
+        if let Some(max) = self.tuning.max_output_tokens {
+            body["generationConfig"]["maxOutputTokens"] = json!(max);
+        }
+        if let Some(level) = &self.tuning.reasoning_effort {
+            if !matches!(level.as_str(), "low" | "medium" | "high") {
+                bail!("Gemini thinkingLevel supports low, medium or high; remove unsupported model tuning");
+            }
+            if self.thinking_budget.is_some() {
+                bail!("Gemini thinkingLevel cannot be combined with a token thinkingBudget");
+            }
+            body["generationConfig"]["thinkingConfig"]["thinkingLevel"] = json!(level);
+        }
+        if let Some(budget) = self.thinking_budget {
+            body["generationConfig"]["thinkingConfig"] = json!({"thinkingBudget":budget});
+        }
+        if let Some(schema) = &self.response_schema {
+            body["generationConfig"]["responseMimeType"] = json!("application/json");
+            body["generationConfig"]["responseJsonSchema"] = schema.clone();
+        }
+        Ok(body)
+    }
 }
 
 #[async_trait]
@@ -334,16 +696,7 @@ impl ModelProvider for Gemini {
     }
 
     async fn complete(&self, request: &ModelRequest) -> Result<ModelResponse> {
-        let mut body = gemini_request_body(request)?;
-        if let Some(budget) = self.thinking_budget {
-            body["generationConfig"]["thinkingConfig"] = json!({"thinkingBudget":budget});
-        }
-        if let Some(schema) = &self.response_schema {
-            // generateContent JSON schema mode, preserving the independent
-            // thinkingConfig set above when both SDK options are enabled.
-            body["generationConfig"]["responseMimeType"] = json!("application/json");
-            body["generationConfig"]["responseJsonSchema"] = schema.clone();
-        }
+        let body = self.request_body(request)?;
         let model = request
             .model
             .strip_prefix("models/")
@@ -384,7 +737,7 @@ impl ModelProvider for Gemini {
         let mut texts = Vec::new();
         let mut calls = Vec::new();
         for part in parts {
-            if let Some(text) = part.get("text").and_then(Value::as_str) {
+            if let Some(text) = crate::gemini_content::visible_text(part) {
                 texts.push(text.to_owned());
             }
             if let Some(f) = part.get("functionCall") {
@@ -410,6 +763,7 @@ impl ModelProvider for Gemini {
                 } else {
                     Some(texts.join("\n"))
                 },
+                reasoning_content: Some(crate::gemini_content::encode(parts)?),
                 content_blocks: None,
                 tool_calls: if calls.is_empty() { None } else { Some(calls) },
                 tool_call_id: None,
@@ -427,10 +781,7 @@ impl ModelProvider for Gemini {
         request: &ModelRequest,
         deltas: UnboundedSender<String>,
     ) -> Result<ModelResponse> {
-        let mut body = gemini_request_body(request)?;
-        if let Some(budget) = self.thinking_budget {
-            body["generationConfig"] = json!({"thinkingConfig":{"thinkingBudget":budget}});
-        }
+        let body = self.request_body(request)?;
         crate::gemini_sse::complete(
             &self.client,
             &self.base_url,
@@ -547,6 +898,83 @@ fn error_summary(value: &Value) -> String {
 mod tests {
     use super::*;
     #[test]
+    fn tool_images_follow_all_parallel_results_in_chat_and_stay_with_gemini_responses() {
+        let calls = vec![
+            ToolCall {
+                id: "first".into(),
+                kind: "function".into(),
+                function: FunctionCall {
+                    name: "fetch".into(),
+                    arguments: "{}".into(),
+                },
+            },
+            ToolCall {
+                id: "second".into(),
+                kind: "function".into(),
+                function: FunctionCall {
+                    name: "fetch".into(),
+                    arguments: "{}".into(),
+                },
+            },
+        ];
+        let mut assistant = Message::text("assistant", "");
+        assistant.tool_calls = Some(calls.clone());
+        let mut first = Message::tool_result(&calls[0], "first image".into());
+        first.content_blocks = Some(vec![
+            json!({"type":"image","mime_type":"image/png","data":"AQID"}),
+        ]);
+        let second = Message::tool_result(&calls[1], "second result".into());
+        let request = ModelRequest {
+            model: "mock".into(),
+            system: "rules".into(),
+            messages: vec![assistant, first, second, Message::text("assistant", "done")],
+            tools: vec![],
+        };
+        let chat = openai_messages(&request).unwrap();
+        assert_eq!(chat[2]["role"], "tool");
+        assert_eq!(chat[3]["role"], "tool");
+        assert_eq!(chat[4]["role"], "user");
+        assert_eq!(chat[5]["role"], "assistant");
+        assert_eq!(chat[2]["tool_call_id"], "first");
+        assert_eq!(chat[3]["tool_call_id"], "second");
+        assert_eq!(
+            chat[4]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,AQID"
+        );
+        let gemini = gemini_request_body(&request).unwrap();
+        let response = gemini["contents"][1]["parts"].as_array().unwrap();
+        assert_eq!(
+            response
+                .iter()
+                .filter(|p| p.get("functionResponse").is_some())
+                .count(),
+            2
+        );
+        assert_eq!(response[1]["inlineData"]["data"], "AQID");
+    }
+    #[test]
+    fn gemini_signed_parts_are_not_sent_to_openai_compatible_models() {
+        let mut message = Message::text("assistant", "visible answer");
+        message.reasoning_content = Some(
+            crate::gemini_content::encode(&[
+                json!({"text":"private thought","thought":true,"thoughtSignature":"opaque"}),
+            ])
+            .unwrap(),
+        );
+        let request = ModelRequest {
+            model: "other-provider".into(),
+            system: "rules".into(),
+            messages: vec![message],
+            tools: vec![],
+        };
+        let wire = openai_messages(&request).unwrap();
+        assert_eq!(wire[1]["content"], "visible answer");
+        assert!(wire[1].get("reasoning_content").is_none());
+        assert!(!serde_json::to_string(&wire)
+            .unwrap()
+            .contains("private thought"));
+    }
+    #[test]
     fn provider_adapters_preserve_user_image_blocks_and_keep_roles() {
         let parsed = crate::multimodal::parse(&json!([
             {"type":"text","text":"What is in this photo?"},
@@ -604,6 +1032,41 @@ mod tests {
         );
     }
     #[test]
+    fn gemini_streaming_preserves_native_json_schema_and_thinking_budget() {
+        let mut provider = Gemini {
+            client: Client::new(),
+            base_url: "https://example.test".into(),
+            key: "unused".into(),
+            thinking_budget: None,
+            response_schema: None,
+            tuning: Default::default(),
+        };
+        provider.set_thinking_budget(Some(2048)).unwrap();
+        let schema = json!({"type":"object","properties":{"value":{"type":"string"}}});
+        provider.set_response_schema(Some(schema.clone())).unwrap();
+        let request = ModelRequest {
+            model: "test-model".into(),
+            system: "instructions".into(),
+            messages: vec![Message::text("user", "Return structured output")],
+            tools: vec![],
+        };
+        let body = provider.request_body(&request).unwrap();
+        assert_eq!(
+            body["generationConfig"]["thinkingConfig"]["thinkingBudget"],
+            2048
+        );
+        assert_eq!(
+            body["generationConfig"]["responseMimeType"],
+            "application/json"
+        );
+        assert_eq!(body["generationConfig"]["responseJsonSchema"], schema);
+        assert_eq!(
+            body["contents"][0]["parts"][0]["text"],
+            "Return structured output"
+        );
+    }
+
+    #[test]
     fn token_usage_normalization_is_provider_neutral() {
         assert_eq!(
             parse_openai_usage(&json!({"usage":{"prompt_tokens":20,
@@ -645,6 +1108,247 @@ mod tests {
         assert_eq!(gemini.cache_read_input_tokens, 40);
         assert_eq!(gemini.cache_creation_input_tokens, 12);
         assert_eq!(gemini.web_search_requests, 3);
+    }
+
+    #[test]
+    fn deepseek_tool_result_round_trips_reasoning_to_next_request() {
+        let assistant: Message = serde_json::from_value(json!({
+            "role":"assistant", "content":null,
+            "reasoning_content":"I need to inspect source",
+            "tool_calls":[{"id":"call_one","type":"function",
+                "function":{"name":"read_file","arguments":"{}"}}]
+        }))
+        .unwrap();
+        let tool_call = assistant.tool_calls.as_ref().unwrap()[0].clone();
+        let request = ModelRequest {
+            model: "deepseek-flash".into(),
+            system: "You are an assistant".into(),
+            messages: vec![
+                Message::text("user", "Inspect source"),
+                assistant,
+                Message::tool_result(&tool_call, "file content".into()),
+            ],
+            tools: vec![],
+        };
+        let wire = openai_messages(&request).unwrap();
+        assert_eq!(wire[2]["role"], "assistant");
+        assert_eq!(wire[2]["reasoning_content"], "I need to inspect source");
+        assert_eq!(wire[2]["tool_calls"][0]["id"], "call_one");
+        assert_eq!(wire[3]["role"], "tool");
+        assert_eq!(wire[3]["tool_call_id"], "call_one");
+    }
+
+    #[test]
+    fn source_default_ten_retries_and_portable_parse_int_override() {
+        for (value, attempts) in [
+            (None, 11),
+            (Some("0"), 1),
+            (Some("2retries"), 3),
+            (Some(" +5 days"), 6),
+            (Some("10"), 11),
+        ] {
+            assert_eq!(model_retry_attempts_from(value).unwrap(), attempts);
+        }
+        for value in ["", "foo", "-1", "99999999999999999999999999999"] {
+            assert!(model_retry_attempts_from(Some(value)).is_err());
+        }
+    }
+
+    #[test]
+    fn model_retry_backoff_uses_source_exponential_base_and_25_percent_jitter() {
+        assert_eq!(model_backoff_millis(0, 0), 500);
+        assert_eq!(model_backoff_millis(1, 0), 1_000);
+        assert_eq!(model_backoff_millis(2, 0), 2_000);
+        assert_eq!(model_backoff_millis(6, 0), 32_000);
+        assert_eq!(model_backoff_millis(80, 0), 32_000);
+        assert_eq!(model_backoff_millis(0, u64::MAX), 624);
+        assert_eq!(model_backoff_millis(6, u64::MAX), 39_999);
+        for attempt in 0..20 {
+            let floor = model_backoff_millis(attempt, 0);
+            let upper = model_backoff_millis(attempt, u64::MAX);
+            let middle = model_backoff_millis(attempt, u64::MAX / 2);
+            assert!(floor <= middle && middle <= upper);
+            assert!(upper < floor + floor / 4 + 1);
+        }
+    }
+
+    #[test]
+    fn idle_timeout_uses_source_decimal_prefix_without_environment_side_effects() {
+        for (raw, expected_ms) in [
+            (None, 90_000),
+            (Some("0"), 90_000),
+            (Some("-1"), 90_000),
+            (Some("  +30000ms"), 30_000),
+            (Some("1e3"), 1),
+            (Some("45000"), 45_000),
+        ] {
+            assert_eq!(stream_idle_timeout_from(raw).as_millis(), expected_ms);
+        }
+    }
+
+    #[test]
+    fn retry_after_prefix_matches_source_parse_int_without_six_hour_cap() {
+        for (value, expected) in [
+            ("120", Some(120)),
+            ("  +005.9", Some(5)),
+            ("2 seconds", Some(2)),
+            ("0x10", Some(0)),
+            ("-1", Some(0)),
+            ("21601", Some(21601)),
+            ("100000", Some(100000)),
+            ("99999999999999999999999999999", Some(u64::MAX)),
+            ("next Wednesday", None),
+        ] {
+            assert_eq!(
+                retry_after_delay(value).map(|delay| delay.as_secs()),
+                expected,
+                "{value}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn retry_after_zero_exhausts_all_eleven_source_default_attempts() {
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/models", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for _ in 0..11 {
+                let (mut stream, _) =
+                    tokio::time::timeout(Duration::from_secs(5), listener.accept())
+                        .await
+                        .unwrap()
+                        .unwrap();
+                let mut buf = [0u8; 1024];
+                let read = stream.read(&mut buf).await.unwrap();
+                assert!(read > 0);
+                stream.write_all(b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 0\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+            }
+        });
+        assert_eq!(model_retry_attempts_from(None).unwrap(), 11);
+        let response = send_model_request(Client::new().post(url).body("{}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::TOO_MANY_REQUESTS);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn retry_after_decimal_prefix_retries_once_and_false_header_suppresses_retry() {
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/models", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for (attempt, response) in [
+                b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 0 seconds\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice(),
+                b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".as_slice(),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let (mut stream, _) = tokio::time::timeout(
+                    Duration::from_secs(5),
+                    listener.accept(),
+                )
+                .await
+                .expect("Model retry did not arrive")
+                .unwrap();
+                let mut request = [0_u8; 2048];
+                let read = stream.read(&mut request).await.unwrap();
+                assert!(read > 0, "missing HTTP request on attempt {attempt}");
+                stream.write_all(response).await.unwrap();
+            }
+        });
+        let response = send_model_request(Client::new().post(url).body("{}"))
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        assert_eq!(response.text().await.unwrap(), "ok");
+        server.await.unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/models", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = [0_u8; 2048];
+            let _ = stream.read(&mut bytes).await.unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nx-should-retry: false\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .await
+                .unwrap();
+            assert!(
+                tokio::time::timeout(Duration::from_millis(800), listener.accept())
+                    .await
+                    .is_err(),
+                "x-should-retry:false must suppress retry"
+            );
+        });
+        let response = send_model_request(Client::new().post(url).body("{}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn successful_model_http_response_is_never_retried_even_if_header_says_true() {
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/models", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = [0_u8; 2048];
+            let _ = stream.read(&mut bytes).await.unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nx-should-retry: true\r\nConnection: close\r\n\r\nok").await.unwrap();
+            // A faulty retry would send the same successful request again
+            // after a 500ms backoff; reject any duplicate connection.
+            assert!(
+                tokio::time::timeout(Duration::from_millis(800), listener.accept())
+                    .await
+                    .is_err(),
+                "A successful response was sent twice"
+            );
+        });
+        let client = Client::new();
+        let response = send_model_request(client.post(url).body("{}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(response.text().await.unwrap(), "ok");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn unauthenticated_api_profile_opens_locally_but_refuses_inference() {
+        let mut profile = crate::config::Config::default()
+            .select(Some("deepseek"), None)
+            .unwrap();
+        profile.id = "missing-key-test-provider".into();
+        profile.api_key_env = Some("ATLAS_TEST_NEVER_CONFIGURED_KEY_929318".into());
+        let provider = create(&profile).expect("Local model selection must work without key");
+        let request = ModelRequest {
+            model: profile.model.clone(),
+            system: "instructions".into(),
+            messages: vec![Message::text("user", "hello")],
+            tools: vec![],
+        };
+        let err = provider
+            .complete(&request)
+            .await
+            .err()
+            .expect("key required");
+        assert!(format!("{err:#}").contains("models connect"), "{err:#}");
     }
 
     #[test]

@@ -1,0 +1,987 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/CircularBuffer.ts",
+  "source_sha256": "25f366b06de5d0f36131635b3a72169401c8e4da1fbee5d1a8bb46692060120e",
+  "cases": [
+    {
+      "id": "ordinary",
+      "kind": "normal",
+      "input": {
+        "capacity": 3,
+        "steps": [
+          {
+            "op": "add",
+            "value": 1
+          },
+          {
+            "op": "add",
+            "value": 2
+          },
+          {
+            "op": "toArray"
+          },
+          {
+            "op": "length"
+          },
+          {
+            "op": "getRecent",
+            "count": 1
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [
+            1
+          ],
+          "length": 1
+        },
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [
+            1,
+            2
+          ],
+          "length": 2
+        },
+        {
+          "op": "toArray",
+          "value": [
+            1,
+            2
+          ],
+          "snapshot": [
+            1,
+            2
+          ],
+          "length": 2
+        },
+        {
+          "op": "length",
+          "value": 2,
+          "snapshot": [
+            1,
+            2
+          ],
+          "length": 2
+        },
+        {
+          "op": "getRecent",
+          "value": [
+            2
+          ],
+          "snapshot": [
+            1,
+            2
+          ],
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "zero-capacity",
+      "kind": "edge",
+      "input": {
+        "capacity": 0,
+        "steps": [
+          {
+            "op": "add",
+            "value": 5
+          },
+          {
+            "op": "addAll",
+            "values": [
+              6,
+              7
+            ]
+          },
+          {
+            "op": "getRecent",
+            "count": 2
+          },
+          {
+            "op": "toArray"
+          },
+          {
+            "op": "length"
+          },
+          {
+            "op": "clear"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:29-33:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:72-76:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "getRecent",
+          "value": [],
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "toArray",
+          "value": [],
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "length",
+          "value": 0,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "clear",
+          "value": null,
+          "snapshot": [],
+          "length": 0
+        }
+      ]
+    },
+    {
+      "id": "wrap-around",
+      "kind": "edge",
+      "input": {
+        "capacity": 3,
+        "steps": [
+          {
+            "op": "addAll",
+            "values": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ]
+          },
+          {
+            "op": "toArray"
+          },
+          {
+            "op": "getRecent",
+            "count": 2
+          },
+          {
+            "op": "getRecent",
+            "count": 4
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:29-33:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [
+            3,
+            4,
+            5
+          ],
+          "length": 3
+        },
+        {
+          "op": "toArray",
+          "value": [
+            3,
+            4,
+            5
+          ],
+          "snapshot": [
+            3,
+            4,
+            5
+          ],
+          "length": 3
+        },
+        {
+          "op": "getRecent",
+          "value": [
+            4,
+            5
+          ],
+          "snapshot": [
+            3,
+            4,
+            5
+          ],
+          "length": 3
+        },
+        {
+          "op": "getRecent",
+          "value": [
+            3,
+            4,
+            5
+          ],
+          "snapshot": [
+            3,
+            4,
+            5
+          ],
+          "length": 3
+        }
+      ]
+    },
+    {
+      "id": "clear-and-reuse",
+      "kind": "edge",
+      "input": {
+        "capacity": 2,
+        "steps": [
+          {
+            "op": "addAll",
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "op": "clear"
+          },
+          {
+            "op": "length"
+          },
+          {
+            "op": "toArray"
+          },
+          {
+            "op": "add",
+            "value": 9
+          },
+          {
+            "op": "getRecent",
+            "count": 2
+          },
+          {
+            "op": "add",
+            "value": 10
+          },
+          {
+            "op": "toArray"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:29-33:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:72-76:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [
+            2,
+            3
+          ],
+          "length": 2
+        },
+        {
+          "op": "clear",
+          "value": null,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "length",
+          "value": 0,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "toArray",
+          "value": [],
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [
+            9
+          ],
+          "length": 1
+        },
+        {
+          "op": "getRecent",
+          "value": [
+            9
+          ],
+          "snapshot": [
+            9
+          ],
+          "length": 1
+        },
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [
+            9,
+            10
+          ],
+          "length": 2
+        },
+        {
+          "op": "toArray",
+          "value": [
+            9,
+            10
+          ],
+          "snapshot": [
+            9,
+            10
+          ],
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "one-slot",
+      "kind": "edge",
+      "input": {
+        "capacity": 1,
+        "steps": [
+          {
+            "op": "add",
+            "value": "first"
+          },
+          {
+            "op": "add",
+            "value": "second"
+          },
+          {
+            "op": "getRecent",
+            "count": 1
+          },
+          {
+            "op": "toArray"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [
+            "first"
+          ],
+          "length": 1
+        },
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [
+            "second"
+          ],
+          "length": 1
+        },
+        {
+          "op": "getRecent",
+          "value": [
+            "second"
+          ],
+          "snapshot": [
+            "second"
+          ],
+          "length": 1
+        },
+        {
+          "op": "toArray",
+          "value": [
+            "second"
+          ],
+          "snapshot": [
+            "second"
+          ],
+          "length": 1
+        }
+      ]
+    },
+    {
+      "id": "empty-query",
+      "kind": "edge",
+      "input": {
+        "capacity": 4,
+        "steps": [
+          {
+            "op": "length"
+          },
+          {
+            "op": "toArray"
+          },
+          {
+            "op": "getRecent",
+            "count": 3
+          },
+          {
+            "op": "clear"
+          },
+          {
+            "op": "length"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:72-76:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "length",
+          "value": 0,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "toArray",
+          "value": [],
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "getRecent",
+          "value": [],
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "clear",
+          "value": null,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "length",
+          "value": 0,
+          "snapshot": [],
+          "length": 0
+        }
+      ]
+    },
+    {
+      "id": "recent-zero",
+      "kind": "edge",
+      "input": {
+        "capacity": 3,
+        "steps": [
+          {
+            "op": "addAll",
+            "values": [
+              1,
+              2,
+              3
+            ]
+          },
+          {
+            "op": "getRecent",
+            "count": 0
+          },
+          {
+            "op": "toArray"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:29-33:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [
+            1,
+            2,
+            3
+          ],
+          "length": 3
+        },
+        {
+          "op": "getRecent",
+          "value": [],
+          "snapshot": [
+            1,
+            2,
+            3
+          ],
+          "length": 3
+        },
+        {
+          "op": "toArray",
+          "value": [
+            1,
+            2,
+            3
+          ],
+          "snapshot": [
+            1,
+            2,
+            3
+          ],
+          "length": 3
+        }
+      ]
+    },
+    {
+      "id": "bulk-empty",
+      "kind": "edge",
+      "input": {
+        "capacity": 2,
+        "steps": [
+          {
+            "op": "addAll",
+            "values": []
+          },
+          {
+            "op": "toArray"
+          },
+          {
+            "op": "add",
+            "value": null
+          },
+          {
+            "op": "addAll",
+            "values": [
+              0,
+              false
+            ]
+          },
+          {
+            "op": "toArray"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:29-33:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "toArray",
+          "value": [],
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [
+            null
+          ],
+          "length": 1
+        },
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [
+            0,
+            false
+          ],
+          "length": 2
+        },
+        {
+          "op": "toArray",
+          "value": [
+            0,
+            false
+          ],
+          "snapshot": [
+            0,
+            false
+          ],
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "structured-payload",
+      "kind": "edge",
+      "input": {
+        "capacity": 2,
+        "steps": [
+          {
+            "op": "add",
+            "value": {
+              "a": 1
+            }
+          },
+          {
+            "op": "add",
+            "value": [
+              "x",
+              2
+            ]
+          },
+          {
+            "op": "getRecent",
+            "count": 3
+          },
+          {
+            "op": "clear"
+          },
+          {
+            "op": "addAll",
+            "values": [
+              {
+                "unicode": "你"
+              },
+              null
+            ]
+          },
+          {
+            "op": "toArray"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:29-33:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:72-76:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [
+            {
+              "a": 1
+            }
+          ],
+          "length": 1
+        },
+        {
+          "op": "add",
+          "value": null,
+          "snapshot": [
+            {
+              "a": 1
+            },
+            [
+              "x",
+              2
+            ]
+          ],
+          "length": 2
+        },
+        {
+          "op": "getRecent",
+          "value": [
+            {
+              "a": 1
+            },
+            [
+              "x",
+              2
+            ]
+          ],
+          "snapshot": [
+            {
+              "a": 1
+            },
+            [
+              "x",
+              2
+            ]
+          ],
+          "length": 2
+        },
+        {
+          "op": "clear",
+          "value": null,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [
+            {
+              "unicode": "你"
+            },
+            null
+          ],
+          "length": 2
+        },
+        {
+          "op": "toArray",
+          "value": [
+            {
+              "unicode": "你"
+            },
+            null
+          ],
+          "snapshot": [
+            {
+              "unicode": "你"
+            },
+            null
+          ],
+          "length": 2
+        }
+      ]
+    },
+    {
+      "id": "over-capacity-recent",
+      "kind": "edge",
+      "input": {
+        "capacity": 4,
+        "steps": [
+          {
+            "op": "addAll",
+            "values": [
+              10,
+              20,
+              30,
+              40,
+              50,
+              60,
+              70
+            ]
+          },
+          {
+            "op": "getRecent",
+            "count": 20
+          },
+          {
+            "op": "toArray"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:29-33:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [
+            40,
+            50,
+            60,
+            70
+          ],
+          "length": 4
+        },
+        {
+          "op": "getRecent",
+          "value": [
+            40,
+            50,
+            60,
+            70
+          ],
+          "snapshot": [
+            40,
+            50,
+            60,
+            70
+          ],
+          "length": 4
+        },
+        {
+          "op": "toArray",
+          "value": [
+            40,
+            50,
+            60,
+            70
+          ],
+          "snapshot": [
+            40,
+            50,
+            60,
+            70
+          ],
+          "length": 4
+        }
+      ]
+    },
+    {
+      "id": "many-wraps",
+      "kind": "edge",
+      "input": {
+        "capacity": 2,
+        "steps": [
+          {
+            "op": "addAll",
+            "values": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8
+            ]
+          },
+          {
+            "op": "getRecent",
+            "count": 1
+          },
+          {
+            "op": "toArray"
+          },
+          {
+            "op": "clear"
+          },
+          {
+            "op": "addAll",
+            "values": [
+              9,
+              10,
+              11
+            ]
+          },
+          {
+            "op": "toArray"
+          }
+        ]
+      },
+      "source_ids": [
+        "src/utils/CircularBuffer.ts:Constructor:10-12:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:18-24:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:29-33:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:39-50:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:55-67:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:72-76:occurrence-1",
+        "src/utils/CircularBuffer.ts:MethodDeclaration:81-83:occurrence-1"
+      ],
+      "expected": [
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [
+            7,
+            8
+          ],
+          "length": 2
+        },
+        {
+          "op": "getRecent",
+          "value": [
+            8
+          ],
+          "snapshot": [
+            7,
+            8
+          ],
+          "length": 2
+        },
+        {
+          "op": "toArray",
+          "value": [
+            7,
+            8
+          ],
+          "snapshot": [
+            7,
+            8
+          ],
+          "length": 2
+        },
+        {
+          "op": "clear",
+          "value": null,
+          "snapshot": [],
+          "length": 0
+        },
+        {
+          "op": "addAll",
+          "value": null,
+          "snapshot": [
+            10,
+            11
+          ],
+          "length": 2
+        },
+        {
+          "op": "toArray",
+          "value": [
+            10,
+            11
+          ],
+          "snapshot": [
+            10,
+            11
+          ],
+          "length": 2
+        }
+      ]
+    }
+  ]
+}

@@ -43,15 +43,25 @@ fn canonical_shell_task_id(id: &str) -> Result<String> {
     bail!("Invalid background task ID")
 }
 
-fn new_shell_task_id() -> String {
+fn shell_task_id_from_random(bytes: [u8; 8]) -> String {
     const ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
-    let random = Uuid::new_v4();
     let mut id = String::with_capacity(9);
     id.push('b');
-    for byte in random.as_bytes().iter().take(8) {
-        id.push(ALPHABET[(*byte as usize) % ALPHABET.len()] as char);
+    for byte in bytes {
+        id.push(ALPHABET[(byte as usize) % ALPHABET.len()] as char);
     }
     id
+}
+
+fn new_shell_task_id() -> Result<String> {
+    // Task.ts::generateTaskId calls crypto.randomBytes(8). A UUID v4 fixes
+    // several bits in its version/variant bytes and must not substitute for
+    // eight independent random bytes when creating task output filenames.
+    let mut bytes = [0u8; 8];
+    getrandom::getrandom(&mut bytes).map_err(|error| {
+        anyhow::anyhow!("Cannot allocate task ID: system entropy unavailable: {error}")
+    })?;
+    Ok(shell_task_id_from_random(bytes))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -411,11 +421,23 @@ impl BackgroundTasks {
         if record.id != id {
             bail!("Task metadata ID mismatch");
         }
-        // Spawned processes are bound to their owning agent process.
-        // A stale 'running' record must not masquerade as a live task.
-        if record.status == "running" {
-            record.status = "interrupted".to_owned();
+        // Source Task.ts declares only pending/running/completed/failed/killed.
+        // The owning process is gone, so a persisted running record can no
+        // longer complete. Report a terminal failed state rather than an
+        // unrecognized "interrupted" status (SDK consumers otherwise may
+        // mistake it for successful completion).
+        // Normalize records written by previous Rust versions as well.
+        if matches!(
+            record.status.as_str(),
+            "pending" | "running" | "interrupted"
+        ) {
+            record.status = "failed".to_owned();
+            record.failure_reason.get_or_insert_with(|| {
+                "Background task was interrupted when its owning process exited".to_owned()
+            });
             Self::save(&self.directory, &record)?;
+        } else if !matches!(record.status.as_str(), "completed" | "failed" | "killed") {
+            bail!("Task {id} has invalid persisted status: {}", record.status);
         }
         Ok(record)
     }
@@ -458,15 +480,18 @@ impl BackgroundTasks {
         if command.len() > 100_000 {
             bail!("Background shell command too large")
         }
-        let id = (0..32)
-            .map(|_| new_shell_task_id())
-            .find(|candidate| {
-                !self.directory.join(format!("{candidate}.json")).exists()
-                    && !self.directory.join(format!("{candidate}.stdout")).exists()
-                    && !self.directory.join(format!("{candidate}.stderr")).exists()
-                    && !self.directory.join(format!("{candidate}.output")).exists()
-            })
-            .context("Could not allocate a unique background task ID")?;
+        let mut id = None;
+        for _ in 0..32 {
+            let candidate = new_shell_task_id()?;
+            if ["json", "stdout", "stderr", "output"]
+                .iter()
+                .all(|ext| !self.directory.join(format!("{candidate}.{ext}")).exists())
+            {
+                id = Some(candidate);
+                break;
+            }
+        }
+        let id = id.context("Could not allocate a unique background task ID")?;
         // Validate the shell command before reserving output files: a
         // command-construction failure must not leave stale task artifacts.
         let mut proc = kind.build_command(command)?;
@@ -978,10 +1003,8 @@ impl BackgroundTasks {
             let record = if let Some(running) = live.get(id) {
                 running.record.lock().unwrap().clone()
             } else {
-                match self.load(id) {
-                    Ok(r) => r,
-                    Err(_) => continue,
-                }
+                self.load(id)
+                    .with_context(|| format!("Cannot read background task {id}"))?
             };
             records.push(json!({
                 "task_id":record.id,
@@ -1011,7 +1034,14 @@ impl BackgroundTasks {
         }
         match self.load(&id) {
             Ok(record) => bail!("Task {id} is not running (status: {})", record.status),
-            Err(_) => bail!("No task found with ID: {id}"),
+            Err(error)
+                if error
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                bail!("No task found with ID: {id}")
+            }
+            Err(error) => return Err(error).with_context(|| format!("Inspect task {id}")),
         }
     }
 
@@ -1028,7 +1058,14 @@ impl BackgroundTasks {
             Some(task) => task,
             None => match self.load(id) {
                 Ok(record) => bail!("Task {id} is not running (status: {})", record.status),
-                Err(_) => bail!("No task found with ID: {id}"),
+                Err(error)
+                    if error
+                        .downcast_ref::<std::io::Error>()
+                        .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) =>
+                {
+                    bail!("No task found with ID: {id}")
+                }
+                Err(error) => return Err(error).with_context(|| format!("Inspect task {id}")),
             },
         };
         let record = task.record.lock().unwrap().clone();
@@ -1171,14 +1208,11 @@ fn tail_with_limit(path: &Path, max_bytes: u64) -> Result<String> {
     }
     let len = file.metadata()?.len();
     let start = len.saturating_sub(max_bytes);
-    use std::io::{Read, Seek, SeekFrom};
-    file.seek(SeekFrom::Start(start))?;
-    let mut bytes = Vec::new();
-    file.take(max_bytes).read_to_end(&mut bytes)?;
-    let earlier = len.saturating_sub(bytes.len() as u64);
-    let content = String::from_utf8_lossy(&bytes);
+    let range = crate::fs_operations::read_range_from(&mut file, start, max_bytes)?;
+    let earlier = range.bytes_total.saturating_sub(range.bytes_read as u64);
+    let content = range.content;
     if earlier == 0 {
-        Ok(content.into_owned())
+        Ok(content)
     } else {
         Ok(format!(
             "[{}KB of earlier output omitted]\n{content}",
@@ -1304,7 +1338,7 @@ async fn spool_merged<R: AsyncRead + Unpin>(
 pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"background_list",
-            "description":"List background shell tasks, including previously completed or interrupted jobs.",
+            "description":"List background shell tasks, including completed and failed jobs.",
             "parameters":{"type":"object","properties":{}}}}),
         json!({"type":"function","function":{"name":"task_output",
             "description":"Return status and saved output for a background shell task. block=true waits up to timeout milliseconds.",
@@ -1319,12 +1353,37 @@ pub fn definitions() -> Vec<Value> {
                 "max_bytes":{"type":"integer","minimum":0,"maximum":5368709120_i64}
             },"required":["task_id"]}}}),
         json!({"type":"function","function":{"name":"task_stop",
-        "description":"Stop a running background shell task by ID. Requires approval.",
+        "description":format!("{}\nPermission approval is required before stopping a running task.",
+            crate::source_prompt_catalog::literal(
+                "src/tools/TaskStopTool/prompt.ts",
+                "\n- Stops a running background task by its ID",
+            ).expect("Original TaskStop prompt text must exist")),
         "parameters":{"type":"object","properties":{
             "task_id":{"type":"string"},
             "shell_id":{"type":"string","description":"Legacy alias for task_id"}
         }}}}),
     ]
+}
+
+#[cfg(test)]
+mod source_prompt_tests {
+    use super::*;
+
+    #[test]
+    fn task_stop_definition_contains_original_source_description() {
+        let definition = definitions()
+            .into_iter()
+            .find(|item| item["function"]["name"] == "task_stop")
+            .unwrap();
+        let original = crate::source_prompt_catalog::literal(
+            "src/tools/TaskStopTool/prompt.ts",
+            "\n- Stops a running background task by its ID",
+        )
+        .unwrap();
+        let desc = definition["function"]["description"].as_str().unwrap();
+        assert!(desc.starts_with(original));
+        assert!(desc.contains("approval"));
+    }
 }
 
 #[cfg(test)]
@@ -1378,6 +1437,24 @@ mod tests {
     }
 
     #[test]
+    fn task_ids_use_all_eight_independent_crypto_bytes() {
+        // Covers the original modulo-36 conversion, especially positions
+        // whose entropy a version-4 UUID would accidentally constrain.
+        assert_eq!(shell_task_id_from_random([0; 8]), "b00000000");
+        assert_eq!(shell_task_id_from_random([35; 8]), "bzzzzzzzz");
+        assert_eq!(shell_task_id_from_random([36; 8]), "b00000000");
+        assert_eq!(shell_task_id_from_random([255; 8]), "b33333333");
+        for _ in 0..64 {
+            let id = new_shell_task_id().unwrap();
+            assert_eq!(id.len(), 9);
+            assert!(id.starts_with('b'));
+            assert!(id[1..]
+                .bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+        }
+    }
+
+    #[test]
     fn task_output_delta_schema_preserves_five_gibibyte_limit() {
         let definition = definitions()
             .into_iter()
@@ -1392,7 +1469,7 @@ mod tests {
         let root = root.path().canonicalize().unwrap();
         let source = BackgroundTasks::for_session(&root, Uuid::new_v4()).unwrap();
         let reader = BackgroundTasks::for_session(&root, Uuid::new_v4()).unwrap();
-        let id = new_shell_task_id();
+        let id = new_shell_task_id().unwrap();
         let output = source.directory.join(format!("{id}.stdout"));
         let error = source.directory.join(format!("{id}.stderr"));
         fs::write(&output, b"output from sibling session").unwrap();
@@ -1571,13 +1648,27 @@ mod tests {
         let id = created["task_id"].as_str().unwrap();
         let output: Value =
             serde_json::from_str(&tasks.output(id, true, 5000).await.unwrap()).unwrap();
-        assert_eq!(output["task"]["output"], "first\nsecond\nthird\n");
-        assert!(created["output_file"]
-            .as_str()
-            .unwrap()
-            .ends_with(".output"));
+        // stdout and stderr use independent OS pipes: arrival order across
+        // the pipes is not guaranteed even when the shell writes serially.
+        // Preserve each pipe's order and all bytes without claiming an
+        // impossible cross-pipe total order.
+        let combined = output["task"]["output"].as_str().unwrap();
+        let lines: Vec<&str> = combined.lines().collect();
+        assert_eq!(lines.len(), 3);
+        for expected in ["first", "second", "third"] {
+            assert_eq!(lines.iter().filter(|&&line| line == expected).count(), 1);
+        }
+        let first = lines.iter().position(|&line| line == "first").unwrap();
+        let third = lines.iter().position(|&line| line == "third").unwrap();
+        assert!(first < third, "stdout line order must be preserved");
+        let output_file = created["output_file"].as_str().unwrap();
+        assert!(output_file.ends_with(".output"));
+        let stdout_file = output_file.replace(".output", ".stdout");
+        let stderr_file = output_file.replace(".output", ".stderr");
+        assert_eq!(fs::read_to_string(stdout_file).unwrap(), "first\nthird\n");
+        assert_eq!(fs::read_to_string(stderr_file).unwrap(), "second\n");
         let delta: Value = serde_json::from_str(&tasks.output_delta(id, 0, 100).unwrap()).unwrap();
-        assert_eq!(delta["content"], "first\nsecond\nthird\n");
+        assert_eq!(delta["content"], combined);
     }
 
     #[cfg(unix)]
@@ -1701,7 +1792,7 @@ mod tests {
     }
 
     #[test]
-    fn recovers_unfinished_record_as_interrupted() {
+    fn recovers_unfinished_record_with_source_terminal_status() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().canonicalize().unwrap();
         let tasks = BackgroundTasks::new(&root).unwrap();
@@ -1723,7 +1814,65 @@ mod tests {
         };
         BackgroundTasks::save(&tasks.directory, &record).unwrap();
         let value: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
-        assert_eq!(value["task"]["status"], "interrupted");
+        assert_eq!(value["task"]["status"], "failed");
+        assert!(value["task"]["error"]
+            .as_str()
+            .unwrap()
+            .contains("owning process exited"));
+        let saved: TaskRecord =
+            serde_json::from_slice(&fs::read(tasks.directory.join(format!("{id}.json"))).unwrap())
+                .unwrap();
+        assert_eq!(saved.status, "failed");
+        assert_eq!(
+            saved.failure_reason.as_deref(),
+            value["task"]["error"].as_str()
+        );
+        // Re-reading the same record must not silently change its state.
+        let again: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
+        assert_eq!(again["task"]["status"], "failed");
+        assert_eq!(again["task"]["error"], value["task"]["error"]);
+        // Older Rust releases persisted a sixth status. Migrate it too.
+        let old = TaskRecord {
+            status: "interrupted".into(),
+            failure_reason: None,
+            ..record
+        };
+        BackgroundTasks::save(&tasks.directory, &old).unwrap();
+        let recovered: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
+        assert_eq!(recovered["task"]["status"], "failed");
+        let pending = TaskRecord {
+            status: "pending".into(),
+            failure_reason: None,
+            ..old
+        };
+        BackgroundTasks::save(&tasks.directory, &pending).unwrap();
+        let pending_result: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
+        assert_eq!(pending_result["task"]["status"], "failed");
+    }
+
+    #[test]
+    fn corrupt_task_metadata_is_reported_instead_of_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let tasks = BackgroundTasks::new(dir.path()).unwrap();
+        let id = "b01234567";
+        fs::write(tasks.directory.join(format!("{id}.json")), b"{bad").unwrap();
+        assert!(tasks.list().unwrap_err().to_string().contains(id));
+        assert!(tasks
+            .validate_stop(id)
+            .unwrap_err()
+            .to_string()
+            .contains("Inspect task"));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let error = runtime.block_on(tasks.stop(id)).unwrap_err();
+        assert!(error.to_string().contains("Inspect task"));
+        assert!(tasks
+            .validate_stop("babcdefgh")
+            .unwrap_err()
+            .to_string()
+            .contains("No task found"));
     }
     fn tokio_test_output(tasks: &BackgroundTasks, id: &str) -> String {
         tokio::runtime::Builder::new_current_thread()

@@ -8,9 +8,8 @@ pub fn definition() -> Value {
     json!({"type":"function","function":{
         "name":"web_search",
         "description":"Search the web through the user's explicitly configured SearXNG or Brave Search service. Requires external network approval.",
-        "parameters":{"type":"object","properties":{
-            "query":{"type":"string"},
-            "limit":{"type":"integer","minimum":1,"maximum":10},
+        "parameters":{"type":"object","additionalProperties":false,"properties":{
+            "query":{"type":"string","minLength":2},
             "allowed_domains":{"type":"array","items":{"type":"string"}},
             "blocked_domains":{"type":"array","items":{"type":"string"}}
         },"required":["query"]}
@@ -80,7 +79,14 @@ pub async fn execute(backend: &SearchBackend, args: &Value) -> Result<String> {
         .and_then(Value::as_u64)
         .unwrap_or(8)
         .clamp(1, 10);
-    let client = Client::builder().timeout(Duration::from_secs(20)).build()?;
+    crate::config::require_secure_credential_transport(
+        &backend.base_url,
+        backend.kind == "brave" && backend.api_key_env.is_some(),
+    )?;
+    let client = crate::tls_ca::client_builder()?
+        .timeout(Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
     let endpoint = Url::parse(&backend.base_url)?;
     if !matches!(endpoint.scheme(), "http" | "https") {
         bail!("Search endpoint must be http(s)")

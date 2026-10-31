@@ -10,7 +10,7 @@ GitHub Actions -> **222 Rust 1.99.1 离线工具链产物**。可由此 PR 或�
 
 `222-rust-1.99.1-linux-x86_64-offline`
 
-包含：完整 Rust sysroot、rustc、cargo、rustfmt、clippy、Linux x86_64 所需 Cargo registry/git 缓存、SHA256SUMS、安装脚本、版本/来源清单。单个工件保留期 30 天。合并至默认分支后，每周日 03:17 UTC 自动重新打包并上传新工件，避免所有可用副本过期；此前的工件仍由 GitHub 按各自期限清理。GitHub Actions 的计划运行可能延迟或偶发跳过，需以最新成功工件时间验证续期状态。
+包含：完整 Rust sysroot、rustc、cargo、rustfmt、clippy、Linux x86_64 所需 Cargo registry/git 缓存、SHA256SUMS、安装脚本、版本/来源清单。单个工件保留期 30 天。本工作流仅在 PR、指定分支推送或手动触发时生成工件；未设置定时任务。工件各自保留 30 天，过期后可使用工作流手动重新打包。需以实际成功运行记录和工件校验结果确认可用性。
 
 ## 本地使用
 
@@ -36,3 +36,6 @@ python3 scripts/port_workbench.py check --repo .
 安装器仅支持 Linux x86_64（glibc），会核对包内 SHA256 与 Rust 版本，不需要访问 GitHub / Rust 下载站 / crates.io，也不会覆盖原有安装目录。编译 Rust 项目需主机提供 C linker；迁移工作台需 Python3。
 
 注：有 Artifact 只能证明离线打包已完成。项目编译是否成功，以工作流中 `cargo check --offline --locked --all-targets` 的实际执行结果为准。
+## 当前源码快照
+
+仓库的 `.github/workflows/local-port-export.yml` 在面向 `main` 的 PR 上自动导出该 PR 实际 HEAD（保留七天），附带 `source-head.txt` 与 `SHA256SUMS`，避免下载的源码和 CI 所验证的提交混淆。此工作流不包含定时触发。

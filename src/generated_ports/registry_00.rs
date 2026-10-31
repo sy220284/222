@@ -311,8 +311,19 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/utils/stringUtils.ts" => match export {
+            "escapeRegExp" => Some(super::p_33ab1f755c819::escapeRegExp(args)),
             "capitalize" => Some(super::p_33ab1f755c819::capitalize(args)),
             "plural" => Some(super::p_33ab1f755c819::plural(args)),
+            "firstLineOf" => Some(super::p_33ab1f755c819::firstLineOf(args)),
+            "countCharInString" => Some(super::p_33ab1f755c819::countCharInString(args)),
+            "normalizeFullWidthDigits" => {
+                Some(super::p_33ab1f755c819::normalizeFullWidthDigits(args))
+            }
+            "normalizeFullWidthSpace" => {
+                Some(super::p_33ab1f755c819::normalizeFullWidthSpace(args))
+            }
+            "safeJoinLines" => Some(super::p_33ab1f755c819::safeJoinLines(args)),
+            "truncateToLines" => Some(super::p_33ab1f755c819::truncateToLines(args)),
             _ => None,
         },
         "src/utils/suggestions/commandSuggestions.ts" => match export {
@@ -351,14 +362,14 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "keychainCacheState" => Some(super::p_b2a6ef22565e7::keychainCacheState()),
             _ => None,
         },
-        "src/utils/ultraplan/ccrSession.ts" => match export {
-            "ULTRAPLAN_TELEPORT_SENTINEL" => {
-                Some(super::p_322c9d928a344::ULTRAPLAN_TELEPORT_SENTINEL())
-            }
-            _ => None,
-        },
         "src/components/PromptInput/PromptInputFooterSuggestions.tsx" => match export {
             "OVERLAY_MAX_ITEMS" => Some(super::p_a680bef86b91f::OVERLAY_MAX_ITEMS()),
+            "view" | "PromptInputFooterSuggestions" => Some(
+                serde_json::to_value(super::p_a680bef86b91f::render_source_view(
+                    args.first().unwrap_or(&serde_json::Value::Null),
+                ))
+                .expect("serialize suggestion view"),
+            ),
             _ => None,
         },
         "src/components/ScrollKeybindingHandler.tsx" => match export {
@@ -424,10 +435,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "VALID_UPDATE_SCOPES" => Some(super::p_d37d4b8c26098::VALID_UPDATE_SCOPES()),
             _ => None,
         },
-        "src/services/voiceStreamSTT.ts" => match export {
-            "FINALIZE_TIMEOUTS_MS" => Some(super::p_5bf6ce115b634::FINALIZE_TIMEOUTS_MS()),
-            _ => None,
-        },
         "src/state/AppStateStore.ts" => match export {
             "IDLE_SPECULATION_STATE" => Some(super::p_4160de63cf190::IDLE_SPECULATION_STATE()),
             _ => None,
@@ -477,10 +484,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "SOURCES" => Some(super::p_6a186fe197da0::SOURCES()),
             _ => None,
         },
-        "src/utils/teleport/api.ts" => match export {
-            "CCR_BYOC_BETA" => Some(super::p_1ae7384350177::CCR_BYOC_BETA()),
-            _ => None,
-        },
         "src/Tool.ts" => match export {
             "toolMatchesName" => Some(super::p_2980dcfa0210a::toolMatchesName(args)),
             _ => None,
@@ -510,6 +513,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "FOOTER_TEMPORARY_STATUS_TIMEOUT" => {
                 Some(super::p_4375034f382f7::FOOTER_TEMPORARY_STATUS_TIMEOUT())
             }
+            "view" | "Notifications" => serde_json::to_value(
+                super::p_4375034f382f7::render_source_view(args.first().unwrap_or(&Value::Null)),
+            )
+            .ok(),
             _ => None,
         },
         "src/components/Spinner/utils.ts" => match export {
@@ -529,20 +536,11 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "isTerminalStatus" => Some(super::p_75dd35b9b8459::isTerminalStatus(args)),
             _ => None,
         },
-        "src/hooks/useReplBridge.tsx" => match export {
-            "BRIDGE_FAILURE_DISMISS_MS" => {
-                Some(super::p_c84de04e0085c::BRIDGE_FAILURE_DISMISS_MS())
-            }
-            _ => None,
-        },
         "src/keybindings/resolver.ts" => match export {
             "keystrokesEqual" => Some(super::p_c7d9aa37cc1b1::keystrokesEqual(args)),
             _ => None,
         },
         "src/screens/REPL.tsx" => match export {
-            _ => None,
-        },
-        "src/services/remoteManagedSettings/securityCheck.tsx" => match export {
             _ => None,
         },
         "src/utils/agentContext.ts" => match export {
@@ -600,9 +598,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "isPathLikeToken" => Some(super::p_d37e245605bfe::isPathLikeToken(args)),
             _ => None,
         },
-        "src/utils/teleport.tsx" => match export {
-            _ => None,
-        },
         "src/utils/tokens.ts" => match export {
             "getTokenCountFromUsage" => Some(super::p_faf3dbb033a1d::getTokenCountFromUsage(args)),
             _ => None,
@@ -611,17 +606,11 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             "HISTORY_PAGE_SIZE" => Some(super::p_3532178887ef5::HISTORY_PAGE_SIZE()),
             _ => None,
         },
-        "src/cli/transports/ccrClient.ts" => match export {
-            _ => None,
-        },
         "src/components/FeedbackSurvey/submitTranscriptShare.ts" => match export {
             _ => None,
         },
         "src/components/Spinner/teammateSelectHint.ts" => match export {
             "TEAMMATE_SELECT_HINT" => Some(super::p_9cdb888d4eefe::TEAMMATE_SELECT_HINT()),
-            _ => None,
-        },
-        "src/components/TeleportError.tsx" => match export {
             _ => None,
         },
         _ => None,
@@ -914,7 +903,20 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             vec!["getDefaultSubagentModel", "getAgentModelOptions"],
         ),
         ("src/utils/proxy.ts", vec!["getProxyUrl", "getNoProxy"]),
-        ("src/utils/stringUtils.ts", vec!["capitalize", "plural"]),
+        (
+            "src/utils/stringUtils.ts",
+            vec![
+                "escapeRegExp",
+                "capitalize",
+                "plural",
+                "firstLineOf",
+                "countCharInString",
+                "normalizeFullWidthDigits",
+                "normalizeFullWidthSpace",
+                "safeJoinLines",
+                "truncateToLines",
+            ],
+        ),
         (
             "src/utils/suggestions/commandSuggestions.ts",
             vec!["isCommandInput", "formatCommand"],
@@ -952,16 +954,13 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             ],
         ),
         (
-            "src/utils/ultraplan/ccrSession.ts",
-            vec![
-                "ULTRAPLAN_TELEPORT_SENTINEL",
-                "PollFailReason",
-                "UltraplanPhase",
-            ],
-        ),
-        (
             "src/components/PromptInput/PromptInputFooterSuggestions.tsx",
-            vec!["OVERLAY_MAX_ITEMS", "SuggestionType"],
+            vec![
+                "OVERLAY_MAX_ITEMS",
+                "SuggestionType",
+                "view",
+                "PromptInputFooterSuggestions",
+            ],
         ),
         (
             "src/components/ScrollKeybindingHandler.tsx",
@@ -1016,10 +1015,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             vec!["VALID_INSTALLABLE_SCOPES", "VALID_UPDATE_SCOPES"],
         ),
         (
-            "src/services/voiceStreamSTT.ts",
-            vec!["FINALIZE_TIMEOUTS_MS", "FinalizeSource"],
-        ),
-        (
             "src/state/AppStateStore.ts",
             vec!["IDLE_SPECULATION_STATE", "FooterItem"],
         ),
@@ -1060,10 +1055,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/utils/settings/constants.ts",
             vec!["SETTING_SOURCES", "SOURCES"],
         ),
-        (
-            "src/utils/teleport/api.ts",
-            vec!["CCR_BYOC_BETA", "SessionStatus"],
-        ),
         ("src/Tool.ts", vec!["toolMatchesName"]),
         (
             "src/buddy/CompanionSprite.tsx",
@@ -1085,7 +1076,12 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ),
         (
             "src/components/PromptInput/Notifications.tsx",
-            vec!["FOOTER_TEMPORARY_STATUS_TIMEOUT"],
+            vec![
+                "FOOTER_TEMPORARY_STATUS_TIMEOUT",
+                "view",
+                "Notifications",
+                "externalEditorHint",
+            ],
         ),
         ("src/components/Spinner/utils.ts", vec!["toRGBColor"]),
         (
@@ -1104,16 +1100,8 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/components/tasks/taskStatusUtils.tsx",
             vec!["isTerminalStatus"],
         ),
-        (
-            "src/hooks/useReplBridge.tsx",
-            vec!["BRIDGE_FAILURE_DISMISS_MS"],
-        ),
         ("src/keybindings/resolver.ts", vec!["keystrokesEqual"]),
         ("src/screens/REPL.tsx", vec!["Screen"]),
-        (
-            "src/services/remoteManagedSettings/securityCheck.tsx",
-            vec!["SecurityCheckResult"],
-        ),
         ("src/utils/agentContext.ts", vec!["isSubagentContext"]),
         ("src/utils/autoRunIssue.tsx", vec!["AutoRunIssueReason"]),
         ("src/utils/aws.ts", vec!["isAwsCredentialsProviderError"]),
@@ -1144,10 +1132,8 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/utils/suggestions/directoryCompletion.ts",
             vec!["isPathLikeToken"],
         ),
-        ("src/utils/teleport.tsx", vec!["TeleportProgressStep"]),
         ("src/utils/tokens.ts", vec!["getTokenCountFromUsage"]),
         ("src/assistant/sessionHistory.ts", vec!["HISTORY_PAGE_SIZE"]),
-        ("src/cli/transports/ccrClient.ts", vec!["CCRInitFailReason"]),
         (
             "src/components/FeedbackSurvey/submitTranscriptShare.ts",
             vec!["TranscriptShareTrigger"],
@@ -1155,10 +1141,6 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         (
             "src/components/Spinner/teammateSelectHint.ts",
             vec!["TEAMMATE_SELECT_HINT"],
-        ),
-        (
-            "src/components/TeleportError.tsx",
-            vec!["TeleportLocalErrorType"],
         ),
     ]
 }

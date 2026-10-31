@@ -1,3 +1,168 @@
+## 2026-10-31 最新源码验收复查：历史证据清零缺失、双端门禁稳定性
+
+- 以最新 PR6 HEAD 复核 1,906 原版路径，授权排除 192，需迁移 1,714；已验收 39、部分实现 1,211、未迁移 464，**仍待完整验收 1,675**。本次不把静态索引或旧状态自动提升为已验收。
+- 补齐历史已验收条目所缺 29 份证据：16 条固定工具名常量和 13 条已经有 Rust 测试的工具/通用函数；其原版文件 SHA256 与冻结基线一致，记录具体 Rust 落点、测试名称及成功的历史 CI。当前 39 条已验收均有证据；另有两份已排除路径的历史证据，不影响本轮验收计数。
+- 修改 `scripts/port_workbench.py::check_evidence`，每次检查**全部已验收条目**必须持续保有原版哈希、生产入口、测试和恢复证据；新增 `test_historic_verified_entry_cannot_lose_its_evidence`，防止旧证据丢失而状态仍然冒称验收。
+- 修复 `scripts/runtime_parity_gate.py` 双端函数标识为非字符串导致的未捕获异常，以及适配器输出非法 UTF-8 导致验收器中断；明确将畸形输出记为失败场景。独立快照测试：运行时门禁 6/6 通过，工作台核心 31/31 通过；`port_workbench check` 通过，来源哈希及迁移计数一致。
+- 原版与 Rust 22,021 静态审计对象的完整双端行为测试仍缺大量场景，`原版源码全量等价验收` 专用 CI 当前无符合条件的运行器可执行，必须保留未验收结论；任何局部测试成功都不能替代它。完整交付仍未闭环。
+
+## 2026-10-31：MCP 工具结果完整内容链与多模型图片回放
+
+- 对照原版 `services/mcp/client.ts::transformResultContent/inferCompactSchema/transformMCPResult/processMCPResult/callMCPTool`（2478–2814、3124–3174）、`utils/mcpValidation.ts` 与 `utils/mcpOutputStorage.ts`。使用 `mcp_content` 收敛工具和 prompt 内容转换；优先选择 legacy toolResult、structuredContent、content，未知响应明确报错；isError 在内容转换及文件保存前优先返回原始失败原因。
+- 真实入口为 Agent MCP 授权 → McpManager → 同一内容转换 → PostToolUse 标准内容块/改写 → 会话保存 → Provider。音频和非图片资源完整落盘、返回路径，模型上下文不再出现原始 base64。结构化结果及数组大输出保存实际内容并显示推导的 schema。
+- 图片在会话中保持统一类型，SDK/Hook 使用标准 base64 source：Chat Completions 在相邻工具回执完成后附上用户图片内容，Responses 使用 function_call_output 的 input_image，Gemini 将对应图片与函数回执共同传递并合并相邻并行回执。真实 PNG 测试覆盖三种协议、CLI 子进程、MCP HTTP、模型 HTTP、会话重启及工具不重放；Hook 能读取图片并完全替换旧内容，附加上下文不丢失原块。
+- 已实际执行完整 `cargo test --locked --offline --all-targets`，1,360 项通过；新增规范化/schema/保存失败/UTF-16/图像完整性/多工具关联及真实调用链回归。工作台 33 项通过，原版 1,906 条扫描和台账检查通过；编译/Clippy/Rustfmt 及提交后 Linux/Windows 结果按最终 SHA 独立记录。
+- 相邻回归修复：现有 MCP 错误用例按原版失败优先语义断言；重启用例等待真实子进程退出，消除固定 35ms 竞争；大文件窗口样本改用实际 BOM/CRLF；队列失败的模拟响应通过真实 X-Should-Retry:false 声明终止重试，专门验证后续任务保留。补上 -p JSON/SDK 公共结果中的标准 result 字段，保留已有 content 消费方。
+- 迁移矩阵保持部分实现，不增加排除、不新增已验收路径。图像重采样与超限压缩、精确 token 计数、完整 OAuth 和交互审批仍须继续对齐。
+
+## 2026-10-31 文件监听新建事件漏报修复（第39份产品规格）
+
+- 源码 `utils/hooks/fileChangedWatcher.ts:67-85` 在 `ignoreInitial:true` 后监听 `add/change/unlink`；Rust 原 `diff_events` 对静态 watch path 的 `None -> Some` 漏报 `add`。PR6 提交 [0479c35e](https://github.com/sy220284/222/commit/0479c35e276969d921efac6a32b97a2ab64fff04) 修复首次创建及删除后再次创建；单测使用真实临时目录读写验证三次状态过渡。
+- 原版动态 watchPaths、CwdChanged 重挂载、chokidar 写入稳定等待及运行时重载仍未移植完毕；最新 HEAD 自动测试须核实，保留原迁移状态。
+
+
+---
+
+## 2026-10-31 新上传规格复核：模型 Retry-After 无端截断修复
+
+- 对照本次产品规格 04 与说明书 API/服务章节、原始 2.1.88 `services/api/withRetry.ts::getRetryDelay`（530–548），发现 `src/provider.rs::retry_after_delay` 曾将上游 Retry-After 秒数强制裁至 6 小时，提前重新发送模型请求。
+- 提交 [c1705089](https://github.com/sy220284/222/commit/c1705089ac50978a87dbc7fe65a15c821418530b) 已移除该上限，并加入 21601 秒、100000 秒及超大前缀解析回归。完整 API 异常、取消、来源相关 529、UI/SDK/流式恢复和最新 HEAD CI 仍需继续验收。保持“部分实现”，不增加已验收路径数量。
+
+---
+
+## 2026-10-31：未迁移公共文件与输出链首批接入
+
+> **2026-10-31 分段压缩对照推进（当前 HEAD 待CI复核）：** 原版 `src/services/compact/compact.ts::partialCompactConversation` 的方向选择与用户消息范围已进入 `Agent::compact_history_partial`，`from` 保留选定索引前的上下文并以完整会话进行总结，`up_to` 只总结之前消息并保留之后的消息；过滤旧摘要，模板沿用原版 PARTIAL 与 UP_TO 文本。新会话状态通过 `Session.summary_insert_at`、`transcript_snapshot` 与 `transcript_active_offset` 原子写盘，保留无损归档、终端搜索/导出/会话列表/语义检索/统计及会话恢复；CLI 增加 `/compact from INDEX`、`/compact up_to INDEX` 零基索引入口，SDK `compact` 控制可传 `direction,pivotIndex`。新增两方向模型请求、无效边界、磁盘恢复及失败不变更历史回归。保留缺口：原版 UUID compact_boundary 和保留片段亲缘重链、TUI 图形选段、文件/技能及代理附件恢复、其他同源 Hook/缓存时序；本次不提升已验收原路径数量。
+
+> **2026-10-31 续推：会话压缩后历史不丢失。** 对照 2.1.88 `services/compact/prompt.ts::getCompactUserSummaryMessage`、`services/compact/compact.ts` 与历史导出/搜索入口，已在 PR #6 将压缩摘要从 system 重复注入改为 `Session::model_messages()` 的单条合成 user 消息；普通 Agent、SDK、上下文估算与 /btw 共享该入口。压缩之前的原始 `Message` 迁入 `Session.archived_messages`，随摘要原子保存，后续重复压缩不重抄旧消息；`Session::transcript_messages()` 统一提供归档+当前消息给导出、CLI/交互全文搜索、语义会话检索、会话命名和统计。增加恢复后真实模型请求、历史顺序和清理回归测试。**待验：最新 HEAD 的全量 Linux/Windows CI；from/up_to 分段压缩、边界重链及 UI 行为尚未移植完毕。已验收路径数量不增加。**
+
+
+- 原版依据：2.1.88 `utils/fsOperations.ts`（128–384、620–771）、`utils/mcpOutputStorage.ts`（全文件）、`utils/format.ts`（全文件）。原始 1,906 条清单已实际逐路径核对行数和字节数。
+- 实际生产链：Read/Write/Edit → `fs_operations::permission_paths`，包括链中间目标的显式拒绝；PromptHistory → `ReverseLines`，保持 UTF-8 原始字节跨 4KB 块；后台任务输出 → `read_range_from`，保留原有 O_NOFOLLOW 与普通文件检查。
+- MCP 工具超限文本、MCP prompt 音频/资源和 WebFetch 二进制统一使用 `mcp_output_storage`，保存完整字节、按大小写无关 MIME 选择扩展名、阻止 `.atlas` 链接越界；超限文本包含原版分块阅读完整性要求。会话列表和保存回执接入共享格式。
+- 行为验证包括 `intermediate_symlink_targets_obey_read_and_write_deny_rules`、`bounded_ranges_and_reverse_lines_preserve_utf8_across_chunks`、`large_mcp_output_is_saved_in_full_with_chunk_read_instructions`、`mixed_case_binary_response_is_saved_without_loss`、`escaped_results_directory_does_not_create_or_write_outside_workspace`；`original_formatter_snapshots` 使用原始 TS 运行生成的 175 组结果，先复现舍入偏差再修正。原始 TS 只用于生成测试预期，不进入运行时。
+- 台账仅将这 3 条由未迁移调整为部分实现，逐条保留日期/时区、FS 可替换层、MCP 全部内容变换等剩余缺口。未迁移 493 → 490，部分实现 1,183 → 1,186，已验收仍 38，剩余待完整验收仍 1,676。**本批不代表完成用户要求的全部剩余移植。**
+- 保留同期 LocalTrigger 模型调用链及路径授权提交。本批本地 1,217 项 Rust 测试、26 项工作台测试通过；全部目标编译、Clippy 正确性/可疑代码门禁、Rustfmt、迁移台账检查及原版全量扫描通过。提交后的 Linux/Windows CI 仍需按新 HEAD 独立验收，不沿用旧版通过结论。
+
+## 2026-10-31 本地通用能力模型工具链复查
+
+- 对照原版 RemoteTriggerTool（模型工具）的五种动作，查出此前 Rust 仅注册 CLI/REPL 的入口断链；新增 `LocalTrigger` 通用模型工具定义，连通模型函数调用、权限校验、持久化及返回结果。拒绝周期计划和远程任务字段，用户未明确要求时不启用后台 Agent。
+- 修复任务数据 `get/list` 可经符号链接访问其他工作区的越界问题，统一读写目录检查并增加回归测试。
+- 现有高级审查/规划与本地附件通过初步调用链审计；仍存在 UltraPlan 多阶段状态/草稿、SDK 关键词路由等明确缺口。7 条恢复的源文件均继续标记部分实现。
+- 新增真实模拟模型多轮工具调用测试和权限拒绝、越界测试；完整验收以最新 GitHub Actions HEAD 运行状态为准。保留 1,906 原始路径、192 排除和 1,714 待等价对齐范围。
+
+## 2026-10-31：PR6 审查问题按原版调用边界与模型协议修复
+
+- 原版依据：用户提供的 2.1.88 源码包，`bridge/inboundAttachments.ts` 将附件转为文件引用后交给 Read；`tools/FileReadTool/FileReadTool.ts::checkPermissions/validateInput` 在读盘前执行权限；`services/api/claude.ts` 在 `content_block_stop` 形成完整消息，`query.ts` 才把工具交给 `StreamingToolExecutor.addTool`；Bash 的 `readOnlyValidation.ts` 对只读命令做参数校验。
+- SDK 本地附件：接入当前 Agent 的统一 Read deny/ask 和真实路径规则；失败发生在读取附件及发送用户消息前，保留文本/图片块顺序。远程 Bridge 仍排除。
+- OpenAI-compatible 流：按 index 收集交错参数，收到协议完成标记后按原顺序交付工具；截断、拒绝不启动工具。该协议没有原版 `content_block_stop`，不能把 index 变化冒充块结束；保留流式文本、并发工具、一次性结果和 SDK 中断清理，原版精确中途执行时序仍有协议差异，不提升原路径验收状态。
+- Gemini：这是多模型适配，依据 Google REST thought-signatures 文档，原始签名与 part 边界作为供应商私有状态随会话保存、工具续写、重启恢复原样回放；思考片段不进入用户答案，跨提供商切换时不转发私有状态。非流式与流式共用保存/回放格式。
+- 本地高级审查：只读模式允许固定 argv 的 `gh pr view [PR]` / `gh pr diff [PR]`，沿用显式 deny/ask、超时及取消清理；不允许 Shell 展开、重定向、额外参数、后台执行或写文件。完整原版 Bash 只读命令集合仍待迁移。
+- 回归：`tests/pr6_review_regressions.rs` 先在修复前实际复现四项失败，修复后覆盖附件拒绝、交错参数、签名流/非流与会话恢复、PR 实际查询及权限限制；相邻流式中断测试继续验证进程存活期间取消 Hook。所有正式门禁以本次修复最终提交的真实运行结果为准。
+- 范围不变：1,906 条原路径，192 条排除，38 条已验收；不将本次缺陷修复扩大为全产品或完整源文件等价。
+
+> **2026-10-31 本地触发器范围补充：** RemoteTriggerTool 3 条源码路径恢复本地通用能力，当前原始 1,906 条中排除 **192 条**（既有 22 + 170），纳入对齐 **1,714 条**；该三条与此前高级审查/规划四条均暂列部分实现，完成等价验收后才能调整状态。
+
+> **2026-10-31 恢复更新（优先于历史统计）：** 由原排除 199 条中恢复 4 条本地通用高级审查/规划源路径，目前排除 **195 条**（既有 22 + 本次剩余 173）、非排除 **1,711 条**。恢复项处于部分实现、必须对照原始源码验收。远程控制、原厂云端服务与专属配额仍排除。
+
+> **2026-10-30 最新授权范围（覆盖下文历史快照）**：Claude Code 2.1.88 原始 1,906 条路径，其中 22 条原始排除，加上 177 条用户确认的远程、云端及原厂专属排除，共 **199 条排除**，其余 **1,707 条保留**；模型通过可配置 API 接入，继续实现独立本地 Agent、普通 SDK、MCP、Hooks、任务、会话及文件工具，不再实施本地模型推理、远程 Bridge/SDK、官方订阅权益、云端同步或厂商遥测。排除名单以 `docs/REMOVED_SCOPE.json` 为准；实时状态请执行 `python3 scripts/port_workbench.py counts --repo .`。
+
+> **历史与执行的区别**：本文较早记录的 22/99/186 排除数、1,884/1,807/1,720 待迁移规模，以及 PR #2、远程 SDK/Bridge 待办均为历史资料，不再作为执行指令。当前工作提交至 PR #6，Issue #3 中 24 条取消开发、余 338 条继续闭环。
+
+## 历史日志：以下各节记录当时的整合过程，其远程模块后来已按用户新指令删除
+
+### 2026-10-30：按用户指令将 PR #9 的完整变更整合进 PR #6
+
+- **对比范围**：PR #9 `pr7` 起始检查 `1e0e82d2a1d714d3766460caec61d68997491a94`，并继续整合到 `fd1cbdd20db278544a1704361b2f08aa34387ef5`（含 Windows WebSocket 退避关闭测试、Hybrid 消息顺序及 Ping/Pong 协议修复）和全部 28 个变更文件；目标为 PR #6 `fix/manual-source-parity-20261030`，保留目标分支同期修改与本轮已验证的工具链修复。
+- **实际整合**：Agent 异步 Hook 唤醒与失败恢复、Vim 终端状态机、JWT 刷新及 WorkSecret、WebSocket/WSS/SSE/Hybrid/CCR Worker 与上传队列、依赖和验收工具一并保留。工具输入验证、Hook 强制审批、流式中断清理和模型结果回传的原有修复继续保留。
+- **冲突处理**：逐原路径合并迁移矩阵；保留 PR6 的通知/语音生成模块进度，同时登记 PR9 实际 Vim/远程模块；传输选择保留两边代码目标；进度记录保留双方内容；Windows 测试的 accepted socket blocking 修复只保留一份。没有整文件覆盖一边。
+- **实际本地验证**：最终组合 `cargo test --locked --offline --all-targets` 1283 通过、0 失败；25 项 Python 工作台测试通过，联网证据核验通过；1906 条路径保持唯一。Rustfmt、Clippy 正确性/可疑代码门禁及全部目标编译通过。远端 CI 绑定实际合并提交独立核验。
+- **保留验收边界**：此次合并完成代码整合，不把远程模块单测扩大为 CLI/SDK/REPL 完整远程用户链；SDK 复杂配置、全量生产接线和其余源码路径仍按原台账继续开放，PR6 保持 Draft。
+
+## 2026-10-30：PR #9 SSE 无损流处理与 CCR 恢复失败语义修正
+
+- **原版依据**：2.1.88 `source/src/cli/transports/SSETransport.ts` 采用增量 UTF-8 解码和完整事件保活计时；`ccrClient.ts` 的分页读取在失败耗尽后返回失败，不能把部分数据冒充完整结果。
+- **Rust 修复**：`src/transports/sse.rs` 新增跨 HTTP chunk 的 UTF-8 缓冲、截断/无效字节错误及 45 秒完整帧超时；`src/transports/ccr_client.rs` 修复分页游标转义、超时、网络错误显式传播，初始化不再默默吞下读取错误。
+- **验证**：`02fd52e7` 的五项 CI 通过是旧版基线。后续 `be797091` 与本轮提交的新功能及测试必须依据当前 PR HEAD 的全量 Linux、Windows、Rustfmt、Clippy、专项、安全 CI 重新判断；未在当前 HEAD 全绿前继续保持 Draft。
+- **剩余差异**：远程真实生产入口和原版完整 Worker 初始化、令牌生命周期仍待闭环，迁移台账维持“部分实现”，不升级“已验收”。
+
+## 2026-10-30：PR #9 原版函数/真实调用链审计及新增闭环
+
+- **对照来源**：用户原始 Claude Code 2.1.88 源码 `bridge/jwtUtils.ts`、`bridge/workSecret.ts`、`cli/transports/*.ts`、`vim/*.ts`、`utils/hooks.ts` 与 `hooks/useVimInput.ts`。
+- **新增行为**：`src/jwt_utils.rs` 增加按会话 token refresh scheduler（提前五分钟刷新、失败最多三次、无可用令牌一分钟重试、非 JWT 不破坏旧定时器、取消与代际隔离），对应异步测试；`src/agent.rs` 与 `src/main.rs` 补齐 asyncRewake 阻断通知在 Agent 查询中和 SDK 空闲时的消费，并对会话保存失败保留消息。
+- **质量修复**：合并 Rustfmt 格式修复到 `02fd52e7`；该 SHA 的 Linux 编译、单元与集成测试、Rustfmt、Clippy、专项行为及 RustSec 门禁已经通过。之后新增 Hook 行为和本次台账更新须等待各自最新 CI 验证。
+- **保留差异**：新传输模块和令牌刷新逻辑仍缺真实自建 Bridge/SDK 远程入口连接，WebSocket / SSE / Hybrid 完整进出方向、网络恢复、终端/SDK 用户体验尚无三级对照证据。上述原路径仅从“未迁移”调整为“部分实现”，**不增加任何“已验收”数量**；Draft 保持不变。
+## 2026-10-30：工具调用链收敛、流式审批与真实 SDK 中断修复
+
+- **原版依据**：用户 2.1.88 源包的 `services/tools/StreamingToolExecutor.ts`、`toolExecution.ts`、`utils/hooks.ts`，以及 `cli/print.ts` 的 interrupt 路径。对照真实 `Agent::ask`、普通/并发/流式三个调度和 Shell/Hook 进程所有权；保留同期提交的 SDK 双工具续写回归。
+- **统一执行边界**：`ToolExecutor::validate_call_before_hooks` 由三种调度共用；非法 JSON/非对象、搜索、文件别名、任务和 Shell 参数先验证再运行 Hook。`HookOutcome::require_tool_approval` 统一强制 ask；非交互模式即使 full 授权也不得越过 Hook 要求。
+- **模型结果链**：流式保留参数改写、Pre/PostToolUse 附加上下文及 Hook 警告；已执行工具的失败明确回填；非法输入和审批拒绝不进入 PostToolUse。原 `calls` 被流式结果消费后提前结束的问题沿用同期提交的继续模型循环修复。
+- **取消所有权**：`StreamingExecutor::Drop` 中断活动任务；`ToolBlockPump` 与同一 Agent 轮次共同生灭，取消后不再消费缓存块；`discard` 和兄弟 Shell 失败等待已取消任务释放 Hook/Shell 的进程树守卫，避免 JoinHandle 被丢弃后继续写入。
+- **真实回归**：`tests/streaming_tool_hooks_cli.rs` 同时打开/关闭流式调度，以真实 SSE 模型、Hook 子进程和磁盘验证强制审批、参数改写、附加上下文和非法输入；`tests/streaming_tool_calls_cli.rs` 保留双工具恰好一次及模型续写回归，新增 SDK 进程保持存活期间 interrupt 真正终止 Hook 并阻止后续写入。单测另覆盖执行器丢弃、阻塞的块泵、真实 Shell 子进程树取消、重复 drain、Shell 失败和 panic。
+- **同期故障处理**：计数覆盖按原版 JS 字符串存在判断及 parseInt 十进制前缀解析，去掉无依据的布尔门；保留远端新增边界测试并补充溢出等输入。原厂 NPM 清理项从 Rust 维护清单移除，SDK 提示词枚举使用通用名称，旧模型迁移资格接收显式提供方与旧模型集合，不嵌入厂商字符串或偷偷改用户模型。
+- **验收范围**：本地完整测试实跑 1174 项全部通过；合入同期计数解析修复后，其新增边界单测也通过；Rustfmt、Clippy 正确性/可疑代码门禁、全部目标编译和 21 项工作台测试已实际通过。远端最终 CI 须按提交后的真实 HEAD 独立核验。迁移矩阵保持原分类，新增完整原路径验收为 0；SDK initialize 四类复杂配置、真实远程 Bridge、MCP OAuth、完整终端 UI 和大量生成模块生产接线仍未闭环，不能据本次回归提升整个原路径或产品为完整等价。Issue #3 与 Draft 保持开放。
+
+## 2026-10-30：修复原版 MCP 命名目标的真实 toggle 语义
+
+- **原版证据**：`source/src/commands/mcp/mcp.tsx::MCPToggle` 对命名目标不按 action 过滤状态，直接调用 `toggleMcpServer(name)`；`source/src/services/mcp/useManageMCPConnections.ts` 中 `toggleMcpServer` 对 disabled 执行启用，对所有其它状态执行禁用。此前 Rust 命名目标使用 action 作为期望状态，会让已启用的 `/mcp enable NAME` 保持启用，与原版行为不同。
+- **修复**：`generated_ports/p_7522da9606aa2.rs::toggle_enabled_state` 使用实时状态推导切换方向；`src/main.rs` 所有选定目标以该结果调用 `Agent::toggle_named_mcp`；all 保持原来的基于 action 的筛选。
+- **测试**：源端口单测覆盖 connected/disabled 在 enable/disable/named/all 的结果；真实聊天集成测试覆盖失败连接状态下命名 enable 实际切换为 disabled 和磁盘持久化。
+- **验收状态**：仍以提交后最新 Linux/Windows CI 为准，Ink UI 等差异继续保留。
+
+## 2026-10-30：MCP /mcp 原版批量开关接入真实聊天入口
+
+- **源码依据**：2.1.88 `source/src/commands/mcp/mcp.tsx::call/MCPToggle`；`ide` 不可选择，`all` 启用时仅选 disabled、禁用时仅选非 disabled；命名目标和空选择给出明确结果。
+- **Rust 生产接入**：`src/main.rs::chat` 使用 `generated_ports::p_7522da9606aa2::route_args/resolve_toggle` 收敛此前重复的手写命令；实际调用 `Agent::mcp_statuses`、`toggle_named_mcp` 和 `reconnect_named_mcp`，更改持久化到 mcp-disabled.json，保留无参数 reconnect-failed 快捷命令。
+- **新增测试**：`tests/mcp_chat_route_cli.rs` 通过真实 chat 进程测试禁用 all、重复禁用时的状态反馈、不存在目标、实时 status 与磁盘持久化。已做本地 Rustfmt 检查；本提交完整 Linux/Windows 结果按真实 GitHub CI 核验。
+- **保留差异**：原版 MCPSettings/MCPToggle 完整 Ink UI、交互式连接管理视图以及其它权限/网络边界尚未独立验收，源路径仍为部分实现。
+
+## 2026-10-30：SDK initialize 原子生效与集成测试全量自动发现
+
+- **原始源码对照**：2.1.88 `source/src/cli/print.ts::handleInitializeRequest`，初始化同时提交 Agents、JSON Schema 及系统提示。旧 Rust 路径先发布 Agent catalog 再校验 Schema；Schema 错误后会留下未授权的会话状态。
+- **真实修复**：`src/agent.rs` 将 SDK Agent 解析校验与 catalog 安装分离；`src/main.rs::sdk_nested_control` 先完成 Agent 校验，再设置 Provider Schema，然后才发布 Agent catalog 和 prompt。失败的初始化不污染后续请求。
+- **新增集成测试**：`tests/sdk_initialize_atomic_cli.rs` 真实启动 SDK 子进程，依次发送包含 Agent/无效 Schema 的失败请求及有效初始化，验证失败 Agent 不出现在成功请求的公共目录。
+- **根因级测试覆盖**：CI 原先手工点名部分 `tests/*.rs`，可能遗漏新增 SDK、MCP、SSE 测试；现 Linux 与 Windows 使用 `cargo test --locked --tests` 自动发现全部集成测试目标，保留独立 `cargo test --locked --bins`，无需每新增测试再编辑白名单。
+- **待验收**：本轮涉及文件本地 `cargo fmt --all -- --check` 通过。由于离线 Cargo 缓存缺少最新锁定的 `foldhash 0.2.0`，实际编译/集成/Windows 结果以本提交的 GitHub Actions 为准；SDK Hooks、SDK MCP Servers、提示建议等完整等价仍未闭环。
+
+## 2026-10-30：CA 证书按原版恢复双来源与启动优先级
+
+- **原始依据**：2.1.88 \`source/src/utils/caCertsConfig.ts\`：已有 \`NODE_EXTRA_CA_CERTS\` 不覆盖；用户 \`settings.json\` 的 \`env\` 优先于全局 config 的 \`env\`；项目 settings 未批准前不能提供信任根。
+- **Rust 实际入口**：\`run_cli\` → \`tls_ca::apply_user_startup_config\` → \`ATLAS_USER_SETTINGS\` 或用户配置目录 \`settings.json\` → \`Config::path()\` 全局 config → \`p_8041a90f0b147::get_extra_certs_path_from_config\` → 进程环境 → 统一 Rust HTTPS client builder。
+- **新增测试**：\`tls_ca::tests::user_settings_override_global_config_without_reading_project_settings\` 与 \`malformed_user_settings_report_path_without_using_global_fallback\`，分别覆盖用户优先、全局兜底、双来源缺失以及非法 JSON。此前已有环境变量优先级和 PEM 有效性测试。
+- **验收**：固定 Rust 1.99.1 的 \`cargo fmt --all -- --check\` 本地通过。最新 Cargo.lock 的 \`foldhash 0.2.0\` 不在本机离线缓存，其他 Cargo 测试须依据本次提交的实际 GitHub CI，不将旧提交结果作为本次验收。
+- **保留差异**：原版 \`--use-system-ca\`、Node 系统信任存储、CA 缓存失效和复杂 TLS 运行期切换仍待验证；原路径保持部分实现。
+
+## 2026-10-30：自定义 CA 证书生产入口接通与跨平台测试竞争修复（源码待完全等价验收）
+
+- **原版依据**：`source/src/utils/caCerts.ts`、`caCertsConfig.ts`。Rust 的 reqwest/rustls 不会读取 Node 的 NODE_EXTRA_CA_CERTS，原生成模块此前只有注册及测试引用。
+- **实际修复**：`src/tls_ca.rs` 将 PEM Bundle 信任根追加到默认根证书集；用户 config.json 的 env.NODE_EXTRA_CA_CERTS 在网络请求前读取；模型、MCP HTTP、MCP Legacy SSE、WebSearch、WebFetch、OAuth、Profile、版本信息及 Bridge 附件客户端共用此入口。项目仓库文件不会在信任审批前注入 CA。
+- **测试与修复**：CA 配置优先级纯函数消除两项单测抢改进程环境变量的 Windows 竞态；新增有效 PEM 和无效 PEM 测试。初次全量回归发现 Doctor 无法检查坏配置，已在后续提交修复。离线 Rust 1.99.1 `cargo check --locked --offline --all-targets`、`cargo fmt --all -- --check`、CA 专项单测及 Doctor 针对测试通过。GitHub 最新 HEAD 的全平台 CI 仍按真实结果独立核验。
+- **保留缺口**：原版系统证书选项及动态证书缓存清理、分开的全局 config 与用户 settings 双来源、所有 HTTPS 客户端证书行为回归仍待补齐。两个原路径均保持部分实现，不新增“已验收”计数。
+
+## 2026-10-30：Agent 主链 token budget 全链路手工重写（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 `source/src/query/{tokenBudget.ts,config.ts,deps.ts}`、`source/src/utils/tokenBudget.ts`，及 `query.ts` 主循环接线段（Stop hook 阻断之后、completed 返回之前）与 `REPL.tsx` 轮首/轮末快照调用现场逐行对照。
+- **Rust 行为**：`src/query_token_budget.rs` 还原 BudgetTracker 与 checkTokenBudget 全分支（agentId 或非正预算直接停、0.9 完成阈值、500 双窗口递减判定、Math.round 取整语义、续写文案含 Intl 千分位）；`src/query_config.rs` 还原 buildQueryConfig 四门快照（env 门按仓库中立惯例映射 ATLAS_* 并走 is_env_truthy；streaming tool execution 服务端灰度门在 StreamingToolExecutor 迁移前如实为 false；feature('TOKEN_BUDGET') 编译门按既有惯例改 ATLAS_TOKEN_BUDGET 进程开关）；`src/agent.rs` 主循环接线：ask 入口解析预算并快照（无新预算时沿用上一轮），完成点执行决策（Continue→计数递增+meta 续写消息入会话并继续循环，Stop→递减 debug 行后自然完成），自然完成清空轮预算。
+- **deps.ts 映射**：QueryDeps 注入语义由既有 Provider trait 与 Agent 方法注入点等价承载，不新增平行结构。
+- **实际测试**：`cargo test --locked --offline --all-targets` 合计 881 通过 0 失败（含 tests/privacy.rs 品牌中立扫描），`cargo fmt --all -- --check`、`cargo clippy --locked --all-targets --offline -- -D clippy::correctness -D clippy::suspicious`、`cargo check --locked --offline --all-targets` 全部通过；port_workbench check 基线一致。
+- **保留差异**：REPL 轮末 budgetInfo 的 UI 展示消息（turn duration message）属终端 UI 链后续补齐；原版 logEvent 遥测按隐私政策移除；续写消息的 isMeta 展示过滤随终端 UI 链补齐（模型上下文行为已等价）。本轮同时修复 PR #6 尾部 terminal_input.rs vim 接线编译阻断（恢复 4 参 redraw 与 VimKeys 状态机接线及 read_prompt vim_enabled 透传）。
+- **本地门禁**：五道门禁全绿，已提交待行为验收。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
+
+## 2026-10-30：MCP CLI 原版 JSON 导入、详情与项目授权续补（全功能等价待验收）
+
+- **源代码对照**：`source/src/main.tsx` 中 `mcp add-json / get / remove / reset-project-choices` 注册及 `source/src/cli/handlers/mcp.tsx` 中对应处理器。
+- **Rust 具体行为**：`src/mcp_cli.rs` 新增 `add-json`（按 JSON 反序列化、单服务器 Config 校验、作用域保存、项目审批）、`get`（指定或解析服务所在范围，返回确切配置）、`reset-project-choices`（只撤销本机信任，保留项目配置）、`remove`（不指定范围时只删除唯一匹配项，重名跨范围时明确要求指定）。拒绝静默丢失未知 OAuth 字段。
+- **实际测试**：新增两项真实命令行集成测试，`cargo test --locked --offline --test mcp_cli` 合计 **4/4 成功**，`cargo fmt --all -- --check` 和 Clippy 正确性/可疑行为规则均通过。原 `mcp add` 分支和信任指纹保持覆盖。
+- **保留缺口**：原版 list/get 在线健康探测、SSE、OAuth/XAA、桌面导入与交互信任选择未完整重写；属于原有部分实现继续完善，暂不宣布完整等价。
+
+## 2026-10-30：原版 MCP add 入口与多作用域配置手工重写（源码已完成、全功能未等价）
+
+- **原版基准**：`source/src/commands/mcp/addCommand.ts`（281 行）、`source/src/services/mcp/utils.ts::ensureConfigScope/ensureTransport/parseHeaders`、`source/src/utils/envUtils.ts::parseEnvVars`，来自用户原始 2.1.88 ZIP。
+- **Rust 代码**：`src/mcp_cli.rs` 与 `src/main.rs`。新增 CLI `atlas-agent mcp add|list|remove`，`stdio` 和 `http`、`-s local|project|user`、`-e KEY=VALUE`、`-H 'Header: value'`，支持保留 `=` 后完整 env 值、Header 冒号后文本、持久化、重复检查、错误返回；`--transport sse`、`--client-id`、`--client-secret`、`--callback-port` 暂明确报错，不把未实现协议伪装成功。
+- **真实调用链**：CLI 修改配置 → 原子写入 → Config::validate → Agent 初始化时 active_servers 按作用域加载 → 已有 MCP attach_mcp。项目级 `.mcp.json` 未经本机批准不自动启动；本机批准指纹存于用户配置目录下的 workspace 独立文件，项目修改命令/URL/Header 后即失效，不能由恶意 Git 仓库附带配置文件冒用审批。
+- **本地验收**：`cargo fmt --all -- --check`、`cargo clippy --locked --offline --all-targets -- -D clippy::correctness -D clippy::suspicious`、`cargo test --locked --offline --all-targets` 均返回 0；独立集成测试 `tests/mcp_cli.rs` 通过；`python3 -m unittest discover -s tests/port_workbench` 的 13 项通过，`python3 scripts/port_workbench.py check --repo .` 台账总数 1906、排除 22。
+- **仍缺**：SSE 连接、OAuth/XAA 客户端注册、原版交互密钥获取、MCP 原版信任 UI、完整源 CLI 输出/权限语义。该项仅由“未迁移”改为“部分实现”；其它源码仍继续按总迁移台账，不宣称 1,884 条全部完成。
+
 ## 2026-10-30：SDK 消息快照回退、异步 Hook、插件崩溃恢复续接（源码已提交、待验收）
 
 原始源码依据：完整 source/src/utils/fileHistory.ts (fileHistoryMakeSnapshot/fileHistoryRewind/100 snapshots)、source/src/cli/print.ts (SDK rewind_files 控制/用户 UUID)、source/src/utils/hooks.ts (execCommandHook async 首行及配置 async)、source/src/utils/hooks/AsyncHookRegistry.ts (pending/complete/finalize)、source/src/schemas/hooks.ts (async/asyncRewake)、source/src/bridge/replBridgeTransport.ts、source/src/bridge/remoteBridgeCore.ts。此处只记录真实 Rust 入口，不用静态 generated_ports 计数。
@@ -2006,3 +2171,33 @@ Rust 修改：`src/mcp.rs` 将服务端主动请求放在客户端待决请求 I
 - **修复的真实差异**：旧代码通过 `fs::read` 读取 JSON 检查点或备份，可能跟随被替换的符号链接；旧 `restore` 先哈希验证备份，再用 `fs::copy` 第二次打开同一路径，允许校验与回退之间内容变化。现直接写入已验证 SHA-256 的原始字节，避免二次读取。公开的历史查询、差异预览、回退及会话复制共用这些路径。
 - **代码提交**：`4bdc42ed2af38c0dfae62f9fa597491cd1b3a75c`、`440a6ecd9635ebc31f26f843d1ff20ca9ed6781c`、`02ffae2a97dd3de5ac15659c77d7ebefc9f3e847`、`488d4dd3cefebe246004849507223e3b0644320b`。保守计 **2 项独立用户业务行为**：历史查询/跨会话复制安全读取；回退使用经校验的同一份备份内容。与本轮插件 6 项合计 **8/100，余 92**，均为源码已提交、待行为验收。
 - **仍缺**：完整消息 ID 聚合快照、100 次会话内快照保留、Shell 修改追踪、跨进程复制锁、Windows 重新解析点竞态、文件回退目标写入原子性、跨会话恢复一致性。未运行 Cargo、测试或 CI；100 项预先完整缺口清单和对应实施方案仍未完成，流程 A/B 及数量硬目标未达标。Issue #3 冻结 362 项不核销。
+
+
+## 2026-10-30：工具层手工重写批次一（debug/过滤/插件遍历/Unicode 净化/ANSI 切片/规格/缓存/生成器/诊断/通知折叠）（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 `source/src/utils/{debug.ts,debugFilter.ts,plugins/walkPluginMarkdown.ts,sanitization.ts,sliceAnsi.ts,bash/specs/srun.ts,settings/settingsCache.ts,generators.ts,diagLogs.ts,collapseBackgroundBashNotifications.ts}` 及 npm 依赖 `@alcalzone/ansi-tokenize@0.3.1`、`is-fullwidth-code-point@5.1.0`、`get-east-asian-width@1.7.0` 源码逐函数对照。
+- **Rust 可达链**：`generated_ports::p_5b257a1951fde`（debug 核心）→ `p_7a2adbb3dff05`（过滤）→ `p_9f04f27b8b4b0`（插件 .md 遍历接 debug）；`p_5579cc6f53028`（Unicode 净化：NFKC+手写 Cf/Co/Cn 范围+JSON 递归）；`p_6aa0ce358bf6a`（ANSI 感知切片：tokenize/reduce/undo/OSC8 + EAW F/W 128 区间表 + isZeroWidth 全表 + stringWidth）；`p_4007591beaebd`（srun 规格）；`p_57eeca3eff1c9`（settings 三缓存）；`p_48282ce751286`（Stream 工具）；`p_ce92b3c05ca1a`（诊断 JSON 行）；`p_13ed07885469b`（后台 bash 通知折叠）。
+- **保守功能计数**：debug 日志核心（级别门控/路径链/缓冲写）、debug 过滤器、插件 Markdown 遍历、Unicode 净化（迭代收敛+递归）、ANSI 切片（含 OSC8 与 EAW 测宽）、srun 规格、settings 缓存、生成器工具、诊断日志时序、后台 bash 通知折叠，共 **10 个独立业务行为**，全部含单元测试（34 个 #[test]）。同一行为的修正提交不重复计数。
+- **尚未实现的准确差异**：debug 的 memoize 缓存身份省略（行为等价）、Windows symlink 差异待验收；sliceAnsi 的 Intl.Segmenter 图素聚类以 scalar+ZWJ 合并近似、原版 control token 拼接 undefined 缺陷已修正（AGENTS.md 统一修正条款）；generators 的 return_value 注入语义未单列；walkPluginMarkdown 的 fsOperations 注入接口待接线；env 名按仓库惯例 CLAUDE_CODE_*→ATLAS_*。**未运行 Cargo/测试/CI（本容器无 Rust 工具链）；全部已提交、待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
+
+
+## 2026-10-30：工具层手工重写批次二（Intl 分割/CA 证书/DXT 清单/pyright 规格）（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 `source/src/utils/{intl.ts,caCertsConfig.ts,dxt/helpers.ts,bash/specs/pyright.ts}` 逐函数对照；Intl.Segmenter 与 upstream MCPB zod schema 的等价策略见桩头说明。
+- **Rust 可达链**：`p_0c2f0671dbf30`（图素/词分割+locale）→ 为 sliceAnsi 等消费方提供共享分割原语；`p_8041a90f0b147`（NODE_EXTRA_CA_CERTS 三级优先，config/settings 端口迁移前由调用方传解析后 env 对象）；`p_f2da3e94e87ce`（MCPB 清单必填校验+扩展 ID sanitize）；`p_bec23e04adcfb`（pyright 19 旗标规格）。
+- **保守功能计数**：图素/词分割原语、first/lastGrapheme、CA 证书路径应用（三优先级+用户源限制）、MCPB 清单校验、扩展 ID 生成、pyright 规格，共 **6 个独立业务行为**，17 个单元测试。
+- **尚未实现的准确差异**：全 UAX#29 图素边界为近似（同 ANSI 切片桩口径）；ICU locale/timezone 以 TZ/LANG 解析替代；zod schema 可选字段细则以必填骨架覆盖；隐私门禁（tests/privacy.rs 品牌扫描）已通过。**未运行 CI（本地 cargo check/test/fmt 已全绿，810 通过 0 失败）；已提交待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
+
+
+## 2026-10-30：工具层手工重写批次三（分类器审批/团队发现/团队记忆）（源码已提交、待验收）
+
+- **原版依据**：完整 2.1.88 `source/src/utils/{classifierApprovals.ts,teamDiscovery.ts,teamMemoryOps.ts}`，依赖端口 team_registry/event_signal/backends-types 桩均已在位。
+- **保守功能计数**：分类器审批登记与查询（双分类器隔离）、checking 生命周期、团队状态汇总（隐藏排除）、成员富字段解析、团队记忆计数摘要、isTeamMemFile 路径判定，共 **6 个独立业务行为**，14 个单元测试。
+- **尚未实现的准确差异**：feature 编译期门禁改进程级开关；teamMemPaths 全量（292 行注入防护）待独立迁移；team JSON 富字段由本桩直读。**本地 cargo check/fmt/test 全绿（847 通过 0 失败），已提交待行为验收**。Issue #3 冻结 362 条独立保留，新增完整等价验收 0 项。
+
+
+## 2026-10-30：六条源路径通过实际 Linux/Windows 测试正式销项
+
+正式基准：749a57bfe2da995bd5ba64aaf225f115595b6631；五项成功 CI：https://github.com/sy220284/222/actions/runs/41041559517。其中 `controlMessageCompat.ts` 由真实 SDK 接口与边界测试覆盖；`version.ts` 有真实 CLI 子进程及源码默认构建时间测试；四条命令 `add-dir/index.ts`、`rename/index.ts`、`export/index.ts`、`resume/index.ts` 是独立懒加载命令索引，原版完整元数据（名称、类型、提示、别名、即时执行标志、可见性）已在 `src/command_manifest.rs` 的独立测试对照，真实生产 handler 已接线并通过对应 CLI 集成测试。严格仅核销上述 index 元数据原路径，关联 handler 中 UI、SDK、剪贴板、跨项目搜索和权限差异仍保留 partial。
+
+本轮累计：原始 1,906 路径、22 排除、应迁移 1,884，已验收 **39**（历史 29 + 本任务新增 10），未验收 **1845**；本次 100 项清单 **10 已验收、90 未验收**。证据逐条见 `docs/PORT_EVIDENCE.jsonl`，对应 commit 与成功运行 ID 可独立复核。

@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use std::{
     collections::{HashMap, VecDeque},
     fs,
-    io::{self, Write},
+    io::{self, BufRead, Write},
     path::{Path, PathBuf},
     process::Stdio,
     sync::{Arc, Mutex},
@@ -18,8 +18,97 @@ use std::{
 use tokio::{process::Command, time::timeout};
 use walkdir::WalkDir;
 
+/// FileReadTool.ts::isBlockedDevicePath. Never open device streams that
+/// cannot reach EOF or that read from the terminal, even when the workspace
+/// itself is /dev or /proc. Safe devices such as /dev/null stay allowed.
+fn blocked_read_device(path: &Path) -> bool {
+    let name = path.to_string_lossy();
+    matches!(
+        name.as_ref(),
+        "/dev/zero"
+            | "/dev/random"
+            | "/dev/urandom"
+            | "/dev/full"
+            | "/dev/stdin"
+            | "/dev/tty"
+            | "/dev/console"
+            | "/dev/stdout"
+            | "/dev/stderr"
+            | "/dev/fd/0"
+            | "/dev/fd/1"
+            | "/dev/fd/2"
+    ) || (name.starts_with("/proc/")
+        && ["/fd/0", "/fd/1", "/fd/2"]
+            .iter()
+            .any(|suffix| name.ends_with(suffix)))
+}
+
 const MAX_FILE_BYTES: u64 = 1_048_576;
 const MAX_OUTPUT_CHARS: usize = 16_000;
+
+/// Validate the original 2.1.88 WebFetch/WebSearch/ToolSearch Zod
+/// `inputSchema` before classifying a tool as concurrency-safe. WebFetch
+/// and WebSearch use strictObject; ToolSearch uses a permissive z.object.
+/// This is schema validation, not the later authorization/network check.
+fn validate_web_tool_input_schema(name: &str, input: &Value) -> Result<()> {
+    let object = input
+        .as_object()
+        .context("Tool arguments must be an object")?;
+    match name {
+        "web_fetch" => {
+            if object.keys().any(|key| key != "url" && key != "prompt") {
+                bail!("WebFetch arguments contain unsupported fields");
+            }
+            let raw_url = object
+                .get("url")
+                .and_then(Value::as_str)
+                .context("WebFetch requires a string URL")?;
+            reqwest::Url::parse(raw_url).context("WebFetch URL is invalid")?;
+            object
+                .get("prompt")
+                .and_then(Value::as_str)
+                .context("WebFetch requires a string prompt")?;
+        }
+        "web_search" => {
+            if object.keys().any(|key| {
+                !matches!(
+                    key.as_str(),
+                    "query" | "allowed_domains" | "blocked_domains"
+                )
+            }) {
+                bail!("WebSearch arguments contain unsupported fields");
+            }
+            let query = object
+                .get("query")
+                .and_then(Value::as_str)
+                .context("WebSearch requires a string query")?;
+            if query.encode_utf16().count() < 2 {
+                bail!("WebSearch query must contain at least two UTF-16 code units");
+            }
+            for field in ["allowed_domains", "blocked_domains"] {
+                if let Some(value) = object.get(field) {
+                    if !value
+                        .as_array()
+                        .is_some_and(|list| list.iter().all(Value::is_string))
+                    {
+                        bail!("WebSearch {field} must contain only strings");
+                    }
+                }
+            }
+        }
+        "tool_search" | "ToolSearch" => {
+            object
+                .get("query")
+                .and_then(Value::as_str)
+                .context("ToolSearch requires a string query")?;
+            if object.get("max_results").is_some_and(|v| !v.is_number()) {
+                bail!("ToolSearch max_results must be numeric");
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
 
 /// Stream task output one line at a time. A single unbroken line can be
 /// gigabytes long, so skip and truncate it without allocating the whole file.
@@ -482,6 +571,7 @@ pub enum Approval {
     Full,
 }
 
+#[derive(Clone)]
 pub struct ToolExecutor {
     root: PathBuf,
     extra_roots: Vec<PathBuf>,
@@ -491,6 +581,7 @@ pub struct ToolExecutor {
     history_message_id: Option<uuid::Uuid>,
     approval: Approval,
     interactive: bool,
+    simple_mode_coordinator: bool,
     file_checkpointing_enabled: bool,
     reads: Arc<Mutex<HashMap<PathBuf, u64>>>,
     file_reads: Arc<Mutex<FileReadCache>>,
@@ -513,6 +604,7 @@ impl ToolExecutor {
             history_message_id: None,
             approval,
             interactive,
+            simple_mode_coordinator: false,
             file_checkpointing_enabled: true,
             reads: Arc::new(Mutex::new(HashMap::new())),
             file_reads: Arc::new(Mutex::new(FileReadCache::default())),
@@ -523,6 +615,11 @@ impl ToolExecutor {
             mode: None,
             metrics: Arc::new(ToolMetrics::default()),
         }
+    }
+
+    pub fn with_simple_mode_coordinator(mut self, enabled: bool) -> Self {
+        self.simple_mode_coordinator = enabled;
+        self
     }
 
     pub fn with_extra_roots(mut self, roots: Vec<PathBuf>) -> Self {
@@ -622,6 +719,9 @@ impl ToolExecutor {
     /// modification time; never manufacture a read of newer content.
     pub fn seed_read_state(&self, requested: &str, observed_ms: u64) -> Result<()> {
         let path = self.checked_path(requested)?;
+        if blocked_read_device(&path) {
+            bail!("Cannot read '{requested}': this device file would block or produce infinite output");
+        }
         self.require_read_rules(requested, &path)?;
         let before = match fs::metadata(&path) {
             Ok(metadata) => metadata,
@@ -679,6 +779,58 @@ impl ToolExecutor {
     pub fn with_plugins(mut self, enabled: Vec<String>) -> Self {
         self.enabled_plugins = enabled;
         self
+    }
+
+    /// Validate before any PreToolUse hook can launch a subprocess. Serial,
+    /// concurrent and streaming dispatch share this boundary; dispatch still
+    /// validates the effective arguments after hook rewrites.
+    pub fn validate_call_before_hooks(&self, call: &ToolCall) -> Result<()> {
+        if crate::env_runtime::is_env_truthy(std::env::var("ATLAS_SIMPLE").ok().as_deref())
+            && !crate::tool_pool_merge::is_simple_model_tool_for_context(
+                &call.function.name,
+                false,
+                self.simple_mode_coordinator,
+            )
+        {
+            bail!("Tool {} is unavailable in simple mode", call.function.name);
+        }
+        let value: Value = serde_json::from_str(&call.function.arguments)
+            .context("Invalid tool arguments JSON")?;
+        if !value.is_object() {
+            bail!("Tool arguments must be a JSON object");
+        }
+        let name = crate::tool_names::canonical_name(&call.function.name);
+        if matches!(call.function.name.as_str(), "Read" | "Edit" | "Write") {
+            let mut normalized = value;
+            crate::semantic_inputs::normalize_source_file_tool(
+                &call.function.name,
+                &mut normalized,
+            )
+            .and_then(|_| crate::semantic_inputs::normalize_tool_fields(name, &mut normalized))
+            .with_context(|| format!("Invalid {} arguments", call.function.name))?;
+        } else if matches!(name, "grep_files" | "glob_files") {
+            crate::search::validate_tool_input(name, &value).context("Invalid search arguments")?;
+        } else if matches!(
+            name,
+            "web_fetch" | "web_search" | "tool_search" | "ToolSearch"
+        ) {
+            validate_web_tool_input_schema(name, &value)
+                .with_context(|| format!("Invalid {} input schema", call.function.name))?;
+        } else if crate::task_graph::handles(&call.function.name) {
+            crate::task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
+                .with_context(|| format!("Invalid {} arguments", call.function.name))?;
+        } else if name == "LocalTrigger" {
+            crate::local_triggers::validate_model_input(&value)
+                .context("Invalid LocalTrigger input")?;
+        } else if matches!(name, "task_stop" | "KillShell") {
+            self.validate_task_stop(&value)
+                .context("Invalid TaskStop arguments")?;
+        } else if name == "task_output" {
+            Self::validate_task_output(&value).context("Invalid TaskOutput arguments")?;
+        } else if matches!(name, "run_command" | "PowerShell") {
+            Self::validate_shell_input(name, &value).context("Invalid Shell arguments")?;
+        }
+        Ok(())
     }
 
     pub async fn execute(&self, call: &ToolCall) -> String {
@@ -775,6 +927,9 @@ impl ToolExecutor {
         crate::semantic_inputs::normalize_source_file_tool(&call.function.name, &mut args)?;
         crate::semantic_inputs::normalize_tool_fields(name, &mut args)?;
         match name {
+            "LocalTrigger" => crate::local_triggers::model_call(&self.root, &args, || {
+                self.require_approval("LocalTrigger", &args)
+            }),
             "read_file" => self.read_file_with_mode(&args, call.function.name == "Read"),
             "notebook_edit" => {
                 self.require_approval("notebook_edit", &args)?;
@@ -1067,6 +1222,9 @@ impl ToolExecutor {
         {
             bail!("Shell description must be a string");
         }
+        if background_tasks_disabled() && normalized.get("run_in_background").is_some() {
+            bail!("run_in_background is disabled for this session");
+        }
         if normalized
             .get("run_in_background")
             .is_some_and(|value| !value.is_boolean())
@@ -1197,49 +1355,26 @@ impl ToolExecutor {
     /// symlinked directories must not bypass a denied path pattern.
     fn file_rule_paths(&self, requested: &str) -> Result<Vec<String>> {
         let path = self.checked_path(requested)?;
-        let mut ancestor = path.as_path();
-        while !ancestor.exists() {
-            ancestor = ancestor
-                .parent()
-                .context("File path has no existing ancestor")?;
-        }
-        let resolved = ancestor.canonicalize()?.join(path.strip_prefix(ancestor)?);
-        let mut paths = vec![
-            requested.to_owned(),
-            path.to_string_lossy().into_owned(),
-            resolved.to_string_lossy().into_owned(),
-        ];
-        for candidate in [&path, &resolved] {
+        Ok(self.rule_paths_for(requested, &path))
+    }
+
+    fn rule_paths_for(&self, requested: &str, path: &Path) -> Vec<String> {
+        let candidates = crate::fs_operations::permission_paths(path);
+        let mut paths = vec![requested.to_owned()];
+        for candidate in &candidates {
+            paths.push(candidate.to_string_lossy().into_owned());
             for root in std::iter::once(&self.root).chain(self.extra_roots.iter()) {
                 if let Ok(relative) = candidate.strip_prefix(root) {
                     paths.push(relative.to_string_lossy().into_owned());
                 }
             }
         }
-        Ok(paths)
+        paths.sort();
+        paths.dedup();
+        paths
     }
 
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
-        let mut security_approved = false;
-        if crate::tool_names::canonical_name(tool) == "run_command" || tool == "PowerShell" {
-            if let Some(command) = args.get("command").and_then(Value::as_str) {
-                if let Some(reason) = crate::shell_quote::security_review_reason(command) {
-                    if !self.interactive {
-                        bail!("Shell command needs explicit security review: {reason}");
-                    }
-                    eprintln!("Security review required: {reason}");
-                    eprintln!("Command: {}", truncate(command, 600));
-                    eprint!("Approve this command once? [y/N] ");
-                    io::stderr().flush()?;
-                    let mut answer = String::new();
-                    io::stdin().read_line(&mut answer)?;
-                    if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
-                        bail!("Shell command rejected: {reason}");
-                    }
-                    security_approved = true;
-                }
-            }
-        }
         // Path rules are evaluated against the requested path and the
         // symlink-resolved target, including files not created yet.
         let mut permission_args = args.clone();
@@ -1272,14 +1407,54 @@ impl ToolExecutor {
         if matched == Some(permission_rules::Behavior::Deny) {
             bail!("Tool {tool} denied by explicit permission rule");
         }
-        if self.approval == Approval::ReadOnly {
-            bail!("Tool {tool} denied in read-only mode");
+        // Explicit policy denial must be final before considering interactive
+        // security review. Asking the user about an already-denied command
+        // can override neither policy nor result and confuses the approval
+        // contract. Keep review mandatory even for otherwise allowed tools.
+        let mut security_approved = false;
+        if crate::tool_names::canonical_name(tool) == "run_command" || tool == "PowerShell" {
+            if let Some(command) = args.get("command").and_then(Value::as_str) {
+                if let Some(reason) = crate::shell_quote::security_review_reason(command) {
+                    if !self.interactive {
+                        bail!("Shell command needs explicit security review: {reason}");
+                    }
+                    eprintln!("Security review required: {reason}");
+                    eprintln!("Command: {}", truncate(command, 600));
+                    eprint!("Approve this command once? [y/N] ");
+                    io::stderr().flush()?;
+                    let mut answer = String::new();
+                    io::stdin().read_line(&mut answer)?;
+                    if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+                        bail!("Shell command rejected: {reason}");
+                    }
+                    security_approved = true;
+                }
+            }
         }
-        // Plan mode forbids mutations. In don't-ask mode, explicit allow
-        // rules still work: only decisions that would ask are denied.
-        // Original permissions.ts hasPermissionsToUseTool (lines 480-516).
-        if self.mode == Some(permission_mode::Mode::Plan) {
-            bail!("Tool {tool} denied by permission mode");
+        if self.approval == Approval::ReadOnly || self.mode == Some(permission_mode::Mode::Plan) {
+            // Source BashTool/readOnlyValidation.ts validates read-only
+            // queries instead of rejecting every shell tool. Keep this
+            // local PR adaptation limited to fixed gh argv; no shell syntax,
+            // templates, output files or mutations are authorized here.
+            let query = (crate::tool_names::canonical_name(tool) == "run_command"
+                || tool == "PowerShell")
+                && args
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .and_then(crate::shell_runtime::read_only_pr_args)
+                    .is_some()
+                && args.get("run_in_background").and_then(Value::as_bool) != Some(true);
+            if !query {
+                if self.approval == Approval::ReadOnly {
+                    bail!("Tool {tool} denied in read-only mode");
+                }
+                bail!("Tool {tool} denied by permission mode");
+            }
+            // Explicit ask rules still require the normal prompt below;
+            // explicit deny rules have already been applied above.
+            if matched != Some(permission_rules::Behavior::Ask) {
+                return Ok(());
+            }
         }
         if matched == Some(permission_rules::Behavior::Allow) {
             return Ok(());
@@ -1343,19 +1518,7 @@ impl ToolExecutor {
         requested: &str,
         path: &Path,
     ) -> Result<Option<permission_rules::Behavior>> {
-        let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-        let mut paths = vec![
-            requested.to_owned(),
-            path.to_string_lossy().into_owned(),
-            resolved.to_string_lossy().into_owned(),
-        ];
-        for candidate in [path, &resolved] {
-            for root in std::iter::once(&self.root).chain(self.extra_roots.iter()) {
-                if let Ok(relative) = candidate.strip_prefix(root) {
-                    paths.push(relative.to_string_lossy().into_owned());
-                }
-            }
-        }
+        let paths = self.rule_paths_for(requested, path);
         permission_rules::policy_for(
             &self.permission_rules,
             "read_file",
@@ -1380,7 +1543,7 @@ impl ToolExecutor {
         ))
     }
 
-    fn require_read_rules(&self, requested: &str, path: &Path) -> Result<()> {
+    pub(crate) fn require_read_rules(&self, requested: &str, path: &Path) -> Result<()> {
         match self.read_rule_decision(requested, path)? {
             Some(permission_rules::Behavior::Deny) => {
                 bail!("Read denied by explicit permission rule: {requested}")
@@ -1403,6 +1566,18 @@ impl ToolExecutor {
         }
     }
 
+    /// Original utils/readFileInRange.ts streams only the requested lines
+    /// when the caller supplies a limit. A large file must not be rejected
+    /// just because the portion being read is small. Keep the window bounded
+    /// without loading the complete source file into memory.
+    fn read_large_text_window(path: &Path, start: usize, count: usize) -> Result<String> {
+        Ok(
+            crate::fs_operations::read_text_line_window(path, start, count)
+                .with_context(|| format!("Reading {}", path.display()))?
+                .formatted,
+        )
+    }
+
     fn read_file(&self, args: &Value) -> Result<String> {
         self.read_file_with_mode(args, false)
     }
@@ -1418,6 +1593,9 @@ impl ToolExecutor {
             Some(path) => path,
             None => self.checked_path(requested)?,
         };
+        if blocked_read_device(&path) {
+            bail!("Cannot read '{requested}': this device file would block or produce infinite output");
+        }
         self.require_read_rules(requested, &path)?;
         if trusted_task_output {
             // Reading a temporary task log must never grant Edit/Write
@@ -1456,16 +1634,26 @@ impl ToolExecutor {
         } else {
             MAX_FILE_BYTES
         };
-        if metadata.len() > max_bytes {
-            bail!("File too large (limit {max_bytes} bytes)");
+        // FileReadTool.ts::callInner forwards maxBytes only if limit is
+        // absent. An explicit offset+limit may read a small portion of an
+        // arbitrarily large regular text file.
+        let windowed_large_read = metadata.len() > max_bytes && requested_limit.is_some();
+        if metadata.len() > max_bytes && !windowed_large_read {
+            bail!("File too large (limit {max_bytes} bytes); supply line_count to read a window");
         }
-        let content = read_editable_text(&path)
-            .with_context(|| format!("Reading {}", path.display()))?
-            .content;
-        self.reads
-            .lock()
-            .unwrap()
-            .insert(path.canonicalize()?, notebook::revision(&content));
+        let content = if windowed_large_read {
+            String::new()
+        } else {
+            read_editable_text(&path)
+                .with_context(|| format!("Reading {}", path.display()))?
+                .content
+        };
+        if !windowed_large_read {
+            self.reads
+                .lock()
+                .unwrap()
+                .insert(path.canonicalize()?, notebook::revision(&content));
+        }
         let start = args
             .get("start_line")
             .and_then(Value::as_u64)
@@ -1482,25 +1670,59 @@ impl ToolExecutor {
                 .unwrap_or(250)
                 .clamp(1, 500) as usize
         };
-        let result = content
-            .lines()
-            .enumerate()
-            .skip(start - 1)
-            .take(count)
-            .map(|(i, line)| format!("{}: {}", i + 1, line))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let window = if windowed_large_read {
+            Some(crate::fs_operations::read_text_line_window(
+                &path, start, count,
+            )?)
+        } else {
+            None
+        };
+        let result = if let Some(window) = &window {
+            window.formatted.clone()
+        } else {
+            content
+                .split('\n')
+                .enumerate()
+                .skip(start - 1)
+                .take(count)
+                .map(|(i, line)| format!("{}: {}", i + 1, line.trim_end_matches('\r')))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let source_warning = if source_read && result.is_empty() {
+            let total_lines = window
+                .as_ref()
+                .map(|window| window.total_lines)
+                .unwrap_or_else(|| content.split('\n').count());
+            Some(format!(
+                "<system-reminder>Warning: the file exists but is shorter than the provided offset ({start}). The file has {total_lines} lines.</system-reminder>"
+            ))
+        } else {
+            None
+        };
         let after = fs::metadata(&path)?;
         let before_ms = modified_millis(&metadata)?;
-        let unchanged = modified_millis(&after)? == before_ms && after.len() == metadata.len();
+        let unchanged = modified_millis(&after)? == before_ms
+            && after.len() == metadata.len()
+            && window
+                .as_ref()
+                .map(|selected| selected.mtime_ms == before_ms)
+                .unwrap_or(true);
         self.file_reads.lock().unwrap().insert(
             path.canonicalize()?,
             FileReadState {
-                full: unchanged
+                full: !windowed_large_read
+                    && unchanged
                     && start == 1
-                    && content.lines().count() <= count
+                    && content.split('\n').count() <= count
                     && (source_read || result.chars().count() <= MAX_OUTPUT_CHARS),
-                content,
+                // Original FileReadTool caches the actual selected text,
+                // including for streaming ranges of oversized files. A blank
+                // cache entry loses what the user/model actually read.
+                content: window
+                    .as_ref()
+                    .map(|window| window.content.clone())
+                    .unwrap_or(content),
                 timestamp_ms: before_ms,
                 read_offset: if source_read && unchanged {
                     Some(requested_offset)
@@ -1514,7 +1736,7 @@ impl ToolExecutor {
                 },
             },
         );
-        Ok(result)
+        Ok(source_warning.unwrap_or(result))
     }
 
     fn notebook_edit(&self, args: &Value) -> Result<String> {
@@ -2000,9 +2222,27 @@ impl ToolExecutor {
     ) -> Result<String> {
         let command = required(args, "command")?;
         let timeout_ms = Self::shell_timeout_ms(args)?;
-        let mut proc = kind.build_command(command)?;
+        let pr_args = if self.approval == Approval::ReadOnly
+            || self.mode == Some(permission_mode::Mode::Plan)
+        {
+            crate::shell_runtime::read_only_pr_args(command)
+        } else {
+            None
+        };
+        let read_only_query = pr_args.is_some();
+        let mut proc = if let Some(args) = pr_args {
+            let mut proc = tokio::process::Command::new("gh");
+            proc.args(args);
+            proc
+        } else {
+            kind.build_command(command)?
+        };
         proc.envs(&self.session_env);
         crate::subprocess_env::apply(&mut proc);
+        if read_only_query {
+            // Enforce this after applying session environment overrides.
+            proc.env("GH_PAGER", "cat").env("PAGER", "cat");
+        }
         // The original ShellCommand uses tree-kill on timeout and abort.
         // A dropped shell process alone leaves descendants alive, possibly
         // holding stdout/stderr pipes and continuing unauthorized side effects.
@@ -2237,17 +2477,41 @@ fn truncate(input: &str, max: usize) -> String {
     }
 }
 
+/// BashTool.tsx omits the background flag from the model-visible schema
+/// when background work is disabled. Keep the published schema and execution
+/// validator on the same setting, so a model cannot bypass the omission.
+fn background_tasks_disabled() -> bool {
+    crate::env_runtime::is_env_truthy(
+        std::env::var("ATLAS_DISABLE_BACKGROUND_TASKS")
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn hide_background_parameter(definition: &mut Value) {
+    if let Some(properties) = definition
+        .pointer_mut("/function/parameters/properties")
+        .and_then(Value::as_object_mut)
+    {
+        properties.remove("run_in_background");
+    }
+}
+
 /// Expose the original PowerShell tool wire name only for PowerShell
 /// sessions. The executor still uses a provider-neutral command runner.
 pub fn powershell_definition() -> Value {
-    json!({"type":"function","function":{"name":"PowerShell",
+    let mut definition = json!({"type":"function","function":{"name":"PowerShell",
         "description":"Execute a PowerShell command from the workspace. The command can affect host paths and processes outside the project. Apply permission rules, avoid unapproved destructive operations and inspect output before reporting results.",
         "parameters":{"type":"object","properties":{
             "command":{"type":"string"},
             "timeout":{"type":"integer","description":"Timeout in milliseconds"},
             "run_in_background":{"type":"boolean"},
             "description":{"type":"string"}
-        },"required":["command"]}}})
+        },"required":["command"]}}});
+    if background_tasks_disabled() {
+        hide_background_parameter(&mut definition);
+    }
+    definition
 }
 
 pub fn definitions() -> Vec<Value> {
@@ -2313,6 +2577,14 @@ pub fn definitions() -> Vec<Value> {
                 "run_in_background":{"type":"boolean"},"description":{"type":"string"}
             },"required":["command"]}}}),
     ];
+    if background_tasks_disabled() {
+        for tool in &mut tools {
+            if tool.pointer("/function/name").and_then(Value::as_str) == Some("run_command") {
+                hide_background_parameter(tool);
+            }
+        }
+    }
+    tools.push(crate::local_triggers::model_definition());
     tools.push(notebook::definition());
     tools.extend(search::definitions());
     tools.push(webfetch::definition());
@@ -2339,7 +2611,254 @@ pub fn definitions_with_checkpointing(enabled: bool) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_read_blocks_infinite_or_interactive_devices_before_io() {
+        for path in [
+            "/dev/zero",
+            "/dev/random",
+            "/dev/urandom",
+            "/dev/full",
+            "/dev/stdin",
+            "/dev/tty",
+            "/dev/console",
+            "/dev/stdout",
+            "/dev/stderr",
+            "/dev/fd/0",
+            "/dev/fd/1",
+            "/dev/fd/2",
+            "/proc/self/fd/0",
+            "/proc/123/fd/1",
+            "/proc/123/fd/2",
+        ] {
+            assert!(blocked_read_device(Path::new(path)), "{path}");
+        }
+        for path in [
+            "/dev/null",
+            "/proc/123/fd/3",
+            "/dev/zero-copy",
+            "/project/normal.txt",
+        ] {
+            assert!(!blocked_read_device(Path::new(path)), "{path}");
+        }
+    }
+    #[test]
+    fn large_source_file_with_line_window_streams_only_selected_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("large.rs");
+        let mut text = String::new();
+        text.push_str("\u{feff}header\r\n");
+        for n in 1..=12_000 {
+            text.push_str(&format!("{n}: {}\r\n", "x".repeat(100)));
+        }
+        fs::write(&path, &text).unwrap();
+        assert!(fs::metadata(&path).unwrap().len() > MAX_FILE_BYTES);
+        let window = ToolExecutor::read_large_text_window(&path, 10_000, 2).unwrap();
+        assert_eq!(
+            window,
+            format!(
+                "10000: 9999: {}\n10001: 10000: {}",
+                "x".repeat(100),
+                "x".repeat(100)
+            )
+        );
+        let header = ToolExecutor::read_large_text_window(&path, 1, 1).unwrap();
+        assert_eq!(header, "1: header");
+
+        // Verify the production Read path and its cache, not only the
+        // standalone byte-window helper.
+        let reader = executor(dir.path(), Approval::Full);
+        let args = json!({"path":"large.rs","start_line":10000,"line_count":2});
+        assert_eq!(reader.read_file_with_mode(&args, true).unwrap(), window);
+        let cached = reader
+            .file_reads
+            .lock()
+            .unwrap()
+            .get(&path.canonicalize().unwrap())
+            .unwrap();
+        assert_eq!(
+            cached.content,
+            format!("9999: {}\n10000: {}", "x".repeat(100), "x".repeat(100))
+        );
+        assert!(
+            !cached.full,
+            "a selected range cannot grant full-file edit access"
+        );
+        assert_eq!(
+            reader.read_file_with_mode(&args, true).unwrap(),
+            "File unchanged since last read: large.rs"
+        );
+    }
+
+    #[test]
+    fn source_read_reports_out_of_range_with_real_total_lines() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("source.rs");
+        fs::write(&path, "one\ntwo\n").unwrap();
+        let reader = executor(folder.path(), Approval::Full);
+        let result = reader
+            .read_file_with_mode(
+                &json!({"path":"source.rs","start_line":5,"line_count":2}),
+                true,
+            )
+            .unwrap();
+        assert!(result.contains("offset (5)"), "{result}");
+        assert!(result.contains("3 lines"), "{result}");
+        let final_line = reader
+            .read_file_with_mode(
+                &json!({"path":"source.rs","start_line":3,"line_count":1}),
+                true,
+            )
+            .unwrap();
+        assert_eq!(final_line, "3: ");
+    }
+
+    #[test]
+    fn background_flag_omission_matches_simple_source_schema() {
+        let mut definition = json!({"type":"function","function":{
+        "name":"run_command","parameters":{"type":"object","properties":{
+            "command":{"type":"string"},"run_in_background":{"type":"boolean"}
+        }}}});
+        hide_background_parameter(&mut definition);
+        assert!(definition
+            .pointer("/function/parameters/properties/run_in_background")
+            .is_none());
+        assert!(definition
+            .pointer("/function/parameters/properties/command")
+            .is_some());
+    }
+
+    #[tokio::test]
+    async fn local_trigger_tool_dispatch_requires_permission_and_returns_real_saved_task() {
+        let root = tempfile::tempdir().unwrap();
+        let runner = executor(root.path(), Approval::Full);
+        let payload = json!({"action":"create","trigger_id":"check","body":{"prompt":"Inspect the workspace"}});
+        let call = ToolCall {
+            id: "local-create".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(),
+                arguments: payload.to_string(),
+            },
+        };
+        assert!(crate::local_triggers::model_definition()["function"]["name"] == "LocalTrigger");
+        runner.validate_call_before_hooks(&call).unwrap();
+        let output = runner.execute(&call).await;
+        assert!(output.starts_with("HTTP 201\n"), "{output}");
+        assert_eq!(
+            crate::local_triggers::get(root.path(), "check").unwrap(),
+            "Inspect the workspace"
+        );
+        let run = ToolCall {
+            id: "local-run".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(),
+                arguments: json!({"action":"run","trigger_id":"check"}).to_string(),
+            },
+        };
+        let result = runner.execute(&run).await;
+        assert!(result.contains("current-agent-turn"), "{result}");
+        let denied = executor(root.path(), Approval::ReadOnly)
+            .execute(&run)
+            .await;
+        assert!(denied.starts_with("ERROR:"), "{denied}");
+        let invalid = ToolCall {
+            id: "bad-schedule".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(),
+                arguments: json!({"action":"create","trigger_id":"bad",
+                   "body":{"prompt":"run tomorrow","schedule":"daily"}})
+                .to_string(),
+            },
+        };
+        assert!(runner.validate_call_before_hooks(&invalid).is_err());
+        assert!(crate::local_triggers::get(root.path(), "bad").is_err());
+    }
+
     use crate::protocol::FunctionCall;
+
+    #[test]
+    fn web_and_tool_search_concurrency_schema_matches_original_zod() {
+        use crate::tool_orchestration::{partition_tool_calls, ToolBatch};
+        let root = tempfile::tempdir().unwrap();
+        let runner = executor(root.path(), Approval::Full);
+        let mk = |name: &str, args: Value| ToolCall {
+            id: name.into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: name.into(),
+                arguments: args.to_string(),
+            },
+        };
+        let fetch_schema = crate::webfetch::definition();
+        let search_schema = crate::websearch::definition();
+        let discovery_schema = crate::tool_search::definition();
+        assert_eq!(
+            fetch_schema["function"]["parameters"]["additionalProperties"],
+            false
+        );
+        assert_eq!(
+            search_schema["function"]["parameters"]["additionalProperties"],
+            false
+        );
+        assert_eq!(
+            search_schema["function"]["parameters"]["properties"]["query"]["minLength"],
+            2
+        );
+        assert!(search_schema["function"]["parameters"]["properties"]
+            .get("limit")
+            .is_none());
+        assert_eq!(
+            discovery_schema["function"]["parameters"]["properties"]["max_results"]["type"],
+            "number"
+        );
+        let valid = [
+            mk(
+                "WebFetch",
+                json!({"url":"https://example.org/","prompt":""}),
+            ),
+            mk(
+                "WebSearch",
+                json!({"query":"猫咪","allowed_domains":["example.org"]}),
+            ),
+            mk(
+                "ToolSearch",
+                json!({"query":"select:mcp__x__y","max_results":2.5,"extra":true}),
+            ),
+        ];
+        for call in &valid {
+            runner.validate_call_before_hooks(call).unwrap();
+        }
+        let invalid = [
+            mk("WebFetch", json!({"url":"bad-url","prompt":"ok"})),
+            mk(
+                "WebFetch",
+                json!({"url":"https://a.org","prompt":"ok","extra":1}),
+            ),
+            mk("WebFetch", json!({"url":"https://a.org"})),
+            mk("WebSearch", json!({"query":"a"})),
+            mk("WebSearch", json!({"query":"abc","limit":5})),
+            mk(
+                "WebSearch",
+                json!({"query":"abc","blocked_domains":[false]}),
+            ),
+            mk("ToolSearch", json!({"max_results":3})),
+            mk("ToolSearch", json!({"query":"x","max_results":"three"})),
+        ];
+        for call in &invalid {
+            assert!(runner.validate_call_before_hooks(call).is_err(), "{call:?}");
+        }
+        let batches = partition_tool_calls(
+            vec![valid[0].clone(), invalid[1].clone(), valid[1].clone()],
+            |call| runner.validate_call_before_hooks(call).is_ok(),
+        );
+        assert_eq!(batches.len(), 3);
+        assert!(matches!(&batches[0], ToolBatch::Safe(_)));
+        assert!(matches!(&batches[1], ToolBatch::Unsafe(_)));
+        assert!(matches!(&batches[2], ToolBatch::Safe(_)));
+    }
 
     fn executor(root: &Path, approval: Approval) -> ToolExecutor {
         ToolExecutor::new(root.canonicalize().unwrap(), approval, false)
@@ -3203,6 +3722,31 @@ mod tests {
         );
     }
     #[tokio::test]
+    async fn explicit_shell_deny_precedes_security_review_and_never_prompts() {
+        let root = tempfile::tempdir().unwrap();
+        let rules = permission_rules::compile_rules(&[permission_rules::RuleSetting {
+            behavior: "deny".into(),
+            rule: "Bash".into(),
+        }])
+        .unwrap();
+        let tool = executor(root.path(), Approval::Full).with_permission_rules(rules);
+        let call = ToolCall {
+            id: "explicit-deny-before-review".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":"echo 'unterminated"}).to_string(),
+            },
+        };
+        let result = tool.execute(&call).await;
+        assert!(
+            result.contains("denied by explicit permission rule"),
+            "{result}"
+        );
+        assert!(!result.contains("security review"), "{result}");
+    }
+
+    #[tokio::test]
     async fn malformed_shell_commands_require_security_review_even_with_full_approval() {
         let root = tempfile::tempdir().unwrap();
         let tool = executor(root.path(), Approval::Full);
@@ -3275,6 +3819,64 @@ mod tests {
             .with_permission_mode(permission_mode::Mode::AcceptEdits);
         let result = readonly.execute(&call).await;
         assert!(result.contains("read-only mode"), "{result}");
+    }
+
+    #[test]
+    fn read_only_pr_queries_keep_argv_and_permission_boundaries_on_all_platforms() {
+        let root = tempfile::tempdir().unwrap();
+        for ceiling in [Approval::Full, Approval::ReadOnly] {
+            let tool = executor(root.path(), ceiling)
+                .with_permission_mode(permission_mode::Mode::Plan)
+                .with_permission_rules(vec![permission_rules::Rule {
+                    behavior: permission_rules::Behavior::Allow,
+                    value: permission_rules::parse_rule("Bash"),
+                }]);
+            for command in ["gh pr view 6", "gh pr diff 6", "gh pr view", "gh pr diff"] {
+                assert!(tool
+                    .require_approval("run_command", &json!({"command":command}))
+                    .is_ok());
+            }
+            for command in [
+                "gh pr edit 6",
+                "gh pr checkout 6",
+                "gh pr view 6 --web",
+                "gh pr diff 6 > output",
+                "gh pr diff 6 --output output",
+                "gh pr diff 6; touch output",
+                "gh pr diff 6\ntouch output",
+                "gh pr diff $(touch output)",
+                "gh pr diff 0",
+                "gh pr diff -1",
+            ] {
+                assert!(
+                    tool.require_approval("run_command", &json!({"command":command}))
+                        .is_err(),
+                    "{command}"
+                );
+            }
+            assert!(tool
+                .require_approval(
+                    "run_command",
+                    &json!({
+                        "command":"gh pr diff 6","run_in_background":true
+                    })
+                )
+                .is_err());
+            for behavior in [
+                permission_rules::Behavior::Deny,
+                permission_rules::Behavior::Ask,
+            ] {
+                let restricted = executor(root.path(), ceiling)
+                    .with_permission_mode(permission_mode::Mode::Plan)
+                    .with_permission_rules(vec![permission_rules::Rule {
+                        behavior,
+                        value: permission_rules::parse_rule("Bash"),
+                    }]);
+                assert!(restricted
+                    .require_approval("run_command", &json!({"command":"gh pr diff 6"}))
+                    .is_err());
+            }
+        }
     }
 
     #[tokio::test]
@@ -3438,6 +4040,40 @@ mod tests {
                 })
             )
             .is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn intermediate_symlink_targets_obey_read_and_write_deny_rules() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("public.txt"), "secret").unwrap();
+        symlink("public.txt", root.path().join("denied.txt")).unwrap();
+        symlink("denied.txt", root.path().join("alias.txt")).unwrap();
+        let rules = permission_rules::compile_rules(&[
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "Read(denied.txt)".into(),
+            },
+            permission_rules::RuleSetting {
+                behavior: "deny".into(),
+                rule: "Write(denied.txt)".into(),
+            },
+        ])
+        .unwrap();
+        let tool = executor(root.path(), Approval::Full).with_permission_rules(rules);
+        let path = tool.checked_path("alias.txt").unwrap();
+        assert!(tool.require_read_rules("alias.txt", &path).is_err());
+        assert!(tool
+            .require_approval(
+                "write_file",
+                &json!({"path":"alias.txt","content":"replace"})
+            )
+            .is_err());
+        assert_eq!(
+            fs::read_to_string(root.path().join("public.txt")).unwrap(),
+            "secret"
+        );
     }
 
     #[tokio::test]

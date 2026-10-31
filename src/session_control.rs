@@ -19,6 +19,21 @@ pub struct SessionItem {
     pub modified_ms: u128,
 }
 impl SessionItem {
+    pub fn display_metadata(&self) -> String {
+        crate::display_format::format_log_metadata(
+            &crate::display_format::LogMetadata {
+                modified_ms: self.modified_ms.min(i64::MAX as u128) as i64,
+                message_count: self.messages,
+                file_size: None,
+                git_branch: self.git_branch.as_deref(),
+                tag: self.tag.as_deref(),
+                agent_setting: None,
+                pr_number: None,
+                pr_repository: None,
+            },
+            chrono::Utc::now().timestamp_millis(),
+        )
+    }
     pub fn display_title(&self) -> String {
         match self.tag.as_deref() {
             Some(tag) if !tag.is_empty() => format!("{} #{tag}", self.title),
@@ -105,7 +120,7 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
                 continue;
             }
         };
-        let fallback = preview(&session.messages);
+        let fallback = preview(&session.transcript_messages());
         // log.ts:getLogDisplayTitle skips autonomous <tick> prompts and
         // command-only XML. Strip before choosing a fallback, rather than
         // displaying raw markup or an empty session title.
@@ -157,12 +172,14 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             .map(|t| t.as_millis())
             .unwrap_or(0);
         let title = crate::portable_ui_runtime::strip_display_tags(&title);
+        // Read before moving owned title/tag/branch fields into the listing.
+        let message_count = session.transcript_messages().len();
         entries.push(SessionItem {
             id,
             title,
             tag: session.tag,
             git_branch: session.git_branch,
-            messages: session.messages.len(),
+            messages: message_count,
             modified_ms,
         });
     }
@@ -248,7 +265,7 @@ pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
                         .is_some_and(|s| s.to_lowercase().contains(&query))
                     {
                         Some(5)
-                    } else if searchable_transcript(&session.messages)
+                    } else if searchable_transcript(&session.transcript_messages())
                         .to_lowercase()
                         .contains(&query)
                     {
@@ -405,7 +422,7 @@ fn filename(session: &Session, requested: Option<&str>) -> PathBuf {
         }
         return filename;
     }
-    let label = sanitize_filename(&first_prompt(&session.messages));
+    let label = sanitize_filename(&first_prompt(&session.transcript_messages()));
     // The original export dialog proposes a local-time timestamp before
     // the sanitized first prompt; a UUID-based name is not source-equivalent.
     let timestamp = chrono::Local::now().format("%Y-%m-%d-%H%M%S");
@@ -473,7 +490,9 @@ fn render_export_block(block: &serde_json::Value) -> Option<String> {
 }
 pub fn render(session: &Session) -> String {
     let mut lines = Vec::new();
-    for message in &session.messages {
+    // Include original turns and intermediate compaction summaries in
+    // their correct order, instead of only the current active messages.
+    for message in session.transcript_messages().iter() {
         let role = match message.role.as_str() {
             "user" => "User",
             "assistant" => "Assistant",
@@ -590,6 +609,48 @@ mod tests {
     use super::*;
     use crate::protocol::{FunctionCall, ToolCall};
     #[test]
+    fn session_listing_uses_full_history_count_after_partial_compaction() {
+        let root = tempfile::tempdir().unwrap();
+        let mut s = Session::fresh();
+        s.summary = Some("Summary:\nEarlier context".into());
+        s.summary_insert_at = Some(0);
+        s.transcript_snapshot = Some(vec![
+            Message::text("user", "earlier"),
+            Message::text("assistant", "earlier reply"),
+            Message::text("user", "summarized"),
+        ]);
+        s.messages = vec![
+            Message::text("user", "retained"),
+            Message::text("user", "new"),
+        ];
+        s.transcript_active_offset = 1;
+        s.save(root.path()).unwrap();
+        let items = list(root.path()).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].messages, s.transcript_messages().len());
+        assert_eq!(items[0].messages, 5);
+    }
+
+    #[test]
+    fn transcript_export_includes_precompact_history_in_original_order() {
+        let mut session = Session::fresh();
+        session
+            .archived_messages
+            .push(Message::text("user", "Original design request"));
+        session
+            .archived_messages
+            .push(Message::text("assistant", "Original design reply"));
+        session
+            .messages
+            .push(Message::text("user", "Latest request"));
+        let text = render(&session);
+        let first = text.find("Original design request").unwrap();
+        let second = text.find("Original design reply").unwrap();
+        let last = text.find("Latest request").unwrap();
+        assert!(first < second && second < last);
+    }
+
+    #[test]
     fn generated_name_context_uses_recent_text_and_excludes_tool_results() {
         let messages = vec![
             Message::text("user", "first request"),
@@ -604,6 +665,7 @@ mod tests {
                 ]),
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             },
         ];
         assert_eq!(
@@ -648,6 +710,7 @@ mod tests {
             }]),
             tool_call_id: None,
             content_blocks: None,
+            reasoning_content: None,
         });
         session.messages.push(Message::tool_result(
             &ToolCall {
@@ -743,6 +806,7 @@ mod tests {
             })]),
             tool_calls: None,
             tool_call_id: None,
+            reasoning_content: None,
         });
         transcript.save(root.path()).unwrap();
 

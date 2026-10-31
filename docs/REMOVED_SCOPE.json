@@ -1,0 +1,699 @@
+{
+  "schema": "user-approved-removal-scope/v1",
+  "date": "2026-10-30",
+  "authorization": "用户明确取消本地模型、远程功能、云端专属功能；模型仅接入API，能本地执行的通用能力保留",
+  "policy": [
+    "只移除明确登记的远程与厂商云端专属路径，不按前缀动态扩大排除",
+    "保留模型 API、WebSearch/WebFetch、标准本地 SDK、文件、会话、Agent、MCP、Hooks、本地任务、项目记忆和设置",
+    "普通 /review、本地规划和本地任务保留；远程专项审查、跨设备同步、云端定时 Trigger、官方权益服务移除",
+    "原始1,906条路径、源码哈希及原始状态冻结快照不改；新增移除以本文件为授权依据",
+    "模型 API 可在本地测试中通过回环 Mock 服务验证，但产品不预置或安装本地模型运行时",
+    "第二次源码复核识别出分散的官方云端/远程子入口；全部以逐路径授权并保持本地 SDK、普通 MCP、Git、任务及会话可用。",
+    "第三轮核查进一步剔除原厂订阅额度、营销、托管MCP和实验遥测，保留通用模型API、本地计费、SDK与MCP。",
+    "补充事件生成类型审查：原厂环境遥测事件和仅供事件使用的账号标签均删除。",
+    "本地模型中立的高级审查、规划四条源路径恢复为待等价验收；云端额度、专用 CCR/Bridge、远程工作流继续排除。",
+    "原 RemoteTriggerTool 三条路径恢复为用户显式触发的本地持久任务，通用模型 API 执行且不自动创建定时任务、远程 Worker 或云端会话。"
+  ],
+  "items": [
+    {
+      "path": "src/bridge/bridgeApi.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeConfig.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeDebug.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeEnabled.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeMain.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeMessaging.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgePermissionCallbacks.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgePointer.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeStatusUtil.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/bridgeUI.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/capacityWake.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/codeSessionApi.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/createSession.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/debugUtils.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/envLessBridgeConfig.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/flushGate.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/inboundAttachments.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/inboundMessages.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/initReplBridge.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/jwtUtils.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/pollConfig.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/pollConfigDefaults.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/remoteBridgeCore.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/replBridge.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/replBridgeHandle.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/replBridgeTransport.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/sessionIdCompat.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/sessionRunner.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/trustedDevice.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/types.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/bridge/workSecret.ts",
+      "reason": "跨设备远程 Bridge"
+    },
+    {
+      "path": "src/cli/remoteIO.ts",
+      "reason": "远程会话标准输入输出"
+    },
+    {
+      "path": "src/cli/transports/ccrClient.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/HybridTransport.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/SerialBatchEventUploader.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/SSETransport.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/transportUtils.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/WebSocketTransport.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/cli/transports/WorkerStateUploader.ts",
+      "reason": "远程 SDK 专属传输"
+    },
+    {
+      "path": "src/commands/bridge-kick.ts",
+      "reason": "远程 Bridge 诊断"
+    },
+    {
+      "path": "src/commands/bridge/bridge.tsx",
+      "reason": "远程控制 CLI 命令"
+    },
+    {
+      "path": "src/commands/bridge/index.ts",
+      "reason": "远程控制 CLI 命令"
+    },
+    {
+      "path": "src/commands/extra-usage/extra-usage-core.ts",
+      "reason": "官方超额用量付费入口"
+    },
+    {
+      "path": "src/commands/extra-usage/extra-usage-noninteractive.ts",
+      "reason": "官方超额用量付费入口"
+    },
+    {
+      "path": "src/commands/extra-usage/extra-usage.tsx",
+      "reason": "官方超额用量付费入口"
+    },
+    {
+      "path": "src/commands/extra-usage/index.ts",
+      "reason": "官方超额用量付费入口"
+    },
+    {
+      "path": "src/commands/feedback/feedback.tsx",
+      "reason": "原厂在线反馈上传"
+    },
+    {
+      "path": "src/commands/feedback/index.ts",
+      "reason": "原厂在线反馈上传"
+    },
+    {
+      "path": "src/commands/install-github-app/ApiKeyStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/CheckExistingSecretStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/CheckGitHubStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/ChooseRepoStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/CreatingStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/ErrorStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/ExistingWorkflowStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/index.ts",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/install-github-app.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/InstallAppStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/OAuthFlowStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/setupGitHubActions.ts",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/SuccessStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-github-app/WarningsStep.tsx",
+      "reason": "厂商托管 GitHub App 安装流程；普通 Git 保留"
+    },
+    {
+      "path": "src/commands/install-slack-app/index.ts",
+      "reason": "厂商托管 Slack 自动化"
+    },
+    {
+      "path": "src/commands/install-slack-app/install-slack-app.ts",
+      "reason": "厂商托管 Slack 自动化"
+    },
+    {
+      "path": "src/commands/login/index.ts",
+      "reason": "原厂账号登录"
+    },
+    {
+      "path": "src/commands/login/login.tsx",
+      "reason": "原厂账号登录"
+    },
+    {
+      "path": "src/commands/logout/index.ts",
+      "reason": "原厂账号退出"
+    },
+    {
+      "path": "src/commands/logout/logout.tsx",
+      "reason": "原厂账号退出"
+    },
+    {
+      "path": "src/commands/mobile/index.ts",
+      "reason": "官方云端移动端伴随入口"
+    },
+    {
+      "path": "src/commands/mobile/mobile.tsx",
+      "reason": "官方云端移动端伴随入口"
+    },
+    {
+      "path": "src/commands/passes/index.ts",
+      "reason": "官方订阅权益通行证"
+    },
+    {
+      "path": "src/commands/passes/passes.tsx",
+      "reason": "官方订阅权益通行证"
+    },
+    {
+      "path": "src/commands/rate-limit-options/index.ts",
+      "reason": "原厂订阅额度"
+    },
+    {
+      "path": "src/commands/rate-limit-options/rate-limit-options.tsx",
+      "reason": "原厂订阅额度"
+    },
+    {
+      "path": "src/commands/remote-env/index.ts",
+      "reason": "官方远程环境配置"
+    },
+    {
+      "path": "src/commands/remote-env/remote-env.tsx",
+      "reason": "官方远程环境配置"
+    },
+    {
+      "path": "src/commands/remote-setup/api.ts",
+      "reason": "官方远程环境初始化"
+    },
+    {
+      "path": "src/commands/remote-setup/index.ts",
+      "reason": "官方远程环境初始化"
+    },
+    {
+      "path": "src/commands/remote-setup/remote-setup.tsx",
+      "reason": "官方远程环境初始化"
+    },
+    {
+      "path": "src/commands/review/reviewRemote.ts",
+      "reason": "云端专项审查（保留普通本地审查）"
+    },
+    {
+      "path": "src/commands/review/UltrareviewOverageDialog.tsx",
+      "reason": "云端专项审查（保留普通本地审查）"
+    },
+    {
+      "path": "src/commands/session/index.ts",
+      "reason": "官方远程会话链接命令；本地会话保留"
+    },
+    {
+      "path": "src/commands/session/session.tsx",
+      "reason": "官方远程会话链接命令；本地会话保留"
+    },
+    {
+      "path": "src/commands/teleport/index.js",
+      "reason": "官方 Teleport 入口"
+    },
+    {
+      "path": "src/commands/upgrade/index.ts",
+      "reason": "原厂订阅升级"
+    },
+    {
+      "path": "src/commands/upgrade/upgrade.tsx",
+      "reason": "原厂订阅升级"
+    },
+    {
+      "path": "src/commands/voice/index.ts",
+      "reason": "官方云端语音 CLI"
+    },
+    {
+      "path": "src/commands/voice/voice.ts",
+      "reason": "官方云端语音 CLI"
+    },
+    {
+      "path": "src/components/BridgeDialog.tsx",
+      "reason": "远程 Bridge 状态界面"
+    },
+    {
+      "path": "src/components/DesktopUpsell/DesktopUpsellStartup.tsx",
+      "reason": "官方桌面客户端营销"
+    },
+    {
+      "path": "src/components/LogoV2/GuestPassesUpsell.tsx",
+      "reason": "官方推荐权益营销"
+    },
+    {
+      "path": "src/components/LogoV2/OverageCreditUpsell.tsx",
+      "reason": "官方超额信用额度营销"
+    },
+    {
+      "path": "src/components/LogoV2/VoiceModeNotice.tsx",
+      "reason": "官方语音提示"
+    },
+    {
+      "path": "src/components/mcp/MCPRemoteServerMenu.tsx",
+      "reason": "Claude.ai 托管 MCP 菜单；本地标准 MCP 保留"
+    },
+    {
+      "path": "src/components/PromptInput/VoiceIndicator.tsx",
+      "reason": "官方语音状态组件"
+    },
+    {
+      "path": "src/components/RemoteCallout.tsx",
+      "reason": "远程控制开通提示"
+    },
+    {
+      "path": "src/components/RemoteEnvironmentDialog.tsx",
+      "reason": "远程环境管理界面"
+    },
+    {
+      "path": "src/components/Settings/Usage.tsx",
+      "reason": "官方订阅窗口用量界面；保留通用 API 用量及费用"
+    },
+    {
+      "path": "src/components/tasks/RemoteSessionDetailDialog.tsx",
+      "reason": "远程任务视图"
+    },
+    {
+      "path": "src/components/tasks/RemoteSessionProgress.tsx",
+      "reason": "远程任务视图"
+    },
+    {
+      "path": "src/components/TeleportError.tsx",
+      "reason": "云端 Teleport 界面"
+    },
+    {
+      "path": "src/components/TeleportProgress.tsx",
+      "reason": "云端 Teleport 界面"
+    },
+    {
+      "path": "src/components/TeleportRepoMismatchDialog.tsx",
+      "reason": "云端 Teleport 界面"
+    },
+    {
+      "path": "src/components/TeleportResumeWrapper.tsx",
+      "reason": "云端 Teleport 界面"
+    },
+    {
+      "path": "src/components/TeleportStash.tsx",
+      "reason": "云端 Teleport 界面"
+    },
+    {
+      "path": "src/context/voice.tsx",
+      "reason": "官方语音状态"
+    },
+    {
+      "path": "src/hooks/notifs/useCanSwitchToExistingSubscription.tsx",
+      "reason": "Claude.ai 订阅切换提示"
+    },
+    {
+      "path": "src/hooks/useRemoteSession.ts",
+      "reason": "远程会话 Hook"
+    },
+    {
+      "path": "src/hooks/useReplBridge.tsx",
+      "reason": "远程 Bridge Hook"
+    },
+    {
+      "path": "src/hooks/useTeleportResume.tsx",
+      "reason": "云端 Teleport 恢复"
+    },
+    {
+      "path": "src/hooks/useVoice.ts",
+      "reason": "官方云端语音录入"
+    },
+    {
+      "path": "src/hooks/useVoiceEnabled.ts",
+      "reason": "官方云端语音资格"
+    },
+    {
+      "path": "src/hooks/useVoiceIntegration.tsx",
+      "reason": "官方语音集成"
+    },
+    {
+      "path": "src/migrations/migrateReplBridgeEnabledToRemoteControlAtStartup.ts",
+      "reason": "远程控制迁移"
+    },
+    {
+      "path": "src/remote/remotePermissionBridge.ts",
+      "reason": "远程会话与权限桥接"
+    },
+    {
+      "path": "src/remote/RemoteSessionManager.ts",
+      "reason": "远程会话与权限桥接"
+    },
+    {
+      "path": "src/remote/sdkMessageAdapter.ts",
+      "reason": "远程会话与权限桥接"
+    },
+    {
+      "path": "src/remote/SessionsWebSocket.ts",
+      "reason": "远程会话与权限桥接"
+    },
+    {
+      "path": "src/server/createDirectConnectSession.ts",
+      "reason": "云端直连会话"
+    },
+    {
+      "path": "src/server/directConnectManager.ts",
+      "reason": "云端直连会话"
+    },
+    {
+      "path": "src/server/types.ts",
+      "reason": "云端直连会话"
+    },
+    {
+      "path": "src/services/api/adminRequests.ts",
+      "reason": "官方组织管理员申请 API"
+    },
+    {
+      "path": "src/services/api/bootstrap.ts",
+      "reason": "原厂 CLI 服务端启动配置"
+    },
+    {
+      "path": "src/services/api/filesApi.ts",
+      "reason": "原厂云端文件服务（保留本地文件）"
+    },
+    {
+      "path": "src/services/api/firstTokenDate.ts",
+      "reason": "原厂组织首次使用数据"
+    },
+    {
+      "path": "src/services/api/grove.ts",
+      "reason": "官方账户信息服务"
+    },
+    {
+      "path": "src/services/api/metricsOptOut.ts",
+      "reason": "原厂服务端统计开关"
+    },
+    {
+      "path": "src/services/api/overageCreditGrant.ts",
+      "reason": "官方超额用量额度服务"
+    },
+    {
+      "path": "src/services/api/referral.ts",
+      "reason": "原厂推荐奖励"
+    },
+    {
+      "path": "src/services/api/sessionIngress.ts",
+      "reason": "官方远程会话持久化 API"
+    },
+    {
+      "path": "src/services/api/ultrareviewQuota.ts",
+      "reason": "官方云端审查配额"
+    },
+    {
+      "path": "src/services/api/usage.ts",
+      "reason": "官方订阅配额 API；本地费用统计保留"
+    },
+    {
+      "path": "src/services/claudeAiLimits.ts",
+      "reason": "Claude.ai 订阅限额；保留第三方 API 用量统计"
+    },
+    {
+      "path": "src/services/claudeAiLimitsHook.ts",
+      "reason": "Claude.ai 订阅限额 Hook"
+    },
+    {
+      "path": "src/services/mcp/claudeai.ts",
+      "reason": "Claude.ai 组织托管 MCP；保留标准 MCP"
+    },
+    {
+      "path": "src/services/remoteManagedSettings/index.ts",
+      "reason": "原厂服务端托管设置；本地设置保留"
+    },
+    {
+      "path": "src/services/remoteManagedSettings/securityCheck.tsx",
+      "reason": "原厂服务端托管设置；本地设置保留"
+    },
+    {
+      "path": "src/services/remoteManagedSettings/syncCache.ts",
+      "reason": "原厂服务端托管设置；本地设置保留"
+    },
+    {
+      "path": "src/services/remoteManagedSettings/syncCacheState.ts",
+      "reason": "原厂服务端托管设置；本地设置保留"
+    },
+    {
+      "path": "src/services/remoteManagedSettings/types.ts",
+      "reason": "原厂服务端托管设置；本地设置保留"
+    },
+    {
+      "path": "src/services/settingsSync/index.ts",
+      "reason": "设置云端同步（保留本地设置）"
+    },
+    {
+      "path": "src/services/settingsSync/types.ts",
+      "reason": "设置云端同步（保留本地设置）"
+    },
+    {
+      "path": "src/services/teamMemorySync/index.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/teamMemorySync/secretScanner.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/teamMemorySync/teamMemSecretGuard.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/teamMemorySync/types.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/teamMemorySync/watcher.ts",
+      "reason": "团队记忆云端同步（保留本地记忆）"
+    },
+    {
+      "path": "src/services/voice.ts",
+      "reason": "厂商语音流服务"
+    },
+    {
+      "path": "src/services/voiceKeyterms.ts",
+      "reason": "厂商语音流服务"
+    },
+    {
+      "path": "src/services/voiceStreamSTT.ts",
+      "reason": "厂商语音流服务"
+    },
+    {
+      "path": "src/skills/bundled/scheduleRemoteAgents.ts",
+      "reason": "远程 Agent 计划任务技能"
+    },
+    {
+      "path": "src/tasks/RemoteAgentTask/RemoteAgentTask.tsx",
+      "reason": "远程 Agent 执行任务"
+    },
+    {
+      "path": "src/types/generated/events_mono/claude_code/v1/claude_code_internal_event.ts",
+      "reason": "仅用于原厂 Statsig 内部行为及环境遥测的事件类型"
+    },
+    {
+      "path": "src/types/generated/events_mono/common/v1/auth.ts",
+      "reason": "仅为原厂事件遥测服务提供账户组织标签的类型，已无合法消费方"
+    },
+    {
+      "path": "src/types/generated/events_mono/growthbook/v1/growthbook_experiment_event.ts",
+      "reason": "原厂实验遥测类型"
+    },
+    {
+      "path": "src/upstreamproxy/relay.ts",
+      "reason": "远程代理转发"
+    },
+    {
+      "path": "src/upstreamproxy/upstreamproxy.ts",
+      "reason": "远程代理转发"
+    },
+    {
+      "path": "src/utils/autoUpdater.ts",
+      "reason": "原厂更新服务"
+    },
+    {
+      "path": "src/utils/background/remote/preconditions.ts",
+      "reason": "远程后台 Agent"
+    },
+    {
+      "path": "src/utils/background/remote/remoteSession.ts",
+      "reason": "远程后台 Agent"
+    },
+    {
+      "path": "src/utils/billing.ts",
+      "reason": "Claude.ai 订阅计费权限"
+    },
+    {
+      "path": "src/utils/extraUsage.ts",
+      "reason": "Claude.ai 超额订阅计费"
+    },
+    {
+      "path": "src/utils/sessionIngressAuth.ts",
+      "reason": "远程会话凭据注入"
+    },
+    {
+      "path": "src/utils/teleport.tsx",
+      "reason": "云端 Teleport 运行界面"
+    },
+    {
+      "path": "src/utils/teleport/api.ts",
+      "reason": "官方云端 Teleport API"
+    },
+    {
+      "path": "src/utils/teleport/environments.ts",
+      "reason": "官方云端 Teleport API"
+    },
+    {
+      "path": "src/utils/teleport/environmentSelection.ts",
+      "reason": "官方云端 Teleport API"
+    },
+    {
+      "path": "src/utils/teleport/gitBundle.ts",
+      "reason": "官方云端 Teleport API"
+    },
+    {
+      "path": "src/utils/ultraplan/ccrSession.ts",
+      "reason": "官方云端规划专用工具"
+    },
+    {
+      "path": "src/voice/voiceModeEnabled.ts",
+      "reason": "厂商语音模式授权"
+    }
+  ]
+}

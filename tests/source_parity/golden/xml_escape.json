@@ -1,0 +1,197 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/xml.ts",
+  "source_sha256": "38ada2e9995f0718db6fb104eec7c22820c41135e40796beca3f2639960585cc",
+  "cases": [
+    {
+      "id": "normal-text",
+      "kind": "normal",
+      "export": "escapeXml",
+      "input": "normal",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": "normal"
+    },
+    {
+      "id": "empty-text",
+      "kind": "edge",
+      "export": "escapeXml",
+      "input": "",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": ""
+    },
+    {
+      "id": "mixed-special",
+      "kind": "edge",
+      "export": "escapeXml",
+      "input": "a&b<c>d",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": "a&amp;b&lt;c&gt;d"
+    },
+    {
+      "id": "double-escaped",
+      "kind": "edge",
+      "export": "escapeXml",
+      "input": "&amp;",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": "&amp;amp;"
+    },
+    {
+      "id": "quotes-unchanged",
+      "kind": "edge",
+      "export": "escapeXml",
+      "input": "\"'",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": "\"'"
+    },
+    {
+      "id": "unicode-newline",
+      "kind": "edge",
+      "export": "escapeXml",
+      "input": "😀\n&",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": "😀\n&amp;"
+    },
+    {
+      "id": "nul-unchanged",
+      "kind": "edge",
+      "export": "escapeXml",
+      "input": "a\u0000b",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": "a\u0000b"
+    },
+    {
+      "id": "crlf",
+      "kind": "edge",
+      "export": "escapeXml",
+      "input": "a\r\n<b>",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": "a\r\n&lt;b&gt;"
+    },
+    {
+      "id": "normal-attribute",
+      "kind": "normal",
+      "export": "escapeXmlAttr",
+      "input": "normal",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": "normal"
+    },
+    {
+      "id": "quotes-attribute",
+      "kind": "edge",
+      "export": "escapeXmlAttr",
+      "input": "\"'&<>",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": "&quot;&apos;&amp;&lt;&gt;"
+    },
+    {
+      "id": "double-escaped-attr",
+      "kind": "edge",
+      "export": "escapeXmlAttr",
+      "input": "&amp;",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": "&amp;amp;"
+    },
+    {
+      "id": "unicode-attribute",
+      "kind": "edge",
+      "export": "escapeXmlAttr",
+      "input": "it's 😀",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": "it&apos;s 😀"
+    },
+    {
+      "id": "newlines-attribute",
+      "kind": "edge",
+      "export": "escapeXmlAttr",
+      "input": "\t\n",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": "\t\n"
+    },
+    {
+      "id": "empty-attribute",
+      "kind": "edge",
+      "export": "escapeXmlAttr",
+      "input": "",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": ""
+    },
+    {
+      "id": "amp-before-angle",
+      "kind": "edge",
+      "export": "escapeXmlAttr",
+      "input": "<&>",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": "&lt;&amp;&gt;"
+    },
+    {
+      "id": "apostrophes",
+      "kind": "edge",
+      "export": "escapeXmlAttr",
+      "input": "'safe'",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": "&apos;safe&apos;"
+    },
+    {
+      "id": "nul-attribute",
+      "kind": "edge",
+      "export": "escapeXmlAttr",
+      "input": "\u0000&",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": "\u0000&amp;"
+    },
+    {
+      "id": "nonbreaking-space",
+      "kind": "edge",
+      "export": "escapeXmlAttr",
+      "input": " \"",
+      "source_ids": [
+        "src/utils/xml.ts:FunctionDeclaration:6-8:occurrence-1",
+        "src/utils/xml.ts:FunctionDeclaration:14-16:occurrence-1"
+      ],
+      "expected": " &quot;"
+    }
+  ]
+}

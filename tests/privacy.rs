@@ -64,3 +64,42 @@ fn no_embedded_vendor_telemetry_server_url() {
         );
     }
 }
+
+#[test]
+fn api_only_build_excludes_remote_modules() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let main = fs::read_to_string(root.join("src/main.rs")).unwrap();
+    let config = fs::read_to_string(root.join("src/config.rs")).unwrap();
+
+    for removed_module in [
+        "bridge_core",
+        "bridge_inbound_attachments",
+        "jwt_utils",
+        "remote_sdk",
+        "transports",
+        "work_secret",
+    ] {
+        assert!(
+            !main.contains(&format!("mod {removed_module};")),
+            "removed remote module reintroduced: {removed_module}"
+        );
+    }
+    for removed_file in [
+        "src/bridge_core.rs",
+        "src/bridge_inbound_attachments.rs",
+        "src/jwt_utils.rs",
+        "src/remote_sdk.rs",
+        "src/work_secret.rs",
+        "src/transports/mod.rs",
+    ] {
+        assert!(
+            !root.join(removed_file).exists(),
+            "removed remote file reintroduced: {removed_file}"
+        );
+    }
+    assert!(!main.contains("--remote-session-id"));
+    assert!(!main.contains("--remote-url"));
+    assert!(config.contains("default_provider: \"openai\".into()"));
+    assert!(!config.contains("default_provider: \"local\".into()"));
+    assert!(!config.contains("qwen2.5-coder:7b"));
+}

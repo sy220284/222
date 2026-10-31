@@ -185,7 +185,14 @@ pub fn edit(path: &Path, args: &Value, known_revision: Option<u64>) -> Result<(S
 pub fn definition() -> Value {
     json!({"type":"function","function":{
         "name":"notebook_edit",
-        "description":"Edit a previously read Jupyter notebook cell. Supports insert, replace, delete and cell-N indices. Requires approval.",
+        "description":format!(
+            "{}\nThis implementation supports insert, replace, delete and cell-N indices. A previously read notebook and permission approval are required.",
+            crate::source_prompt_catalog::literal(
+                "src/tools/NotebookEditTool/prompt.ts",
+                "Completely replaces the contents of a specific cell",
+            )
+            .expect("Original NotebookEdit tool prompt must exist")
+        ),
         "parameters":{"type":"object","properties":{
             "notebook_path":{"type":"string"},
             "cell_id":{"type":"string"},

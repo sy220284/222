@@ -71,24 +71,49 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/PromptInput/HistorySearchInput.tsx" => match export {
+            "view" => serde_json::to_value(super::p_3ed42dc8aa879::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInput.tsx" => match export {
             _ => None,
         },
         "src/components/PromptInput/PromptInputFooter.tsx" => match export {
+            "view" | "PromptInputFooter" => serde_json::to_value(
+                super::p_c39f8f63b92a4::render_source_view(args.first().unwrap_or(&Value::Null)),
+            )
+            .ok(),
+            "promptOverlayData" => Some(super::p_c39f8f63b92a4::prompt_overlay_data(args.first()?)),
             _ => None,
         },
         "src/components/PromptInput/PromptInputFooterLeftSide.tsx" => match export {
+            "view" | "PromptInputFooterLeftSide" => serde_json::to_value(
+                super::p_100d28512b001::render_source_view(args.first().unwrap_or(&Value::Null)),
+            )
+            .ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInputHelpMenu.tsx" => match export {
+            "view" | "PromptInputHelpMenu" => serde_json::to_value(
+                super::p_ed2482259a075::render_source_view(args.first().unwrap_or(&Value::Null)),
+            )
+            .ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInputModeIndicator.tsx" => match export {
+            "view" | "PromptInputModeIndicator" => serde_json::to_value(
+                super::p_4ae3f27ee4b20::render_source_view(args.first().unwrap_or(&Value::Null)),
+            )
+            .ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInputQueuedCommands.tsx" => match export {
+            "view" | "PromptInputQueuedCommands" => serde_json::to_value(
+                super::p_9b6293319d85b::render_source_view(args.first().unwrap_or(&Value::Null)),
+            )
+            .ok(),
             _ => None,
         },
         "src/components/PromptInput/PromptInputStashNotice.tsx" => match export {
@@ -102,15 +127,13 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/PromptInput/ShimmeredInput.tsx" => match export {
-            _ => None,
-        },
-        "src/components/PromptInput/VoiceIndicator.tsx" => match export {
+            "view" | "HighlightedInput" => serde_json::to_value(
+                super::p_2f84f9e35605c::render_source_view(args.first().unwrap_or(&Value::Null)),
+            )
+            .ok(),
             _ => None,
         },
         "src/components/QuickOpenDialog.tsx" => match export {
-            _ => None,
-        },
-        "src/components/RemoteEnvironmentDialog.tsx" => match export {
             _ => None,
         },
         "src/components/ResumeTask.tsx" => match export {
@@ -120,6 +143,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/SearchBox.tsx" => match export {
+            "view" => serde_json::to_value(super::p_b99a90b93dfe8::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/SessionBackgroundHint.tsx" => match export {
@@ -135,9 +162,6 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/Settings/Status.tsx" => match export {
-            _ => None,
-        },
-        "src/components/Settings/Usage.tsx" => match export {
             _ => None,
         },
         "src/components/ShowInIDEPrompt.tsx" => match export {
@@ -203,16 +227,11 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             .ok(),
             _ => None,
         },
-        "src/components/TeleportProgress.tsx" => match export {
-            _ => None,
-        },
-        "src/components/TeleportResumeWrapper.tsx" => match export {
-            _ => None,
-        },
-        "src/components/TeleportStash.tsx" => match export {
-            _ => None,
-        },
         "src/components/TextInput.tsx" => match export {
+            "view" => serde_json::to_value(super::p_d47fe9c9aae64::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/ThemePicker.tsx" => match export {
@@ -242,6 +261,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/VimTextInput.tsx" => match export {
+            "view" => serde_json::to_value(super::p_bfd0c9b4cdfac::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/VirtualMessageList.tsx" => match export {
@@ -320,12 +343,20 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/design-system/Byline.tsx" => match export {
+            "view" => serde_json::to_value(super::p_d78b4b20e79ce::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/design-system/Dialog.tsx" => match export {
             _ => None,
         },
         "src/components/design-system/Divider.tsx" => match export {
+            "view" => serde_json::to_value(super::p_24c4306aaf4fa::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         "src/components/design-system/FuzzyPicker.tsx" => match export {
@@ -344,6 +375,10 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             _ => None,
         },
         "src/components/design-system/ProgressBar.tsx" => match export {
+            "view" => serde_json::to_value(super::p_a9eb5b2575d7c::render_source_view(
+                args.first().unwrap_or(&Value::Null),
+            ))
+            .ok(),
             _ => None,
         },
         _ => None,
@@ -371,21 +406,30 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/PackageManagerAutoUpdater.tsx", vec![]),
         ("src/components/PrBadge.tsx", vec!["view"]),
         ("src/components/PressEnterToContinue.tsx", vec![]),
-        ("src/components/PromptInput/HistorySearchInput.tsx", vec![]),
+        (
+            "src/components/PromptInput/HistorySearchInput.tsx",
+            vec!["view"],
+        ),
         ("src/components/PromptInput/PromptInput.tsx", vec![]),
-        ("src/components/PromptInput/PromptInputFooter.tsx", vec![]),
+        (
+            "src/components/PromptInput/PromptInputFooter.tsx",
+            vec!["view", "PromptInputFooter", "promptOverlayData"],
+        ),
         (
             "src/components/PromptInput/PromptInputFooterLeftSide.tsx",
-            vec![],
+            vec!["view", "PromptInputFooterLeftSide"],
         ),
-        ("src/components/PromptInput/PromptInputHelpMenu.tsx", vec![]),
+        (
+            "src/components/PromptInput/PromptInputHelpMenu.tsx",
+            vec!["view", "PromptInputHelpMenu"],
+        ),
         (
             "src/components/PromptInput/PromptInputModeIndicator.tsx",
-            vec![],
+            vec!["view", "PromptInputModeIndicator"],
         ),
         (
             "src/components/PromptInput/PromptInputQueuedCommands.tsx",
-            vec![],
+            vec!["view", "PromptInputQueuedCommands"],
         ),
         (
             "src/components/PromptInput/PromptInputStashNotice.tsx",
@@ -395,19 +439,19 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/components/PromptInput/SandboxPromptFooterHint.tsx",
             vec![],
         ),
-        ("src/components/PromptInput/ShimmeredInput.tsx", vec![]),
-        ("src/components/PromptInput/VoiceIndicator.tsx", vec![]),
+        (
+            "src/components/PromptInput/ShimmeredInput.tsx",
+            vec!["view", "HighlightedInput"],
+        ),
         ("src/components/QuickOpenDialog.tsx", vec![]),
-        ("src/components/RemoteEnvironmentDialog.tsx", vec![]),
         ("src/components/ResumeTask.tsx", vec![]),
         ("src/components/SandboxViolationExpandedView.tsx", vec![]),
-        ("src/components/SearchBox.tsx", vec![]),
+        ("src/components/SearchBox.tsx", vec!["view"]),
         ("src/components/SessionBackgroundHint.tsx", vec![]),
         ("src/components/SessionPreview.tsx", vec![]),
         ("src/components/Settings/Config.tsx", vec![]),
         ("src/components/Settings/Settings.tsx", vec![]),
         ("src/components/Settings/Status.tsx", vec![]),
-        ("src/components/Settings/Usage.tsx", vec![]),
         ("src/components/ShowInIDEPrompt.tsx", vec![]),
         ("src/components/SkillImprovementSurvey.tsx", vec![]),
         ("src/components/Spinner.tsx", vec![]),
@@ -431,17 +475,14 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/TagTabs.tsx", vec![]),
         ("src/components/TaskListV2.tsx", vec![]),
         ("src/components/TeammateViewHeader.tsx", vec!["view"]),
-        ("src/components/TeleportProgress.tsx", vec![]),
-        ("src/components/TeleportResumeWrapper.tsx", vec![]),
-        ("src/components/TeleportStash.tsx", vec![]),
-        ("src/components/TextInput.tsx", vec![]),
+        ("src/components/TextInput.tsx", vec!["view"]),
         ("src/components/ThemePicker.tsx", vec![]),
         ("src/components/ThinkingToggle.tsx", vec![]),
         ("src/components/TokenWarning.tsx", vec!["view"]),
         ("src/components/ToolUseLoader.tsx", vec!["view"]),
         ("src/components/TrustDialog/TrustDialog.tsx", vec![]),
         ("src/components/ValidationErrorsList.tsx", vec![]),
-        ("src/components/VimTextInput.tsx", vec![]),
+        ("src/components/VimTextInput.tsx", vec!["view"]),
         ("src/components/VirtualMessageList.tsx", vec![]),
         ("src/components/WorkflowMultiselectDialog.tsx", vec![]),
         ("src/components/WorktreeExitDialog.tsx", vec![]),
@@ -505,9 +546,9 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
             "src/components/agents/new-agent-creation/wizard-steps/TypeStep.tsx",
             vec![],
         ),
-        ("src/components/design-system/Byline.tsx", vec![]),
+        ("src/components/design-system/Byline.tsx", vec!["view"]),
         ("src/components/design-system/Dialog.tsx", vec![]),
-        ("src/components/design-system/Divider.tsx", vec![]),
+        ("src/components/design-system/Divider.tsx", vec!["view"]),
         ("src/components/design-system/FuzzyPicker.tsx", vec![]),
         (
             "src/components/design-system/KeyboardShortcutHint.tsx",
@@ -516,7 +557,7 @@ pub fn catalog() -> Vec<(&'static str, Vec<&'static str>)> {
         ("src/components/design-system/ListItem.tsx", vec![]),
         ("src/components/design-system/LoadingState.tsx", vec![]),
         ("src/components/design-system/Pane.tsx", vec![]),
-        ("src/components/design-system/ProgressBar.tsx", vec![]),
+        ("src/components/design-system/ProgressBar.tsx", vec!["view"]),
     ]
 }
 

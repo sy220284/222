@@ -1,0 +1,567 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/userPromptKeywords.ts",
+  "source_sha256": "45db9ce9bdeb256b93c2197b39d75df5f8b661279783a145a85dba52276649e8",
+  "cases": [
+    {
+      "id": "negative-0",
+      "kind": "normal",
+      "export": "matchesNegativeKeyword",
+      "input": "wtf",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-1",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "WTF",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-2",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "what the hell",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-3",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "awful",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-4",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "this sucks",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-5",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "damn it",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-6",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "shit",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-7",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "shitty",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-8",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "shittiest",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-9",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "piece of crap",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-10",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "fucking broken",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-11",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "fuck you",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-12",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "screw this",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-13",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "pissed off",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-14",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "pissing off",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-15",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "wtfx",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "negative-16",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "abcwtf",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "negative-17",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "éwtf",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-18",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "中文wtf中文",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-19",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "wtf👌",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-20",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "__wtf__",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "negative-21",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "wtf_日本",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "negative-22",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "wtf\nwth",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-23",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "so frustrating",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-24",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "the app is terrible",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "negative-25",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "what the fuck",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "negative-26",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "negative-27",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "你好",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "negative-28",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "This is fine",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "negative-29",
+      "kind": "edge",
+      "export": "matchesNegativeKeyword",
+      "input": "piss off",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:4-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-0",
+      "kind": "normal",
+      "export": "matchesKeepGoingKeyword",
+      "input": "continue",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-1",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": " Continue ",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-2",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "CONTINUE",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-3",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "continue",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "continuation-4",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "﻿continue",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-5",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "  continue\n",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-6",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "please continue",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "continuation-7",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "continue please",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "continuation-8",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "keep going",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-9",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "go on",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-10",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "go on!",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-11",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "中文go on中文",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-12",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "ékeep goingé",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-13",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "keep going?",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-14",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "keep goingx",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "continuation-15",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "keep going_",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "continuation-16",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "go on now",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-17",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "xgo on",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "continuation-18",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "go on中文",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-19",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "  go on﻿",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-20",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "just testing",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "continuation-21",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "continuation-22",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "KEEP GOING",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-23",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "now keep going please",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-24",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "GO ON",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "continuation-25",
+      "kind": "edge",
+      "export": "matchesKeepGoingKeyword",
+      "input": "kEEp GoINg",
+      "source_ids": [
+        "src/utils/userPromptKeywords.ts:FunctionDeclaration:16-27:occurrence-1"
+      ],
+      "expected": true
+    }
+  ]
+}

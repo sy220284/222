@@ -83,16 +83,31 @@ impl Command {
         }
         self.is_editable()
     }
+    /// messageQueueManager.ts::isSlashCommand accepts only string values.
+    /// SDK input uses separate last-text-block semantics.
     pub fn is_slash(&self) -> bool {
-        // processUserInput.ts takes slash commands from the final text block,
-        // including queued user turns containing earlier image blocks.
+        !self.skip_slash_commands
+            && self
+                .value
+                .as_str()
+                .is_some_and(|text| text.trim().starts_with('/'))
+    }
+
+    /// processUserInput.ts::processUserInputBase processes the last text block
+    /// after image or IDE context for multimodal queued SDK inputs.
+    pub fn is_input_slash(&self) -> bool {
+        if self.skip_slash_commands {
+            return false;
+        }
         let text = self.value.as_str().or_else(|| {
             let last = self.value.as_array()?.last()?;
             (last.get("type").and_then(Value::as_str) == Some("text"))
                 .then(|| last.get("text").and_then(Value::as_str))
                 .flatten()
         });
-        text.is_some_and(|value| value.trim().starts_with('/')) && !self.skip_slash_commands
+        // processUserInput.ts requires the literal first character to be '/'.
+        // Queue display/inspection intentionally has separate trim semantics.
+        text.is_some_and(|value| value.starts_with('/'))
     }
     pub fn text(&self) -> Option<String> {
         if let Some(text) = self.value.as_str() {
@@ -267,15 +282,21 @@ impl Queue {
         removed
     }
     pub fn remove_identity(&mut self, identities: &[u64]) -> usize {
+        if identities.is_empty() {
+            return 0;
+        }
         let before = self.items.len();
         self.items
             .retain(|item| !identities.contains(&item.identity));
         let removed = before - self.items.len();
         if removed > 0 {
             self.notify();
-            for _ in 0..removed {
-                self.record("remove", None)
-            }
+        }
+        // Original messageQueueManager.ts::remove logs one operation per
+        // identity requested, including already-removed and duplicate
+        // references. An unchanged queue must not notify subscribers.
+        for _ in identities {
+            self.record("remove", None);
         }
         removed
     }
@@ -411,6 +432,34 @@ mod tests {
         }
     }
     #[test]
+    fn queue_slash_predicate_differs_from_sdk_multimodal_input_parser() {
+        let mut command = cmd("/help", None, Mode::Prompt);
+        assert!(command.is_slash());
+        assert!(command.is_input_slash());
+        command.value = json!([
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"YQ=="}},
+            {"type":"text","text":" /help"}
+        ]);
+        assert!(!command.is_slash());
+        assert!(!command.is_input_slash());
+        command.value = json!([{"type":"image","source":{"type":"base64","data":"YQ==","media_type":"image/png"}},{"type":"text","text":"/help"}]);
+        assert!(!command.is_slash());
+        assert!(command.is_input_slash());
+        command.value = json!([
+            {"type":"text","text":"/help"},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"YQ=="}}
+        ]);
+        assert!(!command.is_input_slash());
+        command.value = json!(" /help");
+        assert!(command.is_slash());
+        assert!(!command.is_input_slash());
+        command.value = json!("/help");
+        command.skip_slash_commands = true;
+        assert!(!command.is_slash());
+        assert!(!command.is_input_slash());
+    }
+
+    #[test]
     fn priority_fifo_and_nonmatching_agent_isolation() {
         let mut q = Queue::default();
         q.enqueue(
@@ -480,6 +529,40 @@ mod tests {
         assert!(!q.snapshot()[1].command.is_editable());
         assert!(q.pop_all_editable("", 0).is_none());
     }
+    #[test]
+    fn removing_by_identity_records_original_request_count_without_false_mutations() {
+        let temp = tempfile::tempdir().unwrap();
+        let session = uuid::Uuid::new_v4().to_string();
+        let mut queue = Queue::default();
+        queue.enable_journal(temp.path(), &session).unwrap();
+        let first = queue.enqueue(cmd("first", None, Mode::Prompt), false);
+        let revision = queue.revision();
+        assert_eq!(queue.remove_identity(&[first + 1]), 0);
+        assert_eq!(queue.revision(), revision);
+        assert_eq!(queue.len(), 1);
+        // The TypeScript remove([...]) logs requests even if they no longer
+        // refer to any queued command; duplicate references also log twice.
+        assert_eq!(queue.remove_identity(&[first, first]), 1);
+        assert_eq!(queue.len(), 0);
+        let after = queue.revision();
+        assert_eq!(queue.remove_identity(&[]), 0);
+        assert_eq!(queue.revision(), after);
+        let journal_path = temp
+            .path()
+            .join(".atlas/queue")
+            .join(format!("{session}.jsonl"));
+        let events = std::fs::read_to_string(journal_path)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .collect::<Vec<_>>();
+        let operations = events
+            .iter()
+            .map(|entry| entry["operation"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(operations, vec!["enqueue", "remove", "remove", "remove"]);
+    }
+
     #[test]
     fn images_slashes_revision_and_identity() {
         let mut q = Queue::default();

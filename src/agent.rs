@@ -9,7 +9,7 @@ use crate::{
     in_memory_mailbox,
     lsp::LspManager,
     mcp::McpManager,
-    memory, permission_mode, permission_rules,
+    memory, memory_extraction, permission_mode, permission_rules,
     protocol::ToolCall,
     protocol::{Message, ModelRequest, TokenUsage},
     provider::{self, ModelProvider},
@@ -22,7 +22,8 @@ use crate::{
     worktree::Worktree,
 };
 use anyhow::{bail, Context, Result};
-use serde_json::json;
+use futures::stream::StreamExt;
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     fs,
@@ -32,6 +33,18 @@ use std::{
 };
 
 const DEFAULT_SYSTEM: &str = crate::prompt_runtime::BASE_SYSTEM;
+
+/// Model-visible reminder envelope matching utils/messages.ts.
+pub(crate) fn wrap_in_system_reminder(text: &str) -> String {
+    format!("<system-reminder>\n{text}\n</system-reminder>")
+}
+
+/// Preserve completion order when injecting async Stop-hook wake-up events.
+fn append_rewake_messages(messages: &mut Vec<Message>, pending: &[String]) {
+    for message in pending {
+        messages.push(Message::text("user", wrap_in_system_reminder(message)));
+    }
+}
 
 /// Read the metadata scalars used by the on-disk agent editor. Supports
 /// quoted values and YAML folded/literal descriptions without loading the
@@ -167,6 +180,12 @@ struct SdkAgentDefinition {
     mcp_servers: Vec<serde_json::Value>,
 }
 
+/// Prepared SDK agent catalog; validation performs no session mutation.
+/// The commit step is infallible after provider schema validation succeeds.
+pub(crate) struct PreparedSdkAgentDefinitions(
+    std::collections::BTreeMap<String, SdkAgentDefinition>,
+);
+
 pub struct Agent {
     profile: ProviderProfile,
     provider: Box<dyn ModelProvider>,
@@ -187,8 +206,16 @@ pub struct Agent {
     session_context: String,
     /// One-shot first user turn supplied by a SessionStart hook in headless mode.
     pending_initial_user_message: Option<String>,
+    /// hooks.ts:237 asyncRewake blocking errors awaiting model wake-up.
+    /// Drained as a task-notification turn when idle, or injected into the
+    /// running conversation between API rounds.
+    pending_rewake_notifications: Vec<String>,
     conversation_context: ConversationContext,
     structured_output: bool,
+    /// SDK initialize jsonSchema mirror for result-event structured_output.
+    sdk_response_schema: Option<Value>,
+    /// Source query.ts final reason, if a Stop hook prevents normal completion.
+    last_turn_stop_reason: Option<&'static str>,
     child_depth: u8,
     mcp_configs: Vec<McpServerConfig>,
     lsp_configs: Vec<LspServerConfig>,
@@ -224,6 +251,14 @@ pub struct Agent {
     sdk_append_system_prompt: Option<String>,
     /// None restores provider defaults, zero disables thinking where supported.
     sdk_thinking_budget: Option<u32>,
+    /// `currentTurnTokenBudget` — output-token target for the active turn.
+    turn_budget: Option<f64>,
+    /// `outputTokensAtTurnStart` — cumulative output tokens when the turn began.
+    turn_output_baseline: u64,
+    /// `budgetContinuationCount` — turn continuation counter (bootstrap state).
+    budget_continuation_count: u32,
+    /// Loop-local `BudgetTracker` for the active query turn.
+    budget_tracker: Option<crate::query_token_budget::BudgetTracker>,
     sdk_agent_definitions: std::collections::BTreeMap<String, SdkAgentDefinition>,
     sdk_allowed_tools: Option<std::collections::HashSet<String>>,
     sdk_disallowed_tools: std::collections::HashSet<String>,
@@ -316,8 +351,11 @@ impl Agent {
             hooks: HookRunner::default(),
             session_context: String::new(),
             pending_initial_user_message: None,
+            pending_rewake_notifications: Vec::new(),
             conversation_context,
             structured_output: false,
+            sdk_response_schema: None,
+            last_turn_stop_reason: None,
             child_depth: 0,
             mcp_configs: Vec::new(),
             lsp_configs: Vec::new(),
@@ -347,6 +385,10 @@ impl Agent {
             sdk_system_prompt: None,
             sdk_append_system_prompt: None,
             sdk_thinking_budget: None,
+            turn_budget: None,
+            turn_output_baseline: 0,
+            budget_continuation_count: 0,
+            budget_tracker: None,
             sdk_agent_definitions: std::collections::BTreeMap::new(),
             sdk_allowed_tools: None,
             sdk_disallowed_tools: std::collections::HashSet::new(),
@@ -425,7 +467,7 @@ impl Agent {
             .with_workspace(self.root.clone())
             .with_project_root(self.project_root.clone());
 
-        let mut fixed = config.mcp_servers.clone();
+        let mut fixed = crate::mcp_cli::active_servers(&self.root, config)?;
         fixed.extend(plugin_set.mcp_servers);
         let mut ids = std::collections::HashSet::new();
         for server in &fixed {
@@ -450,6 +492,16 @@ impl Agent {
             None => json!({"added":[],"removed":[],"errors":{}}),
         };
 
+        let mut lsp_configs = config.lsp_servers.clone();
+        lsp_configs.extend(plugin_set.lsp_servers);
+        // Prepare the new LSP connections before releasing the running ones.
+        if !lsp_configs.is_empty() {
+            let replacement = LspManager::connect(&self.root, &lsp_configs).await?;
+            self.lsp = Some(replacement);
+        } else {
+            self.lsp = None;
+        }
+        self.lsp_configs = lsp_configs;
         self.mcp_configs = fixed;
         self.hooks = new_hooks;
         self.hook_rules = hook_rules;
@@ -464,7 +516,10 @@ impl Agent {
     /// appear in the public catalog, and change actual delegated model turns.
     /// Reject fields whose behavior is not yet supported (especially tool
     /// restrictions) so a caller cannot accidentally receive broader access.
-    pub fn set_sdk_agent_definitions(&mut self, input: &serde_json::Value) -> Result<()> {
+    pub(crate) fn prepare_sdk_agent_definitions(
+        &self,
+        input: &serde_json::Value,
+    ) -> Result<PreparedSdkAgentDefinitions> {
         let definitions = input
             .as_object()
             .context("initialize agents must be an object")?;
@@ -681,7 +736,18 @@ impl Agent {
                 },
             );
         }
-        self.sdk_agent_definitions = parsed;
+        Ok(PreparedSdkAgentDefinitions(parsed))
+    }
+
+    /// Install only a fully validated catalog. A rejected initialize request
+    /// must not leave new agents visible or mutate the selected provider.
+    pub(crate) fn install_sdk_agent_definitions(&mut self, prepared: PreparedSdkAgentDefinitions) {
+        self.sdk_agent_definitions = prepared.0;
+    }
+
+    pub(crate) fn set_sdk_agent_definitions(&mut self, input: &serde_json::Value) -> Result<()> {
+        let prepared = self.prepare_sdk_agent_definitions(input)?;
+        self.install_sdk_agent_definitions(prepared);
         Ok(())
     }
 
@@ -1332,6 +1398,7 @@ impl Agent {
             }
         }
         let mut running = Vec::new();
+        let leader_session_id = self.session.id.to_string();
         for (index, name, prompt, profile, worktree) in prepared {
             let root = worktree
                 .as_ref()
@@ -1359,8 +1426,23 @@ impl Agent {
             let current_team_root = self.team_root.clone();
             let stable_project_root = self.project_root.clone();
             let cleanup_graph = self.graph.clone();
+            let parent_session_id = leader_session_id.clone();
             running.push(async move {
-                let result = async {
+                // The original AsyncLocalStorage teammate context must be
+                // scoped per future: concurrently polled workers cannot share
+                // process-wide environment identity or cancellation state.
+                let task_context = current_team.as_ref().map(|team| {
+                    crate::teammate_context::create_teammate_context(
+                        format!("{name}@{team}"),
+                        name.clone(),
+                        team.clone(),
+                        None,
+                        mode == permission_mode::Mode::Plan,
+                        parent_session_id,
+                        crate::teammate_context::AbortController::new(),
+                    )
+                });
+                let task_work = async {
                     let mut child = Self::new(
                         profile,
                         root.clone(),
@@ -1560,8 +1642,12 @@ impl Agent {
                         (Ok(answer), Ok(())) => Ok((session_id, answer)),
                     };
                     Ok::<_, anyhow::Error>((outcome, usage, cost))
-                }
-                .await;
+                };
+                let result = if let Some(context) = task_context {
+                    crate::teammate_context::run_with_teammate_context(context, task_work).await
+                } else {
+                    task_work.await
+                };
                 // The member remains active until worktree finalization,
                 // task release and leader notification have been attempted.
                 let worktree_status = if let Some(tree) = worktree {
@@ -1952,6 +2038,17 @@ impl Agent {
         );
         self.session.cost.merge(child.session.cost.clone());
         let answer = result?;
+        // Source AgentTool.tsx returns Explore/Plan one-shot results directly,
+        // except worktree agents that still need a path/branch continuation.
+        if crate::tool_names::is_one_shot_builtin_agent_type(&agent_type)
+            && isolation_result.is_none()
+        {
+            return Ok(if answer.is_empty() {
+                "(Subagent completed but returned no output.)".to_owned()
+            } else {
+                answer
+            });
+        }
         Ok(format!(
             "Subagent session: {child_id}\nResult:\n{answer}\n{}",
             isolation_result.unwrap_or_default()
@@ -2045,14 +2142,120 @@ impl Agent {
         &self.enabled_plugins
     }
 
+    /// Enforce SDK-provided JSON Schema at the provider protocol boundary.
+    pub fn set_sdk_response_schema(&mut self, schema: Option<serde_json::Value>) -> Result<()> {
+        if let Some(value) = &schema {
+            if !value.is_object() {
+                bail!("initialize jsonSchema must be a JSON Schema object")
+            }
+            if value.get("type").is_none() && value.get("$ref").is_none() {
+                bail!("initialize jsonSchema requires type or $ref")
+            }
+        }
+        self.provider.set_response_schema(schema.clone())?;
+        self.sdk_response_schema = schema;
+        Ok(())
+    }
+
+    /// The active SDK response schema, mirrored at set time so the result
+    /// event can attach `structured_output` without reaching into providers.
+    pub fn sdk_response_schema(&self) -> Option<&Value> {
+        self.sdk_response_schema.as_ref()
+    }
+
+    pub fn last_turn_stop_reason(&self) -> Option<&'static str> {
+        self.last_turn_stop_reason
+    }
+
     pub fn set_structured_output(&mut self, enabled: bool) {
         self.structured_output = enabled;
     }
 
-    fn emit(&self, event: serde_json::Value) {
+    fn emit(&self, mut event: serde_json::Value) {
+        // The original tool UI displays action/id and HTTP status/line count
+        // in interactive mode. SDK clients receive the same display fields.
+        if !self.structured_output {
+            if event.get("type").and_then(serde_json::Value::as_str) == Some("assistant") {
+                if let Some(calls) = event
+                    .pointer("/message/tool_calls")
+                    .and_then(serde_json::Value::as_array)
+                {
+                    for call in calls {
+                        if call
+                            .pointer("/function/name")
+                            .and_then(serde_json::Value::as_str)
+                            == Some("LocalTrigger")
+                        {
+                            if let Some(args) = call
+                                .pointer("/function/arguments")
+                                .and_then(serde_json::Value::as_str)
+                            {
+                                if let Ok(input) = serde_json::from_str(args) {
+                                    eprintln!(
+                                        "LocalTrigger {}",
+                                        crate::local_triggers::render_tool_use_message(&input)
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if event.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
+                && event.get("name").and_then(serde_json::Value::as_str) == Some("LocalTrigger")
+            {
+                if let Some(content) = event.get("content").and_then(serde_json::Value::as_str) {
+                    eprintln!(
+                        "{}",
+                        crate::local_triggers::render_tool_result_message(content)
+                    );
+                }
+            }
+            return;
+        }
         if self.structured_output {
+            if event.get("type").and_then(serde_json::Value::as_str) == Some("assistant") {
+                if let Some(calls) = event
+                    .pointer("/message/tool_calls")
+                    .and_then(serde_json::Value::as_array)
+                {
+                    let labels = calls
+                        .iter()
+                        .filter(|call| {
+                            call.pointer("/function/name")
+                                .and_then(serde_json::Value::as_str)
+                                == Some("LocalTrigger")
+                        })
+                        .filter_map(|call| {
+                            let id = call.get("id")?.as_str()?;
+                            let args = call.pointer("/function/arguments")?.as_str()?;
+                            let input: serde_json::Value = serde_json::from_str(args).ok()?;
+                            Some(json!({"tool_use_id":id,
+                                "display":crate::local_triggers::render_tool_use_message(&input)}))
+                        })
+                        .collect::<Vec<_>>();
+                    if !labels.is_empty() {
+                        event["tool_use_display"] = json!(labels);
+                    }
+                }
+            }
+            if event.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
+                && event.get("name").and_then(serde_json::Value::as_str) == Some("LocalTrigger")
+            {
+                if let Some(content) = event.get("content").and_then(serde_json::Value::as_str) {
+                    let display = crate::local_triggers::render_tool_result_message(content);
+                    event["display"] = json!(display);
+                }
+            }
             println!("{}", crate::ndjson::stringify_value(&event));
         }
+    }
+
+    pub fn session_color(&self) -> Option<&str> {
+        self.session.agent_color.as_deref()
+    }
+
+    pub fn set_session_color(&mut self, color: &str) -> Result<String> {
+        crate::session_color::change_color(&mut self.session, &self.root, color)
     }
 
     pub fn session_id(&self) -> String {
@@ -2074,6 +2277,11 @@ impl Agent {
     }
     pub fn workspace_root(&self) -> &std::path::Path {
         &self.root
+    }
+
+    /// FileChanged hook rules backing the live-session file watcher.
+    pub fn file_changed_rules(&self) -> Vec<crate::hooks::HookRule> {
+        self.hooks.file_changed_rules()
     }
     /// Fork the live conversation and switch the active run to the new session.
     /// The original session remains unchanged and resumable.
@@ -2281,41 +2489,75 @@ impl Agent {
     pub async fn pump_async_hook_events(&mut self) -> Result<usize> {
         let events = crate::hooks::collect_async_hook_responses(&self.session.id.to_string()).await;
         let count = events.len();
+        let mut rewake_notifications: Vec<String> = Vec::new();
+        let mut visible: Vec<String> = Vec::new();
         for event in events {
             self.emit(event.clone());
-            let stdout = event["stdout"]
-                .as_str()
-                .unwrap_or("")
-                .lines()
-                .filter(|line| {
-                    serde_json::from_str::<serde_json::Value>(line.trim())
-                        .ok()
-                        .is_none_or(|value| value.get("async") != Some(&json!(true)))
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            let body = if event["outcome"] == "success" {
-                stdout.trim().to_owned()
-            } else {
-                format!(
-                    "Async hook {}: {}",
-                    event["outcome"].as_str().unwrap_or("failed"),
-                    event["stderr"].as_str().unwrap_or("")
-                )
-            };
-            if !body.trim().is_empty() {
-                self.session.messages.push(Message::text(
-                    "user",
-                    format!(
-                        "[Asynchronous {} hook result]\n{}",
-                        event["hook_event_name"].as_str().unwrap_or("Hook"),
-                        body
-                    ),
+            // hooks.ts:237 asyncRewake hooks bypass the registry entirely:
+            // an exit code 2 result enqueues a task-notification that wakes
+            // the model via the queue processor (idle) or injects mid-query.
+            if event["rewake"].as_bool() == Some(true) {
+                let stderr = event["stderr"].as_str().unwrap_or("");
+                let stdout = event["stdout"].as_str().unwrap_or("");
+                let body = if stderr.is_empty() { stdout } else { stderr };
+                rewake_notifications.push(format!(
+                    "Stop hook blocking error from command \"{}\": {}",
+                    event["command"].as_str().unwrap_or(""),
+                    body
                 ));
-                self.session.save(&self.root)?;
+                continue;
+            }
+            // messages.ts:4026 async_hook_response: only systemMessage and
+            // hookSpecificOutput.additionalContext become model-visible
+            // messages; raw stdout never reaches the conversation.
+            let response = &event["response"];
+            if let Some(message) = response["systemMessage"].as_str().filter(|m| !m.is_empty()) {
+                visible.push(message.to_owned());
+            }
+            if let Some(context) = response["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .filter(|context| !context.is_empty())
+            {
+                visible.push(context.to_owned());
             }
         }
+        if !visible.is_empty() {
+            for text in visible {
+                self.session
+                    .messages
+                    .push(Message::text("user", wrap_in_system_reminder(&text)));
+            }
+            self.session.save(&self.root)?;
+        }
+        if !rewake_notifications.is_empty() {
+            self.pending_rewake_notifications
+                .extend(rewake_notifications);
+        }
         Ok(count)
+    }
+
+    /// Drain queued asyncRewake blocking errors. The SDK idle loop turns the
+    /// first notification into a wake-up turn; the running Agent query injects
+    /// them directly between API rounds.
+    pub fn take_rewake_notifications(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.pending_rewake_notifications)
+    }
+
+    /// Attach completed async Stop-hook blocking errors to the active query.
+    /// A failed session write restores the queue so it can be retried intact.
+    fn inject_rewake_notifications(&mut self) -> Result<usize> {
+        let pending = self.take_rewake_notifications();
+        if pending.is_empty() {
+            return Ok(0);
+        }
+        let prior_count = self.session.messages.len();
+        append_rewake_messages(&mut self.session.messages, &pending);
+        if let Err(error) = self.session.save(&self.root) {
+            self.session.messages.truncate(prior_count);
+            self.pending_rewake_notifications.splice(0..0, pending);
+            return Err(error);
+        }
+        Ok(self.session.messages.len() - prior_count)
     }
 
     pub fn sdk_title_request(&self, description: &str) -> Option<ModelRequest> {
@@ -2530,7 +2772,8 @@ impl Agent {
         Ok(matches)
     }
     pub fn search_transcript(&self, query: &str) -> Vec<crate::transcript_search::SearchHit> {
-        crate::transcript_search::TranscriptIndex::from_stored(&self.session.messages).find(query)
+        let transcript = self.session.transcript_messages();
+        crate::transcript_search::TranscriptIndex::from_stored(&transcript).find(query)
     }
     pub fn usage(&self) -> crate::protocol::TokenUsage {
         self.session.usage
@@ -2544,6 +2787,48 @@ impl Agent {
     pub fn set_model_prices(&mut self, prices: &[ModelPrice]) {
         self.model_prices = prices.to_vec();
     }
+    /// Complete a read-only tool without borrowing the mutable Agent. This
+    /// lets each concurrent tool_result enter the durable transcript as soon
+    /// as its own tool and PostToolUse hook complete (source: generators.all).
+    async fn finalize_readonly_result(
+        hooks: &HookRunner,
+        hook_input: serde_json::Value,
+        call: &ToolCall,
+        raw_result: String,
+        pre_contexts: Vec<String>,
+    ) -> (String, Vec<String>) {
+        let (post, mut result): (crate::hooks::HookOutcome, String) = match hooks
+            .after_tool_with_context(call, &raw_result, hook_input)
+            .await
+        {
+            Ok(outcome) => (outcome, raw_result),
+            Err(error) => (
+                Default::default(),
+                format!(
+                    "ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: {raw_result}"
+                ),
+            ),
+        };
+        if let Some(reason) = post.blocking_reason {
+            result.push_str(&format!(
+                "\nPostToolUse hook blocked continuation: {reason}"
+            ));
+        }
+        for context in pre_contexts {
+            result.push_str(&format!("\n{context}"));
+        }
+        (result, post.non_blocking_errors)
+    }
+
+    /// `snapshotOutputTokensForTurn` — record the cumulative output-token
+    /// baseline, install the turn budget and reset the continuation counter
+    /// (bootstrap/state.ts).
+    fn snapshot_output_tokens_for_turn(&mut self, budget: Option<f64>) {
+        self.turn_output_baseline = self.session.usage.output_tokens;
+        self.turn_budget = budget;
+        self.budget_continuation_count = 0;
+    }
+
     fn record_usage(&mut self, usage: TokenUsage) {
         self.session.usage.accumulate(usage);
         self.session.cost.record(
@@ -2564,10 +2849,6 @@ impl Agent {
         }
         let mut system = self.effective_system_prompt()?;
         self.conversation_context.append_to(&mut system);
-        if let Some(summary) = &self.session.summary {
-            system.push_str("\nVerified session continuity summary:\n");
-            system.push_str(summary);
-        }
         if !self.session_context.is_empty() {
             system.push_str("\nSession start hook context:\n");
             system.push_str(&self.session_context);
@@ -2605,7 +2886,7 @@ impl Agent {
         let request = ModelRequest {
             model: self.profile.model.clone(),
             system,
-            messages: self.session.messages.clone(),
+            messages: self.session.model_messages(),
             tools: definitions,
         };
         Ok((
@@ -2618,26 +2899,23 @@ impl Agent {
     /// the parent transcript. When no model turn has run, reconstruct the
     /// same system/session context used by the normal Agent fallback.
     pub fn side_question_request(&self, question: &str) -> Result<ModelRequest> {
+        let current_messages = self.session.model_messages();
         let base = if let Some(last) = &self.last_side_question_request {
             let mut fork = last.clone();
             // Preserve the original request prefix for cache reuse while
             // including the assistant/tool messages completed afterwards.
             // If the transcript was replaced, use its current contents
             // rather than accidentally resurrecting an earlier turn.
-            if self.session.messages.starts_with(&fork.messages) {
+            if current_messages.starts_with(&fork.messages) {
                 fork.messages
-                    .extend(self.session.messages[fork.messages.len()..].iter().cloned());
+                    .extend(current_messages[fork.messages.len()..].iter().cloned());
             } else {
-                fork.messages = self.session.messages.clone();
+                fork.messages = current_messages;
             }
             fork
         } else {
             let mut system = self.effective_system_prompt()?;
             self.conversation_context.append_to(&mut system);
-            if let Some(summary) = &self.session.summary {
-                system.push_str("\nVerified session continuity summary:\n");
-                system.push_str(summary);
-            }
             if !self.session_context.is_empty() {
                 system.push_str("\nSession start hook context:\n");
                 system.push_str(&self.session_context);
@@ -2648,7 +2926,7 @@ impl Agent {
             ModelRequest {
                 model: self.profile.model.clone(),
                 system,
-                messages: self.session.messages.clone(),
+                messages: self.session.model_messages(),
                 tools: Vec::new(),
             }
         };
@@ -2853,6 +3131,16 @@ impl Agent {
         executor.list_skills()
     }
 
+    pub fn attach_local_files(&self, content: &Value, files: Option<&Value>) -> Result<Value> {
+        let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+            .with_permission_rules(self.permission_rules.clone())
+            .with_extra_roots(self.additional_dirs.clone())
+            .with_permission_mode(self.permission_mode);
+        crate::local_attachments::attach(&self.root, content, files, |raw, path| {
+            executor.require_read_rules(raw, path)
+        })
+    }
+
     pub fn list_user_skills(&self) -> Result<String> {
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_plugins(self.enabled_plugins.clone())
@@ -2889,7 +3177,11 @@ impl Agent {
             writeln!(report, "Session tag: #{tag}")?;
         }
         writeln!(report, "Session ID: {}", self.session.id)?;
-        writeln!(report, "cwd: {}", self.root.display())?;
+        writeln!(
+            report,
+            "cwd: {}",
+            crate::path_support::display_path_for_user(&self.root)
+        )?;
         writeln!(
             report,
             "Provider: {} ({})",
@@ -2911,7 +3203,11 @@ impl Agent {
         }
         writeln!(report, "Configured workspace directories:")?;
         for root in self.working_directories() {
-            writeln!(report, "  {}", root.display())?;
+            writeln!(
+                report,
+                "  {}",
+                crate::path_support::display_path_for_user(&root)
+            )?;
         }
         let statuses = self.mcp_statuses()?;
         writeln!(report, "MCP servers: {}", statuses.len())?;
@@ -3438,7 +3734,7 @@ impl Agent {
     /// Replace previous turns with a model-generated, persistent compact summary.
     /// Do not modify the live transcript until the new session is durable.
     pub async fn compact_history(&mut self) -> Result<()> {
-        self.compact_history_with_trigger(false, None).await
+        self.compact_history_with_trigger(false, None, None).await
     }
 
     /// /compact instructions must influence the summarization request, not
@@ -3452,14 +3748,31 @@ impl Agent {
             } else {
                 Some(instructions)
             },
+            None,
         )
         .await
+    }
+
+    /// Source partialCompactConversation: pivot uses a zero-based index in
+    /// model-visible messages. From retains prefix; up_to retains suffix.
+    pub async fn compact_history_partial(
+        &mut self,
+        pivot: usize,
+        direction: crate::compact_source_prompts::CompactDirection,
+        user_feedback: Option<&str>,
+    ) -> Result<()> {
+        if direction == crate::compact_source_prompts::CompactDirection::Full {
+            bail!("Partial compaction requires from or up_to");
+        }
+        self.compact_history_with_trigger(false, user_feedback, Some((pivot, direction)))
+            .await
     }
 
     async fn compact_history_with_trigger(
         &mut self,
         automatic: bool,
         custom_instructions: Option<&str>,
+        partial: Option<(usize, crate::compact_source_prompts::CompactDirection)>,
     ) -> Result<()> {
         if std::env::var("ATLAS_DISABLE_COMPACT")
             .ok()
@@ -3473,8 +3786,77 @@ impl Agent {
             bail!("Compaction is disabled by ATLAS_DISABLE_COMPACT")
         }
         if self.session.messages.is_empty() {
-            bail!("No history to compact")
+            bail!("{}", crate::compact_command_source::NO_MESSAGES)
         }
+        // Match original pivot selection, validating before hooks/model work.
+        let all_messages = self.session.model_messages();
+        // 2.1.88 tracks isCompactSummary on each message. In this Rust
+        // session, old summaries that survive from mode are indexed in the
+        // retained message array. Translate those offsets into the current
+        // model sequence, which also contains the latest synthetic summary.
+        let current_summary_index = self
+            .session
+            .summary
+            .as_deref()
+            .filter(|summary| !summary.trim().is_empty())
+            .map(|_| {
+                self.session
+                    .summary_insert_at
+                    .unwrap_or(0)
+                    .min(self.session.messages.len())
+            });
+        let mut prior_summary_indices = self
+            .session
+            .retained_summary_indices
+            .iter()
+            .map(|index| {
+                index + usize::from(current_summary_index.is_some_and(|summary| summary <= *index))
+            })
+            .collect::<Vec<_>>();
+        if let Some(index) = current_summary_index {
+            prior_summary_indices.push(index);
+        }
+        let messages_to_keep = if let Some((pivot, direction)) = partial {
+            if pivot > all_messages.len() {
+                bail!("Compaction pivot exceeds current message count")
+            }
+            let selected = match direction {
+                crate::compact_source_prompts::CompactDirection::From => &all_messages[pivot..],
+                crate::compact_source_prompts::CompactDirection::UpTo => &all_messages[..pivot],
+                crate::compact_source_prompts::CompactDirection::Full => {
+                    bail!("Partial compaction requires from or up_to")
+                }
+            };
+            if selected.is_empty() {
+                bail!(
+                    "{}",
+                    if direction == crate::compact_source_prompts::CompactDirection::UpTo {
+                        "Nothing to summarize before the selected message."
+                    } else {
+                        "Nothing to summarize after the selected message."
+                    }
+                )
+            }
+            Some(match direction {
+                crate::compact_source_prompts::CompactDirection::From => {
+                    all_messages[..pivot].to_vec()
+                }
+                crate::compact_source_prompts::CompactDirection::UpTo => {
+                    // 2.1.88 removes old compaction summaries from the
+                    // retained suffix, otherwise the later old boundary
+                    // can shadow the new partial summary on resume.
+                    all_messages[pivot..]
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| !prior_summary_indices.contains(&(pivot + *index)))
+                        .map(|(_, message)| message.clone())
+                        .collect()
+                }
+                crate::compact_source_prompts::CompactDirection::Full => unreachable!(),
+            })
+        } else {
+            None
+        };
         runtime_contracts::clear_compact_warning_suppression();
         let before = self
             .hooks
@@ -3497,21 +3879,46 @@ impl Agent {
         for warning in &before.non_blocking_errors {
             eprintln!("PreCompact hook warning: {warning}");
         }
-        let previous = self.session.summary.as_deref().unwrap_or("");
-        let mut prompt = crate::prompt_runtime::compact_prompt(previous);
-        if let Some(custom) = custom_instructions {
-            prompt.push_str("\n\n[User's compaction instructions]\n");
-            prompt.push_str(custom);
+        // Earlier compressed context is already present as a user turn in
+        // model_messages, just as in 2.1.88. Do not duplicate it in system.
+        let mut prompt = if let Some((_, direction)) = partial {
+            crate::compact_source_prompts::prompt_for_direction("", direction)
+        } else {
+            crate::prompt_runtime::compact_prompt("")
+        };
+        // 2.1.88 mergeHookInstructions puts explicit user guidance first,
+        // then successful PreCompact hook context, under one source-defined
+        // Additional Instructions section (before the final tool ban).
+        let mut additional_instructions = Vec::new();
+        // Source partialCompactConversation: hook instructions precede the
+        // User context feedback for manual partial compaction.
+        if partial.is_some() && !before.additional_context.is_empty() {
+            additional_instructions.push(before.additional_context.join("\n\n"));
         }
-        // 2.1.88 executePreCompactHooks merges successful hook stdout as
-        // custom compaction instructions, respecting auto/manual matchers.
-        if !before.additional_context.is_empty() {
-            prompt.push_str("\n\n[Additional PreCompact hook instructions]\n");
-            prompt.push_str(&before.additional_context.join("\n\n"));
+        if let Some(custom) = custom_instructions.filter(|text| !text.trim().is_empty()) {
+            if partial.is_some() {
+                additional_instructions.push(format!("User context: {custom}"));
+            } else {
+                additional_instructions.push(custom.to_owned());
+            }
         }
+        if partial.is_none() && !before.additional_context.is_empty() {
+            additional_instructions.push(before.additional_context.join("\n\n"));
+        }
+        if !additional_instructions.is_empty() {
+            prompt.push_str("\n\nAdditional Instructions:\n");
+            prompt.push_str(&additional_instructions.join("\n\n"));
+        }
+        prompt.push_str(crate::compact_source_prompts::NO_TOOLS_TRAILER);
         // The original stripImagesFromMessages removes binary payloads only
         // from the summarization request, never from saved conversation data.
-        let mut history = self.session.messages.clone();
+        // up_to sends only summarized prefix; from sends full model context.
+        let mut history = match partial {
+            Some((pivot, crate::compact_source_prompts::CompactDirection::UpTo)) => {
+                all_messages[..pivot].to_vec()
+            }
+            _ => all_messages,
+        };
         for message in &mut history {
             // In Rust, tool results are stored as role="tool" messages,
             // while the original TS stream represents them as user blocks.
@@ -3623,7 +4030,8 @@ impl Agent {
             self.session.save(&self.root)?;
             bail!("Compaction model unexpectedly requested tools");
         }
-        let summary = response.message.visible_text();
+        let raw_summary = response.message.visible_text();
+        let summary = crate::prompt_runtime::compact_summary_content(&raw_summary).to_owned();
         if summary.trim().is_empty() {
             self.session.save(&self.root)?;
             bail!("Compaction returned empty text")
@@ -3633,8 +4041,51 @@ impl Agent {
         // Persist a candidate before swapping it into the live Agent so a
         // disk failure cannot destroy the conversation in memory.
         let mut candidate = self.session.clone();
+        if let Some((_, direction)) = partial {
+            // Retain original chronological history independently from
+            // whichever segment remains in the new model context.
+            candidate.transcript_snapshot = Some(self.session.transcript_messages());
+            candidate.messages = messages_to_keep.expect("validated partial selection");
+            candidate.retained_summary_indices =
+                if direction == crate::compact_source_prompts::CompactDirection::From {
+                    prior_summary_indices
+                        .into_iter()
+                        .filter(|index| *index < candidate.messages.len())
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+            candidate.transcript_active_offset = candidate.messages.len();
+            candidate.archived_messages.clear();
+            candidate.summary_insert_at = Some(match direction {
+                crate::compact_source_prompts::CompactDirection::From => candidate.messages.len(),
+                crate::compact_source_prompts::CompactDirection::UpTo => 0,
+                crate::compact_source_prompts::CompactDirection::Full => unreachable!(),
+            });
+        } else if self.session.transcript_snapshot.is_some() {
+            candidate.transcript_snapshot = Some(self.session.transcript_messages());
+            candidate.transcript_active_offset = 0;
+            candidate.archived_messages.clear();
+            candidate.messages.clear();
+            candidate.summary_insert_at = None;
+            candidate.retained_summary_indices.clear();
+        } else {
+            // Preserve the existing full-compaction archive path for legacy
+            // sessions; no active conversation is erased before disk commit.
+            if let Some(previous) = candidate.summary.as_deref() {
+                candidate.archived_messages.push(Message::text(
+                    "user",
+                    crate::compact_source_prompts::user_summary_message(
+                        previous, None, false, false,
+                    ),
+                ));
+            }
+            candidate.archived_messages.append(&mut candidate.messages);
+            candidate.summary_insert_at = None;
+            candidate.retained_summary_indices.clear();
+        }
         candidate.summary = Some(summary);
-        candidate.messages.clear();
+        candidate.memory_extraction_cursor = 0;
         candidate.surfaced_memories.clear();
         candidate.surfaced_memory_units = 0;
         candidate.save(&self.root)?;
@@ -3707,6 +4158,34 @@ impl Agent {
         Ok(available)
     }
 
+    /// Session-scoped cache invalidation shared by /clear and /resume.
+    /// Based on `src/commands/clear/caches.ts::clearSessionCaches`:
+    /// stale file permissions, editor reads, model request prefixes, session
+    /// env overrides and per-session notifications must never survive a
+    /// conversation switch. Background tasks and their mailbox remain owned
+    /// by their own session and are not deleted by this cache reset.
+    fn reset_session_caches(&mut self) {
+        // Source clearSessionCaches invalidates WebFetch's bounded URL cache
+        // on /clear and /resume; cached pages may reflect prior session state.
+        crate::webfetch::clear_cache();
+        // Original clear/caches.ts also invalidates repository detection and
+        // the gitdir/snapshot cache. Otherwise moving between worktrees or
+        // changing origin can reuse stale project identity after /clear.
+        crate::detect_repository::clear_repository_caches();
+        crate::git_filesystem::clear_resolve_git_dir_cache();
+        self.notebook_reads.lock().unwrap().clear();
+        self.file_reads.lock().unwrap().clear();
+        self.last_context_usage = None;
+        self.last_side_question_request = None;
+        self.last_model_usage = None;
+        self.auto_compact_failures = 0;
+        self.session_context.clear();
+        self.pending_initial_user_message = None;
+        self.transient_mailbox = in_memory_mailbox::Mailbox::new();
+        self.session_env.clear();
+        self.background.set_environment(&self.session_env);
+    }
+
     pub async fn resume_interactive_session(&mut self, query: &str) -> Result<String> {
         if !self.interactive {
             bail!("Interactive session switching requires chat mode");
@@ -3760,21 +4239,9 @@ impl Agent {
         self.session_start_source = "resume";
         self.permission_mode = mode;
         self.background = background;
-        // /env overrides belong to the previous conversation; a resumed
-        // session starts with the process/configured environment only.
-        self.session_env.clear();
-        self.background.set_environment(&self.session_env);
         self.graph = graph;
         self.file_metrics = metrics;
-        self.notebook_reads.lock().unwrap().clear();
-        self.file_reads.lock().unwrap().clear();
-        self.last_context_usage = None;
-        self.last_side_question_request = None;
-        self.last_model_usage = None;
-        self.auto_compact_failures = 0;
-        self.session_context.clear();
-        self.pending_initial_user_message = None;
-        self.transient_mailbox = in_memory_mailbox::Mailbox::new();
+        self.reset_session_caches();
         let start = match self
             .hooks
             .run(HookEvent::SessionStart, None, {
@@ -3829,20 +4296,9 @@ impl Agent {
         // Prepare the new durable session before swapping the active state.
         next.save(&self.root)?;
         self.session = next;
-        // A new session cannot inherit file-read authorization from the
-        // previous conversation, even when the workspace is unchanged.
-        self.notebook_reads.lock().unwrap().clear();
-        self.file_reads.lock().unwrap().clear();
-        self.last_context_usage = None;
-        self.last_side_question_request = None;
-        self.last_model_usage = None;
-        self.auto_compact_failures = 0;
         self.graph = graph;
-        self.session_context.clear();
-        self.transient_mailbox = in_memory_mailbox::Mailbox::new();
-        self.session_env.clear();
-        self.background.set_environment(&self.session_env);
         self.file_metrics = Arc::new(ToolMetrics::with_totals(0, 0));
+        self.reset_session_caches();
 
         let start = self
             .hooks
@@ -3872,6 +4328,164 @@ impl Agent {
         Ok(())
     }
 
+    /// Execute the original advisor server tool using a provider-neutral second model.
+    /// The pending tool invocation is excluded so provider protocols never receive
+    /// unmatched tool-call IDs.
+    async fn request_advisor(&mut self, profile: &ProviderProfile, system: &str) -> Result<String> {
+        let pending = self.session.messages.iter().rposition(|message| {
+            message.role == "assistant"
+                && message
+                    .tool_calls
+                    .as_ref()
+                    .is_some_and(|calls| !calls.is_empty())
+        });
+        let conversation = pending
+            .map(|index| &self.session.messages[..index])
+            .unwrap_or(self.session.messages.as_slice());
+        let mut messages = conversation.to_vec();
+        messages.push(Message::text(
+            "user",
+            "Review the full conversation and identify risks, mistakes and actionable next steps. Do not execute tools. Focus on the user's actual request.",
+        ));
+        let request = ModelRequest {
+            model: profile.model.clone(),
+            system: system.to_owned(),
+            messages,
+            tools: Vec::new(),
+        };
+        let provider = provider::create(profile)?;
+        let started = Instant::now();
+        let result = provider.complete(&request).await;
+        self.session.cost.add_api_duration(started.elapsed());
+        if let Ok(response) = &result {
+            if let Some(usage) = response.usage {
+                self.session.usage.accumulate(usage);
+                self.session
+                    .cost
+                    .record(&profile.id, &profile.model, usage, &self.model_prices);
+            }
+        }
+        self.session.save(&self.root)?;
+        let response = result?;
+        if response
+            .message
+            .tool_calls
+            .as_ref()
+            .is_some_and(|calls| !calls.is_empty())
+        {
+            bail!("Advisor provider returned tool calls although no tools were offered")
+        }
+        let advice = response.message.visible_text();
+        if advice.trim().is_empty() {
+            bail!("Advisor provider returned an empty response")
+        }
+        Ok(advice)
+    }
+
+    /// Run one local advanced workflow in plan mode without changing the
+    /// user's persisted permission setting. The guard restores the prior
+    /// mode even if the future is cancelled or the provider fails.
+    pub async fn ask_in_plan_mode(&mut self, prompt: &str) -> Result<String> {
+        self.ask_with_blocks_in_plan_mode(prompt, None, None).await
+    }
+
+    /// SDK advanced review/planning must keep image blocks and the original
+    /// user-message identity while restricting this single request to plan
+    /// permissions. Cancellation drops the guard and restores the caller mode.
+    pub async fn ask_with_blocks_in_plan_mode(
+        &mut self,
+        prompt: &str,
+        blocks: Option<Vec<serde_json::Value>>,
+        message_id: Option<uuid::Uuid>,
+    ) -> Result<String> {
+        struct RestoreMode<'a> {
+            agent: &'a mut Agent,
+            previous: permission_mode::Mode,
+        }
+        impl Drop for RestoreMode<'_> {
+            fn drop(&mut self) {
+                self.agent.permission_mode = self.previous;
+            }
+        }
+        let previous = self.permission_mode;
+        let guard = RestoreMode {
+            agent: self,
+            previous,
+        };
+        guard.agent.permission_mode = permission_mode::Mode::Plan;
+        guard
+            .agent
+            .ask_with_blocks_for_message(prompt, blocks, message_id)
+            .await
+    }
+
+    /// Three evidence-driven passes on the current Agent and selected model.
+    /// All phases use the same session and temporary read-only plan mode.
+    /// The first phase retains SDK images and user UUID; subsequent turns
+    /// review that same session's draft without duplicating attachments.
+    pub async fn run_advanced_with_blocks(
+        &mut self,
+        kind: crate::local_advanced_workflows::Kind,
+        prompt: &str,
+        blocks: Option<Vec<serde_json::Value>>,
+        message_id: Option<uuid::Uuid>,
+    ) -> Result<String> {
+        let workflow = kind.as_str();
+        self.emit(json!({
+            "type":"workflow","workflow":workflow,
+            "phase":"starting","session_id":self.session.id
+        }));
+        let phases = [
+            ("drafting", Some(prompt)),
+            ("verifying", Some(kind.verify_prompt())),
+            ("finalizing", Some(kind.finalize_prompt())),
+        ];
+        let mut first_blocks = blocks;
+        let mut first_id = message_id;
+        let mut answer = String::new();
+        for (phase, instruction) in phases {
+            if !self.structured_output {
+                eprintln!("{workflow}: {phase}");
+            }
+            self.emit(json!({
+                "type":"workflow","workflow":workflow,
+                "phase":phase,"session_id":self.session.id
+            }));
+            let result = self
+                .ask_with_blocks_in_plan_mode(
+                    instruction.context("Advanced workflow phase prompt is missing")?,
+                    first_blocks.take(),
+                    first_id.take(),
+                )
+                .await;
+            match result {
+                Ok(text) => answer = text,
+                Err(error) => {
+                    self.emit(json!({
+                        "type":"workflow","workflow":workflow,
+                        "phase":"failed","session_id":self.session.id,
+                        "message":format!("{error:#}")
+                    }));
+                    return Err(error);
+                }
+            }
+        }
+        self.emit(json!({
+            "type":"workflow","workflow":workflow,
+            "phase":"ready","session_id":self.session.id
+        }));
+        Ok(answer)
+    }
+
+    pub async fn run_advanced(
+        &mut self,
+        kind: crate::local_advanced_workflows::Kind,
+        prompt: &str,
+    ) -> Result<String> {
+        self.run_advanced_with_blocks(kind, prompt, None, None)
+            .await
+    }
+
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
         self.ask_with_blocks(prompt, None).await
     }
@@ -3892,11 +4506,24 @@ impl Agent {
         message_id: Option<uuid::Uuid>,
     ) -> Result<String> {
         let ask_started = Instant::now();
+        self.last_turn_stop_reason = None;
+        // Original REPL.tsx parses the raw input for a token budget before
+        // dispatching a turn and snapshotOutputTokensForTurn keeps the
+        // previous budget when the new input carries none. The compile-time
+        // feature gate becomes the established process-level switch.
+        if crate::env_runtime::is_env_truthy(std::env::var("ATLAS_TOKEN_BUDGET").ok().as_deref()) {
+            let parsed_budget = crate::portable_source_utils::parse_token_budget(prompt);
+            self.snapshot_output_tokens_for_turn(parsed_budget.or(self.turn_budget));
+            self.budget_tracker = Some(crate::query_token_budget::create_budget_tracker());
+        }
         // Original sessionStart.ts + cli/print.ts prepend a one-shot
         // initialUserMessage to the headless input stream. Keep it as an
         // actual user turn (not a system instruction or hook attachment).
         let mut startup_message = self.pending_initial_user_message.take();
-        if prompt.trim().is_empty() && startup_message.is_none() {
+        if prompt.trim().is_empty()
+            && startup_message.is_none()
+            && !crate::process_text_prompt::has_content_blocks(blocks.as_deref())
+        {
             bail!("Prompt cannot be empty")
         }
         let prompt_text = if prompt.trim().is_empty() {
@@ -3923,9 +4550,12 @@ impl Agent {
         // The source autoCompact.ts estimates tokens from the complete API
         // messages rather than only the flat text field. Structured text,
         // tool results and media blocks all count toward context pressure.
-        let mut pending_message = Message::text("user", prompt);
-        pending_message.content_blocks = blocks.clone();
-        let history_tokens = Self::compact_round_token_estimate(&self.session.messages)
+        let pending_message =
+            crate::process_text_prompt::process_text_prompt(prompt, blocks.clone()).message;
+        // Include the synthetic compact-summary user turn in the same
+        // token estimate as the provider request, or subsequent turns may
+        // silently exceed the model context after a successful compact.
+        let history_tokens = Self::compact_round_token_estimate(&self.session.model_messages())
             .saturating_add(Self::compact_round_token_estimate(std::slice::from_ref(
                 &pending_message,
             )));
@@ -3959,14 +4589,26 @@ impl Agent {
                     window - window / 4
                 }
             }
-            Err(std::env::VarError::NotPresent) => 25_000,
+            Err(std::env::VarError::NotPresent) => self
+                .profile
+                .tuning
+                .context_window
+                .map(|value| {
+                    let window = value as usize;
+                    if window > 13_000 {
+                        window - 13_000
+                    } else {
+                        window - window / 4
+                    }
+                })
+                .unwrap_or(25_000),
             Err(error) => return Err(error.into()),
         };
         // Match autoCompact.ts: auto-compaction is best-effort, with a
         // per-session circuit breaker after three consecutive failures.
         // A failed summarizer must not discard the user's new prompt.
         if !auto_disabled && history_tokens >= threshold && self.auto_compact_failures < 3 {
-            match self.compact_history_with_trigger(true, None).await {
+            match self.compact_history_with_trigger(true, None, None).await {
                 Ok(()) => self.auto_compact_failures = 0,
                 Err(error) => {
                     self.auto_compact_failures = self.auto_compact_failures.saturating_add(1);
@@ -4025,10 +4667,6 @@ impl Agent {
             system.push_str(crate::prompt_runtime::COORDINATOR);
         }
         self.conversation_context.append_to(&mut system);
-        if let Some(summary) = &self.session.summary {
-            system.push_str("\nVerified session continuity summary:\n");
-            system.push_str(summary);
-        }
         if !self.session_context.is_empty() {
             system.push_str("\nSession start hook context:\n");
             system.push_str(&self.session_context);
@@ -4114,9 +4752,9 @@ impl Agent {
                 system.push_str(&format!("{}\n", dir.display()));
             }
         }
-        if let Some(mcp) = &self.mcp {
-            system.push_str(&mcp.instruction_context());
-        }
+        // MCP instructions are a live snapshot. A server can reconnect,
+        // change its initialization instructions, or be removed between
+        // model steps in this same user turn. Do not freeze them here.
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_session_id(self.session.id.to_string())
             .with_history_message_id(history_message_id)
@@ -4126,6 +4764,9 @@ impl Agent {
             .with_plugins(self.enabled_plugins.clone())
             .with_search(self.search_backend.clone())
             .with_background(self.background.clone())
+            .with_simple_mode_coordinator(
+                self.team_name.is_some() && self.agent_name.as_deref() == Some("team-lead"),
+            )
             .with_permission_rules(self.permission_rules.clone())
             .with_extra_roots(self.additional_dirs.clone())
             .with_shell(self.shell_kind)
@@ -4139,9 +4780,28 @@ impl Agent {
             // rounds. Attach each completed hook exactly once; emit its
             // outcome to the SDK/UI, without replaying the shell command.
             self.pump_async_hook_events().await?;
+            self.inject_rewake_notifications()?;
+            // Resolve the configured second model before exposing advisor;
+            // stale provider IDs remain inactive rather than misreporting success.
+            let advisor_profile = if self.child_depth == 0 {
+                let settings = crate::config::Config::load()?;
+                settings
+                    .advisor_model
+                    .as_ref()
+                    .and_then(|id| settings.providers.iter().find(|p| &p.id == id).cloned())
+            } else {
+                None
+            };
             let mut available_tools = tools::definitions_with_checkpointing(
                 crate::history::enabled(self.interactive, self.file_checkpointing_enabled),
             );
+            if advisor_profile.is_some() {
+                available_tools.push(json!({"type":"function","function":{
+                    "name":"advisor",
+                    "description":"Ask the configured review model for a second opinion. The full conversation is supplied automatically; this tool takes no arguments.",
+                    "parameters":{"type":"object","properties":{},"additionalProperties":false}
+                }}));
+            }
             if self.shell_kind == crate::shell_runtime::ShellKind::Powershell {
                 available_tools.push(tools::powershell_definition());
             }
@@ -4241,10 +4901,48 @@ impl Agent {
                         })
                 });
             }
-            let complete_catalog = available_tools;
+            // Source: tools.ts::assembleToolPool + useMergedTools.ts.
+            // Preserve a stable built-in prefix followed by MCP tools so
+            // late-discovered MCP tools do not perturb unrelated tool schemas.
+            let complete_catalog =
+                crate::tool_pool_merge::merge_and_filter_tools(&[], &available_tools, None)?;
+            // Source tools.ts::getTools: simple mode is a deliberately small
+            // model tool surface, independent of plugins or MCP discovery.
+            let complete_catalog =
+                if crate::env_runtime::is_env_truthy(std::env::var("ATLAS_SIMPLE").ok().as_deref())
+                {
+                    crate::tool_pool_merge::filter_simple_model_tools_for_context(
+                        complete_catalog,
+                        false,
+                        self.team_name.is_some() && self.agent_name.as_deref() == Some("team-lead"),
+                    )?
+                } else {
+                    complete_catalog
+                };
             let (visible_tools, deferred_names) =
                 crate::tool_search::visible_catalog(&complete_catalog, &selected_mcp_tools);
             let mut request_system = system.clone();
+            // Refresh the MCP instructions after tool rediscovery, for every
+            // model step. This also revokes instructions from removed servers.
+            // The MCP manager quotes these lower-trust strings as data.
+            if let Some(mcp) = &self.mcp {
+                if let Some(delta) =
+                    mcp.instruction_delta(&self.session.mcp_instruction_announcements, &[])
+                {
+                    // Persist source-style delta history before the provider
+                    // request. Model-visible instructions remain in the
+                    // lower-trust, quoted system context below; do not replay
+                    // detached server instructions as privileged tool grants.
+                    self.session.mcp_instruction_announcements.push(
+                        crate::mcp_instructions_delta::InstructionAnnouncement {
+                            added_names: delta.added_names,
+                            removed_names: delta.removed_names,
+                        },
+                    );
+                    self.session.save(&self.root)?;
+                }
+                request_system.push_str(&mcp.instruction_context());
+            }
             if !deferred_names.is_empty() {
                 request_system.push_str("\n<available-deferred-tools>\n");
                 for name in deferred_names {
@@ -4258,16 +4956,76 @@ impl Agent {
             let request = ModelRequest {
                 model: self.profile.model.clone(),
                 system: request_system,
-                messages: self.session.messages.clone(),
+                messages: self.session.model_messages(),
                 tools: visible_tools,
             };
             self.last_context_usage = Some(crate::context_usage::Snapshot::from_request(&request));
             self.last_side_question_request = Some(request.clone());
             let api_started = Instant::now();
+            // Original query.ts: config.gates.streamingToolExecution decides
+            // whether tool_use blocks start executing mid-stream. The gate is
+            // the established process-level switch; the executor owns the
+            // live block channel and runs admitted tools concurrently.
+            let streaming_on = self.profile.stream
+                && crate::env_runtime::is_env_truthy(
+                    std::env::var("ATLAS_STREAMING_TOOL_EXECUTION")
+                        .ok()
+                        .as_deref(),
+                );
+            let (streaming_executor, block_tx, block_pump) = if streaming_on {
+                let deps = crate::streaming_tool_executor::StreamingDeps {
+                    hooks: self.hooks.clone(),
+                    executor: executor.clone(),
+                    tool_hook_base: self.tool_hook_input(),
+                    structured_output: self.structured_output,
+                    interactive: self.interactive,
+                    session_id: self.session.id.to_string(),
+                    child_depth: self.child_depth,
+                    prompt_role: self.prompt_role.clone(),
+                    sdk_allowed_tools: self
+                        .sdk_allowed_tools
+                        .clone()
+                        .map(|set| set.into_iter().collect::<Vec<_>>()),
+                    sdk_disallowed_tools: self.sdk_disallowed_tools.clone(),
+                    permission_mode_label: self.permission_mode.label().to_owned(),
+                    bash_cancel: Default::default(),
+                    errored_description: Default::default(),
+                };
+                let shared = std::sync::Arc::new(tokio::sync::Mutex::new(
+                    crate::streaming_tool_executor::StreamingExecutor::new(deps),
+                ));
+                let (block_tx, block_rx) = tokio::sync::mpsc::unbounded_channel();
+                let pump =
+                    crate::streaming_tool_executor::ToolBlockPump::spawn(block_rx, shared.clone());
+                (Some(shared), Some(block_tx), Some(pump))
+            } else {
+                (None, None, None)
+            };
             let response = if self.profile.stream {
                 let (tx, mut deltas) = tokio::sync::mpsc::unbounded_channel();
-                let future = self.provider.complete_stream(&request, tx);
-                tokio::pin!(future);
+                let mut future = if let (Some(_), Some(btx)) = (&streaming_executor, &block_tx) {
+                    let blocks = btx.clone();
+                    Box::pin(
+                        self.provider
+                            .complete_stream_with_tool_blocks(&request, tx, blocks),
+                    )
+                        as std::pin::Pin<
+                            Box<
+                                dyn std::future::Future<
+                                        Output = anyhow::Result<crate::protocol::ModelResponse>,
+                                    > + Send,
+                            >,
+                        >
+                } else {
+                    Box::pin(self.provider.complete_stream(&request, tx))
+                        as std::pin::Pin<
+                            Box<
+                                dyn std::future::Future<
+                                        Output = anyhow::Result<crate::protocol::ModelResponse>,
+                                    > + Send,
+                            >,
+                        >
+                };
                 let result = loop {
                     tokio::select! {
                         result=&mut future=>break result,
@@ -4287,10 +5045,24 @@ impl Agent {
             } else {
                 self.provider.complete(&request).await
             };
+            // The block pump ends when the transport drops its sink (the SSE
+            // finish flush sends every in-flight block first).
+            drop(block_tx);
+            if let Some(mut pump) = block_pump {
+                if let Err(error) = pump.finish().await {
+                    if let Some(shared) = &streaming_executor {
+                        shared.lock().await.discard().await;
+                    }
+                    return Err(error).context("Streaming tool block dispatch failed");
+                }
+            }
             self.session.cost.add_api_duration(api_started.elapsed());
             let response = match response {
                 Ok(response) => response,
                 Err(error) => {
+                    if let Some(shared) = &streaming_executor {
+                        shared.lock().await.discard().await;
+                    }
                     self.session.cost.add_wall_duration(ask_started.elapsed());
                     self.session.save(&self.root)?;
                     return Err(error);
@@ -4300,7 +5072,7 @@ impl Agent {
             if let Some(usage) = response.usage {
                 self.record_usage(usage);
             }
-            let calls = response.message.tool_calls.clone().unwrap_or_default();
+            let mut calls = response.message.tool_calls.clone().unwrap_or_default();
             let text = response.message.visible_text();
             let finish = response.finish_reason.clone();
             self.emit(json!({
@@ -4318,6 +5090,9 @@ impl Agent {
                 finish.as_deref(),
                 Some("length" | "max_tokens" | "MAX_TOKENS" | "model_context_window_exceeded")
             ) {
+                if let Some(shared) = &streaming_executor {
+                    shared.lock().await.discard().await;
+                }
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
                 bail!("Model reached its output limit before completion; session saved")
@@ -4337,12 +5112,56 @@ impl Agent {
                         | "SPII"
                 )
             ) {
+                if let Some(shared) = &streaming_executor {
+                    shared.lock().await.discard().await;
+                }
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
                 bail!(
                     "Model declined to generate a response ({}); session saved",
                     finish.as_deref().unwrap_or("refusal")
                 )
+            }
+            // Drain the streaming executor after the assistant message is on
+            // the transcript, so tool_results follow their tool_use blocks.
+            // Calls the executor could not carry (agent-layer dispatch:
+            // subagents, teams, task graph, MCP, plugins) stay in `calls` and
+            // run through the existing batched loop below.
+            let mut handled_ids: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            if let Some(shared) = &streaming_executor {
+                let mut ex = shared.lock().await;
+                for outcome in ex.drain().await {
+                    handled_ids.insert(outcome.call.id.clone());
+                    self.session
+                        .cost
+                        .add_tool_duration(outcome.started.elapsed());
+                    let (added, removed) = self.file_metrics.counts();
+                    self.session.cost.set_changed_lines(added, removed);
+                    self.emit(json!({
+                        "type":"tool_result","tool_use_id":outcome.call.id,
+                        "name":outcome.call.function.name,"content":outcome.result,
+                        "session_id":self.session.id,
+                    }));
+                    self.session
+                        .messages
+                        .push(Message::tool_result(&outcome.call, outcome.result));
+                    self.session.save(&self.root)?;
+                    if self.shutdown_requested {
+                        self.session.cost.add_wall_duration(ask_started.elapsed());
+                        self.session.save(&self.root)?;
+                        return Ok("Shutdown approved; confirmation delivered to team lead".into());
+                    }
+                }
+            }
+            if !handled_ids.is_empty() {
+                calls.retain(|call| !handled_ids.contains(&call.id));
+                // Results of streamed tool calls have already been recorded.
+                // The model must consume them before a Stop hook can finish
+                // this turn, even if no unhandled tool calls remain.
+                if calls.is_empty() {
+                    continue;
+                }
             }
             if calls.is_empty() {
                 if self.absorb_team_messages()? {
@@ -4365,6 +5184,7 @@ impl Agent {
                 // processing blocking feedback. A stop request must not
                 // accidentally start another model turn.
                 if hook.prevent_continuation {
+                    self.last_turn_stop_reason = Some("stop_hook_prevented");
                     self.emit(json!({
                         "type": "hook_stopped_continuation",
                         "hook_event_name": "Stop",
@@ -4387,14 +5207,317 @@ impl Agent {
                     self.session.save(&self.root)?;
                     continue;
                 }
+                // Original query.ts evaluates the turn token budget after
+                // Stop-hook blocking and before returning 'completed'.
+                // Compute the decision in a scoped borrow of the tracker so
+                // the match arms below can freely mutate session state.
+                let budget_decision = match self.budget_tracker.as_mut() {
+                    Some(tracker) if !hook.prevent_continuation => {
+                        let agent_id = (self.child_depth > 0).then(|| self.session.id.to_string());
+                        let turn_output = self
+                            .session
+                            .usage
+                            .output_tokens
+                            .saturating_sub(self.turn_output_baseline);
+                        Some(crate::query_token_budget::check_token_budget(
+                            tracker,
+                            agent_id.as_deref(),
+                            self.turn_budget,
+                            turn_output as f64,
+                        ))
+                    }
+                    _ => None,
+                };
+                if let Some(decision) = budget_decision {
+                    match decision {
+                        crate::query_token_budget::TokenBudgetDecision::Continue(nudge) => {
+                            self.budget_continuation_count =
+                                self.budget_continuation_count.saturating_add(1);
+                            crate::generated_ports::p_5b257a1951fde::log_for_debugging(
+                                &format!(
+                                    "Token budget continuation #{}: {}% ({} / {})",
+                                    nudge.continuation_count,
+                                    nudge.pct,
+                                    crate::query_token_budget::format_token_count(
+                                        nudge.turn_tokens
+                                    ),
+                                    crate::query_token_budget::format_token_count(nudge.budget)
+                                ),
+                                crate::generated_ports::p_5b257a1951fde::DebugLogLevel::debug,
+                            );
+                            self.session
+                                .messages
+                                .push(Message::text("user", nudge.nudge_message));
+                            self.session.save(&self.root)?;
+                            continue;
+                        }
+                        crate::query_token_budget::TokenBudgetDecision::Stop {
+                            completion_event,
+                        } => {
+                            if let Some(event) = completion_event {
+                                if event.diminishing_returns {
+                                    crate::generated_ports::p_5b257a1951fde::log_for_debugging(
+                                        &format!(
+                                            "Token budget early stop: diminishing returns at {}%",
+                                            event.pct
+                                        ),
+                                        crate::generated_ports::p_5b257a1951fde::DebugLogLevel::debug,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                // Original REPL clears the turn budget when a turn finishes
+                // normally (snapshotOutputTokensForTurn(null)).
+                self.snapshot_output_tokens_for_turn(None);
                 self.session.cost.add_wall_duration(ask_started.elapsed());
                 self.session.save(&self.root)?;
+                // Run only after a successful main-agent Stop. The original
+                // feature is opt-in; no background agent or timer is created.
+                if !hook.prevent_continuation
+                    && self.child_depth == 0
+                    && memory_extraction::enabled()
+                {
+                    match memory_extraction::extract(
+                        &self.root,
+                        &self.session.messages,
+                        self.session.memory_extraction_cursor,
+                        &system,
+                        self.provider.as_ref(),
+                        &self.profile,
+                    )
+                    .await
+                    {
+                        Ok(outcome) => {
+                            if let Some(usage) = outcome.usage {
+                                self.record_usage(usage);
+                            }
+                            self.session.memory_extraction_cursor = outcome.cursor;
+                            self.session.save(&self.root)?;
+                            if outcome.files_written > 0 {
+                                self.emit(json!({"type":"memory_saved",
+                                    "count":outcome.files_written,"session_id":self.session.id}));
+                            }
+                        }
+                        Err(error) => {
+                            eprintln!("Optional memory extraction failed: {error:#}");
+                        }
+                    }
+                }
+                if self.child_depth == 0 && memory_extraction::dream_enabled() {
+                    match memory_extraction::dream_if_due(
+                        &self.root,
+                        self.session.id,
+                        self.provider.as_ref(),
+                        &self.profile,
+                    )
+                    .await
+                    {
+                        Ok(Some((count, usage))) => {
+                            if let Some(usage) = usage {
+                                self.record_usage(usage);
+                            }
+                            self.session.save(&self.root)?;
+                            self.emit(json!({"type":"dream_completed",
+                                "count":count,"session_id":self.session.id}));
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            eprintln!("Optional local Dream consolidation failed: {error:#}");
+                        }
+                    }
+                }
                 return Ok(text);
             }
             if !text.trim().is_empty() {
                 eprintln!("{text}");
             }
-            for mut call in calls {
+            // Original toolOrchestration.runTools: partition the assistant
+            // turn's tool_use blocks into consecutive read-only batches
+            // (concurrent) and single non-safe tools (serial).
+            for tool_batch in crate::tool_orchestration::partition_tool_calls(calls, |call| {
+                executor.validate_call_before_hooks(call).is_ok()
+            }) {
+                let mut call = match tool_batch {
+                    crate::tool_orchestration::ToolBatch::Unsafe(call) => call,
+                    crate::tool_orchestration::ToolBatch::Safe(safe_batch) => {
+                        // Read-only batch: validation and PreToolUse hooks run
+                        // serially on the agent (fast, keeps stdin approval
+                        // ordered); the executor call and PostToolUse hook run
+                        // concurrently up to the original concurrency cap.
+                        // Completion events are yielded as each tool finishes,
+                        // including its own tool_use_id; a slow read must not
+                        // hold back another completed result.
+                        let mut prepared: Vec<(ToolCall, Option<String>, Vec<String>)> = Vec::new();
+                        for mut call in safe_batch {
+                            let label: Option<&str> = None;
+                            eprintln!(
+                                "Executing tool: {}",
+                                label.as_deref().unwrap_or(&call.function.name)
+                            );
+                            let restricted_by_role = (self.child_depth > 0
+                                && self.prompt_role.as_deref().is_some_and(|role| {
+                                    !crate::prompt_runtime::tool_allowed_for_role(
+                                        role,
+                                        &call.function.name,
+                                    )
+                                }))
+                                || self.sdk_allowed_tools.as_ref().is_some_and(|allowed| {
+                                    !allowed.contains("*")
+                                        && !allowed.contains(&call.function.name)
+                                        && !allowed.contains(crate::tool_names::canonical_name(
+                                            &call.function.name,
+                                        ))
+                                })
+                                || self.sdk_disallowed_tools.contains(&call.function.name)
+                                || self.sdk_disallowed_tools.contains(
+                                    crate::tool_names::canonical_name(&call.function.name),
+                                );
+                            let invalid_input = if restricted_by_role {
+                                Some(format!(
+                                    "Tool {} is unavailable to this agent's tool policy",
+                                    call.function.name
+                                ))
+                            } else {
+                                executor
+                                    .validate_call_before_hooks(&call)
+                                    .err()
+                                    .map(|error| format!("{error:#}"))
+                            };
+                            let mut pre_hook_failure = None;
+                            let pre = if invalid_input.is_none() {
+                                match self
+                                    .hooks
+                                    .before_tool_with_context(&call, self.tool_hook_input())
+                                    .await
+                                {
+                                    Ok(outcome) => Some(outcome),
+                                    Err(error) => {
+                                        pre_hook_failure = Some(format!("{error:#}"));
+                                        None
+                                    }
+                                }
+                            } else {
+                                None
+                            };
+                            if let Some(pre) = pre.as_ref() {
+                                for warning in &pre.non_blocking_errors {
+                                    eprintln!("{warning}");
+                                    self.emit(json!({
+                                        "type":"hook_warning",
+                                        "hook_event_name":"PreToolUse",
+                                        "tool_use_id":call.id,
+                                        "message":warning,
+                                        "session_id":self.session.id,
+                                    }));
+                                }
+                            }
+                            if let Some(updated) =
+                                pre.as_ref().and_then(|hook| hook.updated_input.as_ref())
+                            {
+                                call.function.arguments = serde_json::to_string(updated)?;
+                            }
+                            let hook_ask_rejection = pre.as_ref().and_then(|hook| {
+                                hook.require_tool_approval(self.interactive, &call.function.name)
+                                    .err()
+                                    .map(|error| format!("{error:#}"))
+                            });
+                            let pre_blocked =
+                                pre.as_ref().and_then(|hook| hook.blocking_reason.clone());
+                            // Same synthesized pre-execution errors as the
+                            // serial path: only actual executions see the
+                            // PostToolUse stage, rejections carry stage names.
+                            let skip_reason = if let Some(reason) = invalid_input {
+                                Some(format!("ERROR: {reason}"))
+                            } else if let Some(reason) = pre_hook_failure {
+                                Some(format!("ERROR: PreToolUse hook failed: {reason}"))
+                            } else if let Some(reason) = pre_blocked {
+                                Some(format!("ERROR: PreToolUse hook blocked: {reason}"))
+                            } else if let Some(reason) = hook_ask_rejection {
+                                Some(format!("ERROR: {reason}"))
+                            } else {
+                                None
+                            };
+                            let pre_contexts = pre
+                                .map(|hook| {
+                                    hook.additional_context
+                                        .into_iter()
+                                        .map(|context| {
+                                            format!("[PreToolUse hook context] {context}")
+                                        })
+                                        .collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default();
+                            prepared.push((call, skip_reason, pre_contexts));
+                        }
+                        let cap = crate::tool_orchestration::max_tool_use_concurrency();
+                        let read_only_hooks = self.hooks.clone();
+                        let hook_input = self.tool_hook_input();
+                        let mut completed = crate::tool_orchestration::completed_as_ready(
+                            prepared
+                                .into_iter()
+                                .map(|(call, skip_reason, pre_contexts)| {
+                                    let executor = &executor;
+                                    let hooks = &read_only_hooks;
+                                    let hook_input = hook_input.clone();
+                                    async move {
+                                        let tool_started = Instant::now();
+                                        let (result, warnings) = match skip_reason {
+                                            Some(reason) => (reason, Vec::new()),
+                                            None => {
+                                                let raw = executor.execute(&call).await;
+                                                Self::finalize_readonly_result(
+                                                    hooks,
+                                                    hook_input,
+                                                    &call,
+                                                    raw,
+                                                    pre_contexts,
+                                                )
+                                                .await
+                                            }
+                                        };
+                                        (call, result, warnings, tool_started)
+                                    }
+                                }),
+                            cap,
+                        );
+                        while let Some((call, result, warnings, tool_started)) =
+                            completed.next().await
+                        {
+                            for warning in warnings {
+                                eprintln!("{warning}");
+                                self.emit(json!({
+                                    "type":"hook_warning",
+                                    "hook_event_name":"PostToolUse",
+                                    "tool_use_id":call.id,
+                                    "message":warning,
+                                    "session_id":self.session.id,
+                                }));
+                            }
+                            self.session.cost.add_tool_duration(tool_started.elapsed());
+                            let (added, removed) = self.file_metrics.counts();
+                            self.session.cost.set_changed_lines(added, removed);
+                            self.emit(json!({
+                                "type":"tool_result","tool_use_id":call.id,
+                                "name":call.function.name,"content":result,
+                                "session_id":self.session.id,
+                            }));
+                            self.session
+                                .messages
+                                .push(Message::tool_result(&call, result));
+                            self.session.save(&self.root)?;
+                            if self.shutdown_requested {
+                                self.session.cost.add_wall_duration(ask_started.elapsed());
+                                self.session.save(&self.root)?;
+                                return Ok(
+                                    "Shutdown approved; confirmation delivered to team lead".into(),
+                                );
+                            }
+                        }
+                        continue;
+                    }
+                };
                 let label = if matches!(
                     call.function.name.as_str(),
                     "run_command" | "Bash" | "PowerShell"
@@ -4437,74 +5560,10 @@ impl Agent {
                         call.function.name
                     ))
                 } else {
-                    match serde_json::from_str::<serde_json::Value>(&call.function.arguments) {
-                        Err(error) => Some(format!("Invalid tool arguments JSON: {error}")),
-                        Ok(value @ serde_json::Value::Object(_)) => {
-                            if matches!(call.function.name.as_str(), "Read" | "Edit" | "Write") {
-                                let mut normalized = value.clone();
-                                crate::semantic_inputs::normalize_source_file_tool(
-                                    &call.function.name,
-                                    &mut normalized,
-                                )
-                                .and_then(|_| {
-                                    crate::semantic_inputs::normalize_tool_fields(
-                                        crate::tool_names::canonical_name(&call.function.name),
-                                        &mut normalized,
-                                    )
-                                })
-                                .err()
-                                .map(|error| {
-                                    format!("Invalid {} arguments: {error:#}", call.function.name)
-                                })
-                            } else if matches!(
-                                crate::tool_names::canonical_name(&call.function.name),
-                                "grep_files" | "glob_files"
-                            ) {
-                                crate::search::validate_tool_input(
-                                    crate::tool_names::canonical_name(&call.function.name),
-                                    &value,
-                                )
-                                .err()
-                                .map(|error| format!("Invalid search arguments: {error:#}"))
-                            } else if task_graph::handles(&call.function.name) {
-                                task_graph::TaskGraph::validate_tool_input(
-                                    &call.function.name,
-                                    &value,
-                                )
-                                .err()
-                                .map(|error| {
-                                    format!("Invalid {} arguments: {error:#}", call.function.name)
-                                })
-                            } else if matches!(
-                                crate::tool_names::canonical_name(&call.function.name),
-                                "task_stop" | "KillShell"
-                            ) {
-                                executor
-                                    .validate_task_stop(&value)
-                                    .err()
-                                    .map(|error| format!("Invalid TaskStop arguments: {error:#}"))
-                            } else if crate::tool_names::canonical_name(&call.function.name)
-                                == "task_output"
-                            {
-                                ToolExecutor::validate_task_output(&value)
-                                    .err()
-                                    .map(|error| format!("Invalid TaskOutput arguments: {error:#}"))
-                            } else if matches!(
-                                crate::tool_names::canonical_name(&call.function.name),
-                                "run_command" | "PowerShell"
-                            ) {
-                                ToolExecutor::validate_shell_input(
-                                    crate::tool_names::canonical_name(&call.function.name),
-                                    &value,
-                                )
-                                .err()
-                                .map(|error| format!("Invalid Shell arguments: {error:#}"))
-                            } else {
-                                None
-                            }
-                        }
-                        Ok(_) => Some("Tool arguments must be a JSON object".to_owned()),
-                    }
+                    executor
+                        .validate_call_before_hooks(&call)
+                        .err()
+                        .map(|error| format!("{error:#}"))
                 };
                 let mut pre_hook_failure = None;
                 let pre = if invalid_input.is_none() {
@@ -4542,46 +5601,18 @@ impl Agent {
                 }
                 // A hook's explicit ask is a forced permission prompt. It
                 // cannot be bypassed by --approval full or an allow rule.
-                let hook_ask_rejection = if pre
-                    .as_ref()
-                    .and_then(|hook| hook.permission_decision.as_deref())
-                    == Some("ask")
-                {
-                    if !self.interactive {
-                        Some("PreToolUse hook requires interactive approval".to_owned())
-                    } else {
-                        use std::io::Write;
-                        let answer = (|| -> std::io::Result<bool> {
-                            eprintln!(
-                                "PreToolUse hook requests approval for {}",
-                                call.function.name
-                            );
-                            eprint!("Allow once? [y/N] ");
-                            std::io::stderr().flush()?;
-                            let mut response = String::new();
-                            std::io::stdin().read_line(&mut response)?;
-                            Ok(matches!(
-                                response.trim().to_ascii_lowercase().as_str(),
-                                "y" | "yes"
-                            ))
-                        })();
-                        match answer {
-                            Ok(true) => None,
-                            Ok(false) => Some("User rejected PreToolUse hook approval".to_owned()),
-                            Err(error) => Some(format!("PreToolUse approval failed: {error}")),
-                        }
-                    }
-                } else {
-                    None
-                };
-                // A rejected or malformed invocation never executed a tool.
-                // PostToolUse/Failure hooks belong to actual executions only.
+                let hook_ask_rejection = pre.as_ref().and_then(|hook| {
+                    hook.require_tool_approval(self.interactive, &call.function.name)
+                        .err()
+                        .map(|error| format!("{error:#}"))
+                });
                 let pre_blocked = pre.as_ref().and_then(|hook| hook.blocking_reason.clone());
                 let skipped_tool = invalid_input.is_some()
                     || pre_hook_failure.is_some()
                     || pre_blocked.is_some()
                     || hook_ask_rejection.is_some();
                 let tool_started = Instant::now();
+                let mut mcp_blocks = None;
                 let result = if let Some(reason) = invalid_input {
                     format!("ERROR: {reason}")
                 } else if let Some(reason) = pre_hook_failure {
@@ -4590,6 +5621,25 @@ impl Agent {
                     format!("ERROR: PreToolUse hook blocked: {reason}")
                 } else if let Some(reason) = hook_ask_rejection {
                     format!("ERROR: {reason}")
+                } else if call.function.name == "advisor" {
+                    match advisor_profile.as_ref() {
+                        Some(profile) => {
+                            let args =
+                                serde_json::from_str::<serde_json::Value>(&call.function.arguments);
+                            if !matches!(args, Ok(serde_json::Value::Object(ref obj)) if obj.is_empty())
+                            {
+                                "ERROR: advisor takes no arguments".to_owned()
+                            } else {
+                                match self.request_advisor(profile, &system).await {
+                                    Ok(advice) => advice,
+                                    Err(error) => {
+                                        format!("ERROR: Advisor request failed: {error:#}")
+                                    }
+                                }
+                            }
+                        }
+                        None => "ERROR: Advisor is not enabled for this session".to_owned(),
+                    }
                 } else if call.function.name == "ToolSearch" {
                     match serde_json::from_str::<serde_json::Value>(&call.function.arguments)
                         .map_err(anyhow::Error::from)
@@ -4632,7 +5682,7 @@ impl Agent {
                         Ok(output) => output,
                         Err(error) => format!("ERROR: {error:#}"),
                     }
-                } else if call.function.name == "spawn_agent" {
+                } else if crate::tool_names::canonical_name(&call.function.name) == "spawn_agent" {
                     match self.run_subagent(&call, &executor).await {
                         Ok(output) => output,
                         Err(error) => format!("ERROR: {error:#}"),
@@ -4655,7 +5705,11 @@ impl Agent {
                 } else if let Some(mcp) = &mut self.mcp {
                     if mcp.handles(&call.function.name) {
                         match executor.approve_external(&call) {
-                            Ok(()) => mcp.execute(&call).await,
+                            Ok(()) => {
+                                let output = mcp.execute_content(&call).await;
+                                mcp_blocks = output.blocks;
+                                output.text
+                            }
                             Err(error) => format!("ERROR: {error:#}"),
                         }
                     } else {
@@ -4667,20 +5721,32 @@ impl Agent {
                 self.session.cost.add_tool_duration(tool_started.elapsed());
                 let (added, removed) = self.file_metrics.counts();
                 self.session.cost.set_changed_lines(added, removed);
-                let (post, mut result): (crate::hooks::HookOutcome, String) = if skipped_tool {
-                    (Default::default(), result)
-                } else {
-                    match self.hooks.after_tool_with_context(&call, &result, self.tool_hook_input()).await {
-                        Ok(outcome)=>(outcome,result),
-                        Err(error)=>(
-                            Default::default(),
-                            // The tool already executed: tell the next model
-                            // turn about the side effect instead of inviting
-                            // an unsafe blind retry.
-                            format!("ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: {result}")
-                        )
-                    }
+                let result = crate::mcp_content::Output {
+                    text: result,
+                    blocks: mcp_blocks,
                 };
+                let (post, mut result): (crate::hooks::HookOutcome, crate::mcp_content::Output) =
+                    if skipped_tool {
+                        (Default::default(), result)
+                    } else {
+                        match self
+                            .hooks
+                            .after_tool_with_response(
+                                &call,
+                                &result.text,
+                                result.hook_value(),
+                                self.tool_hook_input(),
+                            )
+                            .await
+                        {
+                            Ok(outcome) => (outcome, result),
+                            Err(error) => {
+                                let mut result = result;
+                                result.prepend(&format!("ERROR: PostToolUse hook failed after tool execution: {error:#}\nTool execution result: "));
+                                (Default::default(), result)
+                            }
+                        }
+                    };
                 for warning in &post.non_blocking_errors {
                     eprintln!("{warning}");
                     self.emit(json!({
@@ -4697,14 +5763,17 @@ impl Agent {
                     .is_some_and(|m| m.handles(&call.function.name))
                 {
                     if let Some(replacement) = post.updated_mcp_tool_output {
-                        result = match replacement {
-                            serde_json::Value::String(text) => text,
-                            other => other.to_string(),
-                        };
+                        result =
+                            match crate::mcp_content::from_hook_output(&replacement, &self.root) {
+                                Ok(output) => output,
+                                Err(error) => crate::mcp_content::Output::text(format!(
+                                    "ERROR: Invalid updated MCP tool output: {error:#}"
+                                )),
+                            };
                     }
                 }
                 if let Some(reason) = post.blocking_reason {
-                    result.push_str(&format!(
+                    result.append(&format!(
                         "\nPostToolUse hook blocked continuation: {reason}"
                     ));
                 }
@@ -4713,20 +5782,20 @@ impl Agent {
                 // not rewrite arguments or force a permission decision.
                 if let Some(pre) = pre.as_ref() {
                     for context in &pre.additional_context {
-                        result.push_str(&format!("\n[PreToolUse hook context] {context}"));
+                        result.append(&format!("\n[PreToolUse hook context] {context}"));
                     }
                 }
                 for context in post.additional_context {
-                    result.push_str(&format!("\n[Local hook context] {context}"));
+                    result.append(&format!("\n[Local hook context] {context}"));
                 }
                 self.emit(json!({
                     "type":"tool_result","tool_use_id":call.id,
-                    "name":call.function.name,"content":result,
+                    "name":call.function.name,"content":result.hook_value(),
                     "session_id":self.session.id,
                 }));
-                self.session
-                    .messages
-                    .push(Message::tool_result(&call, result));
+                let mut message = Message::tool_result(&call, result.text);
+                message.content_blocks = result.blocks;
+                self.session.messages.push(message);
                 self.session.save(&self.root)?;
                 if self.shutdown_requested {
                     self.session.cost.add_wall_duration(ask_started.elapsed());
@@ -4753,6 +5822,11 @@ fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<S
     prompt.push_str(
         &crate::conversation_context::project_instructions_with_dirs(root, additional_dirs)?,
     );
+    // Original 2.1.88 action-scope prompt is part of the actual system
+    // request. Rewrite the obsolete vendor-specific instruction path.
+    prompt.push_str("\n");
+    prompt.push_str(crate::prompt_runtime::active_source_sections());
+    prompt.push('\n');
     if let Ok(style) = std::env::var("ATLAS_OUTPUT_STYLE") {
         let instructions = crate::prompt_runtime::output_style_instructions(root, &style)?;
         prompt.push_str("\nOutput style:\n");
@@ -4764,7 +5838,39 @@ fn system_prompt_with_dirs(root: &Path, additional_dirs: &[PathBuf]) -> Result<S
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn async_rewake_notifications_keep_fifo_order_and_model_reminder_envelope() {
+        let mut messages = Vec::new();
+        append_rewake_messages(
+            &mut messages,
+            &[
+                "first blocking error".to_owned(),
+                "second blocking error".to_owned(),
+            ],
+        );
+        assert_eq!(messages.len(), 2);
+        assert_eq!(
+            messages[0].visible_text(),
+            wrap_in_system_reminder("first blocking error")
+        );
+        assert_eq!(
+            messages[1].visible_text(),
+            wrap_in_system_reminder("second blocking error")
+        );
+        assert!(messages.iter().all(|message| message.role == "user"));
+    }
+
     use super::*;
+
+    #[test]
+    fn original_actions_are_in_live_model_system_prompt() {
+        let root = tempfile::tempdir().unwrap();
+        let system = system_prompt(root.path()).unwrap();
+        assert!(system.contains("# Executing actions with care"));
+        assert!(system.contains("Authorization stands for the scope specified"));
+        assert!(system.contains("AGENTS.md"));
+        assert!(system.contains("AGENTS.md"));
+    }
 
     #[test]
     fn branch_uses_first_multimodal_text_block_and_switches_active_session() {
@@ -4777,6 +5883,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut original = Session::fresh();
         let parent_id = original.id;
@@ -4817,6 +5924,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -4875,6 +5983,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -4922,26 +6031,23 @@ mod tests {
     impl ModelProvider for SummaryModel {
         async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
             assert!(request.tools.is_empty());
+            assert!(request
+                .system
+                .ends_with(crate::compact_source_prompts::NO_TOOLS_TRAILER));
             Ok(crate::protocol::ModelResponse {
-                message: Message::text("assistant", "Retain verified changes and next steps."),
+                message: Message::text(
+                    "assistant",
+                    "<analysis>internal draft</analysis>\n<summary>Retain verified changes and next steps.</summary>",
+                ),
                 finish_reason: Some("stop".into()),
                 usage: None,
             })
         }
     }
 
-    #[tokio::test]
-    async fn compacted_summary_survives_session_restore() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut session = Session::fresh();
-        session
-            .messages
-            .push(Message::text("user", "Check this project"));
-        session
-            .messages
-            .push(Message::text("assistant", "Checked files"));
-        let id = session.id.to_string();
-        let mut agent = Agent {
+    fn test_compaction_agent(root: &std::path::Path, session: Session) -> Agent {
+        let dir = root;
+        Agent {
             profile: ProviderProfile {
                 id: "fake".into(),
                 kind: "openai-compatible".into(),
@@ -4949,10 +6055,11 @@ mod tests {
                 model: "mock".into(),
                 api_key_env: None,
                 stream: false,
+                tuning: Default::default(),
             },
             provider: Box::new(SummaryModel),
-            root: dir.path().canonicalize().unwrap(),
-            project_root: dir.path().canonicalize().unwrap(),
+            root: dir.canonicalize().unwrap(),
+            project_root: dir.canonicalize().unwrap(),
             additional_dirs: Vec::new(),
             approval: Approval::ReadOnly,
             interactive: false,
@@ -4965,17 +6072,20 @@ mod tests {
             hooks: HookRunner::default(),
             session_context: String::new(),
             pending_initial_user_message: None,
-            conversation_context: ConversationContext::capture(dir.path()),
+            pending_rewake_notifications: Vec::new(),
+            conversation_context: ConversationContext::capture(dir),
             structured_output: false,
+            sdk_response_schema: None,
+            last_turn_stop_reason: None,
             child_depth: 0,
             mcp_configs: Vec::new(),
             lsp_configs: Vec::new(),
             enabled_plugins: Vec::new(),
             search_backend: None,
-            background: Arc::new(BackgroundTasks::new(dir.path()).unwrap()),
+            background: Arc::new(BackgroundTasks::new(dir).unwrap()),
             shell_kind: crate::shell_runtime::ShellKind::default(),
             session_env: std::collections::BTreeMap::new(),
-            graph: task_graph::TaskGraph::new(dir.path(), "test").unwrap(),
+            graph: task_graph::TaskGraph::new(dir, "test").unwrap(),
             team_name: None,
             agent_name: None,
             prompt_role: None,
@@ -4996,17 +6106,277 @@ mod tests {
             sdk_system_prompt: None,
             sdk_append_system_prompt: None,
             sdk_thinking_budget: None,
+            turn_budget: None,
+            turn_output_baseline: 0,
+            budget_continuation_count: 0,
+            budget_tracker: None,
             sdk_agent_definitions: std::collections::BTreeMap::new(),
             sdk_allowed_tools: None,
             sdk_disallowed_tools: std::collections::HashSet::new(),
-        };
+        }
+    }
+
+    #[test]
+    fn sdk_response_schema_rejects_unsupported_provider_without_mutating_state() {
+        let root = tempfile::tempdir().unwrap();
+        let mut agent = test_compaction_agent(root.path(), Session::fresh());
+        let schema = json!({"type":"object","properties":{"ok":{"type":"boolean"}}});
+        let error = agent.set_sdk_response_schema(Some(schema)).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("no native JSON schema response capability"),
+            "{error}"
+        );
+        assert!(agent.sdk_response_schema().is_none());
+        // Invalid caller schemas must fail before trying to reconfigure the provider.
+        assert!(agent
+            .set_sdk_response_schema(Some(json!({"properties":{}})))
+            .is_err());
+        assert!(agent.sdk_response_schema().is_none());
+        agent.set_sdk_response_schema(None).unwrap();
+    }
+
+    #[tokio::test]
+    async fn compacted_summary_survives_session_restore() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut session = Session::fresh();
+        session
+            .messages
+            .push(Message::text("user", "Check this project"));
+        session
+            .messages
+            .push(Message::text("assistant", "Checked files"));
+        let id = session.id.to_string();
+        let mut agent = test_compaction_agent(dir.path(), session);
         agent.compact_history().await.unwrap();
         let restored = Session::load(dir.path(), &id).unwrap();
         assert!(restored.messages.is_empty());
+        assert_eq!(restored.archived_messages.len(), 2);
         assert_eq!(
             restored.summary.as_deref(),
-            Some("Retain verified changes and next steps.")
+            Some("Summary:\nRetain verified changes and next steps.")
         );
+        assert_eq!(agent.search_transcript("Check this project").len(), 1);
+        let rendered = restored.model_messages();
+        assert_eq!(rendered.len(), 1);
+        assert_eq!(rendered[0].role, "user");
+        assert!(rendered[0]
+            .visible_text()
+            .contains("Summary:\nRetain verified changes and next steps."));
+        // A real resumed model turn receives a single synthetic user summary,
+        // followed by the user's new task, with no system duplication.
+        agent.provider = Box::new(CompactContinuationModel);
+        agent.ask("Continue from summary").await.unwrap();
+        let new_turn_count = agent.session.messages.len();
+        assert!(new_turn_count >= 2);
+        // Multiple compactions must preserve each earlier summary boundary
+        // and every intervening user/assistant message in the saved archive.
+        agent.provider = Box::new(SummaryModel);
+        agent.compact_history().await.unwrap();
+        let restored_twice = Session::load(dir.path(), &id).unwrap();
+        assert!(restored_twice.messages.is_empty());
+        assert_eq!(restored_twice.archived_messages.len(), 3 + new_turn_count);
+        let export = crate::session_control::render(&restored_twice);
+        assert_eq!(export.matches("This session is being continued").count(), 2);
+        let first_summary = export.find("This session is being continued").unwrap();
+        let resumed_task = export.find("Continue from summary").unwrap();
+        let final_summary = export.rfind("This session is being continued").unwrap();
+        assert!(first_summary < resumed_task && resumed_task < final_summary);
+    }
+
+    #[tokio::test]
+    async fn partial_compaction_matches_source_directions_and_preserves_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut session = Session::fresh();
+        session
+            .messages
+            .push(Message::text("user", "Original issue"));
+        session
+            .messages
+            .push(Message::text("assistant", "Original resolution"));
+        let id = session.id.to_string();
+        // Reuse the real Agent and hook/session wiring from the compaction
+        // restore test, rather than testing a disconnected prompt helper.
+        let mut agent = test_compaction_agent(dir.path(), session);
+        agent.compact_history().await.unwrap();
+        agent.session.messages.extend([
+            Message::text("user", "Keep prefix request"),
+            Message::text("assistant", "Keep prefix answer"),
+            Message::text("user", "Summarize tail"),
+        ]);
+        let untouched = agent.session.model_messages();
+        assert!(agent
+            .compact_history_partial(
+                untouched.len(),
+                crate::compact_source_prompts::CompactDirection::From,
+                None,
+            )
+            .await
+            .is_err());
+        assert_eq!(agent.session.model_messages(), untouched);
+        agent.provider = Box::new(PartialSummaryModel {
+            direction: crate::compact_source_prompts::CompactDirection::From,
+            expected_messages: 4,
+            feedback: true,
+        });
+        agent
+            .compact_history_partial(
+                3,
+                crate::compact_source_prompts::CompactDirection::From,
+                Some("Preserve user constraints"),
+            )
+            .await
+            .unwrap();
+        let from_saved = Session::load(dir.path(), &id).unwrap();
+        assert_eq!(from_saved.summary_insert_at, Some(3));
+        assert_eq!(from_saved.retained_summary_indices, vec![0]);
+        assert_eq!(from_saved.messages.len(), 3);
+        assert_eq!(from_saved.model_messages().len(), 4);
+        assert!(from_saved.model_messages()[3]
+            .visible_text()
+            .contains("Summary:\nPartial complete"));
+        let transcript = from_saved.transcript_messages();
+        assert_eq!(
+            transcript
+                .iter()
+                .filter(|m| m.visible_text() == "Summarize tail")
+                .count(),
+            1
+        );
+        assert!(transcript
+            .iter()
+            .any(|m| m.visible_text() == "Original issue"));
+        assert!(crate::session_control::render(&from_saved).contains("Summarize tail"));
+        agent.provider = Box::new(PartialSummaryModel {
+            direction: crate::compact_source_prompts::CompactDirection::UpTo,
+            expected_messages: 2,
+            feedback: false,
+        });
+        agent
+            .compact_history_partial(
+                2,
+                crate::compact_source_prompts::CompactDirection::UpTo,
+                None,
+            )
+            .await
+            .unwrap();
+        let up_to_saved = Session::load(dir.path(), &id).unwrap();
+        assert_eq!(up_to_saved.summary_insert_at, Some(0));
+        assert!(up_to_saved.retained_summary_indices.is_empty());
+        assert_eq!(up_to_saved.messages.len(), 1);
+        assert_eq!(up_to_saved.model_messages().len(), 2);
+        assert!(up_to_saved.model_messages()[0]
+            .visible_text()
+            .contains("Partial complete"));
+        assert!(up_to_saved.transcript_messages().len() > transcript.len());
+        assert_eq!(
+            up_to_saved
+                .transcript_messages()
+                .iter()
+                .filter(|m| m.visible_text() == "Summarize tail")
+                .count(),
+            1
+        );
+        let before_failure = Session::load(dir.path(), &id).unwrap();
+        agent.provider = Box::new(FailingPartialModel);
+        let error = agent
+            .compact_history_partial(
+                1,
+                crate::compact_source_prompts::CompactDirection::UpTo,
+                None,
+            )
+            .await;
+        assert!(error.is_err());
+        let after_failure = Session::load(dir.path(), &id).unwrap();
+        assert_eq!(
+            before_failure.model_messages(),
+            after_failure.model_messages()
+        );
+        assert_eq!(
+            before_failure.transcript_messages(),
+            after_failure.transcript_messages()
+        );
+    }
+
+    struct FailingPartialModel;
+
+    #[async_trait::async_trait]
+    impl ModelProvider for FailingPartialModel {
+        async fn complete(
+            &self,
+            _request: &ModelRequest,
+        ) -> Result<crate::protocol::ModelResponse> {
+            Err(anyhow::anyhow!("Injected compaction model failure"))
+        }
+    }
+
+    struct PartialSummaryModel {
+        direction: crate::compact_source_prompts::CompactDirection,
+        expected_messages: usize,
+        feedback: bool,
+    }
+    #[async_trait::async_trait]
+    impl ModelProvider for PartialSummaryModel {
+        async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
+            assert!(request.tools.is_empty());
+            assert!(request
+                .system
+                .ends_with(crate::compact_source_prompts::NO_TOOLS_TRAILER));
+            assert_eq!(request.messages.len(), self.expected_messages);
+            match self.direction {
+                crate::compact_source_prompts::CompactDirection::From => {
+                    assert!(request.system.contains("RECENT portion"));
+                    assert!(!request.system.contains("newer messages that build"));
+                }
+                crate::compact_source_prompts::CompactDirection::UpTo => {
+                    assert!(request.system.contains("newer messages that build"));
+                    assert!(!request
+                        .messages
+                        .iter()
+                        .any(|m| { m.visible_text() == "Summarize tail" }));
+                }
+                crate::compact_source_prompts::CompactDirection::Full => {
+                    panic!("Unexpected full compact request")
+                }
+            }
+            assert_eq!(
+                request
+                    .system
+                    .contains("User context: Preserve user constraints"),
+                self.feedback
+            );
+            Ok(crate::protocol::ModelResponse {
+                message: Message::text("assistant", "<summary>Partial complete</summary>"),
+                finish_reason: Some("stop".into()),
+                usage: None,
+            })
+        }
+    }
+
+    struct CompactContinuationModel;
+
+    #[async_trait::async_trait]
+    impl ModelProvider for CompactContinuationModel {
+        async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
+            assert!(request.messages.len() >= 2);
+            assert_eq!(request.messages[0].role, "user");
+            assert!(request.messages[0]
+                .visible_text()
+                .contains("Summary:\nRetain verified changes and next steps."));
+            assert_eq!(
+                request.messages.last().unwrap().visible_text(),
+                "Continue from summary"
+            );
+            assert!(!request
+                .system
+                .contains("Verified session continuity summary"));
+            Ok(crate::protocol::ModelResponse {
+                message: Message::text("assistant", "Continued."),
+                finish_reason: Some("stop".into()),
+                usage: None,
+            })
+        }
     }
 
     struct PromptCaptureModel(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
@@ -5042,6 +6412,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5078,6 +6449,7 @@ mod tests {
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5109,6 +6481,17 @@ done"#;
         agent.attach_mcp(&[server]).await.unwrap();
         let answer = agent.ask("Inspect the current project").await.unwrap();
         assert_eq!(answer, "Validated the supplied prompt.");
+        assert_eq!(agent.session.mcp_instruction_announcements.len(), 1);
+        assert_eq!(
+            agent.session.mcp_instruction_announcements[0].added_names,
+            ["demo"]
+        );
+        let restored = Session::load(dir.path(), &agent.session.id.to_string()).unwrap();
+        assert_eq!(restored.mcp_instruction_announcements.len(), 1);
+        assert_eq!(
+            restored.mcp_instruction_announcements[0].added_names,
+            ["demo"]
+        );
         let captured = captured.lock().unwrap();
         assert_eq!(captured.len(), 1);
         assert!(captured[0].contains("# MCP server-provided usage context"));
@@ -5176,6 +6559,7 @@ done"#;
                     message: Message {
                         role: "assistant".into(),
                         content: None,
+                        reasoning_content: None,
                         content_blocks: None,
                         tool_calls: Some(vec![call]),
                         tool_call_id: None,
@@ -5213,6 +6597,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut leader = Agent::new(
             profile.clone(),
@@ -5290,6 +6675,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut worker = Agent::new(
             profile,
@@ -5340,6 +6726,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut worker = Agent::new(
             profile,
@@ -5398,6 +6785,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut leader = Agent::new(
             profile,
@@ -5460,6 +6848,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut leader = Agent::new(
             profile,
@@ -5509,6 +6898,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut leader = Agent::new(
             profile.clone(),
@@ -5647,6 +7037,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut worker = Agent::new(
             profile,
@@ -5707,6 +7098,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5753,6 +7145,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5811,6 +7204,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let teams = Teams::new(root.path()).unwrap();
         teams.create("team", None, "leader").unwrap();
@@ -5886,6 +7280,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5915,6 +7310,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,
@@ -5944,6 +7340,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut session = Session::fresh();
         session.permission_mode = Some("unknown-future-mode".into());
@@ -5971,6 +7368,39 @@ done"#;
     }
 
     #[tokio::test]
+    async fn local_advanced_plan_restores_permission_mode_after_error() {
+        let root = tempfile::tempdir().unwrap();
+        let profile = ProviderProfile {
+            id: "mock".into(),
+            kind: "openai-compatible".into(),
+            base_url: "http://127.0.0.1:1/v1".into(),
+            model: "mock".into(),
+            api_key_env: None,
+            stream: false,
+            tuning: Default::default(),
+        };
+        let session = Session::fresh();
+        let mut agent = Agent::new(
+            profile,
+            root.path().to_path_buf(),
+            Approval::Ask,
+            false,
+            5,
+            session,
+        )
+        .unwrap();
+        let before = agent.current_permission_mode();
+        assert!(agent.ask_in_plan_mode("").await.is_err());
+        assert_eq!(agent.current_permission_mode(), before);
+        assert!(agent
+            .ask_with_blocks_in_plan_mode("", None, Some(uuid::Uuid::new_v4()))
+            .await
+            .is_err());
+        assert_eq!(agent.current_permission_mode(), before);
+        // Only the SDK's explicit change-permissions action may persist a
+        // different user setting; a local advanced read-only turn must not.
+    }
+    #[tokio::test]
     async fn resumed_teammate_restores_permission_mode_without_escalation() {
         let root = tempfile::tempdir().unwrap();
         let profile = ProviderProfile {
@@ -5980,6 +7410,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile.clone(),
@@ -6024,6 +7455,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let teams = Teams::new(root.path()).unwrap();
         teams.create("team", None, "leader").unwrap();
@@ -6091,6 +7523,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let teams = Teams::new(root.path()).unwrap();
         teams.create("team", None, "leader").unwrap();
@@ -6156,6 +7589,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let teams = Teams::new(root.path()).unwrap();
         teams.create("team", None, "leader").unwrap();
@@ -6243,6 +7677,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut original = Session::fresh();
         let original_id = original.id.to_string();
@@ -6258,7 +7693,15 @@ done"#;
             .graph
             .create(&json!({"subject":"Old session task","description":"Old graph"}))
             .unwrap();
+        // A negative gitdir lookup is cached. Creating the repository
+        // before /clear must become visible to the next conversation.
+        assert!(crate::git_filesystem::resolve_git_dir(&root).is_none());
+        std::fs::create_dir(root.join(".git")).unwrap();
         agent.clear_history().await.unwrap();
+        assert_eq!(
+            crate::git_filesystem::resolve_git_dir(&root),
+            Some(root.join(".git"))
+        );
 
         assert_ne!(agent.session_id(), original_id);
         assert!(agent.session.messages.is_empty());
@@ -6291,6 +7734,7 @@ done"#;
             model: "mock".into(),
             api_key_env: None,
             stream: false,
+            tuning: Default::default(),
         };
         let mut agent = Agent::new(
             profile,

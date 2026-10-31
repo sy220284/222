@@ -89,16 +89,8 @@ pub fn builtin_command_specs() -> Vec<CommandSpec> {
             description: "Time a command".into(),
             arguments: vec![arg("command", "Command to time", false, false, true)],
         },
-        CommandSpec {
-            name: "srun".into(),
-            description: "Run a parallel job with SLURM".into(),
-            arguments: vec![arg("command", "Command to run", false, false, true)],
-        },
-        CommandSpec {
-            name: "pyright".into(),
-            description: "Python static type checker".into(),
-            arguments: vec![],
-        },
+        crate::generated_ports::p_4007591beaebd::srun_spec(),
+        crate::generated_ports::p_bec23e04adcfb::pyright_spec(),
     ]
 }
 pub fn valid_command_spec_name(name: &str) -> bool {
@@ -377,6 +369,27 @@ mod tests {
         assert!(get_builtin_command_spec("timeout").unwrap().arguments[1].is_command);
         assert!(get_builtin_command_spec("../timeout").is_none());
     }
+    #[test]
+    fn builtin_command_registry_reaches_full_source_srun_and_pyright_specs() {
+        let srun = get_builtin_command_spec("srun").unwrap();
+        assert_eq!(srun.description, "Run a command on SLURM cluster nodes");
+        assert_eq!(srun.arguments.len(), 3);
+        assert_eq!(srun.arguments[0].name, "-n, --ntasks <count>");
+        assert_eq!(srun.arguments[1].name, "-N, --nodes <count>");
+        assert_eq!(srun.arguments[2].name, "command");
+        assert!(srun.arguments[2].is_command);
+
+        let pyright = get_builtin_command_spec("pyright").unwrap();
+        assert_eq!(pyright.description, "Type checker for Python");
+        assert_eq!(pyright.arguments.len(), 22);
+        assert!(pyright
+            .arguments
+            .iter()
+            .any(|arg| arg.name == "--threads <N>"));
+        assert_eq!(pyright.arguments.last().unwrap().name, "files");
+        assert!(pyright.arguments.last().unwrap().variadic);
+    }
+
     #[test]
     fn original_direct_mention_and_highlight() {
         assert_eq!(

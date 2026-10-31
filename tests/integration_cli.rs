@@ -12,6 +12,30 @@ fn binary() -> Command {
     Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
 }
 
+fn accept_before(listener: &TcpListener, timeout: Duration) -> TcpStream {
+    listener.set_nonblocking(true).unwrap();
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                // Windows can inherit nonblocking mode from the listening
+                // socket. Every test mock HTTP reader below requires a
+                // blocking accepted stream with its own read timeout.
+                stream.set_nonblocking(false).unwrap();
+                return stream;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Expected local test API request did not arrive within {timeout:?}"
+                );
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("Failed to accept local test API request: {error}"),
+        }
+    }
+}
+
 #[test]
 fn sessions_cli_searches_persisted_summaries_and_multimodal_conversation_text() {
     let root = tempfile::tempdir().unwrap();
@@ -83,7 +107,7 @@ fn cli_initialization_and_model_listing_work_offline() {
         .unwrap();
     assert!(list.status.success());
     let stdout = String::from_utf8(list.stdout).unwrap();
-    assert!(stdout.contains("local (default)"));
+    assert!(stdout.contains("openai (default)"));
     assert!(stdout.contains("gemini"));
 }
 
@@ -1518,6 +1542,57 @@ fn gemini_sse_sdk_model_tool_roundtrip_preserves_streaming_and_context() {
 }
 
 #[test]
+fn chat_rejects_raw_permission_rules_before_any_write() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"test",
+            "base_url":"http://127.0.0.1:12345/v1"
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args(["--workspace", root.path().to_str().unwrap(), "chat"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(input, "/permission add local allow Bash()").unwrap();
+        writeln!(
+            input,
+            "/permission add local allow WebFetch(https://example.com)"
+        )
+        .unwrap();
+        writeln!(input, "/permission add local allow WebSearch(test*)").unwrap();
+        writeln!(input, "/exit").unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("Invalid permission rule: Bash()"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("domain"), "{stderr}");
+    assert!(
+        stderr.contains("WebSearch does not support wildcards"),
+        "{stderr}"
+    );
+    assert!(!root.path().join(".atlas/settings.local.json").exists());
+}
+
+#[test]
 fn chat_permission_mode_cycle_controls_real_model_tool_mutations() {
     use std::process::Stdio;
     for (cycles, expected_allowed) in [(1usize, true), (2usize, false)] {
@@ -2609,8 +2684,10 @@ fn sdk_failed_model_turn_stops_drain_without_consuming_following_work() {
     let server = thread::spawn(move || {
         let (mut conn, _) = listener.accept().unwrap();
         let request = read_request(&mut conn);
+        // This response explicitly ends provider retries so the queue observes
+        // the final model error; retry policy has separate HTTP coverage.
         let body = r#"{"error":{"message":"model unavailable"}}"#;
-        write!(conn,"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        write!(conn,"HTTP/1.1 500 Internal Server Error\r\nX-Should-Retry: false\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             body.len(),body).unwrap();
         conn.flush().unwrap();
         request
@@ -2775,7 +2852,7 @@ fn sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http(
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
-        let (mut conn, _) = listener.accept().unwrap();
+        let mut conn = accept_before(&listener, Duration::from_secs(15));
         let request = read_request(&mut conn);
         let body = json!({"choices":[{"message":{"role":"assistant",
             "content":"Direct text accepted"},"finish_reason":"stop"}]})
@@ -3125,7 +3202,7 @@ done"#;
         &config,
         json!({"default_provider":"local","providers":[{
             "id":"local","kind":"openai-compatible","model":"local",
-            "base_url":"http://127.0.0.1:11434/v1"
+            "base_url":"http://127.0.0.1:9/v1"
         }],"mcp_servers":[{
             "id":"local-mcp","command":"sh","args":["-c",script],
             "env":{"SECRET_VALUE":"must-not-leak"}
@@ -5247,7 +5324,18 @@ fn chat_status_reports_live_state_and_never_prints_secrets() {
     assert!(stdout.contains("Model: portable-model"), "{stdout}");
     assert!(stdout.contains("Permission mode: default"), "{stdout}");
     assert!(stdout.contains("MCP servers: 0"), "{stdout}");
-    assert!(stdout.contains(root.path().to_str().unwrap()), "{stdout}");
+    // The OS can expose the same Windows temp directory with a different
+    // long-path prefix, drive alias or casing. Compare the actual directory
+    // identity instead of its textual spelling.
+    let cwd = stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("cwd: "))
+        .expect("/status must show the active working directory");
+    assert_eq!(
+        std::fs::canonicalize(cwd).unwrap(),
+        root.path().canonicalize().unwrap(),
+        "{stdout}"
+    );
     assert!(!stdout.contains("API_SECRET_NEVER_PRINT"));
     assert!(!stdout.contains("URL_SECRET_NEVER_PRINT"));
     assert!(!stderr.contains("API_SECRET_NEVER_PRINT"));
@@ -5348,7 +5436,8 @@ fn doctor_cli_and_chat_report_real_local_environment_offline() {
     );
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(text.contains("Version:"), "{text}");
-    assert!(text.contains("Provider: 1 model profile"), "{text}");
+    // One user-configured mock profile plus five bundled API brands.
+    assert!(text.contains("Provider: 6 model profile"), "{text}");
     assert!(text.contains("MCP: missing: command"), "{text}");
     assert!(text.contains("Context: AGENTS.md is 50001 bytes"), "{text}");
     let mut child = binary()
@@ -6359,15 +6448,17 @@ fn interactive_project_onboarding_is_persistent_and_disappears_after_init_file()
 }
 
 #[test]
-fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
+fn sdk_removed_remote_bridge_controls_reject_without_remote_side_effects() {
     use std::process::Stdio;
     let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
     let config = root.path().join("config.json");
     fs::write(
         &config,
-        json!({"default_provider":"local","providers":[{
-            "id":"local","kind":"openai-compatible","model":"test",
-            "base_url":"http://127.0.0.1:9/v1"
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock",
+            "base_url":format!("http://{}/v1",listener.local_addr().unwrap())
         }]})
         .to_string(),
     )
@@ -6418,11 +6509,23 @@ fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
             writeln!(
                 writer,
                 "{}",
-                json!({"type":"control_request", "request_id":id,
-                "request":request})
+                json!({"type":"control_request","request_id":id,"request":request})
             )
             .unwrap();
         }
+        // The local SDK is still alive and services its provider-neutral controls.
+        writeln!(
+            writer,
+            "{}",
+            json!({"type":"control","action":"tasks","request_id":"local-tasks"})
+        )
+        .unwrap();
+        writeln!(
+            writer,
+            "{}",
+            json!({"type":"control","action":"permission_mode","request_id":"local-mode"})
+        )
+        .unwrap();
     }
     let output = child.wait_with_output().unwrap();
     assert!(
@@ -6435,23 +6538,39 @@ fn sdk_bridge_flush_control_preserves_order_across_transport_replacement() {
         .lines()
         .map(|s| serde_json::from_str::<Value>(s).unwrap())
         .collect::<Vec<_>>();
-    let response = |id: &str| values.iter().find(|x| x["request_id"] == id).unwrap();
-    assert_eq!(response("3")["result"]["pending_count"], 2);
-    assert_eq!(
-        response("6")["result"]["messages"],
-        json!([{"seq":1},{"seq":2},{"seq":3}])
-    );
-    assert_eq!(response("7")["result"]["messages"], json!([]));
-    assert_eq!(response("8")["result"]["compat_id"], "session_123");
-    assert_eq!(response("9")["result"]["reclaim_older_than_ms"], 5000);
-    assert_eq!(response("10")["ok"], false);
-    let nested = values
-        .iter()
-        .find(|value| value["response"]["request_id"] == "nested-3")
-        .unwrap();
-    assert_eq!(
-        nested["response"]["response"]["messages"],
-        json!(["nested"])
+    for id in (1..=10).map(|n| n.to_string()) {
+        let response = values.iter().find(|x| x["request_id"] == id).unwrap();
+        assert_eq!(response["ok"], false, "{response}");
+        assert!(
+            response["error"]
+                .as_str()
+                .unwrap()
+                .contains("Unknown control action"),
+            "{response}"
+        );
+    }
+    for id in ["nested-1", "nested-2", "nested-3"] {
+        let response = values
+            .iter()
+            .find(|x| x["response"]["request_id"] == id)
+            .unwrap();
+        assert_eq!(response["response"]["subtype"], "error", "{response}");
+        assert!(
+            response["response"]["error"]
+                .as_str()
+                .unwrap()
+                .contains("Unsupported SDK control subtype"),
+            "{response}"
+        );
+    }
+    for id in ["local-tasks", "local-mode"] {
+        let response = values.iter().find(|x| x["request_id"] == id).unwrap();
+        assert_eq!(response["ok"], true, "{response}");
+    }
+    assert!(!values.iter().any(|x| x["type"] == "result"));
+    assert!(
+        listener.accept().is_err(),
+        "Removed remote Bridge requested model/network"
     );
 }
 
@@ -6464,7 +6583,7 @@ fn sdk_bridge_inbound_media_type_fallback_reaches_real_model_for_direct_and_queu
     let received = thread::spawn(move || {
         let mut requests = Vec::new();
         for _ in 0..2 {
-            let (mut conn, _) = server.accept().unwrap();
+            let mut conn = accept_before(&server, Duration::from_secs(15));
             let request = read_request(&mut conn);
             let response = json!({"choices":[{"message":{"role":"assistant",
                 "content":"image compatible"},"finish_reason":"stop"}]})
@@ -6537,58 +6656,29 @@ fn sdk_bridge_inbound_media_type_fallback_reaches_real_model_for_direct_and_queu
 }
 
 #[test]
-fn sdk_remote_attachment_download_and_model_request_share_session() {
-    use std::process::Stdio;
-    let root = tempfile::tempdir().unwrap();
-    let file_server = TcpListener::bind("127.0.0.1:0").unwrap();
-    let file_url = format!("http://{}", file_server.local_addr().unwrap());
-    let file_thread = thread::spawn(move || {
-        let (mut connection, _) = file_server.accept().unwrap();
-        let request = read_request(&mut connection);
-        assert!(
-            request.starts_with("GET /files/uuid-photo/content HTTP/1.1"),
-            "{request}"
-        );
-        assert!(request
-            .to_ascii_lowercase()
-            .contains("authorization: bearer authorized"));
-        let body = b"reference attachment data";
-        write!(
-            connection,
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            body.len()
-        )
-        .unwrap();
-        connection.write_all(body).unwrap();
-        connection.flush().unwrap();
-    });
-    let model_server = TcpListener::bind("127.0.0.1:0").unwrap();
-    let model_url = format!("http://{}/v1", model_server.local_addr().unwrap());
-    let model_thread = thread::spawn(move || {
-        let (mut connection, _) = model_server.accept().unwrap();
-        let request = read_request(&mut connection);
-        let reply =
-            json!({"choices":[{"message":{"role":"assistant","content":"reference received"},
-            "finish_reason":"stop"}]})
-            .to_string();
-        write!(connection,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",reply.len(),reply).unwrap();
-        connection.flush().unwrap();
-        request
-    });
-    let config = root.path().join("config.json");
+fn sdk_remote_attachments_are_rejected_before_any_network_request() {
+    let workspace = tempfile::tempdir().unwrap();
+    let remote_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    remote_listener.set_nonblocking(true).unwrap();
+    let model_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    model_listener.set_nonblocking(true).unwrap();
+    let remote_url = format!("http://{}", remote_listener.local_addr().unwrap());
+    let model_url = format!("http://{}/v1", model_listener.local_addr().unwrap());
+    let config = workspace.path().join("config.json");
     fs::write(
         &config,
-        json!({"default_provider":"local","providers":[{
-            "id":"local","kind":"openai-compatible","model":"test","base_url":model_url
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible",
+            "model":"mock","base_url":model_url
         }]})
         .to_string(),
     )
     .unwrap();
     let mut child = binary()
-        .args(["--workspace", root.path().to_str().unwrap(), "sdk"])
+        .args(["--workspace", workspace.path().to_str().unwrap(), "sdk"])
         .env("ATLAS_CONFIG", &config)
-        .env("ATLAS_BRIDGE_ATTACHMENT_BASE_URL", &file_url)
-        .env("ATLAS_BRIDGE_ATTACHMENT_TOKEN", "authorized")
+        .env("ATLAS_BRIDGE_ATTACHMENT_BASE_URL", &remote_url)
+        .env("ATLAS_BRIDGE_ATTACHMENT_TOKEN", "should-stay-private")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -6599,8 +6689,160 @@ fn sdk_remote_attachment_download_and_model_request_share_session() {
         writeln!(
             stdin,
             "{}",
-            json!({"type":"user","content":"Check attached file",
-            "file_attachments":[{"file_uuid":"uuid-photo","file_name":"../../invoice file.txt"}]})
+            json!({"type":"user","content":"Read the attachment",
+                "file_attachments":[{"file_uuid":"remote-photo",
+                    "file_name":"../../private.txt"}]})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let events: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect();
+    assert!(
+        events.iter().any(|event| {
+            event["type"] == "error"
+                && event["message"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("Remote file attachments are disabled"))
+        }),
+        "{events:?}"
+    );
+    assert!(!events.iter().any(|event| event["type"] == "result"));
+    assert!(
+        remote_listener.accept().is_err(),
+        "SDK attempted remote download"
+    );
+    assert!(
+        model_listener.accept().is_err(),
+        "SDK forwarded a missing attachment"
+    );
+    assert!(!format!("{events:?}").contains("should-stay-private"));
+}
+
+#[test]
+fn sdk_trailing_image_keeps_earlier_slash_literal_and_attachment_intact() {
+    let workspace = tempfile::tempdir().unwrap();
+    let skill = workspace.path().join(".atlas/skills/image_audit");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(
+        skill.join("SKILL.md"),
+        "Inspect this skill request: $ARGUMENTS",
+    )
+    .unwrap();
+    fs::write(workspace.path().join("notes.txt"), "local reference text").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut conn = accept_before(&listener, Duration::from_secs(15));
+        let request = read_request(&mut conn);
+        let body = json!({"choices":[{"message":{"role":"assistant",
+            "content":"skill and attachment accepted"},"finish_reason":"stop"}]})
+        .to_string();
+        write!(conn,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),body).unwrap();
+        conn.flush().unwrap();
+        request
+    });
+    let config = workspace.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"vision",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args(["--workspace", workspace.path().to_str().unwrap(), "sdk"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut writer = child.stdin.take().unwrap();
+        writeln!(
+            writer,
+            "{}",
+            json!({"type":"user","content":[
+            {"type":"text","text":"/image_audit inspect"},
+            {"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"/9j/AA=="}}
+        ],"file_attachments":[{"path":"notes.txt"}]})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let wire = String::from_utf8(output.stdout).unwrap();
+    assert!(wire.contains("skill and attachment accepted"), "{wire}");
+    let request = received.join().unwrap();
+    assert!(
+        request.contains("/image_audit inspect")
+            && !request.contains("Inspect this skill request: inspect"),
+        "{request}"
+    );
+    assert!(request.contains("local reference text"), "{request}");
+    assert!(
+        request.contains("data:image/jpeg;base64,/9j/AA=="),
+        "{request}"
+    );
+}
+
+#[test]
+fn sdk_local_attachments_reach_selected_model_without_remote_bridge() {
+    let workspace = tempfile::tempdir().unwrap();
+    fs::write(workspace.path().join("snippet.txt"), "attachment-token-123").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let server = thread::spawn(move || {
+        let mut connection = accept_before(&listener, Duration::from_secs(15));
+        let request = read_request(&mut connection);
+        let body = json!({"choices":[{"message":{"role":"assistant","content":"attachment accepted"},"finish_reason":"stop"}]}).to_string();
+        write!(connection,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(), body).unwrap();
+        connection.flush().unwrap();
+        request
+    });
+    let config = workspace.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args(["--workspace", workspace.path().to_str().unwrap(), "sdk"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        writeln!(
+            stdin,
+            "{}",
+            json!({"type":"user","content":"Inspect attached source",
+            "file_attachments":[{"path":"snippet.txt"}]})
         )
         .unwrap();
     }
@@ -6611,25 +6853,321 @@ fn sdk_remote_attachment_download_and_model_request_share_session() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("reference received"), "{stdout}");
-    file_thread.join().unwrap();
-    let model_request = model_thread.join().unwrap();
+    assert!(stdout.contains("attachment accepted"), "{stdout}");
+    let request = server.join().unwrap();
+    assert!(request.contains("attachment-token-123"), "{request}");
     assert!(
-        model_request.contains("invoice_file.txt")
-            || model_request.contains("reference attachment data"),
-        "{model_request}"
+        request.contains("Local attachment: snippet.txt"),
+        "{request}"
     );
-    let upload_root = root.path().join(".atlas/uploads");
-    let dirs = fs::read_dir(&upload_root).unwrap().collect::<Vec<_>>();
-    assert_eq!(dirs.len(), 1);
-    let paths = fs::read_dir(dirs[0].as_ref().unwrap().path())
+}
+
+#[test]
+fn local_advanced_commands_reject_invalid_goals_before_model_calls() {
+    let workspace = tempfile::tempdir().unwrap();
+    let config = workspace.path().join("config.json");
+    let plan = binary()
+        .args([
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "ultra-plan",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert!(plan.status.success());
+    assert!(String::from_utf8_lossy(&plan.stdout).contains("Usage: /ultraplan GOAL"));
+    let review = binary()
+        .args([
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "ultra-review",
+            "0",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert!(!review.status.success());
+}
+
+#[test]
+fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("audit-note.txt"),
+        "VERIFIED_LOCAL_TASK_EXECUTION",
+    )
+    .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let request_log = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..5 {
+            let mut stream = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut stream);
+            let body = match step {
+                0 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"create-task","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                          "action":"create","trigger_id":"model_review",
+                          "body":{"prompt":"Inspect local project files"}
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                1 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"get-task","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                          "action":"get","trigger_id":"model_review"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                2 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"run-task","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                          "action":"run","trigger_id":"model_review"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                3 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"read-task-target","type":"function","function":{
+                        "name":"Read","arguments":json!({
+                          "file_path":"audit-note.txt"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                _ => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Confirmed saved local task was executed in current Agent turn"},
+                    "finish_reason":"stop"}]}),
+            }
+            .to_string();
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),body).unwrap();
+            stream.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let output = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "run",
+            "Create a reusable local task then inspect it",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let display = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        display.contains("LocalTrigger create model_review"),
+        "{display}"
+    );
+    assert!(display.contains("HTTP 201 (1 lines)"), "{display}");
+    assert!(
+        display.contains("LocalTrigger run model_review"),
+        "{display}"
+    );
+    let requests = request_log.join().unwrap();
+    assert_eq!(requests.len(), 5);
+    assert!(requests[0].contains("LocalTrigger"), "{}", requests[0]);
+    assert!(
+        requests[1].contains("HTTP 201") && requests[1].contains("model_review"),
+        "{}",
+        requests[1]
+    );
+    assert!(
+        requests[2].contains("Inspect local project files"),
+        "{}",
+        requests[2]
+    );
+    assert!(
+        requests[3].contains("current-agent-turn"),
+        "{}",
+        requests[3]
+    );
+    assert!(
+        requests[4].contains("VERIFIED_LOCAL_TASK_EXECUTION"),
+        "{}",
+        requests[4]
+    );
+    let stored = fs::read_to_string(root.path().join(".atlas/local-triggers/tasks.json")).unwrap();
+    assert!(stored.contains("Inspect local project files"));
+    assert!(String::from_utf8(output.stdout)
         .unwrap()
-        .collect::<Vec<_>>();
-    assert_eq!(paths.len(), 1);
-    assert_eq!(
-        fs::read(paths[0].as_ref().unwrap().path()).unwrap(),
-        b"reference attachment data"
+        .contains("Confirmed saved local task was executed"));
+    assert!(!root
+        .path()
+        .join(".atlas/local-triggers/schedules.json")
+        .exists());
+}
+
+#[test]
+fn local_task_trigger_cli_persists_and_calls_configured_model_once() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let received = thread::spawn(move || {
+        let mut connection = accept_before(&listener, Duration::from_secs(15));
+        let request = read_request(&mut connection);
+        let body = json!({"choices":[{"message":{
+            "role":"assistant","content":"local trigger completed"},
+            "finish_reason":"stop"}]})
+        .to_string();
+        write!(connection,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(), body).unwrap();
+        connection.flush().unwrap();
+        request
+    });
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let invoke = |args: &[&str]| {
+        binary()
+            .args(["--workspace", root.path().to_str().unwrap()])
+            .args(args)
+            .env("ATLAS_CONFIG", &config)
+            .output()
+            .unwrap()
+    };
+    let stored = invoke(&[
+        "trigger", "set", "smoke", "Inspect", "saved", "task", "without", "cloud",
+    ]);
+    assert!(
+        stored.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stored.stderr)
     );
+    let file = root.path().join(".atlas/local-triggers/tasks.json");
+    assert!(file.is_file());
+    assert_eq!(
+        fs::read_to_string(file.parent().unwrap().join(".gitignore")).unwrap(),
+        "*\\n!.gitignore\\n".replace("\\n", "\n")
+    );
+    let list = invoke(&["trigger", "list"]);
+    assert!(list.status.success());
+    assert!(String::from_utf8(list.stdout).unwrap().contains("smoke"));
+    let read = invoke(&["trigger", "get", "smoke"]);
+    assert!(read.status.success());
+    assert!(String::from_utf8(read.stdout)
+        .unwrap()
+        .contains("Inspect saved task without cloud"));
+    let duplicate = invoke(&["trigger", "create", "smoke", "must", "fail"]);
+    assert!(!duplicate.status.success());
+    let updated = invoke(&[
+        "trigger", "update", "smoke", "Inspect", "saved", "task", "without", "cloud", "and",
+        "verify", "update",
+    ]);
+    assert!(
+        updated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&updated.stderr)
+    );
+    let missing = invoke(&["trigger", "update", "nonexistent", "fail"]);
+    assert!(!missing.status.success());
+    let run = invoke(&["trigger", "run", "smoke"]);
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(String::from_utf8(run.stdout)
+        .unwrap()
+        .contains("local trigger completed"));
+    let network_request = received.join().unwrap();
+    assert!(
+        network_request.contains("Inspect saved task without cloud"),
+        "{network_request}"
+    );
+    let removed = invoke(&["trigger", "delete", "smoke"]);
+    assert!(removed.status.success());
+    let missing = invoke(&["trigger", "run", "smoke"]);
+    assert!(!missing.status.success());
+}
+
+#[test]
+fn local_advanced_plan_uses_current_api_and_keeps_plan_permission() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for _ in 0..3 {
+            let mut connection = accept_before(&listener, Duration::from_secs(15));
+            let request = read_request(&mut connection);
+            let body = json!({"choices":[{"message":{
+                "role":"assistant","content":"plan generated"},
+                "finish_reason":"stop"}]})
+            .to_string();
+            write!(connection,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(), body).unwrap();
+            connection.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let output = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "ultra-plan",
+            "Check",
+            "local",
+            "workflows",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("plan generated"));
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert!(
+        requests[0].contains("Check local workflows"),
+        "{}",
+        requests[0]
+    );
+    assert!(
+        requests[0].contains("read-only/plan permissions"),
+        "{}",
+        requests[0]
+    );
+    assert!(requests[1].contains("Second pass"));
+    assert!(requests[2].contains("Final pass"));
 }
 
 #[test]
@@ -6687,4 +7225,693 @@ fn local_marketplace_cli_add_install_list_and_remove_are_durable() {
         .path()
         .join(".atlas/plugins/reviewer/plugin.json")
         .is_file());
+}
+
+#[test]
+fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("note.txt"), "private local note").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..7 {
+            let mut stream = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut stream);
+            let response = json!({"choices":[{"message":{"role":"assistant",
+                "content":if step < 3 {"plan accepted"} else {"plain text accepted"}},
+                "finish_reason":"stop"}]})
+            .to_string();
+            write!(stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(), response).unwrap();
+            stream.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"vision",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user","content":"/ultrareview 0"})
+        )
+        .unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user","uuid":uuid::Uuid::new_v4().to_string(),
+                "content":[{"type":"text","text":"visual reference"},
+                    {"type":"image","source":{"type":"base64",
+                        "media_type":"image/jpeg","data":"/9j/AA=="}},
+                    {"type":"text","text":"/ultraplan repair local UI"}],
+                "file_attachments":[{"path":"note.txt"}],
+                "seedPlan":"Existing approved plan should be refined"
+            })
+        )
+        .unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"/ultraplan literal message, do not expand",
+            "skipSlashCommands":true})
+        )
+        .unwrap();
+        for prompt in [
+            "please ultraplan this is an ordinary SDK message",
+            "please ultrareview this is an ordinary SDK message",
+        ] {
+            writeln!(input, "{}", json!({"type":"user","content":prompt})).unwrap();
+        }
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user","content":[
+                {"type":"text","text":"/ultraplan mentioned in earlier block"},
+                {"type":"image","source":{"type":"base64",
+                    "media_type":"image/jpeg","data":"/9j/AA=="}}
+            ]})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    let wire = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let events: Vec<Value> = wire
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert!(
+        events.iter().any(|e| e["type"] == "error"
+            && e["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("/ultrareview expects")),
+        "{wire}"
+    );
+    assert_eq!(
+        events.iter().filter(|e| e["type"] == "result").count(),
+        5,
+        "{wire}"
+    );
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(), 7);
+    let first: Value = serde_json::from_str(requests[0].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    let first_user = first["messages"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()
+        .to_string();
+    assert!(first_user.contains("repair local UI"), "{first_user}");
+    assert!(
+        first_user.contains("Existing approved plan should be refined"),
+        "{first_user}"
+    );
+    assert!(
+        first_user.contains("detailed implementation plan"),
+        "{first_user}"
+    );
+    assert!(
+        first_user.contains("data:image/jpeg;base64,/9j/AA=="),
+        "{first_user}"
+    );
+    assert!(first_user.contains("private local note"), "{first_user}");
+    assert!(requests[1].contains("Second pass"), "{}", requests[1]);
+    assert!(requests[2].contains("Final pass"), "{}", requests[2]);
+    assert!(events
+        .iter()
+        .any(|e| e["type"] == "workflow" && e["phase"] == "ready" && e["workflow"] == "ultraplan"));
+    assert!(events.iter().any(|e| e["type"] == "workflow"
+        && e["phase"] == "verifying"
+        && e["workflow"] == "ultraplan"));
+    let second: Value =
+        serde_json::from_str(requests[3].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+    let second_user = second["messages"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()
+        .to_string();
+    assert!(
+        second_user.contains("/ultraplan literal message, do not expand"),
+        "{second_user}"
+    );
+    assert!(
+        !second_user.contains("detailed implementation plan"),
+        "{second_user}"
+    );
+    let last_user = |index: usize| -> Value {
+        let v: Value =
+            serde_json::from_str(requests[index].split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        v["messages"].as_array().unwrap().last().unwrap().clone()
+    };
+    assert!(last_user(4)
+        .to_string()
+        .contains("please ultraplan this is an ordinary SDK message"));
+    assert!(last_user(5)
+        .to_string()
+        .contains("please ultrareview this is an ordinary SDK message"));
+    assert!(last_user(6)
+        .to_string()
+        .contains("/ultraplan mentioned in earlier block"));
+    assert!(last_user(6)
+        .to_string()
+        .contains("data:image/jpeg;base64,/9j/AA=="));
+}
+
+#[test]
+fn sdk_advanced_phases_block_write_then_restore_original_mode() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..6 {
+            let mut stream = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut stream);
+            let response = match step {
+                0 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"blocked-plan-write","type":"function","function":{
+                        "name":"Write","arguments":json!({
+                          "file_path":"forbidden-plan-write.txt","content":"MUST_NOT_WRITE"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                1 => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Plan draft after denied edit"},"finish_reason":"stop"}]}),
+                2 => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Verified read-only draft"},"finish_reason":"stop"}]}),
+                3 => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Final plan ready"},"finish_reason":"stop"}]}),
+                4 => json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"allowed-normal-write","type":"function","function":{
+                        "name":"Write","arguments":json!({
+                          "file_path":"normal-after-plan.txt","content":"RESTORED"
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]}),
+                _ => json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Normal write completed"},"finish_reason":"stop"}]}),
+            }
+            .to_string();
+            write!(stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                response.len(), response).unwrap();
+            stream.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"/ultraplan audit permissions"})
+        )
+        .unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"Now perform a normal write"})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let wire = String::from_utf8(output.stdout).unwrap();
+    let events: Vec<Value> = wire
+        .lines()
+        .map(|s| serde_json::from_str(s).unwrap())
+        .collect();
+    assert_eq!(
+        events.iter().filter(|e| e["type"] == "result").count(),
+        2,
+        "{wire}"
+    );
+    assert!(events
+        .iter()
+        .any(|e| e["type"] == "workflow" && e["phase"] == "ready" && e["workflow"] == "ultraplan"));
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 6);
+    assert!(requests[1].contains("ERROR:"), "{}", requests[1]);
+    assert!(!root.path().join("forbidden-plan-write.txt").exists());
+    assert_eq!(
+        fs::read_to_string(root.path().join("normal-after-plan.txt")).unwrap(),
+        "RESTORED"
+    );
+}
+
+#[test]
+fn sdk_local_trigger_body_only_create_emits_source_like_ui_metadata() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..2 {
+            let mut conn = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut conn);
+            let reply = if step == 0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"body-only-create","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                            "action":"create","body":{"prompt":"Check my local repository"}
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Saved locally"},"finish_reason":"stop"}]})
+            }
+            .to_string();
+            write!(conn,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                reply.len(), reply).unwrap();
+            conn.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"Save a reusable local task"})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let records: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert!(
+        records
+            .iter()
+            .any(|e| e["tool_use_display"][0]["display"] == "create"),
+        "{records:?}"
+    );
+    assert!(
+        records
+            .iter()
+            .any(|e| e["type"] == "tool_result" && e["display"] == "HTTP 201 (1 lines)"),
+        "{records:?}"
+    );
+    assert!(records
+        .iter()
+        .any(|e| e["type"] == "result" && e["content"] == "Saved locally"));
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1].contains("HTTP 201"), "{}", requests[1]);
+    assert!(requests[1].contains("trigger_id"), "{}", requests[1]);
+    let store = fs::read_to_string(root.path().join(".atlas/local-triggers/tasks.json")).unwrap();
+    assert!(store.contains("Check my local repository"));
+}
+
+#[test]
+fn sdk_ultrareview_branch_executes_three_verified_local_rounds() {
+    let root = tempfile::tempdir().unwrap();
+    let init = Command::new("git")
+        .arg("-C")
+        .arg(root.path())
+        .args(["init", "-q"])
+        .status()
+        .unwrap();
+    assert!(init.success());
+    fs::write(root.path().join("review-target.rs"), "pub fn target() {}\n").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..3 {
+            let mut conn = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut conn);
+            let reply = json!({"choices":[{"message":{"role":"assistant",
+                "content":format!("Review phase {} verified",step+1)},
+                "finish_reason":"stop"}]})
+            .to_string();
+            write!(conn,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                reply.len(), reply).unwrap();
+            conn.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock",
+            "base_url":format!("http://{addr}/v1")
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let mut child = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "--approval",
+            "full",
+            "sdk",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(
+            input,
+            "{}",
+            json!({"type":"user",
+            "content":"/ultrareview examine the local branch"})
+        )
+        .unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let events: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(events.iter().filter(|e| e["type"] == "result").count(), 1);
+    assert!(events.iter().any(|e| e["type"] == "workflow"
+        && e["phase"] == "ready"
+        && e["workflow"] == "ultrareview"));
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert!(requests[0].contains("review-target.rs"), "{}", requests[0]);
+    assert!(
+        requests[0].contains("examine the local branch"),
+        "{}",
+        requests[0]
+    );
+    assert!(requests[1].contains("Second pass"), "{}", requests[1]);
+    assert!(requests[2].contains("Final pass"), "{}", requests[2]);
+    assert_eq!(
+        fs::read_to_string(root.path().join("review-target.rs")).unwrap(),
+        "pub fn target() {}\n"
+    );
+}
+
+#[test]
+fn print_alias_json_returns_one_real_model_result() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"test-model",
+            "base_url":format!("http://{address}/v1"),"stream":false
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let server = thread::spawn(move || {
+        let mut stream = accept_before(&listener, Duration::from_secs(15));
+        let request = read_request(&mut stream);
+        let body = json!({"choices":[{"message":{
+            "role":"assistant","content":"print-mode-ok"
+        },"finish_reason":"stop"}]})
+        .to_string();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ).unwrap();
+        stream.flush().unwrap();
+        request
+    });
+    let output = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "-p",
+            "Return print-mode-ok",
+            "--output-format",
+            "json",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    let request = server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(request.contains("Return print-mode-ok"), "{request}");
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["type"], "result");
+    assert_eq!(result["result"], "print-mode-ok");
+}
+
+#[test]
+fn simple_mode_restricts_live_provider_tool_catalog_and_background_schema() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"test-model",
+            "base_url":format!("http://{address}/v1"),"stream":false
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let server = thread::spawn(move || {
+        let mut stream = accept_before(&listener, Duration::from_secs(15));
+        let raw = read_request(&mut stream);
+        let request: Value = serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        let body = json!({"choices":[{"message":{
+            "role":"assistant","content":"simple-tools-ok"
+        },"finish_reason":"stop"}]})
+        .to_string();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ).unwrap();
+        stream.flush().unwrap();
+        request
+    });
+    let output = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "run",
+            "List the available tools",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .env("ATLAS_SIMPLE", "true")
+        .env("ATLAS_DISABLE_BACKGROUND_TASKS", "true")
+        .output()
+        .unwrap();
+    let request = server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let names = request["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["function"]["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["edit_file", "read_file", "run_command"]);
+    let bash = request["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["function"]["name"] == "run_command")
+        .unwrap();
+    assert!(bash
+        .pointer("/function/parameters/properties/run_in_background")
+        .is_none());
+    assert!(bash
+        .pointer("/function/parameters/properties/command")
+        .is_some());
+}
+
+#[test]
+fn source_and_legacy_agent_tool_names_dispatch_real_subagent() {
+    for tool_name in ["Agent", "Task"] {
+        let root = tempfile::tempdir().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let tool_name = tool_name.to_owned();
+        let server_tool_name = tool_name.clone();
+        let server = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for step in 0..3 {
+                let mut stream = accept_before(&listener, Duration::from_secs(15));
+                requests.push(read_request(&mut stream));
+                let message = match step {
+                    0 => json!({"role":"assistant","content":null,"tool_calls":[{
+                        "id":"source-agent-1","type":"function","function":{
+                            "name":server_tool_name,"arguments":json!({
+                                "prompt":"Child source-compatible task",
+                                "subagent_type":if server_tool_name == "Agent" { "Explore" } else { "Plan" }
+                            }).to_string()
+                        }
+                    }]}),
+                    1 => json!({"role":"assistant","content":"Child source-compatible result"}),
+                    _ => json!({"role":"assistant","content":"Parent source-compatible result"}),
+                };
+                let finish = if step == 0 { "tool_calls" } else { "stop" };
+                let body =
+                    json!({"choices":[{"message":message,"finish_reason":finish}]}).to_string();
+                write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                stream.flush().unwrap();
+            }
+            requests
+        });
+        let config = root.path().join("model.json");
+        fs::write(
+            &config,
+            json!({"default_provider":"mock","providers":[{
+                "id":"mock","kind":"openai-compatible","model":"unit",
+                "base_url":format!("http://{address}/v1"),"stream":false
+            }]})
+            .to_string(),
+        )
+        .unwrap();
+        let output = binary()
+            .args([
+                "--workspace",
+                root.path().to_str().unwrap(),
+                "--approval",
+                "full",
+                "run",
+                "Delegate a source-compatible task",
+            ])
+            .env("ATLAS_CONFIG", &config)
+            .output()
+            .unwrap();
+        let requests = server.join().unwrap();
+        assert!(
+            output.status.success(),
+            "{tool_name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("Parent source-compatible result"),
+            "{tool_name}"
+        );
+        assert_eq!(requests.len(), 3, "{tool_name}");
+        assert!(
+            requests[1].contains("Child source-compatible task"),
+            "{tool_name}"
+        );
+        assert!(
+            requests[2].contains("Child source-compatible result"),
+            "{tool_name}"
+        );
+        assert!(!requests[2].contains("Subagent session:"), "{tool_name}");
+    }
 }

@@ -1,0 +1,74 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/jsonRead.ts",
+  "source_sha256": "74056192043c19dd73833e34e51350336ed3c814eb8f4a9ae21087648217e403",
+  "export": "stripBOM",
+  "cases": [
+    {
+      "id": "one-bom",
+      "input": "﻿{\"a\":1}",
+      "expected": "{\"a\":1}",
+      "kind": "normal"
+    },
+    {
+      "id": "two-boms",
+      "input": "﻿﻿ABC",
+      "expected": "﻿ABC",
+      "kind": "edge"
+    },
+    {
+      "id": "bom-after-space",
+      "input": " ﻿ABC",
+      "expected": " ﻿ABC",
+      "kind": "edge"
+    },
+    {
+      "id": "trailing-bom",
+      "input": "ABC﻿",
+      "expected": "ABC﻿",
+      "kind": "edge"
+    },
+    {
+      "id": "empty",
+      "input": "",
+      "expected": "",
+      "kind": "edge"
+    },
+    {
+      "id": "only-bom",
+      "input": "﻿",
+      "expected": "",
+      "kind": "edge"
+    },
+    {
+      "id": "nul",
+      "input": "﻿\u0000X",
+      "expected": "\u0000X",
+      "kind": "edge"
+    },
+    {
+      "id": "nbsp-leading",
+      "input": " ﻿X",
+      "expected": " ﻿X",
+      "kind": "edge"
+    },
+    {
+      "id": "newline-after-bom",
+      "input": "﻿\nx",
+      "expected": "\nx",
+      "kind": "edge"
+    },
+    {
+      "id": "emoji",
+      "input": "﻿😀",
+      "expected": "😀",
+      "kind": "edge"
+    },
+    {
+      "id": "interior-bom",
+      "input": "﻿abc﻿",
+      "expected": "abc﻿",
+      "kind": "edge"
+    }
+  ]
+}

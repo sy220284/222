@@ -211,6 +211,171 @@ pub fn expand_tabs(text: &str, interval: usize) -> String {
     output
 }
 
+/**
+ * Original src/ink/optimizer.ts, mirrored in Rust for the terminal diff
+ * inspection path. Keep patch order and merge only adjacent compatible
+ * transitions: styleStr is a transition, not an idempotent style setter.
+ */
+pub fn optimize_patches(diff: &[Value]) -> Vec<Value> {
+    // Source returns unmodified input for singleton diffs, including no-ops.
+    if diff.len() <= 1 {
+        return diff.to_vec();
+    }
+    let mut result: Vec<Value> = Vec::with_capacity(diff.len());
+    for patch in diff {
+        let kind = patch["type"].as_str().unwrap_or("");
+        if (kind == "stdout" && patch["content"] == "")
+            || (kind == "cursorMove" && patch["x"] == 0 && patch["y"] == 0)
+            || (kind == "clear" && patch["count"] == 0)
+        {
+            continue;
+        }
+        if let Some(prev) = result.last() {
+            let prev_kind = prev["type"].as_str().unwrap_or("");
+            match (kind, prev_kind) {
+                ("cursorMove", "cursorMove") => {
+                    // All frame cursor offsets are signed integer cell units.
+                    let (Some(px), Some(py), Some(x), Some(y)) = (
+                        prev["x"].as_i64(),
+                        prev["y"].as_i64(),
+                        patch["x"].as_i64(),
+                        patch["y"].as_i64(),
+                    ) else {
+                        result.push(patch.clone());
+                        continue;
+                    };
+                    let (Some(nx), Some(ny)) = (px.checked_add(x), py.checked_add(y)) else {
+                        result.push(patch.clone());
+                        continue;
+                    };
+                    *result.last_mut().unwrap() = json!({"type":"cursorMove","x":nx,"y":ny});
+                    continue;
+                }
+                ("cursorTo", "cursorTo") => {
+                    *result.last_mut().unwrap() = patch.clone();
+                    continue;
+                }
+                ("styleStr", "styleStr") => {
+                    if let (Some(first), Some(second)) =
+                        (prev["str"].as_str(), patch["str"].as_str())
+                    {
+                        let merged = format!("{first}{second}");
+                        *result.last_mut().unwrap() = json!({"type":"styleStr","str":merged});
+                        continue;
+                    }
+                }
+                ("hyperlink", "hyperlink") if patch["uri"] == prev["uri"] => {
+                    continue;
+                }
+                ("cursorShow", "cursorHide") | ("cursorHide", "cursorShow") => {
+                    result.pop();
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        result.push(patch.clone());
+    }
+    result
+}
+
+/// src/utils/terminal.ts — terminal tool-result folding.
+const TERMINAL_MAX_VISIBLE_LINES: usize = 3;
+const TERMINAL_RESULT_PADDING: usize = 10;
+
+/// The upstream fast predicate deliberately ignores width wrapping. It
+/// requires four line breaks with nonempty content after the last break;
+/// a trailing newline by itself does not mean a fifth visible line.
+pub fn is_output_line_truncated(content: &str) -> bool {
+    let mut from = 0;
+    for _ in 0..=TERMINAL_MAX_VISIBLE_LINES {
+        let Some(index) = content[from..].find('\n') else {
+            return false;
+        };
+        from += index + 1;
+    }
+    from < content.len()
+}
+
+/// Original wrapText/renderTruncatedContent: fold after three visual rows,
+/// except that a single extra row is always shown. UTF-16 accounting matches
+/// JavaScript string length while ANSI-aware slicing preserves text styles.
+/// Only a short prefix is wrapped, even for very large tool results.
+pub fn render_truncated_content(
+    content: &str,
+    terminal_width: i64,
+    suppress_expand_hint: bool,
+) -> String {
+    let text = content.trim_end();
+    if text.is_empty() {
+        return String::new();
+    }
+    let wrap_width = terminal_width
+        .saturating_sub(TERMINAL_RESULT_PADDING as i64)
+        .max(10) as usize;
+    let max_units = TERMINAL_MAX_VISIBLE_LINES
+        .saturating_mul(wrap_width)
+        .saturating_mul(4);
+    let total_units = text.encode_utf16().count();
+    let pre_truncated = total_units > max_units;
+    let excerpt = if pre_truncated {
+        let mut bytes = 0;
+        let mut units = 0;
+        for (offset, ch) in text.char_indices() {
+            if units + ch.len_utf16() > max_units {
+                break;
+            }
+            bytes = offset + ch.len_utf8();
+            units += ch.len_utf16();
+        }
+        &text[..bytes]
+    } else {
+        text
+    };
+    let mut lines = Vec::new();
+    for line in excerpt.split('\n') {
+        let cells = crate::generated_ports::p_6aa0ce358bf6a::string_width(line);
+        if cells <= wrap_width {
+            lines.push(line.trim_end().to_owned());
+        } else {
+            let mut pos = 0;
+            while pos < cells {
+                let part = crate::generated_ports::p_6aa0ce358bf6a::slice_ansi(
+                    line,
+                    pos,
+                    Some(pos.saturating_add(wrap_width)),
+                );
+                lines.push(part.trim_end().to_owned());
+                pos += wrap_width;
+            }
+        }
+    }
+    let remaining = lines.len().saturating_sub(TERMINAL_MAX_VISIBLE_LINES);
+    let shown = if remaining == 1 {
+        TERMINAL_MAX_VISIBLE_LINES + 1
+    } else {
+        TERMINAL_MAX_VISIBLE_LINES
+    };
+    let above = lines[..lines.len().min(shown)].join("\n");
+    let above = above.trim_end();
+    let remaining = if remaining == 1 { 0 } else { remaining };
+    let estimated_remaining = if pre_truncated {
+        let estimated_rows = total_units.div_ceil(wrap_width);
+        remaining.max(estimated_rows.saturating_sub(TERMINAL_MAX_VISIBLE_LINES))
+    } else {
+        remaining
+    };
+    if estimated_remaining == 0 {
+        return above.to_owned();
+    }
+    let hint = if suppress_expand_hint {
+        String::new()
+    } else {
+        " (ctrl+o to expand)".to_owned()
+    };
+    format!("{above}\n… +{estimated_remaining} lines{hint}")
+}
+
 pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
     let first = args.first().unwrap_or(&Value::Null);
     match (source, export) {
@@ -219,6 +384,17 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
         }
         ("src/utils/collapseHookSummaries.ts", "collapseHookSummaries") => {
             Some(json!(collapse_hook_summaries(first.as_array()?)))
+        }
+        ("src/ink/optimizer.ts", "optimize") => Some(json!(optimize_patches(first.as_array()?))),
+        ("src/utils/terminal.ts", "renderTruncatedContent") => {
+            Some(json!(render_truncated_content(
+                first.as_str()?,
+                args.get(1)?.as_i64()?,
+                args.get(2).and_then(Value::as_bool).unwrap_or(false),
+            )))
+        }
+        ("src/utils/terminal.ts", "isOutputLineTruncated") => {
+            Some(json!(is_output_line_truncated(first.as_str()?)))
         }
         ("src/ink/measure-text.ts", "default") => {
             let mut cache = LineWidthCache::default();
@@ -243,6 +419,8 @@ pub fn exports(source: &str) -> Option<&'static [&'static str]> {
     match source {
         "src/utils/collapseTeammateShutdowns.ts" => Some(&["collapseTeammateShutdowns"]),
         "src/utils/collapseHookSummaries.ts" => Some(&["collapseHookSummaries"]),
+        "src/ink/optimizer.ts" => Some(&["optimize"]),
+        "src/utils/terminal.ts" => Some(&["renderTruncatedContent", "isOutputLineTruncated"]),
         "src/ink/measure-text.ts" => Some(&["default"]),
         "src/ink/tabstops.ts" => Some(&["expandTabs"]),
         "src/ink/termio/esc.ts" => Some(&["parseEsc"]),
@@ -253,6 +431,97 @@ pub fn exports(source: &str) -> Option<&'static [&'static str]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn original_terminal_fold_shows_one_extra_line_and_bounds_large_output() {
+        assert_eq!(render_truncated_content("one\n", 80, true), "one");
+        assert_eq!(
+            render_truncated_content("one\ntwo\nthree\nfour", 80, true),
+            "one\ntwo\nthree\nfour"
+        );
+        assert_eq!(
+            render_truncated_content("one\ntwo\nthree\nfour\nfive", 80, true),
+            "one\ntwo\nthree\n… +2 lines"
+        );
+        assert_eq!(render_truncated_content(" ", 80, false), "");
+        assert!(!is_output_line_truncated("one\ntwo\nthree\nfour"));
+        assert!(is_output_line_truncated("one\ntwo\nthree\nfour\nfive"));
+        assert!(!is_output_line_truncated("one\ntwo\nthree\nfour\n"));
+        let giant = "abcdef".repeat(30_000);
+        let preview = render_truncated_content(&giant, 80, true);
+        assert!(preview.len() < 1500);
+        assert!(preview.contains("… +"));
+        assert_eq!(
+            inspect(
+                "src/utils/terminal.ts",
+                "isOutputLineTruncated",
+                &[json!("a\nb\nc\nd\ne")]
+            ),
+            Some(json!(true))
+        );
+        assert_eq!(
+            inspect(
+                "src/utils/terminal.ts",
+                "renderTruncatedContent",
+                &[json!("a\nb\nc\nd\ne"), json!(80), json!(true)]
+            ),
+            Some(json!("a\nb\nc\n… +2 lines"))
+        );
+    }
+
+    #[test]
+    fn source_ink_optimizer_preserves_patch_order_and_terminal_style_transitions() {
+        let raw = json!([
+            {"type":"stdout","content":""},
+            {"type":"cursorMove","x":0,"y":0},
+            {"type":"cursorMove","x":2,"y":-1},
+            {"type":"cursorMove","x":-2,"y":1},
+            {"type":"clear","count":0},
+            {"type":"styleStr","str":"\u{1b}[49m"},
+            {"type":"styleStr","str":"\u{1b}[2m"},
+            {"type":"hyperlink","uri":"https://example.org"},
+            {"type":"hyperlink","uri":"https://example.org"},
+            {"type":"cursorHide"},
+            {"type":"cursorShow"},
+            {"type":"cursorTo","col":8},
+            {"type":"cursorTo","col":4},
+            {"type":"stdout","content":"tail"}
+        ]);
+        let optimized = optimize_patches(raw.as_array().unwrap());
+        assert_eq!(
+            json!(optimized),
+            json!([
+                {"type":"cursorMove","x":0,"y":0},
+                {"type":"styleStr","str":"\u{1b}[49m\u{1b}[2m"},
+                {"type":"hyperlink","uri":"https://example.org"},
+                {"type":"cursorTo","col":4},
+                {"type":"stdout","content":"tail"}
+            ])
+        );
+        // Optimizer's singleton fast-path intentionally does not drop no-ops.
+        assert_eq!(
+            optimize_patches(&[json!({"type":"clear","count":0})]),
+            vec![json!({"type":"clear","count":0})]
+        );
+        assert!(optimize_patches(&[]).is_empty());
+        assert_eq!(
+            optimize_patches(&[
+                json!({"type":"cursorHide"}),
+                json!({"type":"stdout","content":"x"}),
+                json!({"type":"cursorShow"})
+            ]),
+            vec![
+                json!({"type":"cursorHide"}),
+                json!({"type":"stdout","content":"x"}),
+                json!({"type":"cursorShow"})
+            ]
+        );
+        assert_eq!(
+            inspect("src/ink/optimizer.ts", "optimize", &[raw]).unwrap(),
+            json!(optimized)
+        );
+        assert_eq!(exports("src/ink/optimizer.ts"), Some(&["optimize"][..]));
+    }
 
     #[test]
     fn shutdown_runs_only_merge_consecutive_completed_teammates() {

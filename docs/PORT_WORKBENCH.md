@@ -1,66 +1,100 @@
+# 当前统一源码对照与验收出口
+
+**当前唯一强制门禁是 scripts/source_parity_gate.py gate；完整说明见 docs/SOURCE_PARITY.md。** 本文件保留此前工作台操作和历史审计背景，产生的静态扫描与影响分析只能辅助开发，不能独立标记源码级功能等价。迁移计数统一从 docs/FILE_PORT_MATRIX.md 读取，不以本页历史数值为准。
+
 # 222 原版源码驱动的 Rust 全量迁移工作台
 
-## 目的及边界
+## 唯一工作范围（2026-10-31，PR #6）
 
-统一 `1,906` 条原路径的原版源码、函数出口、静态依赖、Rust 实现映射和验证证据，避免重复拉取、逐轮挑小文件以及将部分实现误记为完成。
+- 原版 Claude Code 2.1.88 的源路径固定为 **1,906** 条；原版 SHA-256 与起始状态在 docs/PORT_BASELINE.json 冻结，不随开发进度改写。
+- 当前按用户授权 **排除 192 条，保留 1,714 条**。其中 22 条是原始排除，另外 170 条逐项登记在 docs/REMOVED_SCOPE.json；调整范围必须得到新的用户明确授权。
+- 先前曾出现的 199、195 条排除和 1,707、1,711 条保留均为历史快照，当前禁止作为任务分派依据。
+- 恢复的 UltraPlan、UltraReview 和 LocalTrigger 共 7 条源码路径仍处于“部分实现”，保留本地通用功能并持续核验。移除原厂远程、云端托管、本地模型推理及专属遥测，模型通过用户配置的 API 调用。严格区分已经授权排除的远程能力与需要保留的本地通用能力。
+- **当前开发目标为 sy220284/222 的 PR #6，分支 fix/manual-source-parity-20261030**。Issue #3 原 362 项中 21 项已由用户授权取消，其余 341 项仍须闭环。
 
-**实现目标不变**：排除原厂遥测和专属账号/API 的 22 条原路径后，其余 **1,884** 条按完整功能、真实调用链、权限、异常及恢复逐项实现；原厂专有能力改造为可配置多模型/中立协议。已有 `docs/FILE_PORT_MATRIX.md` 仍是唯一状态台账，`docs/PORT_STATUS.md` 仍保留人工审计及技术差异。
+工作台使用现有文件作为唯一事实源，避免一份数据反复人工填报：
 
-工作台把 **797 条未迁移 + 1,058 条部分实现/部分覆盖** 组织成若干共享依赖业务域。自动生成的静态依赖仅帮助定位上下游，**不会自动宣称任何文件已完成**。
+| 文件 | 作用 |
+|---|---|
+| docs/FILE_PORT_MATRIX.md | 原路径、当前状态、Rust 映射唯一台账 |
+| docs/REMOVED_SCOPE.json | 170 条新增排除的逐项用户授权 |
+| docs/PORT_BASELINE.json | 冻结 1,906 条原版哈希和首次状态 |
+| docs/PORT_EVIDENCE.jsonl | 后续升级为“已验收”的测试与提交证据 |
+| docs/PORT_STATUS.md | 人工核实的行为差异与历史审计 |
+| scripts/port_workbench.py | 同一事实源生成计划、功能链、范围统计、增量影响及验收门禁 |
 
-## 使用方式（不创建定时任务，不启用子代理）
+**任何生成报告都不反写状态矩阵、授权文件或冻结哈希。** 修改原版路径状态必须根据实际实现及有效验收证据；静态引用、Rust 文件存在和编译通过均不构成等价证明。
 
-首先在持久目录中准备两个独立源码树：
+## 使用命令
 
-- Rust 仓库：`git clone -b feat/full-rust-parity https://github.com/sy220284/222.git`，使用最新 PR HEAD；修改前与提交前重新确认分支提交和并行改动。
-- 用户授权原版源码：解压 `claude-code-2.1.88-main(1).zip`，将其包含 `src/`、`vendor/` 的根目录作为 `ORIGINAL_ROOT`。原版不提交进公开 GitHub，不作为运行时捷径。
+准备仓库与用户授权的 2.1.88 原版源码：
 
-执行：
+~~~sh
+git clone -b fix/manual-source-parity-20261030 https://github.com/sy220284/222.git
+cd 222
+export ORIGINAL_ROOT=/path/to/extracted/claude-code-2.1.88/source
+~~~
 
-```sh
+普通开发及检查：
+
+~~~sh
+# 由逐文件台账直接计算当前范围；不需要手工维护数字
+python3 scripts/port_workbench.py counts --repo .
+
+# 严格检查批准的排除范围、既有证据与新增验收记录
 python3 scripts/port_workbench.py check --repo .
+
+# 无须原版 ZIP，也能生成全量逐路径功能链、领域进度及验收差异
+python3 scripts/port_workbench.py dashboard --repo . --output .port-workbench
+
+# 指定本次修改的 Rust 文件；生成直接映射复验提示
+python3 scripts/port_workbench.py dashboard --repo . --output .port-workbench \
+  --changed src/agent.rs --changed src/tools.rs
+
+# 有原版源码时复验完整哈希、函数出口、静态依赖、受影响调用方
+python3 scripts/port_workbench.py dashboard --repo . --source "$ORIGINAL_ROOT" \
+  --output .port-workbench --changed src/agent.rs
+
+# 完整扫描和优先级计划；检查全部原路径字节、行数与导入关系
 python3 scripts/port_workbench.py scan --repo . \
   --source "$ORIGINAL_ROOT" --output .port-workbench
+
+# 精确的原版静态反向依赖分析（需要原版源码）
+python3 scripts/port_workbench.py impact --repo . --source "$ORIGINAL_ROOT" \
+  --output .port-workbench --changed src/agent.rs
+
+# 与 CI 一致的工作台回归测试
 python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
-```
+~~~
 
-扫描必须核对**所有**原路径及原版源码字节数/行数；发现缺文件、不同版本或台账数据不符立即报错，不能跳过。生成：
+在本地有完整 Git 历史（含 HEAD^）时，可以使用 --changed-from-git 自动读取本次提交差异。GitHub PR6 的 CI 已采用该模式并将工作台报告上传为 port-workbench-dashboard 工件；CI 检出深度为两个提交。
 
-- `source-port-inventory.json`：逐路径 SHA-256、原始函数/类型出口（启发式）、TS 静态导入、依赖者、Rust 路径映射及差异。
-- `port-work-plan.json`：按共享依赖和影响面排列的可机器处理工作单，不会生成代码空壳。
-- `PORT_WORK_PLAN.md`：按业务域汇总缺口、关联入口、影响路径和待检查的相邻模块。
+## 报告的可核查内容
 
-这些文件生成到本地 `.port-workbench/`，目录应加入 `.gitignore`。扫描数据是当前 HEAD 和本地原版的可再生结果，禁止用于伪造最终验收。
+运行 dashboard 后生成两个文件：
 
-## 真正的开发循环
+- **PORT_DASHBOARD.json**：包含全部 1,906 条原路径，每条有状态、授权范围、原版哈希、Rust 映射、当前磁盘文件、测试记录、已知缺口、优先度；提供原版源码时还包含导出符号、静态依赖及依赖者。已验收旧基线中没有新版独立证据的路径会明确标成“需重新复核”。
+- **PORT_DASHBOARD.md**：按单一真实范围显示总进度、各业务域缺口、映射/文件缺失、优先处理队列和改动需要复验的范围。
 
-1. 从 `port-work-plan.json` 选取相同状态源、共享依赖和调用方关联的完整功能链；同时读取实际原版文件和相邻上下游。
-2. 明确此链所有应保留函数、事件顺序、权限/副作用、失败、取消及恢复。已有 Rust 语义正确的部分直接复用；复合缺口优先修复共同底层。
-3. 实现完整 Rust 功能；统一 CLI/TUI/SDK/MCP/Agent/远程实际生产入口，删除重复状态；禁止仅做静态 AST 转写、元数据、空壳和未接入模块。
-4. 以原版输入/输出/副作用为基准做正常、失败、并发、权限、取消和重启测试；执行 `cargo fmt --all -- --check`、`cargo check --locked --all-targets`、`cargo test --locked --all-targets`。复杂链还需实际子进程或网络端到端测试。
-5. 将真实代码、测试和台账作为一个语义完整提交；写入前按最新 HEAD 合并并行变更；写入后核对文件差异。缺口仍存在时留在“部分实现”，不核销。
-6. 每次继续运行 `scan`，只复查变更影响到的调用链，不重复研究已锁定且未变化的路径。
+若提供 --changed，报告还会列出直接受影响原路径、需回归的已验收路径、未匹配文件；若提供 --source，则进一步沿原版静态导入关系计算上游调用方。对于动态调用、插件、SDK、跨进程协议和运行时注册，未匹配项必须人工复核，禁止假定不存在影响。
 
-## 完成验收门禁
+原有 scan 仍输出 source-port-inventory.json、port-work-plan.json、PORT_WORK_PLAN.md；reachability 和 stubs 专项检查也保留，避免破坏已有工作路径。
 
-`docs/PORT_BASELINE.json` 冻结工作台上线时的 1,906 路径状态及其原版 SHA-256（首次生成后不得覆盖）。`docs/PORT_EVIDENCE.jsonl` 记录新的“已验收”升级证据，每行必须包括：
+## 固定闭环动作
 
-```json
-{"path":"src/example.ts","source_sha256":"原版 SHA256","rust_entrypoints":["src/agent.rs"],"test_names":["tests::behavior"],"tested_commit":"40位提交 SHA","failure_and_recovery_verified":true,"remaining_gaps":[]}
-```
+1. 检查用户最新需求、PR6 最新 HEAD、矩阵、已授权排除清单；对任何范围漂移先停止错误任务分派。
+2. 运行 dashboard + scan，优先找多个模块共用的缺口，再选取完整的用户功能链。确认原版函数、参数、状态、权限、异常、取消与恢复，不用生成的 AST 或名称相似度冒充等价。
+3. 对照原版实代码实现 Rust；从 CLI/TUI/SDK/Agent/MCP 等**仍保留的实际入口**调用到最终用户结果；清理重复状态与不可达代码。
+4. 验证正常、失败、权限拒绝、取消、并发、重启恢复以及跨平台的实际行为；保留可追溯测试与当前提交证据。
+5. 完整验收后才修改矩阵状态并更新 docs/PORT_EVIDENCE.jsonl；现存差异继续记为“部分实现”。运行 check、dashboard、影响分析和相关回归。
+6. 推送到 PR6 后以**该次 HEAD** 对应的 CI 为验证依据，不沿用之前提交的通过结果。继续完成剩余真实缺口。
 
-原路径新增标记“已验收”而无证据、存在未解决差异、Rust 入口文件缺失，或未经同意增加排除路径，`check` 将失败。**证明文件只负责防止明显虚报；录入文字本身不能替代代码级验收**。既有 29 个已验收项的历史证据仍需逐条复查，本工具不会替它们自动背书。
+校验命令：cargo fmt --all -- --check、cargo clippy --locked --all-targets -- -D clippy::correctness -D clippy::suspicious、cargo check --locked --all-targets、cargo test --locked --all-targets。CI 对工作台进行强制校验并保存最新报告。
 
-本地可独立运行 `check`；CI 中执行本命令及工作台测试，避免并行任务将台账破坏。源码树不进 CI，故源码静态全量核对在本地 `scan` 阶段完成，上传 GitHub 之前必须人工执行并检查。
+本工具不创建定时任务、不自动开启派生 Agent；提交/CI 触发工作台生成只属于一次已有构建，不代表后台任务持续运行。
 
-### 增量影响分析
+## 2026-10-31 双端等价验收器边界修复
 
-Git 提交中变更了一个公共 Rust 文件时，可以先执行：
-
-```sh
-python3 scripts/port_workbench.py impact --repo . \
-  --source "$ORIGINAL_ROOT" --output .port-workbench \
-  --changed src/agent.rs --changed src/tools.rs
-```
-
-`change-impact.json` 会列出该 Rust 文件负责的原路径及其依赖者的传递闭包，只复核受影响功能链。对动态加载、配置注入、跨进程协议和运行时注册保留人工复查，不能把静态依赖图视为完整覆盖。
+- 本轮只对原版与 Rust 双端实际输出的核验器增加输入类型检查：`executed_source_ids` 出现对象、数组或其它非字符串值时，明确记录此场景失败，不允许 Python `set()` 抛出异常导致整套验收过程提前中断。
+- 真实修复见 `scripts/runtime_parity_gate.py`，异常输入回归见 `tests/port_workbench/test_runtime_parity_gate.py::test_malformed_runtime_function_ids_fail_closed_without_crashing`。
+- 该修复保证台账执行器遇到畸形适配器数据仍能继续输出失败报告；不会将任何原版功能自行提升为“已验收”。原版路径统计仍以 `docs/FILE_PORT_MATRIX.md` 为唯一事实来源，最新提交的独立 CI 结果须另行验证。

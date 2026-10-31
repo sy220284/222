@@ -3,14 +3,8 @@
 //! positional values against the prompt's named argument metadata.
 use crate::slash_command;
 use anyhow::{bail, Context, Result};
-use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::{Map, Value};
-use std::{
-    fs::{self, OpenOptions},
-    io::Write,
-    path::Path,
-};
-use uuid::Uuid;
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invocation {
@@ -66,92 +60,6 @@ pub fn named_arguments(prompt: &Value, args: &str) -> Result<Map<String, Value>>
     }
     Ok(result)
 }
-/// The original MCP client persists audio and non-image resource blobs and
-/// returns a text block with the resulting file path. A random filename avoids
-/// trusting a server-controlled URI or name as a filesystem path.
-fn persist_mcp_blob(bytes: &[u8], mime: Option<&str>, workspace: &Path) -> Result<String> {
-    let root = workspace
-        .canonicalize()
-        .context("Cannot resolve MCP workspace")?;
-    let config_directory = root.join(".atlas");
-    fs::create_dir_all(&config_directory).context("Cannot create MCP workspace directory")?;
-    let config_directory = config_directory.canonicalize()?;
-    if !config_directory.starts_with(&root) {
-        bail!("MCP workspace directory escapes workspace");
-    }
-    let directory = config_directory.join("tool-results");
-    fs::create_dir_all(&directory).context("Cannot create MCP tool results directory")?;
-    let directory = directory.canonicalize()?;
-    if !directory.starts_with(&root) {
-        bail!("MCP tool results directory escapes workspace");
-    }
-    let mime = mime
-        .unwrap_or("")
-        .split(';')
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase();
-    let extension = match mime.as_str() {
-        "application/pdf" => "pdf",
-        "application/json" => "json",
-        "text/csv" => "csv",
-        "text/plain" => "txt",
-        "text/html" => "html",
-        "text/markdown" => "md",
-        "application/zip" => "zip",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "docx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "xlsx",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation" => "pptx",
-        "application/msword" => "doc",
-        "application/vnd.ms-excel" => "xls",
-        "audio/mpeg" => "mp3",
-        "audio/wav" => "wav",
-        "audio/ogg" => "ogg",
-        "video/mp4" => "mp4",
-        "video/webm" => "webm",
-        "image/svg+xml" => "svg",
-        _ => "bin",
-    };
-    let path = directory.join(format!("mcp-blob-{}.{}", Uuid::new_v4(), extension));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&path)?;
-    if let Err(error) = file.write_all(bytes).and_then(|_| file.sync_all()) {
-        drop(file);
-        let _ = fs::remove_file(&path);
-        return Err(error).context("Cannot persist MCP binary resource");
-    }
-    Ok(format!(
-        "Binary content ({}, {} bytes) saved to {}",
-        if mime.is_empty() {
-            "unknown type"
-        } else {
-            &mime
-        },
-        bytes.len(),
-        path.display()
-    ))
-}
-
-fn binary_result_text(data: &str, mime: Option<&str>, prefix: &str, workspace: &Path) -> String {
-    match STANDARD.decode(data) {
-        Ok(bytes) => match persist_mcp_blob(&bytes, mime, workspace) {
-            Ok(message) => format!("{prefix}{message}"),
-            Err(error) => format!(
-                "{prefix}Binary content ({}, {} bytes) could not be saved to disk: {error:#}",
-                mime.unwrap_or("unknown type"),
-                bytes.len()
-            ),
-        },
-        Err(error) => format!(
-            "{prefix}Binary content ({}) could not be decoded: {error}",
-            mime.unwrap_or("unknown type")
-        ),
-    }
-}
-
 pub fn render_response(server: &str, name: &str, result: &Value) -> Result<String> {
     let content = render_content(server, name, result)?;
     if content.blocks.is_some() {
@@ -203,111 +111,29 @@ pub fn render_content_in_workspace(
         text.push_str(&prefix);
         blocks.push(serde_json::json!({"type":"text","text":prefix}));
         for (index, part) in parts.iter().enumerate() {
-            match part.get("type").and_then(Value::as_str) {
-                Some("text") => {
-                    let value = part
-                        .get("text")
-                        .and_then(Value::as_str)
-                        .context("MCP prompt text block missing text")?;
-                    let line = if index > 0 {
-                        format!("\n{value}")
-                    } else {
-                        value.to_owned()
-                    };
-                    text.push_str(&line);
-                    blocks.push(serde_json::json!({"type":"text","text":line}));
-                }
-                Some("image") => {
-                    let mime = part
-                        .get("mimeType")
-                        .and_then(Value::as_str)
-                        .context("MCP image missing mimeType")?;
-                    let data = part
-                        .get("data")
-                        .and_then(Value::as_str)
-                        .context("MCP image missing data")?;
-                    blocks.push(serde_json::json!({"type":"image","source":{
-                        "type":"base64","media_type":mime,"data":data
-                    }}));
+            let rendered = crate::mcp_content::transform_block(part, server, workspace)?;
+            if index > 0 && rendered.first().is_some_and(|b| b["type"] == "text") {
+                text.push('\n');
+                blocks.push(serde_json::json!({"type":"text","text":"\n"}));
+            }
+            for block in rendered {
+                if block["type"] == "image" {
                     images = true;
-                    text.push_str(&format!("[image: {mime}]"));
-                }
-                Some("audio") => {
-                    let data = part
-                        .get("data")
-                        .and_then(Value::as_str)
-                        .context("MCP audio block missing data")?;
-                    let rendered = binary_result_text(
-                        data,
-                        part.get("mimeType").and_then(Value::as_str),
-                        &format!("[Audio from {server}] "),
-                        workspace,
-                    );
-                    text.push_str(&rendered);
-                    blocks.push(serde_json::json!({"type":"text","text":rendered}));
-                }
-                Some("resource") => {
-                    // Original client.ts::transformResultContent keeps text
-                    // embedded in a resource, and forwards image blobs as
-                    // images rather than dropping the prompt.
-                    let resource = part
-                        .get("resource")
-                        .context("MCP prompt resource missing resource")?;
-                    let uri = resource
-                        .get("uri")
-                        .and_then(Value::as_str)
-                        .context("MCP prompt resource missing uri")?;
-                    let prefix = format!("[Resource from {server} at {uri}] ");
-                    if let Some(value) = resource.get("text").and_then(Value::as_str) {
-                        let rendered = format!("{prefix}{value}");
-                        text.push_str(&rendered);
-                        blocks.push(serde_json::json!({"type":"text","text":rendered}));
-                    } else if let Some(data) = resource.get("blob").and_then(Value::as_str) {
-                        let mime = resource
-                            .get("mimeType")
+                    text.push_str(&format!(
+                        "[image: {}]",
+                        block
+                            .pointer("/source/media_type")
                             .and_then(Value::as_str)
-                            .unwrap_or("");
-                        if !matches!(
-                            mime,
-                            "image/png" | "image/jpeg" | "image/gif" | "image/webp"
-                        ) {
-                            let rendered = binary_result_text(data, Some(mime), &prefix, workspace);
-                            text.push_str(&rendered);
-                            blocks.push(serde_json::json!({"type":"text","text":rendered}));
-                        } else {
-                            text.push_str(&prefix);
-                            text.push_str(&format!("[image: {mime}]"));
-                            blocks.push(serde_json::json!({"type":"text","text":prefix}));
-                            blocks.push(serde_json::json!({"type":"image","source":{
-                                "type":"base64","media_type":mime,"data":data
-                            }}));
-                            images = true;
-                        }
-                    } else {
-                        bail!("MCP prompt resource has neither text nor blob");
-                    }
+                            .unwrap_or("unknown")
+                    ));
+                } else {
+                    text.push_str(
+                        block["text"]
+                            .as_str()
+                            .context("MCP transformed text missing text")?,
+                    );
                 }
-                Some("resource_link") => {
-                    // Keep the original MCP link name, URI and description
-                    // visible to the model as text; never fetch it implicitly.
-                    let name = part
-                        .get("name")
-                        .and_then(Value::as_str)
-                        .context("MCP resource link missing name")?;
-                    let uri = part
-                        .get("uri")
-                        .and_then(Value::as_str)
-                        .context("MCP resource link missing uri")?;
-                    let mut rendered = format!("[Resource link: {name}] {uri}");
-                    if let Some(description) = part.get("description").and_then(Value::as_str) {
-                        if !description.is_empty() {
-                            rendered.push_str(&format!(" ({description})"));
-                        }
-                    }
-                    text.push_str(&rendered);
-                    blocks.push(serde_json::json!({"type":"text","text":rendered}));
-                }
-                _ => bail!("Unsupported MCP prompt block type"),
+                blocks.push(block);
             }
         }
     }

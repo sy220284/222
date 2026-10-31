@@ -1,0 +1,21 @@
+{
+  "id": "slash-ordinary",
+  "kind": "normal",
+  "source_ids": [
+    "src/utils/slashCommandParsing.ts:FunctionDeclaration:25-60:occurrence-1"
+  ],
+  "input": {
+    "command": "/search foo bar"
+  },
+  "timeout_seconds": 15,
+  "original": [
+    "node",
+    "--no-warnings",
+    "--experimental-strip-types",
+    "{REPO}/tests/source_parity/adapters/original_slash.mjs",
+    "{ORIGINAL}/src/utils/slashCommandParsing.ts"
+  ],
+  "rust": [
+    "{REPO}/target/debug/parity_slash"
+  ]
+}

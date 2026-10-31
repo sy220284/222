@@ -1,0 +1,125 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/sandbox/sandbox-ui-utils.ts",
+  "source_sha256": "2584a6f6da855aa4e366a69186f414ed6eacf9a4edfa0f27c81901c22e423d7d",
+  "export": "removeSandboxViolationTags",
+  "cases": [
+    {
+      "id": "ordinary",
+      "kind": "normal",
+      "input": "before<sandbox_violations>deny</sandbox_violations>after",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "beforeafter"
+    },
+    {
+      "id": "empty",
+      "kind": "edge",
+      "input": "",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": ""
+    },
+    {
+      "id": "plain-text",
+      "kind": "edge",
+      "input": "nothing to remove",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "nothing to remove"
+    },
+    {
+      "id": "two-tags",
+      "kind": "edge",
+      "input": "a<sandbox_violations>x</sandbox_violations>b<sandbox_violations>y</sandbox_violations>c",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "abc"
+    },
+    {
+      "id": "multi-line",
+      "kind": "edge",
+      "input": "a<sandbox_violations>\nx\ny\n</sandbox_violations>b",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "ab"
+    },
+    {
+      "id": "empty-tag",
+      "kind": "edge",
+      "input": "<sandbox_violations></sandbox_violations>",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": ""
+    },
+    {
+      "id": "unclosed-tag",
+      "kind": "edge",
+      "input": "a<sandbox_violations>never-close",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "a<sandbox_violations>never-close"
+    },
+    {
+      "id": "nonmatching-case",
+      "kind": "edge",
+      "input": "<Sandbox_violations>x</Sandbox_violations>",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "<Sandbox_violations>x</Sandbox_violations>"
+    },
+    {
+      "id": "closing-only",
+      "kind": "edge",
+      "input": "a</sandbox_violations>b",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "a</sandbox_violations>b"
+    },
+    {
+      "id": "nested-tags",
+      "kind": "edge",
+      "input": "<sandbox_violations>one<sandbox_violations>two</sandbox_violations>rest</sandbox_violations>",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "rest</sandbox_violations>"
+    },
+    {
+      "id": "attribute-tag",
+      "kind": "edge",
+      "input": "<sandbox_violations type=\"x\">bad</sandbox_violations>",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "<sandbox_violations type=\"x\">bad</sandbox_violations>"
+    },
+    {
+      "id": "unicode",
+      "kind": "edge",
+      "input": "你<sandbox_violations>错误😀</sandbox_violations>好",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "你好"
+    },
+    {
+      "id": "carriage-return",
+      "kind": "edge",
+      "input": "a<sandbox_violations>one\r\ntwo</sandbox_violations>c",
+      "source_ids": [
+        "src/utils/sandbox/sandbox-ui-utils.ts:FunctionDeclaration:10-12:occurrence-1"
+      ],
+      "expected": "ac"
+    }
+  ]
+}

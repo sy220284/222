@@ -105,7 +105,7 @@ pub async fn refresh(home: &Path, url: &str) -> Result<bool> {
     if !matches!(url.scheme(), "http" | "https") {
         anyhow::bail!("Changelog URL must use HTTP(S)");
     }
-    let client = reqwest::Client::builder()
+    let client = crate::tls_ca::client_builder()?
         .timeout(Duration::from_millis(500))
         .build()?;
     let response = client.get(url).send().await?.error_for_status()?;

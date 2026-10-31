@@ -1,0 +1,841 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/set.ts",
+  "source_sha256": "48254261d9b64b8845b462cf2dfe1374538ee1e551fad4cacc34fb0b0e305544",
+  "cases": [
+    {
+      "id": "difference-0",
+      "kind": "normal",
+      "export": "difference",
+      "input": {
+        "a": [
+          3,
+          1,
+          2
+        ],
+        "b": [
+          2,
+          4,
+          3
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": [
+        1
+      ]
+    },
+    {
+      "id": "difference-1",
+      "kind": "edge",
+      "export": "difference",
+      "input": {
+        "a": [],
+        "b": []
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": []
+    },
+    {
+      "id": "difference-2",
+      "kind": "edge",
+      "export": "difference",
+      "input": {
+        "a": [
+          1,
+          2,
+          3
+        ],
+        "b": []
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "difference-3",
+      "kind": "edge",
+      "export": "difference",
+      "input": {
+        "a": [],
+        "b": [
+          4,
+          5
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": []
+    },
+    {
+      "id": "difference-4",
+      "kind": "edge",
+      "export": "difference",
+      "input": {
+        "a": [
+          1,
+          1,
+          2,
+          2
+        ],
+        "b": [
+          2,
+          2,
+          3
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": [
+        1
+      ]
+    },
+    {
+      "id": "difference-5",
+      "kind": "edge",
+      "export": "difference",
+      "input": {
+        "a": [
+          0,
+          -1,
+          7
+        ],
+        "b": [
+          -1,
+          0,
+          9
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": [
+        7
+      ]
+    },
+    {
+      "id": "difference-6",
+      "kind": "edge",
+      "export": "difference",
+      "input": {
+        "a": [
+          "apple",
+          "banana",
+          "apple"
+        ],
+        "b": [
+          "banana",
+          "cherry"
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": [
+        "apple"
+      ]
+    },
+    {
+      "id": "difference-7",
+      "kind": "edge",
+      "export": "difference",
+      "input": {
+        "a": [
+          null,
+          true,
+          false
+        ],
+        "b": [
+          true,
+          0
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": [
+        null,
+        false
+      ]
+    },
+    {
+      "id": "difference-8",
+      "kind": "edge",
+      "export": "difference",
+      "input": {
+        "a": [
+          "1",
+          1,
+          "2"
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": [
+        "1",
+        "2"
+      ]
+    },
+    {
+      "id": "difference-9",
+      "kind": "edge",
+      "export": "difference",
+      "input": {
+        "a": [
+          11,
+          10,
+          9,
+          8
+        ],
+        "b": [
+          7,
+          6,
+          5
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"
+      ],
+      "expected": [
+        11,
+        10,
+        9,
+        8
+      ]
+    },
+    {
+      "id": "intersects-0",
+      "kind": "normal",
+      "export": "intersects",
+      "input": {
+        "a": [
+          3,
+          1,
+          2
+        ],
+        "b": [
+          2,
+          4,
+          3
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "intersects-1",
+      "kind": "edge",
+      "export": "intersects",
+      "input": {
+        "a": [],
+        "b": []
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "intersects-2",
+      "kind": "edge",
+      "export": "intersects",
+      "input": {
+        "a": [
+          1,
+          2,
+          3
+        ],
+        "b": []
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "intersects-3",
+      "kind": "edge",
+      "export": "intersects",
+      "input": {
+        "a": [],
+        "b": [
+          4,
+          5
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "intersects-4",
+      "kind": "edge",
+      "export": "intersects",
+      "input": {
+        "a": [
+          1,
+          1,
+          2,
+          2
+        ],
+        "b": [
+          2,
+          2,
+          3
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "intersects-5",
+      "kind": "edge",
+      "export": "intersects",
+      "input": {
+        "a": [
+          0,
+          -1,
+          7
+        ],
+        "b": [
+          -1,
+          0,
+          9
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "intersects-6",
+      "kind": "edge",
+      "export": "intersects",
+      "input": {
+        "a": [
+          "apple",
+          "banana",
+          "apple"
+        ],
+        "b": [
+          "banana",
+          "cherry"
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "intersects-7",
+      "kind": "edge",
+      "export": "intersects",
+      "input": {
+        "a": [
+          null,
+          true,
+          false
+        ],
+        "b": [
+          true,
+          0
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "intersects-8",
+      "kind": "edge",
+      "export": "intersects",
+      "input": {
+        "a": [
+          "1",
+          1,
+          "2"
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "intersects-9",
+      "kind": "edge",
+      "export": "intersects",
+      "input": {
+        "a": [
+          11,
+          10,
+          9,
+          8
+        ],
+        "b": [
+          7,
+          6,
+          5
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "every-0",
+      "kind": "normal",
+      "export": "every",
+      "input": {
+        "a": [
+          3,
+          1,
+          2
+        ],
+        "b": [
+          2,
+          4,
+          3
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "every-1",
+      "kind": "edge",
+      "export": "every",
+      "input": {
+        "a": [],
+        "b": []
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "every-2",
+      "kind": "edge",
+      "export": "every",
+      "input": {
+        "a": [
+          1,
+          2,
+          3
+        ],
+        "b": []
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "every-3",
+      "kind": "edge",
+      "export": "every",
+      "input": {
+        "a": [],
+        "b": [
+          4,
+          5
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "every-4",
+      "kind": "edge",
+      "export": "every",
+      "input": {
+        "a": [
+          1,
+          1,
+          2,
+          2
+        ],
+        "b": [
+          2,
+          2,
+          3
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "every-5",
+      "kind": "edge",
+      "export": "every",
+      "input": {
+        "a": [
+          0,
+          -1,
+          7
+        ],
+        "b": [
+          -1,
+          0,
+          9
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "every-6",
+      "kind": "edge",
+      "export": "every",
+      "input": {
+        "a": [
+          "apple",
+          "banana",
+          "apple"
+        ],
+        "b": [
+          "banana",
+          "cherry"
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "every-7",
+      "kind": "edge",
+      "export": "every",
+      "input": {
+        "a": [
+          null,
+          true,
+          false
+        ],
+        "b": [
+          true,
+          0
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "every-8",
+      "kind": "edge",
+      "export": "every",
+      "input": {
+        "a": [
+          "1",
+          1,
+          "2"
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "every-9",
+      "kind": "edge",
+      "export": "every",
+      "input": {
+        "a": [
+          11,
+          10,
+          9,
+          8
+        ],
+        "b": [
+          7,
+          6,
+          5
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "union-0",
+      "kind": "normal",
+      "export": "union",
+      "input": {
+        "a": [
+          3,
+          1,
+          2
+        ],
+        "b": [
+          2,
+          4,
+          3
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": [
+        3,
+        1,
+        2,
+        4
+      ]
+    },
+    {
+      "id": "union-1",
+      "kind": "edge",
+      "export": "union",
+      "input": {
+        "a": [],
+        "b": []
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": []
+    },
+    {
+      "id": "union-2",
+      "kind": "edge",
+      "export": "union",
+      "input": {
+        "a": [
+          1,
+          2,
+          3
+        ],
+        "b": []
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "union-3",
+      "kind": "edge",
+      "export": "union",
+      "input": {
+        "a": [],
+        "b": [
+          4,
+          5
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": [
+        4,
+        5
+      ]
+    },
+    {
+      "id": "union-4",
+      "kind": "edge",
+      "export": "union",
+      "input": {
+        "a": [
+          1,
+          1,
+          2,
+          2
+        ],
+        "b": [
+          2,
+          2,
+          3
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": "union-5",
+      "kind": "edge",
+      "export": "union",
+      "input": {
+        "a": [
+          0,
+          -1,
+          7
+        ],
+        "b": [
+          -1,
+          0,
+          9
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": [
+        0,
+        -1,
+        7,
+        9
+      ]
+    },
+    {
+      "id": "union-6",
+      "kind": "edge",
+      "export": "union",
+      "input": {
+        "a": [
+          "apple",
+          "banana",
+          "apple"
+        ],
+        "b": [
+          "banana",
+          "cherry"
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": [
+        "apple",
+        "banana",
+        "cherry"
+      ]
+    },
+    {
+      "id": "union-7",
+      "kind": "edge",
+      "export": "union",
+      "input": {
+        "a": [
+          null,
+          true,
+          false
+        ],
+        "b": [
+          true,
+          0
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": [
+        null,
+        true,
+        false,
+        0
+      ]
+    },
+    {
+      "id": "union-8",
+      "kind": "edge",
+      "export": "union",
+      "input": {
+        "a": [
+          "1",
+          1,
+          "2"
+        ],
+        "b": [
+          1,
+          2
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": [
+        "1",
+        1,
+        "2",
+        2
+      ]
+    },
+    {
+      "id": "union-9",
+      "kind": "edge",
+      "export": "union",
+      "input": {
+        "a": [
+          11,
+          10,
+          9,
+          8
+        ],
+        "b": [
+          7,
+          6,
+          5
+        ]
+      },
+      "source_ids": [
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"
+      ],
+      "expected": [
+        11,
+        10,
+        9,
+        8,
+        7,
+        6,
+        5
+      ]
+    }
+  ]
+}

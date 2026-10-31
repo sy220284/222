@@ -1,0 +1,198 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/messagePredicates.ts",
+  "source_sha256": "6f563bc7a5118cd3e5beb07c2249daa1b9378470c04818f4b8086e6d450bc44a",
+  "export": "isHumanTurn",
+  "cases": [
+    {
+      "id": "plain-human",
+      "kind": "normal",
+      "input": {
+        "type": "user",
+        "content": "hi"
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "assistant",
+      "kind": "edge",
+      "input": {
+        "type": "assistant"
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "tool-result",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "toolUseResult": {
+          "foo": 1
+        }
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "null-tool-result",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "toolUseResult": null
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "false-tool-result",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "toolUseResult": false
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "meta-true",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "isMeta": true
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "meta-false",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "isMeta": false
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "meta-empty-array",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "isMeta": []
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "meta-empty-object",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "isMeta": {}
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "meta-empty-string",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "isMeta": ""
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "meta-nonempty-string",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "isMeta": "false"
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "meta-zero",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "isMeta": 0
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "meta-one",
+      "kind": "edge",
+      "input": {
+        "type": "user",
+        "isMeta": 1
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "type-uppercase",
+      "kind": "edge",
+      "input": {
+        "type": "USER"
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "type-absent",
+      "kind": "edge",
+      "input": {
+        "content": "x"
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    },
+    {
+      "id": "type-null",
+      "kind": "edge",
+      "input": {
+        "type": null
+      },
+      "source_ids": [
+        "src/utils/messagePredicates.ts:FunctionDeclaration:6-8:occurrence-1"
+      ],
+      "expected": false
+    }
+  ]
+}

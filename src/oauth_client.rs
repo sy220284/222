@@ -128,7 +128,7 @@ impl OAuthProvider {
     }
 
     fn http_client() -> Result<Client> {
-        Ok(Client::builder()
+        Ok(crate::tls_ca::client_builder()?
             .timeout(Duration::from_secs(15))
             .redirect(reqwest::redirect::Policy::none())
             .build()?)
