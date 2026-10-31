@@ -1160,12 +1160,12 @@ pub const SOURCE_GREP_DESCRIPTION: &str = r#"A powerful search tool built on rip
 pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"glob_files",
-            "description":SOURCE_GLOB_DESCRIPTION,
+            "description":crate::source_prompt_catalog::glob_description(),
             "parameters":{"type":"object","properties":{
                 "pattern":{"type":"string"},"path":{"type":"string"}
             },"required":["pattern"]}}}),
         json!({"type":"function","function":{"name":"grep_files",
-            "description":SOURCE_GREP_DESCRIPTION,
+            "description":crate::source_prompt_catalog::grep_description(),
             "parameters":{"type":"object","properties":{
                 "pattern":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"},
                 "type":{"type":"string"},"output_mode":{"type":"string","enum":["content","files_with_matches","count"]},
