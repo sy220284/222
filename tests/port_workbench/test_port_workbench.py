@@ -11,7 +11,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from port_workbench import (AuditError, affected_source_paths, check_evidence, collect, label_status,
                             read_matrix, report, resolve_import, verify_counts, current_counts, detect_generated_stubs,
-                            generated_runtime_reachability, verify_github_test_evidence, github_json, main)
+                            generated_runtime_reachability, verify_github_test_evidence, github_json, main,
+                            build_dashboard, write_dashboard, git_changed_files)
 
 
 class WorkbenchTests(unittest.TestCase):
@@ -326,6 +327,88 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(resolve_import('src/components/x/a.ts','../../lib.js',{'src/lib.ts'}),'src/lib.ts')
         self.assertIsNone(resolve_import('src/a.ts','../../../evil',{'evil.ts'}))
         self.assertEqual(resolve_import('src/main.ts','./dir',{'src/dir/index.tsx'}),'src/dir/index.tsx')
+
+
+    def test_dashboard_uses_matrix_scope_and_marks_unverified_behavior(self):
+        self.baseline()
+        report = build_dashboard(self.repo, read_matrix(self.repo), strict=False)
+        self.assertEqual(report['scope']['total'], 2)
+        self.assertEqual(report['scope']['eligible'], 2)
+        self.assertEqual(report['scope']['remaining'], 2)
+        self.assertEqual(report['scope']['accepted'], 0)
+        self.assertEqual(len(report['chains']), 2)
+        self.assertEqual(report['work_queue'][0], 'src/cli.ts')
+        by_path = {item['source_path']: item for item in report['chains']}
+        self.assertTrue(by_path['src/cli.ts']['mapping_missing'])
+        self.assertEqual(by_path['src/lib.ts']['rust_present'], ['src/main.rs'])
+        self.assertEqual(by_path['src/lib.ts']['evidence'], 'not_yet_verified')
+        self.assertEqual(by_path['src/lib.ts']['runtime_behavior'],
+                         'requires_real_entrypoint_test')
+        self.assertFalse(report['provenance']['behavior_parity_verified_by_dashboard'])
+
+    def test_dashboard_with_source_checks_hash_and_transitive_impact(self):
+        self.baseline()
+        report = build_dashboard(self.repo, read_matrix(self.repo), source=self.src,
+                                 changed_files=['src/main.rs', 'docs/readme.md'],
+                                 strict=False)
+        impact = report['impact']
+        self.assertEqual(impact['analysis'], 'source_import_closure')
+        self.assertEqual(impact['direct_source_paths'], ['src/lib.ts'])
+        self.assertEqual(impact['impacted_source_paths'], ['src/cli.ts', 'src/lib.ts'])
+        self.assertEqual(impact['nonexcluded_needs_recheck'], ['src/cli.ts', 'src/lib.ts'])
+        self.assertEqual(impact['unmatched'], ['docs/readme.md'])
+        self.assertTrue(impact['unmatched_require_manual_review'])
+        self.assertEqual(report['chains'][0]['source_dependencies'], ['src/lib.ts'])
+        (self.src / 'src/lib.ts').write_text(self.source2.replace('return 1', 'return 2'))
+        with self.assertRaisesRegex(AuditError, '哈希与冻结基线不一致'):
+            build_dashboard(self.repo, read_matrix(self.repo), source=self.src,
+                            strict=False)
+
+    def test_dashboard_direct_only_impact_does_not_claim_dependency_closure(self):
+        self.baseline()
+        result = build_dashboard(self.repo, read_matrix(self.repo),
+                                 changed_files=['src/main.rs'], strict=False)
+        self.assertEqual(result['impact']['analysis'],
+                         'direct_mapping_only_no_source_dependency_graph')
+        self.assertEqual(result['impact']['impacted_source_paths'], ['src/lib.ts'])
+        self.assertNotIn('src/cli.ts', result['impact']['impacted_source_paths'])
+
+    def test_dashboard_requires_approved_exclusions_and_real_rust_targets(self):
+        self.baseline()
+        (self.repo / 'src/main.rs').unlink()
+        result = build_dashboard(self.repo, read_matrix(self.repo), strict=False)
+        self.assertEqual(result['chains'][1]['rust_missing'], ['src/main.rs'])
+        self.assertEqual(result['domain_summary'][0]['missing_rust'], 1)
+        self.write_matrix(status1='按用户要求删除')
+        with self.assertRaisesRegex(AuditError, '新增排除项'):
+            build_dashboard(self.repo, read_matrix(self.repo), strict=False)
+
+    def test_dashboard_cli_emits_json_and_markdown_without_fabricating_tests(self):
+        self.baseline()
+        output = Path(self.tmp.name) / 'dashboard'
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            self.assertEqual(main(['dashboard', '--repo', str(self.repo),
+                                   '--output', str(output), '--allow-fixture']), 0)
+        snapshot = json.loads((output / 'PORT_DASHBOARD.json').read_text())
+        markdown = (output / 'PORT_DASHBOARD.md').read_text()
+        self.assertEqual(snapshot['scope']['remaining'], 2)
+        self.assertIn('待闭环优先项', markdown)
+        self.assertIn('src/lib.ts', markdown)
+        self.assertEqual(snapshot['chains'][1]['test_names'], [])
+        self.assertEqual(json.loads(stdout.getvalue())['scope']['eligible'], 2)
+
+    def test_changed_from_git_does_not_silently_ignore_diff_failures(self):
+        with mock.patch('port_workbench.subprocess.run') as run:
+            run.return_value = mock.Mock(returncode=0,
+                                         stdout='src/main.rs\nsrc/main.rs\n',
+                                         stderr='')
+            self.assertEqual(git_changed_files(self.repo), ['src/main.rs'])
+            run.return_value = mock.Mock(returncode=128, stdout='',
+                                         stderr='unknown revision HEAD^')
+            with self.assertRaisesRegex(AuditError, 'HEAD'):
+                git_changed_files(self.repo)
+
 
 
 if __name__ == '__main__':
