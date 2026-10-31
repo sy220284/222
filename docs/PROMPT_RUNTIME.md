@@ -28,7 +28,7 @@
 | `src/utils/messages.ts` 与新版来源区分 | 主提示词、`sdk_queue::notification_model_context`、SDK 事件结构 | 后台任务通知作为低信任状态数据接入；其余来源标记/调度权限仍需补齐 |
 | `src/constants/prompts.ts` MCP 指令 | `McpManager::instruction_context`、`Agent::ask_with_blocks` | 已修复同一用户轮次内动态重连/禁用后的旧说明滞留；新增重连/撤销回归测试。原版全部动态来源与策略仍待完整验收 |
 | 原版自动模式权限分类器与外部规则模板 | `permission_rules.rs`、`permission_mode.rs` | 静态权限规则运行；模型分类器缺失，Auto 模式保持拒绝，防止误授权 |
-| Dream、旁路 Observer、即时提示、Artifact 评论 | 对应功能尚未实现 | 不将未调用的提示词文本冒充运行功能 |
+| Dream、旁路 Observer、即时提示、Artifact 评论 | `src/memory_extraction.rs::dream_if_due` 和既有源码迁移模块 | 本地 Dream 已有显式启用后的真实 Stop 门控与模型请求；Observer、即时提示、Artifact 评论仍未接通 |
 
 ## 验收规则
 
@@ -66,3 +66,10 @@
 - 开关：仅显式设置 `ATLAS_AUTO_MEMORY_EXTRACTION=true` 时运行，默认关闭；不会启动定时任务、派生子 Agent 或远程服务。调用失败只影响可选提取，保留主回答与原游标。
 - 约束：全量检查模型产出的所有文件名/类型/长度，拒绝目录逃逸、符号链接、重复文件名和索引预算溢出；每轮至多四条。文件采用临时文件并原子替换。
 - 剩余源码差异：原版复用主 Agent 提示词缓存的 forked agent、多轮工具隔离、团队共享记忆、停止钩子后台通知及 Dream 尚未完整对齐，本条只标记部分实现。
+
+## 2026-10-31：Dream 本地整理链（显式开启）
+
+- 原版依据：`services/autoDream/autoDream.ts` 的触发顺序为时间门 → 最近会话数门 → 独占锁 → 记忆整理；默认要求距上次整理至少24小时、至少五个其他会话更新。
+- Rust 运行：`ATLAS_AUTO_DREAM=true` 时，主 Agent 完成一次真实回答后检查本地 `.atlas/sessions` 与 `.atlas/memory/.dream-consolidated`，满足门限后尝试独占锁，向当前 API 模型提交既有记忆和五个近期会话摘录，模型仅返回数据，写入沿用记忆提取的路径与类型校验、原子文件保存。成功才更新时间戳；失败保持可重试。没有新增系统定时任务或独立 Agent。
+- 验证用例：不足五会话不调用模型；达到五会话后运行并刷新时间门；同一天重复调用被抑制；异常 JSON 不推进时间门。
+- 源码差异：原版 forked-agent、工具沙箱、实时状态/取消、共享团队记忆、完整四阶段提示词中的日志检索与删除策略仍需等价；两条原未迁移源路径维持「部分实现」，尚未标记完整验收。
