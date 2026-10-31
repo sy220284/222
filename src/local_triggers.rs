@@ -2,7 +2,12 @@
 //! No remote worker, background process, cloud schedule or implicit execution.
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, io::Write, path::{Path, PathBuf}};
+use std::{
+    collections::BTreeMap,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 use uuid::Uuid;
 
 const MAX_TRIGGERS: usize = 128;
@@ -16,8 +21,11 @@ pub struct Trigger {
 type Store = BTreeMap<String, Trigger>;
 
 fn check_name(name: &str) -> Result<()> {
-    if name.is_empty() || name.len() > 64
-        || !name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+    if name.is_empty()
+        || name.len() > 64
+        || !name
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
     {
         bail!("Trigger name must be 1-64 ASCII letters, numbers, hyphens or underscores");
     }
@@ -30,14 +38,19 @@ fn store_path(root: &Path) -> PathBuf {
 
 fn load(root: &Path) -> Result<Store> {
     let path = store_path(root);
-    if !path.exists() { return Ok(BTreeMap::new()); }
+    if !path.exists() {
+        return Ok(BTreeMap::new());
+    }
     let meta = fs::metadata(&path).context("Cannot inspect trigger store")?;
     if meta.len() > (MAX_TRIGGERS * MAX_PROMPT_BYTES) as u64 {
         bail!("Local trigger store exceeds the accepted size limit");
     }
     let bytes = fs::read(&path).context("Cannot read trigger store")?;
-    let entries: Store = serde_json::from_slice(&bytes).context("Local trigger store is corrupted")?;
-    if entries.len() > MAX_TRIGGERS { bail!("Too many local triggers"); }
+    let entries: Store =
+        serde_json::from_slice(&bytes).context("Local trigger store is corrupted")?;
+    if entries.len() > MAX_TRIGGERS {
+        bail!("Too many local triggers");
+    }
     for (name, record) in &entries {
         check_name(name)?;
         if record.prompt.trim().is_empty() || record.prompt.len() > MAX_PROMPT_BYTES {
@@ -67,7 +80,9 @@ fn update(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> Result<
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let _lock_file = options.open(&lock_path).context("Another trigger update is running")?;
+    let _lock_file = options
+        .open(&lock_path)
+        .context("Another trigger update is running")?;
     let _lock = Lock(lock_path);
     let mut entries = load(root)?;
     change(&mut entries)?;
@@ -82,13 +97,17 @@ fn update(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> Result<
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options.open(&temp).context("Cannot create temporary trigger store")?;
+        let mut file = options
+            .open(&temp)
+            .context("Cannot create temporary trigger store")?;
         file.write_all(&bytes)?;
         file.sync_all()?;
         fs::rename(&temp, &path).context("Cannot atomically replace trigger store")?;
         Ok(())
     })();
-    if result.is_err() { let _ = fs::remove_file(&temp); }
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
     result
 }
 
@@ -102,7 +121,12 @@ pub fn set(root: &Path, name: &str, prompt: &str) -> Result<()> {
         if !entries.contains_key(name) && entries.len() >= MAX_TRIGGERS {
             bail!("Local trigger limit reached");
         }
-        entries.insert(name.to_owned(), Trigger { prompt: prompt.to_owned() });
+        entries.insert(
+            name.to_owned(),
+            Trigger {
+                prompt: prompt.to_owned(),
+            },
+        );
         Ok(())
     })
 }
@@ -110,14 +134,18 @@ pub fn set(root: &Path, name: &str, prompt: &str) -> Result<()> {
 pub fn delete(root: &Path, name: &str) -> Result<()> {
     check_name(name)?;
     update(root, |entries| {
-        if entries.remove(name).is_none() { bail!("No local trigger named {name}"); }
+        if entries.remove(name).is_none() {
+            bail!("No local trigger named {name}");
+        }
         Ok(())
     })
 }
 
 pub fn get(root: &Path, name: &str) -> Result<String> {
     check_name(name)?;
-    load(root)?.get(name).map(|v| v.prompt.clone())
+    load(root)?
+        .get(name)
+        .map(|v| v.prompt.clone())
         .with_context(|| format!("No local trigger named {name}"))
 }
 
@@ -134,7 +162,9 @@ mod tests {
         set(root.path(), "review_ci", "检查 CI 失败").unwrap();
         set(root.path(), "review_ci", "使用已配置模型检查 Git 变更").unwrap();
         assert_eq!(list(root.path()).unwrap(), vec!["review_ci"]);
-        assert!(get(root.path(), "review_ci").unwrap().contains("已配置模型"));
+        assert!(get(root.path(), "review_ci")
+            .unwrap()
+            .contains("已配置模型"));
         delete(root.path(), "review_ci").unwrap();
         assert!(get(root.path(), "review_ci").is_err());
         assert!(list(root.path()).unwrap().is_empty());

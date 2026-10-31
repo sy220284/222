@@ -43,7 +43,6 @@ mod git_filesystem;
 mod git_ignore;
 mod git_workflows;
 
-mod local_triggers;
 mod github_repo_mapping;
 mod history;
 mod hooks;
@@ -54,6 +53,7 @@ mod json_runtime;
 mod keybindings;
 mod local_advanced_workflows;
 mod local_attachments;
+mod local_triggers;
 mod lsp;
 mod marketplace_registry;
 mod marketplace_source;
@@ -1274,7 +1274,9 @@ async fn run_cli() -> Result<()> {
                 return Ok(());
             }
             LocalTriggerAction::List => {
-                for name in local_triggers::list(&workspace)? { println!("{name}"); }
+                for name in local_triggers::list(&workspace)? {
+                    println!("{name}");
+                }
                 return Ok(());
             }
             LocalTriggerAction::Delete { name } => {
@@ -1402,11 +1404,15 @@ async fn run_cli() -> Result<()> {
             agent.set_sdk_permission_mode("plan")?;
             agent.ask(&prompt).await.map(|answer| println!("{answer}"))
         }
-        Commands::Trigger { action: LocalTriggerAction::Run { name } } => {
+        Commands::Trigger {
+            action: LocalTriggerAction::Run { name },
+        } => {
             let prompt = local_triggers::get(agent.workspace_root(), name)?;
             agent.ask(&prompt).await.map(|answer| println!("{answer}"))
         }
-        Commands::Trigger { .. } => unreachable!("Local trigger management is handled before model creation"),
+        Commands::Trigger { .. } => {
+            unreachable!("Local trigger management is handled before model creation")
+        }
         Commands::Commit { instructions } => {
             let prompt = git_workflows::prompt(
                 git_workflows::Action::Commit,
@@ -2952,33 +2958,29 @@ async fn chat(
             let name = parts.next().unwrap_or("").trim();
             let tail = parts.next().unwrap_or("").trim();
             match action {
-                "list" if name.is_empty() => {
-                    match local_triggers::list(agent.workspace_root()) {
-                        Ok(names) => { for name in names { println!("{name}"); } }
-                        Err(error) => eprintln!("Cannot list triggers: {error:#}"),
+                "list" if name.is_empty() => match local_triggers::list(agent.workspace_root()) {
+                    Ok(names) => {
+                        for name in names {
+                            println!("{name}");
+                        }
                     }
-                }
-                "set" => {
-                    match local_triggers::set(agent.workspace_root(), name, tail) {
-                        Ok(()) => println!("Saved local trigger: {name}"),
-                        Err(error) => eprintln!("Cannot save trigger: {error:#}"),
-                    }
-                }
-                "delete" => {
-                    match local_triggers::delete(agent.workspace_root(), name) {
-                        Ok(()) => println!("Deleted local trigger: {name}"),
-                        Err(error) => eprintln!("Cannot delete trigger: {error:#}"),
-                    }
-                }
-                "run" => {
-                    match local_triggers::get(agent.workspace_root(), name) {
-                        Ok(prompt) => match agent.ask(&prompt).await {
-                            Ok(answer) => println!("{answer}"),
-                            Err(error) => eprintln!("Trigger failed: {error:#}"),
-                        },
-                        Err(error) => eprintln!("Cannot run trigger: {error:#}"),
-                    }
-                }
+                    Err(error) => eprintln!("Cannot list triggers: {error:#}"),
+                },
+                "set" => match local_triggers::set(agent.workspace_root(), name, tail) {
+                    Ok(()) => println!("Saved local trigger: {name}"),
+                    Err(error) => eprintln!("Cannot save trigger: {error:#}"),
+                },
+                "delete" => match local_triggers::delete(agent.workspace_root(), name) {
+                    Ok(()) => println!("Deleted local trigger: {name}"),
+                    Err(error) => eprintln!("Cannot delete trigger: {error:#}"),
+                },
+                "run" => match local_triggers::get(agent.workspace_root(), name) {
+                    Ok(prompt) => match agent.ask(&prompt).await {
+                        Ok(answer) => println!("{answer}"),
+                        Err(error) => eprintln!("Trigger failed: {error:#}"),
+                    },
+                    Err(error) => eprintln!("Cannot run trigger: {error:#}"),
+                },
                 _ => eprintln!("Usage: /trigger set NAME GOAL | run NAME | list | delete NAME"),
             }
             continue;
