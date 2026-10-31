@@ -205,6 +205,8 @@ pub fn read_text_line_window(
 ) -> io::Result<TextLineWindow> {
     let file = fs::File::open(path)?;
     let mut reader = io::BufReader::new(file);
+    // Original readFileInRange strips the UTF-8 BOM before computing totalBytes.
+    let has_bom = reader.fill_buf()?.starts_with(&[0xef, 0xbb, 0xbf]);
     let end = start.saturating_add(count);
     let mut formatted = String::new();
     let mut selected_bytes = Vec::new();
@@ -260,7 +262,7 @@ pub fn read_text_line_window(
         formatted,
         selected_lines,
         total_lines: line_number,
-        total_bytes,
+        total_bytes: total_bytes.saturating_sub(if has_bom { 3 } else { 0 }),
         read_bytes,
     })
 }
@@ -391,7 +393,7 @@ mod tests {
         assert_eq!(end.formatted, "2: 你好\n3: ");
         assert_eq!(end.selected_lines, 2);
         assert_eq!(end.read_bytes, "你好\n".len());
-        assert_eq!(end.total_bytes, fs::metadata(&path).unwrap().len());
+        assert_eq!(end.total_bytes, fs::metadata(&path).unwrap().len() - 3);
         assert_eq!(
             read_text_line_window(&path, 5, 2).unwrap().selected_lines,
             0
