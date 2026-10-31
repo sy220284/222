@@ -135,7 +135,6 @@ pub fn commands() -> &'static [CommandDefinition] {
                     "ultraplan" => "src/commands/ultraplan.tsx".to_owned(),
                     "ultrareview" => "src/commands/review/ultrareviewCommand.tsx".to_owned(),
                     "trigger" => "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts".to_owned(),
-                    "pr_comments" => "src/commands/review.ts".to_owned(),
                     _ => format!(
                         "src/commands/{actual_dir}/index.{}",
                         if disabled {
@@ -251,7 +250,7 @@ mod tests {
             ("ultraplan", "src/commands/ultraplan.tsx"),
             ("ultrareview", "src/commands/review/ultrareviewCommand.tsx"),
             ("trigger", "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts"),
-            ("pr-comments", "src/commands/review.ts"),
+            ("pr-comments", "src/commands/pr_comments/index.ts"),
         ];
         for (name, path) in examples {
             assert_eq!(lookup(name).expect("registered command").source, path);
