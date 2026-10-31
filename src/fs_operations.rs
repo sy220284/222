@@ -379,7 +379,6 @@ impl Iterator for ReverseLines {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(unix)]
     #[test]
     fn line_window_matches_source_crlf_bom_unicode_and_terminal_empty_line() {
         let folder = tempfile::tempdir().unwrap();
@@ -411,6 +410,7 @@ mod tests {
         assert_eq!(result.total_lines, 3);
     }
 
+    #[cfg(unix)]
     #[test]
     fn permission_paths_include_each_link_and_uncreated_destination() {
         use std::os::unix::fs::symlink;
