@@ -31,10 +31,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          python3 scripts/port_workbench.py check --repo .
-          python3 scripts/port_workbench.py reachability --repo . --output .port-audit
-          python3 scripts/port_workbench.py dashboard --repo . --output .port-audit --changed-from-git
-          python3 scripts/sync_spec_progress_summary.py --repo .
+          python3 scripts/source_parity_gate.py check --repo .
+          python3 scripts/source_parity_gate.py reachability --repo . --output .port-audit
+          python3 scripts/source_parity_gate.py dashboard --repo . --output .port-audit --changed-from-git
+          python3 scripts/source_parity_gate.py sync-spec --repo .
           python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
       - name: 保存迁移工作台报告和本次改动复验范围
         uses: actions/upload-artifact@v4
