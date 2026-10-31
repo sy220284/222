@@ -280,15 +280,21 @@ impl Queue {
         removed
     }
     pub fn remove_identity(&mut self, identities: &[u64]) -> usize {
+        if identities.is_empty() {
+            return 0;
+        }
         let before = self.items.len();
         self.items
             .retain(|item| !identities.contains(&item.identity));
         let removed = before - self.items.len();
         if removed > 0 {
             self.notify();
-            for _ in 0..removed {
-                self.record("remove", None)
-            }
+        }
+        // Original messageQueueManager.ts::remove logs one operation per
+        // identity requested, including already-removed and duplicate
+        // references. An unchanged queue must not notify subscribers.
+        for _ in identities {
+            self.record("remove", None);
         }
         removed
     }
@@ -515,6 +521,40 @@ mod tests {
         assert!(!q.snapshot()[1].command.is_editable());
         assert!(q.pop_all_editable("", 0).is_none());
     }
+    #[test]
+    fn removing_by_identity_records_original_request_count_without_false_mutations() {
+        let temp = tempfile::tempdir().unwrap();
+        let session = uuid::Uuid::new_v4().to_string();
+        let mut queue = Queue::default();
+        queue.enable_journal(temp.path(), &session).unwrap();
+        let first = queue.enqueue(cmd("first", None, Mode::Prompt), false);
+        let revision = queue.revision();
+        assert_eq!(queue.remove_identity(&[first + 1]), 0);
+        assert_eq!(queue.revision(), revision);
+        assert_eq!(queue.len(), 1);
+        // The TypeScript remove([...]) logs requests even if they no longer
+        // refer to any queued command; duplicate references also log twice.
+        assert_eq!(queue.remove_identity(&[first, first]), 1);
+        assert_eq!(queue.len(), 0);
+        let after = queue.revision();
+        assert_eq!(queue.remove_identity(&[]), 0);
+        assert_eq!(queue.revision(), after);
+        let journal_path = temp
+            .path()
+            .join(".atlas/queue")
+            .join(format!("{session}.jsonl"));
+        let events = std::fs::read_to_string(journal_path)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .collect::<Vec<_>>();
+        let operations = events
+            .iter()
+            .map(|entry| entry["operation"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(operations, vec!["enqueue", "remove", "remove", "remove"]);
+    }
+
     #[test]
     fn images_slashes_revision_and_identity() {
         let mut q = Queue::default();
