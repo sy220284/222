@@ -70,3 +70,9 @@
 | `WebFetchTool.ts::inputSchema` | `tools.rs::validate_web_tool_input_schema` → `webfetch.rs::definition` | 严格对象、URL/提示必填、未知字段拒绝；模型公开参数同步，`c5c8c41`、`07556b1` | 网页摘要、权限动态交互、错误协议 |
 | `WebSearchTool.ts::inputSchema` | `tools.rs::validate_web_tool_input_schema` → `websearch.rs::definition` | 查询长度按UTF16、严格可选域名数组、拒绝额外字段及移除原版不存在的limit；`c5c8c41`、`07556b1`、`4da27a0` | 原版搜索返回结构、来源引用、全平台联网链 |
 | `ToolSearchTool.ts::inputSchema/searchToolsWithKeywords` | `tools.rs`、`tool_search.rs::execute` | 数字类型支持小数、零、负值并按JS slice裁切；保留原始 query；`2588957` | 延迟工具完整原版tool_reference与动态同步行为 |
+
+### 第04份模型API与重试边界的源码级对照
+
+| 原版代码位置 | 实际Rust运行入口 | 已修复并提交 | 仍未闭环 |
+|---|---|---|---|
+| `services/api/withRetry.ts::withRetry/getDefaultMaxRetries` | `provider.rs::send_model_request/model_retry_attempts_from` | 原版默认十次重试加首次请求；HTTP 429 Retry-After=0连续十一请求后原样返回最终429；通用配置 `ATLAS_MAX_RETRIES` 支持源版 parseInt 数字前缀且无效配置显式报错，`8a1bf92` | 529依来源重试策略、可取消重试等待、流式事件断连恢复、完整重试进度与错误分类 |
