@@ -769,10 +769,12 @@ mod tests {
     #[test]
     fn summary_requires_evidence_and_latest_user_constraints() {
         let text = compact_prompt("Old summary");
-        assert!(text.contains("latest messages"));
-        assert!(text.contains("tool responses"));
+        assert!(text.contains("the conversation so far"));
+        assert!(text.contains("Primary Request and Intent"));
+        assert!(text.contains("Files and Code Sections"));
+        assert!(text.contains("Pending Tasks"));
         assert!(text.contains("Old summary"));
-        assert!(text.contains("pending"));
+        assert!(!text.contains("RECENT portion"));
     }
 
     #[test]
