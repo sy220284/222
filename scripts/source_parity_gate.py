@@ -193,6 +193,105 @@ def verify_spec_archive(archive: Path, baseline: dict):
     return errors, stats
 
 
+# This inventory is generated from exact ZIP bytes. It is a list of review
+# candidates, not evidence of complete parsing or behavioral equivalence.
+DECLARATION = re.compile(
+    r"^\\s*(?:(?:export|default|declare|abstract|async)\\s+)*"
+    r"(function|class|interface|type|enum|namespace|const|let|var)\\s+"
+    r"([A-Za-z_$][\\w$]*)\\b"
+)
+
+
+def source_declarations(data: bytes):
+    declarations = []
+    for number, line in enumerate(data.decode("utf-8").splitlines(), 1):
+        found = DECLARATION.match(line)
+        if found:
+            kind, name = found.groups()
+            declarations.append({"id": f"{kind}:{name}@{number}",
+                                 "line": number,
+                                 "declaration_sha256": hashlib.sha256(
+                                     line.encode("utf-8")).hexdigest()})
+    return declarations
+
+
+def original_source_files(archive: Path):
+    files = {}
+    with ZipFile(archive) as z:
+        for info in z.infolist():
+            if info.is_dir():
+                continue
+            parts = info.filename.replace("\\\\", "/").split("/")
+            if ".." in parts or info.filename.startswith("/"):
+                raise AuditError("原版 ZIP 包含非法路径: " + info.filename)
+            root = next((i for i in range(len(parts) - 2)
+                         if parts[i] == "source" and parts[i + 1] in ("src", "vendor")), None)
+            if root is None:
+                continue
+            path = "/".join(parts[root + 1:])
+            if path in files or info.file_size > 30 * 1024 * 1024:
+                raise AuditError("原版路径重复或文件过大: " + path)
+            files[path] = z.read(info)
+    return files
+
+
+def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False):
+    """Create a reproducible, source-backed review queue for EVERY eligible path.
+
+    Never grant review_status=verified, copy historical approval or invent behavior.
+    Existing human-reviewed contracts are preserved exactly; the review queue
+    can be promoted only after independent source and Rust behavior tests.
+    """
+    rows = read_matrix(repo)
+    baseline = json.loads((repo / "docs/PORT_BASELINE.json").read_text(encoding="utf-8"))
+    problems = verify_original(archive, rows, baseline)
+    if problems:
+        raise AuditError("原版 ZIP 核验失败: " + "; ".join(problems[:8]))
+    files = original_source_files(archive)
+    old, parse_errors = load_contracts(repo / CONTRACTS)
+    if parse_errors:
+        raise AuditError("现有行为契约损坏: " + "; ".join(parse_errors[:8]))
+    eligible = sorted(p for p, r in rows.items() if r["status"] != "excluded")
+    if set(old) - set(eligible):
+        raise AuditError("现有行为契约存在无效路径")
+    indexed = []
+    for path in eligible:
+        row = rows[path]
+        existing = old.get(path)
+        source = files[path]
+        declarations = source_declarations(source)
+        if existing is not None and existing.get("review_status") == "verified":
+            indexed.append(existing)
+            continue
+        item = {
+            "path": path,
+            "source_sha256": baseline["source_hashes"][path],
+            "source_lines": row["source_lines"],
+            "source_declarations": declarations,
+            "index_method": "static-declaration-candidates/v1",
+            "review_status": "pending",
+            "rust_entrypoints": rust_targets(row["rust_mapping"]),
+            "functions": (existing or {}).get("functions", []),
+            "full_source_review": (existing or {}).get("full_source_review", {
+                "lines_reviewed": 0, "unreviewed_branches": None}),
+            "unresolved": (existing or {}).get("unresolved", ["逐函数语义与 Rust 真实行为待核实"])
+        }
+        # Never erase manually recorded but not-yet-accepted evidence.
+        for key in ("reviewer", "reviewed_at", "tested_commit", "workflow_run_id"):
+            if existing is not None and key in existing:
+                item[key] = existing[key]
+        indexed.append(item)
+    payload = "".join(json.dumps(i, ensure_ascii=False, sort_keys=True) + "\\n" for i in indexed)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(payload, encoding="utf-8")
+    if write:
+        target = repo / CONTRACTS
+        target.write_text(payload, encoding="utf-8")
+    return {"required": len(eligible), "indexed": len(indexed),
+            "declaration_candidates": sum(len(i.get("source_declarations", [])) for i in indexed),
+            "written": str(output), "contracts_updated": write}
+
+
 def load_contracts(path: Path):
     items, errors = {}, []
     if not path.is_file():
@@ -216,11 +315,17 @@ def verify_contracts(rows, baseline, contracts, repo=None, evidence_records=None
     errors = ["无合同的原版路径: " + p for p in sorted(eligible - set(contracts))]
     errors += ["无效范围的合同: " + p for p in sorted(set(contracts) - eligible)]
     verified = 0
+    indexed = 0
     for path in sorted(eligible & set(contracts)):
         row, item = rows[path], contracts[path]
         issues = []
         if item.get("source_sha256") != baseline["source_hashes"][path]:
             issues.append("原版 SHA 不一致")
+        if item.get("index_method") == "static-declaration-candidates/v1":
+            if item.get("source_lines") != row["source_lines"] or not isinstance(item.get("source_declarations"), list):
+                issues.append("源码索引结构不完整")
+            else:
+                indexed += 1
         if row["status"] != "verified" or item.get("review_status") != "verified":
             issues.append("尚未验收")
         if item.get("unresolved") != []:
@@ -291,12 +396,24 @@ def verify_contracts(rows, baseline, contracts, repo=None, evidence_records=None
         else:
             verified += 1
     return errors, {"required":len(eligible),"recorded":len(contracts),
-                    "missing":len(eligible - set(contracts)), "fully_evidenced":verified}
+                    "missing":len(eligible - set(contracts)), "indexed":indexed, "fully_evidenced":verified}
 
 
 def run(args):
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    if args.command == "index":
+        try:
+            if not args.source_archive:
+                raise AuditError("建立源码索引必须提供真实原版 ZIP")
+            stats = index_contracts(args.repo, args.source_archive,
+                                    output / "SOURCE_CONTRACT_INDEX.jsonl",
+                                    write=args.write_contracts)
+            print(json.dumps(stats, ensure_ascii=False))
+            return 0
+        except (AuditError, OSError, ValueError, BadZipFile, UnicodeDecodeError) as exc:
+            print("原版索引失败: " + str(exc), file=sys.stderr)
+            return 1
     try:
         rows = read_matrix(args.repo)
         progress = current_counts(rows)
@@ -331,7 +448,7 @@ def run(args):
             original_checked = not original_problems
         elif args.command == "gate":
             errors.append("缺少原版源码 ZIP，拒绝放行")
-        if args.spec_archive:
+        if getattr(args, "spec_archive", None):
             spec_problems, spec_stats = verify_spec_archive(args.spec_archive, baseline)
             errors.extend(spec_problems)
             queue = spec_stats.pop("function_queue", [])
@@ -358,6 +475,7 @@ def run(args):
                    "结果：" + ("通过" if passed else "未通过"),
                    "原版 ZIP 重新验证：" + ("是" if original_checked else "否"),
                    "已验收：" + str(progress["accepted"]) + "/" + str(progress["eligible"]),
+                   "源码底稿：" + str(stats["indexed"])+"/"+str(stats["required"]),
                    "完整逐函数契约：" + str(stats["fully_evidenced"])+"/"+str(stats["required"]),
                    "", "## 缺口"]
         summary += ["- "+e for e in errors[:100]]
@@ -377,10 +495,11 @@ def run(args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("command",choices=("audit","gate","report"))
+    p.add_argument("command",choices=("audit","gate","report","index"))
     p.add_argument("--repo",type=Path,default=Path("."))
     p.add_argument("--source-archive",type=Path)
     p.add_argument("--spec-archive",type=Path)
+    p.add_argument("--write-contracts", action="store_true", help="index: 显式更新待审契约清单")
     p.add_argument("--output",type=Path,default=Path(".port-audit"))
     return run(p.parse_args())
 
