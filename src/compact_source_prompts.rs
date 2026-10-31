@@ -249,13 +249,15 @@ pub fn prompt(previous: &str, partial: bool) -> String {
     } else {
         DETAILED_ANALYSIS_INSTRUCTION_BASE
     };
-    let text = template.replace(
-        concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_BASE}"),
-        analysis,
-    ).replace(
-        concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_PARTIAL}"),
-        analysis,
-    );
+    let text = template
+        .replace(
+            concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_BASE}"),
+            analysis,
+        )
+        .replace(
+            concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_PARTIAL}"),
+            analysis,
+        );
     // The first line must be the original source's no-tools preamble.
     // Extra continuation guidance preserves user-specific verified evidence.
     format!("{}{}\n\nContinuation constraints: Preserve latest messages, user instructions, verified tool responses, errors and pending work. Separate completed and pending tasks, never fabricate tests or commits. Earlier summaries can be stale.\n\nPrevious summary:\n{previous}",
