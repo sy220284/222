@@ -1211,6 +1211,9 @@ impl ToolExecutor {
         {
             bail!("Shell description must be a string");
         }
+        if background_tasks_disabled() && normalized.get("run_in_background").is_some() {
+            bail!("run_in_background is disabled for this session");
+        }
         if normalized
             .get("run_in_background")
             .is_some_and(|value| !value.is_boolean())
@@ -2407,17 +2410,39 @@ fn truncate(input: &str, max: usize) -> String {
     }
 }
 
+/// BashTool.tsx omits the background flag from the model-visible schema
+/// when background work is disabled. Keep the published schema and execution
+/// validator on the same setting, so a model cannot bypass the omission.
+fn background_tasks_disabled() -> bool {
+    crate::env_runtime::is_env_truthy(
+        std::env::var("ATLAS_DISABLE_BACKGROUND_TASKS").ok().as_deref(),
+    )
+}
+
+fn hide_background_parameter(definition: &mut Value) {
+    if let Some(properties) = definition
+        .pointer_mut("/function/parameters/properties")
+        .and_then(Value::as_object_mut)
+    {
+        properties.remove("run_in_background");
+    }
+}
+
 /// Expose the original PowerShell tool wire name only for PowerShell
 /// sessions. The executor still uses a provider-neutral command runner.
 pub fn powershell_definition() -> Value {
-    json!({"type":"function","function":{"name":"PowerShell",
+    let mut definition = json!({"type":"function","function":{"name":"PowerShell",
         "description":"Execute a PowerShell command from the workspace. The command can affect host paths and processes outside the project. Apply permission rules, avoid unapproved destructive operations and inspect output before reporting results.",
         "parameters":{"type":"object","properties":{
             "command":{"type":"string"},
             "timeout":{"type":"integer","description":"Timeout in milliseconds"},
             "run_in_background":{"type":"boolean"},
             "description":{"type":"string"}
-        },"required":["command"]}}})
+        },"required":["command"]}}});
+    if background_tasks_disabled() {
+        hide_background_parameter(&mut definition);
+    }
+    definition
 }
 
 pub fn definitions() -> Vec<Value> {
@@ -2483,6 +2508,15 @@ pub fn definitions() -> Vec<Value> {
                 "run_in_background":{"type":"boolean"},"description":{"type":"string"}
             },"required":["command"]}}}),
     ];
+    if background_tasks_disabled() {
+        for tool in &mut tools {
+            if tool.pointer("/function/name").and_then(Value::as_str)
+                == Some("run_command")
+            {
+                hide_background_parameter(tool);
+            }
+        }
+    }
     tools.push(crate::local_triggers::model_definition());
     tools.push(notebook::definition());
     tools.extend(search::definitions());
@@ -2541,6 +2575,17 @@ mod tests {
             assert!(!blocked_read_device(Path::new(path)), "{path}");
         }
     }
+    #[test]
+    fn background_flag_omission_matches_simple_source_schema() {
+        let mut definition = json!({"type":"function","function":{
+            "name":"run_command","parameters":{"type":"object","properties":{
+                "command":{"type":"string"},"run_in_background":{"type":"boolean"}
+            }}}});
+        hide_background_parameter(&mut definition);
+        assert!(definition.pointer("/function/parameters/properties/run_in_background").is_none());
+        assert!(definition.pointer("/function/parameters/properties/command").is_some());
+    }
+
     #[tokio::test]
     async fn local_trigger_tool_dispatch_requires_permission_and_returns_real_saved_task() {
         let root = tempfile::tempdir().unwrap();
