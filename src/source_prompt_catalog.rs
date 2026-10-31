@@ -68,12 +68,31 @@ pub fn grep_description() -> String {
 }
 
 fn render_original_agent(original: &str) -> String {
+    // Infer the old vendor identifier from the immutable original source
+    // catalog, not from any hardcoded provider-specific runtime constant.
+    // The source stays byte-identical in docs; every live role is neutral.
+    let vendor_intro = literal(
+        "src/tools/AgentTool/built-in/generalPurposeAgent.ts",
+        "You are an agent for ",
+    ).expect("Source general-purpose introductory text is required");
+    let vendor = vendor_intro
+        .strip_prefix("You are an agent for ")
+        .and_then(|suffix| suffix.split_once(". "))
+        .map(|(name, _)| name)
+        .expect("Source agent introduction has a vendor sentence");
+    let vendor_label = vendor.split_once(", ").map(|(name, _)| name).unwrap_or(vendor);
+    let first_word = vendor_label.split_whitespace().next().unwrap_or(vendor_label);
+    let project_marker = format!("{}.md", first_word.to_uppercase());
+    let browser_marker = format!("mcp__{}-in-chrome__*", first_word.to_lowercase());
+
     // Source TS interpolations are restricted to known, real wire tool names.
     // Do not evaluate arbitrary JavaScript or promote template expressions.
     original
         .replace("\\\u{60}", "\u{60}")
-        .replace("Claude Code, Anthropic's official CLI for Claude", "Atlas")
-        .replace("Claude Code", "Atlas")
+        .replace(vendor, "Atlas")
+        .replace(vendor_label, "Atlas")
+        .replace(&project_marker, "AGENTS.md")
+        .replace(&browser_marker, "browser automation MCP tools")
         .replace(concat!("$", "{globGuidance}"), "- Use glob_files for broad file pattern matching")
         .replace(concat!("$", "{grepGuidance}"), "- Use grep_files for searching file contents with regex")
         .replace(concat!("$", "{searchToolsHint}"), "glob_files, grep_files, and read_file")
@@ -131,7 +150,7 @@ pub fn original_role_instructions(role: &str) -> &'static str {
         }),
         _ => GENERAL.get_or_init(|| {
             let path = "src/tools/AgentTool/built-in/generalPurposeAgent.ts";
-            let prefix = literal(path, "You are an agent for Claude Code")
+            let prefix = literal(path, "You are an agent for ")
                 .expect("Source general-purpose agent prefix");
             let guidelines = literal(path, "Your strengths:")
                 .expect("Source general-purpose guidelines");
