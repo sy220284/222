@@ -54,10 +54,13 @@ fn ensure_private_directory(dir: &Path) -> Result<()> {
             file.sync_all()?;
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let present = fs::read_to_string(&path)
-                .context("Cannot verify local task privacy rules")?;
+            let present =
+                fs::read_to_string(&path).context("Cannot verify local task privacy rules")?;
             if present != RULES {
-                bail!("Local task store privacy rules have been modified: {}", path.display());
+                bail!(
+                    "Local task store privacy rules have been modified: {}",
+                    path.display()
+                );
             }
         }
         Err(error) => return Err(error).context("Cannot create task privacy rules"),
@@ -67,7 +70,11 @@ fn ensure_private_directory(dir: &Path) -> Result<()> {
 
 fn load(root: &Path) -> Result<Store> {
     let primary = store_path(root);
-    let path = if primary.exists() { primary } else { legacy_path(root) };
+    let path = if primary.exists() {
+        primary
+    } else {
+        legacy_path(root)
+    };
     if !path.exists() {
         return Ok(BTreeMap::new());
     }
@@ -93,8 +100,12 @@ fn load(root: &Path) -> Result<Store> {
 fn mutate_store(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> Result<()> {
     let dir = store_dir(root);
     fs::create_dir_all(&dir).context("Cannot create local trigger directory")?;
-    let workspace = root.canonicalize().context("Cannot resolve task workspace")?;
-    let actual = dir.canonicalize().context("Cannot resolve local task store")?;
+    let workspace = root
+        .canonicalize()
+        .context("Cannot resolve task workspace")?;
+    let actual = dir
+        .canonicalize()
+        .context("Cannot resolve local task store")?;
     if !actual.starts_with(&workspace) {
         bail!("Local task store must remain inside the workspace");
     }
@@ -291,20 +302,30 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         set(root.path(), "private", "sensitive-local-prompt").unwrap();
         let directory = store_dir(root.path());
-        assert_eq!(fs::read_to_string(directory.join(".gitignore")).unwrap(), "*\\n!.gitignore\\n".replace("\\n", "\n"));
+        assert_eq!(
+            fs::read_to_string(directory.join(".gitignore")).unwrap(),
+            "*\\n!.gitignore\\n".replace("\\n", "\n")
+        );
         assert!(directory.join("tasks.json").is_file());
         assert!(!legacy_path(root.path()).exists());
     }
     #[test]
     fn task_prompt_is_ignored_by_an_unconfigured_git_repository() {
         let root = tempfile::tempdir().unwrap();
-        let git = std::process::Command::new("git").arg("-C").arg(root.path())
-            .args(["init", "-q"]).status().unwrap();
+        let git = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["init", "-q"])
+            .status()
+            .unwrap();
         assert!(git.success());
         set(root.path(), "private", "do not publish my task").unwrap();
-        let status = std::process::Command::new("git").arg("-C").arg(root.path())
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root.path())
             .args(["status", "--porcelain", "--untracked-files=all"])
-            .output().unwrap();
+            .output()
+            .unwrap();
         assert!(status.status.success());
         let visible = String::from_utf8(status.stdout).unwrap();
         assert!(!visible.contains("tasks.json"), "{visible}");
@@ -313,11 +334,20 @@ mod tests {
     fn legacy_prompts_are_read_and_migrated_without_loss() {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join(".atlas")).unwrap();
-        fs::write(legacy_path(root.path()),
-            r#"{"legacy":{"prompt":"saved before migration"}}"#).unwrap();
-        assert_eq!(get(root.path(), "legacy").unwrap(), "saved before migration");
+        fs::write(
+            legacy_path(root.path()),
+            r#"{"legacy":{"prompt":"saved before migration"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            get(root.path(), "legacy").unwrap(),
+            "saved before migration"
+        );
         change(root.path(), "legacy", "updated after migration").unwrap();
-        assert_eq!(get(root.path(), "legacy").unwrap(), "updated after migration");
+        assert_eq!(
+            get(root.path(), "legacy").unwrap(),
+            "updated after migration"
+        );
         assert!(!legacy_path(root.path()).exists());
         assert!(store_path(root.path()).exists());
     }

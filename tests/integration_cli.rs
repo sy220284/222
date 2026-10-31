@@ -6875,8 +6875,10 @@ fn local_task_trigger_cli_persists_and_calls_configured_model_once() {
     );
     let file = root.path().join(".atlas/local-triggers/tasks.json");
     assert!(file.is_file());
-    assert_eq!(fs::read_to_string(file.parent().unwrap().join(".gitignore")).unwrap(),
-        "*\\n!.gitignore\\n".replace("\\n", "\n"));
+    assert_eq!(
+        fs::read_to_string(file.parent().unwrap().join(".gitignore")).unwrap(),
+        "*\\n!.gitignore\\n".replace("\\n", "\n")
+    );
     let list = invoke(&["trigger", "list"]);
     assert!(list.status.success());
     assert!(String::from_utf8(list.stdout).unwrap().contains("smoke"));
