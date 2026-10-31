@@ -19,7 +19,9 @@ fn all_registered_source_goldens_execute_against_production_adapters() {
     let mut count = 0_usize;
     for line in registry.lines().filter(|line| !line.trim().is_empty()) {
         let entry: Value = serde_json::from_str(line).expect("invalid source test registry JSON");
-        let source_path = entry["path"].as_str().expect("missing original source path");
+        let source_path = entry["path"]
+            .as_str()
+            .expect("missing original source path");
         let golden_path = entry["golden"].as_str().expect("missing golden path");
         assert!(
             golden_path.starts_with("tests/source_parity/golden/")
@@ -34,10 +36,14 @@ fn all_registered_source_goldens_execute_against_production_adapters() {
         assert_eq!(fixture["source_path"], source_path);
         assert_eq!(fixture["source_sha256"], entry["source_sha256"]);
         let adapter = &entry["adapter"];
-        let binary = adapter["binary"].as_str().expect("missing real Rust adapter binary");
+        let binary = adapter["binary"]
+            .as_str()
+            .expect("missing real Rust adapter binary");
         assert!(
             binary.starts_with("parity_")
-                && binary.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_'),
+                && binary
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_'),
             "invalid Rust adapter name"
         );
         assert!(
@@ -45,11 +51,21 @@ fn all_registered_source_goldens_execute_against_production_adapters() {
             "registered Rust production adapter source missing: {binary}"
         );
         let executable = bin_dir.join(format!("{binary}{}", std::env::consts::EXE_SUFFIX));
-        assert!(executable.is_file(), "Rust adapter has not been built: {}", executable.display());
+        assert!(
+            executable.is_file(),
+            "Rust adapter has not been built: {}",
+            executable.display()
+        );
         let key = adapter["input_key"].as_str().expect("missing input key");
-        let pointer = adapter["observation_pointer"].as_str().expect("missing output JSON pointer");
-        let source_ids = entry["source_ids"].as_array().expect("missing original AST function IDs");
-        let cases = fixture["cases"].as_array().expect("missing source golden cases");
+        let pointer = adapter["observation_pointer"]
+            .as_str()
+            .expect("missing output JSON pointer");
+        let source_ids = entry["source_ids"]
+            .as_array()
+            .expect("missing original AST function IDs");
+        let cases = fixture["cases"]
+            .as_array()
+            .expect("missing source golden cases");
         assert!(cases.len() >= 2, "normal and boundary cases required");
         for case in cases {
             let mut input = serde_json::Map::new();
