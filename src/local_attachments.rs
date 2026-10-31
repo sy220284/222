@@ -121,7 +121,9 @@ pub fn attach(
                 bail!("Attachment {name} exceeds the API's 5 MiB base64 image limit");
             }
             attached.push(json!({"type":"text","text":format!("Attached local image: {name}")}));
-            attached.push(json!({"type":"image","source":{"type":"base64","media_type":mime,"data":encoded}}));
+            attached.push(
+                json!({"type":"image","source":{"type":"base64","media_type":mime,"data":encoded}}),
+            );
         } else {
             if meta.len() > MAX_TEXT_BYTES {
                 bail!("Local text attachment exceeds 1 MiB: {name}");
@@ -186,15 +188,34 @@ mod tests {
         let mut bytes = vec![0_u8; MAX_IMAGE_BYTES as usize];
         bytes[..8].copy_from_slice(&[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
         fs::write(&path, &bytes).unwrap();
-        let input = attach(root.path(), &json!("Inspect"), Some(&json!([{"path":"boundary.png"}])))
+        let input = attach(
+            root.path(),
+            &json!("Inspect"),
+            Some(&json!([{"path":"boundary.png"}])),
+        )
+        .unwrap();
+        let image = input
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["type"] == "image")
             .unwrap();
-        let image = input.as_array().unwrap().iter().find(|item| item["type"] == "image").unwrap();
-        assert_eq!(image["source"]["data"].as_str().unwrap().len(), MAX_IMAGE_BASE64_BYTES as usize);
+        assert_eq!(
+            image["source"]["data"].as_str().unwrap().len(),
+            MAX_IMAGE_BASE64_BYTES as usize
+        );
         assert!(crate::multimodal::parse(&input).is_ok());
         bytes.push(0);
         fs::write(&path, &bytes).unwrap();
-        let result = attach(root.path(), &json!("Inspect"), Some(&json!([{"path":"boundary.png"}])));
-        assert!(result.unwrap_err().to_string().contains("base64 image limit"));
+        let result = attach(
+            root.path(),
+            &json!("Inspect"),
+            Some(&json!([{"path":"boundary.png"}])),
+        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("base64 image limit"));
     }
 
     #[test]
