@@ -82,16 +82,23 @@ python3 scripts/source_diff_gate.py --repo . \
 
 `.github/workflows/original-differential.yml` 仅提供手动启动的私有 runner 复验，不建立任何定时任务。必须由受信任操作者控制工作流代码来源、运行器权限和原版工作区，禁止运行不可信 fork PR 的代码。没有受控 runner 时在提交者本地执行上述命令。工作流只上传核验摘要，不上传源码。
 
-## 从真实原版输入输出新增叶子函数回归
+## 全量原版源码测试建设现状与自动验收路径
 
-`isLocalShellTask` 18 例、`normalizeControlMessageKeys` 23 例、`extractBashCommentLabel` 25 例均已从实际 2.1.88 TypeScript 模块执行并冻结结果；通过同一个 Rust 真实生产调用适配器重放。新增 U+0085 NEL 字符边界测试，并修正 Bash 注释标签的 JavaScript/Rust 空白字符语义差异。
+冻结的原版包含 1,906 条源码路径，明确排除 192 条，必须迁移并测试的共 1,714 条。原版 AST / 规格索引覆盖 1,902 个第一方文件、513,237 行、20,788 个函数或方法节点、1,212 个独立导出值、17 个纯文件级单元和 4 个 vendor 单元，共 22,021 个待核实对象。**源代码对象数量、登记数量与实际通过的等价功能数量相互独立**。
 
-本次新增 66 例，已登记黄金测试累计 120 例。此数字仅代表已编制并接入的明确用例，不能代替尚未迁移路径的完整验收。
+截至本次 2.1.88 源码驱动测试建设，`docs/SOURCE_TEST_REGISTRY.jsonl` 已接入 **19 条源码路径、389 组真实原版黄金回归场景**。数值仅是当前提交快照，未来变动以 CI 生成的 `.port-audit/SOURCE_TEST_SUITE.json` 和 `.port-audit/SOURCE_TEST_WORKLIST.json` 为准；文档里的旧历史阶段数字不能覆盖这些机器结果。
 
-## 当前验收结果的含义
+目前已实际登记测试的范围包括：斜杠解析、JSON BOM、XML 转义、命令生命周期、数组、环形缓冲区、Bash 注释、SDK 控制请求字段、Shell 任务识别、地址路由、命令行参数、消息判定、沙箱违规标签、Set 集合、对象分组、macOS 特殊键、工作树开关、Bash 超时参数与用户提示词关键词。
 
-原版静态索引已核对 1,902 个第一方文件、513,237 行、20,788 个函数/方法及 1,212 个独立导出值，另有 17 个纯文件级单元和 4 个 vendor 单元，共 22,021 个定位对象。它们是核查范围，不能当作已通过的功能测试数。
+新增测试的实际源码差异修复包括：U+0085 NEL 在 JavaScript `trim/parseInt` 中不属于可移除的空白；`isMacosOptionChar` 通过普通对象的 `in` 操作符会对 `constructor`、`toString` 等继承键返回真；环形缓冲区零容量场景；部分跨语言集合与分组行为。所有修复仍以 CI 实际执行结果为准。
 
-当前已登记四组原版黄金回归：`src/utils/slashCommandParsing.ts` 的 15 例（包含 U+0085 空白语义差异），以及 `src/utils/jsonRead.ts` 的 11 例（前导 BOM、双 BOM、空值、NUL、Unicode、尾部 BOM 等）。再加入 `src/utils/xml.ts` 的 18 例，覆盖同一文件两个不同导出函数及其内部调用链。另外增加状态型 `src/utils/commandLifecycle.ts` 的 10 例，使用公开可审阅的原版执行脚本对照监听器替换、清空和事件顺序，Rust 侧运行真实生产状态模块。四组原版行为均纳入数据驱动回归。其他路径在新测试体系中仍需逐项沉淀黄金用例、补齐真实 Rust 功能链并验收。新增测试体系不自动升级任何路径的迁移状态。
+### 实施原版全量测试的可复用途径
+
+1. 对提交者私有的 **完整原版工作区** 执行 `scripts/source_test_factory.py --source-root ... --spec-archive ...`；它先验证冻结 1,906 条源文件哈希与规格逐行一致，再根据真实 AST 生成 **所有必须迁移路径/函数**的待测工单。无私有原版时，普通 CI 仍对 1,714 条路径生成完整文件级缺口索引，不伪造函数级结果。
+2. 为每个真实原版功能补齐可运行的单元测试、回归、按职责需要的集成/端到端测试、来源 SHA、AST 函数身份和黄金预期；通过 `scripts/source_test_gate.py verify-original --source-root ...` 在提交者工作区复验原版结果。
+3. Rust 侧必须通过生产模块执行适配器实际调用，再用 `cargo test --locked --bins` 和 `cargo test --locked --tests` 运行回归。任何新登记会被统一黄金回归测试自动发现并重放。注册字段缺失、真实测试名不在本轮编译清单、原版输入与 Rust 结果不同，均不能标记验收。
+4. 普通 CI 的 `source-regression` 先验收已实现的真实测试，`source-completeness` 再对全部原版路径与函数契约严格核查。完整范围补齐前始终保持非零退出码，禁止借待办文档、静态索引或部分测试冒充已通过。
+
+**当前尚未完成的语义覆盖**：Set 的 JS 对象引用身份与 SameValueZero 全部数值边界、对象分组中的 Symbol 键及枚举次序、超时参数超出 Rust `u64` 的 JS Number 范围、以及复杂 CLI/Agent/SDK/MCP 的跨模块行为，还需要单独复验和补齐。纯函数黄金样例通过，不自动意味着该源码所在的完整调用链等价。
 
 仓库管理员仍须在 main Ruleset/分支保护中把完整验收和 Rust 测试设为必需状态并验证执行。工作流失败本身不足以证明服务器强制阻止合并。
