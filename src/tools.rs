@@ -1258,26 +1258,6 @@ impl ToolExecutor {
     }
 
     fn require_approval(&self, tool: &str, args: &Value) -> Result<()> {
-        let mut security_approved = false;
-        if crate::tool_names::canonical_name(tool) == "run_command" || tool == "PowerShell" {
-            if let Some(command) = args.get("command").and_then(Value::as_str) {
-                if let Some(reason) = crate::shell_quote::security_review_reason(command) {
-                    if !self.interactive {
-                        bail!("Shell command needs explicit security review: {reason}");
-                    }
-                    eprintln!("Security review required: {reason}");
-                    eprintln!("Command: {}", truncate(command, 600));
-                    eprint!("Approve this command once? [y/N] ");
-                    io::stderr().flush()?;
-                    let mut answer = String::new();
-                    io::stdin().read_line(&mut answer)?;
-                    if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
-                        bail!("Shell command rejected: {reason}");
-                    }
-                    security_approved = true;
-                }
-            }
-        }
         // Path rules are evaluated against the requested path and the
         // symlink-resolved target, including files not created yet.
         let mut permission_args = args.clone();
@@ -1309,6 +1289,30 @@ impl ToolExecutor {
         };
         if matched == Some(permission_rules::Behavior::Deny) {
             bail!("Tool {tool} denied by explicit permission rule");
+        }
+        // Explicit policy denial must be final before considering interactive
+        // security review. Asking the user about an already-denied command
+        // can override neither policy nor result and confuses the approval
+        // contract. Keep review mandatory even for otherwise allowed tools.
+        let mut security_approved = false;
+        if crate::tool_names::canonical_name(tool) == "run_command" || tool == "PowerShell" {
+            if let Some(command) = args.get("command").and_then(Value::as_str) {
+                if let Some(reason) = crate::shell_quote::security_review_reason(command) {
+                    if !self.interactive {
+                        bail!("Shell command needs explicit security review: {reason}");
+                    }
+                    eprintln!("Security review required: {reason}");
+                    eprintln!("Command: {}", truncate(command, 600));
+                    eprint!("Approve this command once? [y/N] ");
+                    io::stderr().flush()?;
+                    let mut answer = String::new();
+                    io::stdin().read_line(&mut answer)?;
+                    if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+                        bail!("Shell command rejected: {reason}");
+                    }
+                    security_approved = true;
+                }
+            }
         }
         if self.approval == Approval::ReadOnly || self.mode == Some(permission_mode::Mode::Plan) {
             // Source BashTool/readOnlyValidation.ts validates read-only
@@ -3312,6 +3316,28 @@ mod tests {
             "a\nc\n"
         );
     }
+    #[tokio::test]
+    async fn explicit_shell_deny_precedes_security_review_and_never_prompts() {
+        let root = tempfile::tempdir().unwrap();
+        let rules = permission_rules::compile_rules(&[permission_rules::RuleSetting {
+            behavior: "deny".into(),
+            rule: "Bash".into(),
+        }])
+        .unwrap();
+        let tool = executor(root.path(), Approval::Full).with_permission_rules(rules);
+        let call = ToolCall {
+            id: "explicit-deny-before-review".into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "run_command".into(),
+                arguments: json!({"command":"echo 'unterminated"}).to_string(),
+            },
+        };
+        let result = tool.execute(&call).await;
+        assert!(result.contains("denied by explicit permission rule"), "{result}");
+        assert!(!result.contains("security review"), "{result}");
+    }
+
     #[tokio::test]
     async fn malformed_shell_commands_require_security_review_even_with_full_approval() {
         let root = tempfile::tempdir().unwrap();
