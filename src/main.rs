@@ -3202,17 +3202,30 @@ async fn sdk_interruptible_turn(
     advanced_kind: Option<local_advanced_workflows::Kind>,
 ) -> Result<String> {
     let mut observer = interrupts.clone();
+    // Capture the session before the select borrows Agent mutably; an SDK
+    // interrupt must publish a terminal workflow state after dropping the
+    // in-flight request (which restores its temporary plan permission).
+    let session_id = agent.session_id();
+    let emit_interrupt = |phase: &str| {
+        if let Some(kind) = advanced_kind {
+            print_json!(json!({"type":"workflow","workflow":kind.as_str(),
+                "phase":phase,"session_id":session_id}));
+        }
+    };
     // The stdin reader may have parsed a later interrupt while the main loop
     // was preparing an earlier user event. Match event order, not scheduling.
     if *observer.borrow_and_update() > input_epoch {
+        emit_interrupt("cancelled");
         bail!("SDK request interrupted");
     }
     tokio::select! {
         biased;
         changed = observer.changed() => {
             if changed.is_ok() {
+                emit_interrupt("cancelled");
                 bail!("SDK request interrupted");
             }
+            emit_interrupt("failed");
             bail!("SDK interrupt control channel closed");
         }
         response = async {
