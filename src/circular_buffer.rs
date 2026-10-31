@@ -11,7 +11,10 @@ pub struct CircularBuffer<T> {
 impl<T> CircularBuffer<T> {
     pub fn new(capacity: usize) -> Result<Self> {
         // Original JS accepts zero-capacity buffers: add is a no-op.
-        Ok(Self { capacity, buffer: VecDeque::with_capacity(capacity) })
+        Ok(Self {
+            capacity,
+            buffer: VecDeque::with_capacity(capacity),
+        })
     }
     pub fn add(&mut self, value: T) {
         if self.capacity == 0 {
@@ -28,7 +31,10 @@ impl<T> CircularBuffer<T> {
         }
     }
     pub fn get_recent(&self, count: usize) -> Vec<&T> {
-        self.buffer.iter().skip(self.buffer.len().saturating_sub(count)).collect()
+        self.buffer
+            .iter()
+            .skip(self.buffer.len().saturating_sub(count))
+            .collect()
     }
     pub fn to_array(&self) -> Vec<&T> {
         self.buffer.iter().collect()

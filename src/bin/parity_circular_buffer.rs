@@ -69,8 +69,11 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
                              "snapshot": buffer.to_array(),
                              "length": buffer.len()}));
     }
-    let ids: Vec<&str> = SOURCE_IDS.iter().enumerate()
-        .filter_map(|(i, source_id)| used[i].then_some(*source_id)).collect();
+    let ids: Vec<&str> = SOURCE_IDS
+        .iter()
+        .enumerate()
+        .filter_map(|(i, source_id)| used[i].then_some(*source_id))
+        .collect();
     let response = json!({"schema":"source-rust-observation/v1",
         "case_id":case_id,"executed_source_ids":ids,
         "outcome":{"parsed":observed},"errors":[],

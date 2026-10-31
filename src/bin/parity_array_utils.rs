@@ -21,7 +21,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let case_id = request["id"].as_str().ok_or("missing golden ID")?;
     let payload = &request["input"]["payload"];
     let values: Vec<i64> = serde_json::from_value(payload["values"].clone())?;
-    let op = payload["operation"].as_str().ok_or("missing array operation")?;
+    let op = payload["operation"]
+        .as_str()
+        .ok_or("missing array operation")?;
     let (parsed, source_ids): (serde_json::Value, Vec<&str>) = match op {
         "intersperse" => {
             if payload["mode"].as_str() != Some("negative-index") {
@@ -40,14 +42,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let result = match mode {
                 "positive" => array_utils::count(&values, |value| *value > 0),
                 "even" => array_utils::count(&values, |value| value % 2 == 0),
-                _ => return Err("unknown count predicate".into())
+                _ => return Err("unknown count predicate".into()),
             };
             (serde_json::json!(result), vec![COUNT])
         }
-        "uniq" => (
-            serde_json::json!(array_utils::uniq(values)),
-            vec![UNIQ]
-        ),
+        "uniq" => (serde_json::json!(array_utils::uniq(values)), vec![UNIQ]),
         _ => return Err("unknown original array export".into()),
     };
     let output = serde_json::json!({
@@ -64,6 +63,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "persistence":{},
         "cancellation":{"cancelled":false}
     });
-    println!("{}",serde_json::to_string(&output)?);
+    println!("{}", serde_json::to_string(&output)?);
     Ok(())
 }
