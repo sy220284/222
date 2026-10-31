@@ -127,8 +127,50 @@ def _execute(template, repo, original, sandbox, case, side):
     return observation, None
 
 
+def _required_kinds(index, contracts, expected):
+    """Every behavior family requires a case or a source-anchored N/A review."""
+    requirements, errors = {}, []
+    for sid, path in expected.items():
+        records = contracts.get(path, {}).get("functions", [])
+        record = next((r for r in records if isinstance(r, dict) and
+                       r.get("source_id") == sid), None)
+        if record is None:
+            errors.append(sid + ": 未登记完整原版函数级审计合同")
+            requirements[sid] = set(KINDS)
+            continue
+        scope = record.get("not_applicable_scenarios", {})
+        if not isinstance(scope, dict):
+            errors.append(sid + ": 不适用场景说明不是 JSON 对象")
+            scope = {}
+        for kind, evidence in scope.items():
+            if kind not in KINDS or kind in ("normal", "edge"):
+                errors.append(sid + ": 不允许跳过正常、边界或未知类型: " + str(kind))
+                continue
+            if not isinstance(evidence, dict):
+                errors.append(sid + ": 缺失不适用场景源码依据: " + kind)
+                continue
+            anchor = evidence.get("source_lines")
+            reason = evidence.get("reason")
+            parent = next((r for r in index.get(path, []) if r["source_id"] == sid), None)
+            limit = parent["source_lines"] if parent else None
+            if (not isinstance(anchor, list) or len(anchor)!=2 or
+                any(type(n) is not int for n in anchor) or
+                not limit or not limit[0] <= anchor[0] <= anchor[1] <= limit[1] or
+                not isinstance(reason, str) or len(reason.strip()) < 20 or
+                evidence.get("source_sha256") != parent["source_sha256"]):
+                errors.append(sid + ": 不适用场景缺少可追溯原版源码位置、哈希和具体理由: " + kind)
+        valid = {k for k in scope if k in KINDS and k not in ("normal","edge") and
+                 isinstance(scope[k], dict) and
+                 scope[k].get("source_sha256") == (next((r["source_sha256"] for r in index.get(path, []) if r["source_id"] == sid), None)) and
+                 isinstance(scope[k].get("reason"), str) and len(scope[k]["reason"].strip()) >= 20 and
+                 isinstance(scope[k].get("source_lines"), list) and len(scope[k]["source_lines"])==2 and
+                 all(type(n) is int for n in scope[k]["source_lines"])}
+        requirements[sid] = set(KINDS) - valid
+    return requirements, errors
+
+
 def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
-                       index: dict, eligible: set, output: Path):
+                       index: dict, eligible: set, output: Path, contracts=None):
     """Fail closed on missing scenarios, mismatch or unavailable runtime.
 
     Every AST function, exported initializer, file-only module and vendor path
@@ -147,6 +189,8 @@ def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
                 if ident in expected:
                     errors.append("原版函数审计 ID 重复: " + ident)
                 expected[ident] = path
+    required, review_errors = _required_kinds(index, contracts or {}, expected)
+    errors.extend(review_errors)
     coverage = {key:set() for key in expected}
     attempted = passed = 0
     mismatches = []
@@ -178,12 +222,13 @@ def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
         passed += 1
         for sid in ids:
             coverage[sid].add(case["kind"])
-    # Baseline + adversarial path must run for every required source unit.
-    uncovered = {sid:sorted({"normal","edge"}-kinds)
+    # All ten behavior families must run unless a source-anchored, human
+    # reviewed contract explicitly documents why a family does not apply.
+    uncovered = {sid:sorted(required[sid]-kinds)
                  for sid,kinds in coverage.items()
-                 if not {"normal","edge"}.issubset(kinds)}
+                 if not required[sid].issubset(kinds)}
     if uncovered:
-        errors.append(f"{len(uncovered)} 个原版功能审计对象缺少动态正常/边界场景")
+        errors.append(f"{len(uncovered)} 个原版功能审计对象缺少动态场景及可核验的不适用依据")
     if mismatches:
         errors.append(f"{len(mismatches)} 个原版与 Rust 的实际运行结果不一致或执行失败")
     if not passed:
