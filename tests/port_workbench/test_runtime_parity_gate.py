@@ -76,6 +76,18 @@ class DynamicParityTest(unittest.TestCase):
         self.assertEqual(len(report["mismatches"]),1)
         self.assertIn("outcome",report["mismatches"][0]["different_fields"])
 
+    def test_malformed_runtime_function_ids_fail_closed_without_crashing(self):
+        self.case("malformed","normal")
+        producer = (self.repo/"produce.py")
+        producer.write_text(PRODUCER.replace(
+            '"executed_source_ids":["src/f.ts:FunctionDeclaration:1-1:occurrence-1"]',
+            '"executed_source_ids":[{"unexpected":"non-string"}]'
+        ), encoding="utf8")
+        report = self.run_gate()
+        self.assertFalse(report["pass"])
+        self.assertEqual(report["passed"], 0)
+        self.assertTrue(any("真实执行路径未覆盖" in item["reason"] for item in report["mismatches"]))
+
     def test_unknown_function_cannot_claim_coverage(self):
         self.case("ok","normal")
         file = self.cases/"ok.json"
