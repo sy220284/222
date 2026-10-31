@@ -3198,7 +3198,11 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     initial_turn_pending = false;
                     sdk_run_initial_turn(agent, &interrupt_rx, input_epoch).await;
                 }
-                let prompt_value = event.get("content");
+                // Accept both direct content and SDK message envelopes.
+                // Older SDK clients send message.content with replay metadata.
+                let prompt_value = event
+                    .get("content")
+                    .or_else(|| event.pointer("/message/content"));
                 let Some(prompt_value) = prompt_value else {
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
