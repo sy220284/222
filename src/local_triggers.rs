@@ -410,9 +410,12 @@ pub fn model_call(
         "list" => Ok(model_result(200, serde_json::json!(list(root)?))),
         "get" => {
             let name = name.context("Missing trigger_id")?;
-            Ok(model_result(200, serde_json::json!({
-                "trigger_id":name, "prompt":get(root,name)?
-            })))
+            Ok(model_result(
+                200,
+                serde_json::json!({
+                    "trigger_id":name, "prompt":get(root,name)?
+                }),
+            ))
         }
         "create" | "update" => {
             authorize_mutation()?;
@@ -425,7 +428,8 @@ pub fn model_call(
             } else {
                 name.context("Missing trigger_id")?
             };
-            let prompt = args.pointer("/body/prompt")
+            let prompt = args
+                .pointer("/body/prompt")
                 .and_then(serde_json::Value::as_str)
                 .context("Missing prompt")?;
             if action == "create" {
@@ -433,23 +437,28 @@ pub fn model_call(
             } else {
                 change(root, name, prompt)?;
             }
-            Ok(model_result(if action == "create" {201} else {200},
+            Ok(model_result(
+                if action == "create" { 201 } else { 200 },
                 serde_json::json!({
                     "trigger_id":name, "prompt":prompt,
                     "action":action, "storage":"local"
-                })))
+                }),
+            ))
         }
         "run" => {
             authorize_mutation()?;
             let name = name.context("Missing trigger_id")?;
-            let prompt = get(root,name)?;
-            Ok(model_result(200,serde_json::json!({
-                "trigger_id":name,
-                "status":"accepted",
-                "execution":"current-agent-turn",
-                "prompt":prompt,
-                "instructions":"Execute the saved task using the current Agent's tools and permissions, and report its actual result. This request does not start a background or scheduled agent."
-            })))
+            let prompt = get(root, name)?;
+            Ok(model_result(
+                200,
+                serde_json::json!({
+                    "trigger_id":name,
+                    "status":"accepted",
+                    "execution":"current-agent-turn",
+                    "prompt":prompt,
+                    "instructions":"Execute the saved task using the current Agent's tools and permissions, and report its actual result. This request does not start a background or scheduled agent."
+                }),
+            ))
         }
         _ => bail!("Unsupported LocalTrigger action"),
     }
@@ -475,7 +484,8 @@ fn model_tool_contract_rejects_schedules_and_invalid_actions() {
     )
     .unwrap();
     assert!(auto.starts_with("HTTP 201\\n".replace("\\n", "\n").as_str()));
-    let auto_json: serde_json::Value = serde_json::from_str(auto.split_once('\n').unwrap().1).unwrap();
+    let auto_json: serde_json::Value =
+        serde_json::from_str(auto.split_once('\n').unwrap().1).unwrap();
     let auto_id = auto_json["trigger_id"].as_str().unwrap();
     assert_eq!(get(root.path(), auto_id).unwrap(), "auto id task");
     assert!(auto_json["storage"] == "local");
