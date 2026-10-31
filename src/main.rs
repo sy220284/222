@@ -2842,8 +2842,19 @@ async fn chat(
                         query = selector;
                     }
                     Ok((project, selector)) => {
+                        let worktrees = cross_project_resume::active_worktree_paths(
+                            agent.workspace_root(),
+                        )
+                        .await;
+                        let worktrees = match worktrees {
+                            Ok(paths) => paths,
+                            Err(error) => {
+                                eprintln!("Could not inspect Git worktrees: {error:#}");
+                                continue;
+                            }
+                        };
                         let location = cross_project_resume::check_cross_project_resume(
-                            agent.workspace_root(), Some(&project), true, &[], selector,
+                            agent.workspace_root(), Some(&project), true, &worktrees, selector,
                         );
                         match location {
                             cross_project_resume::ResumeLocation::AnotherProject { command, .. } => {
