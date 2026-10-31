@@ -196,9 +196,9 @@ def verify_spec_archive(archive: Path, baseline: dict):
 # This inventory is generated from exact ZIP bytes. It is a list of review
 # candidates, not evidence of complete parsing or behavioral equivalence.
 DECLARATION = re.compile(
-    r"^\\s*(?:(?:export|default|declare|abstract|async)\\s+)*"
-    r"(function|class|interface|type|enum|namespace|const|let|var)\\s+"
-    r"([A-Za-z_$][\\w$]*)\\b"
+    r"^\s*(?:(?:export|default|declare|abstract|async)\s+)*"
+    r"(function|class|interface|type|enum|namespace|const|let|var)\s+"
+    r"([A-Za-z_$][\w$]*)\b"
 )
 
 
@@ -221,7 +221,7 @@ def original_source_files(archive: Path):
         for info in z.infolist():
             if info.is_dir():
                 continue
-            parts = info.filename.replace("\\\\", "/").split("/")
+            parts = info.filename.replace("\\", "/").split("/")
             if ".." in parts or info.filename.startswith("/"):
                 raise AuditError("原版 ZIP 包含非法路径: " + info.filename)
             root = next((i for i in range(len(parts) - 2)
@@ -290,7 +290,7 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
             if existing is not None and key in existing:
                 item[key] = existing[key]
         indexed.append(item)
-    payload = "".join(json.dumps(i, ensure_ascii=False, sort_keys=True) + "\\n" for i in indexed)
+    payload = "".join(json.dumps(i, ensure_ascii=False, sort_keys=True) + "\n" for i in indexed)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(payload, encoding="utf-8")
     if write:
