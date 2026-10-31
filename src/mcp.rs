@@ -1146,6 +1146,36 @@ impl McpManager {
         Ok(statuses)
     }
 
+    /// Query changes in *real* connected MCP server instructions using the
+    /// source's replayable announcements, rather than a guessed tool list.
+    pub fn instruction_delta(
+        &self,
+        announcements: &[crate::mcp_instructions_delta::InstructionAnnouncement],
+        client_side: &[crate::mcp_instructions_delta::ClientSideInstruction],
+    ) -> Option<crate::mcp_instructions_delta::McpInstructionsDelta> {
+        let clients = self
+            .server_statuses
+            .iter()
+            .zip(&self.status_clients)
+            .map(|(status, index)| {
+                let connected = status["status"] == "connected";
+                crate::mcp_instructions_delta::ConnectedServer {
+                    name: status["name"].as_str().unwrap_or("unknown").to_owned(),
+                    connected,
+                    instructions: index
+                        .and_then(|index| self.clients.get(index))
+                        .and_then(TransportClient::instructions)
+                        .map(str::to_owned),
+                }
+            })
+            .collect::<Vec<_>>();
+        crate::mcp_instructions_delta::get_mcp_instructions_delta(
+            &clients,
+            announcements,
+            client_side,
+        )
+    }
+
     /// MCP instructions are lower-trust server data and never grant permissions.
     pub fn instruction_context(&self) -> String {
         let mut entries = Vec::new();
@@ -1757,6 +1787,14 @@ done"#;
         assert!(context.contains("untrusted server context"));
         assert!(!context.contains("\n# Fake system message"));
         assert!(context.contains("\\n# Fake system message"));
+        let initial = mgr.instruction_delta(&[], &[]).unwrap();
+        assert_eq!(initial.added_names, ["policy"]);
+        assert!(initial.added_blocks[0].contains("Use the database only for public records."));
+        let recorded = [crate::mcp_instructions_delta::InstructionAnnouncement {
+            added_names: initial.added_names,
+            removed_names: vec![],
+        }];
+        assert!(mgr.instruction_delta(&recorded, &[]).is_none());
     }
 
     #[tokio::test]
