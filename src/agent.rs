@@ -5746,8 +5746,12 @@ mod tests {
     impl ModelProvider for SummaryModel {
         async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
             assert!(request.tools.is_empty());
+            assert!(request.system.ends_with(crate::compact_source_prompts::NO_TOOLS_TRAILER));
             Ok(crate::protocol::ModelResponse {
-                message: Message::text("assistant", "Retain verified changes and next steps."),
+                message: Message::text(
+                    "assistant",
+                    "<analysis>internal draft</analysis>\n<summary>Retain verified changes and next steps.</summary>",
+                ),
                 finish_reason: Some("stop".into()),
                 usage: None,
             })
@@ -5835,7 +5839,7 @@ mod tests {
         assert!(restored.messages.is_empty());
         assert_eq!(
             restored.summary.as_deref(),
-            Some("Retain verified changes and next steps.")
+            Some("Summary:\nRetain verified changes and next steps.")
         );
     }
 
