@@ -274,7 +274,7 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
         existing = old.get(path)
         source = files[path]
         declarations = source_declarations(source)
-        candidates = function_index.get(path, [])
+        candidates = function_by_source.get(path, [])
         if not candidates and spec_archive is not None:
             candidates = [{"source_id": f"{path}:file-level:1",
                            "kind": "FileLevel", "source_lines": [1, row["source_lines"]]}]
