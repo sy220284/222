@@ -128,19 +128,34 @@ mod tests {
     #[test]
     fn original_filename_and_compound_extensions() {
         for path in [
-            "Cargo.lock", "pnpm-lock.yaml", "src/x.d.ts", "src/code.MIN.JS",
-            "src/bundle.bundle.css", "src/foo.generated.ts",
-            "proto/account.pb.go", "proto/account_pb2.py",
-            "proto/account_pb.py", "proto/service.grpc.ts",
-            "schema.openapi.json", "src/A-min.js", "src/a.auto.py",
-            "src/a.gen.rs", "src/data.pb.h", "src/foo.swagger.yaml",
+            "Cargo.lock",
+            "pnpm-lock.yaml",
+            "src/x.d.ts",
+            "src/code.MIN.JS",
+            "src/bundle.bundle.css",
+            "src/foo.generated.ts",
+            "proto/account.pb.go",
+            "proto/account_pb2.py",
+            "proto/account_pb.py",
+            "proto/service.grpc.ts",
+            "schema.openapi.json",
+            "src/A-min.js",
+            "src/a.auto.py",
+            "src/a.gen.rs",
+            "src/data.pb.h",
+            "src/foo.swagger.yaml",
         ] {
             assert!(is_generated_file(path), "expected generated: {path}");
         }
         for path in [
-            "src/normal.rs", "Cargo.toml", "src/types.ts",
-            "src/package-lock.json.bak", "src/production.locked", "src/a_auto.py",
-            "src/distinguished/file.rs", "src/a.pb.h.txt",
+            "src/normal.rs",
+            "Cargo.toml",
+            "src/types.ts",
+            "src/package-lock.json.bak",
+            "src/production.locked",
+            "src/a_auto.py",
+            "src/distinguished/file.rs",
+            "src/a.pb.h.txt",
             "src/README.md",
         ] {
             assert!(!is_generated_file(path), "expected authored: {path}");
@@ -152,8 +167,10 @@ mod tests {
         for path in [
             "dist/index.js",
             "nested/node_modules/fixture.js",
-            "vendor/lib.rs", "target/release/app",
-            "target/debug/app", ".next/static/main.js",
+            "vendor/lib.rs",
+            "target/release/app",
+            "target/debug/app",
+            ".next/static/main.js",
             "nested/third-party/client.rs",
             "nested\\coverage\\stats.txt",
         ] {
@@ -167,8 +184,11 @@ mod tests {
     #[test]
     fn filters_without_reordering_or_deduplicating_authored_paths() {
         let paths = vec![
-            "src/main.rs".into(), "Cargo.lock".into(), "src/main.rs".into(),
-            "dist/run.js".into(), "src/lib.rs".into(),
+            "src/main.rs".into(),
+            "Cargo.lock".into(),
+            "src/main.rs".into(),
+            "dist/run.js".into(),
+            "src/lib.rs".into(),
         ];
         assert_eq!(
             filter_generated_files(&paths),
