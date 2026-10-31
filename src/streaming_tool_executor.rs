@@ -229,11 +229,7 @@ impl StreamingExecutor {
             .iter()
             .filter(|t| t.status == ToolStatus::Executing)
             .collect();
-        executing.is_empty()
-            || (safe
-                && executing
-                    .iter()
-                    .all(|t| concurrency_safe(&t.call)))
+        executing.is_empty() || (safe && executing.iter().all(|t| concurrency_safe(&t.call)))
     }
 
     /// `addTool` — unknown tools to the executor become deferred (the agent
@@ -687,25 +683,31 @@ mod tests {
     async fn streaming_local_trigger_reads_use_safe_path_and_writes_are_exclusive() {
         let root = tempfile::tempdir().unwrap();
         let mut deps = deps();
-        deps.executor = ToolExecutor::new(
-            root.path().canonicalize().unwrap(), Approval::Full, false
-        );
+        deps.executor =
+            ToolExecutor::new(root.path().canonicalize().unwrap(), Approval::Full, false);
         let mut executor = StreamingExecutor::new(deps);
         let call = |action: &str, id: &str| ToolCall {
-            id:id.into(),kind:"function".into(),
-            function:FunctionCall{name:"LocalTrigger".into(),
-                arguments:serde_json::json!({"action":action}).to_string()},
+            id: id.into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: "LocalTrigger".into(),
+                arguments: serde_json::json!({"action":action}).to_string(),
+            },
         };
         executor.add_tool(call("list", "read"));
         executor.add_tool(call("create", "invalid"));
-        assert_eq!(executor.tools.len(),2);
+        assert_eq!(executor.tools.len(), 2);
         assert!(!executor.tools[0].deferred);
         assert!(!executor.tools[1].deferred);
         assert_eq!(executor.tools[1].status, ToolStatus::Queued);
         let output = executor.drain().await;
-        assert_eq!(output.len(),2);
-        assert_eq!(output[0].call.id,"read");
-        assert!(output[0].result.starts_with("HTTP 200\n"),"{:?}",output[0].result);
+        assert_eq!(output.len(), 2);
+        assert_eq!(output[0].call.id, "read");
+        assert!(
+            output[0].result.starts_with("HTTP 200\n"),
+            "{:?}",
+            output[0].result
+        );
         assert!(output[1].result.starts_with("ERROR:"));
     }
 
