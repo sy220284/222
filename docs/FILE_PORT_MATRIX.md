@@ -571,7 +571,7 @@
 | `src/components/mcp/McpParsingWarnings.tsx` | 213 | 22079 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/mcp/index.ts` | 10 | 523 | 重写：终端 UI／交互 | `src/generated_ports/p_9ba24aa9d05d7.rs` | 部分实现：完整等价：八组件+三类型 re-export 面清单；待验收 |
 | `src/components/mcp/utils/reconnectHelpers.tsx` | 49 | 5292 | 重写：终端 UI／交互 | `src/generated_ports/p_962b63a53cf13.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
-| `src/components/memory/MemoryFileSelector.tsx` | 438 | 48121 | 重写：终端 UI／交互 | 待定 | 未迁移 |
+| `src/components/memory/MemoryFileSelector.tsx` | 438 | 48121 | 重写：终端 UI／交互 | `src/memory_command.rs / src/main.rs` | 部分实现：交互式 /memory 已提供用户与项目两种可新建文件、已有自动记忆索引的可选列表、按序号确认与取消；仍缺原版树形导入/嵌套记忆、自动记忆文件夹与代理记忆入口、AutoMemory/AutoDream 状态切换持久化、最后选项记忆与完整交互控件；源码仅为本地终端可用子集，仍需功能对照验收 |
 | `src/components/memory/MemoryUpdateNotification.tsx` | 45 | 5100 | 重写：终端 UI／交互 | `src/generated_ports/p_88d57d5c10a9a.rs` | 部分实现：完整等价：getRelativeMemoryPath 纯函数（~/相对双候选取短，否则绝对）含三分支单测；JSX 宿主归 ink，待验收 |
 | `src/components/messageActions.tsx` | 450 | 54948 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/components/messages/AdvisorMessage.tsx` | 158 | 14479 | 重写：终端 UI／交互 | 待定 | 未迁移 |
