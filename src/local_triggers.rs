@@ -294,10 +294,10 @@ pub fn list(root: &Path) -> Result<Vec<String>> {
 pub fn model_definition() -> serde_json::Value {
     serde_json::json!({"type":"function","function":{
         "name":"LocalTrigger",
-        "description":"Manage explicit local reusable tasks only. list/get read saved tasks; create/update save a prompt; run retrieves a saved task for execution within this SAME current Agent turn. Does not schedule, launch remote agents, or spawn background workers. Mutations and run require user permission.",
+        "description":"Manage explicit, user-authorized local reusable tasks. create accepts a prompt without trigger_id and generates one; get/update/run require trigger_id. run returns the saved instructions to be performed in the SAME current Agent turn. No cloud jobs or scheduled/remote execution.",
         "parameters":{"type":"object","properties":{
             "action":{"type":"string","enum":["list","get","create","update","run"]},
-            "trigger_id":{"type":"string","description":"Saved task name for get/update/run"},
+            "trigger_id":{"type":"string","description":"Required for get/update/run, optional for create"},
             "body":{"type":"object","properties":{"prompt":{"type":"string"}},
                 "required":["prompt"],"additionalProperties":false}
         },"required":["action"],"additionalProperties":false}
@@ -363,18 +363,22 @@ pub fn validate_model_input(args: &serde_json::Value) -> Result<()> {
             if prompt.trim().is_empty() || prompt.len() > MAX_PROMPT_BYTES {
                 bail!("LocalTrigger prompt must be 1-65536 bytes");
             }
-            if action == "create" && !object.contains_key("trigger_id") {
-                bail!("LocalTrigger create requires a caller-chosen trigger_id");
-            }
         }
         _ => bail!("Unknown LocalTrigger action: {action}"),
     }
     Ok(())
 }
 
-/// A model tool cannot re-enter the owning Agent recursively. The run action
-/// returns the saved instructions to be executed in the SAME current turn;
-/// CLI/REPL run already execute through Agent::ask.
+/// The remote API's observable tool result is status plus raw JSON. The
+/// provider-neutral local equivalent keeps that wire format without making
+/// any HTTP request, and returns the selected identifier on create.
+fn model_result(status: u16, json: serde_json::Value) -> String {
+    format!("HTTP {status}\n{json}")
+}
+
+/// A model tool cannot recursively launch an Agent. "run" makes the
+/// authorized saved instructions available to the current model round, which
+/// can execute them using its existing local tools and permission checks.
 pub fn model_call(
     root: &Path,
     args: &serde_json::Value,
@@ -384,15 +388,25 @@ pub fn model_call(
     let action = args["action"].as_str().context("Missing action")?;
     let name = args.get("trigger_id").and_then(serde_json::Value::as_str);
     match action {
-        "list" => Ok(serde_json::to_string(&list(root)?)?),
-        "get" => Ok(serde_json::json!({"trigger_id":name,
-            "prompt":get(root, name.context("Missing trigger_id")?)?})
-        .to_string()),
+        "list" => Ok(model_result(200, serde_json::json!(list(root)?))),
+        "get" => {
+            let name = name.context("Missing trigger_id")?;
+            Ok(model_result(200, serde_json::json!({
+                "trigger_id":name, "prompt":get(root,name)?
+            })))
+        }
         "create" | "update" => {
             authorize_mutation()?;
-            let name = name.context("Missing trigger_id")?;
-            let prompt = args
-                .pointer("/body/prompt")
+            let generated;
+            let name = if action == "create" {
+                // Original inputSchema allows body-only create. The remote
+                // server supplies an id; the local store must do the same.
+                generated = Uuid::new_v4().to_string();
+                name.unwrap_or(&generated)
+            } else {
+                name.context("Missing trigger_id")?
+            };
+            let prompt = args.pointer("/body/prompt")
                 .and_then(serde_json::Value::as_str)
                 .context("Missing prompt")?;
             if action == "create" {
@@ -400,13 +414,23 @@ pub fn model_call(
             } else {
                 change(root, name, prompt)?;
             }
-            Ok(format!("LocalTrigger {action} saved: {name}"))
+            Ok(model_result(if action == "create" {201} else {200},
+                serde_json::json!({
+                    "trigger_id":name, "prompt":prompt,
+                    "action":action, "storage":"local"
+                })))
         }
         "run" => {
             authorize_mutation()?;
             let name = name.context("Missing trigger_id")?;
-            let prompt = get(root, name)?;
-            Ok(format!("User-authorized local task {name} for the CURRENT Agent turn (no background agent, no scheduled execution):\\n{prompt}"))
+            let prompt = get(root,name)?;
+            Ok(model_result(200,serde_json::json!({
+                "trigger_id":name,
+                "status":"accepted",
+                "execution":"current-agent-turn",
+                "prompt":prompt,
+                "instructions":"Execute the saved task using the current Agent's tools and permissions, and report its actual result. This request does not start a background or scheduled agent."
+            })))
         }
         _ => bail!("Unsupported LocalTrigger action"),
     }
@@ -425,13 +449,25 @@ fn model_tool_contract_rejects_schedules_and_invalid_actions() {
     )
     .unwrap()
     .contains("review local files"));
+    let auto = model_call(
+        root.path(),
+        &serde_json::json!({"action":"create","body":{"prompt":"auto id task"}}),
+        || Ok(()),
+    )
+    .unwrap();
+    assert!(auto.starts_with("HTTP 201\\n".replace("\\n", "\n").as_str()));
+    let auto_json: serde_json::Value = serde_json::from_str(auto.split_once('\n').unwrap().1).unwrap();
+    let auto_id = auto_json["trigger_id"].as_str().unwrap();
+    assert_eq!(get(root.path(), auto_id).unwrap(), "auto id task");
+    assert!(auto_json["storage"] == "local");
     let task = model_call(
         root.path(),
         &serde_json::json!({"action":"run","trigger_id":"manual"}),
         || Ok(()),
     )
     .unwrap();
-    assert!(task.contains("CURRENT Agent turn"));
+    assert!(task.contains("current-agent-turn"));
+    assert!(task.starts_with("HTTP 200\n"));
     assert!(model_call(
         root.path(),
         &serde_json::json!({"action":"update","trigger_id":"manual","body":{"prompt":"mutate"}}),
