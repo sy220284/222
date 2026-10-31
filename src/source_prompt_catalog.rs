@@ -77,14 +77,21 @@ fn render_original_agent(original: &str) -> String {
     let vendor_intro = literal(
         "src/tools/AgentTool/built-in/generalPurposeAgent.ts",
         "You are an agent for ",
-    ).expect("Source general-purpose introductory text is required");
+    )
+    .expect("Source general-purpose introductory text is required");
     let vendor = vendor_intro
         .strip_prefix("You are an agent for ")
         .and_then(|suffix| suffix.split_once(". "))
         .map(|(name, _)| name)
         .expect("Source agent introduction has a vendor sentence");
-    let vendor_label = vendor.split_once(", ").map(|(name, _)| name).unwrap_or(vendor);
-    let first_word = vendor_label.split_whitespace().next().unwrap_or(vendor_label);
+    let vendor_label = vendor
+        .split_once(", ")
+        .map(|(name, _)| name)
+        .unwrap_or(vendor);
+    let first_word = vendor_label
+        .split_whitespace()
+        .next()
+        .unwrap_or(vendor_label);
     let project_marker = format!("{}.md", first_word.to_uppercase());
     let browser_marker = format!("mcp__{}-in-chrome__*", first_word.to_lowercase());
 
@@ -201,19 +208,24 @@ mod tests {
         let original = literal(
             "src/tools/AgentTool/built-in/generalPurposeAgent.ts",
             "You are an agent for ",
-        ).unwrap();
+        )
+        .unwrap();
         let vendor_name = original
             .strip_prefix("You are an agent for ")
             .unwrap()
             .split_once(", ")
-            .unwrap().0
+            .unwrap()
+            .0
             .split_whitespace()
             .next()
             .unwrap()
             .to_ascii_lowercase();
         for role in ["explore", "plan", "verification", "general"] {
             let result = original_role_instructions(role);
-            assert!(!result.to_ascii_lowercase().contains(&vendor_name), "{role}");
+            assert!(
+                !result.to_ascii_lowercase().contains(&vendor_name),
+                "{role}"
+            );
         }
         assert!(original_role_instructions("verification").contains("AGENTS.md"));
     }
