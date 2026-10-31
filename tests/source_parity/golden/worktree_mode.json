@@ -1,0 +1,68 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/worktreeModeEnabled.ts",
+  "source_sha256": "31782c2ae3b2e1bb52b6a839b44f3296bd772de5efe6d2f2e15b5a28dbdea210",
+  "export": "isWorktreeModeEnabled",
+  "cases": [
+    {
+      "id": "worktree-0",
+      "kind": "normal",
+      "export": "isWorktreeModeEnabled",
+      "input": null,
+      "source_ids": [
+        "src/utils/worktreeModeEnabled.ts:FunctionDeclaration:9-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "worktree-1",
+      "kind": "edge",
+      "export": "isWorktreeModeEnabled",
+      "input": {},
+      "source_ids": [
+        "src/utils/worktreeModeEnabled.ts:FunctionDeclaration:9-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "worktree-2",
+      "kind": "edge",
+      "export": "isWorktreeModeEnabled",
+      "input": false,
+      "source_ids": [
+        "src/utils/worktreeModeEnabled.ts:FunctionDeclaration:9-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "worktree-3",
+      "kind": "edge",
+      "export": "isWorktreeModeEnabled",
+      "input": 0,
+      "source_ids": [
+        "src/utils/worktreeModeEnabled.ts:FunctionDeclaration:9-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "worktree-4",
+      "kind": "edge",
+      "export": "isWorktreeModeEnabled",
+      "input": "",
+      "source_ids": [
+        "src/utils/worktreeModeEnabled.ts:FunctionDeclaration:9-11:occurrence-1"
+      ],
+      "expected": true
+    },
+    {
+      "id": "worktree-5",
+      "kind": "edge",
+      "export": "isWorktreeModeEnabled",
+      "input": 42,
+      "source_ids": [
+        "src/utils/worktreeModeEnabled.ts:FunctionDeclaration:9-11:occurrence-1"
+      ],
+      "expected": true
+    }
+  ]
+}

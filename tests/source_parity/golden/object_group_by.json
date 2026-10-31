@@ -1,0 +1,324 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/objectGroupBy.ts",
+  "source_sha256": "40024fa3b3d93d669a6c157609496fefe35deec4c0d0375b0a46723597bf657d",
+  "export": "objectGroupBy",
+  "cases": [
+    {
+      "id": "group-0",
+      "kind": "normal",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "mode": "parity"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "odd": [
+          1,
+          3,
+          5
+        ],
+        "even": [
+          2,
+          4
+        ]
+      }
+    },
+    {
+      "id": "group-1",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [],
+        "mode": "parity"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {}
+    },
+    {
+      "id": "group-2",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          0,
+          0,
+          0
+        ],
+        "mode": "parity"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "even": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "group-3",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          3,
+          2,
+          1,
+          0,
+          -1,
+          -2
+        ],
+        "mode": "parity"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "odd": [
+          3,
+          1,
+          -1
+        ],
+        "even": [
+          2,
+          0,
+          -2
+        ]
+      }
+    },
+    {
+      "id": "group-4",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          "apple",
+          "apricot",
+          "banana",
+          "blueberry"
+        ],
+        "mode": "initial"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "a": [
+          "apple",
+          "apricot"
+        ],
+        "b": [
+          "banana",
+          "blueberry"
+        ]
+      }
+    },
+    {
+      "id": "group-5",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          "__proto__",
+          "constructor",
+          "toString",
+          "__proto__"
+        ],
+        "mode": "identity"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "__proto__": [
+          "__proto__",
+          "__proto__"
+        ],
+        "constructor": [
+          "constructor"
+        ],
+        "toString": [
+          "toString"
+        ]
+      }
+    },
+    {
+      "id": "group-6",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "mode": "index-mod3"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "0": [
+          1,
+          4
+        ],
+        "1": [
+          2,
+          5
+        ],
+        "2": [
+          3,
+          6
+        ]
+      }
+    },
+    {
+      "id": "group-7",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          "x",
+          "y",
+          "z"
+        ],
+        "mode": "all"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "__proto__": [
+          "x",
+          "y",
+          "z"
+        ]
+      }
+    },
+    {
+      "id": "group-8",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          10
+        ],
+        "mode": "index-mod3"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "0": [
+          10
+        ]
+      }
+    },
+    {
+      "id": "group-9",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          "你",
+          "好",
+          "汉",
+          "字"
+        ],
+        "mode": "initial"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "你": [
+          "你"
+        ],
+        "好": [
+          "好"
+        ],
+        "汉": [
+          "汉"
+        ],
+        "字": [
+          "字"
+        ]
+      }
+    },
+    {
+      "id": "group-10",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          "x",
+          "y",
+          "x"
+        ],
+        "mode": "identity"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "x": [
+          "x",
+          "x"
+        ],
+        "y": [
+          "y"
+        ]
+      }
+    },
+    {
+      "id": "group-11",
+      "kind": "edge",
+      "export": "objectGroupBy",
+      "input": {
+        "values": [
+          null,
+          true,
+          false,
+          0,
+          "x"
+        ],
+        "mode": "type"
+      },
+      "source_ids": [
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"
+      ],
+      "expected": {
+        "null": [
+          null
+        ],
+        "boolean": [
+          true,
+          false
+        ],
+        "number": [
+          0
+        ],
+        "string": [
+          "x"
+        ]
+      }
+    }
+  ]
+}
