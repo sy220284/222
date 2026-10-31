@@ -194,6 +194,28 @@ mod tests {
     }
 
     #[test]
+    fn all_live_source_roles_strip_original_vendor_brand_and_use_local_rules() {
+        let original = literal(
+            "src/tools/AgentTool/built-in/generalPurposeAgent.ts",
+            "You are an agent for ",
+        ).unwrap();
+        let vendor_name = original
+            .strip_prefix("You are an agent for ")
+            .unwrap()
+            .split_once(", ")
+            .unwrap().0
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .to_ascii_lowercase();
+        for role in ["explore", "plan", "verification", "general"] {
+            let result = original_role_instructions(role);
+            assert!(!result.to_ascii_lowercase().contains(&vendor_name), "{role}");
+        }
+        assert!(original_role_instructions("verification").contains("AGENTS.md"));
+    }
+
+    #[test]
     fn actual_runtime_prompts_match_verbatim_source_literals() {
         assert_eq!(glob_description(), crate::search::SOURCE_GLOB_DESCRIPTION);
         assert_eq!(grep_description(), crate::search::SOURCE_GREP_DESCRIPTION);
