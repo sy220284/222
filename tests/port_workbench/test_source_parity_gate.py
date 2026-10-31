@@ -133,5 +133,37 @@ class SourceParityGateTests(unittest.TestCase):
             errors,_ = verify_source_lines(source,spec)
             self.assertTrue(any("源码逐行原文不一致" in e for e in errors))
 
+
+    def test_declaration_index_keeps_source_provenance_without_faking_acceptance(self):
+        from source_parity_gate import source_declarations, index_contracts
+        from unittest.mock import patch
+        import json
+        code = b"export function process(input: string) {\\n return input;\\n}\\n"
+        found = source_declarations(code)
+        self.assertEqual([entry["id"] for entry in found], ["function:process@1"])
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / "docs").mkdir()
+            (repo / "docs/PORT_BASELINE.json").write_text(json.dumps({
+                "expected_total": 1,
+                "source_hashes": {"src/a.ts": hashlib.sha256(code).hexdigest()}
+            }), encoding="utf-8")
+            (repo / "docs/SOURCE_PARITY_CONTRACTS.jsonl").write_text("", encoding="utf-8")
+            archive = repo / "original.zip"
+            with ZipFile(archive, "w") as original:
+                original.writestr("original/source/src/a.ts", code)
+            row = {"src/a.ts": {"status": "unported", "source_lines": 4,
+                                  "source_bytes": len(code), "rust_mapping": "src/a.rs"}}
+            with patch("source_parity_gate.read_matrix", return_value=row):
+                stats = index_contracts(repo, archive, repo / "index.jsonl", write=True)
+                self.assertEqual(stats["indexed"], 1)
+                record = json.loads((repo / "docs/SOURCE_PARITY_CONTRACTS.jsonl").read_text())
+                self.assertEqual(record["source_declarations"][0]["line"], 1)
+                self.assertEqual(record["review_status"], "pending")
+                self.assertEqual(record["functions"], [])
+                # Re-indexing is idempotent: no new approvals or duplicates.
+                index_contracts(repo, archive, repo / "index.jsonl", write=True)
+                self.assertEqual(len((repo / "docs/SOURCE_PARITY_CONTRACTS.jsonl").read_text().splitlines()), 1)
+
 if __name__=="__main__":
     unittest.main()
