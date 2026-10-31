@@ -196,8 +196,8 @@ fn sdk_interrupt_cancels_in_flight_streamed_hook_before_file_write() {
         let mut stream = accept_before(&listener, Instant::now() + Duration::from_secs(10));
         let request = read_request(&mut stream);
         assert_eq!(request["stream"], true);
-        // Moving to block 1 admits the complete block 0 while the provider
-        // request is still in progress. Do not send the finish marker.
+        // Chat Completions has no per-block stop marker. Finish the model
+        // response, then interrupt while its actual tool hook is running.
         let data = [
             json!({"choices":[{"delta":{"role":"assistant","tool_calls":[{
                 "index":0,"id":"late-write","type":"function","function":{
@@ -209,7 +209,8 @@ fn sdk_interrupt_cancels_in_flight_streamed_hook_before_file_write() {
         .iter()
         .map(|event| format!("data: {event}\n\n"))
         .collect::<String>();
-        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\n\r\n{data}",data.len()+1000).unwrap();
+        let data = data + "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n";
+        write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\n\r\n{data}",data.len()).unwrap();
         stream.flush().unwrap();
         thread::sleep(Duration::from_millis(900));
     });

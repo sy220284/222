@@ -12,6 +12,7 @@ use tokio::sync::mpsc::UnboundedSender;
 #[derive(Default)]
 struct Accumulator {
     text: String,
+    parts: Vec<Value>,
     calls: Vec<ToolCall>,
     usage: Option<TokenUsage>,
     finish_reason: Option<String>,
@@ -47,7 +48,8 @@ impl Accumulator {
         {
             let mut text_parts = Vec::new();
             for part in parts {
-                if let Some(text) = part.get("text").and_then(Value::as_str) {
+                self.parts.push(part.clone());
+                if let Some(text) = crate::gemini_content::visible_text(part) {
                     text_parts.push(text);
                 }
                 if let Some(call) = part.get("functionCall") {
@@ -75,8 +77,8 @@ impl Accumulator {
         }
         Ok(())
     }
-    fn complete(self) -> ModelResponse {
-        ModelResponse {
+    fn complete(self) -> Result<ModelResponse> {
+        Ok(ModelResponse {
             message: Message {
                 role: "assistant".into(),
                 content: if self.text.is_empty() {
@@ -84,7 +86,7 @@ impl Accumulator {
                 } else {
                     Some(self.text)
                 },
-                reasoning_content: None,
+                reasoning_content: Some(crate::gemini_content::encode(&self.parts)?),
                 content_blocks: None,
                 tool_calls: if self.calls.is_empty() {
                     None
@@ -95,7 +97,7 @@ impl Accumulator {
             },
             finish_reason: self.finish_reason,
             usage: self.usage,
-        }
+        })
     }
 }
 fn frame_boundary(buffer: &[u8]) -> Option<(usize, usize)> {
@@ -185,7 +187,7 @@ pub async fn complete(
     if assembler.finish_reason.is_none() && !assembler.saw_done {
         bail!("Gemini stream ended before a completion marker");
     }
-    Ok(assembler.complete())
+    assembler.complete()
 }
 #[cfg(test)]
 mod tests {
@@ -204,7 +206,7 @@ mod tests {
             &mut agg,&tx).unwrap();
         assert_eq!(rx.try_recv().unwrap(), "Hello ");
         assert_eq!(rx.try_recv().unwrap(), "world");
-        let result = agg.complete();
+        let result = agg.complete().unwrap();
         assert_eq!(result.message.content.as_deref(), Some("Hello world"));
         assert_eq!(
             result.message.tool_calls.as_ref().unwrap()[0].function.name,

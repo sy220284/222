@@ -36,6 +36,7 @@ mod event_signal;
 mod exec_file;
 mod exec_sync_compat;
 mod files_context;
+mod gemini_content;
 mod gemini_sse;
 mod generated_ports;
 mod git_config_parser;
@@ -3402,8 +3403,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
                 };
-                let content = match local_attachments::attach(
-                    agent.workspace_root(),
+                let content = match agent.attach_local_files(
                     raw_content,
                     event
                         .get("file_attachments")

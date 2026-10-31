@@ -265,7 +265,7 @@
 | `src/commands/resume/resume.tsx` | 275 | 37026 | 重写：保持通用行为 | `src/session_control.rs / src/main.rs` | 部分实现：真实 UUID/标题搜索、歧义拒绝、原会话恢复、跨进程 CLI；原版 React 选择器、跨项目搜索和聊天即时状态迁移未等价 |
 | `src/commands/review/UltrareviewOverageDialog.tsx` | 96 | 9655 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
 | `src/commands/review/reviewRemote.ts` | 317 | 11926 | 排除：用户取消云端及远程专属功能 | — | 按用户要求删除；云端专项审查（保留普通本地审查）；不再跟进，通用本地能力保留 |
-| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收 |
+| `src/commands/review/ultrareviewCommand.tsx` | 58 | 9855 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收；本次修复只读模式无法读取 PR 的断链，固定 argv 只读查询经过 deny/ask，真实 CLI 验证正常查询与拒绝写入 |
 | `src/commands/review/ultrareviewEnabled.ts` | 15 | 526 | 改造：本地任意模型通用工作流 | `src/local_advanced_workflows.rs / src/main.rs` | 部分实现：已接入多模型本地 Agent 真实执行入口和只读权限；原版全部状态、UI、异常与恢复链尚未逐项验收 |
 | `src/commands/review.ts` | 58 | 2188 | 重写：保持通用行为 | `src/git_workflows.rs / src/main.rs` | 部分实现：通过真实 Agent 执行 PR 审查任务；原版专属 Ultrareview 远程链仍待改造 |
 | `src/commands/rewind/index.ts` | 14 | 337 | 重写：保持通用行为 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 |
@@ -1115,7 +1115,7 @@
 | `src/services/tips/tipScheduler.ts` | 59 | 1664 | 重写：保持通用行为 | `src/generated_ports/p_7cdff970345df.rs` | 部分实现：完整等价：selectTipWithLongestTimeSinceShown 选择核心（空返回 None/单元素短路/降序取最长）纯函数含双单测；历史访问器与厂商事件随各自链路接线，待验收 |
 | `src/services/tokenEstimation.ts` | 496 | 16883 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/services/toolUseSummary/toolUseSummaryGenerator.ts` | 113 | 3376 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | `src/streaming_tool_executor.rs` | 部分实现：保序队列、一次性结果、延期独占工具及失败取消已接 Agent；共用输入验证与强制 Hook 审批，保留附加上下文/警告；执行器与块泵受同一模型轮次所有，discard/兄弟失败等待取消清理，SDK interrupt、真实 Shell 进程树和 SSE 回环有回归；中断的完整会话记录、所有提供方 fallback、进度消息和复杂上下文修饰仍待等价 |
+| `src/services/tools/StreamingToolExecutor.ts` | 531 | 17196 | 重写：保持通用行为 | `src/streaming_tool_executor.rs` | 部分实现：保序队列、一次性结果、延期独占工具及失败取消已接 Agent；共用输入验证与强制 Hook 审批，保留附加上下文/警告；执行器与块泵受同一模型轮次所有，discard/兄弟失败等待取消清理，SDK interrupt、真实 Shell 进程树和 SSE 回环有回归；中断的完整会话记录、所有提供方 fallback、进度消息和复杂上下文修饰仍待等价；本次审查修复 Chat Completions 交错 index 过早交付，按协议完成边界执行，真实 SDK 双工具、续写与中断回归覆盖；该协议无原版块结束事件，中途执行时序差异保留 |
 | `src/services/tools/toolExecution.ts` | 1746 | 60309 | 重写：工具调用与 Hook 生命周期 | `src/agent.rs / src/hooks.rs / src/tools.rs` | 部分实现：三种调度共用工具输入验证及 Hook 强制审批；流式有效参数和前后 Hook 上下文/警告进入真实模型回合；非法输入或拒绝不触发执行后 Hook，真实 SSE/文件系统回归已增加；完整原版事件及所有入口仍待等价 |
 | `src/services/tools/toolHooks.ts` | 651 | 22333 | 重写：Hooks 事件与生命周期 | `src/hooks.rs / src/agent.rs` | 部分实现：PostToolUse 的 MCP 输出替换和连续 Hook 可见性已接入 Agent；完整 Hook 事件/阻断/回调时序仍缺 |
 | `src/services/tools/toolOrchestration.ts` | 189 | 5501 | 重写：保持通用行为 | `src/tool_orchestration.rs` | 部分实现：partitionToolCalls 分区语义（连续只读合批/unsafe 断批/schema 失败与未知工具保守串行）、isConcurrencySafe 表（Read/Glob/Grep/WebFetch/WebSearch 对照原版逐工具核对；Bash 只读条件判定与 task/Agent 类 true 项因 Rust 执行体独占借用保守 false 已记差异）、并发上限 ATLAS_MAX_TOOL_USE_CONCURRENCY（parseInt 非零取值否则 10 语义）已接入 agent.rs 主循环批次调度（safe 批校验/hook 串行+executor.execute 与 PostToolUse hook 并发、结果按块序回填），contextModifier 队列待工具级 modifyContext 端口；待验收 |
@@ -1195,7 +1195,7 @@
 | `src/tools/BashTool/modeValidation.ts` | 116 | 3266 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/pathValidation.ts` | 1304 | 43679 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/prompt.ts` | 370 | 21130 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
-| `src/tools/BashTool/readOnlyValidation.ts` | 1991 | 68322 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
+| `src/tools/BashTool/readOnlyValidation.ts` | 1991 | 68322 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；本次接入高级 PR 审查所需的固定 argv gh pr view/diff 子集及拒绝/审批规则；完整安全命令与参数集合仍未等价 |
 | `src/tools/BashTool/sedEditParser.ts` | 323 | 9562 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/sedValidation.ts` | 685 | 21518 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/BashTool/shouldUseSandbox.ts` | 154 | 5185 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
@@ -1233,7 +1233,7 @@
 | `src/tools/FileEditTool/prompt.ts` | 29 | 1895 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileEditTool/types.ts` | 86 | 2612 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；Edit 原版严格参数名和语义布尔已接入运行时（d061352e），仍缺完整输出结构，待验收； |
 | `src/tools/FileEditTool/utils.ts` | 776 | 22516 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；弯引号文本匹配、替换时保留引号排版和非 Markdown 行尾空白归一化（9eed00be、645510ed、f17bb1c9），源码已提交待验收； |
-| `src/tools/FileReadTool/FileReadTool.ts` | 1184 | 39073 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；读取状态在 Agent 跨轮共享，区分完整/部分读取与输出截断（ae165e76、2206e0f9），待验收；；原版 Read(file_path,offset,limit) 严格参数转换、256KiB 文件上限及不受通用16K截断的真实执行入口（41404581、d061352e、223c5e08），待验收；；原版 Read 同范围且 mtime 未变化时返回简短复用提示，避免重复长文本占用上下文（cf83f4b6、1e8b095a、1b661e19），待验收；；按原版项目临时目录语义读取本会话后台任务 stdout/stderr，保留 Read 规则和流式有界行读取，不扩大编辑权限（46319cca、e773d797），源码已提交待验收 |
+| `src/tools/FileReadTool/FileReadTool.ts` | 1184 | 39073 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全；读取状态在 Agent 跨轮共享，区分完整/部分读取与输出截断（ae165e76、2206e0f9），待验收；；原版 Read(file_path,offset,limit) 严格参数转换、256KiB 文件上限及不受通用16K截断的真实执行入口（41404581、d061352e、223c5e08），待验收；；原版 Read 同范围且 mtime 未变化时返回简短复用提示，避免重复长文本占用上下文（cf83f4b6、1e8b095a、1b661e19），待验收；；按原版项目临时目录语义读取本会话后台任务 stdout/stderr，保留 Read 规则和流式有界行读取，不扩大编辑权限（46319cca、e773d797），源码已提交待验收；本次 SDK 本地附件复用统一 Read 授权，deny/ask 在读盘和发送前阻断，真实 SDK 回归覆盖 |
 | `src/tools/FileReadTool/UI.tsx` | 185 | 22540 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileReadTool/imageProcessor.ts` | 95 | 2881 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |
 | `src/tools/FileReadTool/limits.ts` | 93 | 3219 | 重写：工具行为、参数和权限 | `src/tools.rs` | 部分实现，工具种类尚不全 |

@@ -1307,14 +1307,30 @@ impl ToolExecutor {
         if matched == Some(permission_rules::Behavior::Deny) {
             bail!("Tool {tool} denied by explicit permission rule");
         }
-        if self.approval == Approval::ReadOnly {
-            bail!("Tool {tool} denied in read-only mode");
-        }
-        // Plan mode forbids mutations. In don't-ask mode, explicit allow
-        // rules still work: only decisions that would ask are denied.
-        // Original permissions.ts hasPermissionsToUseTool (lines 480-516).
-        if self.mode == Some(permission_mode::Mode::Plan) {
-            bail!("Tool {tool} denied by permission mode");
+        if self.approval == Approval::ReadOnly || self.mode == Some(permission_mode::Mode::Plan) {
+            // Source BashTool/readOnlyValidation.ts validates read-only
+            // queries instead of rejecting every shell tool. Keep this
+            // local PR adaptation limited to fixed gh argv; no shell syntax,
+            // templates, output files or mutations are authorized here.
+            let query = (crate::tool_names::canonical_name(tool) == "run_command"
+                || tool == "PowerShell")
+                && args
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .and_then(crate::shell_runtime::read_only_pr_args)
+                    .is_some()
+                && args.get("run_in_background").and_then(Value::as_bool) != Some(true);
+            if !query {
+                if self.approval == Approval::ReadOnly {
+                    bail!("Tool {tool} denied in read-only mode");
+                }
+                bail!("Tool {tool} denied by permission mode");
+            }
+            // Explicit ask rules still require the normal prompt below;
+            // explicit deny rules have already been applied above.
+            if matched != Some(permission_rules::Behavior::Ask) {
+                return Ok(());
+            }
         }
         if matched == Some(permission_rules::Behavior::Allow) {
             return Ok(());
@@ -1415,7 +1431,7 @@ impl ToolExecutor {
         ))
     }
 
-    fn require_read_rules(&self, requested: &str, path: &Path) -> Result<()> {
+    pub(crate) fn require_read_rules(&self, requested: &str, path: &Path) -> Result<()> {
         match self.read_rule_decision(requested, path)? {
             Some(permission_rules::Behavior::Deny) => {
                 bail!("Read denied by explicit permission rule: {requested}")
@@ -2035,9 +2051,27 @@ impl ToolExecutor {
     ) -> Result<String> {
         let command = required(args, "command")?;
         let timeout_ms = Self::shell_timeout_ms(args)?;
-        let mut proc = kind.build_command(command)?;
+        let pr_args = if self.approval == Approval::ReadOnly
+            || self.mode == Some(permission_mode::Mode::Plan)
+        {
+            crate::shell_runtime::read_only_pr_args(command)
+        } else {
+            None
+        };
+        let read_only_query = pr_args.is_some();
+        let mut proc = if let Some(args) = pr_args {
+            let mut proc = tokio::process::Command::new("gh");
+            proc.args(args);
+            proc
+        } else {
+            kind.build_command(command)?
+        };
         proc.envs(&self.session_env);
         crate::subprocess_env::apply(&mut proc);
+        if read_only_query {
+            // Enforce this after applying session environment overrides.
+            proc.env("GH_PAGER", "cat").env("PAGER", "cat");
+        }
         // The original ShellCommand uses tree-kill on timeout and abort.
         // A dropped shell process alone leaves descendants alive, possibly
         // holding stdout/stderr pipes and continuing unauthorized side effects.
@@ -3310,6 +3344,64 @@ mod tests {
             .with_permission_mode(permission_mode::Mode::AcceptEdits);
         let result = readonly.execute(&call).await;
         assert!(result.contains("read-only mode"), "{result}");
+    }
+
+    #[test]
+    fn read_only_pr_queries_keep_argv_and_permission_boundaries_on_all_platforms() {
+        let root = tempfile::tempdir().unwrap();
+        for ceiling in [Approval::Full, Approval::ReadOnly] {
+            let tool = executor(root.path(), ceiling)
+                .with_permission_mode(permission_mode::Mode::Plan)
+                .with_permission_rules(vec![permission_rules::Rule {
+                    behavior: permission_rules::Behavior::Allow,
+                    value: permission_rules::parse_rule("Bash"),
+                }]);
+            for command in ["gh pr view 6", "gh pr diff 6", "gh pr view", "gh pr diff"] {
+                assert!(tool
+                    .require_approval("run_command", &json!({"command":command}))
+                    .is_ok());
+            }
+            for command in [
+                "gh pr edit 6",
+                "gh pr checkout 6",
+                "gh pr view 6 --web",
+                "gh pr diff 6 > output",
+                "gh pr diff 6 --output output",
+                "gh pr diff 6; touch output",
+                "gh pr diff 6\ntouch output",
+                "gh pr diff $(touch output)",
+                "gh pr diff 0",
+                "gh pr diff -1",
+            ] {
+                assert!(
+                    tool.require_approval("run_command", &json!({"command":command}))
+                        .is_err(),
+                    "{command}"
+                );
+            }
+            assert!(tool
+                .require_approval(
+                    "run_command",
+                    &json!({
+                        "command":"gh pr diff 6","run_in_background":true
+                    })
+                )
+                .is_err());
+            for behavior in [
+                permission_rules::Behavior::Deny,
+                permission_rules::Behavior::Ask,
+            ] {
+                let restricted = executor(root.path(), ceiling)
+                    .with_permission_mode(permission_mode::Mode::Plan)
+                    .with_permission_rules(vec![permission_rules::Rule {
+                        behavior,
+                        value: permission_rules::parse_rule("Bash"),
+                    }]);
+                assert!(restricted
+                    .require_approval("run_command", &json!({"command":"gh pr diff 6"}))
+                    .is_err());
+            }
+        }
     }
 
     #[tokio::test]

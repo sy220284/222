@@ -258,13 +258,12 @@ pub(crate) fn openai_messages(request: &ModelRequest) -> Result<Vec<Value>> {
         .chain(request.messages.iter().cloned())
     {
         let mut wire = serde_json::to_value(&msg)?;
-        // Responses-only encrypted reasoning is provider-bound opaque state.
+        // Responses/Gemini reasoning envelopes are provider-bound opaque state.
         // Never forward this internal envelope as DeepSeek reasoning text.
-        if msg
-            .reasoning_content
-            .as_deref()
-            .is_some_and(|value| value.starts_with(crate::chatgpt_plan::REASONING_ITEMS_PREFIX))
-        {
+        if msg.reasoning_content.as_deref().is_some_and(|value| {
+            value.starts_with(crate::chatgpt_plan::REASONING_ITEMS_PREFIX)
+                || value.starts_with(crate::gemini_content::PARTS_PREFIX)
+        }) {
             if let Some(map) = wire.as_object_mut() {
                 map.remove("reasoning_content");
             }
@@ -463,6 +462,12 @@ fn gemini_request_body(request: &ModelRequest) -> Result<Value> {
     for msg in &request.messages {
         let parts: Vec<Value> = match msg.role.as_str() {
             "assistant" => {
+                if let Some(parts) =
+                    crate::gemini_content::decode(msg.reasoning_content.as_deref())?
+                {
+                    contents.push(json!({"role":"model","parts":parts}));
+                    continue;
+                }
                 let mut p: Vec<Value> = msg
                     .content
                     .as_ref()
@@ -617,7 +622,7 @@ impl ModelProvider for Gemini {
         let mut texts = Vec::new();
         let mut calls = Vec::new();
         for part in parts {
-            if let Some(text) = part.get("text").and_then(Value::as_str) {
+            if let Some(text) = crate::gemini_content::visible_text(part) {
                 texts.push(text.to_owned());
             }
             if let Some(f) = part.get("functionCall") {
@@ -643,7 +648,7 @@ impl ModelProvider for Gemini {
                 } else {
                     Some(texts.join("\n"))
                 },
-                reasoning_content: None,
+                reasoning_content: Some(crate::gemini_content::encode(parts)?),
                 content_blocks: None,
                 tool_calls: if calls.is_empty() { None } else { Some(calls) },
                 tool_call_id: None,
@@ -777,6 +782,28 @@ fn error_summary(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gemini_signed_parts_are_not_sent_to_openai_compatible_models() {
+        let mut message = Message::text("assistant", "visible answer");
+        message.reasoning_content = Some(
+            crate::gemini_content::encode(&[
+                json!({"text":"private thought","thought":true,"thoughtSignature":"opaque"}),
+            ])
+            .unwrap(),
+        );
+        let request = ModelRequest {
+            model: "other-provider".into(),
+            system: "rules".into(),
+            messages: vec![message],
+            tools: vec![],
+        };
+        let wire = openai_messages(&request).unwrap();
+        assert_eq!(wire[1]["content"], "visible answer");
+        assert!(wire[1].get("reasoning_content").is_none());
+        assert!(!serde_json::to_string(&wire)
+            .unwrap()
+            .contains("private thought"));
+    }
     #[test]
     fn provider_adapters_preserve_user_image_blocks_and_keep_roles() {
         let parsed = crate::multimodal::parse(&json!([

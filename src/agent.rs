@@ -23,7 +23,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use futures::stream::StreamExt;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     fs,
@@ -3009,6 +3009,16 @@ impl Agent {
             .with_extra_roots(self.additional_dirs.clone())
             .with_permission_mode(self.permission_mode);
         executor.list_skills()
+    }
+
+    pub fn attach_local_files(&self, content: &Value, files: Option<&Value>) -> Result<Value> {
+        let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
+            .with_permission_rules(self.permission_rules.clone())
+            .with_extra_roots(self.additional_dirs.clone())
+            .with_permission_mode(self.permission_mode);
+        crate::local_attachments::attach(&self.root, content, files, |raw, path| {
+            executor.require_read_rules(raw, path)
+        })
     }
 
     pub fn list_user_skills(&self) -> Result<String> {

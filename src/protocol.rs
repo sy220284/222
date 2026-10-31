@@ -19,8 +19,9 @@ pub struct Message {
     pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
-    /// Reasoning returned by thinking-capable APIs. DeepSeek requires this in
-    /// the next tool-call turn; keep it in the session, not user-visible text.
+    /// Provider-bound reasoning state: DeepSeek reasoning text, or versioned
+    /// opaque Responses/Gemini envelopes. Kept in sessions, never displayed
+    /// as answer text or forwarded to a different provider's API.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
     /// SDK multimodal content, stored durably in sessions and translated

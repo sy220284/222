@@ -52,7 +52,12 @@ fn authorized_path(root: &Path, raw: &str) -> Result<PathBuf> {
 
 /// Fail before sending the user turn to a model if any attachment is invalid.
 /// Local image inputs use existing multi-provider image blocks; text remains UTF-8.
-pub fn attach(root: &Path, current: &Value, field: Option<&Value>) -> Result<Value> {
+pub fn attach(
+    root: &Path,
+    current: &Value,
+    field: Option<&Value>,
+    authorize_read: impl Fn(&str, &Path) -> Result<()>,
+) -> Result<Value> {
     let Some(field) = field else {
         return Ok(current.clone());
     };
@@ -87,6 +92,10 @@ pub fn attach(root: &Path, current: &Value, field: Option<&Value>) -> Result<Val
             })
             .context("Remote file attachments are disabled; supply path or local_path")?;
         let path = authorized_path(root, raw)?;
+        // inboundAttachments.ts delegates @path to FileReadTool, whose
+        // checkReadPermissionForTool applies deny/ask before reading bytes.
+        // The local SDK uses that same permission engine before embedding.
+        authorize_read(raw, &path)?;
         let name = path
             .file_name()
             .and_then(|name| name.to_str())
@@ -131,6 +140,16 @@ pub fn attach(root: &Path, current: &Value, field: Option<&Value>) -> Result<Val
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn attach(root: &Path, current: &Value, field: Option<&Value>) -> Result<Value> {
+        let executor = crate::tools::ToolExecutor::new(
+            root.to_path_buf(),
+            crate::tools::Approval::ReadOnly,
+            false,
+        );
+        super::attach(root, current, field, |raw, path| {
+            executor.require_read_rules(raw, path)
+        })
+    }
     #[test]
     fn images_and_text_follow_existing_multi_provider_parser() {
         let root = tempfile::tempdir().unwrap();
