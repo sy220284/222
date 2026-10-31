@@ -1,10 +1,10 @@
 //! Paired golden bridge: always invoke the real Rust production modules.
-#[path = "../task_guards.rs"]
-mod task_guards;
-#[path = "../control_message_compat.rs"]
-mod control_message_compat;
 #[path = "../compat_helpers.rs"]
 mod compat_helpers;
+#[path = "../control_message_compat.rs"]
+mod control_message_compat;
+#[path = "../task_guards.rs"]
+mod task_guards;
 
 use std::io::{self, Read};
 
