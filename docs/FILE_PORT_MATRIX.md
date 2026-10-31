@@ -1478,7 +1478,7 @@
 | `src/utils/cronScheduler.ts` | 566 | 21478 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cronTasks.ts` | 459 | 17301 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/cronTasksLock.ts` | 196 | 6259 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/crossProjectResume.ts` | 76 | 2104 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/crossProjectResume.ts` | 76 | 2104 | 重写：保持通用行为 | `src/cross_project_resume.rs / src/main.rs` | 部分实现：已按原版校对当前项目判断、路径边界正确的同仓工作树识别、不同项目安全恢复命令，真实 Git worktree 路径扫描和交互式 /resume --project PATH -- ID 已接入；仍需跨项目全局会话选择界面、同仓工作树免重启切换、完整源协议与跨平台终端实际验收 |
 | `src/utils/crypto.ts` | 14 | 763 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/cwd.ts` | 33 | 985 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
 | `src/utils/debug.ts` | 269 | 8000 | 重写：保持通用行为 | `src/generated_ports/p_5b257a1951fde.rs`| 部分实现：手工重写日志核心（级别门控/会话单例/--debug-file 链/symlink/缓冲写/过滤器接线/logAntError），env 品牌中立映射 CLAUDE_CODE_DEBUG_*→ATLAS_DEBUG_*，同步写替代 Node pendingWrite 异步链；memoize 缓存语义省略（行为等价），Windows symlink 差异待验收|
