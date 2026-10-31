@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/"scripts"))
-from runtime_parity_gate import run_dynamic_parity
+from runtime_parity_gate import run_dynamic_parity, KINDS
 
 PRODUCER = """
 import json, os, sys
@@ -52,7 +52,8 @@ class DynamicParityTest(unittest.TestCase):
 
     def run_gate(self):
         return run_dynamic_parity(self.repo,self.original,self.cases,
-                                  self.index,{"src/f.ts"},self.root/"out")
+                                  self.index,{"src/f.ts"},self.root/"out",
+                                  contracts={"src/f.ts":{"functions":[{"source_id":self.sid}]}})
 
     def test_missing_scenarios_fail_closed(self):
         report = self.run_gate()
@@ -60,11 +61,11 @@ class DynamicParityTest(unittest.TestCase):
         self.assertEqual(report["missing_units"],1)
         self.assertTrue((self.root/"out/DYNAMIC_PARITY.json").is_file())
 
-    def test_both_executables_match_and_cover_normal_and_edge(self):
-        self.case("ok","normal")
-        self.case("boundary","edge")
+    def test_both_executables_cover_all_ten_behavior_families(self):
+        for kind in sorted(KINDS):
+            self.case(kind,kind)
         report = self.run_gate()
-        self.assertEqual(report["passed"],2)
+        self.assertEqual(report["passed"],len(KINDS))
         self.assertTrue(report["pass"])
 
     def test_real_differences_block(self):
