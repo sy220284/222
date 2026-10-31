@@ -420,6 +420,7 @@ pub async fn dream_if_due(
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false)
         .open(lock_path)?;
     match lock.try_lock_exclusive() {
         Ok(()) => {}
@@ -673,11 +674,12 @@ mod tests {
         assert_eq!(result.0, 1);
         assert!(root.join(".atlas/memory/consolidated.md").exists());
         assert!(root.join(".atlas/memory/.dream-consolidated").exists());
-        let requests = model.requests.lock().unwrap();
-        assert_eq!(requests.len(), 1);
-        assert!(requests[0].tools.is_empty());
-        assert!(requests[0].system.contains("Phase 3"));
-        drop(requests);
+        {
+            let requests = model.requests.lock().unwrap();
+            assert_eq!(requests.len(), 1);
+            assert!(requests[0].tools.is_empty());
+            assert!(requests[0].system.contains("Phase 3"));
+        }
         assert!(dream_if_due(&root, active, &model, &profile())
             .await
             .unwrap()
