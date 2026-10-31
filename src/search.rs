@@ -1136,15 +1136,36 @@ pub fn grep_files_filtered<F: Fn(&Path) -> Result<bool>>(
     .to_string())
 }
 
+/// Original 2.1.88: tools/GlobTool/prompt.ts. Matches this wire tool's behavior.
+pub const SOURCE_GLOB_DESCRIPTION: &str = r#"- Fast file pattern matching tool that works with any codebase size
+- Supports glob patterns like "**/*.js" or "src/**/*.ts"
+- Returns matching file paths sorted by modification time
+- Use this tool when you need to find files by name patterns
+- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead"#;
+
+/// Original 2.1.88: tools/GrepTool/prompt.ts::getDescription(), with
+/// original tool-name placeholders changed to this runtime's wire names.
+pub const SOURCE_GREP_DESCRIPTION: &str = r#"A powerful search tool built on ripgrep
+
+  Usage:
+  - ALWAYS use grep_files for search tasks. NEVER invoke \`grep\` or \`rg\` as a run_command command. The grep_files tool has been optimized for correct permissions and access.
+  - Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+")
+  - Filter files with glob parameter (e.g., "*.js", "**/*.tsx") or type parameter (e.g., "js", "py", "rust")
+  - Output modes: "content" shows matching lines, "files_with_matches" shows only file paths (default), "count" shows match counts
+  - Use Agent tool for open-ended searches requiring multiple rounds
+  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use \`interface\\{\\}\` to find \`interface{}\` in Go code)
+  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like \`struct \\{[\\s\\S]*?field\`, use \`multiline: true\`
+"#;
+
 pub fn definitions() -> Vec<Value> {
     vec![
         json!({"type":"function","function":{"name":"glob_files",
-            "description":"Find up to 100 paths matching a wildcard glob; returns oldest first and indicates truncation.",
+            "description":SOURCE_GLOB_DESCRIPTION,
             "parameters":{"type":"object","properties":{
                 "pattern":{"type":"string"},"path":{"type":"string"}
             },"required":["pattern"]}}}),
         json!({"type":"function","function":{"name":"grep_files",
-            "description":"Search regex in files. output_mode: content, files_with_matches or count; supports glob, type, case-insensitivity, context, offset and head_limit.",
+            "description":SOURCE_GREP_DESCRIPTION,
             "parameters":{"type":"object","properties":{
                 "pattern":{"type":"string"},"path":{"type":"string"},"glob":{"type":"string"},
                 "type":{"type":"string"},"output_mode":{"type":"string","enum":["content","files_with_matches","count"]},
@@ -1154,6 +1175,22 @@ pub fn definitions() -> Vec<Value> {
                 "multiline":{"type":"boolean"}
             },"required":["pattern"]}}}),
     ]
+}
+
+#[cfg(test)]
+mod source_prompt_tests {
+    use super::*;
+
+    #[test]
+    fn model_tool_definitions_contain_original_search_guidance() {
+        let tools = definitions();
+        let glob = tools.iter().find(|tool| tool["function"]["name"] == "glob_files").unwrap();
+        let grep = tools.iter().find(|tool| tool["function"]["name"] == "grep_files").unwrap();
+        assert_eq!(glob["function"]["description"], SOURCE_GLOB_DESCRIPTION);
+        assert_eq!(grep["function"]["description"], SOURCE_GREP_DESCRIPTION);
+        assert!(SOURCE_GLOB_DESCRIPTION.contains("sorted by modification time"));
+        assert!(SOURCE_GREP_DESCRIPTION.contains("multiline: true"));
+    }
 }
 
 #[cfg(test)]
