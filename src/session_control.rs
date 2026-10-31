@@ -488,13 +488,9 @@ fn render_export_block(block: &serde_json::Value) -> Option<String> {
 }
 pub fn render(session: &Session) -> String {
     let mut lines = Vec::new();
-    // A compacted session still exports its complete pre-compaction
-    // transcript, not merely the live turns after its summary.
-    for message in session
-        .archived_messages
-        .iter()
-        .chain(session.messages.iter())
-    {
+    // Include original turns and intermediate compaction summaries in
+    // their correct order, instead of only the current active messages.
+    for message in session.transcript_messages().iter() {
         let role = match message.role.as_str() {
             "user" => "User",
             "assistant" => "Assistant",

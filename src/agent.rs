@@ -3883,6 +3883,16 @@ impl Agent {
         // Persist a candidate before swapping it into the live Agent so a
         // disk failure cannot destroy the conversation in memory.
         let mut candidate = self.session.clone();
+        // Archive the preceding summary at its chronological boundary before
+        // replacing it, so repeated compactions preserve every prior segment.
+        if let Some(previous) = candidate.summary.as_deref() {
+            candidate.archived_messages.push(Message::text(
+                "user",
+                crate::compact_source_prompts::user_summary_message(
+                    previous, None, false, false,
+                ),
+            ));
+        }
         candidate.summary = Some(summary);
         // Source 2.1.88 retains pre-compact transcript entries for later
         // inspection. Persist them in the same atomic session write as the

@@ -166,6 +166,16 @@ impl Session {
     pub fn transcript_messages(&self) -> Vec<Message> {
         let mut history = Vec::with_capacity(self.archived_messages.len() + self.messages.len());
         history.extend(self.archived_messages.iter().cloned());
+        // Original transcript retains each synthetic compaction summary
+        // between old and new turns, including the most recent boundary.
+        if let Some(summary) = self.summary.as_deref().filter(|s| !s.trim().is_empty()) {
+            history.push(Message::text(
+                "user",
+                crate::compact_source_prompts::user_summary_message(
+                    summary, None, false, false,
+                ),
+            ));
+        }
         history.extend(self.messages.iter().cloned());
         history
     }
