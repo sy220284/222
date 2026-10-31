@@ -250,10 +250,7 @@ mod tests {
 
         std::fs::write(&path, "value=1").unwrap();
         let created = snapshot(&[path.clone()]);
-        assert_eq!(
-            diff_events(&missing, &created),
-            vec![(path.clone(), "add")]
-        );
+        assert_eq!(diff_events(&missing, &created), vec![(path.clone(), "add")]);
 
         std::fs::remove_file(&path).unwrap();
         let removed = snapshot(&[path.clone()]);
