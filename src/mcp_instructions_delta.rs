@@ -52,7 +52,7 @@ pub fn get_mcp_instructions_delta(
         .map(|client| client.name.as_str())
         .collect();
     let mut blocks: Vec<(String, String)> = Vec::new();
-    let mut offsets = HashMap::new();
+    let mut offsets: HashMap<String, usize> = HashMap::new();
 
     for client in clients.iter().filter(|client| client.connected) {
         if let Some(instructions) = client.instructions.as_deref().filter(|s| !s.is_empty()) {
