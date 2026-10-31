@@ -69,57 +69,75 @@ mod tests {
     use super::*;
 
     fn with_value(key: &str, value: &str) -> QueryConfig {
-        build_query_config_with_env(Uuid::nil(), |name| {
-            (name == key).then(|| value.to_owned())
-        })
+        build_query_config_with_env(Uuid::nil(), |name| (name == key).then(|| value.to_owned()))
     }
 
     #[test]
     fn env_gates_follow_isenvtruthy_semantics() {
-        assert!(build_query_config_with_env(Uuid::nil(), |_| None)
-            .gates
-            .fast_mode_enabled);
+        assert!(
+            build_query_config_with_env(Uuid::nil(), |_| None)
+                .gates
+                .fast_mode_enabled
+        );
         for truthy in ["1", "true", "TRUE", " yes ", "on"] {
-            assert!(!with_value("ATLAS_DISABLE_FAST_MODE", truthy)
-                .gates
-                .fast_mode_enabled);
-            assert!(with_value("ATLAS_EMIT_TOOL_USE_SUMMARIES", truthy)
-                .gates
-                .emit_tool_use_summaries);
+            assert!(
+                !with_value("ATLAS_DISABLE_FAST_MODE", truthy)
+                    .gates
+                    .fast_mode_enabled
+            );
+            assert!(
+                with_value("ATLAS_EMIT_TOOL_USE_SUMMARIES", truthy)
+                    .gates
+                    .emit_tool_use_summaries
+            );
         }
         for falsy in ["0", "false", "no", "off", ""] {
-            assert!(with_value("ATLAS_DISABLE_FAST_MODE", falsy)
-                .gates
-                .fast_mode_enabled);
-            assert!(!with_value("ATLAS_EMIT_TOOL_USE_SUMMARIES", falsy)
-                .gates
-                .emit_tool_use_summaries);
+            assert!(
+                with_value("ATLAS_DISABLE_FAST_MODE", falsy)
+                    .gates
+                    .fast_mode_enabled
+            );
+            assert!(
+                !with_value("ATLAS_EMIT_TOOL_USE_SUMMARIES", falsy)
+                    .gates
+                    .emit_tool_use_summaries
+            );
         }
-        assert!(!build_query_config_with_env(Uuid::nil(), |_| None)
-            .gates
-            .emit_tool_use_summaries);
+        assert!(
+            !build_query_config_with_env(Uuid::nil(), |_| None)
+                .gates
+                .emit_tool_use_summaries
+        );
     }
 
     #[test]
     fn is_ant_requires_exact_user_type() {
-        assert!(!build_query_config_with_env(Uuid::nil(), |_| None)
-            .gates
-            .is_ant);
+        assert!(
+            !build_query_config_with_env(Uuid::nil(), |_| None)
+                .gates
+                .is_ant
+        );
         assert!(!with_value("USER_TYPE", "external").gates.is_ant);
         assert!(with_value("USER_TYPE", "ant").gates.is_ant);
     }
 
     #[test]
     fn streaming_tool_execution_follows_process_switch() {
-        assert!(!build_query_config_with_env(Uuid::nil(), |_| None)
-            .gates
-            .streaming_tool_execution);
-        assert!(with_value("ATLAS_STREAMING_TOOL_EXECUTION", "1")
-            .gates
-            .streaming_tool_execution);
-        assert!(!with_value("ATLAS_STREAMING_TOOL_EXECUTION", "off")
-            .gates
-            .streaming_tool_execution);
+        assert!(
+            !build_query_config_with_env(Uuid::nil(), |_| None)
+                .gates
+                .streaming_tool_execution
+        );
+        assert!(
+            with_value("ATLAS_STREAMING_TOOL_EXECUTION", "1")
+                .gates
+                .streaming_tool_execution
+        );
+        assert!(
+            !with_value("ATLAS_STREAMING_TOOL_EXECUTION", "off")
+                .gates
+                .streaming_tool_execution
+        );
     }
 
     #[test]
