@@ -277,11 +277,8 @@ mod tests {
             first,
             vec![workspace.join(".env"), workspace.join("generated/app.json")]
         );
-        let replacement = combined_watch_paths(
-            &static_paths,
-            &["/tmp/other/config.json".into()],
-            workspace,
-        );
+        let replacement =
+            combined_watch_paths(&static_paths, &["/tmp/other/config.json".into()], workspace);
         assert_eq!(
             replacement,
             vec![
