@@ -12,6 +12,24 @@ fn binary() -> Command {
     Command::new(env!("CARGO_BIN_EXE_atlas-agent"))
 }
 
+fn accept_before(listener: &TcpListener, timeout: Duration) -> TcpStream {
+    listener.set_nonblocking(true).unwrap();
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => return stream,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Expected local test API request did not arrive within {timeout:?}"
+                );
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("Failed to accept local test API request: {error}"),
+        }
+    }
+}
+
 #[test]
 fn sessions_cli_searches_persisted_summaries_and_multimodal_conversation_text() {
     let root = tempfile::tempdir().unwrap();
@@ -2775,10 +2793,10 @@ fn sdk_direct_structured_text_is_delivered_and_nontext_is_rejected_without_http(
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
-        let (mut conn, _) = listener.accept().unwrap();
+        let mut conn = accept_before(&listener, Duration::from_secs(15));
         let request = read_request(&mut conn);
         let body = json!({"choices":[{"message":{"role":"assistant",
-            "content":"Direct text accepted"},"finish_reason":"stop"}]})
+            "content":"Direct text accepted","finish_reason":"stop"}]})
         .to_string();
         write!(conn,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             body.len(),body).unwrap();
@@ -6476,10 +6494,10 @@ fn sdk_bridge_inbound_media_type_fallback_reaches_real_model_for_direct_and_queu
     let received = thread::spawn(move || {
         let mut requests = Vec::new();
         for _ in 0..2 {
-            let (mut conn, _) = server.accept().unwrap();
+            let mut conn = accept_before(&server, Duration::from_secs(15));
             let request = read_request(&mut conn);
             let response = json!({"choices":[{"message":{"role":"assistant",
-                "content":"image compatible"},"finish_reason":"stop"}]})
+                "content":"image compatible","finish_reason":"stop"}]})
             .to_string();
             write!(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 response.len(), response).unwrap();
@@ -6555,7 +6573,7 @@ fn sdk_remote_attachment_download_and_model_request_share_session() {
     let file_server = TcpListener::bind("127.0.0.1:0").unwrap();
     let file_url = format!("http://{}", file_server.local_addr().unwrap());
     let file_thread = thread::spawn(move || {
-        let (mut connection, _) = file_server.accept().unwrap();
+        let mut connection = accept_before(&file_server, Duration::from_secs(15));
         let request = read_request(&mut connection);
         assert!(
             request.starts_with("GET /files/uuid-photo/content HTTP/1.1"),
@@ -6577,7 +6595,7 @@ fn sdk_remote_attachment_download_and_model_request_share_session() {
     let model_server = TcpListener::bind("127.0.0.1:0").unwrap();
     let model_url = format!("http://{}/v1", model_server.local_addr().unwrap());
     let model_thread = thread::spawn(move || {
-        let (mut connection, _) = model_server.accept().unwrap();
+        let mut connection = accept_before(&model_server, Duration::from_secs(15));
         let request = read_request(&mut connection);
         let reply =
             json!({"choices":[{"message":{"role":"assistant","content":"reference received"},
