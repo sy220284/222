@@ -171,9 +171,7 @@ impl Session {
         if let Some(summary) = self.summary.as_deref().filter(|s| !s.trim().is_empty()) {
             history.push(Message::text(
                 "user",
-                crate::compact_source_prompts::user_summary_message(
-                    summary, None, false, false,
-                ),
+                crate::compact_source_prompts::user_summary_message(summary, None, false, false),
             ));
         }
         history.extend(self.messages.iter().cloned());
