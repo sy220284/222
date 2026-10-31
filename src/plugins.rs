@@ -1623,6 +1623,51 @@ mod tests {
     }
 
     #[test]
+    fn enabled_plugin_lsp_config_is_scoped_and_does_not_hide_other_plugins() {
+        let root = tempfile::tempdir().unwrap();
+        let installed = root.path().join(".atlas/plugins");
+        let healthy = installed.join("healthy");
+        let invalid = installed.join("invalid");
+        fs::create_dir_all(&healthy).unwrap();
+        fs::create_dir_all(&invalid).unwrap();
+        fs::write(
+            healthy.join(".lsp.json"),
+            serde_json::json!({
+                "syntax":{"command":"first","extensionToLanguage":{".rs":"rust"}}
+            })
+            .to_string(),
+        ).unwrap();
+        fs::write(
+            healthy.join("plugin.json"),
+            serde_json::json!({
+                "name":"healthy",
+                "lspServers":{"syntax":{"command":"second","args":["--stdio"],
+                    "extensionToLanguage":{".rs":"rust",".toml":"toml"}}}
+            }).to_string(),
+        ).unwrap();
+        fs::write(invalid.join("plugin.json"),
+            serde_json::json!({"name":"invalid","lspServers":{
+                "broken":{"command":"","extensionToLanguage":{".rs":"rust"}}}
+            }).to_string(),
+        ).unwrap();
+        let disabled = PluginSet::load(root.path(), &[]).unwrap();
+        assert!(disabled.lsp_servers.is_empty());
+        let result = PluginSet::load(root.path(), &["invalid".into(), "healthy".into()]).unwrap();
+        assert_eq!(result.lsp_servers.len(), 1);
+        let server = &result.lsp_servers[0];
+        assert_eq!(server.id, "plugin:healthy:syntax");
+        assert_eq!(server.command, "second");
+        assert_eq!(server.extensions, ["rs", "toml"]);
+        assert_eq!(server.extension_to_language["toml"], "toml");
+        assert_eq!(server.args, ["--stdio"]);
+        assert_eq!(
+            server.env.get("ATLAS_PLUGIN_ROOT").unwrap(),
+            &healthy.to_string_lossy().to_string()
+        );
+        assert!(result.errors.iter().any(|e| e.contains("invalid") && e.contains("broken")));
+    }
+
+    #[test]
     fn loads_only_explicitly_enabled_plugins() {
         let root = tempfile::tempdir().unwrap();
         let plugin = root.path().join(".atlas/plugins/formatter");
