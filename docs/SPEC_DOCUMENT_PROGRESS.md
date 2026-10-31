@@ -1741,7 +1741,7 @@
 | `src/utils/process.ts` | `b744b56136db7ea40adaa1e00fcc232a67b4d8e9a47582ae1d427153ddff46cc` | 部分实现 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/processUserInput/processBashCommand.tsx` | `c9aad9f00be458474cfc684e7107e6673ae5c9af2a56c5e92b74a0939dd0ff21` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/processUserInput/processSlashCommand.tsx` | `56b12ed45c20c6afe2968b8510609515edbd065c0e7fa4a5edf9f0118bb45182` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
-| `src/utils/processUserInput/processTextPrompt.ts` | `e5f26ad5b6b610acb5138bbe758885e12a5efb833d62f5c48bd9453e7c7452f4` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
+| `src/utils/processUserInput/processTextPrompt.ts` | `e5f26ad5b6b610acb5138bbe758885e12a5efb833d62f5c48bd9453e7c7452f4` | 部分实现 | `src/process_text_prompt.rs / src/agent.rs / src/main.rs` | 已接入纯文本和多模态结构化输入的Rust处理及合法纯图片请求；原版粘贴ID、附件消息与权限模式字段尚未完全迁移 | 已完成源码接线与三组单测，最新 HEAD CI 尚待确认 |
 | `src/utils/processUserInput/processUserInput.ts` | `7b8602d99fc2b30988d262de7e3a4df7066bd65b09d3c7a79d5419bca87619ef` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/profilerBase.ts` | `c0bb7d21d6d1f7edeb217cc0e19090e480812ca3fd51a887da0c20de24418a94` | 部分实现 | `src/generated_ports/p_5453fc3baa5b5.rs` | 部分实现：完整等价：formatMs 三位小数渲染含三例单测+共享 timeline 三 profiler 清单常量；formatFileSize 引 format 桩，待验收 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/promptCategory.ts` | `d669ce3b30e40e6f1b89b0a70d46646163100f4987d4d180d0896d0ae1260ca7` | 部分实现 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 | 待按规格逐函数核实、补齐并验收 |
