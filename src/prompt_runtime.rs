@@ -211,21 +211,20 @@ Guidelines:
 - NEVER create files unless they're absolutely necessary for achieving your goal. ALWAYS prefer editing an existing file to creating a new one.
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested."#;
 
+/// Built-in roles use the complete 2.1.88 source templates from the
+/// embedded catalog, with only brand and model-visible tool names mapped.
 pub fn role_instructions(role: &str, is_teammate: bool) -> &'static str {
     if is_teammate {
         return WORKER;
     }
-    match role
-        .to_ascii_lowercase()
-        .replace('-', "")
-        .replace('_', "")
-        .as_str()
-    {
-        "verification" | "verify" | "verificationagent" | "reviewer" => VERIFICATION,
-        "explore" | "exploration" | "exploreagent" => EXPLORATION,
-        "plan" | "planner" | "planagent" => PLANNING,
-        _ => GENERAL_DELEGATE,
-    }
+    let normalized = role.to_ascii_lowercase().replace('-', "").replace('_', "");
+    let kind = match normalized.as_str() {
+        "verification" | "verify" | "verificationagent" | "reviewer" => "verification",
+        "explore" | "exploration" | "exploreagent" => "explore",
+        "plan" | "planner" | "planagent" => "plan",
+        _ => "general",
+    };
+    crate::source_prompt_catalog::original_role_instructions(kind)
 }
 
 /// Enforce the built-in exploration/planning/verification tool boundary in
@@ -747,6 +746,20 @@ mod tests {
         assert!(general.contains("don't leave it half-done"));
         assert!(explore.contains("read_file"));
         assert!(plan.contains("Critical Files for Implementation"));
+    }
+
+    #[test]
+    fn full_original_roles_are_rendered_without_js_placeholders() {
+        let verification = role_instructions("verification", false);
+        assert!(verification.contains("VERDICT: PASS"));
+        assert!(verification.contains("ADVERSARIAL PROBES"));
+        assert!(verification.contains("run_command"));
+        for role in ["explore", "plan", "verification", "general"] {
+            let prompt = role_instructions(role, false);
+            assert!(!prompt.contains(concat!("$", "{BASH_TOOL_NAME}")));
+            assert!(!prompt.contains(concat!("$", "{globGuidance}")));
+            assert!(!prompt.contains("Anthropic's official CLI"));
+        }
     }
 
     #[test]
