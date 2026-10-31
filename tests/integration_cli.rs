@@ -7396,3 +7396,70 @@ fn sdk_advanced_phases_block_write_then_restore_original_mode() {
     assert!(!root.path().join("forbidden-plan-write.txt").exists());
     assert_eq!(fs::read_to_string(root.path().join("normal-after-plan.txt")).unwrap(),"RESTORED");
 }
+
+
+#[test]
+fn sdk_local_trigger_body_only_create_emits_source_like_ui_metadata() {
+    let root = tempfile::tempdir().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..2 {
+            let mut conn = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut conn);
+            let reply = if step == 0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,
+                    "tool_calls":[{"id":"body-only-create","type":"function","function":{
+                        "name":"LocalTrigger","arguments":json!({
+                            "action":"create","body":{"prompt":"Check my local repository"}
+                        }).to_string()
+                    }}]},"finish_reason":"tool_calls"}]})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant",
+                    "content":"Saved locally"},"finish_reason":"stop"}]})
+            }.to_string();
+            write!(conn,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                reply.len(), reply).unwrap();
+            conn.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(&config, json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let mut child = binary()
+        .args(["--workspace", root.path().to_str().unwrap(),
+            "--approval", "full", "sdk"])
+        .env("ATLAS_CONFIG", &config)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(input, "{}",json!({"type":"user",
+            "content":"Save a reusable local task"})).unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{}",String::from_utf8_lossy(&output.stderr));
+    let records: Vec<Value> = String::from_utf8(output.stdout).unwrap()
+        .lines().map(|line|serde_json::from_str(line).unwrap()).collect();
+    assert!(records.iter().any(|e|
+        e["tool_use_display"][0]["display"] == "create"), "{records:?}");
+    assert!(records.iter().any(|e|
+        e["type"] == "tool_result" && e["display"] == "HTTP 201 (1 lines)"),
+        "{records:?}");
+    assert!(records.iter().any(|e|e["type"]=="result"
+        && e["content"]=="Saved locally"));
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(),2);
+    assert!(requests[1].contains("HTTP 201"),"{}",requests[1]);
+    assert!(requests[1].contains("trigger_id"),"{}",requests[1]);
+    let store = fs::read_to_string(
+        root.path().join(".atlas/local-triggers/tasks.json")
+    ).unwrap();
+    assert!(store.contains("Check my local repository"));
+}
