@@ -1,0 +1,158 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/tools/BashTool/commentLabel.ts",
+  "source_sha256": "0143ac790de43b151dd6f4a25ff659551363f8b48a06530d7b069cf517475098",
+  "export": "extractBashCommentLabel",
+  "cases": [
+    {
+      "id": "bash_comment-00",
+      "kind": "normal",
+      "input": "# explain\nprintf x",
+      "expected": "explain"
+    },
+    {
+      "id": "bash_comment-01",
+      "kind": "edge",
+      "input": "",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-02",
+      "kind": "edge",
+      "input": "#hello",
+      "expected": "hello"
+    },
+    {
+      "id": "bash_comment-03",
+      "kind": "edge",
+      "input": "###  work\nnext",
+      "expected": "work"
+    },
+    {
+      "id": "bash_comment-04",
+      "kind": "edge",
+      "input": "  # comment  ",
+      "expected": "comment"
+    },
+    {
+      "id": "bash_comment-05",
+      "kind": "edge",
+      "input": "#\nhello",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-06",
+      "kind": "edge",
+      "input": "#!/bin/bash\nx",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-07",
+      "kind": "normal",
+      "input": "echo hi\n#comment",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-08",
+      "kind": "edge",
+      "input": "#  ",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-09",
+      "kind": "edge",
+      "input": " #!not-a-comment",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-10",
+      "kind": "edge",
+      "input": "##﻿heading",
+      "expected": "heading"
+    },
+    {
+      "id": "bash_comment-11",
+      "kind": "edge",
+      "input": "#NOTE",
+      "expected": "NOTE"
+    },
+    {
+      "id": "bash_comment-12",
+      "kind": "edge",
+      "input": "# title",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-13",
+      "kind": "edge",
+      "input": "#hi",
+      "expected": "hi"
+    },
+    {
+      "id": "bash_comment-14",
+      "kind": "edge",
+      "input": "#\t some",
+      "expected": "some"
+    },
+    {
+      "id": "bash_comment-15",
+      "kind": "edge",
+      "input": "# hello",
+      "expected": "hello"
+    },
+    {
+      "id": "bash_comment-16",
+      "kind": "edge",
+      "input": "#​title",
+      "expected": "​title"
+    },
+    {
+      "id": "bash_comment-17",
+      "kind": "edge",
+      "input": "#😀 hello",
+      "expected": "😀 hello"
+    },
+    {
+      "id": "bash_comment-18",
+      "kind": "edge",
+      "input": "#\r\nrest",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-19",
+      "kind": "edge",
+      "input": "#\nrest",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-20",
+      "kind": "edge",
+      "input": "##\nrest",
+      "expected": null
+    },
+    {
+      "id": "bash_comment-21",
+      "kind": "edge",
+      "input": "# hello",
+      "expected": "hello"
+    },
+    {
+      "id": "bash_comment-22",
+      "kind": "edge",
+      "input": "##!x",
+      "expected": "!x"
+    },
+    {
+      "id": "bash_comment-23",
+      "kind": "edge",
+      "input": "#  multiple  spaces  ",
+      "expected": "multiple  spaces"
+    },
+    {
+      "id": "bash_comment-24",
+      "kind": "edge",
+      "input": "#   中文  ",
+      "expected": "中文"
+    }
+  ]
+}

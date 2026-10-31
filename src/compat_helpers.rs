@@ -37,8 +37,23 @@ pub fn expand_env_vars_in_string(source: &str) -> Expanded {
     expand_env_vars_with(source, |key| std::env::var(key).ok())
 }
 pub fn extract_bash_comment_label(command: &str) -> Option<String> {
+    // ECMAScript WhiteSpace/LineTerminator. Rust's Unicode White_Space is
+    // broader: U+0085 (NEL) must remain part of the actual comment text.
     fn whitespace(ch: char) -> bool {
-        ch.is_whitespace() || ch == '\u{feff}'
+        matches!(
+            ch,
+            '\u{0009}'..='\u{000D}'
+                | ' '
+                | '\u{00A0}'
+                | '\u{1680}'
+                | '\u{2000}'..='\u{200A}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202F}'
+                | '\u{205F}'
+                | '\u{3000}'
+                | '\u{FEFF}'
+        )
     }
     let first = command
         .split('\n')
@@ -110,6 +125,23 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn original_js_trim_preserves_unicode_nel() {
+        assert_eq!(
+            extract_bash_comment_label("#\u{0085}NOTE").as_deref(),
+            Some("\u{0085}NOTE")
+        );
+        assert_eq!(extract_bash_comment_label("\u{0085}# title"), None);
+        assert_eq!(
+            extract_bash_comment_label("#hi\u{0085}").as_deref(),
+            Some("hi\u{0085}")
+        );
+        assert_eq!(
+            extract_bash_comment_label("#\u{2028}hello").as_deref(),
+            Some("hello")
+        );
+    }
+
     #[test]
     fn worktree_feature_is_enabled() {
         assert!(is_worktree_mode_enabled());

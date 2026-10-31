@@ -1,0 +1,149 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/tasks/LocalShellTask/guards.ts",
+  "source_sha256": "67f673801cd881b015989226176488d371127e082c85bbde60dac9c3169dedda",
+  "export": "isLocalShellTask",
+  "cases": [
+    {
+      "id": "task_guards-00",
+      "kind": "normal",
+      "input": null,
+      "expected": false
+    },
+    {
+      "id": "task_guards-01",
+      "kind": "edge",
+      "input": false,
+      "expected": false
+    },
+    {
+      "id": "task_guards-02",
+      "kind": "edge",
+      "input": 1,
+      "expected": false
+    },
+    {
+      "id": "task_guards-03",
+      "kind": "edge",
+      "input": "local_bash",
+      "expected": false
+    },
+    {
+      "id": "task_guards-04",
+      "kind": "edge",
+      "input": [],
+      "expected": false
+    },
+    {
+      "id": "task_guards-05",
+      "kind": "edge",
+      "input": [
+        {
+          "type": "local_bash"
+        }
+      ],
+      "expected": false
+    },
+    {
+      "id": "task_guards-06",
+      "kind": "edge",
+      "input": {},
+      "expected": false
+    },
+    {
+      "id": "task_guards-07",
+      "kind": "normal",
+      "input": {
+        "type": "local_bash"
+      },
+      "expected": true
+    },
+    {
+      "id": "task_guards-08",
+      "kind": "edge",
+      "input": {
+        "type": "local_bash",
+        "status": "running"
+      },
+      "expected": true
+    },
+    {
+      "id": "task_guards-09",
+      "kind": "edge",
+      "input": {
+        "type": "local_bash",
+        "command": null
+      },
+      "expected": true
+    },
+    {
+      "id": "task_guards-10",
+      "kind": "edge",
+      "input": {
+        "type": "bash"
+      },
+      "expected": false
+    },
+    {
+      "id": "task_guards-11",
+      "kind": "edge",
+      "input": {
+        "type": "LOCAL_BASH"
+      },
+      "expected": false
+    },
+    {
+      "id": "task_guards-12",
+      "kind": "edge",
+      "input": {
+        "type": null
+      },
+      "expected": false
+    },
+    {
+      "id": "task_guards-13",
+      "kind": "edge",
+      "input": {
+        "type": 42
+      },
+      "expected": false
+    },
+    {
+      "id": "task_guards-14",
+      "kind": "edge",
+      "input": {
+        "type": [
+          "local_bash"
+        ]
+      },
+      "expected": false
+    },
+    {
+      "id": "task_guards-15",
+      "kind": "edge",
+      "input": {
+        "type": "local_bash",
+        "requestId": 1
+      },
+      "expected": true
+    },
+    {
+      "id": "task_guards-16",
+      "kind": "edge",
+      "input": {
+        "type": "local_bash",
+        "result": {}
+      },
+      "expected": true
+    },
+    {
+      "id": "task_guards-17",
+      "kind": "edge",
+      "input": {
+        "type": "local_bash",
+        "status": "done"
+      },
+      "expected": true
+    }
+  ]
+}

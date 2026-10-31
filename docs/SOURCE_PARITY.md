@@ -67,6 +67,12 @@ python3 scripts/source_diff_gate.py --repo . \
 
 `.github/workflows/original-differential.yml` 仅提供手动启动的私有 runner 复验，不建立任何定时任务。必须由受信任操作者控制工作流代码来源、运行器权限和原版工作区，禁止运行不可信 fork PR 的代码。没有受控 runner 时在提交者本地执行上述命令。工作流只上传核验摘要，不上传源码。
 
+## 从真实原版输入输出新增叶子函数回归
+
+`isLocalShellTask` 18 例、`normalizeControlMessageKeys` 23 例、`extractBashCommentLabel` 25 例均已从实际 2.1.88 TypeScript 模块执行并冻结结果；通过同一个 Rust 真实生产调用适配器重放。新增 U+0085 NEL 字符边界测试，并修正 Bash 注释标签的 JavaScript/Rust 空白字符语义差异。
+
+本次新增 66 例，已登记黄金测试累计 120 例。此数字仅代表已编制并接入的明确用例，不能代替尚未迁移路径的完整验收。
+
 ## 当前验收结果的含义
 
 原版静态索引已核对 1,902 个第一方文件、513,237 行、20,788 个函数/方法及 1,212 个独立导出值，另有 17 个纯文件级单元和 4 个 vendor 单元，共 22,021 个定位对象。它们是核查范围，不能当作已通过的功能测试数。
