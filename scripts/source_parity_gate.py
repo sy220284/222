@@ -250,18 +250,15 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
     if problems:
         raise AuditError("原版 ZIP 核验失败: " + "; ".join(problems[:8]))
     files = original_source_files(archive)
-    spec_by_source = {}
     function_by_source = {}
     if spec_archive is not None:
-        spec_errors, spec_stats = verify_spec_archive(spec_archive, baseline)
+        spec_errors, _ = verify_spec_archive(spec_archive, baseline)
         if spec_errors:
             raise AuditError("详细规格校验失败: " + "; ".join(spec_errors[:8]))
-        for entry in spec_stats["function_queue"]:
-            spec_by_source.setdefault(entry["source"], []).append(entry)
-        function_by_source, semantic_errors, semantic_stats = build_function_index(
+        function_by_source, semantic_errors, _ = build_function_index(
             spec_archive, baseline["source_hashes"])
         if semantic_errors:
-            raise AuditError("原版函数语义索引损坏: " + "; ".join(semantic_errors[:8]))
+            raise AuditError("原版函数索引损坏: " + "; ".join(semantic_errors[:8]))
     old, parse_errors = load_contracts(repo / CONTRACTS)
     if parse_errors:
         raise AuditError("现有行为契约损坏: " + "; ".join(parse_errors[:8]))
@@ -295,7 +292,6 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
             "source_sha256": baseline["source_hashes"][path],
             "source_lines": row["source_lines"],
             "source_declarations": declarations,
-            "source_function_nodes": function_by_source.get(path, []),
             "index_method": "static-declaration-candidates/v1",
             "review_status": "pending",
             "rust_entrypoints": rust_targets(row["rust_mapping"]),
