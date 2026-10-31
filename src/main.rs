@@ -3131,21 +3131,8 @@ async fn chat(
             }
             continue;
         }
-        if !local_advanced_keywords::ultrareview_positions(input).is_empty() {
-            match local_advanced_workflows::review_prompt(agent.workspace_root(), None) {
-                Ok(mut prompt) => {
-                    prompt.push_str("\n\nUser's review goal: ");
-                    prompt.push_str(input);
-                    onboarding.maybe_mark_complete()?;
-                    match agent.ask_in_plan_mode(&prompt).await {
-                        Ok(answer) => println!("{answer}"),
-                        Err(error) => eprintln!("Local UltraReview failed: {error:#}"),
-                    }
-                }
-                Err(error) => eprintln!("Cannot prepare UltraReview: {error:#}"),
-            }
-            continue;
-        }
+        // keyword.ts makes ultrareview a visual suggestion only. The user
+        // must explicitly invoke /ultrareview; ordinary requests stay ordinary.
         // The original marks completion on prompt submission, not on a
         // successful model response; local project instructions may have
         // been created by the user outside this chat.
@@ -3487,12 +3474,14 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 // intact, and apply plan permissions only for this one turn.
                 let mut advanced_plan_turn = false;
                 if event.get("skipSlashCommands").and_then(Value::as_bool) != Some(true) {
+                    // processUserInput.ts:336-344 only interprets the LAST
+                    // input block when it is text. A trailing image must not
+                    // accidentally invoke a command in an earlier block.
                     let candidate = prompt_value.as_str().or_else(|| {
-                        prompt_value.as_array()?.iter().rev().find_map(|block| {
-                            (block.get("type").and_then(Value::as_str) == Some("text"))
-                                .then(|| block.get("text").and_then(Value::as_str))
-                                .flatten()
-                        })
+                        let last = prompt_value.as_array()?.last()?;
+                        (last.get("type").and_then(Value::as_str) == Some("text"))
+                            .then(|| last.get("text").and_then(Value::as_str))
+                            .flatten()
                     });
                     if let Some(candidate) = candidate {
                         match local_advanced_workflows::sdk_user_prompt(
