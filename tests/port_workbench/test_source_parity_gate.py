@@ -138,7 +138,7 @@ class SourceParityGateTests(unittest.TestCase):
         from source_parity_gate import source_declarations, index_contracts
         from unittest.mock import patch
         import json
-        code = b"export function process(input: string) {\\n return input;\\n}\\n"
+        code = b"export function process(input: string) {\n return input;\n}\n"
         found = source_declarations(code)
         self.assertEqual([entry["id"] for entry in found], ["function:process@1"])
         with tempfile.TemporaryDirectory() as tmp:
