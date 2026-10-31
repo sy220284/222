@@ -427,12 +427,14 @@ impl BackgroundTasks {
         // unrecognized "interrupted" status (SDK consumers otherwise may
         // mistake it for successful completion).
         // Normalize records written by previous Rust versions as well.
-        if matches!(record.status.as_str(), "running" | "interrupted") {
+        if matches!(record.status.as_str(), "pending" | "running" | "interrupted") {
             record.status = "failed".to_owned();
             record.failure_reason.get_or_insert_with(|| {
                 "Background task was interrupted when its owning process exited".to_owned()
             });
             Self::save(&self.directory, &record)?;
+        } else if !matches!(record.status.as_str(), "completed" | "failed" | "killed") {
+            bail!("Task {id} has invalid persisted status: {}", record.status);
         }
         Ok(record)
     }
@@ -998,10 +1000,8 @@ impl BackgroundTasks {
             let record = if let Some(running) = live.get(id) {
                 running.record.lock().unwrap().clone()
             } else {
-                match self.load(id) {
-                    Ok(r) => r,
-                    Err(_) => continue,
-                }
+                self.load(id)
+                    .with_context(|| format!("Cannot read background task {id}"))?
             };
             records.push(json!({
                 "task_id":record.id,
@@ -1031,7 +1031,14 @@ impl BackgroundTasks {
         }
         match self.load(&id) {
             Ok(record) => bail!("Task {id} is not running (status: {})", record.status),
-            Err(_) => bail!("No task found with ID: {id}"),
+            Err(error)
+                if error
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                bail!("No task found with ID: {id}")
+            }
+            Err(error) => return Err(error).with_context(|| format!("Inspect task {id}")),
         }
     }
 
@@ -1048,7 +1055,14 @@ impl BackgroundTasks {
             Some(task) => task,
             None => match self.load(id) {
                 Ok(record) => bail!("Task {id} is not running (status: {})", record.status),
-                Err(_) => bail!("No task found with ID: {id}"),
+                Err(error)
+                    if error
+                        .downcast_ref::<std::io::Error>()
+                        .is_some_and(|io| io.kind() == std::io::ErrorKind::NotFound) =>
+                {
+                    bail!("No task found with ID: {id}")
+                }
+                Err(error) => return Err(error).with_context(|| format!("Inspect task {id}")),
             },
         };
         let record = task.record.lock().unwrap().clone();
@@ -1823,6 +1837,39 @@ mod tests {
         BackgroundTasks::save(&tasks.directory, &old).unwrap();
         let recovered: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
         assert_eq!(recovered["task"]["status"], "failed");
+        let pending = TaskRecord {
+            status: "pending".into(),
+            failure_reason: None,
+            ..old
+        };
+        BackgroundTasks::save(&tasks.directory, &pending).unwrap();
+        let pending_result: Value = serde_json::from_str(&tokio_test_output(&tasks, &id)).unwrap();
+        assert_eq!(pending_result["task"]["status"], "failed");
+    }
+
+    #[test]
+    fn corrupt_task_metadata_is_reported_instead_of_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let tasks = BackgroundTasks::new(dir.path()).unwrap();
+        let id = "b01234567";
+        fs::write(tasks.directory.join(format!("{id}.json")), b"{bad").unwrap();
+        assert!(tasks.list().unwrap_err().to_string().contains(id));
+        assert!(tasks
+            .validate_stop(id)
+            .unwrap_err()
+            .to_string()
+            .contains("Inspect task"));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let error = runtime.block_on(tasks.stop(id)).unwrap_err();
+        assert!(error.to_string().contains("Inspect task"));
+        assert!(tasks
+            .validate_stop("babcdefgh")
+            .unwrap_err()
+            .to_string()
+            .contains("No task found"));
     }
     fn tokio_test_output(tasks: &BackgroundTasks, id: &str) -> String {
         tokio::runtime::Builder::new_current_thread()
