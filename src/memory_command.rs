@@ -63,6 +63,33 @@ pub fn select(targets: &[MemoryTarget], raw: &str) -> Result<Option<PathBuf>> {
 
 /// Equivalent to original writeFile(flag='wx'): preexisting content is never
 /// truncated, and every other filesystem error reaches the caller.
+/// Refuse following symlinks in a memory-file path. The memory command
+/// must not open or write arbitrary files outside the selected scope through
+/// an existing link, including a dangling link.
+fn verify_memory_path(path: &Path, scope: &Path) -> Result<()> {
+    let relative = path
+        .strip_prefix(scope)
+        .context("Memory file is outside its configured scope")?;
+    let mut current = scope.to_path_buf();
+    for component in relative.components() {
+        match component {
+            std::path::Component::Normal(name) => current.push(name),
+            _ => bail!("Memory path contains a non-normal component"),
+        }
+        match fs::symlink_metadata(&current) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                bail!("Memory file path contains a symbolic link: {}", current.display());
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error).with_context(|| {
+                format!("Inspect memory file path {}", current.display())
+            }),
+        }
+    }
+    Ok(())
+}
+
 pub fn ensure_exists(path: &Path) -> Result<()> {
     let directory = path
         .parent()
@@ -189,6 +216,12 @@ pub fn run(workspace: &Path) -> Result<String> {
         .iter()
         .find(|item| item.path == chosen)
         .context("Selected memory file disappeared from options")?;
+    let scope = if target.label == "User instructions" {
+        user_dir
+    } else {
+        workspace
+    };
+    verify_memory_path(&chosen, scope)?;
     if target.create_if_missing {
         ensure_exists(&chosen)?;
     }
@@ -241,6 +274,23 @@ mod tests {
         let choices = targets(root, &root.join("user"));
         assert_eq!(choices.len(), 3);
         assert_eq!(select(&choices, "3").unwrap(), Some(auto));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn memory_path_never_follows_links_even_when_the_target_is_missing() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let linked = root.path().join(".atlas");
+        symlink(outside.path(), &linked).unwrap();
+        let path = linked.join("memory/MEMORY.md");
+        assert!(verify_memory_path(&path, root.path()).is_err());
+        let direct = root.path().join("AGENTS.md");
+        symlink(outside.path().join("not-yet-created"), &direct).unwrap();
+        assert!(verify_memory_path(&direct, root.path()).is_err());
+        assert!(verify_memory_path(&root.path().join("clean.md"), root.path()).is_ok());
+        assert!(verify_memory_path(&outside.path().join("other"), root.path()).is_err());
     }
 
     #[test]
