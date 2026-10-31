@@ -135,6 +135,8 @@ pub struct HookOutcome {
     pub additional_context: Vec<String>,
     /// SessionStart may enqueue the first user turn for headless execution.
     pub initial_user_message: Option<String>,
+    /// FileChanged/CwdChanged hooks may replace dynamically watched paths.
+    pub watch_paths: Vec<String>,
     pub updated_input: Option<Value>,
     /// PreToolUse hook decision. An explicit `ask` requires user approval
     /// even when the CLI normally grants full tool access.
@@ -524,6 +526,7 @@ impl HookRunner {
             outcome
                 .additional_context
                 .extend(response.additional_context);
+            outcome.watch_paths.extend(response.watch_paths);
             if let Some(message) = response.initial_user_message {
                 outcome.initial_user_message = Some(message);
             }
@@ -1357,6 +1360,18 @@ async fn run_command(
             .filter(|message| !message.trim().is_empty())
             .map(str::to_owned);
     }
+    if matches!(payload["hook_event_name"].as_str(), Some("FileChanged" | "CwdChanged")) {
+        if let Some(paths) = hook_output
+            .and_then(|v| v.get("watchPaths"))
+            .and_then(Value::as_array)
+        {
+            result.watch_paths = paths
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect();
+        }
+    }
     if let Some(input) = hook_output.and_then(|v| v.get("updatedInput")) {
         if !input.is_object() {
             bail!("updatedInput must be a JSON object")
@@ -1392,6 +1407,33 @@ async fn read_limited<R: tokio::io::AsyncRead + Unpin>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn file_changed_hook_returns_dynamic_watch_paths_in_registration_order() {
+        let hooks = HookRunner::new(&[HookRule {
+            async_background: false,
+            async_rewake: false,
+            event: HookEvent::FileChanged,
+            matcher: None,
+            if_condition: None,
+            plugin_root: None,
+            command: r#"printf '%s\\n' '{"hookSpecificOutput":{"hookEventName":"FileChanged","watchPaths":["generated/config.json",".env"]}}'"#.into(),
+            shell: None,
+            timeout_seconds: 3,
+        }])
+        .unwrap();
+        let outcome = hooks
+            .run(
+                HookEvent::FileChanged,
+                None,
+                json!({"file_path":"/project/.env","event":"change"}),
+            )
+            .await
+            .unwrap();
+        assert!(outcome.non_blocking_errors.is_empty(), "{outcome:?}");
+        assert_eq!(outcome.watch_paths, vec!["generated/config.json", ".env"]);
+    }
 
     #[cfg(unix)]
     #[tokio::test]
