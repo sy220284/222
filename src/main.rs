@@ -113,6 +113,7 @@ mod portable_ui_runtime;
 mod powershell_permission_matching;
 mod project_init;
 mod project_onboarding;
+mod process_text_prompt;
 mod prompt_history;
 mod prompt_runtime;
 mod protocol;
