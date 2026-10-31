@@ -42,6 +42,8 @@ mod git_config_parser;
 mod git_filesystem;
 mod git_ignore;
 mod git_workflows;
+mod local_advanced_workflows;
+mod local_attachments;
 mod github_repo_mapping;
 mod history;
 mod hooks;
@@ -420,6 +422,10 @@ enum Commands {
     },
     /// Perform a local PR review through the selected model and GitHub CLI
     Review { pr_number: Option<u64> },
+    /// Deep source-based review using the active API model and local tools
+    UltraReview { pr_number: Option<u64> },
+    /// Detailed read-only project plan using the active API model
+    UltraPlan { objective: Vec<String> },
     /// Review staged/unstaged changes and create a new Git commit
     Commit { instructions: Option<String> },
     /// Commit, push and create/update a Chinese pull request
@@ -1343,6 +1349,16 @@ async fn run_cli() -> Result<()> {
             )?;
             agent.ask(&prompt).await.map(|answer| println!("{answer}"))
         }
+        Commands::UltraReview { pr_number } => {
+            let prompt = local_advanced_workflows::review_prompt(agent.workspace_root(), *pr_number)?;
+            agent.set_sdk_permission_mode("plan")?;
+            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+        }
+        Commands::UltraPlan { objective } => {
+            let prompt = local_advanced_workflows::plan_prompt(agent.workspace_root(), &objective.join(" "))?;
+            agent.set_sdk_permission_mode("plan")?;
+            agent.ask(&prompt).await.map(|answer| println!("{answer}"))
+        }
         Commands::Commit { instructions } => {
             let prompt = git_workflows::prompt(
                 git_workflows::Action::Commit,
@@ -1890,6 +1906,8 @@ async fn chat(
                 println!("/stats                   report real local session usage and costs");
                 println!("/release-notes           show trusted cached release notes");
                 println!("/review [PR]             review a pull request through the active model");
+                println!("/ultrareview [PR]        deep local multi-angle code review");
+                println!("/ultraplan GOAL          detailed local read-only project planning");
                 println!("/commit                  review changes and create a Git commit");
                 println!("/commit-push-pr          commit, push and create/update a Chinese PR");
                 println!("/history [query]         search saved prompt history");
@@ -2887,6 +2905,27 @@ async fn chat(
                 "commit-push-pr" => Some(git_workflows::Action::CommitPushPr),
                 _ => None,
             };
+            if name == "ultrareview" || name == "ultraplan" {
+                let prepared = if name == "ultrareview" {
+                    let pr = if args.trim().is_empty() { Ok(None) } else {
+                        args.trim().parse::<u64>().map(Some).context("/ultrareview expects a positive PR number")
+                    };
+                    pr.and_then(|n| local_advanced_workflows::review_prompt(agent.workspace_root(), n))
+                } else {
+                    local_advanced_workflows::plan_prompt(agent.workspace_root(), args)
+                };
+                match prepared {
+                    Ok(prompt) => {
+                        agent.set_sdk_permission_mode("plan")?;
+                        match agent.ask(&prompt).await {
+                            Ok(answer) => println!("{answer}"),
+                            Err(error) => eprintln!("Error: {error:#}"),
+                        }
+                    }
+                    Err(error) => eprintln!("Cannot prepare /{name}: {error:#}"),
+                }
+                continue;
+            }
             if let Some(action) = action {
                 match git_workflows::prompt(action, agent.workspace_root(), args) {
                     Ok(prompt) => match agent.ask(&prompt).await {
@@ -3178,20 +3217,6 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
         let kind = event.get("type").and_then(Value::as_str).unwrap_or("user");
         match kind {
             "user" => {
-                // Remote attachment download was intentionally removed from the
-                // local/API-only product. Explicitly reject these SDK fields,
-                // before any model call, instead of silently dropping files.
-                if event
-                    .get("file_attachments")
-                    .or_else(|| event.get("fileAttachments"))
-                    .is_some_and(|value| {
-                        !value.is_null() && !value.as_array().is_some_and(Vec::is_empty)
-                    })
-                {
-                    print_json!(json!({"type":"error",
-                        "message":"Remote file attachments are disabled; provide local content blocks instead"}));
-                    continue;
-                }
                 // A stream without explicit initialize still executes the
                 // SessionStart turn first, preserving user message ordering.
                 if initial_turn_pending {
@@ -3200,13 +3225,24 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 }
                 // Accept both direct content and SDK message envelopes.
                 // Older SDK clients send message.content with replay metadata.
-                let prompt_value = event
+                let raw_content = event
                     .get("content")
                     .or_else(|| event.pointer("/message/content"));
-                let Some(prompt_value) = prompt_value else {
+                let Some(raw_content) = raw_content else {
                     print_json!(json!({"type":"error","message":"User event requires content"}));
                     continue;
                 };
+                let content = match local_attachments::attach(
+                    agent.workspace_root(), raw_content,
+                    event.get("file_attachments").or_else(|| event.get("fileAttachments")),
+                ) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        print_json!(json!({"type":"error","message":format!("{error:#}")}));
+                        continue;
+                    }
+                };
+                let prompt_value = &content;
                 // First SDK user message implicitly initializes the stream,
                 // matching the original print.ts user-message path.
                 sdk_initialized = true;
