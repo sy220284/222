@@ -902,7 +902,7 @@
 | `src/ink/measure-element.ts` | 24 | 419 | 重写：终端 UI／交互 | `src/portable_ink_core.rs` | 部分实现：Rust 终端事件/宽度布局/模式/展示基础代码已落地，React/Ink 整体联动待验 |
 | `src/ink/measure-text.ts` | 48 | 1138 | 重写：终端 UI／交互 | `src/portable_render_semantics.rs / src/main.rs` | 部分实现：原始单遍文本宽高测算、尾部空行、非正数/无穷宽度、逐行自动折行已实现；上游所有渲染调用链仍需继续接通 |
 | `src/ink/node-cache.ts` | 55 | 1654 | 重写：终端 UI／交互 | `src/generated_ports/p_965d86a4c90de.rs` | 部分实现：完整等价：CachedLayout 值形状（含 yoga-local top 供视口裁剪）+absolute 待清标志；WeakMap 宿主归 ink DOM，待验收 |
-| `src/ink/optimizer.ts` | 94 | 2588 | 重写：终端 UI／交互 | 待定 | 未迁移：此前只登记契约，所列 Rust 文件在两分支及历史中均不存在；保留原源码路径，待真实实现与接线 |
+| `src/ink/optimizer.ts` | 94 | 2588 | 重写：终端 UI／交互 | `src/portable_render_semantics.rs` | 部分实现：原版 Patch 优化规则已手工转写，含 no-op、游标、样式过渡、超链接与隐藏/显示配对；通过现有 CLI SourceInspect 可调用和单元测试；终端主渲染尚未接入帧 Diff 消费，待完整 TUI 等价验收 |
 | `src/ink/output.ts` | 798 | 26183 | 重写：终端 UI／交互 | 待定 | 未迁移 |
 | `src/ink/parse-keypress.ts` | 802 | 23458 | 重写：终端 UI／交互 | `src/generated_ports/p_22f64b3a15765.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/ink/reconciler.ts` | 513 | 14594 | 重写：终端 UI／交互 | 待定 | 未迁移 |

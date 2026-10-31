@@ -30,6 +30,12 @@ fn cache() -> &'static Mutex<VecDeque<CachedPage>> {
     URL_CACHE.get_or_init(|| Mutex::new(VecDeque::new()))
 }
 
+/// Original WebFetchTool/utils.ts::clearWebFetchCache. /clear and /resume
+/// must not retain cached page text from an earlier conversation.
+pub(crate) fn clear_cache() {
+    cache().lock().unwrap().clear();
+}
+
 fn cached_page(key: &str) -> Option<Value> {
     let mut entries = cache().lock().unwrap();
     entries.retain(|entry| entry.fetched.elapsed() < CACHE_TTL);
@@ -608,6 +614,18 @@ pub fn definition() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn clearing_session_cache_evicts_web_content_and_reopens_fresh_fetch() {
+        clear_cache();
+        cache_page("session-A:url".into(), json!({"content":"old"}), 3);
+        assert_eq!(cached_page("session-A:url").unwrap()["content"], "old");
+        clear_cache();
+        assert!(cached_page("session-A:url").is_none());
+        cache_page("session-A:url".into(), json!({"content":"new"}), 3);
+        assert_eq!(cached_page("session-A:url").unwrap()["content"], "new");
+        clear_cache();
+    }
+
     #[test]
     fn blocks_non_public_ip_ranges() {
         for host in [

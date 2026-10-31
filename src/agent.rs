@@ -4142,6 +4142,9 @@ impl Agent {
     /// conversation switch. Background tasks and their mailbox remain owned
     /// by their own session and are not deleted by this cache reset.
     fn reset_session_caches(&mut self) {
+        // Source clearSessionCaches invalidates WebFetch's bounded URL cache
+        // on /clear and /resume; cached pages may reflect prior session state.
+        crate::webfetch::clear_cache();
         self.notebook_reads.lock().unwrap().clear();
         self.file_reads.lock().unwrap().clear();
         self.last_context_usage = None;
