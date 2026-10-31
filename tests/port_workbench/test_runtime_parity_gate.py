@@ -17,9 +17,9 @@ if os.environ.get("PARITY_SIDE") == "rust" and r["input"].get("diverge"):
 out = {
 "schema":"source-rust-observation/v1",
 "case_id":r["id"], "executed_source_ids":["src/f.ts:FunctionDeclaration:1-1:occurrence-1"],
-"outcome":{"value":value}, "errors":[], "state":{"value":value},
-"calls":["execute"], "permissions":([{"decision":"deny"}] if r["id"]=="permission_deny" else ([{"decision":"allow"}] if r["id"]=="permission_allow" else [])), "events":["begin","end"],
-"side_effects":[], "persistence":{}, "cancellation":{"cancelled":r["id"]=="cancel"}
+"outcome":{"value":value}, "errors":([{"code":"E_TEST"}] if r["id"]=="error" else []), "state":{"value":value},
+"calls":["execute"], "permissions":([{"decision":"deny"}] if r["id"]=="permission_deny" else ([{"decision":"allow"}] if r["id"]=="permission_allow" else [])), "events":(["chunk"] if r["id"]=="stream" else ["begin","end"]),
+"side_effects":[], "persistence":({"restored":True} if r["id"]=="restart" else {}), "cancellation":{"cancelled":r["id"]=="cancel"}
 }
 print(json.dumps(out))
 """
@@ -43,7 +43,7 @@ class DynamicParityTest(unittest.TestCase):
     def case(self, name, kind, diverge=False):
         data = {
             "id":name,"kind":kind,"source_ids":[self.sid],
-            "input":{"value":10,"diverge":diverge},"timeout_seconds":5,
+            "input":{"value":11 if kind=="edge" else 10,"diverge":diverge},"timeout_seconds":5,
             "original":[sys.executable,"{ORIGINAL}/produce.py"],
             "rust":[sys.executable,"{REPO}/produce.py"],
         }
