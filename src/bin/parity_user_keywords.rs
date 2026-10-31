@@ -17,15 +17,19 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
     let request: Value = serde_json::from_str(&data)?;
     let id = request["id"].as_str().ok_or("missing test case ID")?;
     let operation = request["input"]["operation"]
-        .as_str().ok_or("missing original operation")?;
+        .as_str()
+        .ok_or("missing original operation")?;
     let text = request["input"]["payload"]
-        .as_str().ok_or("keyword test input must be text")?;
+        .as_str()
+        .ok_or("keyword test input must be text")?;
     let (value, source_id) = match operation {
         "matchesNegativeKeyword" => (
-            source_user_keywords::matches_negative_keyword(text), NEGATIVE
+            source_user_keywords::matches_negative_keyword(text),
+            NEGATIVE,
         ),
         "matchesKeepGoingKeyword" => (
-            source_user_keywords::matches_keep_going_keyword(text), CONTINUE
+            source_user_keywords::matches_keep_going_keyword(text),
+            CONTINUE,
         ),
         _ => return Err("unknown original keyword export".into()),
     };
