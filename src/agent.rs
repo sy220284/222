@@ -4208,7 +4208,8 @@ impl Agent {
         kind: crate::local_advanced_workflows::Kind,
         prompt: &str,
     ) -> Result<String> {
-        self.run_advanced_with_blocks(kind, prompt, None, None).await
+        self.run_advanced_with_blocks(kind, prompt, None, None)
+            .await
     }
 
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
