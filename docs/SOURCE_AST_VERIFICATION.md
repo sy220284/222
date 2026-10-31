@@ -63,3 +63,16 @@ AST 记录里累计有：205,560 个静态步骤、40,948 个分支节点、23,3
 原版实证：`src/bootstrap/state.ts::regenerateSessionId` 435–450 行直接修改 `STATE.parentSessionId`、`STATE.sessionId`、`STATE.sessionProjectDir`；`switchSession` 468–479 行修改 `STATE.sessionId` 和 `STATE.sessionProjectDir`。旧规格二者均写为零。这个统计字段已在新的 `scripts/source_function_index.py` 改为 `untrusted_original_state_write_count`，并对**所有函数**标记需要原版 AST 与 Rust 运行状态复验；不得把旧数零解释为“函数不会修改状态”，更不得凭该数把功能标成已验收。
 
 该项属于已确认的**规格语义统计错误**，与前述原版代码逐行一致性检查互不冲突：原文正确保留，不意味着概括字段没有漏报。后续应为每条需迁移函数补充真正的状态修改、回滚、恢复及异常契约，并由 CI 绑定实际执行证据。
+
+## 独立复核其它函数语义指标
+
+同一次独立 TypeScript AST 扫描按照函数嵌套边界，重新计算每个函数中的 `ReturnStatement`、`ThrowStatement`、`CatchClause`、`AwaitExpression`，逐项匹配规格包 20,788 条函数记录（含 87 条同位置不同回调的出现顺序），完整结果如下：
+
+| 行为节点 | 原版独立 AST | 规格记录总量 | 逐函数不一致 |
+|---|---:|---:|---:|
+| 显式返回 | 23,380 | 23,380 | 0 |
+| 抛错 | 938 | 938 | 0 |
+| 异常捕获 | 1,838 | 1,838 | 0 |
+| await | 5,238 | 5,238 | 0 |
+
+因此这四个静态指标暂未发现错误，可以在统一索引中保留为结构线索。**有返回、抛错或 await 的静态节点，并不自动证明 Rust 在实际运行中的行为等价**；真实取消、超时、网络失败、权限和状态一致性继续依赖生产链测试。前述“状态写入数”已确认存在漏报，不能与此处四项混为同一个可靠性结论。
