@@ -192,7 +192,7 @@ pub fn create(profile: &ProviderProfile) -> Result<Box<dyn ModelProvider>> {
 /// Once an SSE response has started, its parser owns the stream and we never
 /// replay a partially delivered completion.
 fn stream_idle_timeout_from(raw: Option<&str>) -> Duration {
-    // claude.ts uses parseInt(value, 10) || 90000. The common parser
+    // The original idle-timeout parser uses parseInt(value, 10) || 90000.
     // preserves numeric prefixes, e.g. 30000ms and 1e3 -> 30000 and 1.
     let millis = raw
         .and_then(crate::env_validation::decimal_prefix)
