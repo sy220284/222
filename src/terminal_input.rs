@@ -799,8 +799,14 @@ mod tests {
     #[test]
     fn decode_terminal_controls_and_bracketed_paste() {
         assert_eq!(decode(&mut &b"[D"[..], 27).unwrap(), (Key::Left, None));
-        assert_eq!(decode(&mut &b"[200~"[..], 27).unwrap(), (Key::PasteStart, None));
-        assert_eq!(decode(&mut &b"[201~"[..], 27).unwrap(), (Key::PasteEnd, None));
+        assert_eq!(
+            decode(&mut &b"[200~"[..], 27).unwrap(),
+            (Key::PasteStart, None)
+        );
+        assert_eq!(
+            decode(&mut &b"[201~"[..], 27).unwrap(),
+            (Key::PasteEnd, None)
+        );
         assert_eq!(
             decode(&mut &"猫".as_bytes()[1..], "猫".as_bytes()[0]).unwrap(),
             (Key::Char('猫'), None)
