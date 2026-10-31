@@ -1617,7 +1617,7 @@
 | `src/utils/messagePredicates.ts` | 9 | 427 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
 | `src/utils/messageQueueManager.ts` | 548 | 16563 | 重写：队列优先级、消息身份、可编辑恢复与 SDK 处理 | `src/message_queue.rs` / `src/sdk_queue.rs` / `src/main.rs` |部分实现：优先级 FIFO、过滤移除、代理隔离、图片引用、UTF-16 光标和真实 SDK 消费；Rust 订阅与频道可见性已有，React UI 同步、通知持久化和多模态直接模型发送仍待对照；SDK 取消按原始 UUID 移除全部等待命令，重复请求幂等；增强版规格第02文档：原版字符串队列斜杠判断与SDK多模态最后文本块判断已拆分，SDK四处入口已接通，含混合图片/文本及跳过斜杠测试（05be3e6）；仍待完整交互、队列中断和端到端验收 |
 | `src/utils/messages/mappers.ts` | 291 | 9031 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/messages/systemInit.ts` | 97 | 3747 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/messages/systemInit.ts` | 97 | 3747 | 重写：保持通用行为 | `src/sdk_system_init.rs / src/main.rs` | 部分实现：SDK 生产入口已使用共享 system/init 构造器，提供实际 cwd、会话 ID、模型/提供商、工具列表、MCP 状态、斜杠命令、用户 Agent、技能与本地插件名、权限模式和独立 UUID，兼容 Agent→Task 对外工具名并新增回归；原版厂商 API key/UDS/遥测已授权排除，仍须完整自定义命令可见性、插件完整来源路径、动态工具与 SDK 初始化后变更的多轮验收 |
 | `src/utils/messages.ts` | 5513 | 193203 | 重写：保持通用行为 | `src/generated_ports/p_8882c41a85e4f.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/model/agent.ts` | 158 | 5578 | 重写：保持通用行为 | `src/generated_ports/p_64a95397c4c34.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/model/aliases.ts` | 26 | 793 | 重写：保持通用行为 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 |
