@@ -4170,6 +4170,9 @@ impl Agent {
         let mut first_id = message_id;
         let mut answer = String::new();
         for (phase, instruction) in phases {
+            if !self.structured_output {
+                eprintln!("{workflow}: {phase}");
+            }
             self.emit(json!({
                 "type":"workflow","workflow":workflow,
                 "phase":phase,"session_id":self.session.id
