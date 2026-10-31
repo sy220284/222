@@ -60,7 +60,7 @@ fn load(root: &Path) -> Result<Store> {
     Ok(entries)
 }
 
-fn update(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> Result<()> {
+fn mutate_store(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> Result<()> {
     let dir = root.join(".atlas");
     fs::create_dir_all(&dir).context("Cannot create local trigger directory")?;
     let lock_path = dir.join("local_triggers.lock");
@@ -109,7 +109,7 @@ pub fn set(root: &Path, name: &str, prompt: &str) -> Result<()> {
     if prompt.is_empty() || prompt.len() > MAX_PROMPT_BYTES {
         bail!("Trigger prompt must be 1-65536 bytes");
     }
-    update(root, |entries| {
+    mutate_store(root, |entries| {
         if !entries.contains_key(name) && entries.len() >= MAX_TRIGGERS {
             bail!("Local trigger limit reached");
         }
@@ -123,9 +123,43 @@ pub fn set(root: &Path, name: &str, prompt: &str) -> Result<()> {
     })
 }
 
+/// Source-aligned local create: fail rather than overwrite an existing task.
+pub fn create(root: &Path, name: &str, prompt: &str) -> Result<()> {
+    check_name(name)?;
+    let prompt = prompt.trim();
+    if prompt.is_empty() || prompt.len() > MAX_PROMPT_BYTES {
+        bail!("Trigger prompt must be 1-65536 bytes");
+    }
+    mutate_store(root, |entries| {
+        if entries.contains_key(name) {
+            bail!("Local trigger already exists: {name}");
+        }
+        if entries.len() >= MAX_TRIGGERS {
+            bail!("Local trigger limit reached");
+        }
+        entries.insert(name.to_owned(), Trigger { prompt: prompt.to_owned() });
+        Ok(())
+    })
+}
+
+/// Source-aligned local update: only an existing task may be changed.
+pub fn change(root: &Path, name: &str, prompt: &str) -> Result<()> {
+    check_name(name)?;
+    let prompt = prompt.trim();
+    if prompt.is_empty() || prompt.len() > MAX_PROMPT_BYTES {
+        bail!("Trigger prompt must be 1-65536 bytes");
+    }
+    mutate_store(root, |entries| {
+        let existing = entries.get_mut(name)
+            .with_context(|| format!("No local trigger named {name}"))?;
+        existing.prompt = prompt.to_owned();
+        Ok(())
+    })
+}
+
 pub fn delete(root: &Path, name: &str) -> Result<()> {
     check_name(name)?;
-    update(root, |entries| {
+    mutate_store(root, |entries| {
         if entries.remove(name).is_none() {
             bail!("No local trigger named {name}");
         }
@@ -160,6 +194,17 @@ mod tests {
         delete(root.path(), "review_ci").unwrap();
         assert!(get(root.path(), "review_ci").is_err());
         assert!(list(root.path()).unwrap().is_empty());
+    }
+    #[test]
+    fn create_get_update_respect_existing_record_preconditions() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(change(root.path(), "missing", "new prompt").is_err());
+        create(root.path(), "simple", "draft prompt").unwrap();
+        assert!(create(root.path(), "simple", "overwrite").is_err());
+        assert_eq!(get(root.path(), "simple").unwrap(), "draft prompt");
+        change(root.path(), "simple", "revised prompt").unwrap();
+        assert_eq!(get(root.path(), "simple").unwrap(), "revised prompt");
+        assert_eq!(list(root.path()).unwrap(), vec!["simple"]);
     }
     #[test]
     fn stale_lock_file_does_not_block_subsequent_updates() {
