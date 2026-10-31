@@ -616,8 +616,8 @@ mod default_chat_cli_tests {
             parse_cli_with_default_chat(vec!["atlas-agent".into(), "--unknown-option".into()])
                 .unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
-        let help = parse_cli_with_default_chat(vec!["atlas-agent".into(), "--help".into()])
-            .unwrap_err();
+        let help =
+            parse_cli_with_default_chat(vec!["atlas-agent".into(), "--help".into()]).unwrap_err();
         assert_eq!(help.kind(), clap::error::ErrorKind::DisplayHelp);
     }
 }
