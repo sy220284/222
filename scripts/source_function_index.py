@@ -81,6 +81,10 @@ def build_function_index(archive: Path, source_hashes: dict):
                 metrics[field] = n
             except (ValueError, KeyError):
                 issues.append(f"TSV:{number}: 原函数静态指标无效: {field}")
+        # Independent TypeScript AST audit found 465 functions with real member
+        # assignments while the historical '状态写入数' field claims zero.
+        # Never present that field as an authoritative behavior metric.
+        untrusted_original_state_write_count = metrics.pop("状态写入数")
         indices[path].append({
             "source_id":function_id,
             "source":path,"source_sha256":expected_hash,
@@ -89,6 +93,8 @@ def build_function_index(archive: Path, source_hashes: dict):
             "signature":{"parameters":row["参数"],
                          "return_type":row["返回类型声明"]},
             "flags":flags,"static_metrics":metrics,
+            "untrusted_original_state_write_count":untrusted_original_state_write_count,
+            "state_assignment_review":"mandatory_original_ast_and_rust_runtime",
             "review_status":"pending",
         })
     seen_exports = set()
