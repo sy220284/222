@@ -7764,3 +7764,61 @@ fn print_alias_json_returns_one_real_model_result() {
     assert_eq!(result["type"], "result");
     assert_eq!(result["result"], "print-mode-ok");
 }
+
+#[test]
+fn simple_mode_restricts_live_provider_tool_catalog_and_background_schema() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"test-model",
+            "base_url":format!("http://{address}/v1"),"stream":false
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let server = thread::spawn(move || {
+        let mut stream = accept_before(&listener, Duration::from_secs(15));
+        let raw = read_request(&mut stream);
+        let request: Value = serde_json::from_str(raw.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        let body = json!({"choices":[{"message":{
+            "role":"assistant","content":"simple-tools-ok"
+        },"finish_reason":"stop"}]}).to_string();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ).unwrap();
+        stream.flush().unwrap();
+        request
+    });
+    let output = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "run",
+            "List the available tools",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .env("ATLAS_SIMPLE", "true")
+        .env("ATLAS_DISABLE_BACKGROUND_TASKS", "true")
+        .output()
+        .unwrap();
+    let request = server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let names = request["tools"].as_array().unwrap().iter()
+        .map(|tool| tool["function"]["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["edit_file", "read_file", "run_command"]);
+    let bash = request["tools"].as_array().unwrap().iter()
+        .find(|tool| tool["function"]["name"] == "run_command").unwrap();
+    assert!(bash.pointer("/function/parameters/properties/run_in_background").is_none());
+    assert!(bash.pointer("/function/parameters/properties/command").is_some());
+}
