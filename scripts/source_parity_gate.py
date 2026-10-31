@@ -8,10 +8,10 @@ import argparse
 import csv
 import io
 import hashlib
+import html
 import json
 import re
 from pathlib import Path
-import re
 import sys
 from zipfile import ZipFile, BadZipFile
 from port_workbench import (AuditError, check_evidence, current_counts, read_matrix,
@@ -301,6 +301,56 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
             "written": str(output), "contracts_updated": write}
 
 
+
+def verify_source_lines(source_archive: Path, spec_archive: Path):
+    """Compare all first-party source lines with the documented literal text.
+
+    The spec encodes ordinary ASCII spaces as &nbsp;, while literal original
+    U+00A0 nonbreaking spaces must remain intact.
+    """
+    errors, total_files, total_lines = [], 0, 0
+    with ZipFile(source_archive) as original, ZipFile(spec_archive) as spec:
+        members = {}
+        for info in original.infolist():
+            if not info.is_dir() and "/source/" in info.filename:
+                path = info.filename.split("/source/", 1)[1]
+                if path.startswith(("src/", "vendor/")):
+                    if path in members:
+                        raise AuditError("原版源码成员重复: " + path)
+                    members[path] = info.filename
+        mapping = "核验数据/文件与模块双向映射.tsv"
+        rows = list(csv.DictReader(io.StringIO(spec.read(mapping).decode("utf-8-sig")),delimiter="\t"))
+        pattern = re.compile(r"^\|\s*(\d+)\s*\|\s*<code>(.*?)</code>\s*\|")
+        for item in rows:
+            path = "src/" + item["源文件"]
+            if path not in members:
+                errors.append("原版第一方源文件缺失: " + path)
+                continue
+            total_files += 1
+            code = original.read(members[path]).decode("utf-8").splitlines()
+            total_lines += len(code)
+            document = spec.read(item["对应详细文档"]).decode("utf-8")
+            documented = {}
+            for line in document.splitlines():
+                match = pattern.match(line)
+                if not match:
+                    continue
+                lineno = int(match.group(1))
+                literal = html.unescape(match.group(2).replace("&nbsp;", " "))
+                if literal == "（空行）":
+                    literal = ""
+                if lineno in documented:
+                    errors.append("文档源码行号重复: " + path + ":" + str(lineno))
+                documented[lineno] = literal
+            if len(documented) != len(code):
+                errors.append("文档行数遗漏或重复: " + path)
+            for index, source_line in enumerate(code, 1):
+                if documented.get(index) != source_line:
+                    errors.append("源码逐行原文不一致: " + path + ":" + str(index))
+    return errors, {"firstparty_files":total_files, "physical_lines":total_lines,
+                    "line_mismatches":sum(s.startswith("源码逐行原文不一致") for s in errors)}
+
+
 def load_contracts(path: Path):
     items, errors = {}, []
     if not path.is_file():
@@ -451,6 +501,8 @@ def run(args):
         errors.extend(problem)
         original_checked = False
         spec_checked = False
+        line_checked = False
+        line_stats = {}
         spec_stats = {}
         if args.source_archive:
             original_problems = verify_original(args.source_archive, rows, baseline)
@@ -470,13 +522,21 @@ def run(args):
             spec_checked = not spec_problems
         elif args.command == "gate":
             errors.append("缺少完整源码功能规格 ZIP，拒绝放行")
+        if original_checked and spec_checked:
+            line_problems, line_stats = verify_source_lines(args.source_archive, args.spec_archive)
+            errors.extend(line_problems)
+            line_checked = not line_problems
+        if args.command == "gate" and not line_checked:
+            errors.append("原版源码与逐行详细规格未完成全量原文复核")
         if args.command == "gate" and progress["remaining"]:
             errors.append("尚有 " + str(progress["remaining"]) + " 条源码路径未完整验收")
         if args.command == "gate" and progress["accepted"] != stats["fully_evidenced"]:
             errors.append("已验收台账与逐函数证据未对齐")
-        passed = not errors and (args.command == "audit" or (original_checked and spec_checked))
+        passed = not errors and (args.command == "audit" or (original_checked and spec_checked and line_checked))
         result = {"schema":"source-parity/v1", "pass":passed, "mode":args.command,
-                  "original_checked":original_checked,"spec_checked":spec_checked,"spec_stats":spec_stats,"progress":progress,
+                  "original_checked":original_checked,"spec_checked":spec_checked,
+                  "line_checked":line_checked,"line_stats":line_stats,
+                  "spec_stats":spec_stats,"progress":progress,
                   "evidence":evidence,"contracts":stats,
                   "error_count":len(errors),"errors":errors}
         (output/"SOURCE_PARITY.json").write_text(
