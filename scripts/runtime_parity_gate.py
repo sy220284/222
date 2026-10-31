@@ -76,6 +76,22 @@ def _command(template: list, root: Path, original: Path, sandbox: Path, test_id:
     return result
 
 
+def _snapshot_sandbox(sandbox: Path):
+    """Capture actual on-disk effects, independent of adapter self-report."""
+    result = {}
+    for path in sorted(sandbox.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("测试沙箱创建了符号链接")
+        if path.is_file():
+            if path.stat().st_size > 10_000_000:
+                raise ValueError("动态测试产生过大文件，需审查副作用")
+            result[path.relative_to(sandbox).as_posix()] = {
+                "bytes":path.stat().st_size,
+                "sha256":hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+    return result
+
+
 def _execute(template, repo, original, sandbox, case, side):
     cmd = _command(template, repo, original, sandbox, case["id"])
     env = {
@@ -119,7 +135,32 @@ def _execute(template, repo, original, sandbox, case, side):
     missing = [field for field in REQUIRED_OBSERVATION if field not in observation]
     if missing:
         return None, side + " 缺少行为观察字段: " + ", ".join(missing)
+    for key in ("errors", "calls", "permissions", "events", "side_effects"):
+        if not isinstance(observation[key], list):
+            return None, side + " 行为观察字段必须是实际事件列表: " + key
+    for key in ("state", "persistence", "cancellation"):
+        if not isinstance(observation[key], dict):
+            return None, side + " 行为观察字段必须是状态对象: " + key
+    if case["kind"] == "permission_deny" and not any(
+        entry == "deny" or (isinstance(entry, dict) and
+                            entry.get("decision") == "deny")
+        for entry in observation["permissions"]
+    ):
+        return None, side + " 权限拒绝场景缺少实际 deny 决定"
+    if case["kind"] == "permission_allow" and not any(
+        entry == "allow" or (isinstance(entry, dict) and
+                             entry.get("decision") == "allow")
+        for entry in observation["permissions"]
+    ):
+        return None, side + " 权限允许场景缺少实际 allow 决定"
+    if case["kind"] == "cancel" and observation["cancellation"].get("cancelled") is not True:
+        return None, side + " 取消场景没有取消完成证据"
+    try:
+        filesystem_effects = _snapshot_sandbox(sandbox)
+    except (OSError, ValueError) as exc:
+        return None, side + " 文件副作用审计失败: " + str(exc)
     observation = dict(observation)
+    observation["filesystem_effects"] = filesystem_effects
     observation["process_exit_code"] = result.returncode
     # Adapter diagnostics are not a substitute for the structured error field.
     observation["process_stderr_sha256"] = hashlib.sha256(
