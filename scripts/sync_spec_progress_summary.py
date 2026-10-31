@@ -45,11 +45,11 @@ def reconcile_summary(text: str, expected: dict[str, int]) -> tuple[str, dict[st
     return text[:begin] + section + text[end:], differences
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repo', type=Path, default=Path('.'))
     parser.add_argument('--write', action='store_true')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     target = args.repo / SUMMARY
     try:
         original = target.read_text(encoding='utf-8')
