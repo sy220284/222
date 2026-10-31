@@ -60,7 +60,7 @@ pub fn review_prompt(root: &Path, number: Option<u64>) -> Result<String> {
     } else {
         // reviewRemote.ts compares the branch against its fork point.
         // Include committed changes as well as index/worktree changes.
-        let base = ["origin/main", "origin/master", "main", "master"]
+        let base = ["refs/remotes/origin/HEAD", "origin/main", "origin/master", "main", "master"]
             .iter()
             .find_map(|reference| {
                 git(root, &["merge-base", reference, "HEAD"])
