@@ -3027,17 +3027,7 @@ async fn chat(
             };
             if name == "ultrareview" || name == "ultraplan" {
                 let prepared = if name == "ultrareview" {
-                    let pr = if args.trim().is_empty() {
-                        Ok(None)
-                    } else {
-                        args.trim()
-                            .parse::<u64>()
-                            .map(Some)
-                            .context("/ultrareview expects a positive PR number")
-                    };
-                    pr.and_then(|n| {
-                        local_advanced_workflows::review_prompt(agent.workspace_root(), n)
-                    })
+                    local_advanced_workflows::review_request(agent.workspace_root(), args)
                 } else {
                     local_advanced_workflows::plan_prompt(agent.workspace_root(), args)
                 };
