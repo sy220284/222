@@ -238,18 +238,37 @@ Please provide your summary following this structure, ensuring precision and tho
 
 /// The original partial mode scopes its request to recent messages when
 /// an older summary is retained; all input/output remains tool-less.
-pub fn prompt(previous: &str, partial: bool) -> String {
-    let template = if partial {
-        PARTIAL_COMPACT_PROMPT
-    } else {
-        BASE_COMPACT_PROMPT
+pub const NO_TOOLS_TRAILER: &str = "\n\nREMINDER: Do NOT call any tools. Respond with plain text only — an <analysis> block followed by a <summary> block. Tool calls will be rejected and you will fail the task.";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompactDirection {
+    Full,
+    From,
+    UpTo,
+}
+
+/// Original source templates, with a retained local session summary supplied
+/// as context when one already exists. The caller appends hook/user
+/// instructions and NO_TOOLS_TRAILER as the final instruction.
+pub fn prompt_for_direction(
+    previous: &str,
+    direction: CompactDirection,
+) -> String {
+    let (template, analysis) = match direction {
+        CompactDirection::Full => (
+            BASE_COMPACT_PROMPT,
+            DETAILED_ANALYSIS_INSTRUCTION_BASE,
+        ),
+        CompactDirection::From => (
+            PARTIAL_COMPACT_PROMPT,
+            DETAILED_ANALYSIS_INSTRUCTION_PARTIAL,
+        ),
+        CompactDirection::UpTo => (
+            PARTIAL_COMPACT_UP_TO_PROMPT,
+            DETAILED_ANALYSIS_INSTRUCTION_BASE,
+        ),
     };
-    let analysis = if partial {
-        DETAILED_ANALYSIS_INSTRUCTION_PARTIAL
-    } else {
-        DETAILED_ANALYSIS_INSTRUCTION_BASE
-    };
-    let text = template
+    let body = template
         .replace(
             concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_BASE}"),
             analysis,
@@ -258,16 +277,46 @@ pub fn prompt(previous: &str, partial: bool) -> String {
             concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_PARTIAL}"),
             analysis,
         );
-    // The first line must be the original source's no-tools preamble.
-    // Extra continuation guidance preserves user-specific verified evidence.
-    format!("{}{}\n\nContinuation constraints: Preserve latest messages, user instructions, verified tool responses, errors and pending work. Separate completed and pending tasks, never fabricate tests or commits. Earlier summaries can be stale.\n\nPrevious summary:\n{previous}",
-        crate::prompt_runtime::SOURCE_COMPACT_NO_TOOLS, text)
+    let mut prompt = format!("{}{}", crate::prompt_runtime::SOURCE_COMPACT_NO_TOOLS, body);
+    if !previous.trim().is_empty() {
+        prompt.push_str("\n\nPrevious summary:\n");
+        prompt.push_str(previous);
+    }
+    prompt
+}
+
+pub fn prompt(previous: &str, partial: bool) -> String {
+    prompt_for_direction(
+        previous,
+        if partial {
+            CompactDirection::From
+        } else {
+            CompactDirection::Full
+        },
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn all_three_source_directions_expand_exact_boundaries() {
+        let full = prompt_for_direction("", CompactDirection::Full);
+        let from = prompt_for_direction("earlier verified summary", CompactDirection::From);
+        let up_to = prompt_for_direction("", CompactDirection::UpTo);
+        assert!(full.contains("the conversation so far"));
+        assert!(from.contains("RECENT portion"));
+        assert!(up_to.contains("newer messages that build on this context"));
+        assert!(from.contains("Previous summary:\nearlier verified summary"));
+        for text in [&full, &from, &up_to] {
+            assert!(text.starts_with("CRITICAL: Respond with TEXT ONLY"));
+            assert!(!text.contains(concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_BASE}")));
+            assert!(!text.contains(concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_PARTIAL}")));
+        }
+        assert!(NO_TOOLS_TRAILER.contains("Tool calls will be rejected"));
+    }
     #[test]
     fn full_source_text_and_partial_selection() {
         assert_eq!(BASE_COMPACT_PROMPT.len(), 4220);
@@ -281,7 +330,7 @@ mod tests {
         assert!(partial.contains("verified work"));
         assert!(!base.contains(concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_BASE}")));
         assert!(!partial.contains(concat!("$", "{DETAILED_ANALYSIS_INSTRUCTION_PARTIAL}")));
-        assert!(base.contains("latest messages"));
-        assert!(partial.contains("pending work"));
+        assert!(base.contains("Primary Request and Intent"));
+        assert!(partial.contains("Pending Tasks"));
     }
 }
