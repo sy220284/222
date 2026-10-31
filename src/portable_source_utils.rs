@@ -344,7 +344,10 @@ pub fn macos_option_char(value: &str) -> Option<&'static str> {
 // src/utils/messagePredicates.ts
 pub fn is_human_turn(message: &Value) -> bool {
     message.get("type").and_then(Value::as_str) == Some("user")
-        && message.get("isMeta").and_then(Value::as_bool) != Some(true)
+        // Source uses JavaScript truthiness for !m.isMeta, not bool-only filtering.
+        && !message
+            .get("isMeta")
+            .is_some_and(crate::generated_ports::runtime::truthy)
         && message.get("toolUseResult").is_none()
 }
 
@@ -534,6 +537,14 @@ mod tests {
         );
         assert!(is_human_turn(&json!({"type":"user","content":"human"})));
         assert!(!is_human_turn(&json!({"type":"user","toolUseResult":{}})));
+        for meta in [json!(true), json!("hidden"), json!(1), json!([]), json!({})] {
+            assert!(!is_human_turn(&json!({"type":"user","isMeta":meta})));
+        }
+        for meta in [json!(false), json!(""), json!(0), Value::Null] {
+            assert!(is_human_turn(&json!({"type":"user","isMeta":meta})));
+        }
+        assert!(!is_human_turn(&json!({"type":"user","toolUseResult":null})));
+        assert!(!is_human_turn(&json!({"type":"assistant","isMeta":false})));
     }
     #[test]
     fn tags_paths_and_timeouts() {
