@@ -3763,7 +3763,20 @@ impl Agent {
                     all_messages[..pivot].to_vec()
                 }
                 crate::compact_source_prompts::CompactDirection::UpTo => {
-                    all_messages[pivot..].to_vec()
+                    // 2.1.88 removes old compaction summaries from the
+                    // retained suffix, otherwise the later old boundary
+                    // can shadow the new partial summary on resume.
+                    let old_summary_index = self
+                        .session
+                        .summary
+                        .as_ref()
+                        .map(|_| self.session.summary_insert_at.unwrap_or(0));
+                    all_messages[pivot..]
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| Some(pivot + index) != old_summary_index)
+                        .map(|(_, message)| message.clone())
+                        .collect()
                 }
                 crate::compact_source_prompts::CompactDirection::Full => unreachable!(),
             })
@@ -3803,6 +3816,11 @@ impl Agent {
         // then successful PreCompact hook context, under one source-defined
         // Additional Instructions section (before the final tool ban).
         let mut additional_instructions = Vec::new();
+        // Source partialCompactConversation: hook instructions precede the
+        // User context feedback for manual partial compaction.
+        if partial.is_some() && !before.additional_context.is_empty() {
+            additional_instructions.push(before.additional_context.join("\n\n"));
+        }
         if let Some(custom) = custom_instructions.filter(|text| !text.trim().is_empty()) {
             if partial.is_some() {
                 additional_instructions.push(format!("User context: {custom}"));
@@ -3810,7 +3828,7 @@ impl Agent {
                 additional_instructions.push(custom.to_owned());
             }
         }
-        if !before.additional_context.is_empty() {
+        if partial.is_none() && !before.additional_context.is_empty() {
             additional_instructions.push(before.additional_context.join("\n\n"));
         }
         if !additional_instructions.is_empty() {
@@ -5920,7 +5938,6 @@ mod tests {
             sdk_allowed_tools: None,
             sdk_disallowed_tools: std::collections::HashSet::new(),
         }
-
     }
 
     #[tokio::test]
@@ -6044,8 +6061,8 @@ mod tests {
             .unwrap();
         let up_to_saved = Session::load(dir.path(), &id).unwrap();
         assert_eq!(up_to_saved.summary_insert_at, Some(0));
-        assert_eq!(up_to_saved.messages.len(), 2);
-        assert_eq!(up_to_saved.model_messages().len(), 3);
+        assert_eq!(up_to_saved.messages.len(), 1);
+        assert_eq!(up_to_saved.model_messages().len(), 2);
         assert!(up_to_saved.model_messages()[0]
             .visible_text()
             .contains("Partial complete"));
