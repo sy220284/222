@@ -197,6 +197,8 @@ fn file_range_too_large(actual: u64, limit: usize) -> io::Error {
 /// selected *content*, not the formatted line-number prefixes.
 #[derive(Debug, PartialEq, Eq)]
 pub struct TextLineWindow {
+    /// Unnumbered content consumed by the source FileReadTool state cache.
+    pub content: String,
     pub formatted: String,
     pub selected_lines: usize,
     pub total_lines: usize,
@@ -209,6 +211,7 @@ fn append_selected_line(
     number: usize,
     bytes: &[u8],
     content: &mut String,
+    plain: &mut String,
     count: &mut usize,
     read_bytes: &mut usize,
     max_bytes: Option<usize>,
@@ -229,10 +232,12 @@ fn append_selected_line(
     }
     if separator != 0 {
         content.push('\n');
+        plain.push('\n');
     }
     content.push_str(&number.to_string());
     content.push_str(": ");
     content.push_str(&text);
+    plain.push_str(&text);
     *read_bytes = next_bytes;
     *count += 1;
     true
@@ -269,6 +274,7 @@ pub fn read_text_line_window_with_limit(
     let has_bom = reader.fill_buf()?.starts_with(&[0xef, 0xbb, 0xbf]);
     let end = start.saturating_add(count);
     let mut formatted = String::new();
+    let mut plain = String::new();
     let mut selected_bytes = Vec::new();
     let mut selected_lines = 0;
     let mut read_bytes = 0;
@@ -297,6 +303,7 @@ pub fn read_text_line_window_with_limit(
                     line_number,
                     &selected_bytes,
                     &mut formatted,
+                    &mut plain,
                     &mut selected_lines,
                     &mut read_bytes,
                     output_limit,
@@ -340,6 +347,7 @@ pub fn read_text_line_window_with_limit(
             line_number,
             &selected_bytes,
             &mut formatted,
+            &mut plain,
             &mut selected_lines,
             &mut read_bytes,
             output_limit,
@@ -348,6 +356,7 @@ pub fn read_text_line_window_with_limit(
         }
     }
     Ok(TextLineWindow {
+        content: plain,
         formatted,
         selected_lines,
         total_lines: line_number,
@@ -479,6 +488,7 @@ mod tests {
 
         let limited = read_text_line_window_with_limit(&path, 2, 3, Some(6), true).unwrap();
         assert_eq!(limited.formatted, "2: 你好");
+        assert_eq!(limited.content, "你好");
         assert_eq!(limited.selected_lines, 1);
         assert_eq!(limited.read_bytes, 6);
         assert_eq!(limited.total_lines, 4);
@@ -532,6 +542,7 @@ mod tests {
         assert_eq!(first.total_lines, 3);
         let end = read_text_line_window(&path, 2, 2).unwrap();
         assert_eq!(end.formatted, "2: 你好\n3: ");
+        assert_eq!(end.content, "你好\n");
         assert_eq!(end.selected_lines, 2);
         assert_eq!(end.read_bytes, "你好\n".len());
         assert_eq!(end.total_bytes, fs::metadata(&path).unwrap().len() - 3);

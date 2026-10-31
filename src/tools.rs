@@ -1711,7 +1711,13 @@ impl ToolExecutor {
                     && start == 1
                     && content.split('\n').count() <= count
                     && (source_read || result.chars().count() <= MAX_OUTPUT_CHARS),
-                content,
+                // Original FileReadTool caches the actual selected text,
+                // including for streaming ranges of oversized files. A blank
+                // cache entry loses what the user/model actually read.
+                content: window
+                    .as_ref()
+                    .map(|window| window.content.clone())
+                    .unwrap_or(content),
                 timestamp_ms: before_ms,
                 read_offset: if source_read && unchanged {
                     Some(requested_offset)
@@ -2659,6 +2665,21 @@ mod tests {
         let reader = executor(dir.path(), Approval::Full);
         let args = json!({"path":"large.rs","start_line":10000,"line_count":2});
         assert_eq!(reader.read_file_with_mode(&args, true).unwrap(), window);
+        let cached = reader
+            .file_reads
+            .lock()
+            .unwrap()
+            .get(&path.canonicalize().unwrap())
+            .unwrap();
+        assert_eq!(
+            cached.content,
+            format!(
+                "9999: {}\n10000: {}",
+                "x".repeat(100),
+                "x".repeat(100)
+            )
+        );
+        assert!(!cached.full, "a selected range cannot grant full-file edit access");
         assert_eq!(
             reader.read_file_with_mode(&args, true).unwrap(),
             "File unchanged since last read: large.rs"
