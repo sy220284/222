@@ -38,7 +38,8 @@ pub fn merge_and_filter_tools(
                 continue;
             }
         }
-        if name.starts_with("mcp__") {
+        // Upstream isMcpTool also recognizes an explicit isMcp marker.
+        if name.starts_with("mcp__") || tool.get("isMcp") == Some(&Value::Bool(true)) {
             mcp.push(tool.clone());
         } else {
             built_in.push(tool.clone());
@@ -93,6 +94,19 @@ mod tests {
         );
         assert_eq!(merged[0]["function"]["description"], "initial");
         assert_eq!(merged[3]["function"]["description"], "initial");
+    }
+
+    #[test]
+    fn explicit_mcp_marker_is_partitioned_after_builtin_tools() {
+        let tools = [
+            tool("Read", "builtin"),
+            json!({"name":"external_alias","isMcp":true,"description":"MCP"}),
+            tool("Write", "builtin"),
+        ];
+        let merged = merge_and_filter_tools(&[], &tools, None).unwrap();
+        assert_eq!(merged[0]["function"]["name"], "Read");
+        assert_eq!(merged[1]["function"]["name"], "Write");
+        assert_eq!(merged[2]["name"], "external_alias");
     }
 
     #[test]
