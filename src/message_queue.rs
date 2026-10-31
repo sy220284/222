@@ -105,7 +105,9 @@ impl Command {
                 .then(|| last.get("text").and_then(Value::as_str))
                 .flatten()
         });
-        text.is_some_and(|value| value.trim().starts_with('/'))
+        // processUserInput.ts requires the literal first character to be '/'.
+        // Queue display/inspection intentionally has separate trim semantics.
+        text.is_some_and(|value| value.starts_with('/'))
     }
     pub fn text(&self) -> Option<String> {
         if let Some(text) = self.value.as_str() {
@@ -439,11 +441,17 @@ mod tests {
             {"type":"text","text":" /help"}
         ]);
         assert!(!command.is_slash());
+        assert!(!command.is_input_slash());
+        command.value = json!([{"type":"image","source":{"type":"base64","data":"YQ==","media_type":"image/png"}},{"type":"text","text":"/help"}]);
+        assert!(!command.is_slash());
         assert!(command.is_input_slash());
         command.value = json!([
             {"type":"text","text":"/help"},
             {"type":"image","source":{"type":"base64","media_type":"image/png","data":"YQ=="}}
         ]);
+        assert!(!command.is_input_slash());
+        command.value = json!(" /help");
+        assert!(command.is_slash());
         assert!(!command.is_input_slash());
         command.value = json!("/help");
         command.skip_slash_commands = true;
