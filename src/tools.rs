@@ -2673,13 +2673,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             cached.content,
-            format!(
-                "9999: {}\n10000: {}",
-                "x".repeat(100),
-                "x".repeat(100)
-            )
+            format!("9999: {}\n10000: {}", "x".repeat(100), "x".repeat(100))
         );
-        assert!(!cached.full, "a selected range cannot grant full-file edit access");
+        assert!(
+            !cached.full,
+            "a selected range cannot grant full-file edit access"
+        );
         assert_eq!(
             reader.read_file_with_mode(&args, true).unwrap(),
             "File unchanged since last read: large.rs"
