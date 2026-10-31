@@ -754,6 +754,48 @@ pub fn read_prompt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn raw_mode_uses_actual_input_fd_and_restores_terminal_after_drop() {
+        use std::fs::File;
+        use std::os::fd::{AsRawFd, FromRawFd};
+        let mut master = -1;
+        let mut slave = -1;
+        // SAFETY: openpty writes two owned FDs into the initialized pointers.
+        let result = unsafe {
+            libc::openpty(
+                &mut master,
+                &mut slave,
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        };
+        assert_eq!(result, 0, "openpty failed: {}", io::Error::last_os_error());
+        // SAFETY: openpty returned unique owned descriptors on success.
+        let _master = unsafe { File::from_raw_fd(master) };
+        let slave = unsafe { File::from_raw_fd(slave) };
+        let attributes = |fd| {
+            let mut value = std::mem::MaybeUninit::<libc::termios>::uninit();
+            // SAFETY: fd is an open PTY and value points to writable memory.
+            assert_eq!(unsafe { libc::tcgetattr(fd, value.as_mut_ptr()) }, 0);
+            // SAFETY: tcgetattr initialized all termios bytes on success.
+            unsafe { value.assume_init() }
+        };
+        let before = attributes(slave.as_raw_fd());
+        {
+            let _raw = RawMode::enter(slave.as_raw_fd()).unwrap();
+            let during = attributes(slave.as_raw_fd());
+            assert_eq!(during.c_lflag & libc::ICANON, 0);
+            assert_eq!(during.c_lflag & libc::ECHO, 0);
+        }
+        let after = attributes(slave.as_raw_fd());
+        assert_eq!(after.c_lflag, before.c_lflag);
+        assert_eq!(after.c_iflag, before.c_iflag);
+        assert_eq!(after.c_oflag, before.c_oflag);
+    }
+
     #[test]
     fn original_double_press_window_is_800ms_and_resets_after_second_press() {
         use std::time::{Duration, Instant};
