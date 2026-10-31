@@ -305,11 +305,16 @@ fn output_style_instructions_from(
     let (scope, path) = if project.exists() || project.is_symlink() {
         (root, project)
     } else if let Some(path) = user.filter(|path| path.exists() || path.is_symlink()) {
-        (user_home.context("Cannot locate user output style root")?, path)
+        (
+            user_home.context("Cannot locate user output style root")?,
+            path,
+        )
     } else {
         bail!("Output style not found: {name}");
     };
-    let scope = scope.canonicalize().context("Cannot resolve output style scope")?;
+    let scope = scope
+        .canonicalize()
+        .context("Cannot resolve output style scope")?;
     let path = path.canonicalize().context("Cannot resolve output style")?;
     if !path.starts_with(&scope) {
         bail!("Output style escapes its configuration scope");
@@ -356,7 +361,9 @@ fn available_output_styles_from(
         if !directory.exists() && !directory.is_symlink() {
             continue;
         }
-        let scope_root = scope.canonicalize().context("Cannot resolve output style scope")?;
+        let scope_root = scope
+            .canonicalize()
+            .context("Cannot resolve output style scope")?;
         let resolved = directory
             .canonicalize()
             .context("Cannot resolve output style directory")?;
@@ -484,9 +491,11 @@ mod tests {
             ["default", "Explanatory", "Learning", "alpha", "zeta"]
         );
         for style in &styles {
-            assert!(!output_style_instructions_from(workspace.path(), None, style)
-                .unwrap()
-                .is_empty());
+            assert!(
+                !output_style_instructions_from(workspace.path(), None, style)
+                    .unwrap()
+                    .is_empty()
+            );
         }
         #[cfg(unix)]
         {
@@ -524,7 +533,8 @@ mod tests {
             "Project preference."
         );
         assert_eq!(
-            output_style_instructions_from(workspace.path(), Some(home.path()), "personal").unwrap(),
+            output_style_instructions_from(workspace.path(), Some(home.path()), "personal")
+                .unwrap(),
             "Personal style."
         );
         #[cfg(unix)]
@@ -536,9 +546,11 @@ mod tests {
                 user_styles.join("leaked.md"),
             )
             .unwrap();
-            assert!(!available_output_styles_from(workspace.path(), Some(home.path()))
-                .unwrap()
-                .contains(&"leaked".to_owned()));
+            assert!(
+                !available_output_styles_from(workspace.path(), Some(home.path()))
+                    .unwrap()
+                    .contains(&"leaked".to_owned())
+            );
         }
     }
 
