@@ -67,7 +67,7 @@ pub fn grep_description() -> String {
         .replace(concat!("$", "{AGENT_TOOL_NAME}"), "Agent")
 }
 
-fn render_original_agent(role: &str, original: &str) -> String {
+fn render_original_agent(original: &str) -> String {
     // Source TS interpolations are restricted to known, real wire tool names.
     // Do not evaluate arbitrary JavaScript or promote template expressions.
     original
@@ -90,23 +90,17 @@ fn render_original_agent(role: &str, original: &str) -> String {
         .replace(concat!("$", "{NOTEBOOK_EDIT_TOOL_NAME}"), "notebook_edit")
         .replace(concat!("$", "{EXIT_PLAN_MODE_TOOL_NAME}"), "ExitPlanMode")
         .replace("\\\\", "\\")
-        .replace("You are a verification specialist.", &format!("You are a verification specialist."))
         .replace(
             "For file searches: search broadly when you don't know where something lives. Use Read ",
             "For file searches: search broadly when you don't know where something lives. Use read_file ",
         )
         .replace("Use Glob, Grep", "Use glob_files, grep_files")
-        .replace("when you know the specific file path.", "when you know the specific file path.")
-        .replace(
-            "VERDICT: PASS",
-            if role == "verification" { "VERDICT: PASS" } else { "VERDICT: PASS" },
-        )
 }
 
 pub fn original_role_instructions(role: &str) -> &'static str {
-    fn from_source(path: &str, prefix: &str, title: &str, role: &str) -> String {
+    fn from_source(path: &str, prefix: &str, title: &str) -> String {
         let raw = literal(path, prefix).expect("Original built-in agent prompt exists");
-        let content = render_original_agent(role, raw);
+        let content = render_original_agent(raw);
         format!("{title}\n{content}")
     }
     static EXPLORE: OnceLock<String> = OnceLock::new();
@@ -119,7 +113,6 @@ pub fn original_role_instructions(role: &str) -> &'static str {
                 "src/tools/AgentTool/built-in/exploreAgent.ts",
                 "You are a file search specialist",
                 "# Repository exploration agent",
-                "explore",
             )
         }),
         "plan" => PLAN.get_or_init(|| {
@@ -127,7 +120,6 @@ pub fn original_role_instructions(role: &str) -> &'static str {
                 "src/tools/AgentTool/built-in/planAgent.ts",
                 "You are a software architect",
                 "# Planning agent",
-                "plan",
             )
         }),
         "verification" => VERIFY.get_or_init(|| {
@@ -135,7 +127,6 @@ pub fn original_role_instructions(role: &str) -> &'static str {
                 "src/tools/AgentTool/built-in/verificationAgent.ts",
                 "You are a verification specialist.",
                 "# Independent verification agent",
-                "verification",
             )
         }),
         _ => GENERAL.get_or_init(|| {
@@ -146,8 +137,8 @@ pub fn original_role_instructions(role: &str) -> &'static str {
                 .expect("Source general-purpose guidelines");
             format!(
                 "# Delegated agent\n{} When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.\n\n{}",
-                render_original_agent("general", prefix),
-                render_original_agent("general", guidelines)
+                render_original_agent(prefix),
+                render_original_agent(guidelines)
             )
         }),
     }
