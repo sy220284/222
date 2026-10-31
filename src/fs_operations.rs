@@ -161,9 +161,9 @@ pub fn permission_paths(path: &Path) -> Vec<PathBuf> {
     result
 }
 
-/// Source utils/readFileInRange.ts: stream the entire file to learn the
-/// total line count, but retain only the requested line window. A line outside
-/// the window may be gigabytes long without requiring a matching allocation.
+/// Source utils/readFileInRange.ts: stream the full file to count lines,
+/// but keep only the requested line window. Byte limits constrain the
+/// selected *content*, not the formatted line-number prefixes.
 #[derive(Debug, PartialEq, Eq)]
 pub struct TextLineWindow {
     pub formatted: String,
@@ -171,6 +171,7 @@ pub struct TextLineWindow {
     pub total_lines: usize,
     pub total_bytes: u64,
     pub read_bytes: usize,
+    pub truncated_by_bytes: bool,
 }
 
 fn append_selected_line(
@@ -179,7 +180,8 @@ fn append_selected_line(
     content: &mut String,
     count: &mut usize,
     read_bytes: &mut usize,
-) {
+    max_bytes: Option<usize>,
+) -> bool {
     let bytes = bytes.strip_suffix(b"\r").unwrap_or(bytes);
     let bytes = if number == 1 {
         bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes)
@@ -187,25 +189,49 @@ fn append_selected_line(
         bytes
     };
     let text = String::from_utf8_lossy(bytes);
-    if *count > 0 {
+    let separator = usize::from(*count > 0);
+    let next_bytes = read_bytes.saturating_add(separator).saturating_add(text.len());
+    if max_bytes.is_some_and(|limit| next_bytes > limit) {
+        return false;
+    }
+    if separator != 0 {
         content.push('\n');
-        *read_bytes += 1;
     }
     content.push_str(&number.to_string());
     content.push_str(": ");
     content.push_str(&text);
-    *read_bytes += text.len();
+    *read_bytes = next_bytes;
     *count += 1;
+    true
 }
 
-pub fn read_text_line_window(
+pub fn read_text_line_window(path: &Path, start: usize, count: usize) -> io::Result<TextLineWindow> {
+    read_text_line_window_with_limit(path, start, count, None, false)
+}
+
+/// Source semantics: non-truncating maxBytes rejects oversized source files;
+/// truncation retains complete selected lines up to the UTF-8 byte budget,
+/// continues counting all source lines, and marks truncated_by_bytes.
+pub fn read_text_line_window_with_limit(
     path: &Path,
     start: usize,
     count: usize,
+    max_bytes: Option<usize>,
+    truncate_on_byte_limit: bool,
 ) -> io::Result<TextLineWindow> {
     let file = fs::File::open(path)?;
+    let file_meta = file.metadata()?;
+    if !truncate_on_byte_limit {
+        if let Some(limit) = max_bytes {
+            if file_meta.is_file() && file_meta.len() > limit as u64 {
+                return Err(io::Error::new(
+                    io::ErrorKind::FileTooLarge,
+                    format!("File content ({}) exceeds maximum allowed size ({limit})", file_meta.len()),
+                ));
+            }
+        }
+    }
     let mut reader = io::BufReader::new(file);
-    // Original readFileInRange strips the UTF-8 BOM before computing totalBytes.
     let has_bom = reader.fill_buf()?.starts_with(&[0xef, 0xbb, 0xbf]);
     let end = start.saturating_add(count);
     let mut formatted = String::new();
@@ -214,6 +240,8 @@ pub fn read_text_line_window(
     let mut read_bytes = 0;
     let mut total_bytes = 0_u64;
     let mut line_number = 1_usize;
+    let mut truncated_by_bytes = false;
+    let output_limit = if truncate_on_byte_limit { max_bytes } else { None };
     loop {
         let chunk = reader.fill_buf()?;
         if chunk.is_empty() {
@@ -225,38 +253,61 @@ pub fn read_text_line_window(
             if *byte != b'\n' {
                 continue;
             }
-            if line_number >= start && line_number < end {
+            if !truncated_by_bytes && line_number >= start && line_number < end {
                 selected_bytes.extend_from_slice(&chunk[segment_start..index]);
-                append_selected_line(
+                if !append_selected_line(
                     line_number,
                     &selected_bytes,
                     &mut formatted,
                     &mut selected_lines,
                     &mut read_bytes,
-                );
+                    output_limit,
+                ) {
+                    truncated_by_bytes = true;
+                }
                 selected_bytes.clear();
             }
             line_number = line_number.saturating_add(1);
             segment_start = index + 1;
         }
-        if line_number >= start && line_number < end {
+        if !truncated_by_bytes && line_number >= start && line_number < end {
             selected_bytes.extend_from_slice(&chunk[segment_start..]);
+            if let Some(limit) = output_limit {
+                // Allow BOM and CRLF overhead until the complete line is
+                // known. This bounds a selected line whose size exceeds its
+                // remaining byte allowance while preserving exact fitting.
+                let allowance = limit.saturating_sub(read_bytes);
+                if selected_bytes.len() > allowance.saturating_add(4) {
+                    truncated_by_bytes = true;
+                    selected_bytes.clear();
+                }
+            }
         } else {
             selected_bytes.clear();
         }
         total_bytes += chunk_len as u64;
+        if !truncate_on_byte_limit {
+            if let Some(limit) = max_bytes {
+                if total_bytes.saturating_sub(if has_bom { 3 } else { 0 }) > limit as u64 {
+                    return Err(io::Error::new(io::ErrorKind::FileTooLarge, "File exceeds maximum allowed size"));
+                }
+            }
+        }
         reader.consume(chunk_len);
     }
-    // The original JS split/stream parser counts the last fragment, including
-    // a blank final line when the file ends with a newline.
-    if line_number >= start && line_number < end {
-        append_selected_line(
+    // A trailing LF adds an empty final line in the original JS fast and
+    // streaming paths, even when the preceding line was the last nonempty.
+    if !truncated_by_bytes && line_number >= start && line_number < end {
+        if !append_selected_line(
             line_number,
             &selected_bytes,
             &mut formatted,
             &mut selected_lines,
             &mut read_bytes,
-        );
+            output_limit,
+        ) {
+            truncated_by_bytes = true;
+        }
     }
     Ok(TextLineWindow {
         formatted,
@@ -264,6 +315,7 @@ pub fn read_text_line_window(
         total_lines: line_number,
         total_bytes: total_bytes.saturating_sub(if has_bom { 3 } else { 0 }),
         read_bytes,
+        truncated_by_bytes,
     })
 }
 
@@ -381,6 +433,48 @@ impl Iterator for ReverseLines {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn source_range_byte_limit_does_not_split_utf8_or_lines() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("unicode.txt");
+        fs::write(&path, "zero\n你好\nlast\n").unwrap();
+
+        let limited = read_text_line_window_with_limit(&path, 2, 3, Some(6), true).unwrap();
+        assert_eq!(limited.formatted, "2: 你好");
+        assert_eq!(limited.selected_lines, 1);
+        assert_eq!(limited.read_bytes, 6);
+        assert_eq!(limited.total_lines, 4);
+        assert!(limited.truncated_by_bytes);
+
+        let fits_separator = read_text_line_window_with_limit(&path, 1, 2, Some(11), true).unwrap();
+        assert_eq!(fits_separator.formatted, "1: zero\n2: 你好");
+        assert_eq!(fits_separator.read_bytes, 11);
+        assert!(!fits_separator.truncated_by_bytes);
+
+        let denied = read_text_line_window_with_limit(&path, 2, 1, Some(11), false).unwrap_err();
+        assert_eq!(denied.kind(), io::ErrorKind::FileTooLarge);
+    }
+
+    #[test]
+    fn source_range_truncation_bounds_huge_selected_lines_and_counts_rest() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("long.txt");
+        let mut data = vec![b'x'; 2_000_000];
+        data.extend_from_slice(b"\nend\n");
+        fs::write(&path, data).unwrap();
+
+        let limited = read_text_line_window_with_limit(&path, 1, 3, Some(3), true).unwrap();
+        assert!(limited.truncated_by_bytes);
+        assert_eq!(limited.formatted, "");
+        assert_eq!(limited.selected_lines, 0);
+        assert_eq!(limited.total_lines, 3);
+        assert_eq!(limited.total_bytes, fs::metadata(&path).unwrap().len());
+
+        let out_of_range = read_text_line_window_with_limit(&path, 9, 1, Some(0), true).unwrap();
+        assert!(!out_of_range.truncated_by_bytes);
+        assert_eq!(out_of_range.total_lines, 3);
+    }
+
     #[test]
     fn line_window_matches_source_crlf_bom_unicode_and_terminal_empty_line() {
         let folder = tempfile::tempdir().unwrap();
