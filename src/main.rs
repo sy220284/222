@@ -1420,15 +1420,20 @@ async fn run_cli() -> Result<()> {
                 .map(|answer| println!("{answer}"))
         }
         Commands::UltraPlan { objective, seed_plan } => {
-            let prompt = local_advanced_workflows::plan_prompt_with_seed(
-                agent.workspace_root(),
-                &objective.join(" "),
-                seed_plan.as_deref(),
-            )?;
-            agent
-                .run_advanced(local_advanced_workflows::Kind::Plan, &prompt)
-                .await
-                .map(|answer| println!("{answer}"))
+            if objective.is_empty() && seed_plan.as_deref().unwrap_or("").trim().is_empty() {
+                println!("{}", local_advanced_workflows::plan_usage());
+                Ok(())
+            } else {
+                let prompt = local_advanced_workflows::plan_prompt_with_seed(
+                    agent.workspace_root(),
+                    &objective.join(" "),
+                    seed_plan.as_deref(),
+                )?;
+                agent
+                    .run_advanced(local_advanced_workflows::Kind::Plan, &prompt)
+                    .await
+                    .map(|answer| println!("{answer}"))
+            }
         }
         Commands::Trigger {
             action: LocalTriggerAction::Run { name },
@@ -3032,6 +3037,10 @@ async fn chat(
                 _ => None,
             };
             if name == "ultrareview" || name == "ultraplan" {
+                if name == "ultraplan" && args.trim().is_empty() {
+                    println!("{}", local_advanced_workflows::plan_usage());
+                    continue;
+                }
                 let prepared = if name == "ultrareview" {
                     local_advanced_workflows::review_request(agent.workspace_root(), args)
                 } else {
@@ -3490,9 +3499,26 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                             .flatten()
                     });
                     if let Some(candidate) = candidate {
-                        match local_advanced_workflows::sdk_user_prompt(
+                        let seed_plan = event.get("seedPlan")
+                            .or_else(|| event.get("seed_plan"))
+                            .and_then(Value::as_str);
+                        if let Some(parsed) = slash_command::parse_slash_command(candidate) {
+                            if !parsed.is_mcp && parsed.command_name == "ultraplan"
+                                && parsed.args.trim().is_empty()
+                                && seed_plan.map(str::trim).unwrap_or("").is_empty()
+                            {
+                                print_json!(json!({
+                                    "type":"result","session_id":agent.session_id(),
+                                    "content":local_advanced_workflows::plan_usage(),
+                                    "usage":agent.usage(),"cost":agent.cost_ledger()
+                                }));
+                                continue;
+                            }
+                        }
+                        match local_advanced_workflows::sdk_user_prompt_with_seed(
                             agent.workspace_root(),
                             candidate,
+                            seed_plan,
                         ) {
                             Ok(Some(expanded)) => {
                                 advanced_kind = slash_command::parse_slash_command(candidate)
