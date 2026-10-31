@@ -73,6 +73,7 @@ mod mcp_output_storage;
 mod mcp_policy;
 mod mcp_prompt;
 mod memory;
+mod memory_command;
 mod memory_age;
 mod memory_extraction;
 mod message_queue;
@@ -1672,6 +1673,13 @@ async fn chat(
             }
             continue;
         }
+        if input == "/memory" {
+            match memory_command::run(agent.workspace_root()) {
+                Ok(message) => println!("{message}"),
+                Err(error) => eprintln!("Memory editing failed: {error:#}"),
+            }
+            continue;
+        }
         if input == "/color" || input.starts_with("/color ") {
             let color = input.strip_prefix("/color").unwrap_or("").trim();
             match agent.set_session_color(color) {
@@ -2073,6 +2081,7 @@ async fn chat(
                 println!("/env [NAME=VALUE | -u NAME] configure environment for child commands");
                 println!("/clear                   erase current conversation history");
                 println!("/compact                 summarize and compact conversation history");
+                println!("/memory                  edit user, project, or existing local auto-memory files");
                 println!("/commands                list migrated command registration metadata");
                 println!("@teammate MESSAGE        send directly to active team mailbox");
                 println!("/shell-spec [name]       show registered shell command specs");
