@@ -11,7 +11,8 @@
         "commandName": "search",
         "args": "foo bar",
         "isMcp": false
-      }
+      },
+      "kind": "normal"
     },
     {
       "id": "mcp",
@@ -20,7 +21,8 @@
         "commandName": "mcp:tool (MCP)",
         "args": "arg1 arg2",
         "isMcp": true
-      }
+      },
+      "kind": "edge"
     },
     {
       "id": "multiple-spaces",
@@ -29,7 +31,8 @@
         "commandName": "foo",
         "args": " bar",
         "isMcp": false
-      }
+      },
+      "kind": "edge"
     },
     {
       "id": "not-mcp-with-two-spaces",
@@ -38,7 +41,8 @@
         "commandName": "foo",
         "args": " (MCP) bar",
         "isMcp": false
-      }
+      },
+      "kind": "edge"
     },
     {
       "id": "mcp-empty-args",
@@ -47,7 +51,8 @@
         "commandName": "foo (MCP)",
         "args": "",
         "isMcp": true
-      }
+      },
+      "kind": "edge"
     },
     {
       "id": "tab-is-not-word-separator",
@@ -56,22 +61,26 @@
         "commandName": "foo\tx",
         "args": "",
         "isMcp": false
-      }
+      },
+      "kind": "edge"
     },
     {
       "id": "slash-only",
       "input": "/",
-      "expected": null
+      "expected": null,
+      "kind": "edge"
     },
     {
       "id": "missing-slash",
       "input": "abc",
-      "expected": null
+      "expected": null,
+      "kind": "edge"
     },
     {
       "id": "nel-leading-not-trimmed",
       "input": "/foo bar",
-      "expected": null
+      "expected": null,
+      "kind": "edge"
     },
     {
       "id": "nel-trailing-preserved",
@@ -80,7 +89,8 @@
         "commandName": "foo",
         "args": "bar",
         "isMcp": false
-      }
+      },
+      "kind": "edge"
     },
     {
       "id": "bom-trimmed",
@@ -89,7 +99,8 @@
         "commandName": "foo",
         "args": "bar",
         "isMcp": false
-      }
+      },
+      "kind": "edge"
     },
     {
       "id": "nbsp-not-internal-separator",
@@ -98,7 +109,8 @@
         "commandName": "foo x",
         "args": "",
         "isMcp": false
-      }
+      },
+      "kind": "edge"
     },
     {
       "id": "embedded-newline",
@@ -107,12 +119,14 @@
         "commandName": "foo\nbar",
         "args": "",
         "isMcp": false
-      }
+      },
+      "kind": "edge"
     },
     {
       "id": "space-after-slash",
       "input": "/ foo",
-      "expected": null
+      "expected": null,
+      "kind": "edge"
     },
     {
       "id": "trailing-spaces",
@@ -121,7 +135,8 @@
         "commandName": "foo",
         "args": " x",
         "isMcp": false
-      }
+      },
+      "kind": "edge"
     }
   ]
 }

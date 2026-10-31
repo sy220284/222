@@ -25,8 +25,8 @@ class SourceTestGateTests(unittest.TestCase):
         self.fixture={
             "schema":"source-golden/v1","source_path":"src/example.ts",
             "source_sha256":self.sha,"export":"parseExample",
-            "cases":[{"id":"ordinary","input":"x","expected":"yes"},
-                     {"id":"edge","input":"","expected":None}],
+            "cases":[{"id":"ordinary","kind":"normal","input":"x","expected":"yes"},
+                     {"id":"edge","kind":"edge","input":"","expected":None}],
         }
         self.write_golden()
         self.entry={
@@ -73,6 +73,16 @@ class SourceTestGateTests(unittest.TestCase):
 
     def test_source_sha_mismatch_fails(self):
         self.entry["source_sha256"]="b"*64
+        self.assertFalse(self.result()["pass"])
+
+    def test_duplicate_normal_and_edge_inputs_fail_closed(self):
+        self.fixture["cases"][1]["input"]="x"
+        self.write_golden()
+        self.assertFalse(self.result()["pass"])
+
+    def test_golden_missing_explicit_edge_is_rejected(self):
+        self.fixture["cases"][1]["kind"]="normal"
+        self.write_golden()
         self.assertFalse(self.result()["pass"])
 
     def test_golden_cannot_lose_edge_case(self):

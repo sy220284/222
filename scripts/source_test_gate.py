@@ -186,6 +186,24 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
                     if not all(isinstance(c, dict) and "input" in c and "expected" in c
                                for c in fixture["cases"]):
                         errors.append(path + ": 原版预期样例没有输入与明确预期")
+                    else:
+                        types = [c.get("kind") for c in fixture["cases"]]
+                        if (any(k not in LAYERS and k not in {"normal","edge","error",
+                             "permission_allow","permission_deny","cancel",
+                             "concurrent","restart","stream","side_effect"}
+                             for k in types) or
+                            not {"normal", "edge"}.issubset(types)):
+                            errors.append(path + ": 黄金结果必须显式包含正常与边界场景")
+                        normal_inputs = {
+                            json.dumps(c["input"], sort_keys=True, ensure_ascii=False)
+                            for c in fixture["cases"] if c.get("kind") == "normal"
+                        }
+                        edge_inputs = {
+                            json.dumps(c["input"], sort_keys=True, ensure_ascii=False)
+                            for c in fixture["cases"] if c.get("kind") == "edge"
+                        }
+                        if normal_inputs == edge_inputs:
+                            errors.append(path + ": 正常与边界场景必须使用不同的原版输入")
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 errors.append(path + ": 固化结果文件错误: " + str(exc))
         linked[path] = len(names)
