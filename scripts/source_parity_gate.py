@@ -259,6 +259,7 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
             spec_archive, baseline["source_hashes"])
         if semantic_errors:
             raise AuditError("原版函数索引损坏: " + "; ".join(semantic_errors[:8]))
+        write_queue(function_by_source, output.parent / "SOURCE_SEMANTIC_FUNCTIONS.jsonl")
     old, parse_errors = load_contracts(repo / CONTRACTS)
     if parse_errors:
         raise AuditError("现有行为契约损坏: " + "; ".join(parse_errors[:8]))
