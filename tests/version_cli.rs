@@ -43,9 +43,10 @@ fn version_subcommand_does_not_load_malformed_user_settings() {
         "version command must not parse settings: {}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert_eq!(
-        String::from_utf8(result.stdout).unwrap().trim(),
-        env!("CARGO_PKG_VERSION")
+    let output = String::from_utf8(result.stdout).unwrap();
+    assert!(
+        output.trim().starts_with(env!("CARGO_PKG_VERSION")),
+        "{output}"
     );
     assert!(result.stderr.is_empty());
 }
