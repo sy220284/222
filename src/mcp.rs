@@ -2007,7 +2007,11 @@ done"#;
             r#"while IFS= read -r line; do
 case "$line" in
   *'"method":"initialize"'*)
-    echo '{{"jsonrpc":"2.0","id":1,"result":{{"serverInfo":{{"name":"restarted"}}}}}}' ;;
+    if [ -e '{marker}' ]; then
+      echo '{{"jsonrpc":"2.0","id":1,"result":{{"instructions":"Second generation MCP guidance","serverInfo":{{"name":"restarted"}}}}}}'
+    else
+      echo '{{"jsonrpc":"2.0","id":1,"result":{{"instructions":"First generation MCP guidance","serverInfo":{{"name":"restarted"}}}}}}'
+    fi ;;
   *'"method":"tools/list"'*)
     if [ -e '{marker}' ]; then
       echo '{{"jsonrpc":"2.0","id":2,"result":{{"tools":[{{"name":"after","inputSchema":{{"type":"object"}}}}]}}}}'
@@ -2031,6 +2035,9 @@ done"#,
             headers_helper: None,
         };
         let mut mgr = McpManager::connect(&[config]).await.unwrap();
+        let first_instructions = mgr.instruction_context();
+        assert!(first_instructions.contains("First generation MCP guidance"));
+        assert!(!first_instructions.contains("Second generation MCP guidance"));
         assert!(serde_json::to_string(&mgr.definitions())
             .unwrap()
             .contains("mcp__restart__before"));
@@ -2047,6 +2054,11 @@ done"#,
         assert!(!mgr.handles("mcp__restart__before"));
         assert!(mgr.handles("mcp__restart__after"));
         assert_eq!(mgr.statuses().unwrap()[0]["status"], "connected");
+        let new_instructions = mgr.instruction_context();
+        assert!(new_instructions.contains("Second generation MCP guidance"));
+        assert!(!new_instructions.contains("First generation MCP guidance"));
+        mgr.toggle_named("restart", false).await.unwrap();
+        assert!(mgr.instruction_context().is_empty());
     }
     #[tokio::test]
     async fn failed_stdio_server_cannot_break_healthy_server_and_indexing() {
