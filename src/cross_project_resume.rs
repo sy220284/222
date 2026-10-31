@@ -76,7 +76,7 @@ pub fn check_cross_project_resume(
     }
 }
 
-/// The original emits `cd <quoted dir> && claude --resume <id>`.
+/// The original emits a directory change followed by the upstream resume CLI.
 /// Rust replaces the branded binary with the local CLI and keeps explicit
 /// quoting for paths and selectors, without executing any shell command.
 pub fn resume_command(project: &Path, session_id: &str) -> String {
