@@ -3190,7 +3190,7 @@ async fn sdk_interruptible_turn(
     message_id: Option<uuid::Uuid>,
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
-    plan_mode: bool,
+    advanced_kind: Option<local_advanced_workflows::Kind>,
 ) -> Result<String> {
     let mut observer = interrupts.clone();
     // The stdin reader may have parsed a later interrupt while the main loop
@@ -3207,8 +3207,8 @@ async fn sdk_interruptible_turn(
             bail!("SDK interrupt control channel closed");
         }
         response = async {
-            if plan_mode {
-                agent.ask_with_blocks_in_plan_mode(prompt, blocks, message_id).await
+            if let Some(kind) = advanced_kind {
+                agent.run_advanced_with_blocks(kind, prompt, blocks, message_id).await
             } else {
                 agent.ask_with_blocks_for_message(prompt, blocks, message_id).await
             }
@@ -3221,7 +3221,7 @@ async fn sdk_run_initial_turn(
     interrupts: &tokio::sync::watch::Receiver<u64>,
     input_epoch: u64,
 ) {
-    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch, false).await {
+    match sdk_interruptible_turn(agent, "", None, None, interrupts, input_epoch, None).await {
         Ok(answer) => print_json!(json!({
             "type":"result","session_id":agent.session_id(),
             "content":answer,"usage":agent.usage(),"cost":agent.cost_ledger()
@@ -3371,7 +3371,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                             .join("\n");
                         let input_epoch = *interrupt_rx.borrow();
                         match sdk_interruptible_turn(
-                            agent, &prompt, None, None, &interrupt_rx, input_epoch, false,
+                            agent, &prompt, None, None, &interrupt_rx, input_epoch, None,
                         ).await {
                             Ok(answer) => print_json!(json!({
                                 "type":"result","session_id":agent.session_id(),
@@ -3478,7 +3478,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 // The original SDK user input and REPL both recognize advanced
                 // commands. Keep images, earlier blocks, UUID and skipSlashCommands
                 // intact, and apply plan permissions only for this one turn.
-                let mut advanced_plan_turn = false;
+                let mut advanced_kind: Option<local_advanced_workflows::Kind> = None;
                 if event.get("skipSlashCommands").and_then(Value::as_bool) != Some(true) {
                     // processUserInput.ts:336-344 only interprets the LAST
                     // input block when it is text. A trailing image must not
@@ -3495,8 +3495,13 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                             candidate,
                         ) {
                             Ok(Some(expanded)) => {
+                                advanced_kind = slash_command::parse_slash_command(candidate)
+                                    .and_then(|parsed| match parsed.command_name.as_str() {
+                                        "ultraplan" => Some(local_advanced_workflows::Kind::Plan),
+                                        "ultrareview" => Some(local_advanced_workflows::Kind::Review),
+                                        _ => None,
+                                    });
                                 sdk_replace_last_text(&mut user, expanded);
-                                advanced_plan_turn = true;
                             }
                             Ok(None) => {}
                             Err(error) => {
@@ -3505,7 +3510,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                                 continue;
                             }
                         }
-                        if !advanced_plan_turn {
+                        if advanced_kind.is_none() {
                             if let Some(parsed) = slash_command::parse_slash_command(candidate) {
                                 match expand_user_skill_prompt(
                                     agent,
@@ -3554,7 +3559,7 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     message_id,
                     &interrupt_rx,
                     input_epoch,
-                    advanced_plan_turn,
+                    advanced_kind,
                 )
                 .await
                 {
