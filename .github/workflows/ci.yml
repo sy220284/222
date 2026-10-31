@@ -236,6 +236,15 @@ jobs:
           }
           fetch_private_zip "$SOURCE_URL" "$SOURCE_TOKEN" "$SOURCE_SHA256" "$RUNNER_TEMP/original.zip"
           fetch_private_zip "$SPEC_URL" "$SPEC_TOKEN" "$SPEC_SHA256" "$RUNNER_TEMP/source-spec.zip"
+      - name: 从真实源码与 AST 规格生成待审逐函数契约索引
+        if: steps.private_inputs.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/source_parity_gate.py index --repo . \
+            --source-archive "$RUNNER_TEMP/original.zip" \
+            --spec-archive "$RUNNER_TEMP/source-spec.zip" \
+            --output .port-audit
       - name: 原版源码逐文件、逐函数和 Rust 行为证据门禁
         if: always()
         shell: bash
