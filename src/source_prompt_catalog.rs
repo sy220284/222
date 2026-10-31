@@ -83,7 +83,7 @@ mod tests {
             rows.iter()
                 .map(|entry| entry.literal_candidates.len())
                 .sum::<usize>(),
-            294
+            297
         );
         for row in rows {
             assert_eq!(row.source_sha256.len(), 64);
