@@ -2112,8 +2112,16 @@ impl Agent {
         self.structured_output = enabled;
     }
 
-    fn emit(&self, event: serde_json::Value) {
+    fn emit(&self, mut event: serde_json::Value) {
         if self.structured_output {
+            if event.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
+                && event.get("name").and_then(serde_json::Value::as_str) == Some("LocalTrigger")
+            {
+                if let Some(content) = event.get("content").and_then(serde_json::Value::as_str) {
+                    let display = crate::local_triggers::render_tool_result_message(content);
+                    event["display"] = json!(display);
+                }
+            }
             println!("{}", crate::ndjson::stringify_value(&event));
         }
     }
