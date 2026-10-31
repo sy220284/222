@@ -165,5 +165,28 @@ class SourceParityGateTests(unittest.TestCase):
                 index_contracts(repo, archive, repo / "index.jsonl", write=True)
                 self.assertEqual(len((repo / "docs/SOURCE_PARITY_CONTRACTS.jsonl").read_text().splitlines()), 1)
 
+
+    def test_working_directory_source_hash_is_verified(self):
+        from source_parity_gate import pack_workspace_original, original_entries
+        with tempfile.TemporaryDirectory() as directory:
+            top = Path(directory)
+            repo, source = top/"public-repo", top/"private-original"
+            repo.mkdir()
+            (source/"src").mkdir(parents=True)
+            (source/"vendor").mkdir()
+            code = b"export function example(){return 5;}\n"
+            (source/"src/example.ts").write_bytes(code)
+            (source/"vendor/adapter.ts").write_bytes(b"export const n=1;\n")
+            archive = top/"original.zip"
+            self.assertEqual(pack_workspace_original(source,repo,archive),2)
+            original = original_entries(archive)
+            self.assertEqual(original["src/example.ts"][0],hashlib.sha256(code).hexdigest())
+            self.assertIn("vendor/adapter.ts",original)
+            with self.assertRaises(AuditError):
+                pack_workspace_original(repo,repo,top/"bad.zip")
+            (source/"src/shortcut.ts").symlink_to(source/"src/example.ts")
+            with self.assertRaises(AuditError):
+                pack_workspace_original(source,repo,top/"bad.zip")
+
 if __name__=="__main__":
     unittest.main()
