@@ -6839,7 +6839,11 @@ fn local_advanced_commands_reject_invalid_goals_before_model_calls() {
 #[test]
 fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
     let root = tempfile::tempdir().unwrap();
-    fs::write(root.path().join("audit-note.txt"), "VERIFIED_LOCAL_TASK_EXECUTION").unwrap();
+    fs::write(
+        root.path().join("audit-note.txt"),
+        "VERIFIED_LOCAL_TASK_EXECUTION",
+    )
+    .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
     let request_log = thread::spawn(move || {
@@ -6924,8 +6928,16 @@ fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
         "{}",
         requests[2]
     );
-    assert!(requests[3].contains("current-agent-turn"), "{}", requests[3]);
-    assert!(requests[4].contains("VERIFIED_LOCAL_TASK_EXECUTION"), "{}", requests[4]);
+    assert!(
+        requests[3].contains("current-agent-turn"),
+        "{}",
+        requests[3]
+    );
+    assert!(
+        requests[4].contains("VERIFIED_LOCAL_TASK_EXECUTION"),
+        "{}",
+        requests[4]
+    );
     let stored = fs::read_to_string(root.path().join(".atlas/local-triggers/tasks.json")).unwrap();
     assert!(stored.contains("Inspect local project files"));
     assert!(String::from_utf8(output.stdout)
@@ -7268,10 +7280,12 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
     assert!(first_user.contains("private local note"), "{first_user}");
     assert!(requests[1].contains("Second pass"), "{}", requests[1]);
     assert!(requests[2].contains("Final pass"), "{}", requests[2]);
-    assert!(events.iter().any(|e| e["type"]=="workflow"
-        && e["phase"]=="ready" && e["workflow"]=="ultraplan"));
-    assert!(events.iter().any(|e| e["type"]=="workflow"
-        && e["phase"]=="verifying" && e["workflow"]=="ultraplan"));
+    assert!(events
+        .iter()
+        .any(|e| e["type"] == "workflow" && e["phase"] == "ready" && e["workflow"] == "ultraplan"));
+    assert!(events.iter().any(|e| e["type"] == "workflow"
+        && e["phase"] == "verifying"
+        && e["workflow"] == "ultraplan"));
     let second: Value =
         serde_json::from_str(requests[3].split("\r\n\r\n").nth(1).unwrap()).unwrap();
     let second_user = second["messages"]
