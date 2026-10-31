@@ -224,6 +224,13 @@ mod tests {
     #[test]
     fn sdk_advanced_does_not_execute_quoted_paths_or_unknown_commands() {
         let root = tempfile::tempdir().unwrap();
+        let git = Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["init", "-q"])
+            .status().unwrap();
+        assert!(git.success());
+        std::fs::write(root.path().join("pending.rs"), "fn f() {}").unwrap();
         for input in [
             "/unknown ultraplan work",
             "/model abc",
