@@ -213,6 +213,14 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
+    /// Source-compatible one-shot prompt: -p "prompt" / --print "prompt".
+    #[arg(short = 'p', long = "print", global = true)]
+    print: Option<String>,
+
+    /// Print plain text, one JSON result, or an ordered JSON event stream.
+    #[arg(long = "output-format", global = true, value_enum, default_value_t = OutputFormat::Text)]
+    output_format: OutputFormat,
+
     /// Provider id from config.json (e.g. local, openai, gemini)
     #[arg(long, global = true)]
     provider: Option<String>,
@@ -236,6 +244,13 @@ struct Cli {
     /// Limit model/tool cycles per request
     #[arg(long, global = true, default_value_t = 24)]
     max_steps: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum OutputFormat {
+    Text,
+    Json,
+    StreamJson,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -592,9 +607,57 @@ fn parse_cli_with_default_chat(
     }
 }
 
+/// Map the original single-prompt CLI into the existing Run execution
+/// path. This keeps permissions, session ownership and API processing shared
+/// across 'run PROMPT' and '-p PROMPT', rather than introducing a second actor.
+fn normalize_print_cli(mut cli: Cli) -> Result<Cli> {
+    if let Some(prompt) = cli.print.take() {
+        if !matches!(
+            &cli.command,
+            Commands::Chat {
+                resume: None,
+                prefill: None,
+                ..
+            }
+        ) {
+            bail!("--print cannot be combined with a separate command or restored chat");
+        }
+        cli.command = Commands::Run { prompt };
+    }
+    if cli.output_format != OutputFormat::Text
+        && !matches!(cli.command, Commands::Run { .. })
+    {
+        bail!("--output-format requires a one-shot run or --print prompt");
+    }
+    Ok(cli)
+}
+
 #[cfg(test)]
 mod default_chat_cli_tests {
     use super::*;
+
+    #[test]
+    fn source_print_alias_routes_to_run_and_stream_json_is_scoped() {
+        let plain = parse_cli_with_default_chat(vec![
+            "atlas-agent".into(), "-p".into(), "hello".into()
+        ]).unwrap();
+        let normalized = normalize_print_cli(plain).unwrap();
+        assert!(matches!(normalized.command, Commands::Run { prompt } if prompt == "hello"));
+
+        let streamed = parse_cli_with_default_chat(vec![
+            "atlas-agent".into(), "--print".into(), "hello".into(),
+            "--output-format".into(), "stream-json".into()
+        ]).unwrap();
+        let normalized = normalize_print_cli(streamed).unwrap();
+        assert_eq!(normalized.output_format, OutputFormat::StreamJson);
+        assert!(matches!(normalized.command, Commands::Run { .. }));
+
+        let incompatible = parse_cli_with_default_chat(vec![
+            "atlas-agent".into(), "--output-format".into(), "json".into(),
+            "version".into()
+        ]).unwrap();
+        assert!(normalize_print_cli(incompatible).is_err());
+    }
 
     #[test]
     fn invoking_without_subcommand_enters_chat_and_preserves_global_options() {
@@ -642,7 +705,8 @@ mod default_chat_cli_tests {
 async fn run_cli() -> Result<()> {
     let cli = parse_cli_with_default_chat(std::env::args_os().collect())
         .unwrap_or_else(|error| error.exit());
-    // Doctor must diagnose malformed user configuration without failing startup.
+    let cli = normalize_print_cli(cli)?;
+    // Doctor/version must work even with malformed user settings and no network.
     if !matches!(cli.command, Commands::Doctor | Commands::Version) {
         tls_ca::apply_user_startup_config()?;
     }
@@ -1558,10 +1622,24 @@ async fn run_cli() -> Result<()> {
             } else {
                 prompt.clone()
             };
-            agent
-                .ask(&actual_prompt)
-                .await
-                .map(|answer| println!("{answer}"))
+            match cli.output_format {
+                OutputFormat::Text => agent
+                    .ask(&actual_prompt)
+                    .await
+                    .map(|answer| println!("{answer}")),
+                OutputFormat::Json => agent
+                    .ask(&actual_prompt)
+                    .await
+                    .map(|answer| print_json!(structured_result_event(&agent, &answer))),
+                OutputFormat::StreamJson => {
+                    agent.set_structured_output(true);
+                    print_json!(sdk_system_init::build_for_agent(&agent, &config)?);
+                    agent
+                        .ask(&actual_prompt)
+                        .await
+                        .map(|answer| print_json!(structured_result_event(&agent, &answer)))
+                }
+            }
         }
         Commands::ProjectInit => {
             let prompt = project_init::prompt(agent.workspace_root())?;
