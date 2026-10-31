@@ -13,7 +13,9 @@ import json
 import re
 from pathlib import Path
 import sys
+import tempfile
 from zipfile import ZipFile, BadZipFile
+from runtime_parity_gate import run_dynamic_parity
 from source_function_index import (build_function_index, validate_contract_coverage,
                                    write_queue)
 from port_workbench import (AuditError, check_evidence, current_counts, read_matrix,
@@ -23,6 +25,39 @@ DIMENSIONS = ("inputs", "outputs", "logic", "errors", "permissions", "state",
               "ordering", "cancellation", "persistence", "side_effects",
               "runtime_call_chain", "test_cases")
 CONTRACTS = Path("docs/SOURCE_PARITY_CONTRACTS.jsonl")
+
+
+
+def pack_workspace_original(source_root: Path, repo: Path, archive: Path):
+    """Package only source/src and source/vendor locally for existing hash logic.
+
+    The temporary ZIP never leaves the runner workspace and is deleted after
+    this invocation. Do not accept symlinks or copies inside the public repo.
+    """
+    source_root = source_root.resolve(strict=True)
+    repo = repo.resolve(strict=True)
+    if source_root == repo or source_root.is_relative_to(repo):
+        raise AuditError("私有原版源码目录必须位于公开仓库工作树之外")
+    if not (source_root / "src").is_dir():
+        raise AuditError("工作区原版源码目录缺失 src/: " + str(source_root))
+    paths = []
+    for subdir in ("src", "vendor"):
+        folder = source_root / subdir
+        if not folder.exists():
+            continue
+        for path in folder.rglob("*"):
+            if path.is_symlink():
+                raise AuditError("原版源码工作区包含符号链接: " + str(path))
+            if path.is_file():
+                if path.stat().st_size > 30 * 1024 * 1024:
+                    raise AuditError("原版源码文件超过限制: " + str(path))
+                paths.append(path)
+    if not paths:
+        raise AuditError("原版目录内没有可验证的源码文件")
+    with ZipFile(archive, "w") as z:
+        for path in sorted(paths):
+            z.write(path, arcname="local/source/" + path.relative_to(source_root).as_posix())
+    return len(paths)
 
 
 def original_entries(archive: Path):
@@ -556,6 +591,21 @@ def run(args):
             if args.command == "gate" and coverage_gaps:
                 errors.append(
                     f"有 {len(coverage_gaps)} 条原版路径的真实 AST 函数逐一验收记录缺失")
+        dynamic_stats = {"pass":False,"executed":0,"required_units":0}
+        if args.command == "gate":
+            if not getattr(args, "source_root", None):
+                errors.append("动态等价验收必须提供提交者原版工作区 --source-root")
+            elif not (original_checked and spec_checked):
+                errors.append("缺少可信原版目录及规格，动态执行禁止标为已验收")
+            else:
+                dynamic_stats = run_dynamic_parity(
+                    args.repo, args.source_root,
+                    getattr(args, "runtime_cases", args.repo / "tests/source_parity/cases"),
+                    function_index,
+                    {p for p,r in rows.items() if r["status"] != "excluded"},
+                    output,
+                )
+                errors.extend("动态验收: " + issue for issue in dynamic_stats["errors"])
         if original_checked and spec_checked:
             line_problems, line_stats = verify_source_lines(args.source_archive, args.spec_archive)
             errors.extend(line_problems)
@@ -566,19 +616,20 @@ def run(args):
             errors.append("尚有 " + str(progress["remaining"]) + " 条源码路径未完整验收")
         if args.command == "gate" and progress["accepted"] != stats["fully_evidenced"]:
             errors.append("已验收台账与逐函数证据未对齐")
-        passed = not errors and (args.command == "audit" or (original_checked and spec_checked and line_checked))
+        passed = not errors and (args.command == "audit" or (original_checked and spec_checked and line_checked and dynamic_stats["pass"]))
         result = {"schema":"source-parity/v1", "pass":passed, "mode":args.command,
                   "original_checked":original_checked,"spec_checked":spec_checked,
                   "line_checked":line_checked,"line_stats":line_stats,
                   "spec_stats":spec_stats,"source_function_stats":source_function_stats,
                   "progress":progress,
-                  "evidence":evidence,"contracts":stats,
+                  "evidence":evidence,"contracts":stats,"dynamic":{k:v for k,v in dynamic_stats.items() if k not in ("errors","mismatches","missing_examples")},
                   "error_count":len(errors),"errors":errors}
         (output/"SOURCE_PARITY.json").write_text(
             json.dumps(result, ensure_ascii=False, indent=2)+"\n", encoding="utf8")
         summary = ["# 原版源码统一验收", "",
                    "结果：" + ("通过" if passed else "未通过"),
-                   "原版 ZIP 重新验证：" + ("是" if original_checked else "否"),
+                   "原版来源重新验证：" + ("是" if original_checked else "否"),
+                   "原版/Rust 成对动态运行：" + ("通过" if dynamic_stats["pass"] else "未通过"),
                    "已验收：" + str(progress["accepted"]) + "/" + str(progress["eligible"]),
                    "源码路径登记：" + str(stats["recorded"])+"/"+str(stats["required"]),
                    "原版逐函数索引：" + str(stats["indexed"])+"/"+str(stats["required"]),
@@ -605,6 +656,8 @@ def main():
     p.add_argument("command",choices=("audit","gate","report","index",*legacy,"sync-spec"))
     p.add_argument("--repo",type=Path,default=Path("."))
     p.add_argument("--source-archive",type=Path)
+    p.add_argument("--source-root",type=Path, help="提交者本地原版 source/ 目录，必须在仓库外")
+    p.add_argument("--runtime-cases",type=Path,default=Path("tests/source_parity/cases"))
     p.add_argument("--spec-archive",type=Path)
     p.add_argument("--write-contracts", action="store_true", help="index: 显式更新待审契约清单")
     p.add_argument("--source", type=Path, help="scan/impact/dashboard: 解压后的原版 source 目录")
@@ -631,6 +684,18 @@ def main():
         from sync_spec_progress_summary import main as sync_spec_main
         return sync_spec_main(["--repo", str(args.repo)] +
                               (["--write"] if args.write else []))
+    if args.source_root is not None:
+        if args.source_archive is not None:
+            p.error("--source-root 与 --source-archive 只能选一个")
+        try:
+            with tempfile.TemporaryDirectory(prefix="original-workspace-") as directory:
+                archive = Path(directory) / "original.zip"
+                pack_workspace_original(args.source_root, args.repo, archive)
+                args.source_archive = archive
+                return run(args)
+        except (AuditError, OSError, ValueError) as exc:
+            print("原版源码工作区检验失败: " + str(exc), file=sys.stderr)
+            return 1
     return run(args)
 
 
