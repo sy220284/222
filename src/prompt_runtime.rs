@@ -478,13 +478,13 @@ mod tests {
         std::fs::write(directory.join("empty.md"), "  ").unwrap();
         std::fs::write(directory.join("notes.txt"), "Not an output style.").unwrap();
         std::fs::write(directory.join("default.md"), "Must not replace built-in.").unwrap();
-        let styles = available_output_styles(workspace.path()).unwrap();
+        let styles = available_output_styles_from(workspace.path(), None).unwrap();
         assert_eq!(
             styles,
             ["default", "Explanatory", "Learning", "alpha", "zeta"]
         );
         for style in &styles {
-            assert!(!output_style_instructions(workspace.path(), style)
+            assert!(!output_style_instructions_from(workspace.path(), None, style)
                 .unwrap()
                 .is_empty());
         }
@@ -497,7 +497,7 @@ mod tests {
                 directory.join("outside.md"),
             )
             .unwrap();
-            assert!(!available_output_styles(workspace.path())
+            assert!(!available_output_styles_from(workspace.path(), None)
                 .unwrap()
                 .contains(&"outside".to_owned()));
         }
