@@ -4,7 +4,6 @@
 //! other content blocks in the exact order supplied. Provider telemetry
 //! remains outside the user-visible prompt pipeline.
 use crate::protocol::Message;
-use anyhow::{bail, Result};
 use serde_json::Value;
 
 /// These blocks are model inputs, not a textual prompt. In particular,
@@ -22,10 +21,7 @@ pub struct ProcessedPrompt {
 
 /// Convert CLI text or SDK blocks into the same durable user-message
 /// representation used by the agent and every provider backend.
-pub fn process_text_prompt(text: &str, blocks: Option<Vec<Value>>) -> Result<ProcessedPrompt> {
-    if text.trim().is_empty() && !has_content_blocks(blocks.as_deref()) {
-        bail!("Prompt cannot be empty");
-    }
+pub fn process_text_prompt(text: &str, blocks: Option<Vec<Value>>) -> ProcessedPrompt {
     let first_text = blocks
         .as_ref()
         .and_then(|parts| {
@@ -50,12 +46,12 @@ pub fn process_text_prompt(text: &str, blocks: Option<Vec<Value>>) -> Result<Pro
         .to_owned();
     let mut message = Message::text("user", text);
     message.content_blocks = blocks;
-    Ok(ProcessedPrompt {
+    ProcessedPrompt {
         message,
         first_text,
         last_text,
         should_query: true,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -65,20 +61,22 @@ mod tests {
 
     #[test]
     fn text_only_keeps_original_whitespace_and_queries() {
-        let result = process_text_prompt(" hello\nworld ", None).unwrap();
+        let result = process_text_prompt(" hello\nworld ", None);
         assert_eq!(result.message.content.as_deref(), Some(" hello\nworld "));
         assert!(result.message.content_blocks.is_none());
         assert_eq!(result.first_text, " hello\nworld ");
         assert_eq!(result.last_text, " hello\nworld ");
         assert!(result.should_query);
-        assert!(process_text_prompt("  \n ", None).is_err());
-        assert!(process_text_prompt("", Some(vec![])).is_err());
+        // The source processTextPrompt always returns shouldQuery=true;
+        // empty-input rejection belongs to the outer CLI input policy.
+        assert!(process_text_prompt("  \n ", None).should_query);
+        assert!(process_text_prompt("", Some(vec![])).should_query);
     }
 
     #[test]
     fn image_only_sdk_prompt_does_not_require_fake_text() {
         let block = json!({"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA==" }});
-        let result = process_text_prompt("", Some(vec![block.clone()])).unwrap();
+        let result = process_text_prompt("", Some(vec![block.clone()]));
         assert_eq!(result.message.role, "user");
         assert_eq!(result.message.content.as_deref(), Some(""));
         assert_eq!(result.message.content_blocks, Some(vec![block]));
@@ -94,7 +92,7 @@ mod tests {
             json!({"type":"image","source":"later"}),
             json!({"type":"text","text":"last"}),
         ];
-        let result = process_text_prompt("first", Some(parts.clone())).unwrap();
+        let result = process_text_prompt("first", Some(parts.clone()));
         assert_eq!(result.message.content_blocks, Some(parts));
         assert_eq!(result.first_text, "first");
         assert_eq!(result.last_text, "last");
