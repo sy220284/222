@@ -30,14 +30,8 @@ mod tests {
             parse_peer_address("bridge:session"),
             (PeerScheme::Bridge, "session")
         );
-        assert_eq!(
-            parse_peer_address("/tmp/a"),
-            (PeerScheme::Uds, "/tmp/a")
-        );
-        assert_eq!(
-            parse_peer_address(" agent"),
-            (PeerScheme::Other, " agent")
-        );
+        assert_eq!(parse_peer_address("/tmp/a"), (PeerScheme::Uds, "/tmp/a"));
+        assert_eq!(parse_peer_address(" agent"), (PeerScheme::Other, " agent"));
         assert_eq!(parse_peer_address("uds:"), (PeerScheme::Uds, ""));
     }
 }
