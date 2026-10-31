@@ -188,7 +188,7 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
                         errors.append(path + ": 原版预期样例没有输入与明确预期")
                     else:
                         types = [c.get("kind") for c in fixture["cases"]]
-                        if (any(k not in LAYERS and k not in {"normal","edge","error",
+                        if (any(k not in {"normal","edge","error",
                              "permission_allow","permission_deny","cancel",
                              "concurrent","restart","stream","side_effect"}
                              for k in types) or
