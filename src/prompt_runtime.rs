@@ -281,9 +281,17 @@ pub fn output_style_label(style: &str) -> Option<&'static str> {
     }
 }
 
-/// Select a built-in output style or a user-authored workspace style.
-/// Custom styles are explicit opt-in and remain within the current workspace.
+/// Load a built-in style or an explicit user/project style. Project files
+/// override styles with the same name from the user's personal configuration.
 pub fn output_style_instructions(root: &std::path::Path, name: &str) -> anyhow::Result<String> {
+    output_style_instructions_from(root, dirs::home_dir().as_deref(), name)
+}
+
+fn output_style_instructions_from(
+    root: &std::path::Path,
+    user_home: Option<&std::path::Path>,
+    name: &str,
+) -> anyhow::Result<String> {
     use anyhow::{bail, Context};
 
     if let Some(style) = output_style_label(name) {
@@ -292,17 +300,19 @@ pub fn output_style_instructions(root: &std::path::Path, name: &str) -> anyhow::
     if crate::agent_definition::validate_agent_type(name).is_some() {
         bail!("Invalid output style name");
     }
-    let path = root
-        .join(".atlas")
-        .join("output-styles")
-        .join(format!("{name}.md"));
-    if !path.is_file() {
+    let project = root.join(".atlas/output-styles").join(format!("{name}.md"));
+    let user = user_home.map(|home| home.join(".atlas/output-styles").join(format!("{name}.md")));
+    let (scope, path) = if project.exists() || project.is_symlink() {
+        (root, project)
+    } else if let Some(path) = user.filter(|path| path.exists() || path.is_symlink()) {
+        (user_home.context("Cannot locate user output style root")?, path)
+    } else {
         bail!("Output style not found: {name}");
-    }
-    let root = root.canonicalize().context("Cannot resolve workspace")?;
+    };
+    let scope = scope.canonicalize().context("Cannot resolve output style scope")?;
     let path = path.canonicalize().context("Cannot resolve output style")?;
-    if !path.starts_with(&root) {
-        bail!("Output style escapes workspace");
+    if !path.starts_with(&scope) {
+        bail!("Output style escapes its configuration scope");
     }
     let raw = std::fs::read(&path).context("Read output style")?;
     if raw.len() > 50_000 {
@@ -322,9 +332,16 @@ pub fn output_style_instructions(root: &std::path::Path, name: &str) -> anyhow::
     Ok(content.trim().to_owned())
 }
 
-/// Discover only output styles that can actually be loaded into a model
-/// request. Built-ins always precede lexicographically ordered project styles.
+/// Enumerate styles that can be loaded by this same prompt resolver. Built-ins
+/// precede sorted custom names. Invalid/escaped styles are not advertised.
 pub fn available_output_styles(root: &std::path::Path) -> anyhow::Result<Vec<String>> {
+    available_output_styles_from(root, dirs::home_dir().as_deref())
+}
+
+fn available_output_styles_from(
+    root: &std::path::Path,
+    user_home: Option<&std::path::Path>,
+) -> anyhow::Result<Vec<String>> {
     use anyhow::{bail, Context};
 
     let mut result = vec![
@@ -332,39 +349,42 @@ pub fn available_output_styles(root: &std::path::Path) -> anyhow::Result<Vec<Str
         "Explanatory".to_owned(),
         "Learning".to_owned(),
     ];
-    let directory = root.join(".atlas").join("output-styles");
-    if !directory.exists() {
-        return Ok(result);
-    }
-    let workspace = root.canonicalize().context("Cannot resolve workspace")?;
-    let resolved = directory
-        .canonicalize()
-        .context("Cannot resolve output style directory")?;
-    if !resolved.starts_with(&workspace) {
-        bail!("Output style directory escapes workspace");
-    }
-    let mut custom = Vec::new();
-    for entry in std::fs::read_dir(&resolved).context("List output styles")? {
-        let entry = entry.context("Read output style directory entry")?;
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+    let mut custom = std::collections::BTreeSet::new();
+    let scopes = user_home.into_iter().chain(std::iter::once(root));
+    for scope in scopes {
+        let directory = scope.join(".atlas/output-styles");
+        if !directory.exists() && !directory.is_symlink() {
             continue;
         }
-        let Some(name) = path.file_stem().and_then(|stem| stem.to_str()) else {
-            continue;
-        };
-        if output_style_label(name).is_some()
-            || crate::agent_definition::validate_agent_type(name).is_some()
-        {
-            continue;
+        let scope_root = scope.canonicalize().context("Cannot resolve output style scope")?;
+        let resolved = directory
+            .canonicalize()
+            .context("Cannot resolve output style directory")?;
+        if !resolved.starts_with(&scope_root) {
+            bail!("Output style directory escapes configuration scope");
         }
-        match output_style_instructions(root, name) {
-            Ok(_) => custom.push(name.to_owned()),
+        for entry in std::fs::read_dir(&resolved).context("List output styles")? {
+            let entry = entry.context("Read output style directory entry")?;
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+                continue;
+            }
+            let Some(name) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                continue;
+            };
+            if output_style_label(name).is_none()
+                && crate::agent_definition::validate_agent_type(name).is_none()
+            {
+                custom.insert(name.to_owned());
+            }
+        }
+    }
+    for name in custom {
+        match output_style_instructions_from(root, user_home, &name) {
+            Ok(_) => result.push(name),
             Err(error) => eprintln!("Skipping invalid output style {name}: {error:#}"),
         }
     }
-    custom.sort();
-    result.extend(custom);
     Ok(result)
 }
 
@@ -480,6 +500,45 @@ mod tests {
             assert!(!available_output_styles(workspace.path())
                 .unwrap()
                 .contains(&"outside".to_owned()));
+        }
+    }
+
+    #[test]
+    fn user_output_styles_are_discovered_but_project_styles_win() {
+        let workspace = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let project_styles = workspace.path().join(".atlas/output-styles");
+        let user_styles = home.path().join(".atlas/output-styles");
+        std::fs::create_dir_all(&project_styles).unwrap();
+        std::fs::create_dir_all(&user_styles).unwrap();
+        std::fs::write(user_styles.join("shared.md"), "User preference.").unwrap();
+        std::fs::write(user_styles.join("personal.md"), "Personal style.").unwrap();
+        std::fs::write(project_styles.join("shared.md"), "Project preference.").unwrap();
+        let styles = available_output_styles_from(workspace.path(), Some(home.path())).unwrap();
+        assert_eq!(
+            styles,
+            ["default", "Explanatory", "Learning", "personal", "shared"]
+        );
+        assert_eq!(
+            output_style_instructions_from(workspace.path(), Some(home.path()), "shared").unwrap(),
+            "Project preference."
+        );
+        assert_eq!(
+            output_style_instructions_from(workspace.path(), Some(home.path()), "personal").unwrap(),
+            "Personal style."
+        );
+        #[cfg(unix)]
+        {
+            let outside = tempfile::tempdir().unwrap();
+            std::fs::write(outside.path().join("secret.md"), "private").unwrap();
+            std::os::unix::fs::symlink(
+                outside.path().join("secret.md"),
+                user_styles.join("leaked.md"),
+            )
+            .unwrap();
+            assert!(!available_output_styles_from(workspace.path(), Some(home.path()))
+                .unwrap()
+                .contains(&"leaked".to_owned()));
         }
     }
 
