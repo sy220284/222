@@ -4501,7 +4501,10 @@ impl Agent {
         // initialUserMessage to the headless input stream. Keep it as an
         // actual user turn (not a system instruction or hook attachment).
         let mut startup_message = self.pending_initial_user_message.take();
-        if prompt.trim().is_empty() && startup_message.is_none() {
+        if prompt.trim().is_empty()
+            && startup_message.is_none()
+            && !crate::process_text_prompt::has_content_blocks(blocks.as_deref())
+        {
             bail!("Prompt cannot be empty")
         }
         let prompt_text = if prompt.trim().is_empty() {
@@ -4528,8 +4531,8 @@ impl Agent {
         // The source autoCompact.ts estimates tokens from the complete API
         // messages rather than only the flat text field. Structured text,
         // tool results and media blocks all count toward context pressure.
-        let mut pending_message = Message::text("user", prompt);
-        pending_message.content_blocks = blocks.clone();
+        let pending_message =
+            crate::process_text_prompt::process_text_prompt(prompt, blocks.clone())?.message;
         // Include the synthetic compact-summary user turn in the same
         // token estimate as the provider request, or subsequent turns may
         // silently exceed the model context after a successful compact.
