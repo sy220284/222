@@ -14,7 +14,10 @@ fn decimal_prefix(raw: &str) -> Option<u64> {
     if digits.starts_with('-') {
         return None;
     }
-    let prefix = digits.chars().take_while(char::is_ascii_digit).collect::<String>();
+    let prefix = digits
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect::<String>();
     if prefix.is_empty() {
         return None;
     }

@@ -21,15 +21,16 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
     let request: Value = serde_json::from_str(&input)?;
     let case_id = request["id"].as_str().ok_or("missing case ID")?;
     let operation = request["input"]["operation"]
-        .as_str().ok_or("missing operation")?;
+        .as_str()
+        .ok_or("missing operation")?;
     let (result, source_id) = match operation {
         "isMacosOptionChar" => {
-            let text = request["input"]["payload"].as_str().ok_or("missing shortcut")?;
+            let text = request["input"]["payload"]
+                .as_str()
+                .ok_or("missing shortcut")?;
             (json!(source_keyboard::is_macos_option_char(text)), KEYBOARD)
         }
-        "isWorktreeModeEnabled" => (
-            json!(compat_helpers::is_worktree_mode_enabled()), WORKTREE
-        ),
+        "isWorktreeModeEnabled" => (json!(compat_helpers::is_worktree_mode_enabled()), WORKTREE),
         _ => return Err("unknown original export".into()),
     };
     let observation = json!({

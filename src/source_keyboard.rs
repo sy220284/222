@@ -14,11 +14,20 @@ pub fn is_macos_option_char(value: &str) -> bool {
     // Original is: char in MACOS_OPTION_SPECIAL_CHARS, where the table
     // is an ordinary JS object. These inherited Object.prototype properties
     // are observable even though they have no shortcut equivalent.
-    matches!(value,
-        "constructor" | "toString" | "toLocaleString" | "valueOf"
-        | "hasOwnProperty" | "isPrototypeOf" | "propertyIsEnumerable"
-        | "__proto__" | "__defineGetter__" | "__defineSetter__"
-        | "__lookupGetter__" | "__lookupSetter__"
+    matches!(
+        value,
+        "constructor"
+            | "toString"
+            | "toLocaleString"
+            | "valueOf"
+            | "hasOwnProperty"
+            | "isPrototypeOf"
+            | "propertyIsEnumerable"
+            | "__proto__"
+            | "__defineGetter__"
+            | "__defineSetter__"
+            | "__lookupGetter__"
+            | "__lookupSetter__"
     )
 }
 #[cfg(test)]

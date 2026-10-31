@@ -3,14 +3,32 @@
 mod collections;
 use indexmap::IndexSet;
 use serde_json::{json, Value};
-use std::{collections::HashMap, io::{self, Read}};
+use std::{
+    collections::HashMap,
+    io::{self, Read},
+};
 
-const IDS: [(&str,&str);5] = [
-    ("difference", "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1"),
-    ("intersects", "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1"),
-    ("every", "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1"),
-    ("union", "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1"),
-    ("objectGroupBy", "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1"),
+const IDS: [(&str, &str); 5] = [
+    (
+        "difference",
+        "src/utils/set.ts:FunctionDeclaration:4-12:occurrence-1",
+    ),
+    (
+        "intersects",
+        "src/utils/set.ts:FunctionDeclaration:17-27:occurrence-1",
+    ),
+    (
+        "every",
+        "src/utils/set.ts:FunctionDeclaration:32-39:occurrence-1",
+    ),
+    (
+        "union",
+        "src/utils/set.ts:FunctionDeclaration:44-53:occurrence-1",
+    ),
+    (
+        "objectGroupBy",
+        "src/utils/objectGroupBy.ts:FunctionDeclaration:4-18:occurrence-1",
+    ),
 ];
 fn primitive_key(value: &Value) -> Result<String, &'static str> {
     if value.is_object() || value.is_array() {
@@ -18,7 +36,9 @@ fn primitive_key(value: &Value) -> Result<String, &'static str> {
     }
     Ok(serde_json::to_string(value).expect("JSON primitive encodes"))
 }
-fn ordered_keys(value: &Value) -> Result<(IndexSet<String>,HashMap<String,Value>),Box<dyn std::error::Error>> {
+fn ordered_keys(
+    value: &Value,
+) -> Result<(IndexSet<String>, HashMap<String, Value>), Box<dyn std::error::Error>> {
     let values = value.as_array().ok_or("set operand must be array")?;
     let mut set = IndexSet::new();
     let mut decoded = HashMap::new();
@@ -27,15 +47,24 @@ fn ordered_keys(value: &Value) -> Result<(IndexSet<String>,HashMap<String,Value>
         set.insert(key.clone());
         decoded.entry(key).or_insert_with(|| value.clone());
     }
-    Ok((set,decoded))
+    Ok((set, decoded))
 }
-fn group_key(value: &Value,index: usize,mode: &str) -> Result<String,&'static str> {
+fn group_key(value: &Value, index: usize, mode: &str) -> Result<String, &'static str> {
     Ok(match mode {
-        "parity" => if value.as_i64().ok_or("parity expects integer")? % 2 == 0 {
-            "even".into()
-        } else { "odd".into() },
-        "initial" => value.as_str().ok_or("initial expects string")?
-            .chars().next().map(|c| c.to_string()).unwrap_or_default(),
+        "parity" => {
+            if value.as_i64().ok_or("parity expects integer")? % 2 == 0 {
+                "even".into()
+            } else {
+                "odd".into()
+            }
+        }
+        "initial" => value
+            .as_str()
+            .ok_or("initial expects string")?
+            .chars()
+            .next()
+            .map(|c| c.to_string())
+            .unwrap_or_default(),
         "identity" => value.as_str().ok_or("identity expects string")?.to_owned(),
         "index-mod3" => (index % 3).to_string(),
         "all" => "__proto__".to_owned(),
@@ -60,22 +89,34 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
     io::stdin().read_to_string(&mut input)?;
     let request: Value = serde_json::from_str(&input)?;
     let case_id = request["id"].as_str().ok_or("missing case ID")?;
-    let op = request["input"]["operation"].as_str().ok_or("missing operation")?;
+    let op = request["input"]["operation"]
+        .as_str()
+        .ok_or("missing operation")?;
     let payload = &request["input"]["payload"];
-    let source_id = IDS.iter().find(|(name,_)| *name == op)
-        .ok_or("unknown original collection export")?.1;
+    let source_id = IDS
+        .iter()
+        .find(|(name, _)| *name == op)
+        .ok_or("unknown original collection export")?
+        .1;
     let result = match op {
         "difference" | "intersects" | "every" | "union" => {
             let (a, originals_a) = ordered_keys(&payload["a"])?;
             let (b, originals_b) = ordered_keys(&payload["b"])?;
             match op {
-                "difference" => json!(collections::difference(&a,&b)
-                    .iter().map(|key| originals_a[key].clone()).collect::<Vec<_>>()),
-                "intersects" => json!(collections::intersects(&a,&b)),
-                "every" => json!(collections::every(&a,&b)),
-                "union" => json!(collections::union(&a,&b)
-                    .iter().map(|key| originals_a.get(key).or_else(|| originals_b.get(key))
-                        .expect("union key exists").clone()).collect::<Vec<_>>()),
+                "difference" => json!(collections::difference(&a, &b)
+                    .iter()
+                    .map(|key| originals_a[key].clone())
+                    .collect::<Vec<_>>()),
+                "intersects" => json!(collections::intersects(&a, &b)),
+                "every" => json!(collections::every(&a, &b)),
+                "union" => json!(collections::union(&a, &b)
+                    .iter()
+                    .map(|key| originals_a
+                        .get(key)
+                        .or_else(|| originals_b.get(key))
+                        .expect("union key exists")
+                        .clone())
+                    .collect::<Vec<_>>()),
                 _ => unreachable!(),
             }
         }
