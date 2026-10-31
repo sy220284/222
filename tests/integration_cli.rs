@@ -7463,3 +7463,61 @@ fn sdk_local_trigger_body_only_create_emits_source_like_ui_metadata() {
     ).unwrap();
     assert!(store.contains("Check my local repository"));
 }
+
+
+#[test]
+fn sdk_ultrareview_branch_executes_three_verified_local_rounds() {
+    let root = tempfile::tempdir().unwrap();
+    let init = Command::new("git").arg("-C").arg(root.path())
+        .args(["init", "-q"]).status().unwrap();
+    assert!(init.success());
+    fs::write(root.path().join("review-target.rs"), "pub fn target() {}\n").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let received = thread::spawn(move || {
+        let mut requests = Vec::new();
+        for step in 0..3 {
+            let mut conn = accept_before(&listener, Duration::from_secs(20));
+            let request = read_request(&mut conn);
+            let reply = json!({"choices":[{"message":{"role":"assistant",
+                "content":format!("Review phase {} verified",step+1)},
+                "finish_reason":"stop"}]}).to_string();
+            write!(conn,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                reply.len(), reply).unwrap();
+            conn.flush().unwrap();
+            requests.push(request);
+        }
+        requests
+    });
+    let config = root.path().join("config.json");
+    fs::write(&config,json!({"default_provider":"mock","providers":[{
+        "id":"mock","kind":"openai-compatible","model":"mock",
+        "base_url":format!("http://{addr}/v1")
+    }]}).to_string()).unwrap();
+    let mut child = binary().args([
+        "--workspace",root.path().to_str().unwrap(),"--approval","full","sdk"
+    ]).env("ATLAS_CONFIG",&config)
+      .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
+      .spawn().unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        writeln!(input,"{}",json!({"type":"user",
+            "content":"/ultrareview examine the local branch"})).unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(),"{}",String::from_utf8_lossy(&output.stderr));
+    let events: Vec<Value> = String::from_utf8(output.stdout).unwrap()
+        .lines().map(|l|serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(events.iter().filter(|e|e["type"]=="result").count(),1);
+    assert!(events.iter().any(|e|e["type"]=="workflow"
+        && e["phase"]=="ready" && e["workflow"]=="ultrareview"));
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(),3);
+    assert!(requests[0].contains("review-target.rs"),"{}",requests[0]);
+    assert!(requests[0].contains("examine the local branch"),"{}",requests[0]);
+    assert!(requests[1].contains("Second pass"),"{}",requests[1]);
+    assert!(requests[2].contains("Final pass"),"{}",requests[2]);
+    assert_eq!(fs::read_to_string(root.path().join("review-target.rs")).unwrap(),
+        "pub fn target() {}\n");
+}
