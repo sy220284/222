@@ -4,8 +4,7 @@
 mod slash_command;
 use std::io::{self, Read};
 
-const SOURCE_ID: &str =
-    "src/utils/slashCommandParsing.ts:FunctionDeclaration:25-60:occurrence-1";
+const SOURCE_ID: &str = "src/utils/slashCommandParsing.ts:FunctionDeclaration:25-60:occurrence-1";
 
 fn main() {
     if let Err(e) = real_main() {
@@ -18,9 +17,7 @@ fn real_main() -> Result<(), Box<dyn std::error::Error>> {
     let mut data = String::new();
     io::stdin().read_to_string(&mut data)?;
     let request: serde_json::Value = serde_json::from_str(&data)?;
-    let case_id = request["id"]
-        .as_str()
-        .ok_or("missing case id")?;
+    let case_id = request["id"].as_str().ok_or("missing case id")?;
     let command = request["input"]["command"]
         .as_str()
         .ok_or("missing slash command input")?;
