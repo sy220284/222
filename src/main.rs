@@ -1697,17 +1697,16 @@ async fn chat(
             .into_iter()
             .map(|entry| entry.display)
             .collect();
-        let line =
-            match terminal_input::read_prompt(
-                &prompt,
-                &mut entries,
-                config.editor_mode == "vim",
-                &mut prompt_history,
-            )? {
-                terminal_input::PromptRead::Line(line) => line,
-                terminal_input::PromptRead::Cancelled => continue,
-                terminal_input::PromptRead::Eof => break,
-            };
+        let line = match terminal_input::read_prompt(
+            &prompt,
+            &mut entries,
+            config.editor_mode == "vim",
+            &mut prompt_history,
+        )? {
+            terminal_input::PromptRead::Line(line) => line,
+            terminal_input::PromptRead::Cancelled => continue,
+            terminal_input::PromptRead::Eof => break,
+        };
         let entry = if line.trim().is_empty() {
             initial_prefill.take().unwrap_or_default()
         } else {
