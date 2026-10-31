@@ -474,10 +474,12 @@ fn redraw(
     let displayed = e.text.replace('\n', "↵").replace('\t', "⇥");
     let highlighted = highlight_advanced_keywords(&e.text);
     let to_cursor = e.text[..e.cursor].replace('\n', "↵").replace('\t', "⇥");
-    let tail = displayed
-        .chars()
-        .count()
-        .saturating_sub(to_cursor.chars().count());
+    // Ink measures terminal cells, not Unicode scalar count: CJK and emoji
+    // occupy two cells while combining marks occupy none. A scalar-count
+    // cursor shift lands inside glyphs and corrupts the next edit position.
+    let tail = crate::generated_ports::terminal_truncate::display_width(&displayed).saturating_sub(
+        crate::generated_ports::terminal_truncate::display_width(&to_cursor),
+    );
     write!(out, "\r\x1b[2K{mode}{prompt}{highlighted}")?;
     if e.text.is_empty() {
         let view = text_input_semantics::render_placeholder(&json!({
@@ -492,7 +494,11 @@ fn redraw(
         let ghost = suffix.replace('\n', "↵").replace('\t', "⇥");
         // Ghost text is visual only. Restore the cursor before user input;
         // it is accepted only by an explicit Right/Ctrl-F keystroke.
-        write!(out, "\x1b[2m{ghost}\x1b[22m\x1b[{}D", ghost.chars().count())?;
+        write!(
+            out,
+            "\x1b[2m{ghost}\x1b[22m\x1b[{}D",
+            crate::generated_ports::terminal_truncate::display_width(&ghost)
+        )?;
     }
     out.flush()
 }
@@ -672,6 +678,27 @@ mod tests {
         e.next(&h);
         assert_eq!(e.text, "x");
     }
+    #[cfg(unix)]
+    #[test]
+    fn redraw_uses_terminal_cell_width_for_chinese_and_emoji_cursor_positions() {
+        let mut editor = Editor::default();
+        for ch in "猫😀ab".chars() {
+            editor.insert(ch).unwrap();
+        }
+        editor.cursor = "猫".len();
+        let mut output = Vec::new();
+        redraw(&mut output, "> ", &editor, &VimKeys::new(false), &[]).unwrap();
+        assert!(String::from_utf8(output).unwrap().contains("\x1b[4D"));
+        let mut editor = Editor::default();
+        for ch in "e\u{301}猫x".chars() {
+            editor.insert(ch).unwrap();
+        }
+        editor.cursor = "e\u{301}".len();
+        let mut output = Vec::new();
+        redraw(&mut output, "> ", &editor, &VimKeys::new(false), &[]).unwrap();
+        assert!(String::from_utf8(output).unwrap().contains("\x1b[3D"));
+    }
+
     #[cfg(unix)]
     #[test]
     fn bash_history_ghost_only_when_inserting_at_end() {
