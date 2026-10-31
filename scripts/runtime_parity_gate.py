@@ -130,7 +130,9 @@ def _execute(template, repo, original, sandbox, case, side):
     # A driver must disclose actual source IDs it exercised. This trace and
     # the adapter itself require independent code review; no synthetic pass.
     ids = observation.get("executed_source_ids")
-    if not isinstance(ids, list) or len(ids) != len(set(ids)) or set(ids) != set(case["source_ids"]):
+    if (not isinstance(ids, list) or
+        any(not isinstance(item, str) or not item for item in ids) or
+        len(ids) != len(set(ids)) or set(ids) != set(case["source_ids"])):
         return None, side + " 真实执行路径未覆盖场景声明的所有原版函数 ID"
     missing = [field for field in REQUIRED_OBSERVATION if field not in observation]
     if missing:
