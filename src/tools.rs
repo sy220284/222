@@ -3334,7 +3334,10 @@ mod tests {
             },
         };
         let result = tool.execute(&call).await;
-        assert!(result.contains("denied by explicit permission rule"), "{result}");
+        assert!(
+            result.contains("denied by explicit permission rule"),
+            "{result}"
+        );
         assert!(!result.contains("security review"), "{result}");
     }
 
