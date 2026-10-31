@@ -21,6 +21,70 @@ use walkdir::WalkDir;
 const MAX_FILE_BYTES: u64 = 1_048_576;
 const MAX_OUTPUT_CHARS: usize = 16_000;
 
+/// Validate the original 2.1.88 WebFetch/WebSearch/ToolSearch Zod
+/// `inputSchema` before classifying a tool as concurrency-safe. WebFetch
+/// and WebSearch use strictObject; ToolSearch uses a permissive z.object.
+/// This is schema validation, not the later authorization/network check.
+fn validate_web_tool_input_schema(name: &str, input: &Value) -> Result<()> {
+    let object = input
+        .as_object()
+        .context("Tool arguments must be an object")?;
+    match name {
+        "web_fetch" => {
+            if object.keys().any(|key| key != "url" && key != "prompt") {
+                bail!("WebFetch arguments contain unsupported fields");
+            }
+            let raw_url = object
+                .get("url")
+                .and_then(Value::as_str)
+                .context("WebFetch requires a string URL")?;
+            reqwest::Url::parse(raw_url).context("WebFetch URL is invalid")?;
+            object
+                .get("prompt")
+                .and_then(Value::as_str)
+                .context("WebFetch requires a string prompt")?;
+        }
+        "web_search" => {
+            if object.keys().any(|key| {
+                !matches!(
+                    key.as_str(),
+                    "query" | "allowed_domains" | "blocked_domains"
+                )
+            }) {
+                bail!("WebSearch arguments contain unsupported fields");
+            }
+            let query = object
+                .get("query")
+                .and_then(Value::as_str)
+                .context("WebSearch requires a string query")?;
+            if query.encode_utf16().count() < 2 {
+                bail!("WebSearch query must contain at least two UTF-16 code units");
+            }
+            for field in ["allowed_domains", "blocked_domains"] {
+                if let Some(value) = object.get(field) {
+                    if !value
+                        .as_array()
+                        .is_some_and(|list| list.iter().all(Value::is_string))
+                    {
+                        bail!("WebSearch {field} must contain only strings");
+                    }
+                }
+            }
+        }
+        "tool_search" | "ToolSearch" => {
+            object
+                .get("query")
+                .and_then(Value::as_str)
+                .context("ToolSearch requires a string query")?;
+            if object.get("max_results").is_some_and(|v| !v.is_number()) {
+                bail!("ToolSearch max_results must be numeric");
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 /// Stream task output one line at a time. A single unbroken line can be
 /// gigabytes long, so skip and truncate it without allocating the whole file.
 /// The full byte stream remains available through task_output_delta.
@@ -702,6 +766,12 @@ impl ToolExecutor {
             .with_context(|| format!("Invalid {} arguments", call.function.name))?;
         } else if matches!(name, "grep_files" | "glob_files") {
             crate::search::validate_tool_input(name, &value).context("Invalid search arguments")?;
+        } else if matches!(
+            name,
+            "web_fetch" | "web_search" | "tool_search" | "ToolSearch"
+        ) {
+            validate_web_tool_input_schema(name, &value)
+                .with_context(|| format!("Invalid {} input schema", call.function.name))?;
         } else if crate::task_graph::handles(&call.function.name) {
             crate::task_graph::TaskGraph::validate_tool_input(&call.function.name, &value)
                 .with_context(|| format!("Invalid {} arguments", call.function.name))?;
@@ -2454,6 +2524,87 @@ mod tests {
     }
 
     use crate::protocol::FunctionCall;
+
+    #[test]
+    fn web_and_tool_search_concurrency_schema_matches_original_zod() {
+        use crate::tool_orchestration::{partition_tool_calls, ToolBatch};
+        let root = tempfile::tempdir().unwrap();
+        let runner = executor(root.path(), Approval::Full);
+        let mk = |name: &str, args: Value| ToolCall {
+            id: name.into(),
+            kind: "function".into(),
+            function: FunctionCall {
+                name: name.into(),
+                arguments: args.to_string(),
+            },
+        };
+        let fetch_schema = crate::webfetch::definition();
+        let search_schema = crate::websearch::definition();
+        let discovery_schema = crate::tool_search::definition();
+        assert_eq!(
+            fetch_schema["function"]["parameters"]["additionalProperties"],
+            false
+        );
+        assert_eq!(
+            search_schema["function"]["parameters"]["additionalProperties"],
+            false
+        );
+        assert_eq!(
+            search_schema["function"]["parameters"]["properties"]["query"]["minLength"],
+            2
+        );
+        assert!(search_schema["function"]["parameters"]["properties"]
+            .get("limit")
+            .is_none());
+        assert_eq!(
+            discovery_schema["function"]["parameters"]["properties"]["max_results"]["type"],
+            "number"
+        );
+        let valid = [
+            mk(
+                "WebFetch",
+                json!({"url":"https://example.org/","prompt":""}),
+            ),
+            mk(
+                "WebSearch",
+                json!({"query":"猫咪","allowed_domains":["example.org"]}),
+            ),
+            mk(
+                "ToolSearch",
+                json!({"query":"select:mcp__x__y","max_results":2.5,"extra":true}),
+            ),
+        ];
+        for call in &valid {
+            runner.validate_call_before_hooks(call).unwrap();
+        }
+        let invalid = [
+            mk("WebFetch", json!({"url":"bad-url","prompt":"ok"})),
+            mk(
+                "WebFetch",
+                json!({"url":"https://a.org","prompt":"ok","extra":1}),
+            ),
+            mk("WebFetch", json!({"url":"https://a.org"})),
+            mk("WebSearch", json!({"query":"a"})),
+            mk("WebSearch", json!({"query":"abc","limit":5})),
+            mk(
+                "WebSearch",
+                json!({"query":"abc","blocked_domains":[false]}),
+            ),
+            mk("ToolSearch", json!({"max_results":3})),
+            mk("ToolSearch", json!({"query":"x","max_results":"three"})),
+        ];
+        for call in &invalid {
+            assert!(runner.validate_call_before_hooks(call).is_err(), "{call:?}");
+        }
+        let batches = partition_tool_calls(
+            vec![valid[0].clone(), invalid[1].clone(), valid[1].clone()],
+            |call| runner.validate_call_before_hooks(call).is_ok(),
+        );
+        assert_eq!(batches.len(), 3);
+        assert!(matches!(&batches[0], ToolBatch::Safe(_)));
+        assert!(matches!(&batches[1], ToolBatch::Unsafe(_)));
+        assert!(matches!(&batches[2], ToolBatch::Safe(_)));
+    }
 
     fn executor(root: &Path, approval: Approval) -> ToolExecutor {
         ToolExecutor::new(root.canonicalize().unwrap(), approval, false)

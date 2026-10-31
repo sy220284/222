@@ -63,3 +63,18 @@
 | 03 会话主循环、流式事件与工具往返 | `services/tools/toolOrchestration.ts::runToolsConcurrently`；`utils/generators.ts::all` | `agent.rs::finalize_readonly_result`；`tool_orchestration.rs::completed_as_ready` | 并行只读工具谁先完成先回填独立 tool ID、PostToolUse 警告、会话记录与持久化，增加受控快慢完成先后测试，`f9502fd`、`c15b8e` | 真实并发 Hook/MCP/TUI 集成、Stop Hook/异常/取消/重启、工具上下文修改 |
 | 40 内置命令完整注册与行为入口 | `commands.ts::formatDescriptionWithSource`（728-754）；`getCommand/findCommand`（704-719）；`clearCommandsCache` 五连清（523-539） | `command_manifest.rs::commands/lookup/visible`；`plugins.rs::command_descriptors/list_commands` | 实锤缺口：插件命令描述缺 `(pluginName) ` 来源前缀，已按原版 formatDescriptionWithSource 实装并新增描述符前缀回归测试；未知命令经 lookup 不命中按原版 print 语义落普通消息（`sdk_queue.rs:190` 同口径）；无 memoize 架构下缓存清理链由 reload-plugins 真实重载等价（`main.rs` `/reload-plugins` 重读 hooks+MCP+命令发现）；MCP_SKILLS 为编译期 define 源码包不可证实默认值，记待验不冒修 | 88 注册对象在默认/简化/非交互/禁用开关四环境可达性矩阵；prompt 命令完整展开链 |
 | 39 文件变更监控、项目监听与热更新 | `utils/hooks/fileChangedWatcher.ts::initializeFileChangedWatcher/resolveWatchPaths`（28-108）；`hooks.ts::executeEnvHooks` FileChanged input（4289） | `file_changed_watcher.rs::spawn/resolve_watch_paths/diff_events`（全新）；`hooks.rs::HookRunner::file_changed_rules`；`main.rs chat()` 接线 | FileChanged 监听链全新落地：matcher 管道分隔清单→会话内 mtime 轮询（离线无 chokidar 等价 crate）→change/add/unlink→hook 执行→system 消息在下一输入边界显示，Drop 自动清理句柄；6 测试（清单解析三形态/空清单不启动/他事件不贡献/快照 diff 三事件/无变化零事件/input 形状）；HookEvent 补 PartialEq | CwdChanged/ConfigChange 尚无触发点（TUI 无 cd、settings 运行中不重读，属后续任务）；轮询延迟与 chokidar 事件驱动的可观察差异；watcher 不随 reload-plugins 重建 |
+
+### 工具参数校验与发现链的源码级补充（第03文档跨第08、14、23模块）
+
+| 原版代码位置 | Rust生产路径 | 已提交行为与回归 | 仍未闭环 |
+|---|---|---|---|
+| `toolOrchestration.ts::partitionToolCalls` | `tool_orchestration.rs::partition_tool_calls` → `tools.rs::validate_call_before_hooks` | 原版工具 `inputSchema.safeParse` 先于并发判定，畸形JSON及 schema 失败隔离为单独调用，`9c30863` | 所有工具参数 schema、MCP与安全审批全矩阵 |
+| `WebFetchTool.ts::inputSchema` | `tools.rs::validate_web_tool_input_schema` → `webfetch.rs::definition` | 严格对象、URL/提示必填、未知字段拒绝；模型公开参数同步，`c5c8c41`、`07556b1` | 网页摘要、权限动态交互、错误协议 |
+| `WebSearchTool.ts::inputSchema` | `tools.rs::validate_web_tool_input_schema` → `websearch.rs::definition` | 查询长度按UTF16、严格可选域名数组、拒绝额外字段及移除原版不存在的limit；`c5c8c41`、`07556b1`、`4da27a0` | 原版搜索返回结构、来源引用、全平台联网链 |
+| `ToolSearchTool.ts::inputSchema/searchToolsWithKeywords` | `tools.rs`、`tool_search.rs::execute` | 数字类型支持小数、零、负值并按JS slice裁切；保留原始 query；`2588957` | 延迟工具完整原版tool_reference与动态同步行为 |
+
+### 第04份模型API与重试边界的源码级对照
+
+| 原版代码位置 | 实际Rust运行入口 | 已修复并提交 | 仍未闭环 |
+|---|---|---|---|
+| `services/api/withRetry.ts::withRetry/getDefaultMaxRetries` | `provider.rs::send_model_request/model_retry_attempts_from` | 原版默认十次重试加首次请求；HTTP 429 Retry-After=0连续十一请求后原样返回最终429；通用配置 `ATLAS_MAX_RETRIES` 支持源版 parseInt 数字前缀且无效配置显式报错，`8a1bf92` | 529依来源重试策略、可取消重试等待、流式事件断连恢复、完整重试进度与错误分类 |

@@ -5283,7 +5283,9 @@ impl Agent {
             // Original toolOrchestration.runTools: partition the assistant
             // turn's tool_use blocks into consecutive read-only batches
             // (concurrent) and single non-safe tools (serial).
-            for tool_batch in crate::tool_orchestration::partition_tool_calls(calls) {
+            for tool_batch in crate::tool_orchestration::partition_tool_calls(calls, |call| {
+                executor.validate_call_before_hooks(call).is_ok()
+            }) {
                 let mut call = match tool_batch {
                     crate::tool_orchestration::ToolBatch::Unsafe(call) => call,
                     crate::tool_orchestration::ToolBatch::Safe(safe_batch) => {

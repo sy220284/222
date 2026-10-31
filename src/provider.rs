@@ -238,11 +238,33 @@ fn model_backoff(attempt: usize) -> Result<Duration> {
     )))
 }
 
+/// Source withRetry.ts DEFAULT_MAX_RETRIES=10 plus the initial attempt.
+/// Expose the portable ATLAS_MAX_RETRIES counterpart to the original
+/// CLAUDE_CODE_MAX_RETRIES; parseInt tolerates a decimal numeric prefix.
+fn model_retry_attempts_from(raw: Option<&str>) -> Result<usize> {
+    let Some(raw) = raw else {
+        return Ok(11);
+    };
+    let value = raw.trim_start();
+    let value = value.strip_prefix('+').unwrap_or(value);
+    if value.starts_with('-') {
+        bail!("ATLAS_MAX_RETRIES must not be negative");
+    }
+    let digits: String = value.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let retries = digits
+        .parse::<usize>()
+        .context("ATLAS_MAX_RETRIES must start with a nonnegative decimal integer")?;
+    retries
+        .checked_add(1)
+        .context("ATLAS_MAX_RETRIES exceeds the supported count")
+}
+
 pub(crate) async fn send_model_request(
     request: reqwest::RequestBuilder,
 ) -> Result<reqwest::Response> {
-    const ATTEMPTS: usize = 4;
-    for attempt in 0..ATTEMPTS {
+    let configured = std::env::var("ATLAS_MAX_RETRIES").ok();
+    let attempts = model_retry_attempts_from(configured.as_deref())?;
+    for attempt in 0..attempts {
         let attempt_request = request
             .try_clone()
             .context("Model request body cannot be replayed safely")?;
@@ -263,7 +285,7 @@ pub(crate) async fn send_model_request(
                             status.as_u16(),
                             408 | 409 | 429 | 500 | 502 | 503 | 504 | 529
                         ));
-                if retryable && attempt + 1 < ATTEMPTS {
+                if retryable && attempt + 1 < attempts {
                     let delay = response
                         .headers()
                         .get(reqwest::header::RETRY_AFTER)
@@ -281,7 +303,7 @@ pub(crate) async fn send_model_request(
                 }
                 return Ok(response);
             }
-            Err(error) if attempt + 1 < ATTEMPTS && (error.is_connect() || error.is_timeout()) => {
+            Err(error) if attempt + 1 < attempts && (error.is_connect() || error.is_timeout()) => {
                 // withRetry.ts applies the same exponential backoff and
                 // jitter to transport errors and retryable HTTP responses.
                 tokio::time::sleep(model_backoff(attempt)?).await;
@@ -1013,6 +1035,22 @@ mod tests {
     }
 
     #[test]
+    fn source_default_ten_retries_and_portable_parse_int_override() {
+        for (value, attempts) in [
+            (None, 11),
+            (Some("0"), 1),
+            (Some("2retries"), 3),
+            (Some(" +5 days"), 6),
+            (Some("10"), 11),
+        ] {
+            assert_eq!(model_retry_attempts_from(value).unwrap(), attempts);
+        }
+        for value in ["", "foo", "-1", "99999999999999999999999999999"] {
+            assert!(model_retry_attempts_from(Some(value)).is_err());
+        }
+    }
+
+    #[test]
     fn model_retry_backoff_uses_source_exponential_base_and_25_percent_jitter() {
         assert_eq!(model_backoff_millis(0, 0), 500);
         assert_eq!(model_backoff_millis(1, 0), 1_000);
@@ -1061,6 +1099,35 @@ mod tests {
                 "{value}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn retry_after_zero_exhausts_all_eleven_source_default_attempts() {
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/models", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for _ in 0..11 {
+                let (mut stream, _) =
+                    tokio::time::timeout(Duration::from_secs(5), listener.accept())
+                        .await
+                        .unwrap()
+                        .unwrap();
+                let mut buf = [0u8; 1024];
+                let read = stream.read(&mut buf).await.unwrap();
+                assert!(read > 0);
+                stream.write_all(b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 0\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+            }
+        });
+        assert_eq!(model_retry_attempts_from(None).unwrap(), 11);
+        let response = send_model_request(Client::new().post(url).body("{}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::TOO_MANY_REQUESTS);
+        server.await.unwrap();
     }
 
     #[tokio::test]

@@ -58,11 +58,9 @@ fn concurrency_safe_tools() -> &'static HashSet<&'static str> {
     })
 }
 
-/// `tool.isConcurrencySafe(input)` — the Rust tool surface has no per-tool
-/// safe predicates yet, so the table holds the tools whose original
-/// definitions are unconditionally safe. Schema validation is unnecessary
-/// here: the main loop already rejects calls whose arguments do not parse
-/// before dispatch, and the original treats a failed safe-parse as unsafe.
+/// `tool.isConcurrencySafe(input)` — known read-only tool names are
+/// concurrency candidates. The caller must also validate their input
+/// against the real executor schema before forming a parallel batch.
 pub fn is_concurrency_safe(tool_name: &str) -> bool {
     concurrency_safe_tools().contains(crate::tool_names::canonical_name(tool_name))
 }
@@ -71,10 +69,13 @@ pub fn is_concurrency_safe(tool_name: &str) -> bool {
 /// mutations use a single durable file and therefore stay serialized; pure
 /// list/get calls can join other read-only work without waiting behind them.
 pub fn is_concurrency_safe_call(call: &ToolCall) -> bool {
+    let Ok(input) = serde_json::from_str::<serde_json::Value>(&call.function.arguments) else {
+        return false;
+    };
+    if !input.is_object() {
+        return false;
+    }
     if crate::tool_names::canonical_name(&call.function.name) == "LocalTrigger" {
-        let Ok(input) = serde_json::from_str::<serde_json::Value>(&call.function.arguments) else {
-            return false;
-        };
         if crate::local_triggers::validate_model_input(&input).is_err() {
             return false;
         }
@@ -115,10 +116,16 @@ pub enum ToolBatch {
 /// Safe tools merge into the previous batch when that batch is also safe;
 /// anything else (unsafe, unknown, schema failure in the original) opens a
 /// new singleton batch, so unsafe tools always execute alone in order.
-pub fn partition_tool_calls(calls: Vec<ToolCall>) -> Vec<ToolBatch> {
+pub fn partition_tool_calls(
+    calls: Vec<ToolCall>,
+    validate_input: impl Fn(&ToolCall) -> bool,
+) -> Vec<ToolBatch> {
     let mut batches: Vec<ToolBatch> = Vec::new();
     for call in calls {
-        let safe = is_concurrency_safe_call(&call);
+        // Source tool.inputSchema.safeParse(input) rejects malformed inputs
+        // before tool.isConcurrencySafe. Use the exact executor validation
+        // employed before hooks, so an invalid call splits safe batches.
+        let safe = is_concurrency_safe_call(&call) && validate_input(&call);
         if safe {
             if let Some(ToolBatch::Safe(blocks)) = batches.last_mut() {
                 blocks.push(call);
@@ -224,7 +231,7 @@ mod tests {
         assert!(is_concurrency_safe_call(&list));
         assert!(is_concurrency_safe_call(&get));
         assert!(!is_concurrency_safe_call(&create));
-        let batches = partition_tool_calls(vec![list, get, create]);
+        let batches = partition_tool_calls(vec![list, get, create], |_| true);
         assert!(matches!(&batches[0], ToolBatch::Safe(v) if v.len() == 2));
         assert!(matches!(&batches[1], ToolBatch::Unsafe(_)));
     }
@@ -263,11 +270,10 @@ mod tests {
 
     #[test]
     fn consecutive_safe_tools_merge_into_one_batch() {
-        let batches = partition_tool_calls(vec![
-            call("Read", "a"),
-            call("Grep", "b"),
-            call("Glob", "c"),
-        ]);
+        let batches = partition_tool_calls(
+            vec![call("Read", "a"), call("Grep", "b"), call("Glob", "c")],
+            |_| true,
+        );
         assert_eq!(batches.len(), 1);
         match &batches[0] {
             ToolBatch::Safe(blocks) => {
@@ -281,11 +287,10 @@ mod tests {
 
     #[test]
     fn unsafe_tool_splits_batches_on_both_sides() {
-        let batches = partition_tool_calls(vec![
-            call("Read", "a"),
-            call("Edit", "b"),
-            call("Grep", "c"),
-        ]);
+        let batches = partition_tool_calls(
+            vec![call("Read", "a"), call("Edit", "b"), call("Grep", "c")],
+            |_| true,
+        );
         assert_eq!(batches.len(), 3);
         assert!(matches!(&batches[0], ToolBatch::Safe(v) if v.len() == 1));
         assert!(matches!(&batches[1], ToolBatch::Unsafe(c) if c.id == "b"));
@@ -294,12 +299,15 @@ mod tests {
 
     #[test]
     fn trailing_safe_batch_is_split_from_leading_safe_batch() {
-        let batches = partition_tool_calls(vec![
-            call("Glob", "a"),
-            call("Glob", "b"),
-            call("run_command", "c"),
-            call("Glob", "d"),
-        ]);
+        let batches = partition_tool_calls(
+            vec![
+                call("Glob", "a"),
+                call("Glob", "b"),
+                call("run_command", "c"),
+                call("Glob", "d"),
+            ],
+            |_| true,
+        );
         assert_eq!(batches.len(), 3);
         match &batches[0] {
             ToolBatch::Safe(blocks) => assert_eq!(blocks.len(), 2),
@@ -313,8 +321,30 @@ mod tests {
     }
 
     #[test]
+    fn schema_invalid_tools_are_serial_barriers_between_concurrent_reads() {
+        let mut malformed = call("Read", "invalid-json");
+        malformed.function.arguments = "{broken".to_owned();
+        let batches = partition_tool_calls(
+            vec![call("Read", "first"), malformed, call("Read", "last")],
+            |_| true,
+        );
+        assert_eq!(batches.len(), 3);
+        assert!(matches!(&batches[1], ToolBatch::Unsafe(call) if call.id == "invalid-json"));
+        let batches = partition_tool_calls(
+            vec![
+                call("Read", "first"),
+                call("Read", "invalid-schema"),
+                call("Read", "last"),
+            ],
+            |call| call.id != "invalid-schema",
+        );
+        assert_eq!(batches.len(), 3);
+        assert!(matches!(&batches[1], ToolBatch::Unsafe(call) if call.id == "invalid-schema"));
+    }
+
+    #[test]
     fn empty_input_yields_no_batches() {
-        assert!(partition_tool_calls(Vec::new()).is_empty());
+        assert!(partition_tool_calls(Vec::new(), |_| true).is_empty());
     }
 
     #[test]
