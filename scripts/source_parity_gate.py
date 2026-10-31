@@ -274,21 +274,33 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
         existing = old.get(path)
         source = files[path]
         declarations = source_declarations(source)
-        spec_candidates = spec_by_source.get(path, [])
+        candidates = function_index.get(path, [])
+        if not candidates and spec_archive is not None:
+            candidates = [{"source_id": f"{path}:file-level:1",
+                           "kind": "FileLevel", "source_lines": [1, row["source_lines"]]}]
         if existing is not None and existing.get("review_status") == "verified":
             indexed.append(existing)
             continue
+        old_functions = {f.get("source_id"): f for f in (existing or {}).get("functions", [])
+                         if isinstance(f, dict) and f.get("source_id")}
+        seeded_functions = [
+            old_functions.get(f["source_id"], {
+                "source_id": f["source_id"], "id": f["source_id"],
+                "source_lines": f["source_lines"],
+                "source_ast": f, "review_status": "pending"
+            }) for f in candidates
+        ] if spec_archive is not None else (existing or {}).get("functions", [])
         item = {
             "path": path,
             "source_sha256": baseline["source_hashes"][path],
             "source_lines": row["source_lines"],
             "source_declarations": declarations,
-            "spec_declarations": spec_candidates,
+            "spec_declarations": [],
             "source_function_nodes": function_by_source.get(path, []),
             "index_method": "static-declaration-candidates/v1",
             "review_status": "pending",
             "rust_entrypoints": rust_targets(row["rust_mapping"]),
-            "functions": (existing or {}).get("functions", []),
+            "functions": seeded_functions,
             "full_source_review": (existing or {}).get("full_source_review", {
                 "lines_reviewed": 0, "unreviewed_branches": None}),
             "unresolved": (existing or {}).get("unresolved", ["逐函数语义与 Rust 真实行为待核实"])
@@ -306,6 +318,7 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
         target.write_text(payload, encoding="utf-8")
     return {"required": len(eligible), "indexed": len(indexed),
             "declaration_candidates": sum(len(i.get("source_declarations", [])) for i in indexed),
+            "ast_function_candidates": sum(len(i.get("functions", [])) for i in indexed),
             "written": str(output), "contracts_updated": write}
 
 
