@@ -146,11 +146,13 @@ fn parse_server(
         .context("Plugin LSP maxRestarts must be a nonnegative integer")).transpose()?;
     let restart_on_crash = map.get("restartOnCrash").map(|v| v.as_bool()
         .context("Plugin LSP restartOnCrash must be boolean")).transpose()?;
+    let mut extensions = extension_to_language.keys().cloned().collect::<Vec<_>>();
+    extensions.sort();
     Ok(LspServerConfig {
         id: format!("plugin:{plugin}:{name}"),
         command: expand_field(command, root, data, options, schema)?,
         args,
-        extensions: extension_to_language.keys().cloned().collect(),
+        extensions,
         language_id: String::new(),
         extension_to_language,
         env,
@@ -164,6 +166,25 @@ fn parse_server(
     })
 }
 
+fn merge_server_entry(
+    specs: &mut BTreeMap<String, Value>,
+    errors: &mut Vec<String>,
+    plugin: &str,
+    entry: &str,
+    data: Result<Map<String, Value>>,
+) {
+    match data {
+        Ok(items) => {
+            for (name, config) in items {
+                specs.insert(name, config);
+            }
+        }
+        Err(error) => errors.push(format!(
+            "Plugin '{plugin}' LSP config '{entry}': {error:#}"
+        )),
+    }
+}
+
 /// Read optional .lsp.json, then manifest inline/files in declaration order,
 /// where later definitions replace earlier servers of the same local name.
 pub fn load_plugin_lsp(
@@ -175,17 +196,9 @@ pub fn load_plugin_lsp(
 ) -> (Vec<LspServerConfig>, Vec<String>) {
     let mut specs = BTreeMap::new();
     let mut errors = Vec::new();
-    let mut add_map = |entry: &str, data: Result<Map<String, Value>>| {
-        match data {
-            Ok(data) => {
-                for (name, value) in data { specs.insert(name, value); }
-            }
-            Err(error) => errors.push(format!("Plugin '{plugin}' LSP config '{entry}': {error:#}")),
-        }
-    };
     let file = root.join(".lsp.json");
     if file.exists() || file.is_symlink() {
-        add_map(".lsp.json", read_json_map(root, ".lsp.json"));
+        merge_server_entry(&mut specs, &mut errors, plugin, ".lsp.json", read_json_map(root, ".lsp.json"));
     }
     let definitions: Vec<&Value> = match declaration {
         Value::Null => Vec::new(),
@@ -194,8 +207,8 @@ pub fn load_plugin_lsp(
     };
     for value in definitions {
         match value {
-            Value::String(file) => add_map(file, read_json_map(root, file)),
-            Value::Object(map) => add_map("inline", Ok(map.clone())),
+            Value::String(file) => merge_server_entry(&mut specs, &mut errors, plugin, file, read_json_map(root, file)),
+            Value::Object(map) => merge_server_entry(&mut specs, &mut errors, plugin, "inline", Ok(map.clone())),
             _ => errors.push(format!("Plugin '{plugin}' LSP declaration must be map, path or array")),
         }
     }
@@ -208,6 +221,13 @@ pub fn load_plugin_lsp(
     };
     if data.is_symlink() || data.parent().is_some_and(Path::is_symlink) {
         errors.push(format!("Plugin '{plugin}' data directory is redirected"));
+        return (servers, errors);
+    }
+    // A live language server may write to its plugin data directory.
+    // Enforce the boundary before creating it, rather than passing a path
+    // that does not exist to the subprocess.
+    if let Err(error) = fs::create_dir_all(&data) {
+        errors.push(format!("Plugin '{plugin}' LSP data directory unavailable: {error}"));
         return (servers, errors);
     }
     for (name, spec) in specs {
