@@ -372,9 +372,15 @@ pub fn validate_model_input(args: &serde_json::Value) -> Result<()> {
 /// Source UI.tsx renders the action and optional trigger id in the tool
 /// header. Use the same text in local SDK tool events.
 pub fn render_tool_use_message(args: &serde_json::Value) -> String {
-    let action = args.get("action").and_then(serde_json::Value::as_str).unwrap_or("");
+    let action = args
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
     let name = args.get("trigger_id").and_then(serde_json::Value::as_str);
-    format!("{action}{}", name.map(|id| format!(" {id}")).unwrap_or_default())
+    format!(
+        "{action}{}",
+        name.map(|id| format!(" {id}")).unwrap_or_default()
+    )
 }
 
 /// Source UI.tsx prints the status and the number of JSON body lines.
@@ -489,11 +495,20 @@ fn model_tool_contract_rejects_schedules_and_invalid_actions() {
     let auto_id = auto_json["trigger_id"].as_str().unwrap();
     assert_eq!(get(root.path(), auto_id).unwrap(), "auto id task");
     assert!(auto_json["storage"] == "local");
-    assert_eq!(render_tool_use_message(&serde_json::json!({
-        "action":"run","trigger_id":"manual"
-    })), "run manual");
-    assert_eq!(render_tool_result_message("HTTP 200\n{}"), "HTTP 200 (1 lines)");
-    assert_eq!(render_tool_result_message("ERROR: denied"), "LocalTrigger failed");
+    assert_eq!(
+        render_tool_use_message(&serde_json::json!({
+            "action":"run","trigger_id":"manual"
+        })),
+        "run manual"
+    );
+    assert_eq!(
+        render_tool_result_message("HTTP 200\n{}"),
+        "HTTP 200 (1 lines)"
+    );
+    assert_eq!(
+        render_tool_result_message("ERROR: denied"),
+        "LocalTrigger failed"
+    );
     let task = model_call(
         root.path(),
         &serde_json::json!({"action":"run","trigger_id":"manual"}),
