@@ -18,6 +18,27 @@ fn tool_name(value: &Value) -> Result<&str> {
         .ok_or_else(|| anyhow::anyhow!("Tool pool contains a tool without a name"))
 }
 
+/// Original tools.ts:getTools in simple mode exposes only Bash, Read and
+/// Edit. The Rust runtime uses provider-neutral canonical names for these
+/// three tools; keep the public tool pool and execution permission aligned.
+pub fn is_simple_model_tool(name: &str) -> bool {
+    matches!(
+        crate::tool_names::canonical_name(name),
+        "run_command" | "read_file" | "edit_file"
+    )
+}
+
+pub fn filter_simple_model_tools(tools: Vec<Value>) -> Result<Vec<Value>> {
+    tools
+        .into_iter()
+        .filter_map(|tool| match tool_name(&tool) {
+            Ok(name) if is_simple_model_tool(name) => Some(Ok(tool)),
+            Ok(_) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect()
+}
+
 /// Initial tools take precedence, matching lodash uniqBy([...initial, ...assembled], 'name').
 /// The caller has already applied MCP deny rules during tool discovery.
 pub fn merge_and_filter_tools(
@@ -68,6 +89,29 @@ mod tests {
 
     fn tool(name: &str, version: &str) -> Value {
         json!({"type":"function","function":{"name":name,"description":version}})
+    }
+
+    #[test]
+    fn simple_mode_exposes_only_source_bash_read_and_edit() {
+        let catalog = vec![
+            tool("read_file", "Read"),
+            tool("run_command", "Bash"),
+            tool("edit_file", "Edit"),
+            tool("write_file", "Write"),
+            tool("ToolSearch", "Search"),
+            tool("mcp__server__read_file", "MCP"),
+        ];
+        let simple = filter_simple_model_tools(catalog).unwrap();
+        let names = simple
+            .iter()
+            .map(|tool| tool["function"]["name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["read_file", "run_command", "edit_file"]);
+        assert!(is_simple_model_tool("Read"));
+        assert!(is_simple_model_tool("Bash"));
+        assert!(!is_simple_model_tool("Write"));
+        assert!(!is_simple_model_tool("mcp__server__read_file"));
+        assert!(filter_simple_model_tools(vec![json!({})]).is_err());
     }
 
     #[test]
