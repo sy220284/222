@@ -279,6 +279,123 @@ pub fn list(root: &Path) -> Result<Vec<String>> {
     Ok(load(root)?.into_keys().collect())
 }
 
+/// Provider-neutral replacement for the original RemoteTrigger model tool.
+/// No scheduling metadata, remote session, or spawned worker is accepted.
+pub fn model_definition() -> serde_json::Value {
+    serde_json::json!({"type":"function","function":{
+        "name":"LocalTrigger",
+        "description":"Manage explicit local reusable tasks only. list/get read saved tasks; create/update save a prompt; run retrieves a saved task for execution within this SAME current Agent turn. Does not schedule, launch remote agents, or spawn background workers. Mutations and run require user permission.",
+        "parameters":{"type":"object","properties":{
+            "action":{"type":"string","enum":["list","get","create","update","run"]},
+            "trigger_id":{"type":"string","description":"Saved task name for get/update/run"},
+            "body":{"type":"object","properties":{"prompt":{"type":"string"}},
+                "required":["prompt"],"additionalProperties":false}
+        },"required":["action"],"additionalProperties":false}
+    }})
+}
+pub fn validate_model_input(args: &serde_json::Value) -> Result<()> {
+    let object = args.as_object().context("LocalTrigger requires a JSON object")?;
+    for key in object.keys() {
+        if !matches!(key.as_str(), "action" | "trigger_id" | "body") {
+            bail!("Unknown LocalTrigger field: {key}");
+        }
+    }
+    let action = object.get("action").and_then(serde_json::Value::as_str)
+        .context("LocalTrigger requires action")?;
+    match action {
+        "list" => {
+            if object.contains_key("body") || object.contains_key("trigger_id") {
+                bail!("LocalTrigger list accepts only action");
+            }
+        }
+        "get" | "run" => {
+            check_name(object.get("trigger_id").and_then(serde_json::Value::as_str)
+                .context("LocalTrigger requires trigger_id")?)?;
+            if object.contains_key("body") {
+                bail!("LocalTrigger get/run cannot include body");
+            }
+        }
+        "create" | "update" => {
+            if action == "update" {
+                check_name(object.get("trigger_id").and_then(serde_json::Value::as_str)
+                    .context("LocalTrigger update requires trigger_id")?)?;
+            } else if object.contains_key("trigger_id") {
+                check_name(object.get("trigger_id").and_then(serde_json::Value::as_str)
+                    .context("LocalTrigger create trigger_id must be a string")?)?;
+            }
+            let body = object.get("body").and_then(serde_json::Value::as_object)
+                .context("LocalTrigger requires a body object")?;
+            if body.len() != 1 || !body.contains_key("prompt") {
+                bail!("LocalTrigger accepts only body.prompt; scheduling metadata is unsupported");
+            }
+            let prompt = body.get("prompt").and_then(serde_json::Value::as_str)
+                .context("LocalTrigger body.prompt must be a string")?;
+            if prompt.trim().is_empty() || prompt.len() > MAX_PROMPT_BYTES {
+                bail!("LocalTrigger prompt must be 1-65536 bytes");
+            }
+            if action == "create" && !object.contains_key("trigger_id") {
+                bail!("LocalTrigger create requires a caller-chosen trigger_id");
+            }
+        }
+        _ => bail!("Unknown LocalTrigger action: {action}"),
+    }
+    Ok(())
+}
+
+/// A model tool cannot re-enter the owning Agent recursively. The run action
+/// returns the saved instructions to be executed in the SAME current turn;
+/// CLI/REPL run already execute through Agent::ask.
+pub fn model_call(
+    root: &Path,
+    args: &serde_json::Value,
+    mut authorize_mutation: impl FnMut() -> Result<()>,
+) -> Result<String> {
+    validate_model_input(args)?;
+    let action = args["action"].as_str().context("Missing action")?;
+    let name = args.get("trigger_id").and_then(serde_json::Value::as_str);
+    match action {
+        "list" => Ok(serde_json::to_string(&list(root)?)?),
+        "get" => Ok(serde_json::json!({"trigger_id":name,
+            "prompt":get(root, name.context("Missing trigger_id")?)?}).to_string()),
+        "create" | "update" => {
+            authorize_mutation()?;
+            let name = name.context("Missing trigger_id")?;
+            let prompt = args.pointer("/body/prompt").and_then(serde_json::Value::as_str)
+                .context("Missing prompt")?;
+            if action == "create" { create(root, name, prompt)?; }
+            else { change(root, name, prompt)?; }
+            Ok(format!("LocalTrigger {action} saved: {name}"))
+        }
+        "run" => {
+            authorize_mutation()?;
+            let name = name.context("Missing trigger_id")?;
+            let prompt = get(root, name)?;
+            Ok(format!("User-authorized local task {name} for the CURRENT Agent turn (no background agent, no scheduled execution):\\n{prompt}"))
+        }
+        _ => bail!("Unsupported LocalTrigger action"),
+    }
+}
+
+    #[test]
+    fn model_tool_contract_rejects_schedules_and_invalid_actions() {
+        let root = tempfile::tempdir().unwrap();
+        let valid = serde_json::json!({"action":"create","trigger_id":"manual","body":{"prompt":"review local files"}});
+        assert!(validate_model_input(&valid).is_ok());
+        assert!(model_call(root.path(), &valid, || Ok(())).is_ok());
+        assert!(model_call(root.path(), &serde_json::json!({"action":"get","trigger_id":"manual"}), || Ok(())).unwrap().contains("review local files"));
+        let task = model_call(root.path(), &serde_json::json!({"action":"run","trigger_id":"manual"}), || Ok(())).unwrap();
+        assert!(task.contains("CURRENT Agent turn"));
+        assert!(model_call(root.path(), &serde_json::json!({"action":"update","trigger_id":"manual","body":{"prompt":"mutate"}}), || anyhow::bail!("requires approval")).is_err());
+        assert_eq!(get(root.path(), "manual").unwrap(), "review local files");
+        for args in [
+            serde_json::json!({"action":"create","trigger_id":"future","body":{"prompt":"next","schedule":"hourly"}}),
+            serde_json::json!({"action":"run","trigger_id":"manual","schedule":"hourly"}),
+            serde_json::json!({"action":"delete","trigger_id":"manual"}),
+            serde_json::json!({"action":"list","trigger_id":"manual"}),
+        ] {
+            assert!(validate_model_input(&args).is_err(), "{args}");
+        }
+    }
 #[cfg(test)]
 mod tests {
     use super::*;
