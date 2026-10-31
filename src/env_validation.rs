@@ -15,7 +15,7 @@ pub struct BoundedInt {
 
 /// Accept a decimal prefix rather than Rust's strict integer parser: the
 /// original contract relies on parseInt(value, 10).
-fn decimal_prefix(value: &str) -> Option<u64> {
+pub(crate) fn decimal_prefix(value: &str) -> Option<u64> {
     let trimmed = value.trim_start_matches(char::is_whitespace);
     let (negative, digits) = match trimmed.as_bytes().first() {
         Some(b'-') => (true, &trimmed[1..]),
