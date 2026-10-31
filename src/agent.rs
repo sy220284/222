@@ -4089,6 +4089,28 @@ impl Agent {
         Ok(advice)
     }
 
+    /// Run one local advanced workflow in plan mode without changing the
+    /// user's persisted permission setting. The guard restores the prior
+    /// mode even if the future is cancelled or the provider fails.
+    pub async fn ask_in_plan_mode(&mut self, prompt: &str) -> Result<String> {
+        struct RestoreMode<'a> {
+            agent: &'a mut Agent,
+            previous: permission_mode::Mode,
+        }
+        impl Drop for RestoreMode<'_> {
+            fn drop(&mut self) {
+                self.agent.permission_mode = self.previous;
+            }
+        }
+        let previous = self.permission_mode;
+        let guard = RestoreMode {
+            agent: self,
+            previous,
+        };
+        guard.agent.permission_mode = permission_mode::Mode::Plan;
+        guard.agent.ask(prompt).await
+    }
+
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
         self.ask_with_blocks(prompt, None).await
     }
