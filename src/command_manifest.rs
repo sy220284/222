@@ -124,8 +124,19 @@ pub fn commands() -> &'static [CommandDefinition] {
                 } else {
                     directory.to_owned()
                 };
-                let source: &'static str = Box::leak(
-                    format!(
+                // The original command registry contains both single-file
+                // commands and directory-index commands. Keep the real source
+                // path for auditing instead of manufacturing an index.ts path.
+                // Added local-only commands have no corresponding slash-command
+                // source file in the original distribution.
+                let source_path = match directory {
+                    "advisor" => "src/commands/advisor.ts".to_owned(),
+                    "brief" => "src/commands/brief.ts".to_owned(),
+                    "ultraplan" => "src/commands/ultraplan.tsx".to_owned(),
+                    "ultrareview" => "src/commands/review/ultrareviewCommand.tsx".to_owned(),
+                    "trigger" => "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts".to_owned(),
+                    "pr_comments" => "src/commands/review.ts".to_owned(),
+                    _ => format!(
                         "src/commands/{actual_dir}/index.{}",
                         if disabled {
                             "js"
@@ -134,9 +145,9 @@ pub fn commands() -> &'static [CommandDefinition] {
                         } else {
                             "ts"
                         }
-                    )
-                    .into_boxed_str(),
-                );
+                    ),
+                };
+                let source: &'static str = Box::leak(source_path.into_boxed_str());
                 CommandDefinition {
                     source,
                     name,
@@ -228,6 +239,23 @@ mod tests {
         assert!(visible().any(|command| command.name == "rename"));
         assert!(visible().any(|command| command.name == "export"));
         assert!(visible().any(|command| command.name == "resume"));
+    }
+
+    #[test]
+    fn single_file_and_restored_command_source_paths_are_real() {
+        // Source archive: commands/advisor.ts, commands/brief.ts,
+        // commands/ultraplan.tsx and the review/RemoteTrigger tool sources.
+        let examples = [
+            ("advisor", "src/commands/advisor.ts"),
+            ("brief", "src/commands/brief.ts"),
+            ("ultraplan", "src/commands/ultraplan.tsx"),
+            ("ultrareview", "src/commands/review/ultrareviewCommand.tsx"),
+            ("trigger", "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts"),
+            ("pr-comments", "src/commands/review.ts"),
+        ];
+        for (name, path) in examples {
+            assert_eq!(lookup(name).expect("registered command").source, path);
+        }
     }
 
     #[test]
