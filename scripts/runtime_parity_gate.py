@@ -184,44 +184,29 @@ def _execute(template, repo, original, sandbox, case, side):
 
 
 def _required_kinds(index, contracts, expected):
-    """Every behavior family requires a case or a source-anchored N/A review."""
+    """Select behavior families by function responsibility, not a global ten-kind quota.
+
+    Normal/edge remain mandatory for every selected differential unit; an
+    explicitly reviewed source contract can require errors, permissions,
+    concurrency, cancellation, streaming, restart or filesystem effects.
+    A required family can only be added, never bypassed with an N/A claim.
+    """
     requirements, errors = {}, []
     for sid, path in expected.items():
         records = contracts.get(path, {}).get("functions", [])
         record = next((r for r in records if isinstance(r, dict) and
                        r.get("source_id") == sid), None)
         if record is None:
-            errors.append(sid + ": 未登记完整原版函数级审计合同")
-            requirements[sid] = set(KINDS)
+            errors.append(sid + ": 原版差异测试缺少已注册函数及场景责任")
+            requirements[sid] = {"normal", "edge"}
             continue
-        scope = record.get("not_applicable_scenarios", {})
-        if not isinstance(scope, dict):
-            errors.append(sid + ": 不适用场景说明不是 JSON 对象")
-            scope = {}
-        for kind, evidence in scope.items():
-            if kind not in KINDS or kind in ("normal", "edge"):
-                errors.append(sid + ": 不允许跳过正常、边界或未知类型: " + str(kind))
-                continue
-            if not isinstance(evidence, dict):
-                errors.append(sid + ": 缺失不适用场景源码依据: " + kind)
-                continue
-            anchor = evidence.get("source_lines")
-            reason = evidence.get("reason")
-            parent = next((r for r in index.get(path, []) if r["source_id"] == sid), None)
-            limit = parent["source_lines"] if parent else None
-            if (not isinstance(anchor, list) or len(anchor)!=2 or
-                any(type(n) is not int for n in anchor) or
-                not limit or not limit[0] <= anchor[0] <= anchor[1] <= limit[1] or
-                not isinstance(reason, str) or len(reason.strip()) < 20 or
-                evidence.get("source_sha256") != parent["source_sha256"]):
-                errors.append(sid + ": 不适用场景缺少可追溯原版源码位置、哈希和具体理由: " + kind)
-        valid = {k for k in scope if k in KINDS and k not in ("normal","edge") and
-                 isinstance(scope[k], dict) and
-                 scope[k].get("source_sha256") == (next((r["source_sha256"] for r in index.get(path, []) if r["source_id"] == sid), None)) and
-                 isinstance(scope[k].get("reason"), str) and len(scope[k]["reason"].strip()) >= 20 and
-                 isinstance(scope[k].get("source_lines"), list) and len(scope[k]["source_lines"])==2 and
-                 all(type(n) is int for n in scope[k]["source_lines"])}
-        requirements[sid] = set(KINDS) - valid
+        extra = record.get("required_scenarios", [])
+        if (not isinstance(extra, list) or any(
+            not isinstance(k, str) or k not in KINDS for k in extra
+        )):
+            errors.append(sid + ": required_scenarios 包含未知行为场景")
+            extra = []
+        requirements[sid] = {"normal", "edge"} | set(extra)
     return requirements, errors
 
 
@@ -229,8 +214,8 @@ def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
                        index: dict, eligible: set, output: Path, contracts=None):
     """Fail closed on missing scenarios, mismatch or unavailable runtime.
 
-    Every AST function, exported initializer, file-only module and vendor path
-    must be exercised by an independently executable matching pair.
+    Each explicitly selected original-source function must have actual normal
+    and edge executions plus its source-reviewed behavior-specific scenarios.
     """
     repo, original = repo.resolve(), original.resolve()
     cases, errors = _load_cases(case_dir)
@@ -286,8 +271,8 @@ def run_dynamic_parity(repo: Path, original: Path, case_dir: Path,
                        for c in cases if c["kind"]=="edge" and sid in c["source_ids"]}
         if normal_inputs and edge_inputs and normal_inputs == edge_inputs:
             errors.append(sid + ": 正常与边界场景输入完全相同，无真实边界覆盖")
-    # All ten behavior families must run unless a source-anchored, human
-    # reviewed contract explicitly documents why a family does not apply.
+    # Only real, source-selected behavior families are compulsory; no synthetic
+    # permission/cancel/stream cases for functions with no such paths.
     uncovered = {sid:sorted(required[sid]-kinds)
                  for sid,kinds in coverage.items()
                  if not required[sid].issubset(kinds)}

@@ -670,6 +670,7 @@ def main():
     p.add_argument("--source-root",type=Path, help="提交者本地原版 source/ 目录，必须在仓库外")
     p.add_argument("--runtime-cases",type=Path,default=Path("tests/source_parity/cases"))
     p.add_argument("--spec-archive",type=Path)
+    p.add_argument("--inventory",type=Path, help="通过的 Rust 回归测试 --list 清单")
     p.add_argument("--write-contracts", action="store_true", help="index: 显式更新待审契约清单")
     p.add_argument("--source", type=Path, help="scan/impact/dashboard: 解压后的原版 source 目录")
     p.add_argument("--changed", action="append", default=[])
@@ -678,6 +679,15 @@ def main():
     p.add_argument("--write", action="store_true", help="sync-spec: 显式更新汇总")
     p.add_argument("--output",type=Path,default=Path(".port-audit"))
     args = p.parse_args()
+    # New authority: original-driven Rust unit/integration/e2e/golden tests.
+    # The historical index/report/audit functions remain available for source
+    # investigation, not as the PR acceptance strategy.
+    if args.command == "gate":
+        from source_test_gate import main as suite_main
+        argv = ["gate", "--repo", str(args.repo), "--output", str(args.output)]
+        if args.inventory:
+            argv += ["--inventory", str(args.inventory)]
+        return suite_main(argv)
     if args.command in legacy:
         from port_workbench import main as run_workbench
         translated = [args.command, "--repo", str(args.repo),

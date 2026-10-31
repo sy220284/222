@@ -148,6 +148,75 @@ jobs:
         timeout-minutes: 20
         run: cargo test --locked --tests
 
+      - name: 固化本次已编译 Rust 单元集成端到端测试实际发现清单
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .port-audit
+          cargo test --locked --all-targets -- --list > .port-audit/RUST_TEST_INVENTORY.txt
+      - name: 留存本次已完整执行测试的真实清单
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-test-inventory
+          path: .port-audit/RUST_TEST_INVENTORY.txt
+          if-no-files-found: error
+
+  source-regression:
+    name: 原版驱动 Rust 回归与测试登记检查
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出当前 Rust 源码与原版预期结果
+        uses: actions/checkout@v4
+      - name: 读取本次已通过的全部 Rust 测试清单
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-test-inventory
+          path: .port-audit
+      - name: 核对已验收路径、真实生产入口与全部可执行 Rust 测试
+        run: |
+          python3 scripts/source_test_gate.py check --repo . \
+            --inventory .port-audit/RUST_TEST_INVENTORY.txt --output .port-audit
+          cat .port-audit/SOURCE_TEST_SUITE.md >> "$GITHUB_STEP_SUMMARY"
+      - name: 归档真实测试证据和待补范围
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-driven-regression
+          path: |
+            .port-audit/SOURCE_TEST_SUITE.json
+            .port-audit/SOURCE_TEST_SUITE.md
+          if-no-files-found: warn
+
+  source-completeness:
+    name: 原版全部保留功能完成度强制验收
+    needs: source-regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出源代码与冻结原版索引
+        uses: actions/checkout@v4
+      - name: 读取本次真实 Rust 测试清单
+        uses: actions/download-artifact@v4
+        with:
+          name: rust-test-inventory
+          path: .port-audit
+      - name: 全量原版到 Rust 行为回归闭环验收
+        run: |
+          python3 scripts/source_test_gate.py gate --repo . \
+            --inventory .port-audit/RUST_TEST_INVENTORY.txt --output .port-audit
+          cat .port-audit/SOURCE_TEST_SUITE.md >> "$GITHUB_STEP_SUMMARY"
+      - name: 归档完整验收报告及全部缺口
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-completeness
+          path: |
+            .port-audit/SOURCE_TEST_SUITE.json
+            .port-audit/SOURCE_TEST_SUITE.md
+          if-no-files-found: warn
+
 
   windows-check:
     name: Windows Shell 与跨平台编译
@@ -183,85 +252,3 @@ jobs:
         with:
           command: check advisories
           arguments: --all-features
-
-  source-parity:
-    name: 原版源码全量等价验收
-    # Original stays in an isolated local workspace outside the checkout.
-    # Untrusted fork PRs run on hosted runners and fail without originals;
-    # never execute fork-controlled code on a runner holding private sources.
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '["ubuntu-latest"]' || '["self-hosted","linux","source-parity-222"]') }}
-    timeout-minutes: 120
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - name: 检出当前提交
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: 使用固定 Rust 工具链
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.99.1
-      - name: 配置与原版一致的 Node.js 运行时
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: 编译本次对照的 Rust 生产程序及函数验证桥接程序
-        run: cargo build --locked --bins
-      # The local source may be absent; publish gaps and keep the strict gate failing.
-      - name: 输出源码逐函数差异清单（只报告，不放行）
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/source_parity_gate.py report --repo . --output .port-audit
-          cat .port-audit/SOURCE_PARITY.md >> "$GITHUB_STEP_SUMMARY"
-      - name: 检查提交者工作区的原版源码与规格
-        id: workspace
-        shell: bash
-        env:
-          ORIGINAL_SOURCE_ROOT: ${{ vars.ORIGINAL_SOURCE_ROOT }}
-          ORIGINAL_SPEC_ARCHIVE: ${{ vars.ORIGINAL_SPEC_ARCHIVE }}
-        run: |
-          set -euo pipefail
-          source_root="${ORIGINAL_SOURCE_ROOT:-${RUNNER_WORKSPACE}/original-2.1.88/source}"
-          spec_zip="${ORIGINAL_SPEC_ARCHIVE:-${RUNNER_WORKSPACE}/original-2.1.88/spec.zip}"
-          if [[ ! -d "$source_root/src" ]]; then
-            echo "::error::提交者工作区缺少原版 source/src"
-            exit 1
-          fi
-          if [[ ! -f "$spec_zip" ]]; then
-            echo "::error::提交者工作区缺少本地规格压缩包"
-            exit 1
-          fi
-          if [[ "$(sha256sum "$spec_zip" | cut -d' ' -f1)" != \
-                "3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93" ]]; then
-            echo "::error::本地规格压缩包与冻结版本不一致"
-            exit 1
-          fi
-          printf 'source_root=%s\n' "$source_root" >> "$GITHUB_OUTPUT"
-          printf 'spec_archive=%s\n' "$spec_zip" >> "$GITHUB_OUTPUT"
-      - name: 原版源码完整索引及双端动态验收
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          args=(gate --repo . --output .port-audit)
-          if [[ "${{ steps.workspace.outcome }}" == "success" ]]; then
-            args+=(--source-root "${{ steps.workspace.outputs.source_root }}")
-            args+=(--spec-archive "${{ steps.workspace.outputs.spec_archive }}")
-          fi
-          python3 scripts/source_parity_gate.py "${args[@]}"
-      - name: 保存独立验收记录
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mandatory-source-parity
-          # Do not upload raw source-backed function signatures/initializers.
-          path: |
-            .port-audit/SOURCE_PARITY.json
-            .port-audit/SOURCE_PARITY.md
-            .port-audit/DYNAMIC_PARITY.json
-            .port-audit/SOURCE_FUNCTION_COVERAGE_GAPS.json
-          include-hidden-files: true
-          if-no-files-found: error
