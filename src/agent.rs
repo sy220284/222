@@ -2141,7 +2141,7 @@ impl Agent {
                 bail!("initialize jsonSchema requires type or $ref")
             }
         }
-        self.provider.set_response_schema(schema.clone());
+        self.provider.set_response_schema(schema.clone())?;
         self.sdk_response_schema = schema;
         Ok(())
     }
@@ -6103,6 +6103,23 @@ mod tests {
             sdk_allowed_tools: None,
             sdk_disallowed_tools: std::collections::HashSet::new(),
         }
+    }
+
+    #[test]
+    fn sdk_response_schema_rejects_unsupported_provider_without_mutating_state() {
+        let root = tempfile::tempdir().unwrap();
+        let mut agent = test_compaction_agent(root.path(), Session::fresh());
+        let schema = json!({"type":"object","properties":{"ok":{"type":"boolean"}}});
+        let error = agent.set_sdk_response_schema(Some(schema)).unwrap_err();
+        assert!(
+            error.to_string().contains("no native JSON schema response capability"),
+            "{error}"
+        );
+        assert!(agent.sdk_response_schema().is_none());
+        // Invalid caller schemas must fail before trying to reconfigure the provider.
+        assert!(agent.set_sdk_response_schema(Some(json!({"properties":{}}))).is_err());
+        assert!(agent.sdk_response_schema().is_none());
+        agent.set_sdk_response_schema(None).unwrap();
     }
 
     #[tokio::test]
