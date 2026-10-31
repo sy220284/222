@@ -3425,12 +3425,10 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 // blocks intact. A string-only check lost this SDK behavior.
                 if event.get("skipSlashCommands").and_then(Value::as_bool) != Some(true) {
                     let candidate = prompt_value.as_str().or_else(|| {
-                        prompt_value.as_array()?.last().and_then(|block| {
-                            if block.get("type").and_then(Value::as_str) == Some("text") {
-                                block.get("text").and_then(Value::as_str)
-                            } else {
-                                None
-                            }
+                        prompt_value.as_array()?.iter().rev().find_map(|block| {
+                            (block.get("type").and_then(Value::as_str) == Some("text"))
+                                .then(|| block.get("text").and_then(Value::as_str))
+                                .flatten()
                         })
                     });
                     if let Some(parsed) = candidate.and_then(slash_command::parse_slash_command) {
