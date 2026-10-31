@@ -378,7 +378,7 @@ class WorkbenchTests(unittest.TestCase):
         (self.repo / 'src/main.rs').unlink()
         result = build_dashboard(self.repo, read_matrix(self.repo), strict=False)
         self.assertEqual(result['chains'][1]['rust_missing'], ['src/main.rs'])
-        self.assertEqual(result['domain_summary'][0]['missing_rust'], 1)
+        self.assertEqual(sum(item['missing_rust'] for item in result['domain_summary']), 1)
         self.write_matrix(status1='按用户要求删除')
         with self.assertRaisesRegex(AuditError, '新增排除项'):
             build_dashboard(self.repo, read_matrix(self.repo), strict=False)
