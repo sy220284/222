@@ -4092,8 +4092,15 @@ async fn sdk_nested_control(
                 let agents = agent.sdk_agent_descriptors()?;
                 let available_output_styles =
                     prompt_runtime::available_output_styles(agent.workspace_root())?;
-                let output_style = std::env::var("ATLAS_OUTPUT_STYLE")
-                    .unwrap_or_else(|_| "default".to_owned());
+                let output_style =
+                    std::env::var("ATLAS_OUTPUT_STYLE").unwrap_or_else(|_| "default".to_owned());
+                // Existing lowercase environment values remain accepted; the
+                // SDK announces the canonical 2.1.88 built-in style names.
+                let output_style = match output_style.as_str() {
+                    "explanatory" => "Explanatory".to_owned(),
+                    "learning" => "Learning".to_owned(),
+                    _ => output_style,
+                };
                 if !available_output_styles.contains(&output_style) {
                     anyhow::bail!("Configured output style is not available: {output_style}");
                 }
