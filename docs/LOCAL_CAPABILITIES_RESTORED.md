@@ -47,3 +47,14 @@ SDK 示例：
 ### 本地任务存储隔离补强
 
 任务提示词会写到当前工作区的 `.atlas/local-triggers/tasks.json`，并在同目录生成独立的 `.gitignore`（忽略目录下的任务数据和锁文件）。因此即使目标工程自己的 `.gitignore` 未配置，也不会通过普通 `git add` 意外提交。首次写入时兼容读取旧路径 `.atlas/local_triggers.json`，持久化成功后移除旧文件。
+
+## 2026-10-31 模型工具全链复核
+
+- **原版位置：** `source/src/tools/RemoteTriggerTool/RemoteTriggerTool.ts` 是 Agent 模型工具，支持 `list/get/create/update/run`，`list/get` 为只读，修改及运行需要正常工具权限；原厂 OAuth、CCR 定时服务和独立远端 Agent 按已授权范围继续删除。
+- **此前断点：** Rust 的 `src/local_triggers.rs` 仅由 CLI 和交互命令调用，`src/tools.rs::definitions()` 未发布工具定义，模型无法自行发起这些通用本地操作。
+- **修复调用链：** `src/local_triggers.rs::model_definition()` → `src/tools.rs::definitions()` → 当前模型提供商的工具定义 → `ToolExecutor::validate_call_before_hooks` → `ToolExecutor::dispatch` → `local_triggers::model_call` → 独立任务存储。更新/创建与执行请求通过原有 `require_approval`，只读计划模式会拒绝写入或运行；超范围调度参数明确报错。
+- **模型工具 run 的边界：** 返回当前会话待完成的保存指令，继续由同一 Agent 工作；没有承诺额外执行器或自动后台启动。CLI/REPL 的 `trigger run` 仍然直接交给用户选定模型执行。
+- **发现并修复隐私缺口：** 之前 `get/list` 可沿工作区 `.atlas` 目录或任务文件的符号链接读取其他工作区。现在统一校验所有存储读写路径并拒绝指向工作区外的链接；增加 Unix 符号链接拒绝测试、非法参数和审批拒绝测试。
+- **真实工具链验证：** 在 `tests/integration_cli.rs` 中通过模拟 OpenAI 兼容 API 让模型先发 `LocalTrigger.create` 再 `LocalTrigger.get`，确认工具注册、参数、权限、真实磁盘持久化、结果返回和模型下一轮消费；测试结论以本次提交的最新 GitHub CI 为准。
+
+**尚未等价：** 原版 UltraPlan 多阶段状态机及 seedPlan 草稿、UltraReview 原厂云端回填、模型在 SDK 下的高级关键词路由、LocalTrigger 的原版定时元数据与异步调度（已明确排除）、工具运行后的多阶段任务状态和 UI。以上不能因为 CLI 或 Rust CI 通过而标记成原版完整验收。范围仍为原版 1,906 条、排除 192 条、需持续对齐 1,714 条。

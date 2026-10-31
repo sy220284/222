@@ -1,3 +1,10 @@
+## 2026-10-31 本地通用能力模型工具链复查
+
+- 对照原版 RemoteTriggerTool（模型工具）的五种动作，查出此前 Rust 仅注册 CLI/REPL 的入口断链；新增 `LocalTrigger` 通用模型工具定义，连通模型函数调用、权限校验、持久化及返回结果。拒绝周期计划和远程任务字段，用户未明确要求时不启用后台 Agent。
+- 修复任务数据 `get/list` 可经符号链接访问其他工作区的越界问题，统一读写目录检查并增加回归测试。
+- 现有高级审查/规划与本地附件通过初步调用链审计；仍存在 UltraPlan 多阶段状态/草稿、SDK 关键词路由等明确缺口。7 条恢复的源文件均继续标记部分实现。
+- 新增真实模拟模型多轮工具调用测试和权限拒绝、越界测试；完整验收以最新 GitHub Actions HEAD 运行状态为准。保留 1,906 原始路径、192 排除和 1,714 待等价对齐范围。
+
 ## 2026-10-31：PR6 审查问题按原版调用边界与模型协议修复
 
 - 原版依据：用户提供的 2.1.88 源码包，`bridge/inboundAttachments.ts` 将附件转为文件引用后交给 Read；`tools/FileReadTool/FileReadTool.ts::checkPermissions/validateInput` 在读盘前执行权限；`services/api/claude.ts` 在 `content_block_stop` 形成完整消息，`query.ts` 才把工具交给 `StreamingToolExecutor.addTool`；Bash 的 `readOnlyValidation.ts` 对只读命令做参数校验。
