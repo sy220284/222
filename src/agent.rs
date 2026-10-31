@@ -6626,6 +6626,10 @@ done"#;
         let before = agent.current_permission_mode();
         assert!(agent.ask_in_plan_mode("").await.is_err());
         assert_eq!(agent.current_permission_mode(), before);
+        assert!(agent.ask_with_blocks_in_plan_mode(
+            "", None, Some(uuid::Uuid::new_v4())
+        ).await.is_err());
+        assert_eq!(agent.current_permission_mode(), before);
         // Only the SDK's explicit change-permissions action may persist a
         // different user setting; a local advanced read-only turn must not.
     }
