@@ -8,9 +8,8 @@ pub fn definition() -> Value {
     json!({"type":"function","function":{
         "name":"web_search",
         "description":"Search the web through the user's explicitly configured SearXNG or Brave Search service. Requires external network approval.",
-        "parameters":{"type":"object","properties":{
-            "query":{"type":"string"},
-            "limit":{"type":"integer","minimum":1,"maximum":10},
+        "parameters":{"type":"object","additionalProperties":false,"properties":{
+            "query":{"type":"string","minLength":2},
             "allowed_domains":{"type":"array","items":{"type":"string"}},
             "blocked_domains":{"type":"array","items":{"type":"string"}}
         },"required":["query"]}

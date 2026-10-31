@@ -10,7 +10,7 @@ pub fn definition() -> Value {
         "description":"Find tools by name, server, capability or description. Use select:tool_name[,tool_name] to select exact tools, or +required terms.",
         "parameters":{"type":"object","properties":{
             "query":{"type":"string","description":"Tool name, select: names, or search keywords"},
-            "max_results":{"type":"integer","minimum":1,"default":5}
+            "max_results":{"type":"number","default":5}
         },"required":["query"]}
     }})
 }

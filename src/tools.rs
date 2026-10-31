@@ -85,7 +85,6 @@ fn validate_web_tool_input_schema(name: &str, input: &Value) -> Result<()> {
     Ok(())
 }
 
-
 /// Stream task output one line at a time. A single unbroken line can be
 /// gigabytes long, so skip and truncate it without allocating the whole file.
 /// The full byte stream remains available through task_output_delta.
@@ -2539,6 +2538,14 @@ mod tests {
                 arguments: args.to_string(),
             },
         };
+        let fetch_schema = crate::webfetch::definition();
+        let search_schema = crate::websearch::definition();
+        let discovery_schema = crate::tool_search::definition();
+        assert_eq!(fetch_schema["function"]["parameters"]["additionalProperties"], false);
+        assert_eq!(search_schema["function"]["parameters"]["additionalProperties"], false);
+        assert_eq!(search_schema["function"]["parameters"]["properties"]["query"]["minLength"], 2);
+        assert!(search_schema["function"]["parameters"]["properties"].get("limit").is_none());
+        assert_eq!(discovery_schema["function"]["parameters"]["properties"]["max_results"]["type"], "number");
         let valid = [
             mk(
                 "WebFetch",

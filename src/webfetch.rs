@@ -605,8 +605,8 @@ pub fn definition() -> Value {
                 )
                 .expect("Original WebFetch tool prompt must exist")
             ),
-        "parameters":{"type":"object","properties":{
-            "url":{"type":"string"},"prompt":{"type":"string"}
+        "parameters":{"type":"object","additionalProperties":false,"properties":{
+            "url":{"type":"string","format":"uri"},"prompt":{"type":"string"}
         },"required":["url","prompt"]}
     }})
 }
