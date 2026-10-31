@@ -3184,8 +3184,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 if event
                     .get("file_attachments")
                     .or_else(|| event.get("fileAttachments"))
-                    .is_some_and(|value| !value.is_null()
-                        && !value.as_array().is_some_and(Vec::is_empty))
+                    .is_some_and(|value| {
+                        !value.is_null() && !value.as_array().is_some_and(Vec::is_empty)
+                    })
                 {
                     print_json!(json!({"type":"error",
                         "message":"Remote file attachments are disabled; provide local content blocks instead"}));
