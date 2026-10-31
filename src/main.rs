@@ -33,6 +33,7 @@ mod detect_repository;
 mod diagnostics;
 mod diff_view;
 mod display_format;
+mod editor_runtime;
 mod env_runtime;
 mod env_validation;
 mod event_signal;
