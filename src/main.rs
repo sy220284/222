@@ -1644,7 +1644,7 @@ async fn run_cli() -> Result<()> {
                     .map(|answer| print_json!(structured_result_event(&agent, &answer))),
                 OutputFormat::StreamJson => {
                     agent.set_structured_output(true);
-                    print_json!(sdk_system_init::build_for_agent(&agent, &config)?);
+                    print_json!(sdk_system_init::build_for_agent(&mut agent, &config)?);
                     agent
                         .ask(&actual_prompt)
                         .await
