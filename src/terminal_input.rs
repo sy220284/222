@@ -5,6 +5,8 @@ use crate::{generated_ports::text_input_semantics, keybindings};
 use anyhow::{bail, Result};
 use serde_json::json;
 use std::io::{self, IsTerminal, Read, Write};
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, RawFd};
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 
@@ -324,13 +326,16 @@ enum Key {
 }
 
 #[cfg(unix)]
-struct RawMode(libc::termios);
+struct RawMode {
+    old: libc::termios,
+    fd: RawFd,
+}
 #[cfg(unix)]
 impl RawMode {
-    fn enter() -> io::Result<Self> {
+    fn enter(fd: RawFd) -> io::Result<Self> {
         let mut old = std::mem::MaybeUninit::<libc::termios>::uninit();
-        // SAFETY: STDIN_FILENO is an attached TTY; old is valid writable storage.
-        if unsafe { libc::tcgetattr(libc::STDIN_FILENO, old.as_mut_ptr()) } != 0 {
+        // SAFETY: fd is an attached terminal, old is valid writable storage.
+        if unsafe { libc::tcgetattr(fd, old.as_mut_ptr()) } != 0 {
             return Err(io::Error::last_os_error());
         }
         // SAFETY: tcgetattr wrote a fully initialized termios.
@@ -343,10 +348,10 @@ impl RawMode {
         raw.c_cc[libc::VMIN] = 0;
         raw.c_cc[libc::VTIME] = 1;
         // SAFETY: fd points to the same terminal whose state is restored on Drop.
-        if unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &raw) } != 0 {
+        if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &raw) } != 0 {
             return Err(io::Error::last_os_error());
         }
-        Ok(Self(old))
+        Ok(Self { old, fd })
     }
 }
 #[cfg(unix)]
@@ -354,7 +359,7 @@ impl Drop for RawMode {
     fn drop(&mut self) {
         // SAFETY: the terminal attributes came from this same fd.
         unsafe {
-            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.0);
+            libc::tcsetattr(self.fd, libc::TCSANOW, &self.old);
         }
     }
 }
@@ -536,14 +541,14 @@ fn append_pasted_key(editor: &mut Editor, key: &Key) -> Result<()> {
 }
 
 #[cfg(unix)]
-fn interactive(
+fn interactive<R: Read + AsRawFd>(
     prompt: &str,
     history: &mut Vec<String>,
     vim_enabled: bool,
     prompt_history: &mut crate::prompt_history::PromptHistory,
+    mut input: R,
 ) -> Result<PromptRead> {
-    let _raw = RawMode::enter()?;
-    let mut input = io::stdin().lock();
+    let _raw = RawMode::enter(input.as_raw_fd())?;
     let mut out = io::stdout().lock();
     let file = keybindings::keybindings_path(&keybindings::config_home()?);
     let mut bindings = keybindings::KeybindingRuntime::from_disk(&file);
@@ -729,8 +734,13 @@ pub fn read_prompt(
     prompt_history: &mut crate::prompt_history::PromptHistory,
 ) -> Result<PromptRead> {
     #[cfg(unix)]
-    if io::stdin().is_terminal() && io::stdout().is_terminal() {
-        return interactive(prompt, history, vim_enabled, prompt_history);
+    if io::stdout().is_terminal() {
+        if io::stdin().is_terminal() {
+            return interactive(prompt, history, vim_enabled, prompt_history, io::stdin());
+        }
+        if let Some(input) = crate::render_options::stdin_override() {
+            return interactive(prompt, history, vim_enabled, prompt_history, input);
+        }
     }
     print!("{prompt}");
     io::stdout().flush()?;
