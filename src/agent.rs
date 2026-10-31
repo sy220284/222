@@ -4895,9 +4895,13 @@ impl Agent {
                         &system,
                         self.provider.as_ref(),
                         &self.profile,
-                    ).await {
+                    )
+                    .await
+                    {
                         Ok(outcome) => {
-                            if let Some(usage) = outcome.usage { self.record_usage(usage); }
+                            if let Some(usage) = outcome.usage {
+                                self.record_usage(usage);
+                            }
                             self.session.memory_extraction_cursor = outcome.cursor;
                             self.session.save(&self.root)?;
                             if outcome.files_written > 0 {
