@@ -230,6 +230,52 @@ pub fn output_style_instructions(root: &std::path::Path, name: &str) -> anyhow::
     Ok(content.trim().to_owned())
 }
 
+/// Discover only output styles that can actually be loaded into a model
+/// request. Built-ins always precede lexicographically ordered project styles.
+pub fn available_output_styles(root: &std::path::Path) -> anyhow::Result<Vec<String>> {
+    use anyhow::{bail, Context};
+
+    let mut result = vec![
+        "default".to_owned(),
+        "explanatory".to_owned(),
+        "learning".to_owned(),
+    ];
+    let directory = root.join(".atlas").join("output-styles");
+    if !directory.exists() {
+        return Ok(result);
+    }
+    let workspace = root.canonicalize().context("Cannot resolve workspace")?;
+    let resolved = directory
+        .canonicalize()
+        .context("Cannot resolve output style directory")?;
+    if !resolved.starts_with(&workspace) {
+        bail!("Output style directory escapes workspace");
+    }
+    let mut custom = Vec::new();
+    for entry in std::fs::read_dir(&resolved).context("List output styles")? {
+        let entry = entry.context("Read output style directory entry")?;
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        let Some(name) = path.file_stem().and_then(|stem| stem.to_str()) else {
+            continue;
+        };
+        if output_style_label(name).is_some()
+            || crate::agent_definition::validate_agent_type(name).is_some()
+        {
+            continue;
+        }
+        match output_style_instructions(root, name) {
+            Ok(_) => custom.push(name.to_owned()),
+            Err(error) => eprintln!("Skipping invalid output style {name}: {error:#}"),
+        }
+    }
+    custom.sort();
+    result.extend(custom);
+    Ok(result)
+}
+
 /// Load an explicitly configured project agent's Markdown body. Built-in roles
 /// use role_instructions when no project definition exists.
 pub fn custom_role_instructions(
@@ -303,6 +349,41 @@ mod tests {
             )
             .unwrap();
             assert!(output_style_instructions(workspace.path(), "redirect").is_err());
+        }
+    }
+
+    #[test]
+    fn output_style_catalog_matches_loadable_prompt_instructions() {
+        let workspace = tempfile::tempdir().unwrap();
+        let directory = workspace.path().join(".atlas/output-styles");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(directory.join("zeta.md"), "Explain changes with examples.").unwrap();
+        std::fs::write(directory.join("alpha.md"), "---\nname: alpha\n---\nUse short paragraphs.").unwrap();
+        std::fs::write(directory.join("empty.md"), "  ").unwrap();
+        std::fs::write(directory.join("notes.txt"), "Not an output style.").unwrap();
+        std::fs::write(directory.join("default.md"), "Must not replace built-in.").unwrap();
+        let styles = available_output_styles(workspace.path()).unwrap();
+        assert_eq!(
+            styles,
+            ["default", "explanatory", "learning", "alpha", "zeta"]
+        );
+        for style in &styles {
+            assert!(!output_style_instructions(workspace.path(), style)
+                .unwrap()
+                .is_empty());
+        }
+        #[cfg(unix)]
+        {
+            let outside = tempfile::tempdir().unwrap();
+            std::fs::write(outside.path().join("outside.md"), "private").unwrap();
+            std::os::unix::fs::symlink(
+                outside.path().join("outside.md"),
+                directory.join("outside.md"),
+            )
+            .unwrap();
+            assert!(!available_output_styles(workspace.path())
+                .unwrap()
+                .contains(&"outside".to_owned()));
         }
     }
 
