@@ -190,7 +190,9 @@ fn append_selected_line(
     };
     let text = String::from_utf8_lossy(bytes);
     let separator = usize::from(*count > 0);
-    let next_bytes = read_bytes.saturating_add(separator).saturating_add(text.len());
+    let next_bytes = read_bytes
+        .saturating_add(separator)
+        .saturating_add(text.len());
     if max_bytes.is_some_and(|limit| next_bytes > limit) {
         return false;
     }
@@ -205,7 +207,11 @@ fn append_selected_line(
     true
 }
 
-pub fn read_text_line_window(path: &Path, start: usize, count: usize) -> io::Result<TextLineWindow> {
+pub fn read_text_line_window(
+    path: &Path,
+    start: usize,
+    count: usize,
+) -> io::Result<TextLineWindow> {
     read_text_line_window_with_limit(path, start, count, None, false)
 }
 
@@ -226,7 +232,10 @@ pub fn read_text_line_window_with_limit(
             if file_meta.is_file() && file_meta.len() > limit as u64 {
                 return Err(io::Error::new(
                     io::ErrorKind::FileTooLarge,
-                    format!("File content ({}) exceeds maximum allowed size ({limit})", file_meta.len()),
+                    format!(
+                        "File content ({}) exceeds maximum allowed size ({limit})",
+                        file_meta.len()
+                    ),
                 ));
             }
         }
@@ -241,7 +250,11 @@ pub fn read_text_line_window_with_limit(
     let mut total_bytes = 0_u64;
     let mut line_number = 1_usize;
     let mut truncated_by_bytes = false;
-    let output_limit = if truncate_on_byte_limit { max_bytes } else { None };
+    let output_limit = if truncate_on_byte_limit {
+        max_bytes
+    } else {
+        None
+    };
     loop {
         let chunk = reader.fill_buf()?;
         if chunk.is_empty() {
@@ -289,7 +302,10 @@ pub fn read_text_line_window_with_limit(
         if !truncate_on_byte_limit {
             if let Some(limit) = max_bytes {
                 if total_bytes.saturating_sub(if has_bom { 3 } else { 0 }) > limit as u64 {
-                    return Err(io::Error::new(io::ErrorKind::FileTooLarge, "File exceeds maximum allowed size"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::FileTooLarge,
+                        "File exceeds maximum allowed size",
+                    ));
                 }
             }
         }
