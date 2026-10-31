@@ -214,6 +214,8 @@ pub struct Agent {
     structured_output: bool,
     /// SDK initialize jsonSchema mirror for result-event structured_output.
     sdk_response_schema: Option<Value>,
+    /// Source query.ts final reason, if a Stop hook prevents normal completion.
+    last_turn_stop_reason: Option<&'static str>,
     child_depth: u8,
     mcp_configs: Vec<McpServerConfig>,
     lsp_configs: Vec<LspServerConfig>,
@@ -353,6 +355,7 @@ impl Agent {
             conversation_context,
             structured_output: false,
             sdk_response_schema: None,
+            last_turn_stop_reason: None,
             child_depth: 0,
             mcp_configs: Vec::new(),
             lsp_configs: Vec::new(),
@@ -2147,6 +2150,10 @@ impl Agent {
     /// event can attach `structured_output` without reaching into providers.
     pub fn sdk_response_schema(&self) -> Option<&Value> {
         self.sdk_response_schema.as_ref()
+    }
+
+    pub fn last_turn_stop_reason(&self) -> Option<&'static str> {
+        self.last_turn_stop_reason
     }
 
     pub fn set_structured_output(&mut self, enabled: bool) {
@@ -4488,6 +4495,7 @@ impl Agent {
         message_id: Option<uuid::Uuid>,
     ) -> Result<String> {
         let ask_started = Instant::now();
+        self.last_turn_stop_reason = None;
         // Original REPL.tsx parses the raw input for a token budget before
         // dispatching a turn and snapshotOutputTokensForTurn keeps the
         // previous budget when the new input carries none. The compile-time
@@ -5149,6 +5157,7 @@ impl Agent {
                 // processing blocking feedback. A stop request must not
                 // accidentally start another model turn.
                 if hook.prevent_continuation {
+                    self.last_turn_stop_reason = Some("stop_hook_prevented");
                     self.emit(json!({
                         "type": "hook_stopped_continuation",
                         "hook_event_name": "Stop",
@@ -5176,7 +5185,7 @@ impl Agent {
                 // Compute the decision in a scoped borrow of the tracker so
                 // the match arms below can freely mutate session state.
                 let budget_decision = match self.budget_tracker.as_mut() {
-                    Some(tracker) => {
+                    Some(tracker) if !hook.prevent_continuation => {
                         let agent_id = (self.child_depth > 0).then(|| self.session.id.to_string());
                         let turn_output = self
                             .session
@@ -5239,7 +5248,10 @@ impl Agent {
                 self.session.save(&self.root)?;
                 // Run only after a successful main-agent Stop. The original
                 // feature is opt-in; no background agent or timer is created.
-                if self.child_depth == 0 && memory_extraction::enabled() {
+                if !hook.prevent_continuation
+                    && self.child_depth == 0
+                    && memory_extraction::enabled()
+                {
                     match memory_extraction::extract(
                         &self.root,
                         &self.session.messages,
