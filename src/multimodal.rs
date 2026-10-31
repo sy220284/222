@@ -108,18 +108,12 @@ const IMAGE_MAX_HEIGHT: u32 = 2000;
 fn png_over_dimensions(base64_data: &str) -> Option<(u32, u32)> {
     let raw = STANDARD.decode(base64_data).ok()?;
     // PNG signature is 8 bytes, IHDR width/height live at offsets 16-24.
-    if raw.len() < 24
-        || raw[0] != 0x89
-        || raw[1] != 0x50
-        || raw[2] != 0x4e
-        || raw[3] != 0x47
-    {
+    if raw.len() < 24 || raw[0] != 0x89 || raw[1] != 0x50 || raw[2] != 0x4e || raw[3] != 0x47 {
         return None;
     }
     let width = u32::from_be_bytes([raw[16], raw[17], raw[18], raw[19]]);
     let height = u32::from_be_bytes([raw[20], raw[21], raw[22], raw[23]]);
-    (width > IMAGE_MAX_WIDTH || height > IMAGE_MAX_HEIGHT)
-        .then_some((width, height))
+    (width > IMAGE_MAX_WIDTH || height > IMAGE_MAX_HEIGHT).then_some((width, height))
 }
 
 /// Source: 2.1.88 utils/imageValidation.ts::validateImagesForAPI.
