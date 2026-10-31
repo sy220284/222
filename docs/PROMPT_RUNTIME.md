@@ -24,7 +24,7 @@
 | `src/tools/*/prompt.ts` 工具描述 | `src/tools.rs::definitions`、其余各工具定义 | 文件/Git/Shell/Skills 12 个描述已实质补齐，其他工具需逐项核验 |
 | `src/services/compact/prompt.ts` | `compact_prompt` 与 `Agent::compact_history` | 独立模型摘要请求已接线，原版各种压缩模式未完全移植 |
 | `src/services/SessionMemory/prompts.ts` | `src/memory.rs` | 相关记忆筛选与 system 注入已接线；自动提取/整理仍缺 |
-| `src/constants/outputStyles.ts` | `output_style_label`、`output_style_instructions`、`available_output_styles`、SDK initialize | 三种内置风格和可加载的工作区自定义风格会进入 SDK 实际列表，当前启用项反映真实设置；原版用户级目录、完整设置交互仍待对齐 |
+| `src/constants/outputStyles.ts` | `output_style_label`、`output_style_instructions`、`available_output_styles`、SDK initialize | 三种内置风格已恢复原版名称和详细指令，SDK 实际列表支持用户级及项目级 .atlas/output-styles（项目优先）；原版插件/管理级目录、完整设置交互仍待对齐 |
 | `src/utils/messages.ts` 与新版来源区分 | 主提示词、`sdk_queue::notification_model_context`、SDK 事件结构 | 后台任务通知作为低信任状态数据接入；其余来源标记/调度权限仍需补齐 |
 | `src/constants/prompts.ts` MCP 指令 | `McpManager::instruction_context`、`Agent::ask_with_blocks` | 已修复同一用户轮次内动态重连/禁用后的旧说明滞留；新增重连/撤销回归测试。原版全部动态来源与策略仍待完整验收 |
 | 原版自动模式权限分类器与外部规则模板 | `permission_rules.rs`、`permission_mode.rs` | 静态权限规则运行；模型分类器缺失，Auto 模式保持拒绝，防止误授权 |
@@ -50,5 +50,11 @@
 ## 2026-10-31：输出风格发现与 SDK 初始化一致性
 
 - 修复前：SDK initialize 无条件返回 `output_style=default`、`available_output_styles=[default]`，即使实际启用其他内置/自定义风格。
-- 修复后：`prompt_runtime::available_output_styles` 只枚举真正能够加载的本地 Markdown 风格，保留三种内置风格并对自定义风格排序，跳过空内容、无效 frontmatter、越界符号链接；SDK initialize 读取实际 `ATLAS_OUTPUT_STYLE` 并在启用项不可用时给出明确错误。
+- 修复后：`prompt_runtime::available_output_styles` 只枚举真正能够加载的用户或项目 Markdown 风格，项目同名风格优先，保留三种内置风格（default、Explanatory、Learning）并对自定义风格排序，跳过空内容、无效 frontmatter、越界符号链接；SDK initialize 读取实际 `ATLAS_OUTPUT_STYLE` 并在启用项不可用时给出明确错误。
 - 验证：已增加目录排序、无效文件、越界符号链接、每个返回风格都可成功加载的回归测试。尚未恢复原版所有用户级风格目录与交互配置入口。
+
+## 原版输出风格源码增量核对
+
+- 原版 `src/constants/outputStyles.ts`：`Explanatory` 和 `Learning` 为有独立长篇提示词的内置风格，已恢复名称及主要教学规则（不能以此宣称逐字完全等价）。
+- 原版 `src/outputStyles/loadOutputStylesDir.ts`：同名项目风格覆盖用户风格，已在本地 `.atlas/output-styles` 两级路径实现并以临时双目录测试覆盖；插件/管理级风格与 frontmatter 自定义名称另需补足。
+- 原版风格中的注入条件与 `keep-coding-instructions` 差异，须继续结合 `src/constants/prompts.ts` 和实际 provider 捕获验收。
