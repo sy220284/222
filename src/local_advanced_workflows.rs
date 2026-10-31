@@ -3,10 +3,18 @@ use anyhow::{bail, Context, Result};
 use std::{path::Path, process::Command};
 
 fn git(root: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git").arg("-C").arg(root).args(args).output()
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
         .with_context(|| format!("Cannot inspect Git workspace {}", root.display()))?;
     if !output.status.success() {
-        bail!("git {}: {}", args.join(" "), String::from_utf8_lossy(&output.stderr).trim());
+        bail!(
+            "git {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
     }
     String::from_utf8(output.stdout).context("Git emitted invalid UTF-8")
 }
@@ -15,7 +23,9 @@ fn git(root: &Path, args: &[&str]) -> Result<String> {
 pub fn review_prompt(root: &Path, number: Option<u64>) -> Result<String> {
     git(root, &["rev-parse", "--show-toplevel"])?;
     let target = if let Some(number) = number {
-        if number == 0 { bail!("Pull request number must be positive"); }
+        if number == 0 {
+            bail!("Pull request number must be positive");
+        }
         format!("PR #{number}. Read gh pr view {number} and gh pr diff {number}; inspect all changed files and their callers.")
     } else {
         let status = git(root, &["status", "--short"])?;
@@ -42,9 +52,13 @@ Respond in Chinese."#
 
 /// Local detailed planning reuses normal workspace, tools, and permissions.
 pub fn plan_prompt(root: &Path, objective: &str) -> Result<String> {
-    if !root.is_dir() { bail!("Workspace is not a directory: {}", root.display()); }
+    if !root.is_dir() {
+        bail!("Workspace is not a directory: {}", root.display());
+    }
     let objective = objective.trim();
-    if objective.is_empty() { bail!("UltraPlan requires a non-empty objective"); }
+    if objective.is_empty() {
+        bail!("UltraPlan requires a non-empty objective");
+    }
     Ok(format!(
         r#"Using the CURRENT configured model and local Agent, make a detailed implementation plan.
 Project: {}
@@ -60,7 +74,8 @@ Read project rules and related code first. Use read-only/plan permissions.
 
 Do not create remote sessions, schedule work, modify files or contact vendor planning services.
 Respond in Chinese."#,
-        root.display(), objective
+        root.display(),
+        objective
     ))
 }
 
@@ -78,15 +93,21 @@ mod tests {
     #[test]
     fn reviewer_is_read_only_and_validates_pr_number() {
         let root = tempfile::tempdir().unwrap();
-        let output = Command::new("git").arg("-C").arg(root.path())
-            .args(["init", "-q"]).status().unwrap();
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["init", "-q"])
+            .status()
+            .unwrap();
         assert!(output.success());
         std::fs::write(root.path().join("untracked.rs"), "fn x() {}").unwrap();
         let prompt = review_prompt(root.path(), None).unwrap();
         assert!(prompt.contains("untracked.rs"));
         assert!(prompt.contains("Do not modify code"));
         assert!(review_prompt(root.path(), Some(0)).is_err());
-        assert!(review_prompt(root.path(), Some(42)).unwrap().contains("gh pr diff 42"));
+        assert!(review_prompt(root.path(), Some(42))
+            .unwrap()
+            .contains("gh pr diff 42"));
         assert!(root.path().join("untracked.rs").exists());
     }
 }

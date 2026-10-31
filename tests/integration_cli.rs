@@ -6655,26 +6655,46 @@ fn sdk_local_attachments_reach_selected_model_without_remote_bridge() {
         request
     });
     let config = workspace.path().join("config.json");
-    fs::write(&config, json!({"default_provider":"mock","providers":[{
-        "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
-    }]}).to_string()).unwrap();
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"mock","base_url":base_url
+        }]})
+        .to_string(),
+    )
+    .unwrap();
     let mut child = binary()
         .args(["--workspace", workspace.path().to_str().unwrap(), "sdk"])
         .env("ATLAS_CONFIG", &config)
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-        .spawn().unwrap();
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
     {
         let mut stdin = child.stdin.take().unwrap();
-        writeln!(stdin, "{}", json!({"type":"user","content":"Inspect attached source",
-            "file_attachments":[{"path":"snippet.txt"}]})).unwrap();
+        writeln!(
+            stdin,
+            "{}",
+            json!({"type":"user","content":"Inspect attached source",
+            "file_attachments":[{"path":"snippet.txt"}]})
+        )
+        .unwrap();
     }
     let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("attachment accepted"), "{stdout}");
     let request = server.join().unwrap();
     assert!(request.contains("attachment-token-123"), "{request}");
-    assert!(request.contains("Local attachment: snippet.txt"), "{request}");
+    assert!(
+        request.contains("Local attachment: snippet.txt"),
+        "{request}"
+    );
 }
 
 #[test]
@@ -6682,15 +6702,26 @@ fn local_advanced_commands_reject_invalid_goals_before_model_calls() {
     let workspace = tempfile::tempdir().unwrap();
     let config = workspace.path().join("config.json");
     let plan = binary()
-        .args(["--workspace", workspace.path().to_str().unwrap(), "ultra-plan"])
+        .args([
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "ultra-plan",
+        ])
         .env("ATLAS_CONFIG", &config)
-        .output().unwrap();
+        .output()
+        .unwrap();
     assert!(!plan.status.success());
     assert!(String::from_utf8_lossy(&plan.stderr).contains("non-empty objective"));
     let review = binary()
-        .args(["--workspace", workspace.path().to_str().unwrap(), "ultra-review", "0"])
+        .args([
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "ultra-review",
+            "0",
+        ])
         .env("ATLAS_CONFIG", &config)
-        .output().unwrap();
+        .output()
+        .unwrap();
     assert!(!review.status.success());
 }
 

@@ -42,8 +42,7 @@ mod git_config_parser;
 mod git_filesystem;
 mod git_ignore;
 mod git_workflows;
-mod local_advanced_workflows;
-mod local_attachments;
+
 mod local_triggers;
 mod github_repo_mapping;
 mod history;
@@ -53,6 +52,8 @@ mod ink_constants;
 mod json_read;
 mod json_runtime;
 mod keybindings;
+mod local_advanced_workflows;
+mod local_attachments;
 mod lsp;
 mod marketplace_registry;
 mod marketplace_source;
@@ -1388,12 +1389,16 @@ async fn run_cli() -> Result<()> {
             agent.ask(&prompt).await.map(|answer| println!("{answer}"))
         }
         Commands::UltraReview { pr_number } => {
-            let prompt = local_advanced_workflows::review_prompt(agent.workspace_root(), *pr_number)?;
+            let prompt =
+                local_advanced_workflows::review_prompt(agent.workspace_root(), *pr_number)?;
             agent.set_sdk_permission_mode("plan")?;
             agent.ask(&prompt).await.map(|answer| println!("{answer}"))
         }
         Commands::UltraPlan { objective } => {
-            let prompt = local_advanced_workflows::plan_prompt(agent.workspace_root(), &objective.join(" "))?;
+            let prompt = local_advanced_workflows::plan_prompt(
+                agent.workspace_root(),
+                &objective.join(" "),
+            )?;
             agent.set_sdk_permission_mode("plan")?;
             agent.ask(&prompt).await.map(|answer| println!("{answer}"))
         }
@@ -2990,10 +2995,17 @@ async fn chat(
             };
             if name == "ultrareview" || name == "ultraplan" {
                 let prepared = if name == "ultrareview" {
-                    let pr = if args.trim().is_empty() { Ok(None) } else {
-                        args.trim().parse::<u64>().map(Some).context("/ultrareview expects a positive PR number")
+                    let pr = if args.trim().is_empty() {
+                        Ok(None)
+                    } else {
+                        args.trim()
+                            .parse::<u64>()
+                            .map(Some)
+                            .context("/ultrareview expects a positive PR number")
                     };
-                    pr.and_then(|n| local_advanced_workflows::review_prompt(agent.workspace_root(), n))
+                    pr.and_then(|n| {
+                        local_advanced_workflows::review_prompt(agent.workspace_root(), n)
+                    })
                 } else {
                     local_advanced_workflows::plan_prompt(agent.workspace_root(), args)
                 };
@@ -3316,8 +3328,11 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                     continue;
                 };
                 let content = match local_attachments::attach(
-                    agent.workspace_root(), raw_content,
-                    event.get("file_attachments").or_else(|| event.get("fileAttachments")),
+                    agent.workspace_root(),
+                    raw_content,
+                    event
+                        .get("file_attachments")
+                        .or_else(|| event.get("fileAttachments")),
                 ) {
                     Ok(value) => value,
                     Err(error) => {
