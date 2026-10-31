@@ -2038,6 +2038,17 @@ impl Agent {
         );
         self.session.cost.merge(child.session.cost.clone());
         let answer = result?;
+        // Source AgentTool.tsx returns Explore/Plan one-shot results directly,
+        // except worktree agents that still need a path/branch continuation.
+        if crate::tool_names::is_one_shot_builtin_agent_type(&agent_type)
+            && isolation_result.is_none()
+        {
+            return Ok(if answer.is_empty() {
+                "(Subagent completed but returned no output.)".to_owned()
+            } else {
+                answer
+            });
+        }
         Ok(format!(
             "Subagent session: {child_id}\nResult:\n{answer}\n{}",
             isolation_result.unwrap_or_default()
