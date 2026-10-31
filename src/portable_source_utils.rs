@@ -124,24 +124,9 @@ pub fn cache_mcp_log_path(cache_root: &Path, workspace: &Path, server: &str) -> 
 }
 
 // src/utils/peerAddress.ts
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PeerScheme {
-    Uds,
-    Bridge,
-    Other,
-}
-pub fn parse_peer_address(value: &str) -> (PeerScheme, &str) {
-    if let Some(to) = value.strip_prefix("uds:") {
-        return (PeerScheme::Uds, to);
-    }
-    if let Some(to) = value.strip_prefix("bridge:") {
-        return (PeerScheme::Bridge, to);
-    }
-    if value.starts_with('/') {
-        return (PeerScheme::Uds, value);
-    }
-    (PeerScheme::Other, value)
-}
+#[path = "peer_address.rs"]
+mod peer_address;
+pub use peer_address::{parse_peer_address, PeerScheme};
 
 // src/utils/sandbox/sandbox-ui-utils.ts
 pub fn remove_sandbox_violation_tags(text: &str) -> String {
@@ -186,27 +171,9 @@ impl XdgOptions {
 }
 
 // src/utils/cliArgs.ts
-pub fn eager_parse_cli_flag(flag: &str, argv: &[String]) -> Option<String> {
-    for (i, arg) in argv.iter().enumerate() {
-        if let Some(value) = arg.strip_prefix(flag).and_then(|v| v.strip_prefix('=')) {
-            return Some(value.into());
-        }
-        if arg == flag {
-            if let Some(v) = argv.get(i + 1) {
-                return Some(v.clone());
-            }
-        }
-    }
-    None
-}
-pub fn extract_args_after_double_dash(command: &str, args: &[String]) -> (String, Vec<String>) {
-    if command == "--" {
-        if let Some((first, rest)) = args.split_first() {
-            return (first.clone(), rest.to_vec());
-        }
-    }
-    (command.into(), args.to_vec())
-}
+#[path = "cli_args.rs"]
+mod cli_args;
+pub use cli_args::{eager_parse_cli_flag, extract_args_after_double_dash};
 
 // src/utils/uuid.ts and src/utils/crypto.ts
 pub fn validate_uuid(value: &Value) -> Option<&str> {
