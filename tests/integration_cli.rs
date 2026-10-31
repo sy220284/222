@@ -6675,7 +6675,7 @@ fn sdk_remote_attachments_are_rejected_before_any_network_request() {
 }
 
 #[test]
-fn sdk_slash_skill_with_trailing_image_and_local_attachment_reaches_model_intact() {
+fn sdk_trailing_image_keeps_earlier_slash_literal_and_attachment_intact() {
     let workspace = tempfile::tempdir().unwrap();
     let skill = workspace.path().join(".atlas/skills/image_audit");
     fs::create_dir_all(&skill).unwrap();
@@ -6739,7 +6739,8 @@ fn sdk_slash_skill_with_trailing_image_and_local_attachment_reaches_model_intact
     assert!(wire.contains("skill and attachment accepted"), "{wire}");
     let request = received.join().unwrap();
     assert!(
-        request.contains("Inspect this skill request: inspect"),
+        request.contains("/image_audit inspect")
+            && !request.contains("Inspect this skill request: inspect"),
         "{request}"
     );
     assert!(request.contains("local reference text"), "{request}");
@@ -6821,8 +6822,8 @@ fn local_advanced_commands_reject_invalid_goals_before_model_calls() {
         .env("ATLAS_CONFIG", &config)
         .output()
         .unwrap();
-    assert!(!plan.status.success());
-    assert!(String::from_utf8_lossy(&plan.stderr).contains("non-empty objective"));
+    assert!(plan.status.success());
+    assert!(String::from_utf8_lossy(&plan.stdout).contains("Usage: /ultraplan GOAL"));
     let review = binary()
         .args([
             "--workspace",
@@ -7046,17 +7047,21 @@ fn local_advanced_plan_uses_current_api_and_keeps_plan_permission() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let base_url = format!("http://{}/v1", listener.local_addr().unwrap());
     let received = thread::spawn(move || {
-        let mut connection = accept_before(&listener, Duration::from_secs(15));
-        let request = read_request(&mut connection);
-        let body = json!({"choices":[{"message":{
-            "role":"assistant","content":"plan generated"},
-            "finish_reason":"stop"}]})
-        .to_string();
-        write!(connection,
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-            body.len(), body).unwrap();
-        connection.flush().unwrap();
-        request
+        let mut requests = Vec::new();
+        for _ in 0..3 {
+            let mut connection = accept_before(&listener, Duration::from_secs(15));
+            let request = read_request(&mut connection);
+            let body = json!({"choices":[{"message":{
+                "role":"assistant","content":"plan generated"},
+                "finish_reason":"stop"}]})
+            .to_string();
+            write!(connection,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(), body).unwrap();
+            connection.flush().unwrap();
+            requests.push(request);
+        }
+        requests
     });
     fs::write(
         &config,
@@ -7086,9 +7091,12 @@ fn local_advanced_plan_uses_current_api_and_keeps_plan_permission() {
     assert!(String::from_utf8(output.stdout)
         .unwrap()
         .contains("plan generated"));
-    let request = received.join().unwrap();
-    assert!(request.contains("Check local workflows"), "{request}");
-    assert!(request.contains("read-only/plan permissions"), "{request}");
+    let requests = received.join().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert!(requests[0].contains("Check local workflows"), "{}", requests[0]);
+    assert!(requests[0].contains("read-only/plan permissions"), "{}", requests[0]);
+    assert!(requests[1].contains("Second pass"));
+    assert!(requests[2].contains("Final pass"));
 }
 
 #[test]
