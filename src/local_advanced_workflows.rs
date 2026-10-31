@@ -11,7 +11,10 @@ pub enum Kind {
 }
 impl Kind {
     pub fn as_str(self) -> &'static str {
-        match self { Self::Plan => "ultraplan", Self::Review => "ultrareview" }
+        match self {
+            Self::Plan => "ultraplan",
+            Self::Review => "ultrareview",
+        }
     }
 
     pub fn verify_prompt(self) -> &'static str {
@@ -28,7 +31,6 @@ impl Kind {
         }
     }
 }
-
 
 fn git(root: &Path, args: &[&str]) -> Result<String> {
     let output = Command::new("git")
@@ -113,7 +115,8 @@ pub fn plan_usage() -> &'static str {
 pub fn review_request(root: &Path, args: &str) -> Result<String> {
     let value = args.trim();
     if !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()) {
-        let pr = value.parse::<u64>()
+        let pr = value
+            .parse::<u64>()
             .context("PR number exceeds u64 range")?;
         if pr == 0 {
             bail!("/ultrareview expects a positive PR number");
@@ -135,7 +138,11 @@ pub fn plan_prompt(root: &Path, objective: &str) -> Result<String> {
 
 /// Preserve the seedPlan ordering of buildUltraplanPrompt: the approved or
 /// supplied draft is visible to the model before the refinement objective.
-pub fn plan_prompt_with_seed(root: &Path, objective: &str, seed_plan: Option<&str>) -> Result<String> {
+pub fn plan_prompt_with_seed(
+    root: &Path,
+    objective: &str,
+    seed_plan: Option<&str>,
+) -> Result<String> {
     if !root.is_dir() {
         bail!("Workspace is not a directory: {}", root.display());
     }
@@ -144,9 +151,9 @@ pub fn plan_prompt_with_seed(root: &Path, objective: &str, seed_plan: Option<&st
     if objective.is_empty() && seed_plan.is_none() {
         bail!("UltraPlan requires an objective or a draft plan");
     }
-    let seed_section = seed_plan.map(|draft| format!(
-        "Here is a draft plan to refine:\n\n{draft}\n\n"
-    )).unwrap_or_default();
+    let seed_section = seed_plan
+        .map(|draft| format!("Here is a draft plan to refine:\n\n{draft}\n\n"))
+        .unwrap_or_default();
     Ok(format!(
         r#"{seed_section}Using the CURRENT configured model and local Agent, make a detailed implementation plan.
 Project: {}
@@ -177,7 +184,11 @@ pub fn sdk_user_prompt(root: &Path, text: &str) -> Result<Option<String>> {
 
 /// A plan-approval client may supply its already approved draft for
 /// refinement; all content remains local in this selected Agent session.
-pub fn sdk_user_prompt_with_seed(root: &Path, text: &str, seed: Option<&str>) -> Result<Option<String>> {
+pub fn sdk_user_prompt_with_seed(
+    root: &Path,
+    text: &str,
+    seed: Option<&str>,
+) -> Result<Option<String>> {
     if let Some(parsed) = crate::slash_command::parse_slash_command(text) {
         if parsed.is_mcp {
             return Ok(None);
@@ -248,7 +259,12 @@ mod tests {
             );
         }
         assert!(sdk_user_prompt(root.path(), "/ultraplan").is_err());
-        assert!(sdk_user_prompt(root.path(), "/ultrareview inspect local branch").unwrap().unwrap().contains("User's review focus: inspect local branch"));
+        assert!(
+            sdk_user_prompt(root.path(), "/ultrareview inspect local branch")
+                .unwrap()
+                .unwrap()
+                .contains("User's review focus: inspect local branch")
+        );
         assert!(sdk_user_prompt(root.path(), "/ultrareview 0").is_err());
     }
 
@@ -259,11 +275,17 @@ mod tests {
         assert!(prompt.contains("CURRENT configured model"));
         assert!(prompt.contains("恢复本地功能"));
         assert!(plan_prompt(root.path(), "  ").is_err());
-        let seeded = plan_prompt_with_seed(root.path(), "", Some("Existing rollout draft")).unwrap();
+        let seeded =
+            plan_prompt_with_seed(root.path(), "", Some("Existing rollout draft")).unwrap();
         assert!(seeded.starts_with("Here is a draft plan to refine:"));
         assert!(seeded.contains("Existing rollout draft"));
         assert!(plan_prompt_with_seed(root.path(), "", Some("  ")).is_err());
-        assert!(sdk_user_prompt_with_seed(root.path(), "/ultraplan", Some("Seed draft")).unwrap().unwrap().contains("Seed draft"));
+        assert!(
+            sdk_user_prompt_with_seed(root.path(), "/ultraplan", Some("Seed draft"))
+                .unwrap()
+                .unwrap()
+                .contains("Seed draft")
+        );
         assert!(plan_usage().contains("Usage: /ultraplan GOAL"));
     }
     #[test]
@@ -281,7 +303,9 @@ mod tests {
         assert!(prompt.contains("untracked.rs"));
         assert!(prompt.contains("Do not modify code"));
         assert!(review_prompt(root.path(), Some(0)).is_err());
-        assert!(review_request(root.path(), "security focus").unwrap().contains("User's review focus: security focus"));
+        assert!(review_request(root.path(), "security focus")
+            .unwrap()
+            .contains("User's review focus: security focus"));
         assert!(review_prompt(root.path(), Some(42))
             .unwrap()
             .contains("gh pr diff 42"));
