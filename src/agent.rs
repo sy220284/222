@@ -4532,7 +4532,7 @@ impl Agent {
         // messages rather than only the flat text field. Structured text,
         // tool results and media blocks all count toward context pressure.
         let pending_message =
-            crate::process_text_prompt::process_text_prompt(prompt, blocks.clone())?.message;
+            crate::process_text_prompt::process_text_prompt(prompt, blocks.clone()).message;
         // Include the synthetic compact-summary user turn in the same
         // token estimate as the provider request, or subsequent turns may
         // silently exceed the model context after a successful compact.
