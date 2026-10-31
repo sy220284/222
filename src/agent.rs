@@ -4833,7 +4833,14 @@ impl Agent {
                         })
                 });
             }
-            let complete_catalog = available_tools;
+            // Source: tools.ts::assembleToolPool + useMergedTools.ts.
+            // Preserve a stable built-in prefix followed by MCP tools so
+            // late-discovered MCP tools do not perturb unrelated tool schemas.
+            let complete_catalog = crate::tool_pool_merge::merge_and_filter_tools(
+                &[],
+                &available_tools,
+                None,
+            )?;
             let (visible_tools, deferred_names) =
                 crate::tool_search::visible_catalog(&complete_catalog, &selected_mcp_tools);
             let mut request_system = system.clone();
