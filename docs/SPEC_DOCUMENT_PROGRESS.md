@@ -1741,7 +1741,7 @@
 | `src/utils/process.ts` | `b744b56136db7ea40adaa1e00fcc232a67b4d8e9a47582ae1d427153ddff46cc` | 部分实现 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/processUserInput/processBashCommand.tsx` | `c9aad9f00be458474cfc684e7107e6673ae5c9af2a56c5e92b74a0939dd0ff21` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/processUserInput/processSlashCommand.tsx` | `56b12ed45c20c6afe2968b8510609515edbd065c0e7fa4a5edf9f0118bb45182` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
-| `src/utils/processUserInput/processTextPrompt.ts` | `e5f26ad5b6b610acb5138bbe758885e12a5efb833d62f5c48bd9453e7c7452f4` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
+| `src/utils/processUserInput/processTextPrompt.ts` | `e5f26ad5b6b610acb5138bbe758885e12a5efb833d62f5c48bd9453e7c7452f4` | 部分实现 | `src/process_text_prompt.rs / src/agent.rs / src/main.rs` | 已接入纯文本和多模态结构化输入的Rust处理及合法纯图片请求；原版粘贴ID、附件消息与权限模式字段尚未完全迁移 | 已完成源码接线与三组单测，最新 HEAD CI 尚待确认 |
 | `src/utils/processUserInput/processUserInput.ts` | `7b8602d99fc2b30988d262de7e3a4df7066bd65b09d3c7a79d5419bca87619ef` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/profilerBase.ts` | `c0bb7d21d6d1f7edeb217cc0e19090e480812ca3fd51a887da0c20de24418a94` | 部分实现 | `src/generated_ports/p_5453fc3baa5b5.rs` | 部分实现：完整等价：formatMs 三位小数渲染含三例单测+共享 timeline 三 profiler 清单常量；formatFileSize 引 format 桩，待验收 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/promptCategory.ts` | `d669ce3b30e40e6f1b89b0a70d46646163100f4987d4d180d0896d0ae1260ca7` | 部分实现 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 | 待按规格逐函数核实、补齐并验收 |
@@ -1755,7 +1755,7 @@
 | `src/utils/readEditContext.ts` | `50cdecb9e3b665f979f6ca33a761a98f089d6703075a9efad93b4a723988e2c6` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/readFileInRange.ts` | `36f4f4341928247020c32177422dc8766a5adc6ca0a2e6a9235402bbd088f574` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/releaseNotes.ts` | `1fcf2358ae300784e277706a629fd0ad631608f971990e5c26f20dbc1d68378c` | 部分实现 | `src/release_notes.rs` | 部分实现：版本解析排序、最近五条过滤、可信 URL 下载与原子缓存；旧配置迁移仍缺 | 待按规格逐函数核实、补齐并验收 |
-| `src/utils/renderOptions.ts` | `1a015ba8bdbaf3262b2ff290c86aa8692c4089c4239e8c08232ce5412c621f83` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
+| `src/utils/renderOptions.ts` | `1a015ba8bdbaf3262b2ff290c86aa8692c4089c4239e8c08232ce5412c621f83` | 部分实现 | `src/render_options.rs / src/terminal_input.rs / src/main.rs` | 已接通管道stdin时终端覆盖、进程级缓存及CI/MCP隔离与RawMode FD恢复，详见矩阵；完整Ink及PTY测试仍待验收 | 已提交Rust生产代码及分支守卫测试，当前HEAD CI未完成，仍需PTY端到端验证 |
 | `src/utils/ripgrep.ts` | `bf4bfadbbbea5d5d35a13eea9159ae59f9780d28ee907d6bd5cc1bd1f30a8c70` | 部分实现 | `src/search.rs` | 部分实现：按原版 ripGrep 的默认 20 秒、WSL 60 秒及可配置正整数秒超时，为 Grep/Glob 可达搜索入口增加超时错误和遍历阶段检查（fbd4a626、17a8e25e，源码已提交待验收）；子进程级取消、信号升级、超时抢占、完整忽略规则及其余 ripgrep 执行链仍未迁移；Git 忽略检查子进程共享搜索截止时间，超时强制终止并显式报告错误，异常退出不再静默当成无忽略规则（13a62847，源码已提交待验收）；外部取消与完整 ripgrep 规则仍缺；Grep 大文件逐行及跨行正则扫描增加同一截止时间检查（64627c6e，已提交待验收），仍不能立即抢占单次正则计算；Grep 多个正反 glob 现按原版输入顺序由后命中规则覆盖（82b0bcd6，源码已提交待验收）；与 Git ignore 的跨来源覆盖仍缺；Grep content/count 不再被强制按文件时间重排，只有文件名模式按原版新到旧排序（98b6fc42，源码已提交待验收）；ripgrep 默认遍历顺序仍待验收 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/sandbox/sandbox-adapter.ts` | `7a69378764884ce8bd042e6286ee24468a77c18bb2582aa007bc4b3fd799bfcb` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/sandbox/sandbox-ui-utils.ts` | `2584a6f6da855aa4e366a69186f414ed6eacf9a4edfa0f27c81901c22e423d7d` | 部分实现 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 | 待按规格逐函数核实、补齐并验收 |

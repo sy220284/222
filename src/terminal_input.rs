@@ -5,6 +5,8 @@ use crate::{generated_ports::text_input_semantics, keybindings};
 use anyhow::{bail, Result};
 use serde_json::json;
 use std::io::{self, IsTerminal, Read, Write};
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, RawFd};
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 
@@ -324,13 +326,16 @@ enum Key {
 }
 
 #[cfg(unix)]
-struct RawMode(libc::termios);
+struct RawMode {
+    old: libc::termios,
+    fd: RawFd,
+}
 #[cfg(unix)]
 impl RawMode {
-    fn enter() -> io::Result<Self> {
+    fn enter(fd: RawFd) -> io::Result<Self> {
         let mut old = std::mem::MaybeUninit::<libc::termios>::uninit();
-        // SAFETY: STDIN_FILENO is an attached TTY; old is valid writable storage.
-        if unsafe { libc::tcgetattr(libc::STDIN_FILENO, old.as_mut_ptr()) } != 0 {
+        // SAFETY: fd is an attached terminal, old is valid writable storage.
+        if unsafe { libc::tcgetattr(fd, old.as_mut_ptr()) } != 0 {
             return Err(io::Error::last_os_error());
         }
         // SAFETY: tcgetattr wrote a fully initialized termios.
@@ -343,10 +348,10 @@ impl RawMode {
         raw.c_cc[libc::VMIN] = 0;
         raw.c_cc[libc::VTIME] = 1;
         // SAFETY: fd points to the same terminal whose state is restored on Drop.
-        if unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &raw) } != 0 {
+        if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &raw) } != 0 {
             return Err(io::Error::last_os_error());
         }
-        Ok(Self(old))
+        Ok(Self { old, fd })
     }
 }
 #[cfg(unix)]
@@ -354,7 +359,7 @@ impl Drop for RawMode {
     fn drop(&mut self) {
         // SAFETY: the terminal attributes came from this same fd.
         unsafe {
-            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.0);
+            libc::tcsetattr(self.fd, libc::TCSANOW, &self.old);
         }
     }
 }
@@ -536,14 +541,14 @@ fn append_pasted_key(editor: &mut Editor, key: &Key) -> Result<()> {
 }
 
 #[cfg(unix)]
-fn interactive(
+fn interactive<R: Read + AsRawFd>(
     prompt: &str,
     history: &mut Vec<String>,
     vim_enabled: bool,
     prompt_history: &mut crate::prompt_history::PromptHistory,
+    mut input: R,
 ) -> Result<PromptRead> {
-    let _raw = RawMode::enter()?;
-    let mut input = io::stdin().lock();
+    let _raw = RawMode::enter(input.as_raw_fd())?;
     let mut out = io::stdout().lock();
     let file = keybindings::keybindings_path(&keybindings::config_home()?);
     let mut bindings = keybindings::KeybindingRuntime::from_disk(&file);
@@ -729,8 +734,13 @@ pub fn read_prompt(
     prompt_history: &mut crate::prompt_history::PromptHistory,
 ) -> Result<PromptRead> {
     #[cfg(unix)]
-    if io::stdin().is_terminal() && io::stdout().is_terminal() {
-        return interactive(prompt, history, vim_enabled, prompt_history);
+    if io::stdout().is_terminal() {
+        if io::stdin().is_terminal() {
+            return interactive(prompt, history, vim_enabled, prompt_history, io::stdin());
+        }
+        if let Some(input) = crate::render_options::stdin_override() {
+            return interactive(prompt, history, vim_enabled, prompt_history, input);
+        }
     }
     print!("{prompt}");
     io::stdout().flush()?;
@@ -744,6 +754,48 @@ pub fn read_prompt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn raw_mode_uses_actual_input_fd_and_restores_terminal_after_drop() {
+        use std::fs::File;
+        use std::os::fd::{AsRawFd, FromRawFd};
+        let mut master = -1;
+        let mut slave = -1;
+        // SAFETY: openpty writes two owned FDs into the initialized pointers.
+        let result = unsafe {
+            libc::openpty(
+                &mut master,
+                &mut slave,
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                std::ptr::null(),
+            )
+        };
+        assert_eq!(result, 0, "openpty failed: {}", io::Error::last_os_error());
+        // SAFETY: openpty returned unique owned descriptors on success.
+        let _master = unsafe { File::from_raw_fd(master) };
+        let slave = unsafe { File::from_raw_fd(slave) };
+        let attributes = |fd| {
+            let mut value = std::mem::MaybeUninit::<libc::termios>::uninit();
+            // SAFETY: fd is an open PTY and value points to writable memory.
+            assert_eq!(unsafe { libc::tcgetattr(fd, value.as_mut_ptr()) }, 0);
+            // SAFETY: tcgetattr initialized all termios bytes on success.
+            unsafe { value.assume_init() }
+        };
+        let before = attributes(slave.as_raw_fd());
+        {
+            let _raw = RawMode::enter(slave.as_raw_fd()).unwrap();
+            let during = attributes(slave.as_raw_fd());
+            assert_eq!(during.c_lflag & libc::ICANON, 0);
+            assert_eq!(during.c_lflag & libc::ECHO, 0);
+        }
+        let after = attributes(slave.as_raw_fd());
+        assert_eq!(after.c_lflag, before.c_lflag);
+        assert_eq!(after.c_iflag, before.c_iflag);
+        assert_eq!(after.c_oflag, before.c_oflag);
+    }
+
     #[test]
     fn original_double_press_window_is_800ms_and_resets_after_second_press() {
         use std::time::{Duration, Instant};

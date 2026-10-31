@@ -1729,7 +1729,7 @@
 | `src/utils/process.ts` | 69 | 2333 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/processUserInput/processBashCommand.tsx` | 140 | 22279 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/processUserInput/processSlashCommand.tsx` | 922 | 144807 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/processUserInput/processTextPrompt.ts` | 101 | 3272 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/processUserInput/processTextPrompt.ts` | 101 | 3272 | 重写：保持通用行为 | `src/process_text_prompt.rs / src/agent.rs / src/main.rs` | 部分实现：纯文本、结构化文本、仅图片和图文交错内容已通过共用 Rust 处理器进入 Agent 实际模型请求；保留原始块顺序、第一/最后文本独立选择，拒绝无内容，允许合法纯图片请求并增加单元测试。尚待图片粘贴 ID、附件数组交织、权限模式与 isMeta 字段、源协议完整错误路径和本次 CI 验收；原厂遥测属排除范围 |
 | `src/utils/processUserInput/processUserInput.ts` | 606 | 19507 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/profilerBase.ts` | 47 | 1572 | 重写：保持通用行为 | `src/generated_ports/p_5453fc3baa5b5.rs` | 部分实现：完整等价：formatMs 三位小数渲染含三例单测+共享 timeline 三 profiler 清单常量；formatFileSize 引 format 桩，待验收 |
 | `src/utils/promptCategory.ts` | 50 | 1502 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
@@ -1743,7 +1743,7 @@
 | `src/utils/readEditContext.ts` | 228 | 7224 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/readFileInRange.ts` | 384 | 12259 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/releaseNotes.ts` | 361 | 11813 | 重写：保持通用行为 | `src/release_notes.rs` | 部分实现：版本解析排序、最近五条过滤、可信 URL 下载与原子缓存；旧配置迁移仍缺 |
-| `src/utils/renderOptions.ts` | 78 | 2278 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/renderOptions.ts` | 78 | 2278 | 重写：保持通用行为 | `src/render_options.rs / src/terminal_input.rs / src/main.rs` | 部分实现：标准输入为管道时，在Unix有真实终端且非CI、非MCP的交互会话中，缓存并复制 /dev/tty 文件描述符，原子式读取终端按键；RawMode绑定实际FD并在退出时恢复状态，保留普通管道/CI/MCP原有输入路径。已加入源分支守卫单测，仍需真实PTY端到端、FD资源/恢复异常分支和原版Ink渲染选项行为对照 |
 | `src/utils/ripgrep.ts` | 680 | 21188 | 重写：保持通用行为 | `src/search.rs` | 部分实现：按原版 ripGrep 的默认 20 秒、WSL 60 秒及可配置正整数秒超时，为 Grep/Glob 可达搜索入口增加超时错误和遍历阶段检查（fbd4a626、17a8e25e，源码已提交待验收）；子进程级取消、信号升级、超时抢占、完整忽略规则及其余 ripgrep 执行链仍未迁移；Git 忽略检查子进程共享搜索截止时间，超时强制终止并显式报告错误，异常退出不再静默当成无忽略规则（13a62847，源码已提交待验收）；外部取消与完整 ripgrep 规则仍缺；Grep 大文件逐行及跨行正则扫描增加同一截止时间检查（64627c6e，已提交待验收），仍不能立即抢占单次正则计算；Grep 多个正反 glob 现按原版输入顺序由后命中规则覆盖（82b0bcd6，源码已提交待验收）；与 Git ignore 的跨来源覆盖仍缺；Grep content/count 不再被强制按文件时间重排，只有文件名模式按原版新到旧排序（98b6fc42，源码已提交待验收）；ripgrep 默认遍历顺序仍待验收 |
 | `src/utils/sandbox/sandbox-adapter.ts` | 986 | 35710 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/sandbox/sandbox-ui-utils.ts` | 13 | 389 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
