@@ -399,7 +399,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join(".atlas")).unwrap();
-        fs::write(outside.path().join("tasks.json"), "{\\\"private\\\":{\\\"prompt\\\":\\\"outside\\\"}}").unwrap();
+        fs::write(outside.path().join("tasks.json"), r#"{"private":{"prompt":"outside"}}"#).unwrap();
         symlink(outside.path(), store_dir(root.path())).unwrap();
         assert!(list(root.path()).is_err());
         assert!(get(root.path(), "private").is_err());
@@ -414,7 +414,7 @@ mod tests {
         let outside = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join(".atlas")).unwrap();
         let private = outside.path().join("private.json");
-        fs::write(&private, r#"{\\\"hidden\\\":{\\\"prompt\\\":\\\"secret\\\"}}"#).unwrap();
+        fs::write(&private, r#"{"hidden":{"prompt":"secret"}}"#).unwrap();
         symlink(&private, legacy_path(root.path())).unwrap();
         assert!(list(root.path()).is_err());
         assert!(change(root.path(), "hidden", "wrong").is_err());
