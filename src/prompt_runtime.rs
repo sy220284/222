@@ -312,11 +312,14 @@ pub fn compact_summary_content(raw: &str) -> String {
     text.trim().to_owned()
 }
 
-/// Compact in a separate tool-less model request and keep its summary factual.
-/// Use the unabridged original 2.1.88 compaction template. If prior
-/// retained history exists, switch to the source's recent-message variant.
+/// Ordinary /compact follows getCompactPrompt from 2.1.88 even when an
+/// older summary exists. The recent-message templates belong exclusively to
+/// explicit partial compaction with a selected transcript boundary.
 pub fn compact_prompt(previous: &str) -> String {
-    crate::compact_source_prompts::prompt(previous, !previous.trim().is_empty())
+    crate::compact_source_prompts::prompt_for_direction(
+        previous,
+        crate::compact_source_prompts::CompactDirection::Full,
+    )
 }
 
 /// Optional user-defined output style; never implicitly promote untrusted text.
@@ -785,6 +788,8 @@ mod tests {
         let system = compact_prompt("Previous results");
         assert!(system.starts_with("CRITICAL: Respond with TEXT ONLY."));
         assert!(system.contains("Previous results"));
+        assert!(system.contains("the conversation so far"));
+        assert!(!system.contains("RECENT portion"));
         assert_eq!(
             compact_summary_content(
                 "<analysis>hidden</analysis>\n<summary>verified state</summary>"
