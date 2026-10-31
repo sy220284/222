@@ -1729,7 +1729,7 @@
 | `src/utils/process.ts` | 69 | 2333 | 重写：保持通用行为 | `src/portable_platform.rs` | 部分实现：已编写 Rust 平台路径与 shell/版本/时间/定时配置逻辑，端到端待验 |
 | `src/utils/processUserInput/processBashCommand.tsx` | 140 | 22279 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/processUserInput/processSlashCommand.tsx` | 922 | 144807 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/processUserInput/processTextPrompt.ts` | 101 | 3272 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/processUserInput/processTextPrompt.ts` | 101 | 3272 | 重写：保持通用行为 | `src/process_text_prompt.rs / src/agent.rs / src/main.rs` | 部分实现：纯文本、结构化文本、仅图片和图文交错内容已通过共用 Rust 处理器进入 Agent 实际模型请求；保留原始块顺序、第一/最后文本独立选择，拒绝无内容，允许合法纯图片请求并增加单元测试。尚待图片粘贴 ID、附件数组交织、权限模式与 isMeta 字段、源协议完整错误路径和本次 CI 验收；原厂遥测属排除范围 |
 | `src/utils/processUserInput/processUserInput.ts` | 606 | 19507 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/profilerBase.ts` | 47 | 1572 | 重写：保持通用行为 | `src/generated_ports/p_5453fc3baa5b5.rs` | 部分实现：完整等价：formatMs 三位小数渲染含三例单测+共享 timeline 三 profiler 清单常量；formatFileSize 引 format 桩，待验收 |
 | `src/utils/promptCategory.ts` | 50 | 1502 | 重写：保持通用行为 | `src/portable_ui_runtime.rs` | 部分实现：Rust 领域逻辑已编写，展示/SDK 或来源读取端还需统一验收 |
