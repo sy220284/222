@@ -2331,6 +2331,26 @@ async fn chat(
             }
             _ => {}
         }
+        // Message-selector equivalent for local terminal users: indices are
+        // zero-based in the current model-visible context, as in 2.1.88.
+        if let Some(selection) = input.strip_prefix("/compact from ")
+            .or_else(|| input.strip_prefix("/compact up_to "))
+        {
+            let direction = if input.starts_with("/compact from ") {
+                compact_source_prompts::CompactDirection::From
+            } else {
+                compact_source_prompts::CompactDirection::UpTo
+            };
+            let pivot = selection.trim().parse::<usize>().context(
+                "Partial compact requires a zero-based message index: /compact from 2 or /compact up_to 2",
+            )?;
+            agent.compact_history_partial(pivot, direction, None).await?;
+            println!(
+                "{}",
+                compact_command_source::build_display_text(false, "ctrl+o", None, None)
+            );
+            continue;
+        }
         if let Some(instructions) = input.strip_prefix("/compact ") {
             agent.compact_history_custom(instructions).await?;
             println!(
@@ -3928,15 +3948,38 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                 let result = match action {
                     "clear" => agent.clear_history().await,
                     "compact" => {
-                        agent
-                            .compact_history_custom(
-                                event
-                                    .get("instructions")
-                                    .or_else(|| event.get("customInstructions"))
-                                    .and_then(Value::as_str)
-                                    .unwrap_or(""),
-                            )
-                            .await
+                        let instructions = event
+                            .get("instructions")
+                            .or_else(|| event.get("customInstructions"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        match event.get("direction").and_then(Value::as_str) {
+                            None => agent.compact_history_custom(instructions).await,
+                            Some("from" | "up_to") => {
+                                let direction = if event["direction"] == "from" {
+                                    compact_source_prompts::CompactDirection::From
+                                } else {
+                                    compact_source_prompts::CompactDirection::UpTo
+                                };
+                                match event
+                                    .get("pivotIndex")
+                                    .and_then(Value::as_u64)
+                                    .and_then(|n| usize::try_from(n).ok())
+                                {
+                                    Some(pivot) => {
+                                        agent
+                                            .compact_history_partial(pivot, direction, Some(instructions))
+                                            .await
+                                    }
+                                    None => Err(anyhow::anyhow!(
+                                        "Partial compact requires nonnegative integer pivotIndex"
+                                    )),
+                                }
+                            }
+                            Some(other) => Err(anyhow::anyhow!(
+                                "Unsupported compact direction: {other}"
+                            )),
+                        }
                     }
                     "model" => {
                         let provider = event.get("provider").and_then(Value::as_str);
