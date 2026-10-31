@@ -7144,7 +7144,7 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
     let addr = listener.local_addr().unwrap();
     let received = thread::spawn(move || {
         let mut requests = Vec::new();
-        for step in 0..4 {
+        for step in 0..7 {
             let mut stream = accept_before(&listener, Duration::from_secs(20));
             let request = read_request(&mut stream);
             let response = json!({"choices":[{"message":{"role":"assistant",
@@ -7211,6 +7211,17 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
             "skipSlashCommands":true})
         )
         .unwrap();
+        for prompt in [
+            "please ultraplan this is an ordinary SDK message",
+            "please ultrareview this is an ordinary SDK message",
+        ] {
+            writeln!(input, "{}", json!({"type":"user","content":prompt})).unwrap();
+        }
+        writeln!(input, "{}", json!({"type":"user","content":[
+            {"type":"text","text":"/ultraplan mentioned in earlier block"},
+            {"type":"image","source":{"type":"base64",
+                "media_type":"image/jpeg","data":"/9j/AA=="}}
+        ]})).unwrap();
     }
     let output = child.wait_with_output().unwrap();
     let wire = String::from_utf8(output.stdout).unwrap();
@@ -7233,11 +7244,11 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
     );
     assert_eq!(
         events.iter().filter(|e| e["type"] == "result").count(),
-        2,
+        5,
         "{wire}"
     );
     let requests = received.join().unwrap();
-    assert_eq!(requests.len(), 4);
+    assert_eq!(requests.len(), 7);
     let first: Value = serde_json::from_str(requests[0].split("\r\n\r\n").nth(1).unwrap()).unwrap();
     let first_user = first["messages"]
         .as_array()
@@ -7277,4 +7288,21 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
         !second_user.contains("detailed implementation plan"),
         "{second_user}"
     );
+    let last_user = |index: usize| -> Value {
+        let v: Value = serde_json::from_str(
+            requests[index].split("\r\n\r\n").nth(1).unwrap(),
+        ).unwrap();
+        v["messages"].as_array().unwrap().last().unwrap().clone()
+    };
+    assert!(last_user(4).to_string().contains(
+        "please ultraplan this is an ordinary SDK message"
+    ));
+    assert!(last_user(5).to_string().contains(
+        "please ultrareview this is an ordinary SDK message"
+    ));
+    assert!(last_user(6).to_string().contains(
+        "/ultraplan mentioned in earlier block"
+    ));
+    assert!(last_user(6).to_string().contains("data:image/jpeg;base64,/9j/AA=="));
+
 }
