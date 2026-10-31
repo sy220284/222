@@ -116,7 +116,7 @@ def _execute(template, repo, original, sandbox, case, side):
             stderr=subprocess.PIPE, cwd=original if side=="original" else repo,
             timeout=case["timeout_seconds"], env=env, check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except (OSError, subprocess.TimeoutExpired, UnicodeError) as exc:
         return None, side + " 实际运行失败: " + type(exc).__name__ + " " + str(exc)[:220]
     if len(result.stdout) > 2_000_000 or len(result.stderr) > 2_000_000:
         return None, side + " 输出超过 2MB，拒绝验收"
