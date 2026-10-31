@@ -1,6 +1,6 @@
 //! Discover active model tools. Ported from 2.1.88 ToolSearchTool name
 //! parsing, explicit selection, required keywords and weighted ranking.
-use anyhow::{bail, Result};
+use anyhow::Result;
 use regex::Regex;
 use serde_json::{json, Value};
 
@@ -170,7 +170,7 @@ pub fn execute(args: &Value, tools: &[Value]) -> Result<Value> {
         .filter_map(|tool| tool.pointer("/function/name").and_then(Value::as_str))
         .collect();
     let deferred_count = deferred_names.len();
-    let matches: Vec<String>;
+    let mut matches: Vec<String>;
     if query
         .get(..7)
         .is_some_and(|s| s.eq_ignore_ascii_case("select:"))
