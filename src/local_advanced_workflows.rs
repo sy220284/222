@@ -79,7 +79,6 @@ Respond in Chinese."#,
     ))
 }
 
-
 /// Resolve a local advanced workflow in SDK input using the same slash parser
 /// and keyword boundaries as the interactive REPL. Unknown slash commands
 /// remain the responsibility of the SDK's skill expansion path.
@@ -94,7 +93,10 @@ pub fn sdk_user_prompt(root: &Path, text: &str) -> Result<Option<String>> {
                 let number = if parsed.args.trim().is_empty() {
                     None
                 } else {
-                    let parsed_number = parsed.args.trim().parse::<u64>()
+                    let parsed_number = parsed
+                        .args
+                        .trim()
+                        .parse::<u64>()
                         .context("/ultrareview expects a positive PR number")?;
                     if parsed_number == 0 {
                         bail!("/ultrareview expects a positive PR number");
@@ -125,10 +127,17 @@ mod tests {
     #[test]
     fn sdk_advanced_command_and_keywords_route_to_local_read_only_workflow() {
         let root = tempfile::tempdir().unwrap();
-        let git = Command::new("git").arg("-C").arg(root.path())
-            .args(["init", "-q"]).status().unwrap();
+        let git = Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["init", "-q"])
+            .status()
+            .unwrap();
         assert!(git.success());
-        for text in ["/ultraplan fix local files", "please ultraplan fix local files"] {
+        for text in [
+            "/ultraplan fix local files",
+            "please ultraplan fix local files",
+        ] {
             let prompt = sdk_user_prompt(root.path(), text).unwrap().unwrap();
             assert!(prompt.contains("fix local files"), "{text}");
             assert!(prompt.contains("read-only/plan permissions"), "{text}");
@@ -138,17 +147,28 @@ mod tests {
             assert!(prompt.contains("deep local code review"), "{text}");
             assert!(prompt.contains("Do not modify code"), "{text}");
         }
-        assert!(sdk_user_prompt(root.path(), "/ultrareview 42").unwrap().unwrap()
+        assert!(sdk_user_prompt(root.path(), "/ultrareview 42")
+            .unwrap()
+            .unwrap()
             .contains("gh pr diff 42"));
     }
 
     #[test]
     fn sdk_advanced_does_not_execute_quoted_paths_or_unknown_commands() {
         let root = tempfile::tempdir().unwrap();
-        for input in ["/unknown ultraplan work", "/model abc", "`ultraplan`",
-                      "src/ultraplan.tsx", "ultraplan?", "/ultraplan (MCP) foo",
-                      "quoted 'ultrareview' text"] {
-            assert!(sdk_user_prompt(root.path(), input).unwrap().is_none(), "{input}");
+        for input in [
+            "/unknown ultraplan work",
+            "/model abc",
+            "`ultraplan`",
+            "src/ultraplan.tsx",
+            "ultraplan?",
+            "/ultraplan (MCP) foo",
+            "quoted 'ultrareview' text",
+        ] {
+            assert!(
+                sdk_user_prompt(root.path(), input).unwrap().is_none(),
+                "{input}"
+            );
         }
         assert!(sdk_user_prompt(root.path(), "/ultraplan").is_err());
         assert!(sdk_user_prompt(root.path(), "/ultrareview bad").is_err());
