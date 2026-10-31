@@ -1,7 +1,8 @@
 //! Source parity: permissionsLoader.ts, settings/constants.ts and settings/settings.ts.
 //! Paths and policy injection are vendor-neutral; incomplete UI/MDM behavior is audited.
 use crate::permission_rules::{
-    format_rule, parse_rule, valid_stored_rule, Behavior, RuleSetting, RuleValue,
+    format_rule, parse_rule, valid_stored_rule, validate_rule_input, Behavior, RuleSetting,
+    RuleValue,
 };
 use anyhow::{bail, Context, Result};
 use fs2::FileExt;
@@ -707,6 +708,11 @@ impl SettingsPaths {
         behavior: Behavior,
         rules: &[RuleValue],
     ) -> Result<bool> {
+        // Enforce the same rule syntax for all persistence callers (CLI, SDK
+        // and UI). Invalid settings must never be written and later ignored.
+        for rule in rules {
+            validate_rule_input(&format_rule(rule))?;
+        }
         self.edit(source, |settings| {
             if rules.is_empty() {
                 return Ok(false);
