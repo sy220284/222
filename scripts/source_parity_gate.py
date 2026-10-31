@@ -14,7 +14,8 @@ from pathlib import Path
 import re
 import sys
 from zipfile import ZipFile, BadZipFile
-from port_workbench import AuditError, check_evidence, current_counts, read_matrix, rust_targets
+from port_workbench import (AuditError, check_evidence, current_counts, read_matrix,
+                            rust_targets, verify_github_test_evidence)
 
 DIMENSIONS = ("inputs", "outputs", "logic", "errors", "permissions", "state",
               "ordering", "cancellation", "persistence", "side_effects",
@@ -210,7 +211,7 @@ def load_contracts(path: Path):
     return items, errors
 
 
-def verify_contracts(rows, baseline, contracts):
+def verify_contracts(rows, baseline, contracts, repo=None, evidence_records=None, verify_ci=False):
     eligible = {p for p,r in rows.items() if r["status"] != "excluded"}
     errors = ["无合同的原版路径: " + p for p in sorted(eligible - set(contracts))]
     errors += ["无效范围的合同: " + p for p in sorted(set(contracts) - eligible)]
@@ -250,6 +251,27 @@ def verify_contracts(rows, baseline, contracts):
                 for dim in DIMENSIONS:
                     if not f.get(dim):
                         issues.append("行为维度缺失: " + dim)
+        if repo is not None and isinstance(targets, list):
+            fingerprints = item.get("rust_source_sha256", {})
+            if not isinstance(fingerprints, dict):
+                issues.append("Rust 当前文件哈希证据缺失")
+                fingerprints = {}
+            for target in targets:
+                if not isinstance(target, str) or target not in rust_targets(row["rust_mapping"]):
+                    continue
+                rust_file = repo / target
+                if not rust_file.is_file():
+                    issues.append("Rust 生产文件不存在: " + target)
+                elif fingerprints.get(target) != hashlib.sha256(rust_file.read_bytes()).hexdigest():
+                    issues.append("Rust 文件已发生变化，需重新进行行为验收: " + target)
+        if evidence_records is not None:
+            proof = evidence_records.get(path)
+            if proof is None:
+                issues.append("缺少唯一验收证据 PORT_EVIDENCE: " + path)
+            elif any(proof.get(key) != item.get(key) for key in (
+                "source_sha256","tested_commit","workflow_run_id","test_names"
+            )):
+                issues.append("逐函数契约与 CI 验收证据不一致")
         coverage = item.get("full_source_review")
         if not isinstance(coverage, dict) or (
             coverage.get("lines_reviewed") != row["source_lines"] or
@@ -259,6 +281,11 @@ def verify_contracts(rows, baseline, contracts):
         for key in ("reviewer", "reviewed_at", "tested_commit", "workflow_run_id"):
             if not item.get(key):
                 issues.append("缺少验收凭据: " + key)
+        if not issues and verify_ci:
+            try:
+                verify_github_test_evidence(item)
+            except AuditError as exc:
+                issues.append("CI 记录核验失败: " + str(exc))
         if issues:
             errors.append(path + ": " + ", ".join(dict.fromkeys(issues)))
         else:
@@ -279,7 +306,21 @@ def run(args):
             raise AuditError("冻结源码路径不完整")
         evidence = check_evidence(args.repo, rows, strict=args.command == "gate")
         contracts, errors = load_contracts(args.repo / CONTRACTS)
-        problem, stats = verify_contracts(rows, baseline, contracts)
+        evidence_records = {}
+        proof_file = args.repo / "docs/PORT_EVIDENCE.jsonl"
+        if proof_file.is_file():
+            for line in proof_file.read_text(encoding="utf8").splitlines():
+                if line.strip():
+                    proof = json.loads(line)
+                    key = proof["path"]
+                    if key in evidence_records:
+                        raise AuditError("验收证据重复: " + key)
+                    evidence_records[key] = proof
+        problem, stats = verify_contracts(
+            rows, baseline, contracts,
+            repo=args.repo, evidence_records=evidence_records,
+            verify_ci=args.command == "gate"
+        )
         errors.extend(problem)
         original_checked = False
         spec_checked = False
