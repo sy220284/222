@@ -219,9 +219,12 @@ fn retry_after_delay(header: &str) -> Option<Duration> {
 /// the exponential base at 32 seconds. Accept a supplied random sample to
 /// make the source's retry range verifiable without probabilistic tests.
 fn model_backoff_millis(attempt: usize, sample: u64) -> u64 {
-    let base = if attempt >= 6 { 32_000 } else { 500u64 << attempt };
-    let jitter = (u128::from(sample) * u128::from(base)
-        / ((u128::from(u64::MAX) + 1) * 4)) as u64;
+    let base = if attempt >= 6 {
+        32_000
+    } else {
+        500u64 << attempt
+    };
+    let jitter = (u128::from(sample) * u128::from(base) / ((u128::from(u64::MAX) + 1) * 4)) as u64;
     base + jitter
 }
 
