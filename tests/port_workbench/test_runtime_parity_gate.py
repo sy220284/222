@@ -88,6 +88,17 @@ class DynamicParityTest(unittest.TestCase):
         self.assertEqual(report["passed"], 0)
         self.assertTrue(any("真实执行路径未覆盖" in item["reason"] for item in report["mismatches"]))
 
+    def test_non_utf8_adapter_output_is_rejected_without_crashing_gate(self):
+        self.case("binary","normal")
+        (self.repo/"produce.py").write_text(
+            "import sys\nsys.stdout.buffer.write(b'\\xff\\xfe')\n",
+            encoding="utf8",
+        )
+        report = self.run_gate()
+        self.assertFalse(report["pass"])
+        self.assertEqual(report["passed"], 0)
+        self.assertTrue(any("UnicodeDecodeError" in item["reason"] for item in report["mismatches"]))
+
     def test_unknown_function_cannot_claim_coverage(self):
         self.case("ok","normal")
         file = self.cases/"ok.json"
