@@ -7837,3 +7837,80 @@ fn simple_mode_restricts_live_provider_tool_catalog_and_background_schema() {
         .pointer("/function/parameters/properties/command")
         .is_some());
 }
+
+#[test]
+fn source_and_legacy_agent_tool_names_dispatch_real_subagent() {
+    for tool_name in ["Agent", "Task"] {
+        let root = tempfile::tempdir().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let tool_name = tool_name.to_owned();
+        let server_tool_name = tool_name.clone();
+        let server = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for step in 0..3 {
+                let mut stream = accept_before(&listener, Duration::from_secs(15));
+                requests.push(read_request(&mut stream));
+                let message = match step {
+                    0 => json!({"role":"assistant","content":null,"tool_calls":[{
+                        "id":"source-agent-1","type":"function","function":{
+                            "name":server_tool_name,"arguments":json!({
+                                "prompt":"Child source-compatible task",
+                                "subagent_type":"explore"
+                            }).to_string()
+                        }
+                    }]}),
+                    1 => json!({"role":"assistant","content":"Child source-compatible result"}),
+                    _ => json!({"role":"assistant","content":"Parent source-compatible result"}),
+                };
+                let finish = if step == 0 { "tool_calls" } else { "stop" };
+                let body =
+                    json!({"choices":[{"message":message,"finish_reason":finish}]}).to_string();
+                write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                stream.flush().unwrap();
+            }
+            requests
+        });
+        let config = root.path().join("model.json");
+        fs::write(
+            &config,
+            json!({"default_provider":"mock","providers":[{
+                "id":"mock","kind":"openai-compatible","model":"unit",
+                "base_url":format!("http://{address}/v1"),"stream":false
+            }]})
+            .to_string(),
+        )
+        .unwrap();
+        let output = binary()
+            .args([
+                "--workspace",
+                root.path().to_str().unwrap(),
+                "--approval",
+                "full",
+                "run",
+                "Delegate a source-compatible task",
+            ])
+            .env("ATLAS_CONFIG", &config)
+            .output()
+            .unwrap();
+        let requests = server.join().unwrap();
+        assert!(
+            output.status.success(),
+            "{tool_name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("Parent source-compatible result"),
+            "{tool_name}"
+        );
+        assert_eq!(requests.len(), 3, "{tool_name}");
+        assert!(
+            requests[1].contains("Child source-compatible task"),
+            "{tool_name}"
+        );
+        assert!(
+            requests[2].contains("Child source-compatible result"),
+            "{tool_name}"
+        );
+    }
+}
