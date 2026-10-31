@@ -68,13 +68,40 @@ fn ensure_private_directory(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Reject symlinked local task storage on both reads and writes. The task
+/// directory belongs to the invoking workspace and holds private prompts;
+/// an external symlink must never let get/list read another directory.
+fn validate_storage_path(root: &Path, path: &Path) -> Result<()> {
+    let workspace = root.canonicalize().context("Cannot resolve task workspace")?;
+    let relative = path.strip_prefix(root).context("Task storage path is outside workspace")?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        current.push(component);
+        match fs::symlink_metadata(&current) {
+            Ok(meta) => {
+                if meta.file_type().is_symlink() {
+                    bail!("Task storage path contains a symlink: {}", current.display());
+                }
+                let actual = current.canonicalize()
+                    .with_context(|| format!("Cannot verify task storage: {}", current.display()))?;
+                if !actual.starts_with(&workspace) {
+                    bail!("Task storage escapes workspace: {}", current.display());
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(error) => return Err(error)
+                .with_context(|| format!("Cannot inspect task storage: {}", current.display())),
+        }
+    }
+    Ok(())
+}
+
 fn load(root: &Path) -> Result<Store> {
     let primary = store_path(root);
-    let path = if primary.exists() {
-        primary
-    } else {
-        legacy_path(root)
-    };
+    let legacy = legacy_path(root);
+    validate_storage_path(root, &primary)?;
+    validate_storage_path(root, &legacy)?;
+    let path = if primary.exists() { primary } else { legacy };
     if !path.exists() {
         return Ok(BTreeMap::new());
     }
@@ -110,6 +137,8 @@ impl Drop for TriggerFileLock {
 
 fn mutate_store(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> Result<()> {
     let dir = store_dir(root);
+    validate_storage_path(root, &store_path(root))?;
+    validate_storage_path(root, &legacy_path(root))?;
     fs::create_dir_all(&dir).context("Cannot create local trigger directory")?;
     let workspace = root
         .canonicalize()
@@ -362,6 +391,34 @@ mod tests {
         );
         assert!(!legacy_path(root.path()).exists());
         assert!(store_path(root.path()).exists());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn neither_read_nor_write_follows_symlinked_local_task_directory() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join(".atlas")).unwrap();
+        fs::write(outside.path().join("tasks.json"), "{\\\"private\\\":{\\\"prompt\\\":\\\"outside\\\"}}").unwrap();
+        symlink(outside.path(), store_dir(root.path())).unwrap();
+        assert!(list(root.path()).is_err());
+        assert!(get(root.path(), "private").is_err());
+        assert!(set(root.path(), "new", "safe").is_err());
+        assert!(!outside.path().join("lock").exists());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn legacy_file_symlink_is_rejected_before_read_or_migration() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join(".atlas")).unwrap();
+        let private = outside.path().join("private.json");
+        fs::write(&private, r#"{\\\"hidden\\\":{\\\"prompt\\\":\\\"secret\\\"}}"#).unwrap();
+        symlink(&private, legacy_path(root.path())).unwrap();
+        assert!(list(root.path()).is_err());
+        assert!(change(root.path(), "hidden", "wrong").is_err());
+        assert!(private.exists());
     }
     #[test]
     fn invalid_store_data_is_an_error_not_an_empty_success() {
