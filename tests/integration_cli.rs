@@ -7211,7 +7211,8 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
                     {"type":"image","source":{"type":"base64",
                         "media_type":"image/jpeg","data":"/9j/AA=="}},
                     {"type":"text","text":"/ultraplan repair local UI"}],
-                "file_attachments":[{"path":"note.txt"}]
+                "file_attachments":[{"path":"note.txt"}],
+                "seedPlan":"Existing approved plan should be refined"
             })
         )
         .unwrap();
@@ -7269,6 +7270,8 @@ fn sdk_local_advanced_command_preserves_images_and_skip_slash_behavior() {
         .unwrap()
         .to_string();
     assert!(first_user.contains("repair local UI"), "{first_user}");
+    assert!(first_user.contains("Existing approved plan should be refined"),
+        "{first_user}");
     assert!(
         first_user.contains("detailed implementation plan"),
         "{first_user}"
