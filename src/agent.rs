@@ -4384,9 +4384,9 @@ impl Agent {
                 system.push_str(&format!("{}\n", dir.display()));
             }
         }
-        if let Some(mcp) = &self.mcp {
-            system.push_str(&mcp.instruction_context());
-        }
+        // MCP instructions are a live snapshot. A server can reconnect,
+        // change its initialization instructions, or be removed between
+        // model steps in this same user turn. Do not freeze them here.
         let executor = ToolExecutor::new(self.root.clone(), self.approval, self.interactive)
             .with_session_id(self.session.id.to_string())
             .with_history_message_id(history_message_id)
@@ -4534,6 +4534,12 @@ impl Agent {
             let (visible_tools, deferred_names) =
                 crate::tool_search::visible_catalog(&complete_catalog, &selected_mcp_tools);
             let mut request_system = system.clone();
+            // Refresh the MCP instructions after tool rediscovery, for every
+            // model step. This also revokes instructions from removed servers.
+            // The MCP manager quotes these lower-trust strings as data.
+            if let Some(mcp) = &self.mcp {
+                request_system.push_str(&mcp.instruction_context());
+            }
             if !deferred_names.is_empty() {
                 request_system.push_str("\n<available-deferred-tools>\n");
                 for name in deferred_names {
