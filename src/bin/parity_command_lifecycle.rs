@@ -2,7 +2,7 @@
 #[path = "../command_lifecycle.rs"]
 mod command_lifecycle;
 
-use command_lifecycle::{set_command_lifecycle_listener, notify_command_lifecycle, State};
+use command_lifecycle::{notify_command_lifecycle, set_command_lifecycle_listener, State};
 use std::io::{self, Read};
 use std::sync::{Arc, Mutex};
 
@@ -33,7 +33,10 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
         match op {
             "set" => {
                 used_set = true;
-                let listener = step["listener"].as_str().ok_or("missing listener tag")?.to_owned();
+                let listener = step["listener"]
+                    .as_str()
+                    .ok_or("missing listener tag")?
+                    .to_owned();
                 let sink = Arc::clone(&events);
                 set_command_lifecycle_listener(Some(Arc::new(move |uuid, state| {
                     let state_label = match state {

@@ -5,10 +5,8 @@ use std::process::{Command, Stdio};
 
 #[test]
 fn original_lifecycle_listener_replacement_matches_real_rust_process() {
-    let fixture: Value = serde_json::from_str(include_str!(
-        "source_parity/golden/command_lifecycle.json"
-    ))
-    .unwrap();
+    let fixture: Value =
+        serde_json::from_str(include_str!("source_parity/golden/command_lifecycle.json")).unwrap();
     let example = fixture["cases"]
         .as_array()
         .unwrap()
