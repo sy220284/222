@@ -235,7 +235,7 @@ def original_source_files(archive: Path):
     return files
 
 
-def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False):
+def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False, spec_archive: Path | None = None):
     """Create a reproducible, source-backed review queue for EVERY eligible path.
 
     Never grant review_status=verified, copy historical approval or invent behavior.
@@ -248,6 +248,13 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
     if problems:
         raise AuditError("原版 ZIP 核验失败: " + "; ".join(problems[:8]))
     files = original_source_files(archive)
+    spec_by_source = {}
+    if spec_archive is not None:
+        spec_errors, spec_stats = verify_spec_archive(spec_archive, baseline)
+        if spec_errors:
+            raise AuditError("详细规格校验失败: " + "; ".join(spec_errors[:8]))
+        for entry in spec_stats["function_queue"]:
+            spec_by_source.setdefault(entry["source"], []).append(entry)
     old, parse_errors = load_contracts(repo / CONTRACTS)
     if parse_errors:
         raise AuditError("现有行为契约损坏: " + "; ".join(parse_errors[:8]))
@@ -260,6 +267,7 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
         existing = old.get(path)
         source = files[path]
         declarations = source_declarations(source)
+        spec_candidates = spec_by_source.get(path, [])
         if existing is not None and existing.get("review_status") == "verified":
             indexed.append(existing)
             continue
@@ -268,6 +276,7 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
             "source_sha256": baseline["source_hashes"][path],
             "source_lines": row["source_lines"],
             "source_declarations": declarations,
+            "spec_declarations": spec_candidates,
             "index_method": "static-declaration-candidates/v1",
             "review_status": "pending",
             "rust_entrypoints": rust_targets(row["rust_mapping"]),
@@ -408,7 +417,8 @@ def run(args):
                 raise AuditError("建立源码索引必须提供真实原版 ZIP")
             stats = index_contracts(args.repo, args.source_archive,
                                     output / "SOURCE_CONTRACT_INDEX.jsonl",
-                                    write=args.write_contracts)
+                                    write=args.write_contracts,
+                                    spec_archive=getattr(args, "spec_archive", None))
             print(json.dumps(stats, ensure_ascii=False))
             return 0
         except (AuditError, OSError, ValueError, BadZipFile, UnicodeDecodeError) as exc:
