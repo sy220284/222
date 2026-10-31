@@ -61,3 +61,12 @@
 | 02 交互输入、消息队列与命令分派 | `messageQueueManager.ts::isSlashCommand`；`processUserInput.ts::processUserInputBase` | `message_queue.rs::Command::is_slash/is_input_slash`；`sdk_queue.rs::control` | 队列判定允许前导空格 trim；SDK 模型输入必须从第一个字符开始为斜杠，图文末文本块亦遵循，含非文本尾块/跳过标记测试，`4c00fcc` | 命令注册及弹窗、粘贴/@附件、SDK全模式 |
 | 02 交互输入、消息队列与命令分派 | `cli/print.ts::drainCommandQueue` | `sdk_queue.rs::latest_batch_checkpoint_uuid`、`Agent::ask_with_blocks_for_message` | 批量提示合并采用最后一条存在的有效 UUID，保留历史别名，新增多条及缺失 UUID 回归，`4c00fcc` | 完整 SDK 同步/异步回放、取消、端到端恢复 |
 | 03 会话主循环、流式事件与工具往返 | `services/tools/toolOrchestration.ts::runToolsConcurrently`；`utils/generators.ts::all` | `agent.rs::finalize_readonly_result`；`tool_orchestration.rs::completed_as_ready` | 并行只读工具谁先完成先回填独立 tool ID、PostToolUse 警告、会话记录与持久化，增加受控快慢完成先后测试，`f9502fd`、`c15b8e` | 真实并发 Hook/MCP/TUI 集成、Stop Hook/异常/取消/重启、工具上下文修改 |
+
+### 工具参数校验与发现链的源码级补充（第03文档跨第08、14、23模块）
+
+| 原版代码位置 | Rust生产路径 | 已提交行为与回归 | 仍未闭环 |
+|---|---|---|---|
+| `toolOrchestration.ts::partitionToolCalls` | `tool_orchestration.rs::partition_tool_calls` → `tools.rs::validate_call_before_hooks` | 原版工具 `inputSchema.safeParse` 先于并发判定，畸形JSON及 schema 失败隔离为单独调用，`9c30863` | 所有工具参数 schema、MCP与安全审批全矩阵 |
+| `WebFetchTool.ts::inputSchema` | `tools.rs::validate_web_tool_input_schema` → `webfetch.rs::definition` | 严格对象、URL/提示必填、未知字段拒绝；模型公开参数同步，`c5c8c41`、`07556b1` | 网页摘要、权限动态交互、错误协议 |
+| `WebSearchTool.ts::inputSchema` | `tools.rs::validate_web_tool_input_schema` → `websearch.rs::definition` | 查询长度按UTF16、严格可选域名数组、拒绝额外字段及移除原版不存在的limit；`c5c8c41`、`07556b1`、`4da27a0` | 原版搜索返回结构、来源引用、全平台联网链 |
+| `ToolSearchTool.ts::inputSchema/searchToolsWithKeywords` | `tools.rs`、`tool_search.rs::execute` | 数字类型支持小数、零、负值并按JS slice裁切；保留原始 query；`2588957` | 延迟工具完整原版tool_reference与动态同步行为 |
