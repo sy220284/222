@@ -155,7 +155,8 @@ mod tests {
                     "trigger_id":(action != "list").then_some("manual"),
                     "body":(action == "create" || action == "update")
                         .then_some(serde_json::json!({"prompt":"run locally"})),
-                }).to_string(),
+                })
+                .to_string(),
             },
         };
         // Remove absent optional fields: the tool's strict schema rejects
