@@ -2,7 +2,10 @@
 //! Tokio task-local storage gives each concurrent in-process teammate its
 //! own identity. It never relies on global environment variables.
 use std::future::Future;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tokio::sync::Notify;
 
 #[derive(Clone, Debug, Default)]
@@ -136,22 +139,34 @@ mod tests {
     #[tokio::test]
     async fn nested_scope_restores_parent_even_when_child_returns_error() {
         let outer = create_teammate_context(
-            "outer@team".into(), "outer".into(), "team".into(),
-            None, false, "parent".into(), AbortController::new(),
+            "outer@team".into(),
+            "outer".into(),
+            "team".into(),
+            None,
+            false,
+            "parent".into(),
+            AbortController::new(),
         );
         let inner = create_teammate_context(
-            "inner@team".into(), "inner".into(), "team".into(),
-            None, true, "parent".into(), AbortController::new(),
+            "inner@team".into(),
+            "inner".into(),
+            "team".into(),
+            None,
+            true,
+            "parent".into(),
+            AbortController::new(),
         );
         run_with_teammate_context(outer, async {
             assert_eq!(get_teammate_context().unwrap().agent_name, "outer");
             let error: Result<(), &str> = run_with_teammate_context(inner, async {
                 assert_eq!(get_teammate_context().unwrap().agent_name, "inner");
                 Err("stopped")
-            }).await;
+            })
+            .await;
             assert_eq!(error.unwrap_err(), "stopped");
             assert_eq!(get_teammate_context().unwrap().agent_name, "outer");
-        }).await;
+        })
+        .await;
     }
 
     #[tokio::test]

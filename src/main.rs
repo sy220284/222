@@ -145,13 +145,13 @@ mod statusline_command_source;
 mod streaming_tool_executor;
 mod subprocess_env;
 mod task;
-mod teammate_context;
 mod task_events;
 mod task_graph;
 mod task_guards;
 mod task_output_format;
 mod team_mailbox;
 mod team_registry;
+mod teammate_context;
 mod terminal_input;
 mod terminal_launcher;
 #[cfg(test)]
