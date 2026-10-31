@@ -591,7 +591,14 @@ pub async fn execute(args: &Value) -> Result<String> {
 pub fn definition() -> Value {
     json!({"type":"function","function":{
         "name":"web_fetch",
-        "description":"Fetch public web text (HTML converted to plain text). This only runs after explicit network approval. Model applies the prompt to fetched content.",
+        "description":format!(
+                "{}\nThis implementation converts HTML to plain text, restricts URLs to public addresses and requires explicit network permission. The model applies the prompt to the returned text.",
+                crate::source_prompt_catalog::literal(
+                    "src/tools/WebFetchTool/prompt.ts",
+                    "\n- Fetches content from a specified URL",
+                )
+                .expect("Original WebFetch tool prompt must exist")
+            ),
         "parameters":{"type":"object","properties":{
             "url":{"type":"string"},"prompt":{"type":"string"}
         },"required":["url","prompt"]}
