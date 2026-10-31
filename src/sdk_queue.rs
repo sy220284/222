@@ -557,9 +557,12 @@ mod notification_tests {
         assert!(!help.contains("/ant-trace"));
         assert_eq!(local_headless_help(&json!("/unknown")), None);
         assert_eq!(local_headless_help(&json!("hi /help")), None);
-        assert_eq!(local_headless_help(&json!([{
-            "type":"image","source":{"type":"base64","data":"abc"}
-        },{"type":"text","text":"/help"}])), Some(help));
+        assert_eq!(
+            local_headless_help(&json!([{
+                "type":"image","source":{"type":"base64","data":"abc"}
+            },{"type":"text","text":"/help"}])),
+            Some(help)
+        );
     }
 
     #[test]
