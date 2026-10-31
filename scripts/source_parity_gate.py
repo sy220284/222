@@ -14,6 +14,8 @@ import re
 from pathlib import Path
 import sys
 from zipfile import ZipFile, BadZipFile
+from source_function_index import (build_function_index, validate_contract_coverage,
+                                   write_queue)
 from port_workbench import (AuditError, check_evidence, current_counts, read_matrix,
                             rust_targets, verify_github_test_evidence)
 
@@ -249,12 +251,17 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
         raise AuditError("原版 ZIP 核验失败: " + "; ".join(problems[:8]))
     files = original_source_files(archive)
     spec_by_source = {}
+    function_by_source = {}
     if spec_archive is not None:
         spec_errors, spec_stats = verify_spec_archive(spec_archive, baseline)
         if spec_errors:
             raise AuditError("详细规格校验失败: " + "; ".join(spec_errors[:8]))
         for entry in spec_stats["function_queue"]:
             spec_by_source.setdefault(entry["source"], []).append(entry)
+        function_by_source, semantic_errors, semantic_stats = build_function_index(
+            spec_archive, baseline["source_hashes"])
+        if semantic_errors:
+            raise AuditError("原版函数语义索引损坏: " + "; ".join(semantic_errors[:8]))
     old, parse_errors = load_contracts(repo / CONTRACTS)
     if parse_errors:
         raise AuditError("现有行为契约损坏: " + "; ".join(parse_errors[:8]))
@@ -277,6 +284,7 @@ def index_contracts(repo: Path, archive: Path, output: Path, write: bool = False
             "source_lines": row["source_lines"],
             "source_declarations": declarations,
             "spec_declarations": spec_candidates,
+            "source_function_nodes": function_by_source.get(path, []),
             "index_method": "static-declaration-candidates/v1",
             "review_status": "pending",
             "rust_entrypoints": rust_targets(row["rust_mapping"]),
@@ -522,6 +530,26 @@ def run(args):
             spec_checked = not spec_problems
         elif args.command == "gate":
             errors.append("缺少完整源码功能规格 ZIP，拒绝放行")
+        source_function_stats = {}
+        if spec_checked:
+            function_index, semantic_errors, source_function_stats = build_function_index(
+                args.spec_archive, baseline["source_hashes"])
+            errors.extend(semantic_errors)
+            write_queue(function_index, output/"SOURCE_SEMANTIC_FUNCTIONS.jsonl")
+            expected_paths = {p for p,r in rows.items() if r["status"] != "excluded"}
+            coverage_gaps = validate_contract_coverage(function_index, contracts, expected_paths)
+            source_function_stats["unreviewed_source_paths"] = len(coverage_gaps)
+            source_function_stats["missing_function_reviews"] = sum(
+                row["missing"] for row in coverage_gaps)
+            source_function_stats["extra_function_reviews"] = sum(
+                row["extra"] for row in coverage_gaps)
+            if coverage_gaps:
+                (output/"SOURCE_FUNCTION_COVERAGE_GAPS.json").write_text(
+                    json.dumps(coverage_gaps,ensure_ascii=False,indent=2)+"\n",
+                    encoding="utf-8")
+            if args.command == "gate" and coverage_gaps:
+                errors.append(
+                    f"有 {len(coverage_gaps)} 条原版路径的真实 AST 函数逐一验收记录缺失")
         if original_checked and spec_checked:
             line_problems, line_stats = verify_source_lines(args.source_archive, args.spec_archive)
             errors.extend(line_problems)
@@ -536,7 +564,8 @@ def run(args):
         result = {"schema":"source-parity/v1", "pass":passed, "mode":args.command,
                   "original_checked":original_checked,"spec_checked":spec_checked,
                   "line_checked":line_checked,"line_stats":line_stats,
-                  "spec_stats":spec_stats,"progress":progress,
+                  "spec_stats":spec_stats,"source_function_stats":source_function_stats,
+                  "progress":progress,
                   "evidence":evidence,"contracts":stats,
                   "error_count":len(errors),"errors":errors}
         (output/"SOURCE_PARITY.json").write_text(
