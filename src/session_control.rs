@@ -172,12 +172,14 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             .map(|t| t.as_millis())
             .unwrap_or(0);
         let title = crate::portable_ui_runtime::strip_display_tags(&title);
+        // Read before moving owned title/tag/branch fields into the listing.
+        let message_count = session.transcript_messages().len();
         entries.push(SessionItem {
             id,
             title,
             tag: session.tag,
             git_branch: session.git_branch,
-            messages: session.transcript_messages().len(),
+            messages: message_count,
             modified_ms,
         });
     }
