@@ -2418,7 +2418,7 @@ mod tests {
     #[tokio::test]
     async fn local_trigger_tool_dispatch_requires_permission_and_returns_real_saved_task() {
         let root = tempfile::tempdir().unwrap();
-        let executor = executor(root.path(), Approval::Full);
+        let runner = executor(root.path(), Approval::Full);
         let payload = json!({"action":"create","trigger_id":"check","body":{"prompt":"Inspect the workspace"}});
         let call = ToolCall {
             id: "local-create".into(), kind: "function".into(),
@@ -2427,8 +2427,8 @@ mod tests {
             }
         };
         assert!(crate::local_triggers::model_definition()["function"]["name"] == "LocalTrigger");
-        executor.validate_call_before_hooks(&call).unwrap();
-        let output = executor.execute(&call).await;
+        runner.validate_call_before_hooks(&call).unwrap();
+        let output = runner.execute(&call).await;
         assert!(output.contains("saved"), "{output}");
         assert_eq!(crate::local_triggers::get(root.path(), "check").unwrap(), "Inspect the workspace");
         let run = ToolCall {
@@ -2438,7 +2438,7 @@ mod tests {
                 arguments: json!({"action":"run","trigger_id":"check"}).to_string()
             }
         };
-        let result = executor.execute(&run).await;
+        let result = runner.execute(&run).await;
         assert!(result.contains("CURRENT Agent turn"), "{result}");
         let denied = executor(root.path(), Approval::ReadOnly).execute(&run).await;
         assert!(denied.starts_with("ERROR:"), "{denied}");
@@ -2450,7 +2450,7 @@ mod tests {
                    "body":{"prompt":"run tomorrow","schedule":"daily"}}).to_string()
             }
         };
-        assert!(executor.validate_call_before_hooks(&invalid).is_err());
+        assert!(runner.validate_call_before_hooks(&invalid).is_err());
         assert!(crate::local_triggers::get(root.path(), "bad").is_err());
     }
 
