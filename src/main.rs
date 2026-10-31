@@ -3165,19 +3165,25 @@ async fn chat(
 /// Replace the last SDK text block without dropping other text or images.
 fn sdk_replace_last_text(input: &mut multimodal::Input, replacement: String) {
     if let Some(blocks) = input.blocks.as_mut() {
-        if let Some(last_text) = blocks.iter_mut().rev()
+        if let Some(last_text) = blocks
+            .iter_mut()
+            .rev()
             .find(|block| block["type"] == "text")
         {
             last_text["text"] = json!(replacement);
         }
-        input.preview = blocks.iter().map(|block| match block["type"].as_str() {
-            Some("text") => block["text"].as_str().unwrap_or("").to_owned(),
-            Some("image") => format!(
-                "[image: {}]",
-                block["mime_type"].as_str().unwrap_or("unknown")
-            ),
-            _ => String::new(),
-        }).collect::<Vec<_>>().join("\n");
+        input.preview = blocks
+            .iter()
+            .map(|block| match block["type"].as_str() {
+                Some("text") => block["text"].as_str().unwrap_or("").to_owned(),
+                Some("image") => format!(
+                    "[image: {}]",
+                    block["mime_type"].as_str().unwrap_or("unknown")
+                ),
+                _ => String::new(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
     } else {
         input.preview = replacement;
     }
@@ -3488,7 +3494,10 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         })
                     });
                     if let Some(candidate) = candidate {
-                        match local_advanced_workflows::sdk_user_prompt(agent.workspace_root(), candidate) {
+                        match local_advanced_workflows::sdk_user_prompt(
+                            agent.workspace_root(),
+                            candidate,
+                        ) {
                             Ok(Some(expanded)) => {
                                 sdk_replace_last_text(&mut user, expanded);
                                 advanced_plan_turn = true;
@@ -3503,10 +3512,15 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                         if !advanced_plan_turn {
                             if let Some(parsed) = slash_command::parse_slash_command(candidate) {
                                 match expand_user_skill_prompt(
-                                    agent, config, &parsed.command_name,
-                                    &parsed.args, parsed.is_mcp,
+                                    agent,
+                                    config,
+                                    &parsed.command_name,
+                                    &parsed.args,
+                                    parsed.is_mcp,
                                 ) {
-                                    Ok(Some(expanded)) => sdk_replace_last_text(&mut user, expanded),
+                                    Ok(Some(expanded)) => {
+                                        sdk_replace_last_text(&mut user, expanded)
+                                    }
                                     Ok(None) => {}
                                     Err(error) => {
                                         print_json!(json!({"type":"error",
