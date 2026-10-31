@@ -1884,7 +1884,7 @@
 | `src/utils/teleport/gitBundle.ts` | 293 | 9820 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；官方云端 Teleport API；不再跟进，通用本地能力与模型 API 保留 |
 | `src/utils/teleport.tsx` | 1226 | 175779 | 排除：用户取消官方云端和远程专属功能 | — | 按用户要求删除；云端 Teleport 运行界面；不再跟进，通用本地能力与模型 API 保留 |
 | `src/utils/tempfile.ts` | 32 | 1170 | 重写：保持通用行为 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 |
-| `src/utils/terminal.ts` | 132 | 4372 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/terminal.ts` | 132 | 4372 | 重写：保持通用行为 | `src/portable_render_semantics.rs` | 部分实现：已对照原始 terminal.ts 转写折叠规则、4 行特殊展示、超大输出按 UTF-16 预算切片、ANSI 分段与快速换行判断，接入 CLI SourceInspect 并添加行为测试；完整输出消息组件尚待接通 |
 | `src/utils/terminalPanel.ts` | 192 | 6014 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/textHighlighting.ts` | 167 | 4540 | 重写：保持通用行为 | `src/generated_ports/text_input_semantics.rs` | 部分实现：原版字符范围与渲染主要分支已写 Rust；ANSI 全协议、输入 Hook/交互与原版动态调用链待验收 |
 | `src/utils/theme.ts` | 640 | 26830 | 重写：保持通用行为 | `src/generated_ports/p_0f699233d6b14.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |

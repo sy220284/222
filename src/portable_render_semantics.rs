@@ -279,6 +279,101 @@ pub fn optimize_patches(diff: &[Value]) -> Vec<Value> {
     result
 }
 
+/// src/utils/terminal.ts — terminal tool-result folding.
+const TERMINAL_MAX_VISIBLE_LINES: usize = 3;
+const TERMINAL_RESULT_PADDING: usize = 10;
+
+/// The upstream fast predicate deliberately ignores width wrapping. It
+/// requires four line breaks with nonempty content after the last break;
+/// a trailing newline by itself does not mean a fifth visible line.
+pub fn is_output_line_truncated(content: &str) -> bool {
+    let mut from = 0;
+    for _ in 0..=TERMINAL_MAX_VISIBLE_LINES {
+        let Some(index) = content[from..].find('\n') else {
+            return false;
+        };
+        from += index + 1;
+    }
+    from < content.len()
+}
+
+/// Original wrapText/renderTruncatedContent: fold after three visual rows,
+/// except that a single extra row is always shown. UTF-16 accounting matches
+/// JavaScript string length while ANSI-aware slicing preserves text styles.
+/// Only a short prefix is wrapped, even for very large tool results.
+pub fn render_truncated_content(
+    content: &str,
+    terminal_width: i64,
+    suppress_expand_hint: bool,
+) -> String {
+    let text = content.trim_end();
+    if text.is_empty() {
+        return String::new();
+    }
+    let wrap_width = terminal_width.saturating_sub(TERMINAL_RESULT_PADDING as i64).max(10) as usize;
+    let max_units = TERMINAL_MAX_VISIBLE_LINES
+        .saturating_mul(wrap_width)
+        .saturating_mul(4);
+    let total_units = text.encode_utf16().count();
+    let pre_truncated = total_units > max_units;
+    let excerpt = if pre_truncated {
+        let mut bytes = 0;
+        let mut units = 0;
+        for (offset, ch) in text.char_indices() {
+            if units + ch.len_utf16() > max_units {
+                break;
+            }
+            bytes = offset + ch.len_utf8();
+            units += ch.len_utf16();
+        }
+        &text[..bytes]
+    } else {
+        text
+    };
+    let mut lines = Vec::new();
+    for line in excerpt.split('\n') {
+        let cells = crate::generated_ports::p_6aa0ce358bf6a::string_width(line);
+        if cells <= wrap_width {
+            lines.push(line.trim_end().to_owned());
+        } else {
+            let mut pos = 0;
+            while pos < cells {
+                let part = crate::generated_ports::p_6aa0ce358bf6a::slice_ansi(
+                    line,
+                    pos,
+                    Some(pos.saturating_add(wrap_width)),
+                );
+                lines.push(part.trim_end().to_owned());
+                pos += wrap_width;
+            }
+        }
+    }
+    let remaining = lines.len().saturating_sub(TERMINAL_MAX_VISIBLE_LINES);
+    let shown = if remaining == 1 {
+        TERMINAL_MAX_VISIBLE_LINES + 1
+    } else {
+        TERMINAL_MAX_VISIBLE_LINES
+    };
+    let above = lines[..lines.len().min(shown)].join("\n");
+    let above = above.trim_end();
+    let remaining = if remaining == 1 { 0 } else { remaining };
+    let estimated_remaining = if pre_truncated {
+        let estimated_rows = total_units.div_ceil(wrap_width);
+        remaining.max(estimated_rows.saturating_sub(TERMINAL_MAX_VISIBLE_LINES))
+    } else {
+        remaining
+    };
+    if estimated_remaining == 0 {
+        return above.to_owned();
+    }
+    let hint = if suppress_expand_hint {
+        String::new()
+    } else {
+        " (ctrl+o to expand)".to_owned()
+    };
+    format!("{above}\n… +{estimated_remaining} lines{hint}")
+}
+
 pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
     let first = args.first().unwrap_or(&Value::Null);
     match (source, export) {
@@ -289,6 +384,16 @@ pub fn inspect(source: &str, export: &str, args: &[Value]) -> Option<Value> {
             Some(json!(collapse_hook_summaries(first.as_array()?)))
         }
         ("src/ink/optimizer.ts", "optimize") => Some(json!(optimize_patches(first.as_array()?))),
+        ("src/utils/terminal.ts", "renderTruncatedContent") => Some(json!(
+            render_truncated_content(
+                first.as_str()?,
+                args.get(1)?.as_i64()?,
+                args.get(2).and_then(Value::as_bool).unwrap_or(false),
+            )
+        )),
+        ("src/utils/terminal.ts", "isOutputLineTruncated") => {
+            Some(json!(is_output_line_truncated(first.as_str()?)))
+        }
         ("src/ink/measure-text.ts", "default") => {
             let mut cache = LineWidthCache::default();
             Some(measure_text(
@@ -313,6 +418,7 @@ pub fn exports(source: &str) -> Option<&'static [&'static str]> {
         "src/utils/collapseTeammateShutdowns.ts" => Some(&["collapseTeammateShutdowns"]),
         "src/utils/collapseHookSummaries.ts" => Some(&["collapseHookSummaries"]),
         "src/ink/optimizer.ts" => Some(&["optimize"]),
+        "src/utils/terminal.ts" => Some(&["renderTruncatedContent", "isOutputLineTruncated"]),
         "src/ink/measure-text.ts" => Some(&["default"]),
         "src/ink/tabstops.ts" => Some(&["expandTabs"]),
         "src/ink/termio/esc.ts" => Some(&["parseEsc"]),
@@ -323,6 +429,28 @@ pub fn exports(source: &str) -> Option<&'static [&'static str]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn original_terminal_fold_shows_one_extra_line_and_bounds_large_output() {
+        assert_eq!(render_truncated_content("one\n", 80, true), "one");
+        assert_eq!(render_truncated_content("one\ntwo\nthree\nfour", 80, true),
+            "one\ntwo\nthree\nfour");
+        assert_eq!(render_truncated_content("one\ntwo\nthree\nfour\nfive", 80, true),
+            "one\ntwo\nthree\n… +2 lines");
+        assert_eq!(render_truncated_content(" ", 80, false), "");
+        assert!(!is_output_line_truncated("one\ntwo\nthree\nfour"));
+        assert!(is_output_line_truncated("one\ntwo\nthree\nfour\nfive"));
+        assert!(!is_output_line_truncated("one\ntwo\nthree\nfour\n"));
+        let giant = "abcdef".repeat(30_000);
+        let preview = render_truncated_content(&giant, 80, true);
+        assert!(preview.len() < 1500);
+        assert!(preview.contains("… +"));
+        assert_eq!(inspect("src/utils/terminal.ts", "isOutputLineTruncated",
+            &[json!("a\nb\nc\nd\ne")]), Some(json!(true)));
+        assert_eq!(inspect("src/utils/terminal.ts", "renderTruncatedContent",
+            &[json!("a\nb\nc\nd\ne"), json!(80), json!(true)]),
+            Some(json!("a\nb\nc\n… +2 lines")));
+    }
 
     #[test]
     fn source_ink_optimizer_preserves_patch_order_and_terminal_style_transitions() {
