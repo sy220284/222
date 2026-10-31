@@ -69,6 +69,6 @@ python3 scripts/source_diff_gate.py --repo . \
 
 原版静态索引已核对 1,902 个第一方文件、513,237 行、20,788 个函数/方法及 1,212 个独立导出值，另有 17 个纯文件级单元和 4 个 vendor 单元，共 22,021 个定位对象。它们是核查范围，不能当作已通过的功能测试数。
 
-当前已登记两组原版黄金回归：`src/utils/slashCommandParsing.ts` 的 15 例（包含 U+0085 空白语义差异），以及 `src/utils/jsonRead.ts` 的 11 例（前导 BOM、双 BOM、空值、NUL、Unicode、尾部 BOM 等）。两组均使用原版 TypeScript 真实运行结果，纳入数据驱动 Rust 生产适配器回归。其他路径在新测试体系中仍需逐项沉淀黄金用例、补齐真实 Rust 功能链并验收。新增测试体系不自动升级任何路径的迁移状态。
+当前已登记三组原版黄金回归：`src/utils/slashCommandParsing.ts` 的 15 例（包含 U+0085 空白语义差异），以及 `src/utils/jsonRead.ts` 的 11 例（前导 BOM、双 BOM、空值、NUL、Unicode、尾部 BOM 等）。再加入 `src/utils/xml.ts` 的 18 例，覆盖同一文件两个不同导出函数及其内部调用链。三组均按原版 TypeScript 真实运行行为编制，纳入数据驱动 Rust 生产适配器回归。其他路径在新测试体系中仍需逐项沉淀黄金用例、补齐真实 Rust 功能链并验收。新增测试体系不自动升级任何路径的迁移状态。
 
 仓库管理员仍须在 main Ruleset/分支保护中把完整验收和 Rust 测试设为必需状态并验证执行。工作流失败本身不足以证明服务器强制阻止合并。
