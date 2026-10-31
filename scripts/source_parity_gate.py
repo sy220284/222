@@ -583,7 +583,8 @@ def run(args):
                    "结果：" + ("通过" if passed else "未通过"),
                    "原版 ZIP 重新验证：" + ("是" if original_checked else "否"),
                    "已验收：" + str(progress["accepted"]) + "/" + str(progress["eligible"]),
-                   "源码底稿：" + str(stats["indexed"])+"/"+str(stats["required"]),
+                   "源码路径登记：" + str(stats["recorded"])+"/"+str(stats["required"]),
+                   "原版逐函数索引：" + str(stats["indexed"])+"/"+str(stats["required"]),
                    "完整逐函数契约：" + str(stats["fully_evidenced"])+"/"+str(stats["required"]),
                    "", "## 缺口"]
         summary += ["- "+e for e in errors[:100]]
