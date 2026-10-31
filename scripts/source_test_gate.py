@@ -165,6 +165,17 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
             not {"normal","edge"}.issubset(differential_kinds) or
             not set(differential_kinds).issubset(accepted_kinds)):
             errors.append(path + ": 源码职责差异场景未登记（正常与边界强制）")
+        driver = record.get("original_driver")
+        if driver is not None:
+            if (not isinstance(driver, str) or
+                not driver.startswith("scripts/source_parity_drivers/") or
+                not driver.endswith(".mjs")):
+                errors.append(path + ": 原版状态测试脚本必须位于受审的私有复验脚本目录")
+            else:
+                try:
+                    _safe_file(repo, driver)
+                except ValueError as exc:
+                    errors.append(path + ": " + str(exc))
         golden = record.get("golden")
         if not isinstance(golden, str):
             errors.append(path + ": 缺少原版预期结果固化文件")
@@ -208,7 +219,7 @@ def inspect(repo: Path, rows: dict, hashes: dict, entries: list, legacy: list,
                         default_export = fixture.get("export")
                         for case in fixture["cases"]:
                             symbol = case.get("export", default_export)
-                            if (not isinstance(symbol, str) or
+                            if driver is None and (not isinstance(symbol, str) or
                                 not re.fullmatch(r"[A-Za-z_$][A-Za-z_0-9$]*", symbol)):
                                 errors.append(path + ": 黄金场景缺少有效的原版导出函数名")
                             case_ids = case.get("source_ids", source_ids if len(source_ids)==1 else [])
@@ -318,8 +329,10 @@ def verify_original(repo: Path, source: Path, entries: list, hashes: dict):
             not re.fullmatch(r"[A-Za-z_$][A-Za-z_0-9$]*", export)):
             errors.append(path + ": 原版默认执行入口名称无效")
             continue
-        # The replay bridge is fixed, and user-controlled paths are passed as
-        # argv rather than interpolated into executable JavaScript.
+        # The original-side driver, when present, is versioned and reviewed.
+        # It imports the actual original from a separate contributor workspace.
+        # Plain pure functions use the restricted, fixed inline bridge.
+        driver = record.get("original_driver")
         bridge = """
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
@@ -335,10 +348,15 @@ for (const item of cases) {
 }
 process.stdout.write(JSON.stringify(outputs));
 """
+        if driver:
+            command = ["node", "--experimental-strip-types", "--no-warnings",
+                       str(_safe_file(repo, driver)), str(file)]
+        else:
+            command = ["node", "--experimental-strip-types", "--no-warnings",
+                       "--input-type=module", "--eval", bridge, str(file), export]
         try:
             process = subprocess.run(
-                ["node", "--experimental-strip-types", "--no-warnings",
-                 "--input-type=module", "--eval", bridge, str(file), export],
+                command,
                 input=json.dumps(fixture["cases"], ensure_ascii=False),
                 capture_output=True, text=True, encoding="utf-8", timeout=30,
                 cwd=root, check=False, env={"PATH":__import__("os").environ.get("PATH",""),
