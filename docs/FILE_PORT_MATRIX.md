@@ -1606,7 +1606,7 @@
 | `src/utils/markdownConfigLoader.ts` | 601 | 21312 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcp/dateTimeParser.ts` | 122 | 4322 | 重写：保持通用行为 | 待定 | 未迁移 |
 | `src/utils/mcp/elicitationValidation.ts` | 337 | 9384 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/mcpInstructionsDelta.ts` | 131 | 4752 | 重写：保持通用行为 | `src/mcp_instructions_delta.rs / src/mcp.rs` | 部分实现：手工移植服务端/客户端指令合并、历史增删重放、离线撤销、重连差量、按名称排序，真实 MCP 管理器和进程初始化测试已接通；会话附件持久化和动态注入仍待等价 |
+| `src/utils/mcpInstructionsDelta.ts` | 131 | 4752 | 重写：保持通用行为 | `src/mcp_instructions_delta.rs / src/mcp.rs / src/session.rs / src/agent.rs` | 部分实现：手工移植服务端/客户端指令合并、增删重放、断开/重连差量，接入真实 MCP 管理器与 Agent 回合，增删历史会话持久化及恢复；原版指令附件的模型历史呈现和动态客户端说明仍待等价验收 |
 | `src/utils/mcpOutputStorage.ts` | 190 | 7086 | 重写：保持通用行为 | `src/mcp_output_storage.rs / src/mcp.rs / src/mcp_prompt.rs / src/webfetch.rs` | 部分实现：共享 MIME 检测与扩展名、原子完整保存、大小回执和大输出顺序阅读指引，接通 MCP 工具大文本、MCP prompt 二进制附件和 WebFetch。真实 HTTP 混合大小写 PDF、完整大文本保存和目录越界回归通过；MCP 工具全部二进制内容转换、schema 透传和多模态超限仍待等价 |
 | `src/utils/mcpValidation.ts` | 209 | 6300 | 重写：保持通用行为 | `src/generated_ports/p_6287d1dbedede.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 |
 | `src/utils/mcpWebSocketTransport.ts` | 201 | 6052 | 重写：保持通用行为 | 待定 | 未迁移 |
@@ -1866,7 +1866,7 @@
 | `src/utils/teamDiscovery.ts` | 82 | 2323 | 重写：保持通用行为 | `src/generated_ports/p_e19d4c01601c8.rs`| 部分实现：团队状态汇总（running/idle 计数排除隐藏成员）、成员富字段解析（agentType/model/prompt/color/idleSince/tmuxPaneId/cwd/worktreePath/isHidden/backendType/mode）、无效 pane 后端置空、isPaneBackend 白名单（tmux、iterm2）、缺文件返回 None，附 4 测试；原版 readTeamFile 的跨进程锁由 team_registry 端口承担，本桩自读团队 JSON|
 | `src/utils/teamMemoryOps.ts` | 89 | 2471 | 重写：保持通用行为 | `src/generated_ports/p_0b4548f3115ca.rs`| 部分实现：团队记忆计数摘要构建（read/search/write 三类、单复数、active/recalled 动词时态）、isTeamMemFile 路径形状判定（目录前缀+进程级开关），附 5 测试；memdir/teamMemPaths 全量（sanitizePathKey 注入防护/realpath/lstat，292 行）待独立迁移记依赖差异，实验 flag 名按隐私门禁要求省略|
 | `src/utils/teammate.ts` | 293 | 9206 | 重写：保持通用行为 | 待定 | 未迁移 |
-| `src/utils/teammateContext.ts` | 97 | 3161 | 重写：保持通用行为 | 待定 | 未迁移 |
+| `src/utils/teammateContext.ts` | 97 | 3161 | 重写：保持通用行为 | `src/teammate_context.rs / src/agent.rs` | 部分实现：手工重写 Tokio 任务级队友身份上下文、创建/读取/作用域隔离和取消通知，接入真实团队并发执行入口；已添加并发隔离/嵌套恢复/取消测试，队友完整生命周期、所有身份读取链路仍待源码级对照验收 |
 | `src/utils/teammateMailbox.ts` | 1184 | 33420 | 重写：保持通用行为 | `src/team_mailbox.rs / src/team_registry.rs / src/agent.rs` | 部分实现：持久邮箱、并发锁、未读/条件已读、关停/计划请求与回执、模式设置通知；请求关联、故障重试、来源校验；权限/沙箱审批与其他通知的完整分发、原版异常语义未等价 |
 | `src/utils/telemetry/betaSessionTracing.ts` | 492 | 15843 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
 | `src/utils/telemetry/bigqueryExporter.ts` | 253 | 7806 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
