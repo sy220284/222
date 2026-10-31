@@ -2753,19 +2753,18 @@ impl Agent {
     pub fn set_model_prices(&mut self, prices: &[ModelPrice]) {
         self.model_prices = prices.to_vec();
     }
-    /// Shared tail of a concurrency-safe tool execution: PostToolUse hook,
-    /// warning surface, blocking injection and hook-context attachment. Runs
-    /// on the shared agent reference inside the read-only batch, mirroring
-    /// the serial path's post-hook stage for actual executions only.
+    /// Complete a read-only tool without borrowing the mutable Agent. This
+    /// lets each concurrent tool_result enter the durable transcript as soon
+    /// as its own tool and PostToolUse hook complete (source: generators.all).
     async fn finalize_readonly_result(
-        &self,
+        hooks: &HookRunner,
+        hook_input: serde_json::Value,
         call: &ToolCall,
         raw_result: String,
         pre_contexts: Vec<String>,
-    ) -> String {
-        let (post, mut result): (crate::hooks::HookOutcome, String) = match self
-            .hooks
-            .after_tool_with_context(call, &raw_result, self.tool_hook_input())
+    ) -> (String, Vec<String>) {
+        let (post, mut result): (crate::hooks::HookOutcome, String) = match hooks
+            .after_tool_with_context(call, &raw_result, hook_input)
             .await
         {
             Ok(outcome) => (outcome, raw_result),
@@ -2776,16 +2775,6 @@ impl Agent {
                 ),
             ),
         };
-        for warning in &post.non_blocking_errors {
-            eprintln!("{warning}");
-            self.emit(json!({
-                "type":"hook_warning",
-                "hook_event_name":"PostToolUse",
-                "tool_use_id":call.id,
-                "message":warning,
-                "session_id":self.session.id,
-            }));
-        }
         if let Some(reason) = post.blocking_reason {
             result.push_str(&format!(
                 "\nPostToolUse hook blocked continuation: {reason}"
@@ -2794,7 +2783,7 @@ impl Agent {
         for context in pre_contexts {
             result.push_str(&format!("\n{context}"));
         }
-        result
+        (result, post.non_blocking_errors)
     }
 
     /// `snapshotOutputTokensForTurn` — record the cumulative output-token
@@ -5297,8 +5286,9 @@ impl Agent {
                         // serially on the agent (fast, keeps stdin approval
                         // ordered); the executor call and PostToolUse hook run
                         // concurrently up to the original concurrency cap.
-                        // Results are matched back in block order so every
-                        // tool id keeps a contiguous, ordered tool_result.
+                        // Completion events are yielded as each tool finishes,
+                        // including its own tool_use_id; a slow read must not
+                        // hold back another completed result.
                         let mut prepared: Vec<(ToolCall, Option<String>, Vec<String>)> = Vec::new();
                         for mut call in safe_batch {
                             let label: Option<&str> = None;
@@ -5402,34 +5392,47 @@ impl Agent {
                             prepared.push((call, skip_reason, pre_contexts));
                         }
                         let cap = crate::tool_orchestration::max_tool_use_concurrency();
-                        let finished: Vec<(ToolCall, String, Instant)> =
-                            futures::stream::iter(prepared.into_iter().map(
-                                |(call, skip_reason, pre_contexts)| {
-                                    let agent = &*self;
-                                    let executor = &executor;
-                                    async move {
-                                        let tool_started = Instant::now();
-                                        let result = match skip_reason {
-                                            Some(reason) => reason,
-                                            None => {
-                                                let raw = executor.execute(&call).await;
-                                                agent
-                                                    .finalize_readonly_result(
-                                                        &call,
-                                                        raw,
-                                                        pre_contexts,
-                                                    )
-                                                    .await
-                                            }
-                                        };
-                                        (call, result, tool_started)
-                                    }
-                                },
-                            ))
-                            .buffered(cap)
-                            .collect::<Vec<_>>()
-                            .await;
-                        for (call, result, tool_started) in finished {
+                        let read_only_hooks = self.hooks.clone();
+                        let hook_input = self.tool_hook_input();
+                        let mut completed = futures::stream::iter(prepared.into_iter().map(
+                            |(call, skip_reason, pre_contexts)| {
+                                let executor = &executor;
+                                let hooks = &read_only_hooks;
+                                let hook_input = hook_input.clone();
+                                async move {
+                                    let tool_started = Instant::now();
+                                    let (result, warnings) = match skip_reason {
+                                        Some(reason) => (reason, Vec::new()),
+                                        None => {
+                                            let raw = executor.execute(&call).await;
+                                            Self::finalize_readonly_result(
+                                                hooks,
+                                                hook_input,
+                                                &call,
+                                                raw,
+                                                pre_contexts,
+                                            )
+                                            .await
+                                        }
+                                    };
+                                    (call, result, warnings, tool_started)
+                                }
+                            },
+                        ))
+                        .buffer_unordered(cap);
+                        while let Some((call, result, warnings, tool_started)) =
+                            completed.next().await
+                        {
+                            for warning in warnings {
+                                eprintln!("{warning}");
+                                self.emit(json!({
+                                    "type":"hook_warning",
+                                    "hook_event_name":"PostToolUse",
+                                    "tool_use_id":call.id,
+                                    "message":warning,
+                                    "session_id":self.session.id,
+                                }));
+                            }
                             self.session.cost.add_tool_duration(tool_started.elapsed());
                             let (added, removed) = self.file_metrics.counts();
                             self.session.cost.set_changed_lines(added, removed);
