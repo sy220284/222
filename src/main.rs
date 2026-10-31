@@ -18,9 +18,9 @@ mod config;
 mod context_usage;
 mod control_message_compat;
 mod conversation_context;
-mod cross_project_resume;
 mod copy_response;
 mod cost;
+mod cross_project_resume;
 mod custom_multi_select_source;
 mod custom_select_exports;
 mod custom_select_input_source;
@@ -2823,15 +2823,17 @@ async fn chat(
             // display a shell-safe invocation to resume it locally.
             if let Some(spec) = query.strip_prefix("--project ") {
                 let external = (|| -> Result<(std::path::PathBuf, &str)> {
-                    let (path, selector) = spec.split_once(" -- ").context(
-                        "Usage: /resume --project PROJECT_PATH -- SESSION_ID",
-                    )?;
+                    let (path, selector) = spec
+                        .split_once(" -- ")
+                        .context("Usage: /resume --project PROJECT_PATH -- SESSION_ID")?;
                     if path.trim().is_empty() || selector.trim().is_empty() {
                         bail!("Project path and session selector are required");
                     }
                     let root = std::path::Path::new(path.trim())
                         .canonicalize()
-                        .with_context(|| format!("Project directory unavailable: {}", path.trim()))?;
+                        .with_context(|| {
+                            format!("Project directory unavailable: {}", path.trim())
+                        })?;
                     if !root.is_dir() {
                         bail!("Project must be a directory");
                     }
@@ -2842,10 +2844,9 @@ async fn chat(
                         query = selector;
                     }
                     Ok((project, selector)) => {
-                        let worktrees = cross_project_resume::active_worktree_paths(
-                            agent.workspace_root(),
-                        )
-                        .await;
+                        let worktrees =
+                            cross_project_resume::active_worktree_paths(agent.workspace_root())
+                                .await;
                         let worktrees = match worktrees {
                             Ok(paths) => paths,
                             Err(error) => {
@@ -2854,19 +2855,30 @@ async fn chat(
                             }
                         };
                         let location = cross_project_resume::check_cross_project_resume(
-                            agent.workspace_root(), Some(&project), true, &worktrees, selector,
+                            agent.workspace_root(),
+                            Some(&project),
+                            true,
+                            &worktrees,
+                            selector,
                         );
                         match location {
-                            cross_project_resume::ResumeLocation::AnotherProject { command, .. } => {
+                            cross_project_resume::ResumeLocation::AnotherProject {
+                                command,
+                                ..
+                            } => {
                                 println!("Resume in the other project using: {command}");
                             }
-                            cross_project_resume::ResumeLocation::SameRepositoryWorktree { .. } => {
-                                println!("Resume in that worktree using: {}",
-                                    cross_project_resume::resume_command(&project, selector));
+                            cross_project_resume::ResumeLocation::SameRepositoryWorktree {
+                                ..
+                            } => {
+                                println!(
+                                    "Resume in that worktree using: {}",
+                                    cross_project_resume::resume_command(&project, selector)
+                                );
                             }
-                            cross_project_resume::ResumeLocation::Current => unreachable!(
-                                "Different canonical project path was validated above"
-                            ),
+                            cross_project_resume::ResumeLocation::Current => {
+                                unreachable!("Different canonical project path was validated above")
+                            }
                         }
                         continue;
                     }
