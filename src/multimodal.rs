@@ -130,23 +130,27 @@ pub fn validate_images_for_api(messages: &[crate::protocol::Message]) -> Result<
             }
         }
     }
+    let max_size = crate::display_format::format_file_size(MAX_IMAGE_DATA as f64);
     match oversized.as_slice() {
         [] => Ok(()),
-        [(index, size)] => bail!(
-            "Image base64 size ({} bytes) exceeds API limit ({} bytes) for image {index}. Please resize the image before sending.",
-            size,
-            MAX_IMAGE_DATA
+        [(_, size)] => bail!(
+            "Image base64 size ({}) exceeds API limit ({max_size}). Please resize the image before sending.",
+            crate::display_format::format_file_size(*size as f64),
         ),
         _ => {
             let details = oversized
                 .iter()
-                .map(|(index, size)| format!("Image {index}: {size} bytes"))
+                .map(|(index, size)| {
+                    format!(
+                        "Image {index}: {}",
+                        crate::display_format::format_file_size(*size as f64)
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             bail!(
-                "{} images exceed the API limit ({} bytes): {details}. Please resize these images before sending.",
+                "{} images exceed the API limit ({max_size}): {details}. Please resize these images before sending.",
                 oversized.len(),
-                MAX_IMAGE_DATA
             )
         }
     }
