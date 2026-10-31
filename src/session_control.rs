@@ -177,7 +177,7 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             title,
             tag: session.tag,
             git_branch: session.git_branch,
-            messages: session.archived_messages.len() + session.messages.len(),
+            messages: session.transcript_messages().len(),
             modified_ms,
         });
     }
@@ -606,6 +606,29 @@ pub fn export_saved(root: &Path, id: &str, path: Option<&str>) -> Result<PathBuf
 mod tests {
     use super::*;
     use crate::protocol::{FunctionCall, ToolCall};
+    #[test]
+    fn session_listing_uses_full_history_count_after_partial_compaction() {
+        let root = tempfile::tempdir().unwrap();
+        let mut s = Session::fresh();
+        s.summary = Some("Summary:\nEarlier context".into());
+        s.summary_insert_at = Some(0);
+        s.transcript_snapshot = Some(vec![
+            Message::text("user", "earlier"),
+            Message::text("assistant", "earlier reply"),
+            Message::text("user", "summarized"),
+        ]);
+        s.messages = vec![
+            Message::text("user", "retained"),
+            Message::text("user", "new"),
+        ];
+        s.transcript_active_offset = 1;
+        s.save(root.path()).unwrap();
+        let items = list(root.path()).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].messages, s.transcript_messages().len());
+        assert_eq!(items[0].messages, 5);
+    }
+
     #[test]
     fn transcript_export_includes_precompact_history_in_original_order() {
         let mut session = Session::fresh();

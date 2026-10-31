@@ -22,7 +22,7 @@
 | `src/utils/systemPrompt.ts` 优先级和角色选择 | `Agent::ask_with_blocks` | 内置和项目角色有真实接线；所有覆盖策略和功能门控尚未等价 |
 | `src/tools/AgentTool/built-in/*` 角色指令 | `role_instructions` 与委派/团队调用 | 探索、规划、验收、Worker 已接入；可用工具的强制只读隔离仍按工具执行器权限单独验收 |
 | `src/tools/*/prompt.ts` 工具描述 | `src/tools.rs::definitions`、其余各工具定义 | 文件/Git/Shell/Skills 12 个描述已实质补齐，其他工具需逐项核验 |
-| `src/services/compact/prompt.ts` | `compact_source_prompts.rs`、`compact_prompt`、`Agent::compact_history` | 三套原版模板已录入；普通压缩固定 BASE，Hook 指令合并及摘要格式化按原版；`getCompactUserSummaryMessage` 通过 `Session::model_messages` 加入真实 user 角色，历史归档与摘要原子持久化，普通请求、侧问答与上下文统计复用。分段 UP_TO/from 与边界重链仍待验收 |
+| `src/services/compact/prompt.ts` | `compact_source_prompts.rs`、`compact_prompt`、`Agent::compact_history` | 三套原版模板已录入真实 Agent 模型链；普通 compact 固定 BASE；from 保留前缀并发送完整模型上下文归纳后段，up_to 仅发送待归纳前缀、保留后缀并剔除旧摘要；终端 /compact from/up_to INDEX 和 SDK compact 控制可用，消息索引为零基。摘要与保留位置、历史快照原子保存，边界 UUID 重链/附件恢复及 TUI 消息选择器仍待对齐 |
 | `src/services/SessionMemory/prompts.ts` | `src/memory.rs / src/memory_extraction.rs` | 记忆检索及 system 注入运行，新增显式开启的本地增量提取与安全文件更新；原版 fork-agent 模式与 Dream 整理待验收 |
 | `src/constants/outputStyles.ts` | `output_style_label`、`output_style_instructions`、`available_output_styles`、SDK initialize | 三种内置风格已恢复原版名称和详细指令，SDK 实际列表支持用户级及项目级 .atlas/output-styles（项目优先）；原版插件/管理级目录、完整设置交互仍待对齐 |
 | `src/utils/messages.ts` 与新版来源区分 | 主提示词、`sdk_queue::notification_model_context`、SDK 事件结构 | 后台任务通知作为低信任状态数据接入；其余来源标记/调度权限仍需补齐 |

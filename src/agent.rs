@@ -6079,6 +6079,31 @@ mod tests {
                 .count(),
             1
         );
+        let before_failure = Session::load(dir.path(), &id).unwrap();
+        agent.provider = Box::new(FailingPartialModel);
+        let error = agent
+            .compact_history_partial(
+                1,
+                crate::compact_source_prompts::CompactDirection::UpTo,
+                None,
+            )
+            .await;
+        assert!(error.is_err());
+        let after_failure = Session::load(dir.path(), &id).unwrap();
+        assert_eq!(before_failure.model_messages(), after_failure.model_messages());
+        assert_eq!(
+            before_failure.transcript_messages(),
+            after_failure.transcript_messages()
+        );
+    }
+
+    struct FailingPartialModel;
+
+    #[async_trait::async_trait]
+    impl ModelProvider for FailingPartialModel {
+        async fn complete(&self, _request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
+            Err(anyhow::anyhow!("Injected compaction model failure"))
+        }
     }
 
     struct PartialSummaryModel {

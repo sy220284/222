@@ -1,5 +1,7 @@
 ## 2026-10-31：未迁移公共文件与输出链首批接入
 
+> **2026-10-31 分段压缩对照推进（当前 HEAD 待CI复核）：** 原版 `src/services/compact/compact.ts::partialCompactConversation` 的方向选择与用户消息范围已进入 `Agent::compact_history_partial`，`from` 保留选定索引前的上下文并以完整会话进行总结，`up_to` 只总结之前消息并保留之后的消息；过滤旧摘要，模板沿用原版 PARTIAL 与 UP_TO 文本。新会话状态通过 `Session.summary_insert_at`、`transcript_snapshot` 与 `transcript_active_offset` 原子写盘，保留无损归档、终端搜索/导出/会话列表/语义检索/统计及会话恢复；CLI 增加 `/compact from INDEX`、`/compact up_to INDEX` 零基索引入口，SDK `compact` 控制可传 `direction,pivotIndex`。新增两方向模型请求、无效边界、磁盘恢复及失败不变更历史回归。保留缺口：原版 UUID compact_boundary 和保留片段亲缘重链、TUI 图形选段、文件/技能及代理附件恢复、其他同源 Hook/缓存时序；本次不提升已验收原路径数量。
+
 > **2026-10-31 续推：会话压缩后历史不丢失。** 对照 2.1.88 `services/compact/prompt.ts::getCompactUserSummaryMessage`、`services/compact/compact.ts` 与历史导出/搜索入口，已在 PR #6 将压缩摘要从 system 重复注入改为 `Session::model_messages()` 的单条合成 user 消息；普通 Agent、SDK、上下文估算与 /btw 共享该入口。压缩之前的原始 `Message` 迁入 `Session.archived_messages`，随摘要原子保存，后续重复压缩不重抄旧消息；`Session::transcript_messages()` 统一提供归档+当前消息给导出、CLI/交互全文搜索、语义会话检索、会话命名和统计。增加恢复后真实模型请求、历史顺序和清理回归测试。**待验：最新 HEAD 的全量 Linux/Windows CI；from/up_to 分段压缩、边界重链及 UI 行为尚未移植完毕。已验收路径数量不增加。**
 
 

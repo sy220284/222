@@ -1039,13 +1039,13 @@
 | `src/services/claudeAiLimitsHook.ts` | 24 | 515 | 排除：官方订阅权益与专属云端服务 | — | 按用户要求删除；Claude.ai 订阅限额 Hook；不再跟进 |
 | `src/services/compact/apiMicrocompact.ts` | 154 | 4996 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/autoCompact.ts` | 352 | 12905 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/services/compact/compact.ts` | 1706 | 60814 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现：普通压缩按原版 BASE 模板无工具摘要；摘要通过独立用户消息进入实际模型请求，保留历史原文于 Session.archived_messages，摘要及归档同次原子保存；会话恢复、SDK/CLI 模型请求、搜索、导出、语义检索及统计共用完整历史入口；PostCompact 失败不回滚。原版完整 compact_boundary、from/up_to 分段选择及保留片段重链、附件恢复和全量会话时序仍待等价 |
+| `src/services/compact/compact.ts` | 1706 | 60814 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现：原版普通 BASE 与手动 from/up_to 两种分段请求均进入真实 Agent、终端与 SDK 控制调用链；区分前缀/后缀保留和摘要模型范围，摘要位置与历史时间快照原子保存，搜索、导出、会话列表及统计读取完整记录；PreCompact 与 PostCompact 保留运行。仍缺原版 compact_boundary UUID 亲缘链重连、附件恢复、完整 TUI 选择器与所有恢复时序等价证据 |
 | `src/services/compact/compactWarningHook.ts` | 17 | 568 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/compactWarningState.ts` | 19 | 693 | 重写：压缩与记忆 | `src/runtime_contracts.rs / src/agent.rs` | 部分实现：默认 false、压缩抑制、清除与重复赋值不通知已验证；证据 runtime_contracts::tests::compact_warning_state_and_subscriptions；原始 createStore 的同步 Set 订阅、派发时增删监听及跨 Agent/UI 调用时序尚未等价 |
 | `src/services/compact/grouping.ts` | 64 | 2794 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/microCompact.ts` | 531 | 19544 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/postCompactCleanup.ts` | 78 | 3778 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：BASE/PARTIAL/UP_TO 原版模板及无工具约束已连接；普通 compact 始终用 BASE，Hook 指令顺序和 formatCompactSummary 按源码等价，getCompactUserSummaryMessage 原版继续会话文本已进入用户消息（非 system）。完整 from/up_to 消息范围选择、可见交互及归档边界重链仍待验收 |
+| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：BASE/PARTIAL/UP_TO 三套原版模板及无工具约束进入真实模型请求；from 使用完整模型上下文归纳后段，up_to 只发送前缀归纳；Hook 指令、用户反馈顺序及 formatCompactSummary、用户摘要消息来源均已对照；缺原版边界 UUID 重链、完整交互及分段恢复附件等价验收 |
 | `src/services/compact/sessionMemoryCompact.ts` | 631 | 21058 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/timeBasedMCConfig.ts` | 44 | 1766 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/diagnosticTracking.ts` | 398 | 12315 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |
