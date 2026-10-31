@@ -1045,7 +1045,7 @@
 | `src/services/compact/grouping.ts` | 64 | 2794 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/microCompact.ts` | 531 | 19544 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/postCompactCleanup.ts` | 78 | 3778 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
-| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：BASE 4220、PARTIAL 2362、UP_TO 2326 原版完整正文及双分析指令已逐字落 Rust；无旧摘要使用BASE、有旧摘要使用PARTIAL，并保留无工具约束和summary解析；UP_TO独立原版分支与消息前缀切割仍待连通 |
+| `src/services/compact/prompt.ts` | 375 | 16278 | 重写：压缩与记忆 | `src/prompt_runtime.rs / src/agent.rs / src/session.rs` | 部分实现：原版 BASE/PARTIAL/UP_TO 三套正文及分析指令已接入 Rust 模板；普通 compact 无论旧摘要是否存在均用 BASE，用户及 PreCompact Hook 指令按原版顺序合并，原版无工具结尾置于最后；formatCompactSummary 已去分析段、保留外部文本及 Summary 标题。显式分段选择、UP_TO 消息前缀切割和恢复状态仍待生产链验收 |
 | `src/services/compact/sessionMemoryCompact.ts` | 631 | 21058 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/compact/timeBasedMCConfig.ts` | 44 | 1766 | 重写：压缩与记忆 | `src/agent.rs / src/session.rs` | 部分实现，长期记忆未等价 |
 | `src/services/diagnosticTracking.ts` | 398 | 12315 | 排除：行为／环境遥测回传 | — | 按用户要求删除；不重写外发通道 |

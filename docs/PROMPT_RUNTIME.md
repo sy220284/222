@@ -22,7 +22,7 @@
 | `src/utils/systemPrompt.ts` 优先级和角色选择 | `Agent::ask_with_blocks` | 内置和项目角色有真实接线；所有覆盖策略和功能门控尚未等价 |
 | `src/tools/AgentTool/built-in/*` 角色指令 | `role_instructions` 与委派/团队调用 | 探索、规划、验收、Worker 已接入；可用工具的强制只读隔离仍按工具执行器权限单独验收 |
 | `src/tools/*/prompt.ts` 工具描述 | `src/tools.rs::definitions`、其余各工具定义 | 文件/Git/Shell/Skills 12 个描述已实质补齐，其他工具需逐项核验 |
-| `src/services/compact/prompt.ts` | `compact_prompt` 与 `Agent::compact_history` | 独立模型摘要请求已接线，原版各种压缩模式未完全移植 |
+| `src/services/compact/prompt.ts` | `compact_source_prompts.rs`、`compact_prompt`、`Agent::compact_history` | 原版三套模板均已录入；普通压缩固定 BASE，PreCompact 自定义和 Hook 指令先合并、最后追加原版无工具结尾；原版 `formatCompactSummary` 已源码级修复。显式 UP_TO/from 分段执行及恢复状态仍待验收 |
 | `src/services/SessionMemory/prompts.ts` | `src/memory.rs / src/memory_extraction.rs` | 记忆检索及 system 注入运行，新增显式开启的本地增量提取与安全文件更新；原版 fork-agent 模式与 Dream 整理待验收 |
 | `src/constants/outputStyles.ts` | `output_style_label`、`output_style_instructions`、`available_output_styles`、SDK initialize | 三种内置风格已恢复原版名称和详细指令，SDK 实际列表支持用户级及项目级 .atlas/output-styles（项目优先）；原版插件/管理级目录、完整设置交互仍待对齐 |
 | `src/utils/messages.ts` 与新版来源区分 | 主提示词、`sdk_queue::notification_model_context`、SDK 事件结构 | 后台任务通知作为低信任状态数据接入；其余来源标记/调度权限仍需补齐 |
@@ -80,7 +80,7 @@
 - 原版 Reminders/Hooks 原文也已保存在同模块；为避免把不可信工具结果提权为真正系统指令，Reminders 不直接进运行时 system。保留原文不等于该分支已完全等价。
 - 内置 Explore、Plan、general-purpose：恢复各自 2.1.88 的核心角色提示词正文和只读限制，源品牌替换为 Atlas、工具占位符展开为 Rust 真实工具名，经过 `role_instructions` 加入子 Agent 请求；原版验证 Agent 的完整长文本以及动态条件仍待逐字接入。
 - 搜索工具：`src/search.rs::definitions` 将 Glob/Grep 提示词作为真正的模型函数 description，而非只放进静态生成模块；Grep 模板中的工具名称按实际 `grep_files`、`run_command` 映射，含正则表达式转义。
-- 会话压缩：`src/services/compact/prompt.ts::NO_TOOLS_PREAMBLE` 原文已前置到实际独立摘要请求；`compact_summary_content` 只保存可解析的 `<summary>` 正文，普通文本仍受支持；完整原版 BASE/PARTIAL 长提示词、摘要变体仍待接入。
+- 会话压缩：`NO_TOOLS_PREAMBLE` 和 `NO_TOOLS_TRAILER` 分别位于真实模型请求头尾；采用原版 BASE/PARTIAL/UP_TO 全文模板。`compact_summary_content` 与原版 `formatCompactSummary` 一致：删除第一段 `<analysis>`，将第一段 `<summary>` 替为 `Summary:` 标题，并保留其他可见内容；普通文本与不完整标签按源码规则处理。实际分段消息切割与新旧摘要边界尚未验收。
 - 新增运行路由断言：真实 `system_prompt` 含源动作提示，工具定义内容与源文本对照，角色选择和无工具压缩摘要均有测试。当前不把 120 处“部分实现”擅自提升为“完整等价”。
  
 ## 2026-10-31：原始提示词一次提取和可执行目录
