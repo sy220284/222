@@ -422,10 +422,13 @@ def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
             proof[path] = item
     newly_verified = [p for p,r in rows.items()
                       if r['status']=='verified' and previous[p]!='verified']
+    all_verified = [p for p,r in rows.items() if r['status']=='verified']
     source_hashes = baseline.get('source_hashes', {})
     if set(source_hashes) != set(rows):
         raise AuditError('缺少 1,906 条原版文件 SHA-256 锁定值')
-    for path in newly_verified:
+    # Historic verified rows require the same auditable proof as newly promoted
+    # rows. Otherwise deleting an old JSONL record silently retains acceptance.
+    for path in all_verified:
         item = proof.get(path)
         required = ('source_sha256', 'rust_entrypoints', 'test_names',
                     'tested_commit', 'failure_and_recovery_verified', 'remaining_gaps')
@@ -458,7 +461,7 @@ def check_evidence(repo: Path, rows: dict[str, dict], strict: bool) -> dict:
                 raise AuditError(f'{path}: Rust 测试函数不存在: {test}')
         if not re.fullmatch(r'[0-9a-f]{40}', item['tested_commit']):
             raise AuditError(f'{path}: tested_commit 必须是有效完整提交 SHA')
-        if strict:
+        if strict and path in newly_verified:
             verify_github_test_evidence(item)
     returned = {p for p,r in rows.items() if r['status']=='excluded' and previous[p]!='excluded'}
     approved = approved_removed_paths(repo)
