@@ -4103,6 +4103,18 @@ impl Agent {
     /// user's persisted permission setting. The guard restores the prior
     /// mode even if the future is cancelled or the provider fails.
     pub async fn ask_in_plan_mode(&mut self, prompt: &str) -> Result<String> {
+        self.ask_with_blocks_in_plan_mode(prompt, None, None).await
+    }
+
+    /// SDK advanced review/planning must keep image blocks and the original
+    /// user-message identity while restricting this single request to plan
+    /// permissions. Cancellation drops the guard and restores the caller mode.
+    pub async fn ask_with_blocks_in_plan_mode(
+        &mut self,
+        prompt: &str,
+        blocks: Option<Vec<serde_json::Value>>,
+        message_id: Option<uuid::Uuid>,
+    ) -> Result<String> {
         struct RestoreMode<'a> {
             agent: &'a mut Agent,
             previous: permission_mode::Mode,
@@ -4118,7 +4130,7 @@ impl Agent {
             previous,
         };
         guard.agent.permission_mode = permission_mode::Mode::Plan;
-        guard.agent.ask(prompt).await
+        guard.agent.ask_with_blocks_for_message(prompt, blocks, message_id).await
     }
 
     pub async fn ask(&mut self, prompt: &str) -> Result<String> {
