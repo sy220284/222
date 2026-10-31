@@ -21,7 +21,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let case_id = request["id"].as_str().ok_or("missing golden ID")?;
     let payload = &request["input"]["payload"];
     let values: Vec<i64> = serde_json::from_value(payload["values"].clone())?;
-    let op = payload["operation"]
+    let op = request["input"]["operation"]
         .as_str()
         .ok_or("missing array operation")?;
     let (parsed, source_ids): (serde_json::Value, Vec<&str>) = match op {
