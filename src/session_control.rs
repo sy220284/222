@@ -120,7 +120,7 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
                 continue;
             }
         };
-        let fallback = preview(&session.messages);
+        let fallback = preview(&session.transcript_messages());
         // log.ts:getLogDisplayTitle skips autonomous <tick> prompts and
         // command-only XML. Strip before choosing a fallback, rather than
         // displaying raw markup or an empty session title.
@@ -177,7 +177,7 @@ pub fn list(root: &Path) -> Result<Vec<SessionItem>> {
             title,
             tag: session.tag,
             git_branch: session.git_branch,
-            messages: session.messages.len(),
+            messages: session.archived_messages.len() + session.messages.len(),
             modified_ms,
         });
     }
@@ -263,7 +263,7 @@ pub fn search(root: &Path, query: &str) -> Result<Vec<SessionItem>> {
                         .is_some_and(|s| s.to_lowercase().contains(&query))
                     {
                         Some(5)
-                    } else if searchable_transcript(&session.messages)
+                    } else if searchable_transcript(&session.transcript_messages())
                         .to_lowercase()
                         .contains(&query)
                     {
@@ -420,7 +420,7 @@ fn filename(session: &Session, requested: Option<&str>) -> PathBuf {
         }
         return filename;
     }
-    let label = sanitize_filename(&first_prompt(&session.messages));
+    let label = sanitize_filename(&first_prompt(&session.transcript_messages()));
     // The original export dialog proposes a local-time timestamp before
     // the sanitized first prompt; a UUID-based name is not source-equivalent.
     let timestamp = chrono::Local::now().format("%Y-%m-%d-%H%M%S");

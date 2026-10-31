@@ -160,6 +160,17 @@ impl Session {
         result
     }
 
+    /// Complete local transcript (archived and active) in chronological order.
+    /// Keep this separate from model_messages: old turns must not be resent
+    /// to the model after compaction has replaced them with a summary.
+    pub fn transcript_messages(&self) -> Vec<Message> {
+        let mut history =
+            Vec::with_capacity(self.archived_messages.len() + self.messages.len());
+        history.extend(self.archived_messages.iter().cloned());
+        history.extend(self.messages.iter().cloned());
+        history
+    }
+
     /// Source 2.1.88 places the compacted conversation summary back into
     /// the model transcript as a user message. Keep the persisted session
     /// normalized: the synthetic message is composed once per API request,

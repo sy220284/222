@@ -114,7 +114,8 @@ impl Snapshot {
             }
         }
         let start = session.fork_baseline_messages.unwrap_or(0);
-        let new_messages = session.messages.get(start..).unwrap_or(&[]);
+        let full_transcript = session.transcript_messages();
+        let new_messages = full_transcript.get(start..).unwrap_or(&[]);
         self.recorded_messages += new_messages.len() as u64;
         self.user_messages += new_messages.iter().filter(|m| m.role == "user").count() as u64;
         self.tool_calls += new_messages

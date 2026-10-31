@@ -1219,7 +1219,8 @@ async fn run_cli() -> Result<()> {
             Commands::TranscriptSearch { session_id, query } => {
                 let session = session_control::resolve(&root, session_id)?;
                 for hit in
-                    transcript_search::TranscriptIndex::from_stored(&session.messages).find(query)
+                    transcript_search::TranscriptIndex::from_stored(&session.transcript_messages())
+                        .find(query)
                 {
                     println!("{}  {}  {}", hit.message_index, hit.role, hit.excerpt);
                 }

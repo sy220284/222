@@ -2708,8 +2708,7 @@ impl Agent {
         Ok(matches)
     }
     pub fn search_transcript(&self, query: &str) -> Vec<crate::transcript_search::SearchHit> {
-        let mut transcript = self.session.archived_messages.clone();
-        transcript.extend(self.session.messages.iter().cloned());
+        let transcript = self.session.transcript_messages();
         crate::transcript_search::TranscriptIndex::from_stored(&transcript).find(query)
     }
     pub fn usage(&self) -> crate::protocol::TokenUsage {
