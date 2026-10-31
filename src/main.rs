@@ -214,7 +214,7 @@ struct Cli {
     command: Commands,
 
     /// Source-compatible one-shot prompt: -p "prompt" / --print "prompt".
-    #[arg(short = 'p', long = "print", global = true)]
+    #[arg(short = 'p', long = "print", global = true, num_args = 0..=1, default_missing_value = "-")]
     print: Option<String>,
 
     /// Print plain text, one JSON result, or an ordered JSON event stream.
@@ -600,7 +600,10 @@ fn parse_cli_with_default_chat(
                     | clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
             ) =>
         {
-            args.push(std::ffi::OsString::from("chat"));
+            // Insert the implicit subcommand before global options. Appending
+            // it could be swallowed as the optional value of bare '-p',
+            // leaving a missing subcommand instead of reading stdin.
+            args.insert(1, std::ffi::OsString::from("chat"));
             Cli::try_parse_from(args)
         }
         result => result,
@@ -643,6 +646,14 @@ mod default_chat_cli_tests {
         ]).unwrap();
         let normalized = normalize_print_cli(plain).unwrap();
         assert!(matches!(normalized.command, Commands::Run { prompt } if prompt == "hello"));
+
+        let from_stdin = normalize_print_cli(parse_cli_with_default_chat(vec![
+            "atlas-agent".into(), "-p".into()
+        ]).unwrap()).unwrap();
+        assert!(matches!(
+            from_stdin.command,
+            Commands::Run { prompt } if prompt == "-"
+        ));
 
         let streamed = parse_cli_with_default_chat(vec![
             "atlas-agent".into(), "--print".into(), "hello".into(),
