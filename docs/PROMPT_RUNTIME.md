@@ -73,3 +73,12 @@
 - Rust 运行：`ATLAS_AUTO_DREAM=true` 时，主 Agent 完成一次真实回答后检查本地 `.atlas/sessions` 与 `.atlas/memory/.dream-consolidated`，满足门限后尝试独占锁，向当前 API 模型提交既有记忆和五个近期会话摘录，模型仅返回数据，写入沿用记忆提取的路径与类型校验、原子文件保存。成功才更新时间戳；失败保持可重试。没有新增系统定时任务或独立 Agent。
 - 验证用例：不足五会话不调用模型；达到五会话后运行并刷新时间门；同一天重复调用被抑制；异常 JSON 不推进时间门。
 - 源码差异：原版 forked-agent、工具沙箱、实时状态/取消、共享团队记忆、完整四阶段提示词中的日志检索与删除策略仍需等价；两条原未迁移源路径维持「部分实现」，尚未标记完整验收。
+
+## 2026-10-31：2.1.88 可直接复制的运行提示词实链对齐
+
+- 系统动作安全提示：`src/constants/prompts.ts::getActionsSection` 原版 2832 字符无改写保存在 `src/prompt_runtime.rs::SOURCE_ACTIONS`；`agent.rs::system_prompt_with_dirs` 每次真正拼入请求，在运行时将原厂 `CLAUDE.md` 路径替换成多模型构建的 `AGENTS.md`。用户授权边界和风险确认仍由实际执行器落实。
+- 原版 Reminders/Hooks 原文也已保存在同模块；为避免把不可信工具结果提权为真正系统指令，Reminders 不直接进运行时 system。保留原文不等于该分支已完全等价。
+- 内置 Explore、Plan、general-purpose：恢复各自 2.1.88 的核心角色提示词正文和只读限制，源品牌替换为 Atlas、工具占位符展开为 Rust 真实工具名，经过 `role_instructions` 加入子 Agent 请求；原版验证 Agent 的完整长文本以及动态条件仍待逐字接入。
+- 搜索工具：`src/search.rs::definitions` 将 Glob/Grep 提示词作为真正的模型函数 description，而非只放进静态生成模块；Grep 模板中的工具名称按实际 `grep_files`、`run_command` 映射，含正则表达式转义。
+- 会话压缩：`src/services/compact/prompt.ts::NO_TOOLS_PREAMBLE` 原文已前置到实际独立摘要请求；`compact_summary_content` 只保存可解析的 `<summary>` 正文，普通文本仍受支持；完整原版 BASE/PARTIAL 长提示词、摘要变体仍待接入。
+- 新增运行路由断言：真实 `system_prompt` 含源动作提示，工具定义内容与源文本对照，角色选择和无工具压缩摘要均有测试。当前不把 120 处“部分实现”擅自提升为“完整等价”。
