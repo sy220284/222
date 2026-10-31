@@ -14,6 +14,9 @@ r = json.loads(sys.stdin.read())
 value = r["input"]["value"]
 if os.environ.get("PARITY_SIDE") == "rust" and r["input"].get("diverge"):
     value = value + 1
+if os.environ.get("PARITY_SIDE") == "rust" and r["input"].get("fs_diverge"):
+    from pathlib import Path
+    (Path(os.environ["HOME"])/"changed.txt").write_text("written only by rust")
 out = {
 "schema":"source-rust-observation/v1",
 "case_id":r["id"], "executed_source_ids":["src/f.ts:FunctionDeclaration:1-1:occurrence-1"],
@@ -40,10 +43,10 @@ class DynamicParityTest(unittest.TestCase):
         (self.original/"produce.py").write_text(PRODUCER,encoding="utf8")
         (self.repo/"produce.py").write_text(PRODUCER,encoding="utf8")
 
-    def case(self, name, kind, diverge=False):
+    def case(self, name, kind, diverge=False, fs_diverge=False):
         data = {
             "id":name,"kind":kind,"source_ids":[self.sid],
-            "input":{"value":11 if kind=="edge" else 10,"diverge":diverge},"timeout_seconds":5,
+            "input":{"value":11 if kind=="edge" else 10,"diverge":diverge,"fs_diverge":fs_diverge},"timeout_seconds":5,
             "original":[sys.executable,"{ORIGINAL}/produce.py"],
             "rust":[sys.executable,"{REPO}/produce.py"],
         }
@@ -98,6 +101,19 @@ class DynamicParityTest(unittest.TestCase):
         self.assertFalse(report["pass"])
         self.assertEqual(report["passed"], 0)
         self.assertTrue(any("UnicodeDecodeError" in item["reason"] for item in report["mismatches"]))
+
+    def test_filesystem_side_effects_do_not_depend_on_adapter_claim(self):
+        self.case("disk-change", "normal", fs_diverge=True)
+        report = self.run_gate()
+        self.assertFalse(report["pass"])
+        self.assertEqual(len(report["mismatches"]),1)
+        self.assertIn("filesystem_effects",report["mismatches"][0]["different_fields"])
+
+    def test_unobserved_permission_denial_fails(self):
+        self.case("bad-permission","permission_deny")
+        report=self.run_gate()
+        self.assertFalse(report["pass"])
+        self.assertIn("实际 deny",report["mismatches"][0]["reason"])
 
     def test_unknown_function_cannot_claim_coverage(self):
         self.case("ok","normal")
