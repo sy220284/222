@@ -15,6 +15,7 @@ pub struct CommandDefinition {
     pub immediate: bool,
 }
 const SOURCE_INDEX: &str = r####"add-dir|add-dir|local-jsx||<path>|Add a new working directory
+advisor|advisor|local||<model>|Configure the advisor model
 agents|agents|local-jsx||-|Manage agent configurations
 ant-trace|stub|disabled||-|Disabled internal trace
 autofix-pr|stub|disabled||-|Disabled internal PR autofix
@@ -131,7 +132,6 @@ pub fn commands() -> &'static [CommandDefinition] {
                 // source file in the original distribution.
                 let source_path = match directory {
                     "advisor" => "src/commands/advisor.ts".to_owned(),
-                    "brief" => "src/commands/brief.ts".to_owned(),
                     "ultraplan" => "src/commands/ultraplan.tsx".to_owned(),
                     "ultrareview" => "src/commands/review/ultrareviewCommand.tsx".to_owned(),
                     "trigger" => "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts".to_owned(),
@@ -242,11 +242,10 @@ mod tests {
 
     #[test]
     fn single_file_and_restored_command_source_paths_are_real() {
-        // Source archive: commands/advisor.ts, commands/brief.ts,
+        // Source archive: commands/advisor.ts,
         // commands/ultraplan.tsx and the review/RemoteTrigger tool sources.
         let examples = [
             ("advisor", "src/commands/advisor.ts"),
-            ("brief", "src/commands/brief.ts"),
             ("ultraplan", "src/commands/ultraplan.tsx"),
             ("ultrareview", "src/commands/review/ultrareviewCommand.tsx"),
             ("trigger", "src/tools/RemoteTriggerTool/RemoteTriggerTool.ts"),
@@ -259,7 +258,7 @@ mod tests {
 
     #[test]
     fn registry_and_alias_resolution() {
-        assert_eq!(commands().len(), 72);
+        assert_eq!(commands().len(), 73);
         assert_eq!(commands().iter().filter(|c| c.disabled).count(), 17);
         assert_eq!(lookup("settings").unwrap().name, "config");
         assert_eq!(lookup("add-dir").unwrap().name, "add-dir");
