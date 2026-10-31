@@ -82,21 +82,17 @@ pub fn load_api_key(profile: &ProviderProfile) -> Result<Option<String>> {
     }
     let path = key_store()?.path;
     if !path.exists() {
-        bail!("Provider '{}' requires {name}; run 'atlas-agent models connect {}' or set the environment variable", profile.id, profile.id);
+        // Selecting a brand or opening the UI must work before credentials are provided.
+        // The actual inference request will report the missing credential.
+        return Ok(None);
     }
     let raw = std::fs::read(&path).context("Read local model credentials")?;
     let stored: Value = serde_json::from_slice(&raw).context("Parse local model credentials")?;
-    let key = stored
+    Ok(stored
         .pointer(&format!("/model_api_keys/{}", profile.id))
         .and_then(Value::as_str)
         .filter(|key| !key.trim().is_empty())
-        .with_context(|| {
-            format!(
-                "No API key for {}; run 'atlas-agent models connect {}'",
-                profile.id, profile.id
-            )
-        })?;
-    Ok(Some(key.to_owned()))
+        .map(str::to_owned))
 }
 
 fn persist_key(brand: &str, key: &str) -> Result<()> {
