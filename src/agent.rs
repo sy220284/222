@@ -2117,30 +2117,38 @@ impl Agent {
         // in interactive mode. SDK clients receive the same display fields.
         if !self.structured_output {
             if event.get("type").and_then(serde_json::Value::as_str) == Some("assistant") {
-                if let Some(calls) = event.pointer("/message/tool_calls")
+                if let Some(calls) = event
+                    .pointer("/message/tool_calls")
                     .and_then(serde_json::Value::as_array)
                 {
                     for call in calls {
-                        if call.pointer("/function/name")
-                            .and_then(serde_json::Value::as_str) == Some("LocalTrigger")
+                        if call
+                            .pointer("/function/name")
+                            .and_then(serde_json::Value::as_str)
+                            == Some("LocalTrigger")
                         {
-                            if let Some(args) = call.pointer("/function/arguments")
+                            if let Some(args) = call
+                                .pointer("/function/arguments")
                                 .and_then(serde_json::Value::as_str)
                             {
                                 if let Ok(input) = serde_json::from_str(args) {
-                                    eprintln!("LocalTrigger {}",
-                                        crate::local_triggers::render_tool_use_message(&input));
+                                    eprintln!(
+                                        "LocalTrigger {}",
+                                        crate::local_triggers::render_tool_use_message(&input)
+                                    );
                                 }
                             }
                         }
                     }
                 }
-            } else if event.get("type").and_then(serde_json::Value::as_str)
-                == Some("tool_result")
+            } else if event.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
                 && event.get("name").and_then(serde_json::Value::as_str) == Some("LocalTrigger")
             {
                 if let Some(content) = event.get("content").and_then(serde_json::Value::as_str) {
-                    eprintln!("{}", crate::local_triggers::render_tool_result_message(content));
+                    eprintln!(
+                        "{}",
+                        crate::local_triggers::render_tool_result_message(content)
+                    );
                 }
             }
             return;
