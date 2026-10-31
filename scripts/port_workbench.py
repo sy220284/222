@@ -532,9 +532,198 @@ def current_counts(rows: dict[str, dict], strict: bool = True) -> dict:
                 accepted_percent=round(accepted * 100 / eligible, 2) if eligible else 0.0)
 
 
+
+def build_dashboard(repo: Path, rows: dict[str, dict], source: Path | None = None,
+                    changed_files: list[str] | None = None, strict: bool = True) -> dict:
+    """Combine the ONE matrix, frozen baseline and evidence into reviewable work.
+
+    A Rust file mapping or a static dependency is a lead, never proof of
+    callable runtime behavior. An old verified baseline may lack modern proof.
+    """
+    audit = check_evidence(repo, rows, strict=strict)
+    snapshot = current_counts(rows, strict=strict)
+    baseline = json.loads((repo / BASELINE).read_text(encoding='utf-8'))
+    source_hashes = baseline['source_hashes']
+    approved = approved_removed_paths(repo)
+    proof = {}
+    evidence_file = repo / EVIDENCE
+    if evidence_file.exists():
+        for line in evidence_file.read_text(encoding='utf-8').splitlines():
+            if line.strip():
+                item = json.loads(line)
+                proof[item['path']] = item
+
+    source_entries = None
+    if source is not None:
+        source_entries, _ = collect(rows, repo, source)
+        for entry in source_entries:
+            if entry['sha256'] != source_hashes[entry['path']]:
+                raise AuditError('原版源码哈希与冻结基线不一致: ' + entry['path'])
+    source_info = {item['path']: item for item in source_entries or []}
+
+    usage = Counter(target for row in rows.values() if row['status'] != 'excluded'
+                    for target in rust_targets(row['rust_mapping']))
+    chains = []
+    domains = defaultdict(lambda: {'verified': 0, 'partial': 0, 'unported': 0,
+                                   'excluded': 0, 'missing_mapping': 0,
+                                   'missing_rust': 0, 'legacy_verified': 0})
+    for path, row in rows.items():
+        targets = rust_targets(row['rust_mapping'])
+        existing = [target for target in targets if (repo / target).is_file()]
+        missing = sorted(set(targets) - set(existing))
+        status = row['status']
+        item = proof.get(path)
+        evidence_state = ('not_applicable' if status == 'excluded' else
+                          'recorded' if status == 'verified' and item else
+                          'legacy_baseline_needs_recheck' if status == 'verified' else
+                          'not_yet_verified')
+        domain = (path.split('/')[1] if path.startswith('src/') else 'vendor')
+        if domain not in CRITICAL:
+            domain = 'other'
+        domain_counts = domains[domain]
+        domain_counts[status] += 1
+        if status != 'excluded':
+            if not targets:
+                domain_counts['missing_mapping'] += 1
+            if missing:
+                domain_counts['missing_rust'] += 1
+            if evidence_state == 'legacy_baseline_needs_recheck':
+                domain_counts['legacy_verified'] += 1
+        source_item = source_info.get(path)
+        score = (CRITICAL.get(domain, 3) * 10 +
+                 (80 if status == 'unported' else 45 if status == 'partial' else 0) +
+                 8 * min(10, max((usage[target] for target in targets), default=0)) +
+                 (25 if not targets else 0) +
+                 (15 if missing else 0) +
+                 (min(50, source_item['direct_consumers'] * 4) if source_item else 0))
+        chains.append(dict(
+            source_path=path, source_sha256=source_hashes[path], status=status,
+            scope='excluded' if status == 'excluded' else 'required',
+            authorized_exclusion=path in approved,
+            domain=domain, source_lines=row['source_lines'],
+            rust_targets=targets, rust_present=existing, rust_missing=missing,
+            mapping_missing=status != 'excluded' and not targets,
+            source_exports=source_item['declared_exports'] if source_item else None,
+            source_dependencies=source_item['dependencies'] if source_item else None,
+            source_consumers=source_item['consumers_sample'] if source_item else None,
+            evidence=evidence_state,
+            tested_commit=item.get('tested_commit') if item and status == 'verified' else None,
+            workflow_run_id=item.get('workflow_run_id') if item and status == 'verified' else None,
+            test_names=item.get('test_names', []) if item and status == 'verified' else [],
+            verified_entrypoints=item.get('rust_entrypoints', []) if item and status == 'verified' else [],
+            remaining_gaps=item.get('remaining_gaps', []) if item and status == 'verified' else [],
+            current_gap=row['detail'] if status in ('partial', 'unported') else None,
+            runtime_behavior='requires_real_entrypoint_test' if status != 'excluded' else 'excluded',
+            priority=score if status in ('partial', 'unported') else None))
+
+    impacted = None
+    if changed_files:
+        normalized = [Path(name).as_posix().removeprefix('./') for name in changed_files]
+        if source_entries is not None:
+            impacted = affected_source_paths(source_entries, normalized)
+            impacted['analysis'] = 'source_import_closure'
+        else:
+            direct = {chain['source_path'] for chain in chains
+                      if chain['source_path'] in normalized or
+                      set(chain['rust_targets']).intersection(normalized)}
+            unmatched = sorted(set(normalized) -
+                               {name for name in normalized if any(
+                                   chain['source_path'] == name or name in chain['rust_targets']
+                                   for chain in chains)})
+            impacted = dict(changed_files=normalized, direct_source_paths=sorted(direct),
+                            impacted_source_paths=sorted(direct), unmatched=unmatched,
+                            analysis='direct_mapping_only_no_source_dependency_graph',
+                            disclaimers='需携带 --source 才能识别原版依赖者；动态调用仍须人工复核')
+        impacted['verified_needs_recheck'] = sorted(
+            chain['source_path'] for chain in chains
+            if chain['source_path'] in impacted['impacted_source_paths']
+            and chain['status'] == 'verified')
+        impacted['nonexcluded_needs_recheck'] = sorted(
+            chain['source_path'] for chain in chains
+            if chain['source_path'] in impacted['impacted_source_paths']
+            and chain['status'] != 'excluded')
+        impacted['unmatched_require_manual_review'] = bool(impacted['unmatched'])
+
+    queue = sorted((chain for chain in chains if chain['priority'] is not None),
+                   key=lambda item: (-item['priority'], item['source_path']))
+    domain_order = sorted(domains.items(), key=lambda pair: (
+        -(pair[1]['unported'] * 4 + pair[1]['partial'] * 2), pair[0]))
+    return dict(
+        schema='port-dashboard/v1',
+        provenance={'matrix': str(MATRIX), 'baseline': str(BASELINE),
+                    'approved_scope': 'docs/REMOVED_SCOPE.json',
+                    'evidence': str(EVIDENCE),
+                    'original_source_checked': source is not None,
+                    'behavior_parity_verified_by_dashboard': False},
+        scope={**snapshot, 'new_exclusions_authorized': len(approved),
+               'scope_check_passed': True,
+               'legacy_verified_without_new_evidence': sum(
+                   chain['evidence'] == 'legacy_baseline_needs_recheck'
+                   for chain in chains)},
+        evidence={'newly_verified_since_baseline': audit['new_verified'],
+                  'recorded_entries': audit['evidence_records']},
+        domain_summary=[dict(name=name, **stats) for name, stats in domain_order],
+        chains=chains, work_queue=[chain['source_path'] for chain in queue],
+        impact=impacted,
+        disclaimer='映射/编译/静态依赖/文件存在均不证明功能等价。变更影响只指导复验，验收必须有生产入口、原版行为、异常取消恢复与真实测试证据。')
+
+
+def write_dashboard(dashboard: dict, output: Path) -> dict:
+    """Materialize both machine-readable inventory and a short human summary."""
+    json_dump(output / 'PORT_DASHBOARD.json', dashboard)
+    s = dashboard['scope']
+    lines = [
+        '# 222 Rust 迁移工作台（自动生成）', '',
+        '> 事实源为逐文件矩阵、批准的移除清单和验收证据；此报告不宣称原版行为自动等价。', '',
+        '## 当前范围与验收', '',
+        '| 指标 | 数量 |', '|---|---:|',
+        f'| 原版路径 | {s["total"]} |',
+        f'| 用户批准排除 | {s["excluded"]} |',
+        f'| 需要迁移 | {s["eligible"]} |',
+        f'| 已登记验收 | {s["accepted"]} |',
+        f'| 部分实现 | {s["partial"]} |',
+        f'| 未迁移 | {s["unported"]} |',
+        f'| 仍待验收 | {s["remaining"]} |',
+        f'| 历史验收中缺少新版证据 | {s["legacy_verified_without_new_evidence"]} |',
+        '', '## 业务域', '',
+        '| 域 | 未迁移 | 部分实现 | 已验收 | 映射缺失 | Rust 文件缺失 |',
+        '|---|---:|---:|---:|---:|---:|',
+    ]
+    for domain in dashboard['domain_summary']:
+        lines.append(f'| {domain["name"]} | {domain["unported"]} | '
+                     f'{domain["partial"]} | {domain["verified"]} | '
+                     f'{domain["missing_mapping"]} | {domain["missing_rust"]} |')
+    lines.extend(['', '## 待闭环优先项（人工审查后动手）', '',
+                  '| 原版路径 | 状态 | Rust 映射 | 差异线索 |',
+                  '|---|---|---|---|'])
+    index = {chain['source_path']: chain for chain in dashboard['chains']}
+    for path in dashboard['work_queue'][:30]:
+        item = index[path]
+        mapping = ', '.join(item['rust_targets']) or '待定位'
+        gap = (item['current_gap'] or '').replace('|', '/').replace('\n', ' ')
+        lines.append(f'| {path} | {item["status"]} | {mapping} | {gap[:100]} |')
+    impact = dashboard['impact']
+    if impact is not None:
+        lines.extend(['', '## 本次改动影响', '',
+                      f'- 分析深度：{impact["analysis"]}',
+                      f'- 直接映射：{len(impact["direct_source_paths"])} 条',
+                      f'- 需要复查：{len(impact["nonexcluded_needs_recheck"])} 条',
+                      f'- 已验收但受影响：{len(impact["verified_needs_recheck"])} 条',
+                      f'- 未匹配路径（需人工复核）：{", ".join(impact["unmatched"]) or "无"}'])
+    lines.extend(['', '## 验收边界', '',
+                  dashboard['disclaimer'], '',
+                  '完整 1,906 条逐项功能链信息见 PORT_DASHBOARD.json。'])
+    output.mkdir(parents=True, exist_ok=True)
+    (output / 'PORT_DASHBOARD.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    return dict(scope=dashboard['scope'], evidence=dashboard['evidence'],
+                impact=dashboard['impact'],
+                outputs=[str(output / 'PORT_DASHBOARD.json'),
+                         str(output / 'PORT_DASHBOARD.md')])
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('scan', 'check', 'freeze-baseline', 'impact', 'counts', 'stubs', 'reachability'))
+    parser.add_argument('command', choices=('scan', 'check', 'freeze-baseline', 'impact', 'counts', 'stubs', 'reachability', 'dashboard'))
     parser.add_argument('--repo', type=Path, default=Path('.'))
     parser.add_argument('--source', type=Path, help='解压后的 2.1.88 原始源码根目录')
     parser.add_argument('--output', type=Path, default=Path('port-audit-output'))
@@ -557,6 +746,11 @@ def main(argv: list[str] | None = None) -> int:
             json_dump(output_file, result)
             result = {k: v for k, v in result.items() if k != 'entries'}
             result['report'] = str(output_file)
+        elif args.command == 'dashboard':
+            dashboard = build_dashboard(args.repo, rows, source=args.source,
+                                        changed_files=args.changed,
+                                        strict=not args.allow_fixture)
+            result = write_dashboard(dashboard, args.output)
         elif args.command == 'impact':
             if args.source is None or not args.changed:
                 raise AuditError('impact 必须提供 --source 和至少一项 --changed')
