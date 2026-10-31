@@ -4339,7 +4339,10 @@ impl Agent {
         // tool results and media blocks all count toward context pressure.
         let mut pending_message = Message::text("user", prompt);
         pending_message.content_blocks = blocks.clone();
-        let history_tokens = Self::compact_round_token_estimate(&self.session.messages)
+        // Include the synthetic compact-summary user turn in the same
+        // token estimate as the provider request, or subsequent turns may
+        // silently exceed the model context after a successful compact.
+        let history_tokens = Self::compact_round_token_estimate(&self.session.model_messages())
             .saturating_add(Self::compact_round_token_estimate(std::slice::from_ref(
                 &pending_message,
             )));
@@ -5838,7 +5841,36 @@ mod tests {
         let rendered = restored.model_messages();
         assert_eq!(rendered.len(), 1);
         assert_eq!(rendered[0].role, "user");
-        assert!(rendered[0].visible_text().contains("Summary:\nRetain verified changes and next steps."));
+        assert!(rendered[0]
+            .visible_text()
+            .contains("Summary:\nRetain verified changes and next steps."));
+        // A real resumed model turn receives a single synthetic user summary,
+        // followed by the user's new task, with no system duplication.
+        agent.provider = Box::new(CompactContinuationModel);
+        agent.ask("Continue from summary").await.unwrap();
+    }
+
+    struct CompactContinuationModel;
+
+    #[async_trait::async_trait]
+    impl ModelProvider for CompactContinuationModel {
+        async fn complete(&self, request: &ModelRequest) -> Result<crate::protocol::ModelResponse> {
+            assert!(request.messages.len() >= 2);
+            assert_eq!(request.messages[0].role, "user");
+            assert!(request.messages[0]
+                .visible_text()
+                .contains("Summary:\nRetain verified changes and next steps."));
+            assert_eq!(
+                request.messages.last().unwrap().visible_text(),
+                "Continue from summary"
+            );
+            assert!(!request.system.contains("Verified session continuity summary"));
+            Ok(crate::protocol::ModelResponse {
+                message: Message::text("assistant", "Continued."),
+                finish_reason: Some("stop".into()),
+                usage: None,
+            })
+        }
     }
 
     struct PromptCaptureModel(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
