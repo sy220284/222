@@ -783,10 +783,13 @@ impl PluginSet {
             }
             let options = if !manifest.user_config.is_null() {
                 match crate::permission_settings::SettingsPaths::for_workspace(root)?
-                    .plugin_public_options(name) {
+                    .plugin_public_options(name)
+                {
                     Ok(value) => value,
                     Err(error) => {
-                        set.errors.push(format!("Plugin '{name}' LSP public options unavailable: {error:#}"));
+                        set.errors.push(format!(
+                            "Plugin '{name}' LSP public options unavailable: {error:#}"
+                        ));
                         serde_json::Map::new()
                     }
                 }
@@ -794,7 +797,11 @@ impl PluginSet {
                 serde_json::Map::new()
             };
             let (lsp_servers, lsp_errors) = crate::plugin_lsp::load_plugin_lsp(
-                &location, name, &manifest.lsp_servers, &manifest.user_config, &options,
+                &location,
+                name,
+                &manifest.lsp_servers,
+                &manifest.user_config,
+                &options,
             );
             set.lsp_servers.extend(lsp_servers);
             set.errors.extend(lsp_errors);

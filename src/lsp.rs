@@ -114,7 +114,12 @@ impl LspClient {
             .await?;
         client.notify("initialized", json!({})).await?;
         if let Some(settings) = &config.settings {
-            client.notify("workspace/didChangeConfiguration", json!({"settings":settings})).await?;
+            client
+                .notify(
+                    "workspace/didChangeConfiguration",
+                    json!({"settings":settings}),
+                )
+                .await?;
         }
         Ok(client)
     }

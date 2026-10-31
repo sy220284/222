@@ -7,10 +7,17 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 fn safe_config_path(root: &Path, relative: &str) -> Result<std::path::PathBuf> {
     let input = Path::new(relative);
-    if input.is_absolute() || input.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+    if input.is_absolute()
+        || input
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
         bail!("Plugin LSP config must use a relative path within the plugin")
     }
-    let resolved = root.join(input).canonicalize().context("Cannot open plugin LSP config")?;
+    let resolved = root
+        .join(input)
+        .canonicalize()
+        .context("Cannot open plugin LSP config")?;
     if !resolved.starts_with(root.canonicalize()?) || !resolved.is_file() {
         bail!("Plugin LSP config leaves plugin root or is not a file")
     }
@@ -25,7 +32,9 @@ fn read_json_map(root: &Path, file: &str) -> Result<Map<String, Value>> {
     }
     let data: Value = serde_json::from_slice(&content)
         .with_context(|| format!("Invalid JSON in {}", path.display()))?;
-    data.as_object().cloned().context("Plugin LSP config must be a server map")
+    data.as_object()
+        .cloned()
+        .context("Plugin LSP config must be a server map")
 }
 
 fn expand_field(
@@ -40,19 +49,23 @@ fn expand_field(
     while let Some(start) = remainder.find("${") {
         output.push_str(&remainder[..start]);
         let suffix = &remainder[start + 2..];
-        let end = suffix.find('}').context("Unclosed LSP environment variable")?;
+        let end = suffix
+            .find('}')
+            .context("Unclosed LSP environment variable")?;
         let key = &suffix[..end];
         let value = match key {
             "ATLAS_PLUGIN_ROOT" => plugin_root.to_string_lossy().into_owned(),
             "ATLAS_PLUGIN_DATA" => plugin_data.to_string_lossy().into_owned(),
             _ if key.starts_with("user_config.") => {
                 let option = &key["user_config.".len()..];
-                let field = schema.get(option)
-                    .with_context(|| format!("Undeclared plugin LSP user configuration: {option}"))?;
+                let field = schema.get(option).with_context(|| {
+                    format!("Undeclared plugin LSP user configuration: {option}")
+                })?;
                 if field.get("sensitive").and_then(Value::as_bool) == Some(true) {
                     bail!("Plugin LSP configuration '{option}' requires secure secret storage")
                 }
-                let value = options.get(option)
+                let value = options
+                    .get(option)
                     .with_context(|| format!("Missing plugin LSP user configuration: {option}"))?;
                 match value {
                     Value::String(s) => s.clone(),
@@ -80,25 +93,43 @@ fn parse_server(
     options: &Map<String, Value>,
     schema: &Value,
 ) -> Result<LspServerConfig> {
-    let map = spec.as_object().context("Plugin LSP server must be an object")?;
+    let map = spec
+        .as_object()
+        .context("Plugin LSP server must be an object")?;
     const FIELDS: &[&str] = &[
-        "command", "args", "extensionToLanguage", "transport", "env",
-        "initializationOptions", "settings", "workspaceFolder",
-        "startupTimeout", "shutdownTimeout", "restartOnCrash", "maxRestarts",
+        "command",
+        "args",
+        "extensionToLanguage",
+        "transport",
+        "env",
+        "initializationOptions",
+        "settings",
+        "workspaceFolder",
+        "startupTimeout",
+        "shutdownTimeout",
+        "restartOnCrash",
+        "maxRestarts",
     ];
     if let Some(field) = map.keys().find(|key| !FIELDS.contains(&key.as_str())) {
         bail!("Unsupported plugin LSP setting: {field}")
     }
-    let command = map.get("command").and_then(Value::as_str)
-        .filter(|v| !v.is_empty()).context("Plugin LSP requires command")?;
+    let command = map
+        .get("command")
+        .and_then(Value::as_str)
+        .filter(|v| !v.is_empty())
+        .context("Plugin LSP requires command")?;
     if command.contains(' ') && !command.starts_with('/') {
         bail!("Plugin LSP command contains spaces; use args instead")
     }
-    let transport = map.get("transport").and_then(Value::as_str).unwrap_or("stdio");
+    let transport = map
+        .get("transport")
+        .and_then(Value::as_str)
+        .unwrap_or("stdio");
     if transport != "stdio" {
         bail!("Plugin LSP socket transport requires a socket transport implementation")
     }
-    let mappings = map.get("extensionToLanguage")
+    let mappings = map
+        .get("extensionToLanguage")
         .and_then(Value::as_object)
         .filter(|v| !v.is_empty())
         .context("Plugin LSP requires nonempty extensionToLanguage")?;
@@ -107,34 +138,54 @@ fn parse_server(
         if !extension.starts_with('.') || extension.len() < 2 {
             bail!("Plugin LSP file extensions must begin with .")
         }
-        let language = language.as_str().filter(|v| !v.is_empty())
+        let language = language
+            .as_str()
+            .filter(|v| !v.is_empty())
             .context("Plugin LSP language ID must be a nonempty string")?;
-        extension_to_language.insert(extension.trim_start_matches('.').to_owned(), language.to_owned());
+        extension_to_language.insert(
+            extension.trim_start_matches('.').to_owned(),
+            language.to_owned(),
+        );
     }
     let raw_args: Vec<String> = match map.get("args") {
         None => Vec::new(),
-        Some(Value::Array(items)) => items.iter().map(|item| {
-            item.as_str().filter(|s| !s.is_empty())
-                .map(str::to_owned).context("Plugin LSP args must be nonempty strings")
-        }).collect::<Result<Vec<_>>>()?,
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|item| {
+                item.as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned)
+                    .context("Plugin LSP args must be nonempty strings")
+            })
+            .collect::<Result<Vec<_>>>()?,
         _ => bail!("Plugin LSP args must be an array"),
     };
-    let raw_env: Map<String,Value> = match map.get("env") {
+    let raw_env: Map<String, Value> = match map.get("env") {
         None => Map::new(),
         Some(Value::Object(map)) => map.clone(),
         _ => bail!("Plugin LSP env must be an object"),
     };
     let mut env = std::collections::HashMap::new();
     for (key, raw) in raw_env {
-        let text = raw.as_str().context("Plugin LSP env values must be strings")?;
+        let text = raw
+            .as_str()
+            .context("Plugin LSP env values must be strings")?;
         env.insert(key, expand_field(text, root, data, options, schema)?);
     }
-    env.insert("ATLAS_PLUGIN_ROOT".into(), root.to_string_lossy().into_owned());
-    env.insert("ATLAS_PLUGIN_DATA".into(), data.to_string_lossy().into_owned());
-    let args = raw_args.iter()
+    env.insert(
+        "ATLAS_PLUGIN_ROOT".into(),
+        root.to_string_lossy().into_owned(),
+    );
+    env.insert(
+        "ATLAS_PLUGIN_DATA".into(),
+        data.to_string_lossy().into_owned(),
+    );
+    let args = raw_args
+        .iter()
         .map(|arg| expand_field(arg, root, data, options, schema))
         .collect::<Result<Vec<_>>>()?;
-    let workspace_folder = map.get("workspaceFolder")
+    let workspace_folder = map
+        .get("workspaceFolder")
         .and_then(Value::as_str)
         .map(|text| expand_field(text, root, data, options, schema))
         .transpose()?;
@@ -246,11 +297,17 @@ mod tests {
     #[test]
     fn loads_file_manifest_override_scoped_names_and_languages() {
         let root = tempfile::tempdir().unwrap();
-        fs::write(root.path().join(".lsp.json"), json!({
-            "ts":{"command":"first","extensionToLanguage":{".ts":"typescript"}}
-        }).to_string()).unwrap();
+        fs::write(
+            root.path().join(".lsp.json"),
+            json!({
+                "ts":{"command":"first","extensionToLanguage":{".ts":"typescript"}}
+            })
+            .to_string(),
+        )
+        .unwrap();
         let decl = json!([{"ts":{"command":"later","extensionToLanguage":{".ts":"typescript",".tsx":"typescriptreact"}}}]);
-        let (servers, errors) = load_plugin_lsp(root.path(), "typescript", &decl, &Value::Null, &Map::new());
+        let (servers, errors) =
+            load_plugin_lsp(root.path(), "typescript", &decl, &Value::Null, &Map::new());
         assert!(errors.is_empty(), "{errors:?}");
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].command, "later");
@@ -265,7 +322,8 @@ mod tests {
             {"valid":{"command":"ok","extensionToLanguage":{".rs":"rust"}},
              "broken":{"command":"","extensionToLanguage":{".rs":"rust"}}}
         ]);
-        let (servers, errors) = load_plugin_lsp(root.path(), "rust", &decl, &Value::Null, &Map::new());
+        let (servers, errors) =
+            load_plugin_lsp(root.path(), "rust", &decl, &Value::Null, &Map::new());
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].id, "plugin:rust:valid");
         assert_eq!(errors.len(), 2);
