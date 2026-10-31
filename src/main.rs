@@ -10,6 +10,7 @@ mod chatgpt_plan;
 mod cleanup_registry;
 mod collections;
 mod command_lifecycle;
+mod compact_source_prompts;
 mod command_manifest;
 mod compact_command_source;
 mod compat_helpers;
