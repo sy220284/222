@@ -349,40 +349,47 @@ fn byte(reader: &mut impl Read) -> io::Result<Option<u8>> {
     }
 }
 #[cfg(unix)]
-fn decode(reader: &mut impl Read, head: u8) -> io::Result<Key> {
+/// Decode one terminal event and return an optional byte to replay on the
+/// next event. ESC followed by a normal character is two distinct inputs;
+/// consuming the character while recognizing ESC loses real Vim/shortcut keys.
+fn decode(reader: &mut impl Read, head: u8) -> io::Result<(Key, Option<u8>)> {
     match head {
-        b'\r' | b'\n' => Ok(Key::Enter),
-        8 | 127 => Ok(Key::Backspace),
+        b'\r' | b'\n' => Ok((Key::Enter, None)),
+        8 | 127 => Ok((Key::Backspace, None)),
         27 => {
-            if byte(reader)? != Some(b'[') {
-                return Ok(Key::Escape);
+            match byte(reader)? {
+                Some(b'[') => {}
+                other => return Ok((Key::Escape, other)),
             }
             let mut seq = String::new();
             for _ in 0..12 {
                 let Some(b) = byte(reader)? else {
-                    return Ok(Key::Escape);
+                    return Ok((Key::Escape, None));
                 };
                 seq.push(b as char);
                 if b.is_ascii_alphabetic() || b == b'~' {
                     break;
                 }
             }
-            Ok(match seq.as_str() {
-                "A" => Key::Up,
-                "B" => Key::Down,
-                "C" => Key::Right,
-                "D" => Key::Left,
-                "H" | "1~" => Key::Home,
-                "F" | "4~" => Key::End,
-                "3~" => Key::Delete,
-                "200~" => Key::PasteStart,
-                "201~" => Key::PasteEnd,
-                _ => Key::Escape,
-            })
+            Ok((
+                match seq.as_str() {
+                    "A" => Key::Up,
+                    "B" => Key::Down,
+                    "C" => Key::Right,
+                    "D" => Key::Left,
+                    "H" | "1~" => Key::Home,
+                    "F" | "4~" => Key::End,
+                    "3~" => Key::Delete,
+                    "200~" => Key::PasteStart,
+                    "201~" => Key::PasteEnd,
+                    _ => Key::Escape,
+                },
+                None,
+            ))
         }
-        n @ 1..=26 => Ok(Key::Ctrl((b'a' + n - 1) as char)),
-        n if n < 32 => Ok(Key::Escape),
-        n if n < 128 => Ok(Key::Char(n as char)),
+        n @ 1..=26 => Ok((Key::Ctrl((b'a' + n - 1) as char), None)),
+        n if n < 32 => Ok((Key::Escape, None)),
+        n if n < 128 => Ok((Key::Char(n as char), None)),
         n => {
             let size = if n & 0xe0 == 0xc0 {
                 2
@@ -405,7 +412,10 @@ fn decode(reader: &mut impl Read, head: u8) -> io::Result<Key> {
             }
             let s = std::str::from_utf8(&bytes)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-            Ok(Key::Char(s.chars().next().expect("validated UTF-8 scalar")))
+            Ok((
+                Key::Char(s.chars().next().expect("validated UTF-8 scalar")),
+                None,
+            ))
         }
     }
 }
@@ -497,14 +507,20 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
     let mut e = Editor::default();
     let mut vim = VimKeys::new(vim_enabled);
     let mut paste = false;
+    let mut replay_byte = None;
     write!(out, "\x1b[?2004h")?;
     let result = (|| -> Result<PromptRead> {
         redraw(&mut out, prompt, &e, &vim, history)?;
         loop {
-            let Some(b) = byte(&mut input)? else {
+            let next = match replay_byte.take() {
+                Some(replayed) => Some(replayed),
+                None => byte(&mut input)?,
+            };
+            let Some(b) = next else {
                 continue;
             };
-            let key = decode(&mut input, b)?;
+            let (key, replay) = decode(&mut input, b)?;
+            replay_byte = replay;
             if key == Key::PasteStart {
                 paste = true;
                 continue;
@@ -707,15 +723,36 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn escape_keystroke_never_consumes_the_next_user_character() {
+        assert_eq!(
+            decode(&mut &b"i"[..], 27).unwrap(),
+            (Key::Escape, Some(b'i'))
+        );
+        assert_eq!(decode(&mut &b""[..], 27).unwrap(), (Key::Escape, None));
+        // A complete UTF-8 character following ESC must retain its leading
+        // byte and remain decodable when the remaining bytes arrive.
+        let chinese = "中".as_bytes();
+        let (escape, replay) = decode(&mut &chinese[..], 27).unwrap();
+        assert_eq!(escape, Key::Escape);
+        let (character, leftover) =
+            decode(&mut &chinese[1..], replay.expect("replay leading byte")).unwrap();
+        assert_eq!(character, Key::Char('中'));
+        assert_eq!(leftover, None);
+        let (next, replay) = decode(&mut &b"[A"[..], 27).unwrap();
+        assert_eq!((next, replay), (Key::Up, None));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn decode_terminal_controls_and_bracketed_paste() {
-        assert_eq!(decode(&mut &b"[D"[..], 27).unwrap(), Key::Left);
-        assert_eq!(decode(&mut &b"[200~"[..], 27).unwrap(), Key::PasteStart);
-        assert_eq!(decode(&mut &b"[201~"[..], 27).unwrap(), Key::PasteEnd);
+        assert_eq!(decode(&mut &b"[D"[..], 27).unwrap(), (Key::Left, None));
+        assert_eq!(decode(&mut &b"[200~"[..], 27).unwrap(), (Key::PasteStart, None));
+        assert_eq!(decode(&mut &b"[201~"[..], 27).unwrap(), (Key::PasteEnd, None));
         assert_eq!(
             decode(&mut &"猫".as_bytes()[1..], "猫".as_bytes()[0]).unwrap(),
-            Key::Char('猫')
+            (Key::Char('猫'), None)
         );
-        assert_eq!(decode(&mut &b""[..], 3).unwrap(), Key::Ctrl('c'));
+        assert_eq!(decode(&mut &b""[..], 3).unwrap(), (Key::Ctrl('c'), None));
     }
 }
 
