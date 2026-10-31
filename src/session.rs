@@ -214,7 +214,7 @@ impl Session {
                         .then(|| format!(".atlas/sessions/{}.json", self.id))
                         .as_deref(),
                     false,
-                    self.summary_insert_at.unwrap_or(0) > 0,
+                    false,
                 ),
             );
             let insert_at = self.summary_insert_at.unwrap_or(0).min(messages.len());
@@ -278,7 +278,9 @@ mod tests {
         assert_eq!(s.model_messages().len(), 3);
         assert_eq!(s.model_messages()[0].visible_text(), "kept-first");
         assert_eq!(s.model_messages()[1].visible_text(), "kept-answer");
-        assert!(s.model_messages()[2].visible_text().contains("Summarized tail"));
+        assert!(s.model_messages()[2]
+            .visible_text()
+            .contains("Summarized tail"));
         s.messages.push(Message::text("user", "new-task"));
         let model = s.model_messages();
         assert_eq!(model[3].visible_text(), "new-task");
@@ -287,7 +289,9 @@ mod tests {
         assert_eq!(transcript[2].visible_text(), "summarized-tail");
         assert_eq!(transcript[4].visible_text(), "new-task");
         s.summary_insert_at = Some(0);
-        assert!(s.model_messages()[0].visible_text().contains("Summarized tail"));
+        assert!(s.model_messages()[0]
+            .visible_text()
+            .contains("Summarized tail"));
         s.clear();
         assert!(s.transcript_snapshot.is_none());
         assert!(s.summary_insert_at.is_none());

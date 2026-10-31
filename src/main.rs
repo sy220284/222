@@ -2333,7 +2333,8 @@ async fn chat(
         }
         // Message-selector equivalent for local terminal users: indices are
         // zero-based in the current model-visible context, as in 2.1.88.
-        if let Some(selection) = input.strip_prefix("/compact from ")
+        if let Some(selection) = input
+            .strip_prefix("/compact from ")
             .or_else(|| input.strip_prefix("/compact up_to "))
         {
             let direction = if input.starts_with("/compact from ") {
@@ -2344,7 +2345,9 @@ async fn chat(
             let pivot = selection.trim().parse::<usize>().context(
                 "Partial compact requires a zero-based message index: /compact from 2 or /compact up_to 2",
             )?;
-            agent.compact_history_partial(pivot, direction, None).await?;
+            agent
+                .compact_history_partial(pivot, direction, None)
+                .await?;
             println!(
                 "{}",
                 compact_command_source::build_display_text(false, "ctrl+o", None, None)
@@ -3968,7 +3971,11 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                                 {
                                     Some(pivot) => {
                                         agent
-                                            .compact_history_partial(pivot, direction, Some(instructions))
+                                            .compact_history_partial(
+                                                pivot,
+                                                direction,
+                                                Some(instructions),
+                                            )
                                             .await
                                     }
                                     None => Err(anyhow::anyhow!(
@@ -3976,9 +3983,9 @@ async fn sdk(agent: &mut Agent, config: &Config) -> Result<()> {
                                     )),
                                 }
                             }
-                            Some(other) => Err(anyhow::anyhow!(
-                                "Unsupported compact direction: {other}"
-                            )),
+                            Some(other) => {
+                                Err(anyhow::anyhow!("Unsupported compact direction: {other}"))
+                            }
                         }
                     }
                     "model" => {

@@ -5992,8 +5992,12 @@ mod tests {
     async fn partial_compaction_matches_source_directions_and_preserves_history() {
         let dir = tempfile::tempdir().unwrap();
         let mut session = Session::fresh();
-        session.messages.push(Message::text("user", "Original issue"));
-        session.messages.push(Message::text("assistant", "Original resolution"));
+        session
+            .messages
+            .push(Message::text("user", "Original issue"));
+        session
+            .messages
+            .push(Message::text("assistant", "Original resolution"));
         let id = session.id.to_string();
         // Reuse the real Agent and hook/session wiring from the compaction
         // restore test, rather than testing a disconnected prompt helper.
@@ -6097,16 +6101,19 @@ mod tests {
                 }
                 crate::compact_source_prompts::CompactDirection::UpTo => {
                     assert!(request.system.contains("newer messages that build"));
-                    assert!(!request.messages.iter().any(|m| {
-                        m.visible_text() == "Summarize tail"
-                    }));
+                    assert!(!request
+                        .messages
+                        .iter()
+                        .any(|m| { m.visible_text() == "Summarize tail" }));
                 }
                 crate::compact_source_prompts::CompactDirection::Full => {
                     panic!("Unexpected full compact request")
                 }
             }
             assert_eq!(
-                request.system.contains("User context: Preserve user constraints"),
+                request
+                    .system
+                    .contains("User context: Preserve user constraints"),
                 self.feedback
             );
             Ok(crate::protocol::ModelResponse {
