@@ -145,6 +145,7 @@ mod statusline_command_source;
 mod streaming_tool_executor;
 mod subprocess_env;
 mod task;
+mod teammate_context;
 mod task_events;
 mod task_graph;
 mod task_guards;
