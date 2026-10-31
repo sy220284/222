@@ -203,8 +203,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.99.1
-      - name: 编译本次对照的 Rust 生产程序
-        run: cargo build --locked --bin atlas-agent
+      - name: 配置与原版一致的 Node.js 运行时
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 编译本次对照的 Rust 生产程序及函数验证桥接程序
+        run: cargo build --locked --bins
       # The local source may be absent; publish gaps and keep the strict gate failing.
       - name: 输出源码逐函数差异清单（只报告，不放行）
         shell: bash
