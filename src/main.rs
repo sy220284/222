@@ -433,7 +433,12 @@ enum Commands {
     /// Deep source-based review using the active API model and local tools
     UltraReview { pr_number: Option<u64> },
     /// Detailed read-only project plan using the active API model
-    UltraPlan { objective: Vec<String> },
+    UltraPlan {
+        /// Optional user-approved draft to refine using the same model
+        #[arg(long)]
+        seed_plan: Option<String>,
+        objective: Vec<String>,
+    },
     /// Manage user-owned, explicitly invoked local task triggers
     Trigger {
         #[command(subcommand)]
@@ -1410,17 +1415,18 @@ async fn run_cli() -> Result<()> {
             let prompt =
                 local_advanced_workflows::review_prompt(agent.workspace_root(), *pr_number)?;
             agent
-                .ask_in_plan_mode(&prompt)
+                .run_advanced(local_advanced_workflows::Kind::Review, &prompt)
                 .await
                 .map(|answer| println!("{answer}"))
         }
-        Commands::UltraPlan { objective } => {
-            let prompt = local_advanced_workflows::plan_prompt(
+        Commands::UltraPlan { objective, seed_plan } => {
+            let prompt = local_advanced_workflows::plan_prompt_with_seed(
                 agent.workspace_root(),
                 &objective.join(" "),
+                seed_plan.as_deref(),
             )?;
             agent
-                .ask_in_plan_mode(&prompt)
+                .run_advanced(local_advanced_workflows::Kind::Plan, &prompt)
                 .await
                 .map(|answer| println!("{answer}"))
         }
@@ -3032,9 +3038,16 @@ async fn chat(
                     local_advanced_workflows::plan_prompt(agent.workspace_root(), args)
                 };
                 match prepared {
-                    Ok(prompt) => match agent.ask_in_plan_mode(&prompt).await {
-                        Ok(answer) => println!("{answer}"),
-                        Err(error) => eprintln!("Error: {error:#}"),
+                    Ok(prompt) => {
+                        let kind = if name == "ultraplan" {
+                            local_advanced_workflows::Kind::Plan
+                        } else {
+                            local_advanced_workflows::Kind::Review
+                        };
+                        match agent.run_advanced(kind, &prompt).await {
+                            Ok(answer) => println!("{answer}"),
+                            Err(error) => eprintln!("Error: {error:#}"),
+                        }
                     },
                     Err(error) => eprintln!("Cannot prepare /{name}: {error:#}"),
                 }
@@ -3112,7 +3125,10 @@ async fn chat(
             match local_advanced_workflows::plan_prompt(agent.workspace_root(), &goal) {
                 Ok(prompt) => {
                     onboarding.maybe_mark_complete()?;
-                    match agent.ask_in_plan_mode(&prompt).await {
+                    match agent
+                        .run_advanced(local_advanced_workflows::Kind::Plan, &prompt)
+                        .await
+                    {
                         Ok(answer) => println!("{answer}"),
                         Err(error) => eprintln!("Local UltraPlan failed: {error:#}"),
                     }
