@@ -186,8 +186,9 @@ jobs:
 
   source-parity:
     name: 原版源码全量等价验收
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # Original stays in an isolated local workspace outside the checkout.
+    runs-on: [self-hosted, linux, source-parity-222]
+    timeout-minutes: 120
     permissions:
       contents: read
       actions: read
@@ -202,62 +203,42 @@ jobs:
           set -euo pipefail
           python3 scripts/source_parity_gate.py report --repo . --output .port-audit
           cat .port-audit/SOURCE_PARITY.md >> "$GITHUB_STEP_SUMMARY"
-      # SHA256 are immutable public provenance; URLs/tokens are secrets.
-      # Missing credentials still produce an actionable full parity report.
-      - name: 获取经哈希固定的私有原版源码及规格
-        id: private_inputs
-        continue-on-error: true
+      - name: 检查提交者工作区的原版源码与规格
+        id: workspace
         shell: bash
         env:
-          SOURCE_URL: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_URL }}
-          SOURCE_TOKEN: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_TOKEN }}
-          SPEC_URL: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_URL }}
-          SPEC_TOKEN: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_TOKEN }}
+          ORIGINAL_SOURCE_ROOT: \${{ vars.ORIGINAL_SOURCE_ROOT }}
+          ORIGINAL_SPEC_ARCHIVE: \${{ vars.ORIGINAL_SPEC_ARCHIVE }}
         run: |
           set -euo pipefail
-          umask 077
-          SOURCE_SHA256=23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d
-          SPEC_SHA256=3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93
-          if [[ -z "$SOURCE_URL" || -z "$SPEC_URL" ]]; then
-            echo "::error::须配置 ORIGINAL_SOURCE_ARCHIVE_URL 与 ORIGINAL_SPEC_ARCHIVE_URL 两个仓库 Secret；无原版证据不得放行"
+          source_root="\${ORIGINAL_SOURCE_ROOT:-\${RUNNER_WORKSPACE}/original-2.1.88/source}"
+          spec_zip="\${ORIGINAL_SPEC_ARCHIVE:-\${RUNNER_WORKSPACE}/original-2.1.88/spec.zip}"
+          if [[ ! -d "$source_root/src" ]]; then
+            echo "::error::提交者工作区缺少原版 source/src"
             exit 1
           fi
-          fetch_private_zip() {
-            local url="$1" token="$2" expected="$3" destination="$4"
-            [[ "$url" == https://* ]] || { echo "::error::原版文件必须使用 HTTPS 地址"; return 1; }
-            local options=(--fail --silent --show-error --proto '=https' --max-redirs 0
-                           --connect-timeout 15 --max-time 240 --retry 2 --retry-all-errors)
-            if [[ -n "$token" ]]; then
-              curl "${options[@]}" --header "Authorization: Bearer $token" "$url" -o "$destination"
-            else
-              curl "${options[@]}" "$url" -o "$destination"
-            fi
-            echo "$expected  $destination" | sha256sum -c -
-          }
-          fetch_private_zip "$SOURCE_URL" "$SOURCE_TOKEN" "$SOURCE_SHA256" "$RUNNER_TEMP/original.zip"
-          fetch_private_zip "$SPEC_URL" "$SPEC_TOKEN" "$SPEC_SHA256" "$RUNNER_TEMP/source-spec.zip"
-      - name: 从真实源码与 AST 规格生成待审逐函数契约索引
-        if: steps.private_inputs.outcome == 'success'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/source_parity_gate.py index --repo . \
-            --source-archive "$RUNNER_TEMP/original.zip" \
-            --spec-archive "$RUNNER_TEMP/source-spec.zip" \
-            --output .port-audit
-      - name: 原版源码逐文件、逐函数和 Rust 行为证据门禁
+          if [[ ! -f "$spec_zip" ]]; then
+            echo "::error::提交者工作区缺少本地规格压缩包"
+            exit 1
+          fi
+          if [[ "$(sha256sum "$spec_zip" | cut -d' ' -f1)" != \
+                "3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93" ]]; then
+            echo "::error::本地规格压缩包与冻结版本不一致"
+            exit 1
+          fi
+          printf 'source_root=%s\n' "$source_root" >> "$GITHUB_OUTPUT"
+          printf 'spec_archive=%s\n' "$spec_zip" >> "$GITHUB_OUTPUT"
+      - name: 原版源码完整索引及双端动态验收
         if: always()
         shell: bash
         run: |
           set -euo pipefail
           args=(gate --repo . --output .port-audit)
-          if [[ -f "$RUNNER_TEMP/original.zip" ]]; then
-            args+=(--source-archive "$RUNNER_TEMP/original.zip")
+          if [[ "\${{ steps.workspace.outcome }}" == "success" ]]; then
+            args+=(--source-root "\${{ steps.workspace.outputs.source_root }}")
+            args+=(--spec-archive "\${{ steps.workspace.outputs.spec_archive }}")
           fi
-          if [[ -f "$RUNNER_TEMP/source-spec.zip" ]]; then
-            args+=(--spec-archive "$RUNNER_TEMP/source-spec.zip")
-          fi
-          python3 scripts/source_parity_gate.py "${args[@]}"
+          python3 scripts/source_parity_gate.py "\${args[@]}"
       - name: 保存独立验收记录
         if: always()
         uses: actions/upload-artifact@v4
