@@ -80,8 +80,9 @@ Respond in Chinese."#,
 }
 
 /// Resolve a local advanced workflow in SDK input using the same slash parser
-/// and keyword boundaries as the interactive REPL. Unknown slash commands
-/// remain the responsibility of the SDK's skill expansion path.
+/// for explicit commands only. The original processUserInput.ts limits
+/// bare-word UltraPlan launch to interactive mode; UltraReview bare words
+/// are only an input hint. Unknown commands go through SDK Skill/MCP.
 pub fn sdk_user_prompt(root: &Path, text: &str) -> Result<Option<String>> {
     if let Some(parsed) = crate::slash_command::parse_slash_command(text) {
         if parsed.is_mcp {
@@ -108,15 +109,6 @@ pub fn sdk_user_prompt(root: &Path, text: &str) -> Result<Option<String>> {
             _ => Ok(None),
         };
     }
-    if let Some(goal) = crate::local_advanced_keywords::replace_ultraplan_keyword(text) {
-        return plan_prompt(root, &goal).map(Some);
-    }
-    if !crate::local_advanced_keywords::ultrareview_positions(text).is_empty() {
-        let mut prompt = review_prompt(root, None)?;
-        prompt.push_str("\n\nUser's review goal: ");
-        prompt.push_str(text);
-        return Ok(Some(prompt));
-    }
     Ok(None)
 }
 
@@ -134,15 +126,12 @@ mod tests {
             .status()
             .unwrap();
         assert!(git.success());
-        for text in [
-            "/ultraplan fix local files",
-            "please ultraplan fix local files",
-        ] {
+        for text in ["/ultraplan fix local files"] {
             let prompt = sdk_user_prompt(root.path(), text).unwrap().unwrap();
             assert!(prompt.contains("fix local files"), "{text}");
             assert!(prompt.contains("read-only/plan permissions"), "{text}");
         }
-        for text in ["/ultrareview 42", "please ultrareview current changes"] {
+        for text in ["/ultrareview 42"] {
             let prompt = sdk_user_prompt(root.path(), text).unwrap().unwrap();
             assert!(prompt.contains("deep local code review"), "{text}");
             assert!(prompt.contains("Do not modify code"), "{text}");
@@ -164,6 +153,8 @@ mod tests {
             "ultraplan?",
             "/ultraplan (MCP) foo",
             "quoted 'ultrareview' text",
+            "please ultraplan fix local files",
+            "please ultrareview current changes",
         ] {
             assert!(
                 sdk_user_prompt(root.path(), input).unwrap().is_none(),
