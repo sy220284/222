@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn sdk_advanced_does_not_execute_quoted_paths_or_unknown_commands() {
         let root = tempfile::tempdir().unwrap();
-        for input in ["/unknown ultraplan work", "/model abc", "\u0060ultraplan\u0060",
+        for input in ["/unknown ultraplan work", "/model abc", "`ultraplan`",
                       "src/ultraplan.tsx", "ultraplan?", "/ultraplan (MCP) foo",
                       "quoted 'ultrareview' text"] {
             assert!(sdk_user_prompt(root.path(), input).unwrap().is_none(), "{input}");
