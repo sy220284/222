@@ -84,7 +84,11 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
             let mode = payload["mode"].as_str().ok_or("missing grouping mode")?;
             let grouped = collections::object_group_by(values.iter().cloned(),
                 |item,index| group_key(item,index,mode).expect("registered selector is valid"));
-            json!(grouped)
+            let mut object = serde_json::Map::new();
+            for (key, values) in grouped {
+                object.insert(key, json!(values));
+            }
+            Value::Object(object)
         }
         _ => return Err("unknown original collection function".into()),
     };
