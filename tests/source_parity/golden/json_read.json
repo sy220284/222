@@ -1,0 +1,63 @@
+{
+  "schema": "source-golden/v1",
+  "source_path": "src/utils/jsonRead.ts",
+  "source_sha256": "74056192043c19dd73833e34e51350336ed3c814eb8f4a9ae21087648217e403",
+  "export": "stripBOM",
+  "cases": [
+    {
+      "id": "one-bom",
+      "input": "﻿{\"a\":1}",
+      "expected": "{\"a\":1}"
+    },
+    {
+      "id": "two-boms",
+      "input": "﻿﻿ABC",
+      "expected": "﻿ABC"
+    },
+    {
+      "id": "bom-after-space",
+      "input": " ﻿ABC",
+      "expected": " ﻿ABC"
+    },
+    {
+      "id": "trailing-bom",
+      "input": "ABC﻿",
+      "expected": "ABC﻿"
+    },
+    {
+      "id": "empty",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "id": "only-bom",
+      "input": "﻿",
+      "expected": ""
+    },
+    {
+      "id": "nul",
+      "input": "﻿\u0000X",
+      "expected": "\u0000X"
+    },
+    {
+      "id": "nbsp-leading",
+      "input": " ﻿X",
+      "expected": " ﻿X"
+    },
+    {
+      "id": "newline-after-bom",
+      "input": "﻿\nx",
+      "expected": "\nx"
+    },
+    {
+      "id": "emoji",
+      "input": "﻿😀",
+      "expected": "😀"
+    },
+    {
+      "id": "interior-bom",
+      "input": "﻿abc﻿",
+      "expected": "abc﻿"
+    }
+  ]
+}
