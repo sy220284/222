@@ -1,5 +1,5 @@
 {
-  "count": 188,
+  "count": 174,
   "disclaimer": "仅是自动生成空壳的静态检测，不证明手写代码功能完整。",
   "items": [
     {
@@ -139,14 +139,6 @@
       "view_export_unreachable": true
     },
     {
-      "null_expression_count": 11,
-      "rust": "src/generated_ports/p_ad72c0a43614a.rs",
-      "rust_lines": 27,
-      "source": "src/commands/mobile/mobile.tsx",
-      "source_lines": 274,
-      "view_export_unreachable": true
-    },
-    {
       "null_expression_count": 10,
       "rust": "src/generated_ports/p_9d478e1ba087e.rs",
       "rust_lines": 152,
@@ -168,14 +160,6 @@
       "rust_lines": 153,
       "source": "src/components/ResumeTask.tsx",
       "source_lines": 268,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 9,
-      "rust": "src/generated_ports/p_a3657ca61fd5e.rs",
-      "rust_lines": 69,
-      "source": "src/components/TeleportStash.tsx",
-      "source_lines": 116,
       "view_export_unreachable": true
     },
     {
@@ -244,14 +228,6 @@
     },
     {
       "null_expression_count": 7,
-      "rust": "src/generated_ports/p_af902ff34c817.rs",
-      "rust_lines": 50,
-      "source": "src/components/TeleportProgress.tsx",
-      "source_lines": 140,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 7,
       "rust": "src/generated_ports/p_baa83b625cf4b.rs",
       "rust_lines": 36,
       "source": "src/components/LanguagePicker.tsx",
@@ -276,14 +252,6 @@
     },
     {
       "null_expression_count": 6,
-      "rust": "src/generated_ports/p_6945c8538facb.rs",
-      "rust_lines": 21,
-      "source": "src/components/RemoteEnvironmentDialog.tsx",
-      "source_lines": 340,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 6,
       "rust": "src/generated_ports/p_b297abdcbeb6f.rs",
       "rust_lines": 29,
       "source": "src/components/StatusLine.tsx",
@@ -304,14 +272,6 @@
       "rust_lines": 41,
       "source": "src/components/EffortCallout.tsx",
       "source_lines": 265,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 6,
-      "rust": "src/generated_ports/p_7c4a2c598240c.rs",
-      "rust_lines": 38,
-      "source": "src/commands/install-github-app/ChooseRepoStep.tsx",
-      "source_lines": 211,
       "view_export_unreachable": true
     },
     {
@@ -416,14 +376,6 @@
       "rust_lines": 21,
       "source": "src/commands/model/model.tsx",
       "source_lines": 297,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 5,
-      "rust": "src/generated_ports/p_92dc7da033a9e.rs",
-      "rust_lines": 46,
-      "source": "src/commands/install-github-app/OAuthFlowStep.tsx",
-      "source_lines": 276,
       "view_export_unreachable": true
     },
     {
@@ -536,14 +488,6 @@
       "rust_lines": 53,
       "source": "src/components/FullscreenLayout.tsx",
       "source_lines": 637,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 4,
-      "rust": "src/generated_ports/p_52c6c162180e4.rs",
-      "rust_lines": 51,
-      "source": "src/components/Settings/Usage.tsx",
-      "source_lines": 377,
       "view_export_unreachable": true
     },
     {
@@ -828,22 +772,6 @@
     },
     {
       "null_expression_count": 2,
-      "rust": "src/generated_ports/p_b9c0fcb163e64.rs",
-      "rust_lines": 47,
-      "source": "src/utils/teleport.tsx",
-      "source_lines": 1226,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_a9174729be5dd.rs",
-      "rust_lines": 20,
-      "source": "src/commands/install-github-app/install-github-app.tsx",
-      "source_lines": 587,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
       "rust": "src/generated_ports/p_50bf5166734f7.rs",
       "rust_lines": 12,
       "source": "src/components/Spinner/GlimmerMessage.tsx",
@@ -896,14 +824,6 @@
       "rust_lines": 44,
       "source": "src/components/permissions/FilePermissionDialog/permissionOptions.tsx",
       "source_lines": 177,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 2,
-      "rust": "src/generated_ports/p_145c13866144f.rs",
-      "rust_lines": 33,
-      "source": "src/components/TeleportResumeWrapper.tsx",
-      "source_lines": 167,
       "view_export_unreachable": true
     },
     {
@@ -976,14 +896,6 @@
       "rust_lines": 12,
       "source": "src/components/CustomSelect/select.tsx",
       "source_lines": 690,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 1,
-      "rust": "src/generated_ports/p_c5c7a3a7a86d5.rs",
-      "rust_lines": 16,
-      "source": "src/commands/bridge/bridge.tsx",
-      "source_lines": 509,
       "view_export_unreachable": true
     },
     {
@@ -1104,14 +1016,6 @@
       "rust_lines": 60,
       "source": "src/components/LogoV2/WelcomeV2.tsx",
       "source_lines": 433,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 0,
-      "rust": "src/generated_ports/p_21443fd0f496d.rs",
-      "rust_lines": 16,
-      "source": "src/components/BridgeDialog.tsx",
-      "source_lines": 401,
       "view_export_unreachable": true
     },
     {
@@ -1248,14 +1152,6 @@
       "rust_lines": 45,
       "source": "src/components/agents/new-agent-creation/wizard-steps/MethodStep.tsx",
       "source_lines": 80,
-      "view_export_unreachable": true
-    },
-    {
-      "null_expression_count": 0,
-      "rust": "src/generated_ports/p_9eba1e482615d.rs",
-      "rust_lines": 29,
-      "source": "src/components/LogoV2/VoiceModeNotice.tsx",
-      "source_lines": 68,
       "view_export_unreachable": true
     },
     {
@@ -1476,14 +1372,6 @@
     },
     {
       "null_expression_count": 1,
-      "rust": "src/generated_ports/p_c84de04e0085c.rs",
-      "rust_lines": 23,
-      "source": "src/hooks/useReplBridge.tsx",
-      "source_lines": 723,
-      "view_export_unreachable": false
-    },
-    {
-      "null_expression_count": 1,
       "rust": "src/generated_ports/p_bb3d7b51ba520.rs",
       "rust_lines": 19,
       "source": "src/utils/plugins/zipCache.ts",
@@ -1508,7 +1396,7 @@
     }
   ],
   "schema": "port-stubs/v1",
-  "total_null_expressions": 908,
-  "unreachable_views": 159,
-  "with_null": 164
+  "total_null_expressions": 852,
+  "unreachable_views": 146,
+  "with_null": 152
 }
