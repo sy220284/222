@@ -202,54 +202,49 @@ jobs:
           set -euo pipefail
           python3 scripts/source_parity_gate.py report --repo . --output .port-audit
           cat .port-audit/SOURCE_PARITY.md >> "$GITHUB_STEP_SUMMARY"
-      - name: 获取私密 2.1.88 原版源码
+      # SHA256 are immutable public provenance; URLs/tokens are secrets.
+      # Missing credentials still produce an actionable full parity report.
+      - name: 获取经哈希固定的私有原版源码及规格
+        id: private_inputs
+        continue-on-error: true
         shell: bash
         env:
           SOURCE_URL: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_URL }}
-          SOURCE_SHA256: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_SHA256 }}
           SOURCE_TOKEN: ${{ secrets.ORIGINAL_SOURCE_ARCHIVE_TOKEN }}
           SPEC_URL: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_URL }}
-          SPEC_SHA256: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_SHA256 }}
           SPEC_TOKEN: ${{ secrets.ORIGINAL_SPEC_ARCHIVE_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p .port-audit
-          if [[ -z "$SOURCE_URL" || -z "$SOURCE_SHA256" ]]; then
-            echo "::error::未配置可信的原版源码与哈希，禁止放行"
+          umask 077
+          SOURCE_SHA256=23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d
+          SPEC_SHA256=3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93
+          if [[ -z "$SOURCE_URL" || -z "$SPEC_URL" ]]; then
+            echo "::error::须配置 ORIGINAL_SOURCE_ARCHIVE_URL 与 ORIGINAL_SPEC_ARCHIVE_URL 两个仓库 Secret；无原版证据不得放行"
             exit 1
           fi
-          [[ "$SOURCE_URL" == https://* ]] || { echo "::error::必须使用 HTTPS 原版源码地址"; exit 1; }
-          [[ "$SOURCE_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || { echo "::error::原版 ZIP SHA256 非法"; exit 1; }
-          if [[ -n "$SOURCE_TOKEN" ]]; then
-            curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
-              --header "Authorization: Bearer $SOURCE_TOKEN" "$SOURCE_URL" -o "$RUNNER_TEMP/original.zip"
-          else
-            curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
-              "$SOURCE_URL" -o "$RUNNER_TEMP/original.zip"
-          fi
-          echo "$SOURCE_SHA256  $RUNNER_TEMP/original.zip" | sha256sum -c -
-          if [[ -z "$SPEC_URL" || -z "$SPEC_SHA256" ]]; then
-            echo "::error::缺少完整源码功能规格包与 SHA256，禁止放行"
-            exit 1
-          fi
-          [[ "$SPEC_URL" == https://* ]] || { echo "::error::规格包必须通过 HTTPS 获取"; exit 1; }
-          [[ "$SPEC_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || { echo "::error::规格包 SHA256 非法"; exit 1; }
-          # Avoid sending private source credentials to a different host.
-          if [[ -n "$SPEC_TOKEN" ]]; then
-            curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
-              --header "Authorization: Bearer $SPEC_TOKEN" "$SPEC_URL" -o "$RUNNER_TEMP/source-spec.zip"
-          else
-            curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 240 \
-              "$SPEC_URL" -o "$RUNNER_TEMP/source-spec.zip"
-          fi
-          echo "$SPEC_SHA256  $RUNNER_TEMP/source-spec.zip" | sha256sum -c -
+          fetch_private_zip() {
+            local url="$1" token="$2" expected="$3" destination="$4"
+            [[ "$url" == https://* ]] || { echo "::error::原版文件必须使用 HTTPS 地址"; return 1; }
+            local options=(--fail --silent --show-error --proto '=https' --max-redirs 0
+                           --connect-timeout 15 --max-time 240 --retry 2 --retry-all-errors)
+            if [[ -n "$token" ]]; then
+              curl "${options[@]}" --header "Authorization: Bearer $token" "$url" -o "$destination"
+            else
+              curl "${options[@]}" "$url" -o "$destination"
+            fi
+            echo "$expected  $destination" | sha256sum -c -
+          }
+          fetch_private_zip "$SOURCE_URL" "$SOURCE_TOKEN" "$SOURCE_SHA256" "$RUNNER_TEMP/original.zip"
+          fetch_private_zip "$SPEC_URL" "$SPEC_TOKEN" "$SPEC_SHA256" "$RUNNER_TEMP/source-spec.zip"
       - name: 原版源码逐文件、逐函数和 Rust 行为证据门禁
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+        if: always()
+        shell: bash
         run: |
-          python3 scripts/source_parity_gate.py gate --repo . \
-            --source-archive "$RUNNER_TEMP/original.zip" \
-            --spec-archive "$RUNNER_TEMP/source-spec.zip" --output .port-audit
+          set -euo pipefail
+          args=(gate --repo . --output .port-audit)
+          [[ -f "$RUNNER_TEMP/original.zip" ]] && args+=(--source-archive "$RUNNER_TEMP/original.zip")
+          [[ -f "$RUNNER_TEMP/source-spec.zip" ]] && args+=(--spec-archive "$RUNNER_TEMP/source-spec.zip")
+          python3 scripts/source_parity_gate.py "${args[@]}"
       - name: 保存独立验收记录
         if: always()
         uses: actions/upload-artifact@v4
