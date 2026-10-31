@@ -15,6 +15,10 @@ use uuid::Uuid;
 pub struct Session {
     pub id: Uuid,
     pub messages: Vec<Message>,
+    /// Replayable MCP server instruction announcements survive resume, just
+    /// as 2.1.88 preserves mcp_instructions_delta attachment history.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp_instruction_announcements: Vec<crate::mcp_instructions_delta::InstructionAnnouncement>,
     /// Durable pre-compaction transcript. Never sent to the model again:
     /// the compact summary represents this portion in active context.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -93,6 +97,7 @@ impl Session {
         Self {
             id: Uuid::new_v4(),
             messages: Vec::new(),
+            mcp_instruction_announcements: Vec::new(),
             archived_messages: Vec::new(),
             history_message_ids: Vec::new(),
             history_message_aliases: std::collections::BTreeMap::new(),
@@ -235,6 +240,7 @@ impl Session {
         self.transcript_snapshot = None;
         self.transcript_active_offset = 0;
         self.messages.clear();
+        self.mcp_instruction_announcements.clear();
         self.archived_messages.clear();
         self.tasks.clear();
         self.surfaced_memories.clear();
@@ -247,6 +253,32 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mcp_instruction_announcements_persist_resume_and_clear() {
+        let mut session = Session::fresh();
+        session.mcp_instruction_announcements.push(
+            crate::mcp_instructions_delta::InstructionAnnouncement {
+                added_names: vec!["review-server".to_owned()],
+                removed_names: Vec::new(),
+            },
+        );
+        let encoded = serde_json::to_vec(&session).unwrap();
+        let restored: Session = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(
+            restored.mcp_instruction_announcements,
+            session.mcp_instruction_announcements
+        );
+        let mut restored = restored;
+        restored.clear();
+        assert!(restored.mcp_instruction_announcements.is_empty());
+        let legacy: Session = serde_json::from_value(serde_json::json!({
+            "id": uuid::Uuid::new_v4(),
+            "messages": []
+        }))
+        .unwrap();
+        assert!(legacy.mcp_instruction_announcements.is_empty());
+    }
+
     #[test]
     fn compact_context_is_a_single_user_turn_and_not_a_system_override() {
         let mut session = Session::fresh();
