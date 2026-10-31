@@ -161,6 +161,37 @@ pub fn permission_paths(path: &Path) -> Vec<PathBuf> {
     result
 }
 
+/// Version-independent equivalent of the original FileTooLargeError.
+/// The public std::io::ErrorKind::FileTooLarge requires Rust 1.83 but this
+/// repository promises MSRV 1.82. Callers can downcast the source error.
+#[derive(Debug)]
+pub struct FileRangeTooLarge {
+    pub size_in_bytes: u64,
+    pub max_size_bytes: usize,
+}
+
+impl std::fmt::Display for FileRangeTooLarge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "File content ({}) exceeds maximum allowed size ({}). Use offset and limit parameters to read specific portions of the file.",
+            self.size_in_bytes, self.max_size_bytes
+        )
+    }
+}
+
+impl std::error::Error for FileRangeTooLarge {}
+
+fn file_range_too_large(actual: u64, limit: usize) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        FileRangeTooLarge {
+            size_in_bytes: actual,
+            max_size_bytes: limit,
+        },
+    )
+}
+
 /// Source utils/readFileInRange.ts: stream the full file to count lines,
 /// but keep only the requested line window. Byte limits constrain the
 /// selected *content*, not the formatted line-number prefixes.
@@ -230,13 +261,7 @@ pub fn read_text_line_window_with_limit(
     if !truncate_on_byte_limit {
         if let Some(limit) = max_bytes {
             if file_meta.is_file() && file_meta.len() > limit as u64 {
-                return Err(io::Error::new(
-                    io::ErrorKind::FileTooLarge,
-                    format!(
-                        "File content ({}) exceeds maximum allowed size ({limit})",
-                        file_meta.len()
-                    ),
-                ));
+                return Err(file_range_too_large(file_meta.len(), limit));
             }
         }
     }
@@ -302,10 +327,7 @@ pub fn read_text_line_window_with_limit(
         if !truncate_on_byte_limit {
             if let Some(limit) = max_bytes {
                 if total_bytes.saturating_sub(if has_bom { 3 } else { 0 }) > limit as u64 {
-                    return Err(io::Error::new(
-                        io::ErrorKind::FileTooLarge,
-                        "File exceeds maximum allowed size",
-                    ));
+                    return Err(file_range_too_large(total_bytes, limit));
                 }
             }
         }
@@ -468,7 +490,13 @@ mod tests {
         assert!(!fits_separator.truncated_by_bytes);
 
         let denied = read_text_line_window_with_limit(&path, 2, 1, Some(11), false).unwrap_err();
-        assert_eq!(denied.kind(), io::ErrorKind::FileTooLarge);
+        assert_eq!(denied.kind(), io::ErrorKind::InvalidData);
+        let source_error = denied
+            .get_ref()
+            .and_then(|error| error.downcast_ref::<FileRangeTooLarge>())
+            .expect("source FileTooLargeError is preserved");
+        assert_eq!(source_error.max_size_bytes, 11);
+        assert_eq!(source_error.size_in_bytes, fs::metadata(&path).unwrap().len());
     }
 
     #[test]
