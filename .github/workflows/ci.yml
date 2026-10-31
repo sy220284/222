@@ -197,6 +197,14 @@ jobs:
     steps:
       - name: 检出当前提交
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: 使用固定 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - name: 编译本次对照的 Rust 生产程序
+        run: cargo build --locked --bin atlas-agent
       # The local source may be absent; publish gaps and keep the strict gate failing.
       - name: 输出源码逐函数差异清单（只报告，不放行）
         shell: bash
