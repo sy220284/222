@@ -1,76 +1,76 @@
-# 222 原版源码、函数行为与 Rust 等价验收唯一工作台
+# 222 唯一原版源码与 Rust 全量等价验收门禁
 
-## 统一真源
-原版 2.1.88 共有 1,906 条源码路径，已批准排除 192 条，其余 1,714 条必须有完整的 Rust 实现、真实入口、行为与恢复测试。原版 SHA256 和首次状态存于 docs/PORT_BASELINE.json；实时迁移状态只取 docs/FILE_PORT_MATRIX.md；已授权排除由 docs/REMOVED_SCOPE.json 定义；已执行测试证据写入 docs/PORT_EVIDENCE.jsonl；全函数语义与行为契约统一保存在 docs/SOURCE_PARITY_CONTRACTS.jsonl。禁止从历史报告复制完成率。
+## 结论与边界
 
-## 检查入口
-python3 scripts/source_parity_gate.py audit --repo . --output .port-audit
-python3 scripts/source_parity_gate.py audit --repo . --source-archive /private/claude-code-2.1.88.zip --output .port-audit
-python3 scripts/source_parity_gate.py gate --repo . --source-archive /private/claude-code-2.1.88.zip --spec-archive /private/2.1.88-spec.zip --output .port-audit
+唯一强制入口：\`scripts/source_parity_gate.py gate\`，由 \`.github/workflows/ci.yml\` 中固定作业 **原版源码全量等价验收** 执行。正常编译、静态扫描、原版文档、函数索引、旧 CI 通过记录，都不能替代原版与 Rust 在同样输入下实际运行的结果。
 
-统一输出 SOURCE_PARITY.json 和 SOURCE_PARITY.md。audit 可核查缺口，gate 是拒绝未闭环的最终验收。源码缺失、文件哈希/大小/行数不符、函数/行为证据遗漏、仍有未迁移/部分实现、测试凭证不存在，全部使 gate 返回失败。它永远不自动把一条路径改为已验收。原版只用于对照，不能发布到公开 GitHub 仓库。
+冻结原版 2.1.88：**1,906 条源码路径**（1,902 条第一方 \`src/\` 与 4 条 \`vendor/\`）。仅按已授权范围排除 **192 条**，其余 **1,714 条**都须完整复核。单一事实源：
 
-## 行为契约
-每条原版非排除路径使用原路径作为唯一键；每个函数使用函数名与原版起止行号标识，记录输入、输出、条件和功能逻辑、失败、权限、状态、时序、取消、持久化、副作用、真实调用链及测试。全文件需逐分支审查，内部动态入口不能因未导出而漏计；同一业务的 CLI、SDK、工具、MCP 多入口归并为同一功能链，同时保留路径级证据。文档和原版哈希匹配只能证明来源，完整功能仍需当前 Rust 行为与 CI 实测。
+- \`docs/PORT_BASELINE.json\`：原版文件路径、SHA256、字节数与行数的冻结来源。
+- \`docs/FILE_PORT_MATRIX.md\`：真实迁移状态及 Rust 映射，禁止因为索引存在自动变更为已验收。
+- \`docs/REMOVED_SCOPE.json\`：经用户批准的剔除范围。
+- \`docs/SOURCE_PARITY_CONTRACTS.jsonl\`：原版逐函数与 Rust 行为契约，每个功能索引的行为及场景适用性。
+- \`docs/PORT_EVIDENCE.jsonl\`：验收提交和 CI 证据，必须与当前 Rust 实际文件哈希一致。
 
-## CI 如何获取保密原版源码
-仓库 Secrets 必须配置 ORIGINAL_SOURCE_ARCHIVE_URL、ORIGINAL_SPEC_ARCHIVE_URL 两个私有下载地址；两个原版 ZIP 的 SHA256 已作为固定来源指纹写入 CI（源码 `23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d`，规格 `3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93`），不再要求单独设置 SHA256 Secret；可选 ORIGINAL_SOURCE_ARCHIVE_TOKEN 与 ORIGINAL_SPEC_ARCHIVE_TOKEN（分别用于源码和规格包的 Bearer 认证，互不转发）。URL 必须 HTTPS 且无需跨站重定向，CI 首先校验两个 ZIP 的整体哈希；门禁再逐项验证全部 1,906 个源文件的冻结 SHA256、大小及行数，以及 5,258 份规格包文件的内部 SHA256 和 1,902 条第一方源文件与详细规格的唯一双向关系。下载地址缺失会使严格验收失败，仍生成完整缺口报告。请使用私有且受控的存储，不要将源码放入公开仓库、发布物或 Actions Artifact。
+## 提交者自己工作区的源码（不再上传/下载原版）
 
-## GitHub 服务器端保护
-原版源码全量等价验收是固定作业名。要阻止 GitHub 网页/接口绕过失败的 CI，需对 main 设置 Ruleset 强制要求该检查且不允许 bypass；当前 GitHub 连接缺乏读取/配置分支保护的管理员权限，不能将工作流失败误称为已开启不可绕过的合并保护。
+**原版由每位提交者在自己的受控工作区查阅、执行、复核。** 不要求 GitHub Secrets 中配置私有 ZIP 下载地址，也禁止将原版源码复制到公开仓库、PR、日志或构建工件。工作区目录在仓库外，包含 \`source/src/\` 和 \`source/vendor/\`。若只有 \`src/\` 目录，仍缺 4 个 \`vendor/\` 原版文件，冻结校验会失败。
 
-## 旧工具与历史资料去重
-scripts/port_workbench.py：唯一迁移台账读取、证据检查、静态影响范围与空壳检测；其结果汇入本门禁。
-scripts/spec_closure_index.py 与 scripts/spec_document_progress.py：外部产品规格/函数入口索引导入工具，仅供生成待办，不再另设验收结论。
-scripts/import_original_prompt_literals.py：提示词原文候选采集，不把原文存在当成运行时对齐。
-scripts/sync_spec_progress_summary.py：同步显示数字，不再定义独立状态。旧审计报告保存用于追溯，不重新引入第二套工作台。
+源码 SHA256 的原版 ZIP 参考指纹为 \`23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d\`；完整规格 ZIP 指纹为 \`3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93\`。本门禁逐文件校验目录中的 1,906 个原版文件的冻结哈希、大小和行数，并交叉核验规格中的 1,902 个第一方文件逐行原文。规格 ZIP 的总体 SHA256 另由 CI 校验，内部所有 5,258 个条目的清单哈希也逐个核对。
 
-## 2026-10-31 首轮审计状态
-当前 FILE_PORT_MATRIX 登记：排除 192、已验收 38、部分实现 1,212、未迁移 464。剩余 1,676 项必须继续完成逐函数与行为验收。现有 PORT_EVIDENCE.jsonl 仅 11 条历史新增验证记录，且历史的验收项并不具有本门禁所需的全函数契约。因此初次强制门禁预期失败；这是真实问题清单，不能用占位数据改成通过。
+提交者本地命令：
 
-现有工作流此前没有原版 ZIP 输入，外部完整原版档案也未入库，故本次不会声称已完成全量动态等价。按照本门禁持续补齐之后，应从原始源码重新复查所有非排除路径，直到完整真实证据全部通过。
-
-## 实际来源锁定
-
-本轮独立读取用户资料库原版 ZIP：SHA256 23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d；完整逐行规格包：SHA256 3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93。规格包 ZIP CRC 通过，内部 5,258 条哈希记录验证一致，1,902 条第一方映射没有重复、源码 SHA 不匹配或详细文档缺失。该静态来源审计不等于动态运行行为对齐。
-
-
-## 2026-10-31 契约底稿重构及可执行路径
-
-**现状必须分层显示：** 本次把零字节的 `SOURCE_PARITY_CONTRACTS.jsonl` 建成覆盖 1,714 条应迁移路径的**待审基线**，内容是已有冻结 SHA256、路径、源码行数、Rust 映射和明确的待验证状态。这仅消除了空文件导致的断档；1,714 条当前没有一条可以凭这份底稿通过新版完整行为验收。禁止把 JSONL 记录条数称为验收完成率。
-
-需要真实源码逐函数索引时，在有两份用户授权原版 ZIP 的可信环境运行：
-
-```bash
-python3 scripts/source_parity_gate.py index --repo . \
-  --source-archive /private/claude-code-2.1.88.zip \
-  --spec-archive /private/complete-source-spec.zip \
-  --output .port-audit --write-contracts
+~~~bash
 python3 scripts/source_parity_gate.py report --repo . --output .port-audit
-python3 -m unittest discover -s tests/port_workbench -p 'test_*.py'
-```
 
-`index` 在写入前重新校验全部 1,906 个文件及冻结哈希；可选核对 1,902 份第一方详细规格，并生成声明候选、源码位置与规格文件引用。重复执行按源路径覆盖同一个待审底稿，已经验收的人工契约保持原样。提取器捕获的是待复核函数线索，自动登记不生成语义、权限、失败、持久化等运行结论，也不自动调整台账。需要逐个补足 `functions` 的十二种行为维度、真实 Rust 入口及回归测试，再重新审计。
+python3 scripts/source_parity_gate.py index --repo . \
+  --source-root /absolute/path/to/claude-code-2.1.88/source \
+  --spec-archive /absolute/path/to/complete-spec.zip \
+  --output .port-audit --write-contracts
 
-已在本轮独立验证的私有资料：源码 ZIP SHA256 为
-`23ee61c936cc73e34dbd556b10ff3ad355d2699a91e4e69cd8fc12791017d33d`，
-详细规格 ZIP SHA256 为
-`3b291532059e887b20a9adaf779fb789dabcd843042c5343745f3adfdf372b93`。
-对原版 1,906 个源码文件及 1,902 份第一方详细规格逐行核对，共计 **513,237 行原文，零差异**。这只说明规格文本准确复现了原版源码，不等于 Rust 功能已等价。
+python3 scripts/source_parity_gate.py gate --repo . \
+  --source-root /absolute/path/to/claude-code-2.1.88/source \
+  --spec-archive /absolute/path/to/complete-spec.zip \
+  --runtime-cases tests/source_parity/cases \
+  --output .port-audit
+~~~
 
-### GitHub 私有资料接入（仓库管理员一次性配置）
+\`--source-root\` 读取**真实目录**，只在本地临时创建中间 ZIP 复用冻结哈希校验流程，操作结束即删除；不得指向当前公开仓库内的目录，也不接受符号链接。\`--source-archive\` 仍可用于历史静态审计，但完整动态 \`gate\` 强制同时要求原版工作区目录，不能只交一个历史 ZIP 冒充实际运行。
 
-GitHub 仓库 `Settings → Secrets and variables → Actions → Repository secrets` 中配置：
+## 动态对照到底做什么
 
-- `ORIGINAL_SOURCE_ARCHIVE_URL`：可通过 HTTPS 无重定向获取完整原版 ZIP 的私有地址。
-- `ORIGINAL_SPEC_ARCHIVE_URL`：完整逐行规格 ZIP 的私有地址。
-- `ORIGINAL_SOURCE_ARCHIVE_TOKEN`：源码服务需要 Bearer 鉴权时提供。
-- `ORIGINAL_SPEC_ARCHIVE_TOKEN`：规格服务需要 Bearer 鉴权时提供。
+\`scripts/source_function_index.py\` 从原版 AST 详细规格构造独立审计 ID：已复核的 20,788 个函数/方法节点 + 1,212 个不同的直接导出值 + 17 个纯文件级单元 + 4 个 vendor 文件级单元，合计 **22,021 个静态定位对象**。它们仅是原版需要核对的对象，不等于 22,021 个已经独立验收的用户功能。同一行的不同回调保留各自身份。旧规格的“状态写入数”存在漏报，已作为不可信历史数据，禁止用它判定状态逻辑已经等价；参见 \`docs/SOURCE_AST_VERIFICATION.md\`。
 
-整体 SHA256 已固定在 `.github/workflows/ci.yml`，无须将公开的哈希重复存为 Secret。建议两份档案放在访问受控、支持短时密钥的私有对象存储中；CI 不向日志或工件上传原版 ZIP。
+动态门禁 \`scripts/runtime_parity_gate.py\` 读取 \`tests/source_parity/cases/*.json\` 中的显式场景并执行：
 
-**不能把 ChatGPT 资料库路径当作 GitHub Actions 可访问的路径**。Actions 运行器无权直接读取本会话资料库。仓库管理员完成私有下载地址及 Token 配置前，下载会失败，随后仍执行唯一契约门禁并上传失败原因及缺口报告；这个失败是按设计拒绝放行。
+1. 在隔离的两个临时数据目录中，用**同一个 JSON 输入**分别启动工作区原版执行入口和已编译的 Rust 执行入口（直接 argv，无 shell，均限制时间和输出大小）。
+2. 要求两个程序都返回 \`source-rust-observation/v1\`，实际报告运行过的原版函数 ID，且与该场景 \`source_ids\` 完全一致。无原版实际执行、找不到入口、超时、崩溃、未产生可解析的观察数据都拒绝通过。
+3. 严格比较返回值、错误、状态快照、函数/工具调用顺序、权限决定、事件顺序、副作用、持久化快照、取消表现，以及真实进程退出码与标准错误摘要。所有差异均保留到 \`DYNAMIC_PARITY.json\` 中；不自动归一化或忽略不符合预期的字段。
+4. 每个保留的原版审计对象必须覆盖 **normal、edge、error、permission_allow、permission_deny、cancel、concurrent、restart、stream、side_effect** 十种行为族。确实不适用的族，必须在对应 \`functions[].not_applicable_scenarios\` 中逐项写出源代码起止行号、原版 SHA256、具体理由；**normal 和 edge 禁止豁免**。这些文字仍需由代码审阅者核实，禁止批量虚构。
+5. 逐条绑定已审行为契约、Rust 生产入口和最新文件哈希、实际通过的 CI 测试记录及当前迁移状态。只要有遗漏、差异或未迁移项，\`gate\` 返回失败，**不会自动放行或自动晋级状态**。
 
-当前 CI 已将台账校验、调用范围审计、迁移报告、规格进度同步与完整源码验收统一从 `scripts/source_parity_gate.py` 进入。旧脚本仍作为内部数据处理模块或兼容入口保留，原始迁移状态继续以单一矩阵为准。
+双端测试适配器须分别调用原版和 Rust 的**真实生产代码**，需要在原版工作区中构建/配置可实际运行的测试入口。仅打印预设 JSON 的模拟器即使两端结果一致，也不构成通过验收的证据；必须人工检查适配器的真实调用链与源码断言。测试环境须隔离网络与凭据并控制时间、随机数、路径等可变因素。不能把同一个实现作为双端适配器。
 
-GitHub 网页/API 真正禁止合并仍需要有管理权限的仓库人员设置 `main` Ruleset，要求状态检查 `原版源码全量等价验收` 成功且禁止绕过；PR 保持 Draft，直到所有必需证据闭环。
+可复核场景格式、约束及增加方式见 \`tests/source_parity/cases/README.md\`。\`SOURCE_PARITY.json\` 包含静态/动态验收结论；\`DYNAMIC_PARITY.json\` 单独输出场景覆盖、实际执行数及差异；\`SOURCE_FUNCTION_COVERAGE_GAPS.json\` 记录未闭环的原版索引。
+
+## CI 如何强制阻断
+
+GitHub-hosted runner **无法读取提交者电脑的文件**。因此强制作业使用专用标签 \`self-hosted, linux, source-parity-222\` 的可信隔离运行器；外部 fork PR 改用 GitHub-hosted runner，缺少私有原版，按设计失败，避免让不可信 PR 在携带私有源码的运行器上执行。请将个人原版工作区配置到该独立运行器：
+
+- 缺省源码：\`$RUNNER_WORKSPACE/original-2.1.88/source\`
+- 缺省规格包：\`$RUNNER_WORKSPACE/original-2.1.88/spec.zip\`
+- 可选使用仓库 Variables \`ORIGINAL_SOURCE_ROOT\` 和 \`ORIGINAL_SPEC_ARCHIVE\` 指定绝对路径；不依赖 Secret 下载 URL。
+
+运行器要对每次作业进行隔离清理，确保原版目录只读、适配器无生产密钥或外网权限；一位提交者自己的源码工作区**不会自动同步到其它提交者的运行器**。未注册符合标签的可信运行器时，必需验收作业无法成功，按“未获验收”处理。
+
+**合并保护需仓库管理员在 \`main\` Ruleset 中把 \`原版源码全量等价验收\` 设为必需成功状态，禁止绕过。** 单纯让工作流检查失败，尚不能保证 GitHub 合并按钮被服务器端拦截。当前未验证 Ruleset 已设置，因此禁止声称具备不可绕过的合并保护。
+
+仅归档经过限制的缺口报告，不上传原版源码、原版工作区 ZIP、函数签名/初始化表达式全量索引。CI 取消过期提交的旧作业；仅最新 HEAD 的完整验收结果有效。
+
+## 本轮源码级复查与当前真实状态
+
+对用户提供的原版源码和完整规格 ZIP 核验：两个 SHA256 与冻结指纹匹配；1,902 个第一方文件共 **513,237 行**逐行原文一致；AST 与 TSV **20,788 个函数/方法**匹配；\`export\` 直接导出变量 **1,276** 项中另有 **64** 项箭头函数已在函数表内，剩余 1,212 项独立入索引。\`src/bootstrap/state.ts\` 的 \`regenerateSessionId\` 与 \`switchSession\` 涉及 \`STATE\` 字段直接赋值、缓存删除及会话切换通知，旧规格“状态写入数=0”存在漏报；因此新增动态场景必须核对缓存、状态同步及事件时序。更多来源核验见 \`docs/SOURCE_AST_VERIFICATION.md\`。
+
+当前原有迁移矩阵 38 已验收、1,212 部分实现、464 未迁移、192 已排除。现在的 1,714 条行为契约仍处于待审/未充分证明状态，仓库也尚无覆盖 22,021 个原版审计对象的**真实双端动态执行场景**。**新门禁应失败，不得为取得绿色 CI 而补造测试结果或擅自放宽范围。** 交付时必须核对实际 GitHub Actions 作业及 Rust 测试的最终结论，并继续修复真实功能缺口。
+
+旧 \`port_workbench.py\`、规格索引和历史审计文档保留为数据导入、台账与影响分析辅助，最终动态和静态结论统一以 \`source_parity_gate.py gate\` 为准。
