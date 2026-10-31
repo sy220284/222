@@ -221,7 +221,7 @@
 | `src/commands/mcp/mcp.tsx` | `14c72b6b3a77dc8e2c5bb5b13f75ef44e67bd62657bfee739c4a8d9fad9754fe` | 部分实现 | `src/generated_ports/p_7522da9606aa2.rs` | 部分实现：/mcp 原版参数路由已接真实 chat 入口，支持 enable/disable all、状态过滤、命名目标和持久化（附真实 CLI 回归）；原有 /mcp 参数路由（no-redirect/设置视图、reconnect <name>、enable/disable [target]）+MCPToggle 目标解析纯核——ide 客户端恒排除、all 按 enable 筛 disabled/disable 筛非 disabled、命名按 name 匹配、空选择 already/not-found 消息、成功计数或单服务器结果；toggle 动作注入，settings/reconnect 视图归组件域，附 5 测试 | 待按规格逐函数核实、补齐并验收 |
 | `src/commands/mcp/xaaIdpCommand.ts` | `3138dd1d1876daef063974fdd914c90056bba90759779f5921e8558183826cdb` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/commands/memory/index.ts` | `15d2f44ead737f46aed1a6248901b3a01b91b24c24785af446163885d0a1ce88` | 部分实现 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 | 待按规格逐函数核实、补齐并验收 |
-| `src/commands/memory/memory.tsx` | `24533c71d22f067ea42815950c3666af4b958bbaf55b9728ef162afd99c230c5` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
+| `src/commands/memory/memory.tsx` | `24533c71d22f067ea42815950c3666af4b958bbaf55b9728ef162afd99c230c5` | 部分实现 | `src/memory_command.rs / src/main.rs / src/memory.rs` | 部分实现：已接通交互式 /memory 的用户/项目指令及已有自动记忆选择、文件 wx 原子新建且绝不覆盖、取消无副作用、VISUAL/EDITOR 优先顺序及安全 argv 编辑器调用，增加单元测试；待完整实现原版 MemoryFileSelector 的导入文件树、代理记忆文件夹、自动记忆与 Dream 开关及其设置持久化、编辑后缓存刷新和跨平台终端实际回归 | 已提交 /memory 真实执行入口、用户/项目/已有自动记忆文件编辑、wx 不覆盖和环境编辑器测试；原版全部行为仍待验收 |
 | `src/commands/mobile/index.ts` | `3f6d5b28a636c40c35aa4880908868614caa1631a7fa62ea1d849f937f9607a6` | 排除 | — | 按用户要求删除；官方云端移动端伴随入口；不再跟进，通用本地能力与模型 API 保留 | 已授权排除 |
 | `src/commands/mobile/mobile.tsx` | `acccea2ee9a2b9ec03ae131294d5199d178d34e04eaf6abc5ced630639e97f60` | 排除 | — | 按用户要求删除；官方云端移动端伴随入口；不再跟进，通用本地能力与模型 API 保留 | 已授权排除 |
 | `src/commands/mock-limits/index.js` | `866d3056ed253b20df98d66ef89ddf24e1e93f5becf82b0bf0c87df7c694b767` | 部分实现 | `src/command_manifest.rs` | 部分实现：Rust 指令注册描述/别名/隐藏/禁用索引和交互别名查询已落地，命令处理器独立迁移中 | 待按规格逐函数核实、补齐并验收 |
@@ -583,7 +583,7 @@
 | `src/components/mcp/McpParsingWarnings.tsx` | `47e99da44303586bd44df1e38a034ddd8fe62d330f8f03568b49c582976d90d0` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/components/mcp/index.ts` | `c6974df8a29afcdf16a1ca4a9d77f598f59f51318477dc3e22196cad64720614` | 部分实现 | `src/generated_ports/p_9ba24aa9d05d7.rs` | 部分实现：完整等价：八组件+三类型 re-export 面清单；待验收 | 待按规格逐函数核实、补齐并验收 |
 | `src/components/mcp/utils/reconnectHelpers.tsx` | `9a0eef92fccac7169ddbff0c7f4fb330eec7b82bcdbcd6cd106d937b54796f47` | 部分实现 | `src/generated_ports/p_962b63a53cf13.rs` | 部分实现：从原始 2.1.88 AST 转写 Rust 类型、字面量/纯函数或 JSX 视图结构；源码已落地，交互和完整语义待统一验收 | 待按规格逐函数核实、补齐并验收 |
-| `src/components/memory/MemoryFileSelector.tsx` | `4f24f21da1c31b7359193af67bcd1a9088f7b22e5271440c6ede6ee557bb9d14` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
+| `src/components/memory/MemoryFileSelector.tsx` | `4f24f21da1c31b7359193af67bcd1a9088f7b22e5271440c6ede6ee557bb9d14` | 部分实现 | `src/memory_command.rs / src/main.rs` | 部分实现：交互式 /memory 已提供用户与项目两种可新建文件、已有自动记忆索引的可选列表、按序号确认与取消；仍缺原版树形导入/嵌套记忆、自动记忆文件夹与代理记忆入口、AutoMemory/AutoDream 状态切换持久化、最后选项记忆与完整交互控件；源码仅为本地终端可用子集，仍需功能对照验收 | 记忆文件选择与取消已有终端交互；导入文件树、代理记忆、自动记忆/Dream开关、最后选项仍未迁移 |
 | `src/components/memory/MemoryUpdateNotification.tsx` | `939968df58d0052ccc964cb0875019fff0135862724cd8cb8559013714587441` | 部分实现 | `src/generated_ports/p_88d57d5c10a9a.rs` | 部分实现：完整等价：getRelativeMemoryPath 纯函数（~/相对双候选取短，否则绝对）含三分支单测；JSX 宿主归 ink，待验收 | 待按规格逐函数核实、补齐并验收 |
 | `src/components/messageActions.tsx` | `5f02733eb459cc37edcbae2767c383bd6042feb58fa5f88b35d55b523bd12b3b` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/components/messages/AdvisorMessage.tsx` | `952e52c5281f6cb9e1f8b89f90e0314d8db1074a08100fe5c3a9dced588f15d6` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
@@ -1490,7 +1490,7 @@
 | `src/utils/cronScheduler.ts` | `8262123d2a9f9bdca1cf0d14506ffdc0b7db75ab011966a6417190853ad66027` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/cronTasks.ts` | `3d945a1e391ec19ef9674ce2f0f45672eb2638ec3d778e3985e96c7eca0e8adf` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/cronTasksLock.ts` | `58edf5dfa4599ed73fbc0f19ee623d48634746d6a42466934faeb1a83d25d6cb` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
-| `src/utils/crossProjectResume.ts` | `03a940cbd43e493f22fdd34c85f031ee27bb3f1bc8c0b0d121ffac5631fe6249` | 未迁移 | 待定 | 未迁移 | 待按规格逐函数核实、补齐并验收 |
+| `src/utils/crossProjectResume.ts` | `03a940cbd43e493f22fdd34c85f031ee27bb3f1bc8c0b0d121ffac5631fe6249` | 部分实现 | `src/cross_project_resume.rs / src/main.rs` | 部分实现：已按原版校对当前项目判断、路径边界正确的同仓工作树识别、不同项目安全恢复命令，真实 Git worktree 路径扫描和交互式 /resume --project PATH -- ID 已接入；仍需跨项目全局会话选择界面、同仓工作树免重启切换、完整源协议与跨平台终端实际验收 | 已提交 Rust 实现、交互式入口和路径/工作树/安全命令单元测试；尚缺全局选择与工作树免重启恢复；待最新HEAD CI |
 | `src/utils/crypto.ts` | `64c8787d6392c91af39a5fa1aa689cddae8039124f29d8dc25928c3b7d0086da` | 部分实现 | `src/portable_source_utils.rs` | 部分实现：已写 Rust 行为代码并加入基础用例，等待按原版完整验收与调用链补齐 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/cwd.ts` | `25d5bbb7fc905447a3f17c4daac6d073c41515263223ec37484badf5792b37ce` | 部分实现 | `src/portable_configuration.rs` | 部分实现：Rust 函数/类型/状态处理已写入，原版调用方与边界统一验收后置 | 待按规格逐函数核实、补齐并验收 |
 | `src/utils/debug.ts` | `8d6734724d4e8467a50781d3af9d4341d54a8ffc64bf71a2726976714123b01e` | 部分实现 | `src/generated_ports/p_5b257a1951fde.rs` | 部分实现：手工重写日志核心（级别门控/会话单例/--debug-file 链/symlink/缓冲写/过滤器接线/logAntError），env 品牌中立映射 CLAUDE_CODE_DEBUG_*→ATLAS_DEBUG_*，同步写替代 Node pendingWrite 异步链；memoize 缓存语义省略（行为等价），Windows symlink 差异待验收 | 待按规格逐函数核实、补齐并验收 |
