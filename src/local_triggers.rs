@@ -97,6 +97,17 @@ fn load(root: &Path) -> Result<Store> {
     Ok(entries)
 }
 
+/// Release an OS advisory lock on every exit path, including an early
+/// validation error or cancellation. File close alone is platform-dependent.
+struct TriggerFileLock(fs::File);
+impl Drop for TriggerFileLock {
+    fn drop(&mut self) {
+        if let Err(error) = fs2::FileExt::unlock(&self.0) {
+            eprintln!("Cannot release local task store lock: {error}");
+        }
+    }
+}
+
 fn mutate_store(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> Result<()> {
     let dir = store_dir(root);
     fs::create_dir_all(&dir).context("Cannot create local trigger directory")?;
@@ -122,6 +133,7 @@ fn mutate_store(root: &Path, change: impl FnOnce(&mut Store) -> Result<()>) -> R
         .context("Cannot open local task lock file")?;
     fs2::FileExt::try_lock_exclusive(&lock_file)
         .context("Another local trigger update is running")?;
+    let _guard = TriggerFileLock(lock_file);
     let mut entries = load(root)?;
     change(&mut entries)?;
     ensure_private_directory(&dir)?;
