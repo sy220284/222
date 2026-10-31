@@ -18,6 +18,7 @@ mod config;
 mod context_usage;
 mod control_message_compat;
 mod conversation_context;
+mod cross_project_resume;
 mod copy_response;
 mod cost;
 mod custom_multi_select_source;
@@ -2053,6 +2054,7 @@ async fn chat(
                 println!("/sessions --semantic QUERY use model-ranked session search");
                 println!("One-shot model search: atlas-agent semantic-sessions QUERY");
                 println!("/resume [TERM]           pick or directly resume a saved conversation");
+                println!("/resume --project PATH -- ID  get a safe command to resume another project's session");
                 println!("/rename [NAME]           rename conversation or generate a name using active model");
                 println!("/export [filename]       save full conversation to a local text file");
                 println!("Resume: atlas-agent chat --resume SESSION_ID");
@@ -2815,7 +2817,54 @@ async fn chat(
             .or_else(|| input.strip_prefix("/continue"))
             .filter(|tail| tail.is_empty() || tail.starts_with(' '))
         {
-            let query = query.trim();
+            let mut query = query.trim();
+            // Source: utils/crossProjectResume.ts::checkCrossProjectResume.
+            // A cross-project path never causes a hidden CWD/agent switch:
+            // display a shell-safe invocation to resume it locally.
+            if let Some(spec) = query.strip_prefix("--project ") {
+                let external = (|| -> Result<(std::path::PathBuf, &str)> {
+                    let (path, selector) = spec.split_once(" -- ").context(
+                        "Usage: /resume --project PROJECT_PATH -- SESSION_ID",
+                    )?;
+                    if path.trim().is_empty() || selector.trim().is_empty() {
+                        bail!("Project path and session selector are required");
+                    }
+                    let root = std::path::Path::new(path.trim())
+                        .canonicalize()
+                        .with_context(|| format!("Project directory unavailable: {}", path.trim()))?;
+                    if !root.is_dir() {
+                        bail!("Project must be a directory");
+                    }
+                    Ok((root, selector.trim()))
+                })();
+                match external {
+                    Ok((project, selector)) if project == agent.workspace_root() => {
+                        query = selector;
+                    }
+                    Ok((project, selector)) => {
+                        let location = cross_project_resume::check_cross_project_resume(
+                            agent.workspace_root(), Some(&project), true, &[], selector,
+                        );
+                        match location {
+                            cross_project_resume::ResumeLocation::AnotherProject { command, .. } => {
+                                println!("Resume in the other project using: {command}");
+                            }
+                            cross_project_resume::ResumeLocation::SameRepositoryWorktree { .. } => {
+                                println!("Resume in that worktree using: {}",
+                                    cross_project_resume::resume_command(&project, selector));
+                            }
+                            cross_project_resume::ResumeLocation::Current => unreachable!(
+                                "Different canonical project path was validated above"
+                            ),
+                        }
+                        continue;
+                    }
+                    Err(error) => {
+                        eprintln!("Resume selection failed: {error:#}");
+                        continue;
+                    }
+                }
+            }
             let selection = (|| -> Result<Option<String>> {
                 if !query.is_empty() {
                     return Ok(Some(query.to_owned()));
