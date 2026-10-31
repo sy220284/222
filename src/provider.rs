@@ -240,7 +240,7 @@ fn model_backoff(attempt: usize) -> Result<Duration> {
 
 /// Source withRetry.ts DEFAULT_MAX_RETRIES=10 plus the initial attempt.
 /// Expose the portable ATLAS_MAX_RETRIES counterpart to the original
-/// CLAUDE_CODE_MAX_RETRIES; parseInt tolerates a decimal numeric prefix.
+/// Original retry environment setting; parseInt tolerates a decimal numeric prefix.
 fn model_retry_attempts_from(raw: Option<&str>) -> Result<usize> {
     let Some(raw) = raw else {
         return Ok(11);
