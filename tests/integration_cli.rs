@@ -1565,7 +1565,11 @@ fn chat_rejects_raw_permission_rules_before_any_write() {
     {
         let mut input = child.stdin.take().unwrap();
         writeln!(input, "/permission add local allow Bash()").unwrap();
-        writeln!(input, "/permission add local allow WebFetch(https://example.com)").unwrap();
+        writeln!(
+            input,
+            "/permission add local allow WebFetch(https://example.com)"
+        )
+        .unwrap();
         writeln!(input, "/permission add local allow WebSearch(test*)").unwrap();
         writeln!(input, "/exit").unwrap();
     }
@@ -1576,9 +1580,15 @@ fn chat_rejects_raw_permission_rules_before_any_write() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("Invalid permission rule: Bash()"), "{stderr}");
+    assert!(
+        stderr.contains("Invalid permission rule: Bash()"),
+        "{stderr}"
+    );
     assert!(stderr.contains("domain"), "{stderr}");
-    assert!(stderr.contains("WebSearch does not support wildcards"), "{stderr}");
+    assert!(
+        stderr.contains("WebSearch does not support wildcards"),
+        "{stderr}"
+    );
     assert!(!root.path().join(".atlas/settings.local.json").exists());
 }
 
