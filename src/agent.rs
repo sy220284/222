@@ -5864,7 +5864,9 @@ mod tests {
                 request.messages.last().unwrap().visible_text(),
                 "Continue from summary"
             );
-            assert!(!request.system.contains("Verified session continuity summary"));
+            assert!(!request
+                .system
+                .contains("Verified session continuity summary"));
             Ok(crate::protocol::ModelResponse {
                 message: Message::text("assistant", "Continued."),
                 finish_reason: Some("stop".into()),
