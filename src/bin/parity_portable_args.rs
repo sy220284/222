@@ -1,10 +1,10 @@
 //! Original peerAddress and cliArgs leaf function parity against real Rust modules.
-#[path = "../peer_address.rs"]
-mod peer_address;
 #[path = "../cli_args.rs"]
 mod cli_args;
-use std::io::{self, Read};
+#[path = "../peer_address.rs"]
+mod peer_address;
 use serde_json::{json, Value};
+use std::io::{self, Read};
 
 const PEER: &str = "src/utils/peerAddress.ts:FunctionDeclaration:8-21:occurrence-1";
 const EAGER: &str = "src/utils/cliArgs.ts:FunctionDeclaration:13-29:occurrence-1";
@@ -21,7 +21,9 @@ fn execute() -> Result<(), Box<dyn std::error::Error>> {
     io::stdin().read_to_string(&mut raw)?;
     let request: Value = serde_json::from_str(&raw)?;
     let id = request["id"].as_str().ok_or("missing case ID")?;
-    let operation = request["input"]["operation"].as_str().ok_or("missing operation")?;
+    let operation = request["input"]["operation"]
+        .as_str()
+        .ok_or("missing operation")?;
     let input = &request["input"]["payload"];
     let (value, source_id) = match operation {
         "parseAddress" => {

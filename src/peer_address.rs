@@ -22,10 +22,22 @@ mod tests {
     use super::*;
     #[test]
     fn original_prefixes_and_legacy_paths_preserve_targets() {
-        assert_eq!(parse_peer_address("uds:/tmp/a"), (PeerScheme::Uds, "/tmp/a"));
-        assert_eq!(parse_peer_address("bridge:session"), (PeerScheme::Bridge, "session"));
-        assert_eq!(parse_peer_address("/tmp/a"), (PeerScheme::Uds, "/tmp/a"));
-        assert_eq!(parse_peer_address(" agent"), (PeerScheme::Other, " agent"));
+        assert_eq!(
+            parse_peer_address("uds:/tmp/a"),
+            (PeerScheme::Uds, "/tmp/a")
+        );
+        assert_eq!(
+            parse_peer_address("bridge:session"),
+            (PeerScheme::Bridge, "session")
+        );
+        assert_eq!(
+            parse_peer_address("/tmp/a"),
+            (PeerScheme::Uds, "/tmp/a")
+        );
+        assert_eq!(
+            parse_peer_address(" agent"),
+            (PeerScheme::Other, " agent")
+        );
         assert_eq!(parse_peer_address("uds:"), (PeerScheme::Uds, ""));
     }
 }
