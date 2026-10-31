@@ -30,13 +30,11 @@ pub fn stdin_override() -> Option<File> {
     if !should_use_tty_override(stdin_is_tty, ci, mcp, false) {
         return None;
     }
-    let handle = TTY_INPUT.get_or_init(|| {
-        match File::open("/dev/tty") {
-            Ok(file) => Some(file),
-            Err(error) => {
-                eprintln!("Controlling terminal unavailable for piped interactive input: {error}");
-                None
-            }
+    let handle = TTY_INPUT.get_or_init(|| match File::open("/dev/tty") {
+        Ok(file) => Some(file),
+        Err(error) => {
+            eprintln!("Controlling terminal unavailable for piped interactive input: {error}");
+            None
         }
     });
     match handle {
