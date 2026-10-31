@@ -1,3 +1,11 @@
+## 2026-10-31 最新源码验收复查：历史证据清零缺失、双端门禁稳定性
+
+- 以最新 PR6 HEAD 复核 1,906 原版路径，授权排除 192，需迁移 1,714；已验收 39、部分实现 1,211、未迁移 464，**仍待完整验收 1,675**。本次不把静态索引或旧状态自动提升为已验收。
+- 补齐历史已验收条目所缺 29 份证据：16 条固定工具名常量和 13 条已经有 Rust 测试的工具/通用函数；其原版文件 SHA256 与冻结基线一致，记录具体 Rust 落点、测试名称及成功的历史 CI。当前 39 条已验收均有证据；另有两份已排除路径的历史证据，不影响本轮验收计数。
+- 修改 `scripts/port_workbench.py::check_evidence`，每次检查**全部已验收条目**必须持续保有原版哈希、生产入口、测试和恢复证据；新增 `test_historic_verified_entry_cannot_lose_its_evidence`，防止旧证据丢失而状态仍然冒称验收。
+- 修复 `scripts/runtime_parity_gate.py` 双端函数标识为非字符串导致的未捕获异常，以及适配器输出非法 UTF-8 导致验收器中断；明确将畸形输出记为失败场景。独立快照测试：运行时门禁 6/6 通过，工作台核心 31/31 通过；`port_workbench check` 通过，来源哈希及迁移计数一致。
+- 原版与 Rust 22,021 静态审计对象的完整双端行为测试仍缺大量场景，`原版源码全量等价验收` 专用 CI 当前无符合条件的运行器可执行，必须保留未验收结论；任何局部测试成功都不能替代它。完整交付仍未闭环。
+
 ## 2026-10-31：MCP 工具结果完整内容链与多模型图片回放
 
 - 对照原版 `services/mcp/client.ts::transformResultContent/inferCompactSchema/transformMCPResult/processMCPResult/callMCPTool`（2478–2814、3124–3174）、`utils/mcpValidation.ts` 与 `utils/mcpOutputStorage.ts`。使用 `mcp_content` 收敛工具和 prompt 内容转换；优先选择 legacy toolResult、structuredContent、content，未知响应明确报错；isError 在内容转换及文件保存前优先返回原始失败原因。
