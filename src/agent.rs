@@ -5864,6 +5864,24 @@ mod tests {
         // followed by the user's new task, with no system duplication.
         agent.provider = Box::new(CompactContinuationModel);
         agent.ask("Continue from summary").await.unwrap();
+        let new_turn_count = agent.session.messages.len();
+        assert!(new_turn_count >= 2);
+        // Multiple compactions must preserve each earlier summary boundary
+        // and every intervening user/assistant message in the saved archive.
+        agent.provider = Box::new(SummaryModel);
+        agent.compact_history().await.unwrap();
+        let restored_twice = Session::load(dir.path(), &id).unwrap();
+        assert!(restored_twice.messages.is_empty());
+        assert_eq!(restored_twice.archived_messages.len(), 3 + new_turn_count);
+        let export = crate::session_control::render(&restored_twice);
+        assert_eq!(
+            export.matches("This session is being continued").count(),
+            2
+        );
+        let first_summary = export.find("This session is being continued").unwrap();
+        let resumed_task = export.find("Continue from summary").unwrap();
+        let final_summary = export.rfind("This session is being continued").unwrap();
+        assert!(first_summary < resumed_task && resumed_task < final_summary);
     }
 
     struct CompactContinuationModel;
