@@ -1,4 +1,4 @@
-//! Literal prompt evidence from the user-supplied Claude Code 2.1.88 source.
+//! Literal prompt evidence from the user-supplied original 2.1.88 source.
 //! Dynamic JS templates remain source text until their parameters are bound.
 use serde::Deserialize;
 use std::sync::OnceLock;
@@ -187,9 +187,15 @@ mod tests {
     fn actual_runtime_prompts_match_verbatim_source_literals() {
         assert_eq!(glob_description(), crate::search::SOURCE_GLOB_DESCRIPTION);
         assert_eq!(grep_description(), crate::search::SOURCE_GREP_DESCRIPTION);
-        assert_eq!(
-            literal("src/constants/prompts.ts", "# Executing actions with care"),
-            Some(crate::prompt_runtime::SOURCE_ACTIONS)
-        );
+        // The runtime is intentionally vendor-neutral: the original catalog
+        // remains immutable evidence while project guidance points at
+        // the local repository's actual AGENTS.md instructions.
+        let original = literal("src/constants/prompts.ts", "# Executing actions with care")
+            .expect("The original action safety instructions must be present");
+        assert!(original.contains("Authorization stands for the scope specified"));
+        assert!(crate::prompt_runtime::SOURCE_ACTIONS.contains("AGENTS.md files"));
+        assert!(crate::prompt_runtime::SOURCE_ACTIONS.contains(
+            "Authorization stands for the scope specified"
+        ));
     }
 }
