@@ -231,6 +231,33 @@ mod tests {
     }
 
     #[test]
+    fn additional_tools_receive_original_model_visible_descriptions() {
+        let cases = [
+            (
+                crate::lsp::LspManager::definition(),
+                "src/tools/LSPTool/prompt.ts",
+                "Interact with Language Server Protocol",
+            ),
+            (
+                crate::notebook::definition(),
+                "src/tools/NotebookEditTool/prompt.ts",
+                "Completely replaces the contents of a specific cell",
+            ),
+            (
+                crate::webfetch::definition(),
+                "src/tools/WebFetchTool/prompt.ts",
+                "\n- Fetches content from a specified URL",
+            ),
+        ];
+        for (definition, path, prefix) in cases {
+            let exact = literal(path, prefix).unwrap();
+            let actual = definition["function"]["description"].as_str().unwrap();
+            assert!(actual.starts_with(exact), "{path}");
+            assert!(actual.len() > exact.len(), "{path}");
+        }
+    }
+
+    #[test]
     fn actual_runtime_prompts_match_verbatim_source_literals() {
         assert_eq!(glob_description(), crate::search::SOURCE_GLOB_DESCRIPTION);
         assert_eq!(grep_description(), crate::search::SOURCE_GREP_DESCRIPTION);
