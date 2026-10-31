@@ -7711,3 +7711,56 @@ fn sdk_ultrareview_branch_executes_three_verified_local_rounds() {
         "pub fn target() {}\n"
     );
 }
+
+#[test]
+fn print_alias_json_returns_one_real_model_result() {
+    let root = tempfile::tempdir().unwrap();
+    let config = root.path().join("config.json");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    fs::write(
+        &config,
+        json!({"default_provider":"mock","providers":[{
+            "id":"mock","kind":"openai-compatible","model":"test-model",
+            "base_url":format!("http://{address}/v1"),"stream":false
+        }]})
+        .to_string(),
+    )
+    .unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = accept_before(&listener, Duration::from_secs(15));
+        let request = read_request(&mut stream);
+        let body = json!({"choices":[{"message":{
+            "role":"assistant","content":"print-mode-ok"
+        },"finish_reason":"stop"}]}).to_string();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        ).unwrap();
+        stream.flush().unwrap();
+        request
+    });
+    let output = binary()
+        .args([
+            "--workspace",
+            root.path().to_str().unwrap(),
+            "-p",
+            "Return print-mode-ok",
+            "--output-format",
+            "json",
+        ])
+        .env("ATLAS_CONFIG", &config)
+        .output()
+        .unwrap();
+    let request = server.join().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(request.contains("Return print-mode-ok"), "{request}");
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["type"], "result");
+    assert_eq!(result["result"], "print-mode-ok");
+}
