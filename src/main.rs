@@ -1692,13 +1692,18 @@ async fn chat(
             use std::io::IsTerminal as _;
             session_color::prompt_prefix(agent.session_color(), io::stdout().is_terminal())
         };
-        let entries: Vec<String> = prompt_history
+        let mut entries: Vec<String> = prompt_history
             .get_history()?
             .into_iter()
             .map(|entry| entry.display)
             .collect();
         let line =
-            match terminal_input::read_prompt(&prompt, &entries, config.editor_mode == "vim")? {
+            match terminal_input::read_prompt(
+                &prompt,
+                &mut entries,
+                config.editor_mode == "vim",
+                &mut prompt_history,
+            )? {
                 terminal_input::PromptRead::Line(line) => line,
                 terminal_input::PromptRead::Cancelled => continue,
                 terminal_input::PromptRead::Eof => break,

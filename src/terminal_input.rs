@@ -8,6 +8,25 @@ use std::io::{self, IsTerminal, Read, Write};
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 
+/// 2.1.88 src/hooks/useDoublePress.ts: one press starts an 800ms
+/// window; a second press consumes it without scheduling another.
+#[derive(Default)]
+struct DoublePress {
+    last: Option<std::time::Instant>,
+}
+impl DoublePress {
+    fn press(&mut self, now: std::time::Instant) -> bool {
+        if self.last.is_some_and(|old| {
+            now.saturating_duration_since(old) <= std::time::Duration::from_millis(800)
+        }) {
+            self.last = None;
+            return true;
+        }
+        self.last = Some(now);
+        false
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum PromptRead {
     Line(String),
@@ -517,7 +536,12 @@ fn append_pasted_key(editor: &mut Editor, key: &Key) -> Result<()> {
 }
 
 #[cfg(unix)]
-fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<PromptRead> {
+fn interactive(
+    prompt: &str,
+    history: &mut Vec<String>,
+    vim_enabled: bool,
+    prompt_history: &mut crate::prompt_history::PromptHistory,
+) -> Result<PromptRead> {
     let _raw = RawMode::enter()?;
     let mut input = io::stdin().lock();
     let mut out = io::stdout().lock();
@@ -526,6 +550,9 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
     bindings.register_context("Chat");
     let mut e = Editor::default();
     let mut vim = VimKeys::new(vim_enabled);
+    let mut ctrl_c = DoublePress::default();
+    let mut ctrl_d = DoublePress::default();
+    let mut escape = DoublePress::default();
     let mut paste = false;
     let mut replay_byte = None;
     write!(out, "\x1b[?2004h")?;
@@ -593,6 +620,58 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
                 Resolution::Match(a) => Some(a.as_str()),
                 _ => None,
             };
+            // Escape clears the draft only when pressed twice within 800ms;
+            // the second press also archives a meaningful draft to history.
+            if key == Key::Escape && matches!(action, None | Some("chat:cancel")) {
+                if escape.press(std::time::Instant::now()) {
+                    let draft = e.text.clone();
+                    if !draft.trim().is_empty() {
+                        if let Err(error) =
+                            prompt_history.add(&draft, std::collections::BTreeMap::new())
+                        {
+                            writeln!(out, "Unable to save cleared draft: {error:#}")?;
+                            redraw(&mut out, prompt, &e, &vim, history)?;
+                            continue;
+                        }
+                        history.insert(0, draft);
+                    }
+                    e.text.clear();
+                    e.cursor = 0;
+                    e.history_position = None;
+                    e.draft.clear();
+                } else if !e.text.is_empty() {
+                    writeln!(out, "\r\x1b[2KEsc again to clear")?;
+                }
+                redraw(&mut out, prompt, &e, &vim, history)?;
+                continue;
+            }
+            // Original useTextInput: first Ctrl-C clears, second exits;
+            // empty Ctrl-D only exits on its second press.
+            if key == Key::Ctrl('c') && matches!(action, None | Some("app:interrupt")) {
+                if ctrl_c.press(std::time::Instant::now()) {
+                    writeln!(out)?;
+                    return Ok(PromptRead::Eof);
+                }
+                e.text.clear();
+                e.cursor = 0;
+                e.history_position = None;
+                e.draft.clear();
+                writeln!(out, "\r\x1b[2KCtrl-C again to exit")?;
+                redraw(&mut out, prompt, &e, &vim, history)?;
+                continue;
+            }
+            if key == Key::Ctrl('d')
+                && e.text.is_empty()
+                && matches!(action, None | Some("app:exit"))
+            {
+                if ctrl_d.press(std::time::Instant::now()) {
+                    writeln!(out)?;
+                    return Ok(PromptRead::Eof);
+                }
+                writeln!(out, "\r\x1b[2KCtrl-D again to exit")?;
+                redraw(&mut out, prompt, &e, &vim, history)?;
+                continue;
+            }
             if matches!(action, Some("chat:submit")) || (action.is_none() && key == Key::Enter) {
                 writeln!(out)?;
                 return Ok(PromptRead::Line(e.text));
@@ -643,10 +722,15 @@ fn interactive(prompt: &str, history: &[String], vim_enabled: bool) -> Result<Pr
     out.flush()?;
     result
 }
-pub fn read_prompt(prompt: &str, history: &[String], vim_enabled: bool) -> Result<PromptRead> {
+pub fn read_prompt(
+    prompt: &str,
+    history: &mut Vec<String>,
+    vim_enabled: bool,
+    prompt_history: &mut crate::prompt_history::PromptHistory,
+) -> Result<PromptRead> {
     #[cfg(unix)]
     if io::stdin().is_terminal() && io::stdout().is_terminal() {
-        return interactive(prompt, history, vim_enabled);
+        return interactive(prompt, history, vim_enabled, prompt_history);
     }
     print!("{prompt}");
     io::stdout().flush()?;
@@ -660,6 +744,18 @@ pub fn read_prompt(prompt: &str, history: &[String], vim_enabled: bool) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn original_double_press_window_is_800ms_and_resets_after_second_press() {
+        use std::time::{Duration, Instant};
+        let now = Instant::now();
+        let mut key = DoublePress::default();
+        assert!(!key.press(now));
+        assert!(key.press(now + Duration::from_millis(800)));
+        assert!(!key.press(now + Duration::from_millis(801)));
+        assert!(!key.press(now + Duration::from_millis(1602)));
+        assert!(key.press(now + Duration::from_millis(2000)));
+    }
+
     #[test]
     fn unicode_cursor_and_delete_are_utf8_safe() {
         let mut e = Editor::default();
