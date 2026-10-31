@@ -58,3 +58,17 @@ SDK 示例：
 - **真实工具链验证：** 在 `tests/integration_cli.rs` 中通过模拟 OpenAI 兼容 API 让模型先发 `LocalTrigger.create` 再 `LocalTrigger.get`，确认工具注册、参数、权限、真实磁盘持久化、结果返回和模型下一轮消费；测试结论以本次提交的最新 GitHub CI 为准。
 
 **尚未等价：** 原版 UltraPlan 多阶段状态机及 seedPlan 草稿、UltraReview 原厂云端回填、模型在 SDK 下的高级关键词路由、LocalTrigger 的原版定时元数据与异步调度（已明确排除）、工具运行后的多阶段任务状态和 UI。以上不能因为 CLI 或 Rust CI 通过而标记成原版完整验收。范围仍为原版 1,906 条、排除 192 条、需持续对齐 1,714 条。
+
+
+## 2026-10-31 SDK 高级工作流入口继续对齐
+
+本次沿「SDK user 消息 → 内容块校验/附件解析 → 高级命令与关键词路由 → 单轮计划权限 Agent → 当前配置模型 API → SDK 结果事件」补齐实际断开的调用链：
+
+- local_advanced_workflows::sdk_user_prompt 统一解析 /ultraplan 目标、/ultrareview [PR] 及普通文本中的有效 ultraplan、ultrareview 关键词；未识别的斜杠命令继续走原有 SDK Skill/MCP 解析。无效参数直接产生 SDK error，不把错误指令送给模型。
+- SDK 只读取用户消息的最后一个原始文本块作为命令候选；替换为经过实际文件/Git 检查的本地工作流提示词，同时保留同一消息之前的文本、图片、本地附件及原 UUID。skipSlashCommands=true 时按原有 SDK 契约完全跳过该项路由。
+- 新增 Agent::ask_with_blocks_in_plan_mode，将高级工作流限定在本次请求的只读计划权限下，保留图片与消息身份，模型失败或 SDK 中断后恢复之前的权限，不持久改变用户设定。
+- 新增真实模拟模型 HTTP 的 SDK 端到端测试，覆盖无效高级命令、图片与附件不丢失、合法高级规划生成和跳过命令标志，并增加 SDK 路由边界与错误后权限恢复测试。
+
+以上仍只推进 **4 条高级审查/规划及关键词源码路径** 的本地等价接线；另外 3 条 LocalTrigger 路径之前已接通本地模型工具、审批与存储链。**7 条全部继续保持“部分实现”**。原版 UltraPlan 的多阶段状态、seedPlan、进度/取消回传 UI，UltraReview 相关本地 UI 与差异回收，LocalTrigger 的交互展示/结构化结果仍需独立源码级比对与验收；用户已授权排除的原厂云端和远程调度仍不纳入恢复。
+
+本轮的真实测试结论应以其对应 PR6 GitHub 提交的 CI 为准，不以前一提交或测试代码存在代替完成验收。
