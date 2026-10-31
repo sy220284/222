@@ -7856,7 +7856,7 @@ fn source_and_legacy_agent_tool_names_dispatch_real_subagent() {
                         "id":"source-agent-1","type":"function","function":{
                             "name":server_tool_name,"arguments":json!({
                                 "prompt":"Child source-compatible task",
-                                "subagent_type":"explore"
+                                "subagent_type":if server_tool_name == "Agent" { "Explore" } else { "Plan" }
                             }).to_string()
                         }
                     }]}),
@@ -7912,5 +7912,6 @@ fn source_and_legacy_agent_tool_names_dispatch_real_subagent() {
             requests[2].contains("Child source-compatible result"),
             "{tool_name}"
         );
+        assert!(!requests[2].contains("Subagent session:"), "{tool_name}");
     }
 }
