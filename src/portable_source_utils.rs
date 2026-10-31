@@ -8,58 +8,16 @@ use regex::Regex;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
 use uuid::Uuid;
 
 // src/utils/CircularBuffer.ts
-#[derive(Debug, Clone)]
-pub struct CircularBuffer<T> {
-    capacity: usize,
-    buffer: VecDeque<T>,
-}
-impl<T> CircularBuffer<T> {
-    pub fn new(capacity: usize) -> Result<Self> {
-        if capacity == 0 {
-            bail!("CircularBuffer capacity must be greater than zero")
-        }
-        Ok(Self {
-            capacity,
-            buffer: VecDeque::with_capacity(capacity),
-        })
-    }
-    pub fn add(&mut self, value: T) {
-        if self.buffer.len() == self.capacity {
-            self.buffer.pop_front();
-        }
-        self.buffer.push_back(value);
-    }
-    pub fn add_all(&mut self, values: impl IntoIterator<Item = T>) {
-        for value in values {
-            self.add(value);
-        }
-    }
-    pub fn get_recent(&self, count: usize) -> Vec<&T> {
-        self.buffer
-            .iter()
-            .skip(self.buffer.len().saturating_sub(count))
-            .collect()
-    }
-    pub fn to_array(&self) -> Vec<&T> {
-        self.buffer.iter().collect()
-    }
-    pub fn clear(&mut self) {
-        self.buffer.clear()
-    }
-    pub fn len(&self) -> usize {
-        self.buffer.len()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.buffer.is_empty()
-    }
-}
+#[path = "circular_buffer.rs"]
+mod circular_buffer;
+pub use circular_buffer::CircularBuffer;
 
 // src/utils/binaryCheck.ts and src/utils/findExecutable.ts
 static BINARY_CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();

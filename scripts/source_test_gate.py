@@ -349,7 +349,7 @@ for (const item of cases) {
 process.stdout.write(JSON.stringify(outputs));
 """
         if driver:
-            command = ["node", "--experimental-strip-types", "--no-warnings",
+            command = ["node", "--experimental-transform-types", "--no-warnings",
                        str(_safe_file(repo, driver)), str(file)]
         else:
             command = ["node", "--experimental-strip-types", "--no-warnings",
