@@ -6916,6 +6916,10 @@ fn model_local_trigger_round_trip_uses_selected_api_and_local_store() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let display = String::from_utf8_lossy(&output.stderr);
+    assert!(display.contains("LocalTrigger create model_review"), "{display}");
+    assert!(display.contains("HTTP 201 (1 lines)"), "{display}");
+    assert!(display.contains("LocalTrigger run model_review"), "{display}");
     let requests = request_log.join().unwrap();
     assert_eq!(requests.len(), 5);
     assert!(requests[0].contains("LocalTrigger"), "{}", requests[0]);
