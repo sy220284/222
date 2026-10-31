@@ -61,7 +61,7 @@ permissions|permissions|local-jsx|allowed-tools|-|Tool permissions
 plan|plan|local-jsx||[open|description]|Planning mode
 ultraplan|ultraplan|local-jsx||[goal]|Detailed local planning with active model
 ultrareview|ultrareview|local-jsx||[PR]|Deep local code review with active model
-trigger|local-trigger|local-jsx||[set|run|list|delete]|Run saved local Agent tasks with active model
+trigger|trigger|local-jsx||[set|run|list|delete]|Run saved local Agent tasks with active model
 plugin|plugin|local-jsx|plugins,marketplace|-|Plugin manager
 pr_comments|pr-comments|text||-|PR comments
 privacy-settings|privacy-settings|local-jsx||-|Privacy options
@@ -241,6 +241,7 @@ mod tests {
         assert_eq!(lookup("continue").unwrap().name, "resume");
         assert!(lookup("ultrareview").is_some());
         assert!(lookup("ultraplan").is_some());
+        assert_eq!(lookup("trigger").unwrap().name, "trigger");
         for removed in [
             "remote-control",
             "remote-env",
