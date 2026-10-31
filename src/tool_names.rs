@@ -4,6 +4,10 @@ pub const BASH_TOOL_NAME: &str = "Bash";
 pub const AGENT_TOOL_NAME: &str = "Agent";
 pub const LEGACY_AGENT_TOOL_NAME: &str = "Task";
 pub const VERIFICATION_AGENT_TYPE: &str = "verification";
+pub const ONE_SHOT_BUILTIN_AGENT_TYPES: &[&str] = &["Explore", "Plan"];
+pub fn is_one_shot_builtin_agent_type(agent_type: &str) -> bool {
+    ONE_SHOT_BUILTIN_AGENT_TYPES.contains(&agent_type)
+}
 pub const FILE_EDIT_TOOL_NAME: &str = "Edit";
 pub const CONFIG_TOOL_NAME: &str = "Config";
 pub const ENTER_PLAN_MODE_TOOL_NAME: &str = "EnterPlanMode";
@@ -85,6 +89,10 @@ mod tests {
         assert_eq!(canonical_name("WebSearch"), "web_search");
         assert_eq!(canonical_name("Config"), "Config");
         assert_eq!(canonical_name("Agent"), "spawn_agent");
+        assert_eq!(ONE_SHOT_BUILTIN_AGENT_TYPES, &["Explore", "Plan"]);
+        assert!(is_one_shot_builtin_agent_type("Explore"));
+        assert!(is_one_shot_builtin_agent_type("Plan"));
+        assert!(!is_one_shot_builtin_agent_type("explore"));
         assert_eq!(canonical_name("Task"), "spawn_agent");
         assert_eq!(canonical_name("Edit"), "edit_file");
     }
