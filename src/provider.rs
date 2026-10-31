@@ -1064,6 +1064,68 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn retry_after_decimal_prefix_retries_once_and_false_header_suppresses_retry() {
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/models", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for (attempt, response) in [
+                b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 0 seconds\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice(),
+                b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".as_slice(),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let (mut stream, _) = tokio::time::timeout(
+                    Duration::from_secs(5),
+                    listener.accept(),
+                )
+                .await
+                .expect("Model retry did not arrive")
+                .unwrap();
+                let mut request = [0_u8; 2048];
+                let read = stream.read(&mut request).await.unwrap();
+                assert!(read > 0, "missing HTTP request on attempt {attempt}");
+                stream.write_all(response).await.unwrap();
+            }
+        });
+        let response = send_model_request(Client::new().post(url).body("{}"))
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        assert_eq!(response.text().await.unwrap(), "ok");
+        server.await.unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/models", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = [0_u8; 2048];
+            let _ = stream.read(&mut bytes).await.unwrap();
+            stream
+                .write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nx-should-retry: false\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .await
+                .unwrap();
+            assert!(
+                tokio::time::timeout(Duration::from_millis(800), listener.accept())
+                    .await
+                    .is_err(),
+                "x-should-retry:false must suppress retry"
+            );
+        });
+        let response = send_model_request(Client::new().post(url).body("{}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn successful_model_http_response_is_never_retried_even_if_header_says_true() {
         use tokio::{
             io::{AsyncReadExt, AsyncWriteExt},
