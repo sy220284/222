@@ -280,6 +280,12 @@ class MobileState(private val context: Context) {
             if (!accept) {
                 if (method in setOf("item/commandExecution/requestApproval", "item/fileChange/requestApproval")) {
                     engine.respond(id, JSONObject().put("decision", "decline"))
+                } else if (method == "mcpServer/elicitation/request") {
+                    engine.respond(id, JSONObject().put("action", "decline"))
+                } else if (method == "item/permissions/requestApproval") {
+                    // No requested capability is granted.
+                    engine.respond(id, JSONObject().put("permissions", JSONObject())
+                        .put("scope", "turn"))
                 } else engine.reject(id, "用户明确拒绝了该操作")
             } else {
                 val result = if (args.isNotBlank()) JSONObject(args) else when (method) {
