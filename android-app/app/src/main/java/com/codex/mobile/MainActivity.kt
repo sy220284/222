@@ -46,8 +46,8 @@ import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     private lateinit var model: MobileState
-    private val pickDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) model.importAttachment(uri)
+    private val pickDocument = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        for (uri in uris) model.importAttachment(uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -438,14 +438,19 @@ private fun Composer(state: MobileState, pickFile: () -> Unit) {
                         ),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
                     )
-                    AnimatedVisibility(state.attachment != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.AttachFile, null, modifier = Modifier.size(16.dp))
-                            Text(state.attachment?.name ?: "",
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { state.attachment = null }) {
-                                Icon(Icons.Outlined.Close, "移除附件")
+                    AnimatedVisibility(state.attachments.isNotEmpty()) {
+                        Column {
+                            state.attachments.forEach { file ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.AttachFile, null,
+                                        modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text(file.name, style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1, modifier = Modifier.weight(1f))
+                                    IconButton(onClick = { state.attachments.remove(file) }) {
+                                        Icon(Icons.Outlined.Close, "移除附件")
+                                    }
+                                }
                             }
                         }
                     }
@@ -532,7 +537,7 @@ private fun HistoryPage(state: MobileState, onOpen: () -> Unit) {
 private fun WorkspacePage(state: MobileState, pickFile: () -> Unit) {
     var selected by remember { mutableStateOf<java.io.File?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
-    val files = remember(refresh, state.attachment) {
+    val files = remember(refresh, state.attachments.size) {
         runCatching { state.engine.workspace().listFiles()?.sortedBy { it.name } ?: emptyList() }
             .getOrDefault(emptyList())
     }

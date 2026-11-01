@@ -40,7 +40,7 @@ class MobileState(private val context: Context) {
     var selectedGroup by mutableStateOf("thread")
     var selectedMethod by mutableStateOf("thread/list")
     var responseJson by mutableStateOf("")
-    var attachment by mutableStateOf<File?>(null)
+    val attachments = mutableStateListOf<File>()
 
     private fun ui(block: () -> Unit) = mainHandler.post(block)
 
@@ -199,8 +199,8 @@ class MobileState(private val context: Context) {
         }
         busy = true
         chat.add(ChatLine(UUID.randomUUID().toString(), "user", prompt))
-        val file = attachment
-        attachment = null
+        val chosenFiles = attachments.toList()
+        attachments.clear()
         val id = threadId
         if (id == null) {
             try {
@@ -217,7 +217,7 @@ class MobileState(private val context: Context) {
                     } else {
                         threadId = nextId
                         refresh()
-                        startTurn(nextId, prompt, file)
+                        startTurn(nextId, prompt, chosenFiles)
                     }
                 }
             } catch (error: Exception) {
@@ -225,20 +225,20 @@ class MobileState(private val context: Context) {
                 context.stopService(Intent(context, CodexTaskService::class.java))
                 lastError = error.message
             }
-        } else startTurn(id, prompt, file)
+        } else startTurn(id, prompt, chosenFiles)
     }
 
-    private fun startTurn(id: String, prompt: String, file: File?) {
+    private fun startTurn(id: String, prompt: String, files: List<File>) {
         val input = JSONArray().put(JSONObject().put("type", "text").put("text", prompt))
-        if (file != null) {
-            val ext = file.extension.lowercase()
-            val type = when {
-                ext in setOf("jpg", "jpeg", "png", "webp") -> "localImage"
-                ext in setOf("mp3", "wav", "m4a", "ogg") -> "localAudio"
+        for (file in files) {
+            val extension = file.extension.lowercase()
+            val kind = when {
+                extension in setOf("jpg", "jpeg", "png", "webp") -> "localImage"
+                extension in setOf("mp3", "wav", "m4a", "ogg") -> "localAudio"
                 else -> "mention"
             }
-            val part = JSONObject().put("type", type).put("path", file.absolutePath)
-            if (type == "mention") part.put("name", file.name)
+            val part = JSONObject().put("type", kind).put("path", file.absolutePath)
+            if (kind == "mention") part.put("name", file.name)
             input.put(part)
         }
         ask("turn/start", JSONObject().put("threadId", id).put("input", input)) { result ->
@@ -304,18 +304,33 @@ class MobileState(private val context: Context) {
 
     fun importAttachment(uri: Uri) {
         try {
-            val mime = context.contentResolver.getType(uri) ?: ""
-            val extension = when {
-                mime.startsWith("image/") -> "png"
+            val resolver = context.contentResolver
+            val mime = resolver.getType(uri) ?: ""
+            val originalName = resolver.query(uri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null, null, null)?.use { cursor ->
+                    val column = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+                }.orEmpty()
+            val clean = originalName.replace(Regex("[^a-zA-Z0-9_.\\-]"), "_")
+                .take(120).ifBlank { "upload" }
+            val ext = clean.substringAfterLast('.', "").lowercase()
+            val fallbackExtension = when {
+                mime == "image/jpeg" -> "jpg"
+                mime == "image/png" -> "png"
+                mime == "image/webp" -> "webp"
                 mime.startsWith("audio/") -> "m4a"
-                else -> "txt"
+                else -> "bin"
             }
-            val file = File(engine.workspace(), "import-" + UUID.randomUUID() + "." + extension)
-            context.contentResolver.openInputStream(uri).use { stream ->
+            val suffix = if (ext.isNotBlank()) ext else fallbackExtension
+            val name = clean.substringBeforeLast('.', clean).take(70)
+            val target = File(engine.workspace(),
+                name + "-" + UUID.randomUUID() + "." + suffix)
+            resolver.openInputStream(uri).use { stream ->
                 requireNotNull(stream) { "无法读取文件内容" }
-                file.outputStream().use { stream.copyTo(it) }
+                target.outputStream().use { stream.copyTo(it) }
             }
-            attachment = file
+            attachments.add(target)
         } catch (error: Exception) {
             lastError = "附件导入失败：" + error.message
         }
