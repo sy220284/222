@@ -23,6 +23,8 @@ jobs:
         run: |
           set -euo pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+      - name: 校验 Codex 全量 RPC 功能目录与源码同步
+        run: python3 android-app/tools/generate_protocol_catalog.py --check
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.13"
