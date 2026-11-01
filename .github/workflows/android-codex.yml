@@ -4,8 +4,14 @@ on:
   push:
     paths:
       - "android-app/**"
+      - "codex-rs/cli/Cargo.toml"
       - ".github/workflows/android-codex.yml"
   workflow_dispatch:
+
+# Only the newest commit on a branch needs expensive Rust + Android builds.
+concurrency:
+  group: android-mobile-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
