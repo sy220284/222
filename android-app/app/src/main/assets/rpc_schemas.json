@@ -911,6 +911,11 @@
       "method": "fuzzyFileSearch/sessionUpdate",
       "paramsType": null,
       "namespace": null
+    },
+    {
+      "method": "fuzzyFileSearch/sessionStop",
+      "paramsType": null,
+      "namespace": null
     }
   ]
 }
