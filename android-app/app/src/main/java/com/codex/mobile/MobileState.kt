@@ -120,8 +120,10 @@ class MobileState(private val context: Context) {
             ui {
                 if (error != null) {
                     lastError = method + "：" + (error.cause?.message ?: error.message)
-                    busy = false
-                    context.stopService(Intent(context, CodexTaskService::class.java))
+                    if (method == "thread/start" || method == "turn/start") {
+                        busy = false
+                        context.stopService(Intent(context, CodexTaskService::class.java))
+                    }
                 } else done(result)
             }
         }
@@ -338,9 +340,11 @@ class MobileState(private val context: Context) {
         try {
             SecretStore(context).save(value.trim())
             apiKey = ""
-            engine.stop()
             connected = false
-            start()
+            Thread({
+                engine.stop()
+                ui { start() }
+            }, "codex-auth-restart").start()
         } catch (error: Exception) {
             lastError = "密钥保存失败：" + error.message
         }
