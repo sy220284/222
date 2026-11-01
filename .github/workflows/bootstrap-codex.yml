@@ -32,8 +32,9 @@ jobs:
           git -C "$RUNNER_TEMP/codex-upstream" fetch --depth=1 origin "$UPSTREAM_SHA"
           git -C "$RUNNER_TEMP/codex-upstream" checkout -q --detach FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/codex-upstream" rev-parse HEAD)" = "$UPSTREAM_SHA"
-          rsync -a --exclude='.git' "$RUNNER_TEMP/codex-upstream/" "$GITHUB_WORKSPACE/"
-          rm -f "$GITHUB_WORKSPACE/.github/workflows/bootstrap-codex.yml"
+          rsync -a --exclude='.git' --exclude='.github/workflows/' "$RUNNER_TEMP/codex-upstream/" "$GITHUB_WORKSPACE/"
+          mkdir -p "$GITHUB_WORKSPACE/.codex-workflows-import-stage"
+          rsync -a "$RUNNER_TEMP/codex-upstream/.github/workflows/" "$GITHUB_WORKSPACE/.codex-workflows-import-stage/"
           cat > "$GITHUB_WORKSPACE/UPSTREAM_SNAPSHOT.md" <<EOF
           # Codex 源码快照
 
