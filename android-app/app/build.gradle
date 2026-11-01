@@ -22,6 +22,8 @@ android {
         release { minifyEnabled false }
     }
     buildFeatures { compose true }
+    // Include the upstream generated JSON Schemas rather than hand-maintaining forms.
+    sourceSets { main { assets.srcDirs += ['../../codex-rs/app-server-protocol/schema/json'] } }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
