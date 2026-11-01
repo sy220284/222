@@ -755,6 +755,36 @@ private fun SettingsPage(state: MobileState) {
         }
         Spacer(Modifier.height(14.dp))
         SettingsCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.AccountCircle, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("ChatGPT 账号", fontWeight = FontWeight.Medium)
+                    Text("设备授权登录，无需将密码交给应用",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = state::loginChatGpt, enabled = state.connected) {
+                Text("通过浏览器登录 ChatGPT")
+            }
+            if (state.loginCode.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                SelectionContainer {
+                    Text("设备授权码：" + state.loginCode,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontFamily = FontFamily.Monospace)
+                }
+                Text("在刚刚打开的浏览器页面输入授权码",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = state::logout, enabled = state.connected) {
+                Text("退出 ChatGPT 账号")
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        SettingsCard {
             Text("运行环境", fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(10.dp))
             Text(state.status, style = MaterialTheme.typography.bodySmall)
