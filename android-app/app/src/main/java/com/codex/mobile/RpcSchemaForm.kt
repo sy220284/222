@@ -156,7 +156,7 @@ internal fun RpcSchemaForm(state: MobileState, method: String,
         return
     }
     LaunchedEffect(method) {
-        onChange(runCatching { RpcForms.build(fields, values).toString(2) }.getOrDefault("{}"))
+        onChange(serialize(fields, values))
     }
     fields.forEach { field ->
         val value = values[field.key].orEmpty()
@@ -235,6 +235,6 @@ internal fun RpcSchemaForm(state: MobileState, method: String,
 private fun serialize(fields: List<ParameterField>, values: Map<String, String>): String =
     try { RpcForms.build(fields, values).toString(2) }
     catch (error: Exception) {
-        // Preserve the user's typed data for corrections, including invalid JSON.
-        JSONObject().put("_incompleteForm", error.message).toString()
+        // Reject incomplete forms at the submit boundary instead of inventing values.
+        "表单尚未填写正确：" + (error.message ?: "参数错误")
     }
