@@ -173,14 +173,23 @@ public final class CodexRpcEngine implements AutoCloseable {
         } catch (Exception error) {
             failure = "Codex 通道异常：" + error.getMessage();
         } finally {
-            initialized = false;
-            if (process == running) process = null;
-            stdin = null;
-            for (CompletableFuture<JSONObject> future : pending.values()) {
-                future.completeExceptionally(new IOException(failure));
+            // Old transports cannot reset a newer generation after reconnection.
+            boolean ownsSession;
+            synchronized (this) {
+                ownsSession = process == running;
+                if (ownsSession) {
+                    initialized = false;
+                    process = null;
+                    synchronized (outputLock) { stdin = null; }
+                }
             }
-            pending.clear();
-            notifyDisconnect(failure);
+            if (ownsSession) {
+                for (CompletableFuture<JSONObject> future : pending.values()) {
+                    future.completeExceptionally(new IOException(failure));
+                }
+                pending.clear();
+                notifyDisconnect(failure);
+            }
         }
     }
 
@@ -233,6 +242,12 @@ public final class CodexRpcEngine implements AutoCloseable {
     public synchronized void stop() {
         initialized = false;
         Process current = process;
+        process = null;
+        synchronized (outputLock) { stdin = null; }
+        for (CompletableFuture<JSONObject> future : pending.values()) {
+            future.completeExceptionally(new IOException("Codex 连接已主动关闭"));
+        }
+        pending.clear();
         if (current != null) {
             current.destroy();
             if (current.isAlive()) current.destroyForcibly();
