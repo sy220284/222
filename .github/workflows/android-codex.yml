@@ -1,0 +1,54 @@
+name: Android ARM64 Codex 原生移植验证
+
+on:
+  push:
+    paths:
+      - "android-app/**"
+      - ".github/workflows/android-codex.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-android:
+    name: 编译 Codex ARM64 原生核心
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: 安装 Android NDK 与 SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018"
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: aarch64-linux-android
+      - name: 构建原生 Codex CLI
+        working-directory: codex-rs
+        env:
+          NDK_PATH: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        run: |
+          set -euo pipefail
+          NDK_PATH="$ANDROID_HOME/ndk/27.2.12479018"
+          BIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$BIN/aarch64-linux-android24-clang"
+          export CC_aarch64_linux_android="$BIN/aarch64-linux-android24-clang"
+          export AR_aarch64_linux_android="$BIN/llvm-ar"
+          export CARGO_BUILD_JOBS=4
+          cargo build --release --locked --target aarch64-linux-android -p codex-cli --bin codex
+      - name: 验证原生二进制
+        run: |
+          set -euo pipefail
+          file codex-rs/target/aarch64-linux-android/release/codex
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h codex-rs/target/aarch64-linux-android/release/codex | grep -E 'Class:|Machine:|Type:'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codex-android-arm64-cli
+          path: codex-rs/target/aarch64-linux-android/release/codex
+          if-no-files-found: error
+          retention-days: 14
