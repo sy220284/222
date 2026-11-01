@@ -184,6 +184,7 @@ class MobileState(private val activity: Activity) {
         if (id == null) {
             try {
                 val args = JSONObject().put("cwd", engine.workspace().absolutePath)
+                    .put("sandbox", if (writeAccess) "workspace-write" else "read-only")
                 if (selectedModel.isNotBlank()) args.put("model", selectedModel)
                 // Always preserve interactive approvals.
                 ask("thread/start", args) { result ->
