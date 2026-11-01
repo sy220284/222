@@ -27,6 +27,9 @@ class MobileState(private val activity: Activity) {
     var selectedModel by mutableStateOf("")
     var apiKey by mutableStateOf("")
     var pendingApproval by mutableStateOf<JSONObject?>(null)
+    private val approvalQueue = ArrayDeque<JSONObject>()
+    var loginCode by mutableStateOf("")
+    var loginUrl by mutableStateOf("")
     var lastError by mutableStateOf<String?>(null)
     var writeAccess by mutableStateOf(false)
     var darkMode by mutableStateOf(false)
@@ -78,16 +81,18 @@ class MobileState(private val activity: Activity) {
                     }
                     override fun onNotification(message: JSONObject) = ui { handleNotification(message) }
                     override fun onServerRequest(message: JSONObject) = ui {
-                        pendingApproval = message
+                        if (pendingApproval == null) pendingApproval = message
+                        else approvalQueue.addLast(message)
                         status = "等待人工确认"
                     }
                     override fun onDisconnected(reason: String) = ui {
                         connected = false
                         busy = false
                         status = reason
-                        if (pendingApproval != null) {
+                        if (pendingApproval != null || approvalQueue.isNotEmpty()) {
                             lastError = "连接中断，待审核请求尚未完成"
                             pendingApproval = null
+                            approvalQueue.clear()
                         }
                     }
                 })
@@ -266,8 +271,8 @@ class MobileState(private val activity: Activity) {
                 }
                 engine.respond(id, result)
             }
-            pendingApproval = null
-            status = "授权已响应"
+            pendingApproval = if (approvalQueue.isEmpty()) null else approvalQueue.removeFirst()
+            status = if (pendingApproval == null) "授权已响应" else "还有待处理的授权请求"
         } catch (error: Exception) {
             lastError = "响应失败：" + error.message
         }
@@ -290,6 +295,27 @@ class MobileState(private val activity: Activity) {
         } catch (error: Exception) {
             lastError = "附件导入失败：" + error.message
         }
+    }
+
+    fun loginChatGpt() {
+        ask("account/login/start", JSONObject().put("type", "chatgptDeviceCode")) { result ->
+            loginCode = result.optString("userCode")
+            loginUrl = result.optString("verificationUrl")
+            if (!loginUrl.startsWith("https://") || loginCode.isBlank()) {
+                lastError = "ChatGPT 设备授权参数缺失"
+                return@ask
+            }
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                Uri.parse(loginUrl))
+            try { activity.startActivity(intent) }
+            catch (error: Exception) { lastError = "打开授权页失败：" + error.message }
+        }
+    }
+
+    fun logout() = ask("account/logout", JSONObject()) {
+        loginCode = ""
+        loginUrl = ""
+        status = "账号已退出"
     }
 
     fun saveKey(value: String) {
@@ -338,6 +364,12 @@ class MobileState(private val activity: Activity) {
                 refresh()
             }
             "thread/name/updated", "thread/archived", "thread/started" -> refresh()
+            "account/login/completed" -> {
+                loginCode = ""
+                loginUrl = ""
+                status = "ChatGPT 授权流程已结束"
+                getModels()
+            }
             "error" -> { lastError = params.optString("message").ifBlank { params.toString() } }
             "turn/plan/updated", "turn/diff/updated", "item/commandExecution/outputDelta",
             "item/fileChange/patchUpdated", "item/mcpToolCall/progress",
