@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        model = MobileState(this)
+        model = (application as CodexMobileApp).state
         setContent {
             CodexAppearance(dark = model.darkMode) {
                 MobileShell(model) {
@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        model.close()
+        // The application-scoped runtime and foreground service own active tasks.
         super.onDestroy()
     }
 }

@@ -1,6 +1,9 @@
 package com.codex.mobile
 
-import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.net.Uri
 import androidx.compose.runtime.*
 import org.json.JSONArray
@@ -12,8 +15,9 @@ data class ChatLine(val id: String, val role: String, val text: String)
 data class SessionLine(val id: String, val title: String)
 data class FeatureGroup(val title: String, val key: String, val methods: List<String>)
 
-class MobileState(private val activity: Activity) {
-    val engine = CodexRpcEngine(activity)
+class MobileState(private val context: Context) {
+    val engine = CodexRpcEngine(context)
+    private val mainHandler = Handler(Looper.getMainLooper())
     val chat = mutableStateListOf<ChatLine>()
     val sessions = mutableStateListOf<SessionLine>()
     val models = mutableStateListOf<String>()
@@ -38,11 +42,11 @@ class MobileState(private val activity: Activity) {
     var responseJson by mutableStateOf("")
     var attachment by mutableStateOf<File?>(null)
 
-    private fun ui(block: () -> Unit) = activity.runOnUiThread(block)
+    private fun ui(block: () -> Unit) = mainHandler.post(block)
 
     init {
         try {
-            val raw = activity.assets.open("rpc_methods.json").bufferedReader().use { it.readText() }
+            val raw = context.assets.open("rpc_methods.json").bufferedReader().use { it.readText() }
             val groups = JSONObject(raw).getJSONObject("groups")
             val iterator = groups.keys()
             while (iterator.hasNext()) {
@@ -88,6 +92,7 @@ class MobileState(private val activity: Activity) {
                     override fun onDisconnected(reason: String) = ui {
                         connected = false
                         busy = false
+                        context.stopService(Intent(context, CodexTaskService::class.java))
                         status = reason
                         if (pendingApproval != null || approvalQueue.isNotEmpty()) {
                             lastError = "连接中断，待审核请求尚未完成"
@@ -116,6 +121,7 @@ class MobileState(private val activity: Activity) {
                 if (error != null) {
                     lastError = method + "：" + (error.cause?.message ?: error.message)
                     busy = false
+                    context.stopService(Intent(context, CodexTaskService::class.java))
                 } else done(result)
             }
         }
@@ -145,6 +151,7 @@ class MobileState(private val activity: Activity) {
     }
 
     fun newChat() {
+        if (busy) { lastError = "任务执行中，请先停止后再新建会话"; return }
         threadId = null
         turnId = null
         busy = false
@@ -181,6 +188,13 @@ class MobileState(private val activity: Activity) {
 
     fun send(prompt: String) {
         if (prompt.isBlank() || busy) return
+        if (!connected) { lastError = "Codex 原生核心尚未连接"; return }
+        try {
+            context.startForegroundService(Intent(context, CodexTaskService::class.java))
+        } catch (error: Exception) {
+            lastError = "无法启动后台任务服务：" + error.message
+            return
+        }
         busy = true
         chat.add(ChatLine(UUID.randomUUID().toString(), "user", prompt))
         val file = attachment
@@ -196,6 +210,7 @@ class MobileState(private val activity: Activity) {
                     val nextId = result.optJSONObject("thread")?.optString("id").orEmpty()
                     if (nextId.isBlank()) {
                         busy = false
+                        context.stopService(Intent(context, CodexTaskService::class.java))
                         lastError = "Codex 未返回会话 ID"
                     } else {
                         threadId = nextId
@@ -205,6 +220,7 @@ class MobileState(private val activity: Activity) {
                 }
             } catch (error: Exception) {
                 busy = false
+                context.stopService(Intent(context, CodexTaskService::class.java))
                 lastError = error.message
             }
         } else startTurn(id, prompt, file)
@@ -280,14 +296,14 @@ class MobileState(private val activity: Activity) {
 
     fun importAttachment(uri: Uri) {
         try {
-            val mime = activity.contentResolver.getType(uri) ?: ""
+            val mime = context.contentResolver.getType(uri) ?: ""
             val extension = when {
                 mime.startsWith("image/") -> "png"
                 mime.startsWith("audio/") -> "m4a"
                 else -> "txt"
             }
             val file = File(engine.workspace(), "import-" + UUID.randomUUID() + "." + extension)
-            activity.contentResolver.openInputStream(uri).use { stream ->
+            context.contentResolver.openInputStream(uri).use { stream ->
                 requireNotNull(stream) { "无法读取文件内容" }
                 file.outputStream().use { stream.copyTo(it) }
             }
@@ -307,7 +323,7 @@ class MobileState(private val activity: Activity) {
             }
             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
                 Uri.parse(loginUrl))
-            try { activity.startActivity(intent) }
+            try { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             catch (error: Exception) { lastError = "打开授权页失败：" + error.message }
         }
     }
@@ -320,7 +336,7 @@ class MobileState(private val activity: Activity) {
 
     fun saveKey(value: String) {
         try {
-            SecretStore(activity).save(value.trim())
+            SecretStore(context).save(value.trim())
             apiKey = ""
             engine.stop()
             connected = false
@@ -358,6 +374,7 @@ class MobileState(private val activity: Activity) {
                 status = "正在执行"
             }
             "turn/completed" -> {
+                context.stopService(Intent(context, CodexTaskService::class.java))
                 busy = false
                 turnId = null
                 status = "已完成"

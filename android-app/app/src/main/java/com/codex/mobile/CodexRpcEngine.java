@@ -99,7 +99,7 @@ public final class CodexRpcEngine implements AutoCloseable {
                     new InputStreamReader(running.getErrorStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    android.util.Log.w("CodexRuntime", line.replace(apiKey, "[REDACTED]"));
+                    android.util.Log.w("CodexRuntime", apiKey.isEmpty() ? line : line.replace(apiKey, "[REDACTED]"));
                 }
             } catch (IOException exception) {
                 android.util.Log.e("CodexRuntime", "stderr 读取异常", exception);
@@ -127,7 +127,7 @@ public final class CodexRpcEngine implements AutoCloseable {
                 return;
             }
             try {
-                notifyMethod("initialized", new JSONObject());
+                notifyMethod("initialized", null);
                 initialized = true;
                 callback.onReady();
             } catch (Exception error) {
