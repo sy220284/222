@@ -1,0 +1,267 @@
+{
+  "origin": "codex-rs/app-server-protocol/src/protocol/common.rs",
+  "upstream": "67f0994b532b8740f14b5b738af7b7b2a915b1d6",
+  "total": 182,
+  "groups": {
+    "initialize": [
+      "initialize"
+    ],
+    "server": [
+      "server/diagnostics"
+    ],
+    "userVerification": [
+      "userVerification/status",
+      "userVerification/enroll",
+      "userVerification/delete",
+      "userVerification/verify",
+      "userVerification/cancel"
+    ],
+    "thread": [
+      "thread/start",
+      "thread/resume",
+      "thread/fork",
+      "thread/sample",
+      "thread/sample/cancel",
+      "thread/archive",
+      "thread/delete",
+      "thread/unsubscribe",
+      "thread/increment_elicitation",
+      "thread/decrement_elicitation",
+      "thread/name/set",
+      "thread/prediction/request",
+      "thread/goal/set",
+      "thread/goal/get",
+      "thread/goal/clear",
+      "thread/queue/add",
+      "thread/queue/list",
+      "thread/queue/update",
+      "thread/queue/delete",
+      "thread/queue/reorder",
+      "thread/queue/start",
+      "thread/metadata/update",
+      "thread/attachment/add",
+      "thread/attachment/list",
+      "thread/attachmentOwner/list",
+      "thread/attachment/remove",
+      "thread/section/move",
+      "thread/settings/update",
+      "thread/memoryMode/set",
+      "thread/memory/read",
+      "thread/unarchive",
+      "thread/compact/start",
+      "thread/shellCommand",
+      "thread/approveGuardianDeniedAction",
+      "thread/backgroundTerminals/clean",
+      "thread/backgroundTerminals/list",
+      "thread/backgroundTerminals/terminate",
+      "thread/revert",
+      "thread/list",
+      "thread/search",
+      "thread/searchOccurrences",
+      "thread/loaded/list",
+      "thread/read",
+      "thread/readState/update",
+      "thread/turns/list",
+      "thread/items/list",
+      "thread/items/read",
+      "thread/guardianReview",
+      "thread/inject_items",
+      "thread/realtime/start",
+      "thread/realtime/appendAudio",
+      "thread/realtime/appendText",
+      "thread/realtime/appendSpeech",
+      "thread/realtime/stop",
+      "thread/timeline/list",
+      "thread/realtime/listVoices"
+    ],
+    "memory": [
+      "memory/status",
+      "memory/reset"
+    ],
+    "rollout": [
+      "rollout/compress"
+    ],
+    "project": [
+      "project/list",
+      "project/read",
+      "project/create",
+      "project/import",
+      "project/update",
+      "project/move",
+      "project/delete"
+    ],
+    "threadSection": [
+      "threadSection/list",
+      "threadSection/create",
+      "threadSection/update",
+      "threadSection/delete"
+    ],
+    "skills": [
+      "skills/list",
+      "skills/extraRoots/set",
+      "skills/config/write"
+    ],
+    "hooks": [
+      "hooks/list"
+    ],
+    "marketplace": [
+      "marketplace/add",
+      "marketplace/remove",
+      "marketplace/upgrade"
+    ],
+    "plugin": [
+      "plugin/list",
+      "plugin/search",
+      "plugin/installed",
+      "plugin/reconcile",
+      "plugin/read",
+      "plugin/skill/read",
+      "plugin/share/save",
+      "plugin/share/updateTargets",
+      "plugin/share/list",
+      "plugin/share/checkout",
+      "plugin/share/delete",
+      "plugin/install",
+      "plugin/uninstall"
+    ],
+    "app": [
+      "app/read",
+      "app/list",
+      "app/installed"
+    ],
+    "fs": [
+      "fs/readFile",
+      "fs/writeFile",
+      "fs/createDirectory",
+      "fs/getMetadata",
+      "fs/readDirectory",
+      "fs/remove",
+      "fs/copy",
+      "fs/watch",
+      "fs/unwatch"
+    ],
+    "turn": [
+      "turn/start",
+      "turn/settings/update",
+      "turn/steer",
+      "turn/interrupt"
+    ],
+    "review": [
+      "review/start"
+    ],
+    "model": [
+      "model/list"
+    ],
+    "account": [
+      "account/gatewayOAuth/read",
+      "account/gatewayOAuth/login",
+      "account/gatewayOAuth/cancel",
+      "account/login/start",
+      "account/bedrock/discover",
+      "account/bedrock/setup",
+      "account/gcp/setup",
+      "account/bedrock/checkGovCloudRequirements",
+      "account/login/cancel",
+      "account/logout",
+      "account/rateLimits/read",
+      "account/rateLimitResetCredit/consume",
+      "account/usage/read",
+      "account/workspaceMessages/read",
+      "account/sendAddCreditsNudgeEmail",
+      "account/read"
+    ],
+    "modelProvider": [
+      "modelProvider/capabilities/read"
+    ],
+    "experimentalFeature": [
+      "experimentalFeature/list",
+      "experimentalFeature/enablement/set"
+    ],
+    "permissionProfile": [
+      "permissionProfile/list"
+    ],
+    "remoteControl": [
+      "remoteControl/enable",
+      "remoteControl/disable",
+      "remoteControl/status/read",
+      "remoteControl/pairing/start",
+      "remoteControl/pairing/status",
+      "remoteControl/client/list",
+      "remoteControl/client/revoke"
+    ],
+    "collaborationMode": [
+      "collaborationMode/list"
+    ],
+    "mock": [
+      "mock/experimentalMethod"
+    ],
+    "environment": [
+      "environment/add",
+      "environment/info",
+      "environment/status"
+    ],
+    "mcpServer": [
+      "mcpServer/oauth/login",
+      "mcpServer/resource/read",
+      "mcpServer/event/stream/start",
+      "mcpServer/event/stream/stop",
+      "mcpServer/tool/call"
+    ],
+    "config": [
+      "config/mcpServer/reload",
+      "config/read",
+      "config/value/write",
+      "config/batchWrite"
+    ],
+    "mcpServerStatus": [
+      "mcpServerStatus/list"
+    ],
+    "windowsSandbox": [
+      "windowsSandbox/setupStart",
+      "windowsSandbox/readiness"
+    ],
+    "accountSession": [
+      "accountSession/list",
+      "accountSession/switch"
+    ],
+    "feedback": [
+      "feedback/upload",
+      "feedback/save"
+    ],
+    "command": [
+      "command/exec",
+      "command/exec/write",
+      "command/exec/terminate",
+      "command/exec/resize"
+    ],
+    "process": [
+      "process/spawn",
+      "process/writeStdin",
+      "process/kill",
+      "process/resizePty"
+    ],
+    "externalAgentConfig": [
+      "externalAgentConfig/detect",
+      "externalAgentConfig/import",
+      "externalAgentConfig/import/recordHistory",
+      "externalAgentConfig/import/readHistories"
+    ],
+    "configRequirements": [
+      "configRequirements/read"
+    ],
+    "getConversationSummary": [
+      "getConversationSummary"
+    ],
+    "gitDiffToRemote": [
+      "gitDiffToRemote"
+    ],
+    "getAuthStatus": [
+      "getAuthStatus"
+    ],
+    "fuzzyFileSearch": [
+      "fuzzyFileSearch",
+      "fuzzyFileSearch/sessionStart",
+      "fuzzyFileSearch/sessionUpdate"
+    ]
+  }
+}
