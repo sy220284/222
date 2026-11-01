@@ -596,6 +596,7 @@ private fun WorkspacePage(state: MobileState, pickFile: () -> Unit) {
 private fun CapabilityPage(state: MobileState) {
     var filter by remember { mutableStateOf("") }
     var parameters by remember(state.selectedMethod) { mutableStateOf("{}") }
+    var advanced by remember(state.selectedMethod) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         Headline("全部功能", "从官方源码提取的 " +
             state.featureGroups.sumOf { it.methods.size } + " 个 Codex 接口")
@@ -648,11 +649,21 @@ private fun CapabilityPage(state: MobileState) {
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = parameters, onValueChange = { parameters = it },
-                        modifier = Modifier.fillMaxWidth(), minLines = 3,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace),
-                        label = { Text("请求参数 JSON") })
+                    TextButton(onClick = { advanced = !advanced }) {
+                        Icon(Icons.Outlined.Tune, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (advanced) "使用智能表单" else "高级 JSON 编辑")
+                    }
+                    if (advanced) {
+                        OutlinedTextField(value = parameters,
+                            onValueChange = { parameters = it },
+                            modifier = Modifier.fillMaxWidth(), minLines = 3,
+                            textStyle = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace),
+                            label = { Text("请求参数 JSON") })
+                    } else {
+                        RpcSchemaForm(state, state.selectedMethod) { parameters = it }
+                    }
                     Spacer(Modifier.height(10.dp))
                     Button(onClick = { state.invokeMethod(state.selectedMethod, parameters) },
                         enabled = state.connected, modifier = Modifier.fillMaxWidth()) {
