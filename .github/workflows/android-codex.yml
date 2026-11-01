@@ -1,4 +1,4 @@
-name: Android ARM64 Codex 原生移植验证
+name: 安卓 Codex 完整 APK 构建和验证
 
 on:
   push:
@@ -11,44 +11,74 @@ permissions:
   contents: read
 
 jobs:
-  rust-android:
-    name: 编译 Codex ARM64 原生核心
+  android-apk:
+    name: 源码交叉编译、原生 APK 和产物校验
     runs-on: ubuntu-24.04
-    timeout-minutes: 80
+    timeout-minutes: 110
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: 安装 Android NDK 与 SDK
+      - name: 安装 Android SDK 和 NDK
+        shell: bash
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018"
-      - name: 安装 Rust 工具链
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
+      - name: 安装 Rust Android ARM64 工具链
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
           targets: aarch64-linux-android
-      - name: 构建原生 Codex CLI
+      - name: 编译仓库内真实 Codex CLI
         working-directory: codex-rs
-        env:
-          NDK_PATH: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        shell: bash
         run: |
           set -euo pipefail
-          NDK_PATH="$ANDROID_HOME/ndk/27.2.12479018"
-          BIN="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          BIN="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$BIN/aarch64-linux-android24-clang"
           export CC_aarch64_linux_android="$BIN/aarch64-linux-android24-clang"
           export AR_aarch64_linux_android="$BIN/llvm-ar"
-          export CARGO_BUILD_JOBS=4
+          export CARGO_BUILD_JOBS=3
+          export CARGO_PROFILE_RELEASE_DEBUG=0
           cargo build --release --locked --target aarch64-linux-android -p codex-cli --bin codex
-      - name: 验证原生二进制
+      - name: 校验原生执行文件并装入 APK
+        shell: bash
         run: |
           set -euo pipefail
-          file codex-rs/target/aarch64-linux-android/release/codex
-          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h codex-rs/target/aarch64-linux-android/release/codex | grep -E 'Class:|Machine:|Type:'
-      - uses: actions/upload-artifact@v4
+          ELF="codex-rs/target/aarch64-linux-android/release/codex"
+          READELF="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          test -s "$ELF"
+          "$READELF" -h "$ELF" | tee /tmp/codex-elf-header.txt
+          grep -q 'AArch64' /tmp/codex-elf-header.txt
+          grep -q 'DYN' /tmp/codex-elf-header.txt
+          install -Dm755 "$ELF" "android-app/app/src/main/jniLibs/arm64-v8a/libcodex.so"
+      - name: 准备 Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          name: codex-android-arm64-cli
-          path: codex-rs/target/aarch64-linux-android/release/codex
+          gradle-version: "8.13"
+      - name: 编译 Android UI、资源及 APK
+        working-directory: android-app
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:assembleDebug
+      - name: 验证 APK 包含 Codex 本体
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android-app/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          unzip -Z -1 "$APK" | grep -q '^lib/arm64-v8a/libcodex\.so$'
+          unzip -p "$APK" lib/arm64-v8a/libcodex.so > /tmp/codex-from-apk
+          cmp /tmp/codex-from-apk codex-rs/target/aarch64-linux-android/release/codex
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -n 8
+          echo "APK 原生核心一致性验证通过"
+      - name: 发布可安装测试 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-mobile-arm64-debug-apk
+          path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
