@@ -117,9 +117,11 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
     val scope = rememberCoroutineScope()
     val drawer = rememberDrawerState(DrawerValue.Closed)
     var page by remember { mutableStateOf(Page.CHAT) }
-    val animated = remember { android.provider.Settings.Global.getFloat(
-        state.engine.workspace().let { (LocalContextHolder.app)?.contentResolver },
-        android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f }
+    val context = LocalContext.current
+    val animated = remember(context) {
+        android.provider.Settings.Global.getFloat(context.contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
+    }
     // Navigation and content remain independently scrollable.
     val pages = listOf(
         Page.CHAT to Icons.Outlined.ChatBubbleOutline,
@@ -249,10 +251,6 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
             confirmButton = { TextButton(onClick = { state.lastError = null }) { Text("知道了") } }
         )
     }
-}
-
-private object LocalContextHolder {
-    var app: android.content.Context? = null
 }
 
 @Composable
