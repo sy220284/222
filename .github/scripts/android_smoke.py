@@ -92,10 +92,14 @@ def main() -> int:
                 return 0
             if "原生核心启动失败" in xml or "操作未完成" in xml:
                 raise RuntimeError("界面报告原生核心启动错误")
-        except RuntimeError:
-            raise
-        except (subprocess.TimeoutExpired, OSError):
-            pass
+        except RuntimeError as error:
+            if "应用进程已退出" in str(error) or "界面报告原生核心启动错误" in str(error):
+                raise
+            # UIAutomator can fail before the first frame is drawn; retry the
+            # screenshot/hierarchy read until the global deadline.
+            previous = str(error)
+        except (subprocess.TimeoutExpired, OSError) as error:
+            previous = str(error)
         time.sleep(2)
 
     print("Last UI dump:", previous[-4000:], file=sys.stderr)
