@@ -260,7 +260,7 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
                     Page.FILES -> WorkspaceScreen(state, pickFile)
                     Page.TOOLS -> CapabilitiesScreen(state)
                     Page.TIMELINE -> ActivityScreen(state)
-                    Page.SETTINGS -> SettingsPage(state)
+                    Page.SETTINGS -> SettingsScreen(state)
                 }
             }
         }
@@ -506,123 +506,6 @@ private fun Composer(state: MobileState, pickFile: () -> Unit) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SettingsPage(state: MobileState) {
-    var key by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-        .padding(horizontal = 22.dp)) {
-        Headline("偏好与安全", "保持简洁、私密、可控")
-        SettingsCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Palette, null,
-                    tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("深色外观", fontWeight = FontWeight.Medium)
-                    Text("柔和对比度，适合夜间编码",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = state.darkMode, onCheckedChange = { state.darkMode = it })
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        SettingsCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Key, null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text("模型 API 密钥", fontWeight = FontWeight.Medium)
-                    Text("通过 Android Keystore 加密，存于应用私有目录",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-            OutlinedTextField(
-                value = key, onValueChange = { key = it },
-                modifier = Modifier.fillMaxWidth(), singleLine = true,
-                placeholder = { Text("输入新的 API Key") },
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-            )
-            Spacer(Modifier.height(12.dp))
-            Button(onClick = { state.saveKey(key); key = "" }, enabled = key.isNotBlank()) {
-                Text("保存并重新连接")
-            }
-            Spacer(Modifier.height(8.dp))
-            TextButton(onClick = { state.saveKey(""); key = "" }) {
-                Text("清除已保存的密钥")
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        SettingsCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.AccountCircle, null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text("ChatGPT 账号", fontWeight = FontWeight.Medium)
-                    Text("设备授权登录，无需将密码交给应用",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            Button(onClick = state::loginChatGpt, enabled = state.connected) {
-                Text("通过浏览器登录 ChatGPT")
-            }
-            if (state.loginCode.isNotBlank()) {
-                Spacer(Modifier.height(12.dp))
-                SelectionContainer {
-                    Text("设备授权码：" + state.loginCode,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontFamily = FontFamily.Monospace)
-                }
-                Text("在刚刚打开的浏览器页面输入授权码",
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            TextButton(onClick = state::logout, enabled = state.connected) {
-                Text("退出 ChatGPT 账号")
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        SettingsCard {
-            Text("运行环境", fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(10.dp))
-            Text(state.status, style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = { state.engine.stop(); state.connected = false; state.start() }) {
-                Icon(Icons.Outlined.Refresh, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("重新启动本地核心")
-            }
-        }
-        Spacer(Modifier.height(24.dp))
-        Text("Codex Mobile · 0.2.0", modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.labelSmall)
-        Spacer(Modifier.height(36.dp))
-    }
-}
-
-@Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.fillMaxWidth().padding(18.dp), content = content)
-    }
-}
-
-@Composable
-private fun Headline(title: String, subtitle: String) {
-    Column(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 20.dp)) {
-        Text(title, fontSize = 25.sp, fontWeight = FontWeight.SemiBold,
-            letterSpacing = (-0.5).sp)
-        Spacer(Modifier.height(5.dp))
-        Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall)
     }
 }
 
