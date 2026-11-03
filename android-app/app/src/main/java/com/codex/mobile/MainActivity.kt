@@ -372,8 +372,9 @@ private fun ConversationPage(state: MobileState) {
         }
     } else {
         val listState = rememberLazyListState()
-        LaunchedEffect(state.chat.size) {
-            if (state.chat.isNotEmpty()) listState.animateScrollToItem(state.chat.lastIndex)
+        val lastMessageSize = state.chat.lastOrNull()?.text?.length ?: 0
+        LaunchedEffect(state.chat.size, lastMessageSize / 160) {
+            if (state.chat.isNotEmpty()) listState.scrollToItem(state.chat.lastIndex)
         }
         LazyColumn(
             state = listState,
@@ -413,10 +414,53 @@ private fun ConversationMessage(line: ChatLine) {
             color = if (user) MaterialTheme.colorScheme.surfaceContainer
                 else MaterialTheme.colorScheme.surface
         ) {
-            SelectionContainer {
-                Text(line.text, Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    lineHeight = 23.sp)
+            MessageBody(line.text)
+        }
+    }
+}
+
+@Composable
+private fun MessageBody(message: String) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val fragments = remember(message) { message.split(Char(96).toString().repeat(3)) }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        fragments.forEachIndexed { index, segment ->
+            if (index % 2 == 1) {
+                val raw = segment.trim('\n')
+                val label = raw.substringBefore('\n').trim()
+                val language = if (label.length <= 18 &&
+                    label.matches(Regex("[a-zA-Z0-9+#.\\-]*"))) label else ""
+                val code = if (language.isNotEmpty()) raw.substringAfter('\n', "") else raw
+                Surface(shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer) {
+                    Column {
+                        Row(Modifier.fillMaxWidth().padding(start = 12.dp, top = 7.dp,
+                            end = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(language.ifBlank { "代码" }, modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            IconButton(onClick = {
+                                clipboard.setText(androidx.compose.ui.text.AnnotatedString(code))
+                            }, modifier = Modifier.size(30.dp)) {
+                                Icon(Icons.Outlined.ContentCopy, "复制代码",
+                                    modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        SelectionContainer {
+                            Text(code, Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp,
+                                bottom = 13.dp),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = FontFamily.Monospace),
+                                lineHeight = 19.sp)
+                        }
+                    }
+                }
+            } else if (segment.isNotBlank()) {
+                SelectionContainer {
+                    Text(segment.trim('\n'),
+                        style = MaterialTheme.typography.bodyMedium, lineHeight = 23.sp)
+                }
             }
         }
     }
