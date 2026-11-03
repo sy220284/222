@@ -68,12 +68,12 @@ jobs:
           export AR_aarch64_linux_android="$BIN/llvm-ar"
           export CARGO_BUILD_JOBS=3
           export CARGO_PROFILE_RELEASE_DEBUG=0
-          cargo build --release --locked --target aarch64-linux-android -p codex-cli --bin codex
+          cargo build --release --locked --target aarch64-linux-android -p codex-app-server --bin codex-app-server
       - name: 校验原生执行文件并装入 APK
         shell: bash
         run: |
           set -euo pipefail
-          ELF="codex-rs/target/aarch64-linux-android/release/codex"
+          ELF="codex-rs/target/aarch64-linux-android/release/codex-app-server"
           READELF="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
           test -s "$ELF"
           "$READELF" -h "$ELF" | tee /tmp/codex-elf-header.txt
@@ -99,7 +99,7 @@ jobs:
           unzip -t "$APK" >/dev/null
           unzip -Z -1 "$APK" | grep -q '^lib/arm64-v8a/libcodex\.so$'
           unzip -p "$APK" lib/arm64-v8a/libcodex.so > /tmp/codex-from-apk
-          cmp /tmp/codex-from-apk codex-rs/target/aarch64-linux-android/release/codex
+          cmp /tmp/codex-from-apk codex-rs/target/aarch64-linux-android/release/codex-app-server
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -n 8
           echo "APK 原生核心一致性验证通过"
       - name: 发布可安装测试 APK

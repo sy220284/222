@@ -5,7 +5,7 @@
 ## 架构
 
 - Java / Android SDK：中文触控 UI、会话管理、工作区、文件导入、取消任务
-- Rust Codex CLI：从 `codex-rs/cli` 为 `aarch64-linux-android` 编译
+- Rust Codex CLI：从 `codex-rs/app-server` 为 `aarch64-linux-android` 编译
 - 通过 `codex exec --json` 启动原生核心；JSONL 事件由界面消费，`exec resume` 恢复会话
 - `libcodex.so` 是 Android 原生库目录中的 **可执行 ELF**（来自 Codex CLI 的 PIE 程序），并非 JNI .so。利用 Android APK 原生库可执行路径加载，由 Java `ProcessBuilder` 创建独立执行进程
 - Codex 状态和工作区只存在应用私有存储中，API 密钥由 Android Keystore AES-GCM 加密
@@ -14,7 +14,7 @@
 
 需 JDK 17、Gradle 8.13、Android SDK 36、Android NDK 27.2.12479018、Rust 1.95.0 的 aarch64-linux-android target。
 
-先在 `codex-rs` 交叉编译 `codex-cli` 的 `codex`，复制生成的 ELF 到：
+先在 `codex-rs` 交叉编译 `codex-app-server` 的 `codex-app-server`，复制生成的 ELF 到：
 `android-app/app/src/main/jniLibs/arm64-v8a/libcodex.so`。
 然后在 `android-app` 下运行 `gradle :app:assembleDebug`。
 

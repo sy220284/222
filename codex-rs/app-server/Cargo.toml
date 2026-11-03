@@ -130,6 +130,10 @@ libc = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 codex-windows-sandbox = { workspace = true }
 
+[target.'cfg(target_os = "android")'.dependencies]
+# Android NDK has no built-in OpenSSL. Build the locked vendored release.
+openssl-sys = { workspace = true, features = ["vendored"] }
+
 [dev-dependencies]
 zip = { workspace = true }
 codex-uds = { workspace = true }

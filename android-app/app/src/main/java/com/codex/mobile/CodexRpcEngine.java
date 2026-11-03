@@ -79,7 +79,7 @@ public final class CodexRpcEngine implements AutoCloseable {
         File temp = ensureDirectory(new File(context.getCacheDir(), "runtime"));
         File workspace = workspace();
         ProcessBuilder builder = new ProcessBuilder(binary().getAbsolutePath(),
-                "app-server", "--listen", "stdio://");
+                "--listen", "stdio://");
         builder.directory(workspace);
         Map<String, String> env = builder.environment();
         env.put("HOME", root.getAbsolutePath());
