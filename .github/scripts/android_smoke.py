@@ -15,7 +15,7 @@ from pathlib import Path
 
 PACKAGE = "com.codex.mobile"
 ACTIVITY = PACKAGE + "/.MainActivity"
-CORE = "lib/arm64-v8a/libcodex.so"
+CORE_TEMPLATE = "lib/{abi}/libcodex.so"
 
 
 def run(*args: str, timeout: int = 35, check: bool = True) -> str:
@@ -48,6 +48,7 @@ def capture_failure() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apk", type=Path, required=True)
+    parser.add_argument("--abi", default="arm64-v8a", choices=("arm64-v8a", "x86_64"))
     parser.add_argument("--min-sdk", type=int, default=37,
                         help="Android 17 / API 37 by default")
     parser.add_argument("--timeout", type=int, default=75)
@@ -55,10 +56,11 @@ def main() -> int:
 
     if not args.apk.is_file():
         raise FileNotFoundError(args.apk)
+    core = CORE_TEMPLATE.format(abi=args.abi)
     with zipfile.ZipFile(args.apk) as apk:
-        if CORE not in apk.namelist():
-            raise RuntimeError(f"APK 缺少原生 Codex：{CORE}")
-        elf = apk.read(CORE)
+        if core not in apk.namelist():
+            raise RuntimeError(f"APK 缺少原生 Codex：{core}")
+        elf = apk.read(core)
         if elf[:4] != b"\x7fELF" or elf[4] != 2:
             raise RuntimeError("原生核心不是有效的 64 位 ELF")
         print(f"Verified embedded native Rust core: {len(elf):,} bytes")
@@ -68,9 +70,9 @@ def main() -> int:
     if sdk < args.min_sdk:
         raise RuntimeError(f"设备 Android API {sdk} 低于要求 {args.min_sdk}")
     abi = run("shell", "getprop", "ro.product.cpu.abilist")
-    if "arm64-v8a" not in abi:
-        raise RuntimeError(f"设备缺少 arm64-v8a ABI: {abi}")
-    print(f"Detected Android API {sdk}, ARM64")
+    if args.abi not in abi:
+        raise RuntimeError(f"设备缺少 {args.abi} ABI: {abi}")
+    print(f"Detected Android API {sdk}, ABI {args.abi}")
 
     run("install", "-r", str(args.apk.absolute()), timeout=150)
     run("shell", "am", "force-stop", PACKAGE)
