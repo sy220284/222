@@ -109,9 +109,21 @@ class MobileState(private val context: Context) {
                     }
                     override fun onNotification(message: JSONObject) = ui { handleNotification(message) }
                     override fun onServerRequest(message: JSONObject) = ui {
-                        if (pendingApproval == null) pendingApproval = message
-                        else approvalQueue.addLast(message)
-                        status = "等待人工确认"
+                        val method = message.optString("method")
+                        val id = message.opt("id")
+                        if (method == "currentTime/read" && id != null) {
+                            try {
+                                engine.respond(id, JSONObject().put("currentTimeAt",
+                                    System.currentTimeMillis() / 1000L))
+                                addActivity("currentTime/read", "已返回本机时间")
+                            } catch (error: Exception) {
+                                lastError = "读取本机时间失败：" + error.message
+                            }
+                        } else {
+                            if (pendingApproval == null) pendingApproval = message
+                            else approvalQueue.addLast(message)
+                            status = "等待人工确认"
+                        }
                     }
                     override fun onDisconnected(reason: String) = ui {
                         connected = false
@@ -465,20 +477,28 @@ class MobileState(private val context: Context) {
         when (method) {
             "item/agentMessage/delta" -> {
                 val delta = params.optString("delta")
+                val key = params.optString("itemId").takeIf { it.isNotBlank() }
+                    ?.let { "agent:" + it }
                 if (delta.isNotBlank()) {
-                    val last = chat.lastOrNull()
-                    if (last?.role == "assistant") chat[chat.lastIndex] = last.copy(text = last.text + delta)
-                    else chat.add(ChatLine(UUID.randomUUID().toString(), "assistant", delta))
+                    val index = if (key != null) chat.indexOfLast { it.id == key } else -1
+                    if (index >= 0) {
+                        chat[index] = chat[index].copy(text = chat[index].text + delta)
+                    } else {
+                        chat.add(ChatLine(key ?: UUID.randomUUID().toString(), "assistant", delta))
+                    }
                 }
             }
             "item/completed" -> {
                 val item = params.optJSONObject("item") ?: JSONObject()
                 val txt = item.optString("text")
                 if (item.optString("type") == "agentMessage" && txt.isNotBlank()) {
-                    val last = chat.lastOrNull()
-                    if (last?.role == "assistant") chat[chat.lastIndex] = last.copy(text = txt)
-                    else chat.add(ChatLine(UUID.randomUUID().toString(), "assistant", txt))
+                    val key = item.optString("id").takeIf { it.isNotBlank() }
+                        ?.let { "agent:" + it }
+                    val index = if (key != null) chat.indexOfLast { it.id == key } else -1
+                    if (index >= 0) chat[index] = chat[index].copy(text = txt)
+                    else chat.add(ChatLine(key ?: UUID.randomUUID().toString(), "assistant", txt))
                 }
+                if (item.optString("type") == "fileChange") workspaceChanged()
                 addActivity(method, item.optString("type"))
             }
             "turn/started" -> {
@@ -490,7 +510,17 @@ class MobileState(private val context: Context) {
                 context.stopService(Intent(context, CodexTaskService::class.java))
                 busy = false
                 turnId = null
-                status = "已完成"
+                val turn = params.optJSONObject("turn")
+                status = when (turn?.optString("status")) {
+                    "failed" -> "执行失败"
+                    "interrupted" -> "已停止"
+                    else -> "已完成"
+                }
+                if (status == "执行失败") {
+                    lastError = turn?.optJSONObject("error")?.optString("message")
+                        ?.takeIf { it.isNotBlank() } ?: "任务执行失败，可在执行过程查看详情"
+                }
+                workspaceChanged()
                 refresh()
             }
             "thread/name/updated", "thread/archived", "thread/started" -> refresh()
