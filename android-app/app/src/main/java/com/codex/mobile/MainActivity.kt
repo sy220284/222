@@ -257,7 +257,7 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
                 when (current) {
                     Page.CHAT -> ConversationPage(state)
                     Page.HISTORY -> HistoryPage(state) { page = Page.CHAT }
-                    Page.FILES -> WorkspacePage(state, pickFile)
+                    Page.FILES -> WorkspaceScreen(state, pickFile)
                     Page.TOOLS -> CapabilityPage(state)
                     Page.TIMELINE -> ActivityPage(state)
                     Page.SETTINGS -> SettingsPage(state)
@@ -559,70 +559,6 @@ private fun HistoryPage(state: MobileState, onOpen: () -> Unit) {
                 renaming = null
             }) { Text("保存") } },
             dismissButton = { TextButton(onClick = { renaming = null }) { Text("取消") } })
-    }
-}
-
-@Composable
-private fun WorkspacePage(state: MobileState, pickFile: () -> Unit) {
-    var selected by remember { mutableStateOf<java.io.File?>(null) }
-    var refresh by remember { mutableIntStateOf(0) }
-    val files = remember(refresh, state.attachments.size) {
-        runCatching { state.engine.workspace().listFiles()?.sortedBy { it.name } ?: emptyList() }
-            .getOrDefault(emptyList())
-    }
-    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
-        Headline("独立工作区", "你的项目文件仅存储在这台手机中")
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            FilledTonalButton(onClick = pickFile) {
-                Icon(Icons.Outlined.FileUpload, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("导入文件")
-            }
-            Spacer(Modifier.width(8.dp))
-            IconButton(onClick = { refresh++ }) { Icon(Icons.Outlined.Refresh, "刷新文件列表") }
-        }
-        Spacer(Modifier.height(12.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(files, key = { it.absolutePath }) { file ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth().clickable { selected = file },
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (file.isDirectory) Icons.Outlined.Folder else Icons.Outlined.Description,
-                            null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(14.dp))
-                        Text(file.name, modifier = Modifier.weight(1f),
-                            maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Icon(Icons.Outlined.ChevronRight, null)
-                    }
-                }
-            }
-        }
-    }
-    selected?.let { file ->
-        AlertDialog(onDismissRequest = { selected = null },
-            title = { Text(file.name) },
-            text = {
-                Column {
-                    Text(file.absolutePath, style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(12.dp))
-                    val preview = remember(file) {
-                        runCatching {
-                            if (file.isDirectory) "目录"
-                            else if (file.length() > 128_000) "文件较大，请使用 Codex 工具处理"
-                            else file.readText().take(8000)
-                        }.getOrElse { "无法预览二进制文件" }
-                    }
-                    SelectionContainer {
-                        Text(preview, maxLines = 16, fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.verticalScroll(rememberScrollState()))
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { selected = null }) { Text("关闭") } })
     }
 }
 
