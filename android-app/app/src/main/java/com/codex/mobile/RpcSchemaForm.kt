@@ -27,6 +27,8 @@ internal data class ParameterField(
     val choices: List<String>
 )
 
+internal data class RpcVariant(val title: String, val discriminator: String)
+
 internal object RpcForms {
     private fun findSource(context: Context, method: String): JSONObject? {
         val definitions = JSONObject(context.assets.open("rpc_schemas.json")
@@ -48,11 +50,25 @@ internal object RpcForms {
         return null
     }
 
-    fun fields(context: Context, method: String): List<ParameterField> {
+    fun variants(context: Context, method: String): List<RpcVariant> {
         val root = findSource(context, method) ?: return emptyList()
-        val required = root.optJSONArray("required") ?: JSONArray()
+        val variants = root.optJSONArray("oneOf") ?: return emptyList()
+        return (0 until variants.length()).mapNotNull { index ->
+            val item = variants.optJSONObject(index) ?: return@mapNotNull null
+            val label = item.optString("title").ifBlank { "方案 " + (index + 1) }
+            val discriminator = item.optJSONObject("properties")
+                ?.optJSONObject("type")?.optJSONArray("enum")?.optString(0).orEmpty()
+            RpcVariant(label, discriminator)
+        }
+    }
+
+    fun fields(context: Context, method: String, variantIndex: Int = 0): List<ParameterField> {
+        val root = findSource(context, method) ?: return emptyList()
+        val selected = root.optJSONArray("oneOf")?.optJSONObject(variantIndex)
+        val required = selected?.optJSONArray("required") ?: root.optJSONArray("required") ?: JSONArray()
         val requiredNames = (0 until required.length()).map { required.optString(it) }.toSet()
-        val properties = root.optJSONObject("properties") ?: return emptyList()
+        val properties = selected?.optJSONObject("properties")
+            ?: root.optJSONObject("properties") ?: return emptyList()
         val definitions = root.optJSONObject("definitions") ?: JSONObject()
         val result = mutableListOf<ParameterField>()
         val keys = properties.keys()
@@ -60,6 +76,8 @@ internal object RpcForms {
             val key = keys.next()
             val property = properties.optJSONObject(key) ?: continue
             val nested = property.optJSONArray("anyOf")
+                ?: property.optJSONArray("oneOf")
+                ?: property.optJSONArray("allOf")
             val resolved = if (nested != null) {
                 (0 until nested.length()).mapNotNull { nested.optJSONObject(it) }
                     .firstOrNull {
@@ -134,28 +152,55 @@ internal object RpcForms {
 internal fun RpcSchemaForm(state: MobileState, method: String,
                            onChange: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val fields = remember(method) {
-        try { RpcForms.fields(context, method) }
+    val variants = remember(method) { RpcForms.variants(context, method) }
+    var variantIndex by remember(method) { mutableIntStateOf(0) }
+    val fields = remember(method, variantIndex) {
+        try { RpcForms.fields(context, method, variantIndex) }
         catch (error: Exception) {
             state.lastError = "读取接口表单失败：" + error.message
             emptyList()
         }
     }
-    val values = remember(method) {
+    val values = remember(method, variantIndex) {
         mutableStateMapOf<String, String>().apply {
+            variants.getOrNull(variantIndex)?.discriminator?.takeIf { it.isNotBlank() }
+                ?.let { put("type", it) }
             state.threadId?.let { put("threadId", it) }
             state.turnId?.let { put("turnId", it) }
             try { put("cwd", state.engine.workspace().absolutePath) }
             catch (error: Exception) { state.lastError = error.message }
         }
     }
+    if (variants.isNotEmpty()) {
+        var menu by remember(method) { mutableStateOf(false) }
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+            Text("请求类型", style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(6.dp))
+            Box {
+                OutlinedButton(onClick = { menu = true },
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text(variants.getOrNull(variantIndex)?.title ?: "选择类型",
+                        modifier = Modifier.weight(1f))
+                    Icon(Icons.Outlined.ExpandMore, null)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    variants.forEachIndexed { index, option ->
+                        DropdownMenuItem(text = { Text(option.title) }, onClick = {
+                            variantIndex = index
+                            menu = false
+                        })
+                    }
+                }
+            }
+        }
+    }
     if (fields.isEmpty()) {
-        Text("此接口无常规表单，使用高级 JSON 参数即可。",
+        Text("此接口没有可自动生成的字段，可切换高级 JSON 参数。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    LaunchedEffect(method) {
+    LaunchedEffect(method, variantIndex) {
         onChange(serialize(fields, values))
     }
     fields.forEach { field ->
