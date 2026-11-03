@@ -12,6 +12,8 @@ import sys
 import time
 import zipfile
 from pathlib import Path
+import re
+import xml.etree.ElementTree as ET
 
 PACKAGE = "com.codex.mobile"
 ACTIVITY = PACKAGE + "/.MainActivity"
@@ -35,6 +37,70 @@ def dump_ui() -> str:
     return run("shell", "cat", "/sdcard/codex-ui.xml", timeout=20)
 
 
+def read_nodes() -> list[dict[str, str]]:
+    raw = dump_ui()
+    start = raw.find("<?xml")
+    if start < 0:
+        raise RuntimeError("UIAutomator did not return a hierarchy")
+    document = ET.fromstring(raw[start:])
+    return [element.attrib for element in document.iter("node")]
+
+
+def visible(nodes: list[dict[str, str]], needle: str) -> bool:
+    return any(needle in node.get("text", "") or
+               needle in node.get("content-desc", "") for node in nodes)
+
+
+def tap(label: str) -> None:
+    nodes = read_nodes()
+    matches = [node for node in nodes
+               if node.get("text", "") == label or
+               node.get("content-desc", "") == label]
+    if not matches:
+        raise RuntimeError("Could not find navigation item: " + label)
+    # Prefer an actionable node, then the smallest matching bounds.
+    matches.sort(key=lambda n: (n.get("clickable") != "true",
+                                len(n.get("bounds", ""))))
+    bounds = re.findall(r"\[(\d+),(\d+)\]", matches[0].get("bounds", ""))
+    if len(bounds) != 2:
+        raise RuntimeError("Navigation item has no click bounds: " + label)
+    x = (int(bounds[0][0]) + int(bounds[1][0])) // 2
+    y = (int(bounds[0][1]) + int(bounds[1][1])) // 2
+    run("shell", "input", "tap", str(x), str(y))
+
+
+def verify_navigation() -> None:
+    # Test actual Android Compose navigation with ADB touch events.
+    for label, expected in [
+        ("文件", "本地工作区"),
+        ("功能", "功能中心"),
+        ("历史", "会话记录"),
+        ("对话", "工作台")
+    ]:
+        tap(label)
+        for attempt in range(12):
+            time.sleep(0.8)
+            if visible(read_nodes(), expected):
+                print(f"PASS: {label} -> {expected}")
+                break
+        else:
+            raise RuntimeError(f"Navigation {label} did not reach {expected}")
+    tap("打开侧边栏")
+    for label, expected in [("执行过程", "执行过程"), ("设置", "账号、安全")]:
+        if not visible(read_nodes(), label):
+            raise RuntimeError("Drawer does not expose " + label)
+        tap(label)
+        for attempt in range(12):
+            time.sleep(0.8)
+            if visible(read_nodes(), expected):
+                print(f"PASS: drawer {label}")
+                break
+        else:
+            raise RuntimeError("Drawer navigation failed: " + label)
+        if label != "设置":
+            tap("打开侧边栏")
+
+
 def capture_failure() -> None:
     print("Recent app logs:", file=sys.stderr)
     logcat = run("logcat", "-d", "-t", "1000", check=False)
@@ -52,6 +118,7 @@ def main() -> int:
     parser.add_argument("--min-sdk", type=int, default=37,
                         help="Android 17 / API 37 by default")
     parser.add_argument("--timeout", type=int, default=75)
+    parser.add_argument("--check-navigation", action="store_true")
     args = parser.parse_args()
 
     if not args.apk.is_file():
@@ -91,6 +158,8 @@ def main() -> int:
             previous = xml
             if "已连接 · 原生 Codex" in xml or "已连接 &#183; 原生 Codex" in xml:
                 print("PASS: Android UI launched, native app-server initialized.")
+                if args.check_navigation:
+                    verify_navigation()
                 return 0
             if "原生核心启动失败" in xml or "操作未完成" in xml:
                 raise RuntimeError("界面报告原生核心启动错误")
