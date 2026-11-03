@@ -5,6 +5,9 @@ on:
     paths:
       - "android-app/**"
       - "codex-rs/cli/Cargo.toml"
+      - "codex-rs/app-server/Cargo.toml"
+      - "codex-rs/mxc-sandbox/Cargo.toml"
+      - "codex-rs/Cargo.lock"
       - ".github/workflows/android-codex.yml"
   workflow_dispatch:
 
@@ -57,7 +60,18 @@ jobs:
         with:
           toolchain: 1.95.0
           targets: aarch64-linux-android
-      - name: 编译仓库内真实 Codex CLI
+      - name: 复用 Android ARM64 Rust 编译缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "codex-rs -> target"
+          shared-key: codex-appserver-android-arm64
+          cache-on-failure: true
+          cache-bin: false
+      - name: 检查 Android Rust 依赖锁定
+        working-directory: codex-rs
+        shell: bash
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
+      - name: 编译官方 Codex App Server 原生核心
         working-directory: codex-rs
         shell: bash
         run: |
