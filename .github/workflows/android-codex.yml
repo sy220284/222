@@ -39,7 +39,7 @@ jobs:
           gradle-version: "8.13"
       - name: 编译安卓 UI 源码
         working-directory: android-app
-        run: gradle --no-daemon :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:testDebugUnitTest
+        run: gradle --no-daemon :app:unpackCodexExperimentalSchemas :app:compileDebugKotlin :app:compileDebugJavaWithJavac :app:testDebugUnitTest
 
   android-apk:
     name: 源码交叉编译、原生 APK 和产物校验
