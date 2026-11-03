@@ -259,7 +259,7 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
                     Page.HISTORY -> HistoryScreen(state) { page = Page.CHAT }
                     Page.FILES -> WorkspaceScreen(state, pickFile)
                     Page.TOOLS -> CapabilitiesScreen(state)
-                    Page.TIMELINE -> ActivityPage(state)
+                    Page.TIMELINE -> ActivityScreen(state)
                     Page.SETTINGS -> SettingsPage(state)
                 }
             }
@@ -501,35 +501,6 @@ private fun Composer(state: MobileState, pickFile: () -> Unit) {
                             }, enabled = state.connected && draft.isNotBlank()) {
                                 Icon(Icons.Outlined.ArrowUpward, "发送请求")
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActivityPage(state: MobileState) {
-    val list = rememberLazyListState()
-    LaunchedEffect(state.activities.size) {
-        if (state.activities.isNotEmpty()) list.animateScrollToItem(state.activities.lastIndex)
-    }
-    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
-        Headline("执行过程", "命令、文件改动、工具调用和实时状态")
-        LazyColumn(state = list, verticalArrangement = Arrangement.spacedBy(7.dp),
-            contentPadding = PaddingValues(bottom = 24.dp)) {
-            items(state.activities, key = { it.id }) { entry ->
-                Surface(shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface) {
-                    Row(Modifier.fillMaxWidth().padding(14.dp),
-                        verticalAlignment = Alignment.Top) {
-                        Icon(Icons.Outlined.Terminal, null,
-                            modifier = Modifier.size(17.dp),
-                            tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(12.dp))
-                        SelectionContainer {
-                            Text(entry.text, fontSize = 12.sp, lineHeight = 18.sp)
                         }
                     }
                 }
