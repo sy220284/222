@@ -41,6 +41,27 @@ class MobileState(private val context: Context) {
     var selectedMethod by mutableStateOf("thread/list")
     var responseJson by mutableStateOf("")
     val attachments = mutableStateListOf<File>()
+    val fileManager by lazy { WorkspaceFiles(engine.workspace()) }
+    var workspaceRevision by mutableIntStateOf(0)
+    var sessionCursor by mutableStateOf<String?>(null)
+    var sessionLoading by mutableStateOf(false)
+    var sessionHasMore by mutableStateOf(false)
+    var accountDescription by mutableStateOf("尚未检查登录状态")
+    var operationRunning by mutableStateOf(false)
+    var lastOperationMethod by mutableStateOf("")
+    fun workspaceChanged() { workspaceRevision++ }
+    fun editWorkspace(action: () -> Unit) {
+        try { action(); workspaceChanged() }
+        catch (error: Exception) { lastError = error.message ?: error.javaClass.simpleName }
+    }
+    fun chooseMethod(group: String, method: String) {
+        selectedGroup = group
+        selectedMethod = method
+        responseJson = ""
+    }
+    fun invokeQuickMethod(method: String, params: JSONObject = JSONObject()) {
+        invokeMethod(method, params.toString())
+    }
 
     private fun ui(block: () -> Unit) {
         mainHandler.post(block)
@@ -84,6 +105,7 @@ class MobileState(private val context: Context) {
                         status = "本地核心已连接"
                         refresh()
                         getModels()
+                        readAccount()
                     }
                     override fun onNotification(message: JSONObject) = ui { handleNotification(message) }
                     override fun onServerRequest(message: JSONObject) = ui {
@@ -131,16 +153,47 @@ class MobileState(private val context: Context) {
         }
     }
 
-    fun refresh() = ask("thread/list", JSONObject().put("limit", 100)) { result ->
-        sessions.clear()
-        val data = result.optJSONArray("data") ?: JSONArray()
-        for (i in 0 until data.length()) {
-            val item = data.optJSONObject(i) ?: continue
-            val id = item.optString("id")
-            if (id.isBlank()) continue
-            sessions.add(SessionLine(id, item.optString("name").takeIf { it.isNotBlank() }
-                ?: item.optString("preview").takeIf { it.isNotBlank() }
-                ?: "会话 " + id.take(8)))
+    fun refresh() = loadSessions(null)
+
+    fun loadMoreSessions() {
+        if (sessionHasMore && !sessionLoading) loadSessions(sessionCursor)
+    }
+
+    private fun loadSessions(cursor: String?) {
+        if (!connected || sessionLoading) return
+        sessionLoading = true
+        val parameters = JSONObject().put("limit", 100)
+        if (!cursor.isNullOrBlank()) parameters.put("cursor", cursor)
+        engine.request("thread/list", parameters).whenComplete { result, error ->
+            ui {
+                sessionLoading = false
+                if (error != null) {
+                    lastError = "会话记录：" + (error.cause?.message ?: error.message)
+                    return@ui
+                }
+                if (cursor == null) sessions.clear()
+                val data = result.optJSONArray("data") ?: JSONArray()
+                val existing = sessions.mapTo(HashSet()) { it.id }
+                for (i in 0 until data.length()) {
+                    val item = data.optJSONObject(i) ?: continue
+                    val id = item.optString("id")
+                    if (id.isBlank() || !existing.add(id)) continue
+                    sessions.add(SessionLine(id, item.optString("name").takeIf { it.isNotBlank() }
+                        ?: item.optString("preview").takeIf { it.isNotBlank() }
+                        ?: "会话 " + id.take(8)))
+                }
+                sessionCursor = result.optString("nextCursor").takeIf { it.isNotBlank() }
+                sessionHasMore = sessionCursor != null
+            }
+        }
+    }
+
+    fun readAccount() = ask("account/read", JSONObject()) { result ->
+        val account = result.optJSONObject("account")
+        accountDescription = when {
+            account == null || account.optString("type").isBlank() -> "尚未登录 ChatGPT，可使用 API 密钥"
+            account.optString("email").isNotBlank() -> account.optString("email")
+            else -> "已登录：" + account.optString("type")
         }
     }
 
@@ -169,6 +222,7 @@ class MobileState(private val context: Context) {
         ask("thread/resume", JSONObject().put("threadId", id)) {
             threadId = id
             chat.clear()
+            status = "正在恢复会话"
             activities.clear()
             ask("thread/read", JSONObject().put("threadId", id).put("includeTurns", true)) { response ->
                 val turns = response.optJSONObject("thread")?.optJSONArray("turns") ?: JSONArray()
@@ -179,13 +233,26 @@ class MobileState(private val context: Context) {
                         val kind = item.optString("type")
                         val text = when (kind) {
                             "agentMessage" -> item.optString("text")
-                            "userMessage" -> item.optJSONArray("content")?.toString() ?: ""
+                            "userMessage" -> {
+                                val contents = item.optJSONArray("content") ?: JSONArray()
+                                (0 until contents.length()).mapNotNull { index ->
+                                    val part = contents.optJSONObject(index) ?: return@mapNotNull null
+                                    when (part.optString("type")) {
+                                        "text" -> part.optString("text")
+                                        "localImage", "image" -> "[图片]"
+                                        "localAudio", "audio" -> "[音频]"
+                                        "mention" -> "[文件：" + part.optString("name") + "]"
+                                        else -> null
+                                    }
+                                }.joinToString("\n")
+                            }
                             else -> ""
                         }
                         if (text.isNotBlank()) chat.add(ChatLine(UUID.randomUUID().toString(),
                             if (kind == "agentMessage") "assistant" else "user", text))
                     }
                 }
+                status = "会话已恢复"
             }
         }
     }
@@ -243,7 +310,9 @@ class MobileState(private val context: Context) {
             if (kind == "mention") part.put("name", file.name)
             input.put(part)
         }
-        ask("turn/start", JSONObject().put("threadId", id).put("input", input)) { result ->
+        val parameters = JSONObject().put("threadId", id).put("input", input)
+        if (selectedModel.isNotBlank()) parameters.put("model", selectedModel)
+        ask("turn/start", parameters) { result ->
             turnId = result.optJSONObject("turn")?.optString("id")
             status = "Codex 正在处理"
         }
@@ -266,11 +335,26 @@ class MobileState(private val context: Context) {
         JSONObject().put("threadId", id).put("name", name)) { refresh() }
 
     fun invokeMethod(method: String, args: String) {
-        try {
-            responseJson = "执行中：" + method
-            ask(method, JSONObject(args.ifBlank { "{}" })) { responseJson = it.toString(2) }
-        } catch (error: Exception) {
-            lastError = "接口参数错误：" + error.message
+        if (!connected) { lastError = "Codex 原生核心尚未连接"; return }
+        if (operationRunning) { lastError = "上一个功能调用尚未结束"; return }
+        val payload = try { JSONObject(args.ifBlank { "{}" }) }
+        catch (error: Exception) { lastError = "接口参数错误：" + error.message; return }
+        operationRunning = true
+        lastOperationMethod = method
+        responseJson = "正在调用 " + method + "…"
+        engine.request(method, payload).whenComplete { response, error ->
+            ui {
+                operationRunning = false
+                if (error != null) {
+                    responseJson = "调用失败：" + (error.cause?.message ?: error.message)
+                    lastError = method + "：" + (error.cause?.message ?: error.message)
+                } else {
+                    responseJson = response.toString(2)
+                    addActivity(method, responseJson)
+                    if (method.startsWith("fs/") || method.startsWith("command/")) workspaceChanged()
+                    if (method.startsWith("thread/")) refresh()
+                }
+            }
         }
     }
 
@@ -333,6 +417,7 @@ class MobileState(private val context: Context) {
                 target.outputStream().use { stream.copyTo(it) }
             }
             attachments.add(target)
+            workspaceChanged()
         } catch (error: Exception) {
             lastError = "附件导入失败：" + error.message
         }
@@ -356,6 +441,7 @@ class MobileState(private val context: Context) {
     fun logout() = ask("account/logout", JSONObject()) {
         loginCode = ""
         loginUrl = ""
+        accountDescription = "已退出 ChatGPT"
         status = "账号已退出"
     }
 
@@ -412,6 +498,7 @@ class MobileState(private val context: Context) {
                 loginCode = ""
                 loginUrl = ""
                 status = "ChatGPT 授权流程已结束"
+                readAccount()
                 getModels()
             }
             "error" -> { lastError = params.optString("message").ifBlank { params.toString() } }
@@ -424,7 +511,7 @@ class MobileState(private val context: Context) {
 
     private fun addActivity(name: String, data: String) {
         activities.add(ChatLine(UUID.randomUUID().toString(), "event",
-            if (data.isBlank()) name else name + " · " + data.take(200)))
+            if (data.isBlank()) name else name + " · " + data.take(16000)))
         if (activities.size > 400) activities.removeAt(0)
     }
 
