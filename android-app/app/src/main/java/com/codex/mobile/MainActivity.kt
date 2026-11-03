@@ -256,7 +256,7 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
             ) { current ->
                 when (current) {
                     Page.CHAT -> ConversationPage(state)
-                    Page.HISTORY -> HistoryPage(state) { page = Page.CHAT }
+                    Page.HISTORY -> HistoryScreen(state) { page = Page.CHAT }
                     Page.FILES -> WorkspaceScreen(state, pickFile)
                     Page.TOOLS -> CapabilityPage(state)
                     Page.TIMELINE -> ActivityPage(state)
@@ -506,59 +506,6 @@ private fun Composer(state: MobileState, pickFile: () -> Unit) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun HistoryPage(state: MobileState, onOpen: () -> Unit) {
-    var query by remember { mutableStateOf("") }
-    var renaming by remember { mutableStateOf<SessionLine?>(null) }
-    var name by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
-        Headline("你的会话", "浏览、恢复或归档任务")
-        OutlinedTextField(value = query, onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth(),
-            leadingIcon = { Icon(Icons.Outlined.Search, null) },
-            placeholder = { Text("搜索会话") }, singleLine = true)
-        Spacer(Modifier.height(14.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            items(state.sessions.filter { it.title.contains(query, ignoreCase = true)
-                    || it.id.contains(query, ignoreCase = true) }, key = { it.id }) { item ->
-                Surface(shape = RoundedCornerShape(17.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.fillMaxWidth().padding(7.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { state.openThread(item.id); onOpen() }) {
-                            Icon(Icons.Outlined.ChatBubbleOutline, "打开会话")
-                        }
-                        Column(Modifier.weight(1f).clickable { state.openThread(item.id); onOpen() }) {
-                            Text(item.title, fontWeight = FontWeight.Medium,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Text(item.id.take(12),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelSmall)
-                        }
-                        IconButton(onClick = { name = item.title; renaming = item }) {
-                            Icon(Icons.Outlined.Edit, "重命名会话", modifier = Modifier.size(20.dp))
-                        }
-                        IconButton(onClick = { state.archive(item.id) }) {
-                            Icon(Icons.Outlined.Archive, "归档会话", modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
-            }
-        }
-    }
-    renaming?.let { item ->
-        AlertDialog(onDismissRequest = { renaming = null },
-            title = { Text("修改会话名称") },
-            text = { OutlinedTextField(value = name, onValueChange = { name = it }) },
-            confirmButton = { TextButton(onClick = {
-                state.rename(item.id, name)
-                renaming = null
-            }) { Text("保存") } },
-            dismissButton = { TextButton(onClick = { renaming = null }) { Text("取消") } })
     }
 }
 
