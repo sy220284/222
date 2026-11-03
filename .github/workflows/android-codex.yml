@@ -66,6 +66,15 @@ jobs:
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$BIN/aarch64-linux-android24-clang"
           export CC_aarch64_linux_android="$BIN/aarch64-linux-android24-clang"
           export AR_aarch64_linux_android="$BIN/llvm-ar"
+          export RANLIB_aarch64_linux_android="$BIN/llvm-ranlib"
+          export AR="$BIN/llvm-ar"
+          export RANLIB="$BIN/llvm-ranlib"
+          # OpenSSL configure invokes GNU-style prefixed binutils; NDK ships LLVM binutils.
+          mkdir -p "$RUNNER_TEMP/android-cross-tools"
+          for tool in ar ranlib nm strip; do
+            ln -s "$BIN/llvm-$tool" "$RUNNER_TEMP/android-cross-tools/aarch64-linux-android-$tool"
+          done
+          export PATH="$RUNNER_TEMP/android-cross-tools:$BIN:$PATH"
           export CARGO_BUILD_JOBS=3
           export CARGO_PROFILE_RELEASE_DEBUG=0
           cargo build --release --locked --target aarch64-linux-android -p codex-app-server --bin codex-app-server
