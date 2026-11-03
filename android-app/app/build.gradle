@@ -1,3 +1,10 @@
+import groovy.json.JsonSlurper
+
+buildscript {
+    repositories { mavenCentral() }
+    dependencies { classpath 'com.github.luben:zstd-jni:1.5.7-7' }
+}
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
@@ -11,9 +18,9 @@ android {
     defaultConfig {
         applicationId 'com.codex.mobile'
         minSdk 28
-        targetSdk 35
-        versionCode 2
-        versionName '0.2.0'
+        targetSdk 36
+        versionCode 3
+        versionName '0.3.0'
         ndk { abiFilters 'arm64-v8a' }
     }
 
@@ -23,7 +30,14 @@ android {
     }
     buildFeatures { compose true }
     // Include the upstream generated JSON Schemas rather than hand-maintaining forms.
-    sourceSets { main { assets.srcDirs += ['../../codex-rs/app-server-protocol/schema/json'] } }
+    sourceSets {
+        main {
+            assets.srcDirs += [
+                file('../../codex-rs/app-server-protocol/schema/json'),
+                layout.buildDirectory.dir('generated/assets/codex-experimental').get().asFile
+            ]
+        }
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -45,4 +59,61 @@ dependencies {
     implementation 'androidx.compose.material:material-icons-extended'
     debugImplementation 'androidx.compose.ui:ui-tooling'
     testImplementation 'junit:junit:4.13.2'
+}
+
+
+// The official source tree contains a compressed experimental schema bundle.
+// Generate only the schemas absent from the checked-in stable schema tree.
+// Every RPC entry gets its real upstream contract, without handwritten mappings.
+def codexExperimentalArchive = rootProject.file(
+    '../codex-rs/app-server-protocol/schema/precomputed/app-server-exports-experimental.json.zst')
+def checkedInSchemas = rootProject.file('../codex-rs/app-server-protocol/schema/json')
+def generatedSchemas = layout.buildDirectory.dir('generated/assets/codex-experimental')
+
+def unpackCodexSchemas = tasks.register('unpackCodexExperimentalSchemas') {
+    inputs.file(codexExperimentalArchive)
+    inputs.file(file('src/main/assets/rpc_schemas.json'))
+    outputs.dir(generatedSchemas)
+    doLast {
+        def outputRoot = generatedSchemas.get().asFile
+        project.delete(outputRoot)
+        outputRoot.mkdirs()
+        def stream = new com.github.luben.zstd.ZstdInputStream(
+            new FileInputStream(codexExperimentalArchive))
+        def serialized = stream.withCloseable {
+            new InputStreamReader(it, 'UTF-8').text
+        }
+        def content = new JsonSlurper().parseText(serialized)
+        int count = 0
+        content.json_schema.each { String relativePath, String schema ->
+            def destination = new File(outputRoot, relativePath).canonicalFile
+            if (!destination.toPath().startsWith(outputRoot.canonicalFile.toPath())) {
+                throw new GradleException("Invalid generated schema path: " + relativePath)
+            }
+            if (!new File(checkedInSchemas, relativePath).isFile()) {
+                destination.parentFile.mkdirs()
+                destination.setText(schema, 'UTF-8')
+                count++
+            }
+        }
+        def methods = new JsonSlurper().parse(file('src/main/assets/rpc_schemas.json')).methods
+        def missing = methods.findAll { m ->
+            m.paramsType && m.namespace &&
+                !new File(checkedInSchemas, m.namespace + '/' + m.paramsType + '.json').isFile() &&
+                !new File(outputRoot, m.namespace + '/' + m.paramsType + '.json').isFile()
+        }
+        if (!missing.isEmpty()) {
+            throw new GradleException("Upstream RPC methods missing schemas: " +
+                missing.collect { it.method }.join(', '))
+        }
+        logger.lifecycle("Codex: extracted " + count +
+            " missing official schema files; all " + methods.size() +
+            " request contracts have been checked.")
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name.startsWith('merge') && task.name.endsWith('Assets')) {
+        task.dependsOn(unpackCodexSchemas)
+    }
 }
