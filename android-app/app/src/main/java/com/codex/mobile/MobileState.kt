@@ -41,7 +41,7 @@ class MobileState(private val context: Context) {
     var selectedMethod by mutableStateOf("thread/list")
     var responseJson by mutableStateOf("")
     val attachments = mutableStateListOf<File>()
-    val fileManager by lazy { WorkspaceFiles(engine.workspace()) }
+    internal val fileManager by lazy { WorkspaceFiles(engine.workspace()) }
     var workspaceRevision by mutableIntStateOf(0)
     var sessionCursor by mutableStateOf<String?>(null)
     var sessionLoading by mutableStateOf(false)
