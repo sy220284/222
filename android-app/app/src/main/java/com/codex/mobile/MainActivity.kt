@@ -267,7 +267,7 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
     }
 
     state.pendingApproval?.let { request ->
-        ApprovalSheet(request,
+        ApprovalDialog(request,
             onDecline = { state.resolveApproval(false) },
             onAccept = { state.resolveApproval(true, it) })
     }
@@ -509,51 +509,3 @@ private fun Composer(state: MobileState, pickFile: () -> Unit) {
     }
 }
 
-@Composable
-private fun ApprovalSheet(request: JSONObject, onDecline: () -> Unit,
-    onAccept: (String) -> Unit) {
-    var raw by remember(request) { mutableStateOf("") }
-    val method = request.optString("method")
-    val approval = method == "item/commandExecution/requestApproval" ||
-        method == "item/fileChange/requestApproval"
-    Dialog(onDismissRequest = {}) {
-        Surface(shape = RoundedCornerShape(26.dp), tonalElevation = 6.dp,
-            modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(22.dp).verticalScroll(rememberScrollState())) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Shield, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(10.dp))
-                    Text("需要你的确认", style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold)
-                }
-                Spacer(Modifier.height(14.dp))
-                Text(method, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(10.dp))
-                SelectionContainer {
-                    Text(request.optJSONObject("params")?.toString(2)?.take(3000) ?: "{}",
-                        fontSize = 12.sp, lineHeight = 19.sp,
-                        modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState()))
-                }
-                Spacer(Modifier.height(16.dp))
-                if (!approval) {
-                    Text("此类请求需要完整的 JSON 回应。请检查请求字段后填写。",
-                        style = MaterialTheme.typography.bodySmall)
-                }
-                OutlinedTextField(
-                    value = raw, onValueChange = { raw = it },
-                    modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5,
-                    placeholder = { Text(if (approval) "可选：自定义审批 JSON" else "填写完整回应 JSON") },
-                    textStyle = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace)
-                )
-                Spacer(Modifier.height(18.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    OutlinedButton(onClick = onDecline) { Text("拒绝") }
-                    Spacer(Modifier.width(10.dp))
-                    Button(onClick = { onAccept(raw) },
-                        enabled = approval || raw.isNotBlank()) { Text("确认执行") }
-                }
-            }
-        }
-    }
-}
