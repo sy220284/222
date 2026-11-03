@@ -210,7 +210,7 @@ jobs:
           script: |
             python3 .github/scripts/android_smoke.py \
               --apk android-app/app/build/outputs/apk/debug/app-debug.apk \
-              --abi x86_64 --min-sdk 37
+              --abi x86_64 --min-sdk 37 --check-navigation
             adb exec-out screencap -p > /tmp/codex-android17-home.png
       - name: 归档 Android 17 界面截图和验证日志
         if: always()
