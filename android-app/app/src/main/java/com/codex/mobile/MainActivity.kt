@@ -72,9 +72,9 @@ class MainActivity : ComponentActivity() {
 
 private val Ink = Color(0xFF182336)
 private val Deep = Color(0xFF0C1524)
-private val LightBackground = Color(0xFFF7F8FA)
+private val LightBackground = Color(0xFFF5F7FB)
 private val LightPanel = Color(0xFFFFFFFF)
-private val Blue = Color(0xFF4565DB)
+private val Blue = Color(0xFF5265E8)
 private val Muted = Color(0xFF69778D)
 
 @Composable
@@ -141,7 +141,7 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
                     BrandMark()
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("Codex", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Codex", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                         Text("Mobile Workspace", style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -213,7 +213,36 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
                 )
             },
             bottomBar = {
-                if (page == Page.CHAT) Composer(state, pickFile)
+                Column {
+                    if (page == Page.CHAT) Composer(state, pickFile)
+                    NavigationBar(
+                        tonalElevation = 0.dp,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.fillMaxWidth().height(68.dp)
+                    ) {
+                        val primary = listOf(
+                            Triple(Page.CHAT, Icons.Outlined.ChatBubbleOutline, "对话"),
+                            Triple(Page.FILES, Icons.Outlined.FolderOpen, "文件"),
+                            Triple(Page.TOOLS, Icons.Outlined.GridView, "功能"),
+                            Triple(Page.HISTORY, Icons.Outlined.History, "历史")
+                        )
+                        primary.forEach { (destination, icon, title) ->
+                            NavigationBarItem(
+                                selected = page == destination,
+                                onClick = {
+                                    page = destination
+                                    if (destination == Page.HISTORY) state.refresh()
+                                },
+                                icon = { Icon(icon, contentDescription = title, modifier = Modifier.size(22.dp)) },
+                                label = { Text(title, fontSize = 11.sp) },
+                                alwaysShowLabel = true,
+                                colors = NavigationBarItemDefaults.colors(
+                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                )
+                            )
+                        }
+                    }
+                }
             }
         ) { padding ->
             val duration = if (animated) 180 else 0
