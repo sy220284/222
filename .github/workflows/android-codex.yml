@@ -132,3 +132,92 @@ jobs:
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+
+  android-emulator:
+    name: Android 17 模拟器真实安装、RPC 握手与界面验收
+    runs-on: ubuntu-24.04
+    needs: android-ui
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - name: 清理无关工具链并开启 KVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/share/dotnet /opt/ghc
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          df -h .
+      - name: 安装 Android SDK 和 NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-linux-android
+      - name: 使用原生 Android x86_64 交叉编译 App Server
+        working-directory: codex-rs
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$BIN/x86_64-linux-android24-clang"
+          export CC_x86_64_linux_android="$BIN/x86_64-linux-android24-clang"
+          export AR_x86_64_linux_android="$BIN/llvm-ar"
+          export RANLIB_x86_64_linux_android="$BIN/llvm-ranlib"
+          export AR="$BIN/llvm-ar"
+          export RANLIB="$BIN/llvm-ranlib"
+          mkdir -p "$RUNNER_TEMP/android-cross-tools"
+          for tool in ar ranlib nm strip; do
+            ln -s "$BIN/llvm-$tool" "$RUNNER_TEMP/android-cross-tools/x86_64-linux-android-$tool"
+          done
+          export PATH="$RUNNER_TEMP/android-cross-tools:$BIN:$PATH"
+          export CARGO_BUILD_JOBS=3
+          export CARGO_PROFILE_RELEASE_DEBUG=0
+          cargo build --release --locked --target x86_64-linux-android \
+            -p codex-app-server --bin codex-app-server
+      - name: 安装仿真架构的真实 Codex 核心
+        shell: bash
+        run: |
+          set -euo pipefail
+          ELF="codex-rs/target/x86_64-linux-android/release/codex-app-server"
+          READELF="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          test -s "$ELF"
+          "$READELF" -h "$ELF" | grep -q 'X86-64'
+          install -Dm755 "$ELF" "android-app/app/src/main/jniLibs/x86_64/libcodex.so"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: 构建可在 Android 17 仿真环境运行的 APK
+        working-directory: android-app
+        run: gradle --no-daemon -PcodexAbi=x86_64 :app:assembleDebug
+      - name: Android 17 启动并核验 Codex RPC
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 37
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            python3 .github/scripts/android_smoke.py \
+              --apk android-app/app/build/outputs/apk/debug/app-debug.apk \
+              --abi x86_64 --min-sdk 37
+            adb exec-out screencap -p > /tmp/codex-android17-home.png
+      - name: 归档 Android 17 界面截图和验证日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-android17-emulator-proof
+          path: |
+            /tmp/codex-android17-home.png
+          if-no-files-found: ignore
+          retention-days: 14
