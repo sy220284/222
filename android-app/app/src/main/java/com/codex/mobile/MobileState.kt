@@ -42,7 +42,9 @@ class MobileState(private val context: Context) {
     var responseJson by mutableStateOf("")
     val attachments = mutableStateListOf<File>()
 
-    private fun ui(block: () -> Unit) = mainHandler.post(block)
+    private fun ui(block: () -> Unit) {
+        mainHandler.post(block)
+    }
 
     init {
         try {

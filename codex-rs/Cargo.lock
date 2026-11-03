@@ -2571,6 +2571,7 @@ dependencies = [
  "jsonwebtoken",
  "libc",
  "os_info",
+ "openssl-sys",
  "owo-colors",
  "predicates",
  "pretty_assertions",
