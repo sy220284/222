@@ -258,7 +258,7 @@ private fun MobileShell(state: MobileState, pickFile: () -> Unit) {
                     Page.CHAT -> ConversationPage(state)
                     Page.HISTORY -> HistoryScreen(state) { page = Page.CHAT }
                     Page.FILES -> WorkspaceScreen(state, pickFile)
-                    Page.TOOLS -> CapabilityPage(state)
+                    Page.TOOLS -> CapabilitiesScreen(state)
                     Page.TIMELINE -> ActivityPage(state)
                     Page.SETTINGS -> SettingsPage(state)
                 }
@@ -504,100 +504,6 @@ private fun Composer(state: MobileState, pickFile: () -> Unit) {
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CapabilityPage(state: MobileState) {
-    var filter by remember { mutableStateOf("") }
-    var parameters by remember(state.selectedMethod) { mutableStateOf("{}") }
-    var advanced by remember(state.selectedMethod) { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
-        Headline("全部功能", "从官方源码提取的 " +
-            state.featureGroups.sumOf { it.methods.size } + " 个 Codex 接口")
-        OutlinedTextField(value = filter, onValueChange = { filter = it },
-            modifier = Modifier.fillMaxWidth(), singleLine = true,
-            placeholder = { Text("搜索技能、工具、插件、会话…") },
-            leadingIcon = { Icon(Icons.Outlined.Search, null) })
-        Spacer(Modifier.height(12.dp))
-        val groups = state.featureGroups.filter { group ->
-            group.title.contains(filter, true) || group.methods.any { it.contains(filter, true) }
-        }
-        Row(Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.width(128.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
-                contentPadding = PaddingValues(bottom = 18.dp)) {
-                items(groups, key = { it.key }) { group ->
-                    NavigationDrawerItem(
-                        label = { Text(group.title, fontSize = 12.sp, maxLines = 2) },
-                        selected = group.key == state.selectedGroup,
-                        onClick = {
-                            state.selectedGroup = group.key
-                            state.selectedMethod = group.methods.first()
-                        },
-                        modifier = Modifier.padding(end = 7.dp),
-                        shape = RoundedCornerShape(14.dp)
-                    )
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                val chosen = groups.firstOrNull { it.key == state.selectedGroup }
-                    ?: groups.firstOrNull()
-                chosen?.methods?.forEach { method ->
-                    val highlighted = method == state.selectedMethod
-                    Surface(shape = RoundedCornerShape(12.dp),
-                        color = if (highlighted) MaterialTheme.colorScheme.surfaceContainer
-                            else Color.Transparent,
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            state.selectedMethod = method
-                        }) {
-                        Text(method, Modifier.padding(12.dp), fontSize = 11.sp,
-                            fontWeight = if (highlighted) FontWeight.SemiBold else FontWeight.Normal,
-                            lineHeight = 16.sp)
-                    }
-                }
-                if (chosen != null) {
-                    Spacer(Modifier.height(18.dp))
-                    HorizontalDivider()
-                    Spacer(Modifier.height(14.dp))
-                    Text("调用 " + state.selectedMethod,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { advanced = !advanced }) {
-                        Icon(Icons.Outlined.Tune, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (advanced) "使用智能表单" else "高级 JSON 编辑")
-                    }
-                    if (advanced) {
-                        OutlinedTextField(value = parameters,
-                            onValueChange = { parameters = it },
-                            modifier = Modifier.fillMaxWidth(), minLines = 3,
-                            textStyle = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace),
-                            label = { Text("请求参数 JSON") })
-                    } else {
-                        RpcSchemaForm(state, state.selectedMethod) { parameters = it }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Button(onClick = { state.invokeMethod(state.selectedMethod, parameters) },
-                        enabled = state.connected, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Outlined.PlayArrow, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("执行接口")
-                    }
-                    if (state.responseJson.isNotBlank()) {
-                        Spacer(Modifier.height(12.dp))
-                        SelectionContainer {
-                            Text(state.responseJson,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = FontFamily.Monospace))
-                        }
-                    }
-                }
-                Spacer(Modifier.height(32.dp))
             }
         }
     }
