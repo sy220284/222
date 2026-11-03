@@ -515,5 +515,14 @@ class MobileState(private val context: Context) {
         if (activities.size > 400) activities.removeAt(0)
     }
 
+    fun restartCore() {
+        status = "正在重新连接本地核心"
+        connected = false
+        Thread({
+            engine.stop()
+            ui { start() }
+        }, "codex-runtime-restart").start()
+    }
+
     fun close() = engine.close()
 }
